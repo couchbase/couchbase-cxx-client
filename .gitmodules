@@ -1,0 +1,21 @@
+[submodule "third_party/gsl"]
+	path = third_party/gsl
+	url = git://github.com/microsoft/gsl.git
+[submodule "third_party/json"]
+	path = third_party/json
+	url = git://github.com/taocpp/json.git
+[submodule "third_party/spdlog"]
+	path = third_party/spdlog
+	url = git://github.com/gabime/spdlog.git
+[submodule "third_party/http_parser"]
+	path = third_party/http_parser
+	url = git://github.com/nodejs/http-parser.git
+[submodule "third_party/asio"]
+	path = third_party/asio
+	url = git://github.com/chriskohlhoff/asio.git
+[submodule "third_party/snappy"]
+	path = third_party/snappy
+	url = git://github.com/google/snappy.git
+[submodule "third_party/catch2"]
+	path = third_party/catch2
+	url = git://github.com/catchorg/Catch2.git
