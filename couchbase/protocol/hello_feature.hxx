@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -152,10 +152,10 @@ enum class hello_feature : uint16_t {
     subdoc_document_macro_support = 0x18,
 };
 
-constexpr inline bool
+constexpr bool
 is_valid_hello_feature(uint16_t code)
 {
-    switch (static_cast<hello_feature>(code)) {
+    switch (hello_feature(code)) {
         case hello_feature::tls:
         case hello_feature::tcp_nodelay:
         case hello_feature::mutation_seqno:

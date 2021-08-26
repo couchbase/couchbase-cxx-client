@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -120,7 +120,7 @@ struct error_map {
         std::string description;
         std::set<attribute> attributes;
 
-        bool has_retry_attribute()
+        bool has_retry_attribute() const
         {
             return attributes.find(attribute::retry_now) != attributes.end() || attributes.find(attribute::retry_later) != attributes.end();
         }

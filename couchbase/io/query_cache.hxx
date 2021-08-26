@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -35,13 +35,13 @@ class query_cache
     void put(const std::string& statement, const std::string& prepared)
     {
         std::scoped_lock lock(store_mutex_);
-        store_.emplace(statement, entry{ prepared });
+        store_.try_emplace(statement, entry{ prepared });
     }
 
     void put(const std::string& statement, const std::string& name, const std::string& encoded_plan)
     {
         std::scoped_lock lock(store_mutex_);
-        store_.emplace(statement, entry{ name, encoded_plan });
+        store_.try_emplace(statement, entry{ name, encoded_plan });
     }
 
     std::optional<entry> get(const std::string& statement)

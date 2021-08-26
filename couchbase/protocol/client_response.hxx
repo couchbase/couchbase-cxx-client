@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <gsl/gsl_assert>
+#include <gsl/assert>
 
 #include <tao/json.hpp>
 #include <tao/json/contrib/traits.hpp>
@@ -27,14 +27,39 @@
 #include <protocol/datatype.hxx>
 #include <protocol/cmd_info.hxx>
 #include <protocol/frame_info_id.hxx>
+#include <protocol/enhanced_error_info.hxx>
+#include <utils/byteswap.hxx>
 
 namespace couchbase::protocol
 {
 
-struct enhanced_error {
-    std::string context;
-    std::string ref;
-};
+double
+parse_server_duration_us(const io::mcbp_message& msg)
+{
+    if (msg.header.magic != static_cast<std::uint8_t>(magic::alt_client_response)) {
+        return 0;
+    }
+    std::uint8_t framing_extras_size = static_cast<std::uint8_t>(msg.header.keylen & 0xfU);
+    if (framing_extras_size == 0) {
+        return 0;
+    }
+    std::size_t offset = 0;
+    while (offset < framing_extras_size) {
+        std::uint8_t frame_size = static_cast<std::uint8_t>(msg.body[offset] & 0xfU);
+        std::uint8_t frame_id = static_cast<std::uint8_t>((static_cast<std::uint32_t>(msg.body[offset]) >> 4U) & 0xfU);
+        offset++;
+        if (frame_id == static_cast<std::uint8_t>(response_frame_info_id::server_duration)) {
+            if (frame_size == 2 && framing_extras_size - offset >= frame_size) {
+                std::uint16_t encoded_duration{};
+                std::memcpy(&encoded_duration, msg.body.data() + offset, sizeof(encoded_duration));
+                encoded_duration = ntohs(encoded_duration);
+                return std::pow(encoded_duration, 1.74) / 2;
+            }
+        }
+        offset += frame_size;
+    }
+    return 0;
+}
 
 template<typename Body>
 class client_response
@@ -51,14 +76,14 @@ class client_response
     std::uint8_t extras_size_{ 0 };
     std::size_t body_size_{ 0 };
     protocol::status status_{};
-    std::optional<enhanced_error> error_;
+    std::optional<enhanced_error_info> error_;
     std::uint32_t opaque_{};
     std::uint64_t cas_{};
     cmd_info info_{};
 
   public:
     client_response() = default;
-    explicit client_response(io::mcbp_message& msg)
+    explicit client_response(io::mcbp_message&& msg)
     {
         header_ = msg.header_data();
         data_ = std::move(msg.body);
@@ -111,15 +136,15 @@ class client_response
         Expects(header_[0] == static_cast<std::uint8_t>(magic::alt_client_response) ||
                 header_[0] == static_cast<std::uint8_t>(magic::client_response));
         Expects(header_[1] == static_cast<std::uint8_t>(Body::opcode));
-        magic_ = static_cast<magic>(header_[0]);
-        opcode_ = static_cast<client_opcode>(header_[1]);
+        magic_ = magic(header_[0]);
+        opcode_ = client_opcode(header_[1]);
         data_type_ = header_[5];
 
         uint16_t status = 0;
         memcpy(&status, header_.data() + 6, sizeof(status));
         status = ntohs(status);
         Expects(protocol::is_valid_status(status));
-        status_ = static_cast<protocol::status>(status);
+        status_ = protocol::status(status);
 
         extras_size_ = header_[4];
         if (magic_ == magic::alt_client_response) {
@@ -138,9 +163,15 @@ class client_response
         memcpy(&opaque_, header_.data() + 12, sizeof(opaque_));
 
         memcpy(&cas_, header_.data() + 16, sizeof(cas_));
+        cas_ = utils::byte_swap_64(cas_);
     }
 
-    std::string error_message()
+    [[nodiscard]] std::optional<enhanced_error_info> error_info()
+    {
+        return error_;
+    }
+
+    [[nodiscard]] std::string error_message() const
     {
         if (error_) {
             return fmt::format(R"(magic={}, opcode={}, status={}, error={})", magic_, opcode_, status_, *error_);
@@ -157,13 +188,11 @@ class client_response
             if (error.is_object()) {
                 auto& err_obj = error["error"];
                 if (err_obj.is_object()) {
-                    enhanced_error err{};
-                    auto& ref = err_obj["ref"];
-                    if (ref.is_string()) {
-                        err.ref = ref.get_string();
+                    enhanced_error_info err{};
+                    if (auto& ref = err_obj["ref"]; ref.is_string()) {
+                        err.reference = ref.get_string();
                     }
-                    auto& ctx = err_obj["context"];
-                    if (ctx.is_string()) {
+                    if (auto& ctx = err_obj["context"]; ctx.is_string()) {
                         err.context = ctx.get_string();
                     }
                     error_.emplace(err);
@@ -182,13 +211,12 @@ class client_response
             std::uint8_t frame_size = data_[offset] & 0xfU;
             std::uint8_t frame_id = (static_cast<std::uint32_t>(data_[offset]) >> 4U) & 0xfU;
             offset++;
-            if (frame_id == static_cast<std::uint8_t>(response_frame_info_id::server_duration)) {
-                if (frame_size == 2 && framing_extras_size_ - offset >= frame_size) {
-                    std::uint16_t encoded_duration{};
-                    std::memcpy(&encoded_duration, data_.data() + offset, sizeof(encoded_duration));
-                    encoded_duration = ntohs(encoded_duration);
-                    info_.server_duration_us = std::pow(encoded_duration, 1.74) / 2;
-                }
+            if (frame_id == static_cast<std::uint8_t>(response_frame_info_id::server_duration) && frame_size == 2 &&
+                framing_extras_size_ - offset >= frame_size) {
+                std::uint16_t encoded_duration{};
+                std::memcpy(&encoded_duration, data_.data() + offset, sizeof(encoded_duration));
+                encoded_duration = ntohs(encoded_duration);
+                info_.server_duration_us = std::pow(encoded_duration, 1.74) / 2;
             }
             offset += frame_size;
         }
@@ -202,14 +230,14 @@ class client_response
 } // namespace couchbase::protocol
 
 template<>
-struct fmt::formatter<couchbase::protocol::enhanced_error> : formatter<std::string> {
+struct fmt::formatter<couchbase::protocol::enhanced_error_info> : formatter<std::string> {
     template<typename FormatContext>
-    auto format(const couchbase::protocol::enhanced_error& error, FormatContext& ctx)
+    auto format(const couchbase::protocol::enhanced_error_info& error, FormatContext& ctx)
     {
-        if (!error.ref.empty() && !error.context.empty()) {
-            format_to(ctx.out(), R"((ref: "{}", ctx: "{}"))", error.ref, error.context);
-        } else if (!error.ref.empty()) {
-            format_to(ctx.out(), R"((ref: "{}"))", error.ref);
+        if (!error.reference.empty() && !error.context.empty()) {
+            format_to(ctx.out(), R"((ref: "{}", ctx: "{}"))", error.reference, error.context);
+        } else if (!error.reference.empty()) {
+            format_to(ctx.out(), R"((ref: "{}"))", error.reference);
         } else if (!error.context.empty()) {
             format_to(ctx.out(), R"((ctx: "{}"))", error.context);
         }

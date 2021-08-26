@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@
 
 #include <protocol/unsigned_leb128.h>
 
-#include <protocol/client_opcode.hxx>
 #include <document_id.hxx>
+#include <protocol/client_opcode.hxx>
 
 namespace couchbase::protocol
 {
@@ -31,9 +31,9 @@ class mutate_in_response_body
     static const inline client_opcode opcode = client_opcode::subdoc_multi_mutation;
 
     struct mutate_in_field {
-        std::uint8_t index;
-        protocol::status status;
-        std::string value;
+        std::uint8_t index{};
+        protocol::status status{};
+        std::string value{};
     };
 
   private:
@@ -41,12 +41,12 @@ class mutate_in_response_body
     mutation_token token_;
 
   public:
-    std::vector<mutate_in_field>& fields()
+    [[nodiscard]] const std::vector<mutate_in_field>& fields() const
     {
         return fields_;
     }
 
-    mutation_token& token()
+    [[nodiscard]] const mutation_token& token() const
     {
         return token_;
     }
@@ -57,7 +57,7 @@ class mutate_in_response_body
                std::uint16_t key_size,
                std::uint8_t extras_size,
                const std::vector<uint8_t>& body,
-               const cmd_info&)
+               const cmd_info& /* info */)
     {
         Expects(header[1] == static_cast<uint8_t>(opcode));
         if (status == protocol::status::success || status == protocol::status::subdoc_multi_path_failure) {
@@ -80,14 +80,13 @@ class mutate_in_response_body
                 mutate_in_field field;
 
                 field.index = body[static_cast<std::size_t>(offset)];
-                Expects(field.index < 16);
                 offset++;
 
                 std::uint16_t entry_status = 0;
                 memcpy(&entry_status, body.data() + offset, sizeof(entry_status));
                 entry_status = ntohs(entry_status);
                 Expects(is_valid_status(entry_status));
-                field.status = static_cast<protocol::status>(entry_status);
+                field.status = protocol::status(entry_status);
                 offset += static_cast<offset_type>(sizeof(entry_status));
 
                 if (field.status == protocol::status::success) {
@@ -225,7 +224,7 @@ class mutate_in_request_body
 
         void add_spec(subdoc_opcode operation, bool xattr, const std::string& path)
         {
-            Expects(operation == protocol::subdoc_opcode::remove);
+            Expects(operation == protocol::subdoc_opcode::remove || operation == protocol::subdoc_opcode::remove_doc);
             add_spec(static_cast<std::uint8_t>(operation), build_path_flags(xattr, false, false), path, "");
         }
 
@@ -306,30 +305,39 @@ class mutate_in_request_body
             return;
         }
         auto frame_id = static_cast<uint8_t>(protocol::request_frame_info_id::durability_requirement);
+        auto extras_size = framing_extras_.size();
         if (timeout) {
-            framing_extras_.resize(4);
-            framing_extras_[0] = static_cast<std::uint8_t>((static_cast<std::uint32_t>(frame_id) << 4U) | 3U);
-            framing_extras_[1] = static_cast<std::uint8_t>(level);
+            framing_extras_.resize(extras_size + 4);
+            framing_extras_[extras_size + 0] = static_cast<std::uint8_t>((static_cast<std::uint32_t>(frame_id) << 4U) | 3U);
+            framing_extras_[extras_size + 1] = static_cast<std::uint8_t>(level);
             uint16_t val = htons(*timeout);
-            memcpy(framing_extras_.data() + 2, &val, sizeof(val));
+            memcpy(framing_extras_.data() + extras_size + 2, &val, sizeof(val));
         } else {
-            framing_extras_.resize(2);
-            framing_extras_[0] = static_cast<std::uint8_t>(static_cast<std::uint32_t>(frame_id) << 4U | 1U);
-            framing_extras_[1] = static_cast<std::uint8_t>(level);
+            framing_extras_.resize(extras_size + 2);
+            framing_extras_[extras_size + 0] = static_cast<std::uint8_t>(static_cast<std::uint32_t>(frame_id) << 4U | 1U);
+            framing_extras_[extras_size + 1] = static_cast<std::uint8_t>(level);
         }
     }
 
-    const std::string& key()
+    void preserve_expiry()
+    {
+        auto frame_id = static_cast<uint8_t>(protocol::request_frame_info_id::preserve_ttl);
+        auto extras_size = framing_extras_.size();
+        framing_extras_.resize(extras_size + 1);
+        framing_extras_[extras_size + 0] = static_cast<std::uint8_t>(static_cast<std::uint32_t>(frame_id) << 4U | 0U);
+    }
+
+    [[nodiscard]] const std::string& key() const
     {
         return key_;
     }
 
-    const std::vector<std::uint8_t>& framing_extras()
+    [[nodiscard]] const std::vector<std::uint8_t>& framing_extras() const
     {
         return framing_extras_;
     }
 
-    const std::vector<std::uint8_t>& extras()
+    [[nodiscard]] const std::vector<std::uint8_t>& extras()
     {
         if (extras_.empty()) {
             fill_extention();
@@ -337,7 +345,7 @@ class mutate_in_request_body
         return extras_;
     }
 
-    const std::vector<std::uint8_t>& value()
+    [[nodiscard]] const std::vector<std::uint8_t>& value()
     {
         if (value_.empty()) {
             fill_value();
@@ -345,7 +353,7 @@ class mutate_in_request_body
         return value_;
     }
 
-    std::size_t size()
+    [[nodiscard]] std::size_t size()
     {
         if (extras_.empty()) {
             fill_extention();
@@ -374,7 +382,7 @@ class mutate_in_request_body
     void fill_value()
     {
         size_t value_size = 0;
-        for (auto& spec : specs_.entries) {
+        for (const auto& spec : specs_.entries) {
             value_size += sizeof(spec.opcode) + sizeof(spec.flags) + sizeof(std::uint16_t) + spec.path.size() + sizeof(std::uint32_t) +
                           spec.param.size();
         }

@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ struct mcbp_context {
     const std::optional<configuration>& config;
     const std::vector<protocol::hello_feature>& supported_features;
 
-    [[nodiscard]] bool supports_feature(protocol::hello_feature feature)
+    [[nodiscard]] bool supports_feature(protocol::hello_feature feature) const
     {
         return std::find(supported_features.begin(), supported_features.end(), feature) != supported_features.end();
     }

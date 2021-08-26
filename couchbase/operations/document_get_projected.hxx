@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -25,9 +25,7 @@ namespace couchbase::operations
 {
 
 struct get_projected_response {
-    document_id id;
-    std::uint32_t opaque;
-    std::error_code ec{};
+    error_context::key_value ctx;
     std::string value{};
     std::uint64_t cas{};
     std::uint32_t flags{};
@@ -48,7 +46,7 @@ struct get_projected_request {
     std::chrono::milliseconds timeout{ timeout_defaults::key_value_timeout };
     io::retry_context<io::retry_strategy::best_effort> retries{ true };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& /* context */)
     {
         encoded.opaque(opaque);
         encoded.partition(partition);
@@ -113,8 +111,7 @@ subdoc_lookup(tao::json::value& root, const std::string& path)
                 break;
             }
             std::string key = path.substr(offset, idx - offset);
-            int array_index = std::stoi(key);
-            if (array_index == -1) {
+            if (int array_index = std::stoi(key); array_index == -1) {
                 cur = &cur->get_array().back();
             } else if (static_cast<std::size_t>(array_index) < cur->get_array().size()) {
                 cur = &cur->get_array().back();
@@ -198,13 +195,10 @@ subdoc_apply_projection(tao::json::value& root, const std::string& path, tao::js
 } // namespace priv
 
 get_projected_response
-make_response(std::error_code ec, get_projected_request& request, get_projected_request::encoded_response_type&& encoded)
+make_response(error_context::key_value&& ctx, const get_projected_request& request, get_projected_request::encoded_response_type&& encoded)
 {
-    get_projected_response response{ request.id, encoded.opaque(), ec };
-    if (ec && response.opaque == 0) {
-        response.opaque = request.opaque;
-    }
-    if (!ec) {
+    get_projected_response response{ std::move(ctx) };
+    if (!response.ctx.ec) {
         response.cas = encoded.cas();
         if (request.with_expiry && !encoded.body().fields()[0].value.empty()) {
             response.expiry = gsl::narrow_cast<std::uint32_t>(std::stoul(encoded.body().fields()[0].value));
@@ -215,14 +209,20 @@ make_response(std::error_code ec, get_projected_request& request, get_projected_
                 // special case when user only wanted full+expiration
                 response.value = encoded.body().fields()[1].value;
             } else {
-                tao::json::value full_doc = tao::json::from_string(encoded.body().fields()[request.with_expiry ? 1 : 0].value);
+                tao::json::value full_doc{};
+                try {
+                    full_doc = tao::json::from_string(encoded.body().fields()[request.with_expiry ? 1 : 0].value);
+                } catch (const tao::pegtl::parse_error& e) {
+                    response.ctx.ec = error::common_errc::parsing_failure;
+                    return response;
+                }
                 tao::json::value new_doc;
                 for (const auto& projection : request.projections) {
                     auto value_to_apply = priv::subdoc_lookup(full_doc, projection);
                     if (value_to_apply) {
                         priv::subdoc_apply_projection(new_doc, projection, *value_to_apply, request.preserve_array_indexes);
                     } else {
-                        response.ec = std::make_error_code(error::key_value_errc::path_not_found);
+                        response.ctx.ec = error::key_value_errc::path_not_found;
                         return response;
                     }
                 }
@@ -234,10 +234,16 @@ make_response(std::error_code ec, get_projected_request& request, get_projected_
             for (const auto& projection : request.projections) {
                 auto& field = encoded.body().fields()[offset++];
                 if (field.status == protocol::status::success && !field.value.empty()) {
-                    auto value_to_apply = tao::json::from_string(field.value);
+                    tao::json::value value_to_apply{};
+                    try {
+                        value_to_apply = tao::json::from_string(field.value);
+                    } catch (const tao::pegtl::parse_error& e) {
+                        response.ctx.ec = error::common_errc::parsing_failure;
+                        return response;
+                    }
                     priv::subdoc_apply_projection(new_doc, projection, value_to_apply, request.preserve_array_indexes);
                 } else {
-                    response.ec = std::make_error_code(error::key_value_errc::path_not_found);
+                    response.ctx.ec = error::key_value_errc::path_not_found;
                     return response;
                 }
             }

@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -23,8 +23,7 @@
 namespace couchbase::operations
 {
 struct view_index_get_all_response {
-    std::string client_context_id;
-    std::error_code ec;
+    error_context::http ctx;
     std::vector<design_document> design_documents{};
 };
 
@@ -32,6 +31,7 @@ struct view_index_get_all_request {
     using response_type = view_index_get_all_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
+    using error_context_type = error_context::http;
 
     static const inline service_type type = service_type::management;
 
@@ -41,7 +41,7 @@ struct view_index_get_all_request {
     std::string bucket_name;
     design_document::name_space name_space;
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& /* context */) const
     {
         encoded.method = "GET";
         encoded.path = fmt::format("/pools/default/buckets/{}/ddocs", bucket_name);
@@ -50,12 +50,20 @@ struct view_index_get_all_request {
 };
 
 view_index_get_all_response
-make_response(std::error_code ec, view_index_get_all_request& request, view_index_get_all_request::encoded_response_type&& encoded)
+make_response(error_context::http&& ctx,
+              const view_index_get_all_request& request,
+              view_index_get_all_request::encoded_response_type&& encoded)
 {
-    view_index_get_all_response response{ request.client_context_id, ec };
-    if (!ec) {
+    view_index_get_all_response response{ std::move(ctx) };
+    if (!response.ctx.ec) {
         if (encoded.status_code == 200) {
-            auto payload = tao::json::from_string(encoded.body);
+            tao::json::value payload{};
+            try {
+                payload = tao::json::from_string(encoded.body);
+            } catch (const tao::pegtl::parse_error& e) {
+                response.ctx.ec = error::common_errc::parsing_failure;
+                return response;
+            }
             auto* rows = payload.find("rows");
             if (rows != nullptr && rows->is_array()) {
                 for (const auto& entry : rows->get_array()) {
@@ -71,14 +79,12 @@ make_response(std::error_code ec, view_index_get_all_request& request, view_inde
                     design_document document{};
                     document.rev = meta->at("rev").get_string();
                     auto id = meta->at("id").get_string();
-                    static const std::string prefix = "_design/";
-                    if (id.find(prefix) == 0) {
+                    if (static const std::string prefix = "_design/"; id.find(prefix) == 0) {
                         document.name = id.substr(prefix.size());
                     } else {
                         document.name = id; // fall back, should not happen
                     }
-                    static const std::string name_space_prefix = "dev_";
-                    if (document.name.find(name_space_prefix) == 0) {
+                    if (static const std::string name_space_prefix = "dev_"; document.name.find(name_space_prefix) == 0) {
                         document.name = document.name.substr(name_space_prefix.size());
                         document.ns = couchbase::operations::design_document::name_space::development;
                     } else {
@@ -92,18 +98,15 @@ make_response(std::error_code ec, view_index_get_all_request& request, view_inde
                     if (json == nullptr || !json->is_object()) {
                         continue;
                     }
-                    const auto* views = json->find("views");
-                    if (views != nullptr && views->is_object()) {
-                        for (const auto& view_entry : views->get_object()) {
+                    if (const auto* views = json->find("views"); views != nullptr && views->is_object()) {
+                        for (const auto& [name, view_entry] : views->get_object()) {
                             couchbase::operations::design_document::view view;
-                            view.name = view_entry.first;
-                            if (view_entry.second.is_object()) {
-                                const auto* map = view_entry.second.find("map");
-                                if (map != nullptr && map->is_string()) {
+                            view.name = name;
+                            if (view_entry.is_object()) {
+                                if (const auto* map = view_entry.find("map"); map != nullptr && map->is_string()) {
                                     view.map = map->get_string();
                                 }
-                                const auto* reduce = view_entry.second.find("reduce");
-                                if (reduce != nullptr && reduce->is_string()) {
+                                if (const auto* reduce = view_entry.find("reduce"); reduce != nullptr && reduce->is_string()) {
                                     view.reduce = reduce->get_string();
                                 }
                             }
@@ -115,9 +118,9 @@ make_response(std::error_code ec, view_index_get_all_request& request, view_inde
                 }
             }
         } else if (encoded.status_code == 404) {
-            response.ec = std::make_error_code(error::common_errc::bucket_not_found);
+            response.ctx.ec = error::common_errc::bucket_not_found;
         } else {
-            response.ec = std::make_error_code(error::common_errc::internal_server_failure);
+            response.ctx.ec = error::common_errc::internal_server_failure;
         }
     }
     return response;

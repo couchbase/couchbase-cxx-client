@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -18,9 +18,16 @@
 #pragma once
 
 #include <timeout_defaults.hxx>
+#include <tracing/threshold_logging_options.hxx>
+#include <metrics/logging_meter_options.hxx>
 
 namespace couchbase
 {
+enum class tls_verify_mode {
+    none,
+    peer,
+};
+
 struct cluster_options {
     std::chrono::milliseconds bootstrap_timeout = timeout_defaults::bootstrap_timeout;
     std::chrono::milliseconds connect_timeout = timeout_defaults::connect_timeout;
@@ -40,14 +47,22 @@ struct cluster_options {
     bool force_ipv4{ false };
     bool enable_dns_srv{ true };
     bool show_queries{ false };
+    bool enable_unordered_execution{ true };
+    bool enable_clustermap_notification{ true };
+    bool enable_compression{ true };
+    bool enable_tracing{ true };
+    bool enable_metrics{ true };
     std::string network{ "auto" };
+    tracing::threshold_logging_options tracing_options{};
+    metrics::logging_meter_options metrics_options{};
+    tls_verify_mode tls_verify{ tls_verify_mode::peer };
 
     std::chrono::milliseconds tcp_keep_alive_interval = timeout_defaults::tcp_keep_alive_interval;
     std::chrono::milliseconds config_poll_interval = timeout_defaults::config_poll_interval;
     std::chrono::milliseconds config_poll_floor = timeout_defaults::config_poll_floor;
     std::chrono::milliseconds config_idle_redial_timeout = timeout_defaults::config_idle_redial_timeout;
 
-    size_t max_http_connections{ 0 };
+    std::size_t max_http_connections{ 0 };
     std::chrono::milliseconds idle_http_connection_timeout = timeout_defaults::idle_http_connection_timeout;
 };
 

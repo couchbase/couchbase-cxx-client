@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -95,7 +95,7 @@ enum class retry_reason {
     views_no_active_partition,
 };
 
-constexpr inline bool
+constexpr bool
 allows_non_idempotent_retry(retry_reason reason)
 {
     switch (reason) {
@@ -126,7 +126,7 @@ allows_non_idempotent_retry(retry_reason reason)
     return false;
 }
 
-constexpr inline bool
+constexpr bool
 always_retry(retry_reason reason)
 {
     switch (reason) {

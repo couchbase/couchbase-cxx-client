@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -90,13 +90,13 @@ enum class request_frame_info_id : uint8_t {
      * If the request modifies an existing document the expiry time from the existing document should be used instead of the TTL provided.
      * If document don't exist the provided TTL should be used. The frame info contains no value (length = 0).
      */
-    preserve_ttl = 0x1f,
+    preserve_ttl = 0x05,
 };
 
-constexpr inline bool
+constexpr bool
 is_valid_request_frame_info_id(uint8_t value)
 {
-    switch (static_cast<request_frame_info_id>(value)) {
+    switch (request_frame_info_id(value)) {
         case request_frame_info_id::barrier:
         case request_frame_info_id::durability_requirement:
         case request_frame_info_id::dcp_stream_id:
@@ -129,10 +129,10 @@ enum class response_frame_info_id : uint8_t {
     server_duration = 0x00,
 };
 
-constexpr inline bool
+constexpr bool
 is_valid_response_frame_info_id(uint8_t value)
 {
-    switch (static_cast<response_frame_info_id>(value)) {
+    switch (response_frame_info_id(value)) {
         case response_frame_info_id::server_duration:
             return true;
     }

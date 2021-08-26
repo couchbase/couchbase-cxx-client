@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -27,9 +27,7 @@ namespace couchbase::operations
 struct exists_response {
     enum class observe_status { invalid, found, not_found, persisted, logically_deleted };
 
-    document_id id;
-    std::uint32_t opaque;
-    std::error_code ec{};
+    error_context::key_value ctx;
     std::uint16_t partition_id{};
     std::uint64_t cas{};
     observe_status status{ observe_status::invalid };
@@ -45,7 +43,7 @@ struct exists_request {
     std::chrono::milliseconds timeout{ timeout_defaults::key_value_timeout };
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& /* context */) const
     {
         encoded.opaque(opaque);
         encoded.body().id(partition, id);
@@ -54,10 +52,10 @@ struct exists_request {
 };
 
 exists_response
-make_response(std::error_code ec, exists_request& request, exists_request::encoded_response_type&& encoded)
+make_response(error_context::key_value&& ctx, const exists_request& request, exists_request::encoded_response_type&& encoded)
 {
-    exists_response response{ request.id, encoded.opaque(), ec, request.partition };
-    if (!ec) {
+    exists_response response{ ctx, request.partition };
+    if (!ctx.ec) {
         response.cas = encoded.body().cas();
         response.partition_id = encoded.body().partition_id();
         switch (encoded.body().status()) {

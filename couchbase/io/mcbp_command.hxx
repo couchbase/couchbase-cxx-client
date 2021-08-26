@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,14 +17,18 @@
 
 #pragma once
 
+#include <functional>
+#include <utility>
+
 #include <platform/uuid.h>
 
 #include <io/mcbp_session.hxx>
 #include <io/retry_orchestrator.hxx>
 
 #include <protocol/cmd_get_collection_id.hxx>
-#include <functional>
-#include <utility>
+
+#include <tracing/request_tracer.hxx>
+#include <metrics/meter.hxx>
 
 namespace couchbase::operations
 {
@@ -44,6 +48,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     mcbp_command_handler handler_{};
     std::shared_ptr<Manager> manager_{};
     std::string id_;
+    tracing::request_span* span_{ nullptr };
 
     mcbp_command(asio::io_context& ctx, std::shared_ptr<Manager> manager, Request req)
       : deadline(ctx)
@@ -56,7 +61,11 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
     void start(mcbp_command_handler&& handler)
     {
-        handler_ = handler;
+        span_ = manager_->tracer()->start_span(tracing::span_name_for_mcbp_command(encoded_request_type::body_type::opcode), nullptr);
+        span_->add_tag(tracing::attributes::service, tracing::service::key_value);
+        span_->add_tag(tracing::attributes::instance, request.id.bucket);
+
+        handler_ = std::move(handler);
         deadline.expires_after(request.timeout);
         deadline.async_wait([self = this->shared_from_this()](std::error_code ec) {
             if (ec == asio::error::operation_aborted) {
@@ -73,14 +82,21 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                 handler_ = nullptr;
             }
         }
-        invoke_handler(std::make_error_code(request.retries.idempotent ? error::common_errc::unambiguous_timeout
-                                                                       : error::common_errc::ambiguous_timeout));
+        invoke_handler(request.retries.idempotent ? error::common_errc::unambiguous_timeout : error::common_errc::ambiguous_timeout);
         retry_backoff.cancel();
         deadline.cancel();
     }
 
     void invoke_handler(std::error_code ec, std::optional<io::mcbp_message> msg = {})
     {
+        if (span_) {
+            if (msg) {
+                auto server_duration_us = static_cast<std::uint64_t>(protocol::parse_server_duration_us(msg.value()));
+                span_->add_tag(tracing::attributes::server_duration, server_duration_us);
+            }
+            span_->end();
+            span_ = nullptr;
+        }
         if (handler_) {
             handler_(ec, std::move(msg));
         }
@@ -100,9 +116,9 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
           req.data(session_->supports_feature(protocol::hello_feature::snappy)),
           [self = this->shared_from_this()](std::error_code ec, io::retry_reason /* reason */, io::mcbp_message&& msg) mutable {
               if (ec == asio::error::operation_aborted) {
-                  return self->invoke_handler(std::make_error_code(error::common_errc::ambiguous_timeout));
+                  return self->invoke_handler(error::common_errc::ambiguous_timeout);
               }
-              if (ec == std::make_error_code(error::common_errc::collection_not_found)) {
+              if (ec == error::common_errc::collection_not_found) {
                   if (self->request.id.collection_uid) {
                       return self->invoke_handler(ec);
                   }
@@ -111,7 +127,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
               if (ec) {
                   return self->invoke_handler(ec);
               }
-              protocol::client_response<protocol::get_collection_id_response_body> resp(msg);
+              protocol::client_response<protocol::get_collection_id_response_body> resp(std::move(msg));
               self->session_->update_collection_uid(self->request.id.collection, resp.body().collection_uid());
               self->request.id.collection_uid = resp.body().collection_uid();
               return self->send();
@@ -130,8 +146,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                       std::chrono::duration_cast<std::chrono::milliseconds>(time_left).count(),
                       id_);
         if (time_left < backoff) {
-            return invoke_handler(std::make_error_code(request.retries.idempotent ? error::common_errc::unambiguous_timeout
-                                                                                  : error::common_errc::ambiguous_timeout));
+            return invoke_handler(make_error_code(request.retries.idempotent ? error::common_errc::unambiguous_timeout
+                                                                             : error::common_errc::ambiguous_timeout));
         }
         retry_backoff.expires_after(backoff);
         retry_backoff.async_wait([self = this->shared_from_this()](std::error_code ec) mutable {
@@ -146,6 +162,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     {
         opaque_ = session_->next_opaque();
         request.opaque = *opaque_;
+        span_->add_tag(tracing::attributes::operation_id, fmt::format("0x{:x}", request.opaque));
         if (request.id.use_collections && !request.id.collection_uid) {
             if (session_->supports_feature(protocol::hello_feature::collections)) {
                 auto collection_id = session_->get_collection_uid(request.id.collection);
@@ -163,26 +180,38 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                 }
             } else {
                 if (!request.id.collection.empty() && request.id.collection != "_default._default") {
-                    return invoke_handler(std::make_error_code(error::common_errc::unsupported_operation));
+                    return invoke_handler(error::common_errc::unsupported_operation);
                 }
             }
         }
-        auto encoding_ec = request.encode_to(encoded, session_->context());
-        if (encoding_ec) {
-            return invoke_handler(encoding_ec);
+
+        if (auto ec = request.encode_to(encoded, session_->context()); ec) {
+            return invoke_handler(ec);
         }
 
         session_->write_and_subscribe(
           request.opaque,
           encoded.data(session_->supports_feature(protocol::hello_feature::snappy)),
-          [self = this->shared_from_this()](std::error_code ec, io::retry_reason reason, io::mcbp_message&& msg) mutable {
+          [self = this->shared_from_this(),
+           start = std::chrono::steady_clock::now()](std::error_code ec, io::retry_reason reason, io::mcbp_message&& msg) mutable {
+              static std::string meter_name = "db.couchbase.operations";
+              static std::map<std::string, std::string> tags = {
+                  { "db.couchbase.service", "kv" },
+                  { "db.operation", fmt::format("{}", encoded_request_type::body_type::opcode) },
+              };
+              self->manager_->meter()
+                ->get_value_recorder(meter_name, tags)
+                ->record_value(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count());
+
               self->retry_backoff.cancel();
               if (ec == asio::error::operation_aborted) {
-                  return self->invoke_handler(std::make_error_code(
-                    self->request.retries.idempotent ? error::common_errc::unambiguous_timeout : error::common_errc::ambiguous_timeout));
+                  self->span_->add_tag(tracing::attributes::orphan, "aborted");
+                  return self->invoke_handler(make_error_code(self->request.retries.idempotent ? error::common_errc::unambiguous_timeout
+                                                                                               : error::common_errc::ambiguous_timeout));
               }
-              if (ec == std::make_error_code(error::common_errc::request_canceled)) {
+              if (ec == error::common_errc::request_canceled) {
                   if (reason == io::retry_reason::do_not_retry) {
+                      self->span_->add_tag(tracing::attributes::orphan, "canceled");
                       return self->invoke_handler(ec);
                   }
                   return io::retry_orchestrator::maybe_retry(self->manager_, self, reason, ec);
@@ -190,7 +219,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
               protocol::status status = protocol::status::invalid;
               std::optional<error_map::error_info> error_code{};
               if (protocol::is_valid_status(msg.header.status())) {
-                  status = static_cast<protocol::status>(msg.header.status());
+                  status = protocol::status(msg.header.status());
               } else {
                   error_code = self->session_->decode_error_code(msg.header.status());
               }
@@ -242,6 +271,9 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
             return;
         }
         session_ = std::move(session);
+        span_->add_tag(tracing::attributes::remote_socket, session_->remote_address());
+        span_->add_tag(tracing::attributes::local_socket, session_->local_address());
+        span_->add_tag(tracing::attributes::local_id, session_->id());
         send();
     }
 };

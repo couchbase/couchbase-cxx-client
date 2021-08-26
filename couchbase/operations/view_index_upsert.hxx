@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -22,16 +22,16 @@
 namespace couchbase::operations
 {
 struct view_index_upsert_response {
-    std::string client_context_id;
-    std::error_code ec;
+    error_context::http ctx;
 };
 
 struct view_index_upsert_request {
     using response_type = view_index_upsert_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
+    using error_context_type = error_context::http;
 
-    static const inline service_type type = service_type::views;
+    static const inline service_type type = service_type::view;
 
     std::string client_context_id{ uuid::to_string(uuid::random()) };
     std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
@@ -39,7 +39,7 @@ struct view_index_upsert_request {
     std::string bucket_name;
     design_document document;
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& /* context */) const
     {
         tao::json::value body;
         body["views"] = tao::json::empty_object;
@@ -64,22 +64,24 @@ struct view_index_upsert_request {
 };
 
 view_index_upsert_response
-make_response(std::error_code ec, view_index_upsert_request& request, view_index_upsert_request::encoded_response_type&& encoded)
+make_response(error_context::http&& ctx,
+              const view_index_upsert_request& /* request */,
+              view_index_upsert_request::encoded_response_type&& encoded)
 {
-    view_index_upsert_response response{ request.client_context_id, ec };
-    if (!ec) {
+    view_index_upsert_response response{ std::move(ctx) };
+    if (!response.ctx.ec) {
         switch (encoded.status_code) {
             case 200:
             case 201:
                 break;
             case 400:
-                response.ec = std::make_error_code(error::common_errc::invalid_argument);
+                response.ctx.ec = error::common_errc::invalid_argument;
                 break;
             case 404:
-                response.ec = std::make_error_code(error::view_errc::design_document_not_found);
+                response.ctx.ec = error::view_errc::design_document_not_found;
                 break;
             default:
-                response.ec = std::make_error_code(error::common_errc::internal_server_failure);
+                response.ctx.ec = error::common_errc::internal_server_failure;
         }
     }
     return response;

@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include <utility>
 #include <memory>
+#include <utility>
 
 #include <spdlog/spdlog.h>
 
@@ -30,9 +30,9 @@
 #include <errors.hxx>
 #include <version.hxx>
 
-#include <io/http_parser.hxx>
-#include <io/http_message.hxx>
 #include <io/http_context.hxx>
+#include <io/http_message.hxx>
+#include <io/http_parser.hxx>
 #include <platform/base64.h>
 #include <timeout_defaults.hxx>
 
@@ -60,14 +60,7 @@ class http_session : public std::enable_shared_from_this<http_session>
       , credentials_(credentials)
       , hostname_(hostname)
       , service_(service)
-      , user_agent_(fmt::format("cxx/{}.{}.{}/{}; client/{}; session/{}; {}",
-                                BACKEND_VERSION_MAJOR,
-                                BACKEND_VERSION_MINOR,
-                                BACKEND_VERSION_PATCH,
-                                BACKEND_GIT_REVISION,
-                                client_id_,
-                                id_,
-                                BACKEND_SYSTEM))
+      , user_agent_(fmt::format("{}; client/{}; session/{}; {}", couchbase::sdk_id(), client_id_, id_, BACKEND_SYSTEM))
       , log_prefix_(fmt::format("[{}/{}]", client_id_, id_))
       , http_ctx_(std::move(http_ctx))
     {
@@ -92,14 +85,7 @@ class http_session : public std::enable_shared_from_this<http_session>
       , credentials_(credentials)
       , hostname_(hostname)
       , service_(service)
-      , user_agent_(fmt::format("cxx/{}.{}.{}/{}; client/{}; session/{}; {}",
-                                BACKEND_VERSION_MAJOR,
-                                BACKEND_VERSION_MINOR,
-                                BACKEND_VERSION_PATCH,
-                                BACKEND_GIT_REVISION,
-                                client_id_,
-                                id_,
-                                BACKEND_SYSTEM))
+      , user_agent_(fmt::format("{}; client/{}; session/{}; {}", couchbase::sdk_id(), client_id_, id_, BACKEND_SYSTEM))
       , log_prefix_(fmt::format("[{}/{}]", client_id_, id_))
       , http_ctx_(std::move(http_ctx))
     {
@@ -117,11 +103,17 @@ class http_session : public std::enable_shared_from_this<http_session>
 
     std::string remote_address() const
     {
+        if (endpoint_.protocol() == asio::ip::tcp::v6()) {
+            return fmt::format("[{}]:{}", endpoint_address_, endpoint_.port());
+        }
         return fmt::format("{}:{}", endpoint_address_, endpoint_.port());
     }
 
     std::string local_address() const
     {
+        if (endpoint_.protocol() == asio::ip::tcp::v6()) {
+            return fmt::format("[{}]:{}", local_endpoint_address_, local_endpoint_.port());
+        }
         return fmt::format("{}:{}", local_endpoint_address_, local_endpoint_.port());
     }
 
@@ -180,7 +172,7 @@ class http_session : public std::enable_shared_from_this<http_session>
         {
             std::scoped_lock lock(command_handlers_mutex_);
             for (auto& handler : command_handlers_) {
-                handler(std::make_error_code(error::common_errc::ambiguous_timeout), {});
+                handler(error::common_errc::ambiguous_timeout, {});
             }
             command_handlers_.clear();
         }
@@ -192,12 +184,12 @@ class http_session : public std::enable_shared_from_this<http_session>
         state_ = diag::endpoint_state::disconnected;
     }
 
-    bool keep_alive()
+    bool keep_alive() const
     {
         return keep_alive_;
     }
 
-    bool is_stopped()
+    bool is_stopped() const
     {
         return stopped_;
     }
@@ -210,7 +202,7 @@ class http_session : public std::enable_shared_from_this<http_session>
         output_buffer_.push_back(buf);
     }
 
-    void write(const std::string& buf)
+    void write(const std::string_view& buf)
     {
         if (stopped_) {
             return;
@@ -229,7 +221,8 @@ class http_session : public std::enable_shared_from_this<http_session>
         do_write();
     }
 
-    void write_and_subscribe(io::http_request& request, std::function<void(std::error_code, io::http_response&&)> handler)
+    template<typename Handler>
+    void write_and_subscribe(io::http_request& request, Handler&& handler)
     {
         if (stopped_) {
             return;

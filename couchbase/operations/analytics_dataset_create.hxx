@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@
 
 #include <tao/json.hpp>
 
+#include <error_context/http.hxx>
+#include <utils/name_codec.hxx>
 #include <version.hxx>
 
 namespace couchbase::operations
@@ -29,8 +31,7 @@ struct analytics_dataset_create_response {
         std::string message;
     };
 
-    std::string client_context_id;
-    std::error_code ec;
+    error_context::http ctx;
     std::string status{};
     std::vector<problem> errors{};
 };
@@ -39,6 +40,7 @@ struct analytics_dataset_create_request {
     using response_type = analytics_dataset_create_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
+    using error_context_type = error_context::http;
 
     static const inline service_type type = service_type::analytics;
 
@@ -53,15 +55,19 @@ struct analytics_dataset_create_request {
 
     bool ignore_if_exists{ false };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& /* context */) const
     {
         std::string where_clause = condition ? fmt::format("WHERE {}", *condition) : "";
         std::string if_not_exists_clause = ignore_if_exists ? "IF NOT EXISTS" : "";
 
         tao::json::value body{
             { "statement",
-              fmt::format(
-                "CREATE DATASET {} `{}`.`{}` ON `{}` {}", if_not_exists_clause, dataverse_name, dataset_name, bucket_name, where_clause) },
+              fmt::format("CREATE DATASET {} {}.`{}` ON `{}` {}",
+                          if_not_exists_clause,
+                          utils::analytics::uncompound_name(dataverse_name),
+                          dataset_name,
+                          bucket_name,
+                          where_clause) },
         };
         encoded.headers["content-type"] = "application/json";
         encoded.method = "POST";
@@ -72,21 +78,26 @@ struct analytics_dataset_create_request {
 };
 
 analytics_dataset_create_response
-make_response(std::error_code ec,
-              analytics_dataset_create_request& request,
+make_response(error_context::http&& ctx,
+              const analytics_dataset_create_request& /* request */,
               analytics_dataset_create_request::encoded_response_type&& encoded)
 {
-    analytics_dataset_create_response response{ request.client_context_id, ec };
-    if (!ec) {
-        auto payload = tao::json::from_string(encoded.body);
+    analytics_dataset_create_response response{ std::move(ctx) };
+    if (!response.ctx.ec) {
+        tao::json::value payload{};
+        try {
+            payload = tao::json::from_string(encoded.body);
+        } catch (const tao::pegtl::parse_error& e) {
+            response.ctx.ec = error::common_errc::parsing_failure;
+            return response;
+        }
         response.status = payload.at("status").get_string();
 
         if (response.status != "success") {
             bool dataset_exists = false;
             bool link_not_found = false;
 
-            auto* errors = payload.find("errors");
-            if (errors != nullptr && errors->is_array()) {
+            if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
                 for (const auto& error : errors->get_array()) {
                     analytics_dataset_create_response::problem err{
                         error.at("code").as<std::uint32_t>(),
@@ -104,11 +115,11 @@ make_response(std::error_code ec,
                 }
             }
             if (dataset_exists) {
-                response.ec = std::make_error_code(error::analytics_errc::dataset_exists);
+                response.ctx.ec = error::analytics_errc::dataset_exists;
             } else if (link_not_found) {
-                response.ec = std::make_error_code(error::analytics_errc::link_not_found);
+                response.ctx.ec = error::analytics_errc::link_not_found;
             } else {
-                response.ec = std::make_error_code(error::common_errc::internal_server_failure);
+                response.ctx.ec = error::common_errc::internal_server_failure;
             }
         }
     }

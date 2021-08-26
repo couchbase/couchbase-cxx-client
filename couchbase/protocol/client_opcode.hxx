@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -233,6 +233,7 @@ enum class client_opcode : uint8_t {
 enum class subdoc_opcode : uint8_t {
     get_doc = 0x00,
     set_doc = 0x01,
+    remove_doc = 0x04,
     get = 0xc5,
     exists = 0xc6,
     dict_add = 0xc7,
@@ -248,10 +249,10 @@ enum class subdoc_opcode : uint8_t {
     replace_body_with_xattr = 0xd3,
 };
 
-constexpr inline bool
+constexpr bool
 is_valid_client_opcode(uint8_t code)
 {
-    switch (static_cast<client_opcode>(code)) {
+    switch (client_opcode(code)) {
         case client_opcode::get:
         case client_opcode::upsert:
         case client_opcode::insert:
@@ -327,10 +328,10 @@ is_valid_client_opcode(uint8_t code)
     return false;
 }
 
-constexpr inline bool
+constexpr bool
 is_valid_subdoc_opcode(uint8_t code)
 {
-    switch (static_cast<subdoc_opcode>(code)) {
+    switch (subdoc_opcode(code)) {
         case subdoc_opcode::get:
         case subdoc_opcode::exists:
         case subdoc_opcode::dict_add:
@@ -345,11 +346,15 @@ is_valid_subdoc_opcode(uint8_t code)
         case subdoc_opcode::get_count:
         case subdoc_opcode::get_doc:
         case subdoc_opcode::set_doc:
+        case subdoc_opcode::remove_doc:
         case subdoc_opcode::replace_body_with_xattr:
             return true;
     }
     return false;
 }
+
+const inline static std::vector<std::uint8_t> empty_buffer;
+const inline static std::string empty_string;
 } // namespace couchbase::protocol
 
 template<>
@@ -625,6 +630,9 @@ struct fmt::formatter<couchbase::protocol::subdoc_opcode> : formatter<string_vie
                 break;
             case couchbase::protocol::subdoc_opcode::replace_body_with_xattr:
                 name = "replace_body_with_xattr (0xd3)";
+                break;
+            case couchbase::protocol::subdoc_opcode::remove_doc:
+                name = "remove_doc (0x04)";
                 break;
         }
         return formatter<string_view>::format(name, ctx);

@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -26,12 +26,13 @@
 #include <version.hxx>
 
 #include <errors.hxx>
-#include <mutation_token.hxx>
-#include <service_type.hxx>
-#include <platform/uuid.h>
-#include <timeout_defaults.hxx>
-#include <io/http_message.hxx>
 #include <io/http_context.hxx>
+#include <io/http_message.hxx>
+#include <mutation_token.hxx>
+#include <platform/uuid.h>
+#include <service_type.hxx>
+#include <timeout_defaults.hxx>
+#include <error_context/query.hxx>
 
 namespace couchbase::operations
 {
@@ -48,8 +49,8 @@ struct query_response_payload {
     };
 
     struct query_problem {
-        std::uint64_t code;
-        std::string message;
+        std::uint64_t code{};
+        std::string message{};
     };
 
     struct query_meta_data {
@@ -78,28 +79,22 @@ struct traits<couchbase::operations::query_response_payload> {
     {
         couchbase::operations::query_response_payload result;
         result.meta_data.request_id = v.at("requestID").get_string();
-        const auto i = v.find("clientContextID");
-        if (i != nullptr) {
+
+        if (const auto* i = v.find("clientContextID"); i != nullptr) {
             result.meta_data.client_context_id = i->get_string();
         }
         result.meta_data.status = v.at("status").get_string();
-        const auto s = v.find("signature");
-        if (s != nullptr) {
+        if (const auto* s = v.find("signature"); s != nullptr) {
             result.meta_data.signature = tao::json::to_string(*s);
         }
-        {
-            const auto c = v.find("prepared");
-            if (c != nullptr) {
-                result.prepared = c->get_string();
-            }
+        if (const auto* c = v.find("prepared"); c != nullptr) {
+            result.prepared = c->get_string();
         }
-        const auto p = v.find("profile");
-        if (p != nullptr) {
+        if (const auto* p = v.find("profile"); p != nullptr) {
             result.meta_data.profile = tao::json::to_string(*p);
         }
 
-        const auto m = v.find("metrics");
-        if (m != nullptr) {
+        if (const auto* m = v.find("metrics"); m != nullptr) {
             result.meta_data.metrics.result_count = m->at("resultCount").get_unsigned();
             result.meta_data.metrics.result_size = m->at("resultSize").get_unsigned();
             result.meta_data.metrics.elapsed_time = m->at("elapsedTime").get_string();
@@ -110,8 +105,7 @@ struct traits<couchbase::operations::query_response_payload> {
             result.meta_data.metrics.warning_count = m->template optional<std::uint64_t>("warningCount");
         }
 
-        const auto e = v.find("errors");
-        if (e != nullptr) {
+        if (const auto* e = v.find("errors"); e != nullptr) {
             std::vector<couchbase::operations::query_response_payload::query_problem> problems{};
             for (auto& err : e->get_array()) {
                 couchbase::operations::query_response_payload::query_problem problem;
@@ -122,8 +116,7 @@ struct traits<couchbase::operations::query_response_payload> {
             result.meta_data.errors.emplace(problems);
         }
 
-        const auto w = v.find("warnings");
-        if (w != nullptr) {
+        if (const auto* w = v.find("warnings"); w != nullptr) {
             std::vector<couchbase::operations::query_response_payload::query_problem> problems{};
             for (auto& warn : w->get_array()) {
                 couchbase::operations::query_response_payload::query_problem problem;
@@ -133,8 +126,8 @@ struct traits<couchbase::operations::query_response_payload> {
             }
             result.meta_data.warnings.emplace(problems);
         }
-        const auto r = v.find("results");
-        if (r != nullptr) {
+
+        if (const auto* r = v.find("results"); r != nullptr) {
             result.rows.reserve(result.meta_data.metrics.result_count);
             for (auto& row : r->get_array()) {
                 result.rows.emplace_back(tao::json::to_string(row));
@@ -149,8 +142,7 @@ struct traits<couchbase::operations::query_response_payload> {
 namespace couchbase::operations
 {
 struct query_response {
-    std::string client_context_id;
-    std::error_code ec;
+    error_context::query ctx;
     query_response_payload payload{};
 };
 
@@ -158,6 +150,7 @@ struct query_request {
     using response_type = query_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
+    using error_context_type = error_context::query;
 
     enum class scan_consistency_type { not_bounded, request_plus };
 
@@ -196,6 +189,8 @@ struct query_request {
     std::optional<http_context> ctx_{};
     bool extract_encoded_plan_{ false };
 
+    std::string body_str{};
+
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context)
     {
         ctx_.emplace(context);
@@ -222,13 +217,13 @@ struct query_request {
         body["timeout"] = fmt::format(
           "{}ms", ((timeout > std::chrono::milliseconds(5'000)) ? (timeout - std::chrono::milliseconds(500)) : timeout).count());
         if (positional_parameters.empty()) {
-            for (auto& param : named_parameters) {
-                Expects(param.first.empty() == false);
-                std::string key = param.first;
+            for (const auto& [name, value] : named_parameters) {
+                Expects(name.empty() == false);
+                std::string key = name;
                 if (key[0] != '$') {
                     key.insert(key.begin(), '$');
                 }
-                body[key] = param.second;
+                body[key] = value;
             }
         } else {
             body["args"] = positional_parameters;
@@ -298,18 +293,19 @@ struct query_request {
             body["query_context"] = scope_qualifier;
         } else if (scope_name) {
             if (bucket_name) {
-                body["query_context"] = fmt::format("`{}`.{}", *bucket_name, *scope_name);
+                body["query_context"] = fmt::format("default:`{}`.`{}`", *bucket_name, *scope_name);
             }
         }
-        for (auto& param : raw) {
-            body[param.first] = param.second;
+        for (const auto& [name, value] : raw) {
+            body[name] = value;
         }
         encoded.type = type;
         encoded.headers["connection"] = "keep-alive";
         encoded.headers["content-type"] = "application/json";
         encoded.method = "POST";
         encoded.path = "/query/service";
-        encoded.body = tao::json::to_string(body);
+        body_str = tao::json::to_string(body);
+        encoded.body = body_str;
 
         tao::json::value stmt = body["statement"];
         tao::json::value prep = body["prepared"];
@@ -329,11 +325,18 @@ struct query_request {
 };
 
 query_response
-make_response(std::error_code ec, query_request& request, query_request::encoded_response_type&& encoded)
+make_response(error_context::query&& ctx, query_request& request, query_request::encoded_response_type&& encoded)
 {
-    query_response response{ request.client_context_id, ec };
-    if (!ec) {
-        response.payload = tao::json::from_string(encoded.body).as<query_response_payload>();
+    query_response response{ std::move(ctx) };
+    response.ctx.statement = request.statement;
+    response.ctx.parameters = request.body_str;
+    if (!response.ctx.ec) {
+        try {
+            response.payload = tao::json::from_string(encoded.body).as<query_response_payload>();
+        } catch (const tao::pegtl::parse_error&) {
+            response.ctx.ec = error::common_errc::parsing_failure;
+            return response;
+        }
         Expects(response.payload.meta_data.client_context_id.empty() ||
                 response.payload.meta_data.client_context_id == request.client_context_id);
         if (response.payload.meta_data.status == "success") {
@@ -342,17 +345,23 @@ make_response(std::error_code ec, query_request& request, query_request::encoded
             } else if (request.extract_encoded_plan_) {
                 request.extract_encoded_plan_ = false;
                 if (response.payload.rows.size() == 1) {
-                    auto row = tao::json::from_string(response.payload.rows[0]);
-                    auto plan = row.find("encoded_plan");
-                    auto name = row.find("name");
+                    tao::json::value row{};
+                    try {
+                        row = tao::json::from_string(response.payload.rows[0]);
+                    } catch (const tao::pegtl::parse_error&) {
+                        response.ctx.ec = error::common_errc::parsing_failure;
+                        return response;
+                    }
+                    auto* plan = row.find("encoded_plan");
+                    auto* name = row.find("name");
                     if (plan != nullptr && name != nullptr) {
                         request.ctx_->cache.put(request.statement, name->get_string(), plan->get_string());
                         throw couchbase::priv::retry_http_request{};
-                    } else {
-                        response.ec = std::make_error_code(error::query_errc::prepared_statement_failure);
                     }
+                    response.ctx.ec = error::query_errc::prepared_statement_failure;
+
                 } else {
-                    response.ec = std::make_error_code(error::query_errc::prepared_statement_failure);
+                    response.ctx.ec = error::query_errc::prepared_statement_failure;
                 }
             }
         } else {
@@ -363,6 +372,8 @@ make_response(std::error_code ec, query_request& request, query_request::encoded
             bool syntax_error = false;
             bool server_timeout = false;
             bool invalid_argument = false;
+            bool cas_mismatch = false;
+            bool authentication_failure = false;
 
             if (response.payload.meta_data.errors) {
                 for (const auto& error : *response.payload.meta_data.errors) {
@@ -384,9 +395,17 @@ make_response(std::error_code ec, query_request& request, query_request::encoded
                         case 4090: /* IKey: "plan.build_prepared.name_not_in_encoded_plan" */
                             prepared_statement_failure = true;
                             break;
+                        case 12009: /* IKey: "datastore.couchbase.DML_error" */
+                            if (error.message.find("CAS mismatch") != std::string::npos) {
+                                cas_mismatch = true;
+                            }
+                            break;
                         case 12004: /* IKey: "datastore.couchbase.primary_idx_not_found" */
                         case 12016: /* IKey: "datastore.couchbase.index_not_found" */
                             index_not_found = true;
+                            break;
+                        case 13014: /* IKey: "datastore.couchbase.insufficient_credentials" */
+                            authentication_failure = true;
                             break;
                         default:
                             if ((error.code >= 12000 && error.code < 13000) || (error.code >= 14000 && error.code < 15000)) {
@@ -399,21 +418,25 @@ make_response(std::error_code ec, query_request& request, query_request::encoded
                 }
             }
             if (syntax_error) {
-                response.ec = std::make_error_code(error::common_errc::parsing_failure);
+                response.ctx.ec = error::common_errc::parsing_failure;
             } else if (invalid_argument) {
-                response.ec = std::make_error_code(error::common_errc::invalid_argument);
+                response.ctx.ec = error::common_errc::invalid_argument;
             } else if (server_timeout) {
-                response.ec = std::make_error_code(error::common_errc::unambiguous_timeout);
+                response.ctx.ec = error::common_errc::unambiguous_timeout;
             } else if (prepared_statement_failure) {
-                response.ec = std::make_error_code(error::query_errc::prepared_statement_failure);
+                response.ctx.ec = error::query_errc::prepared_statement_failure;
             } else if (index_failure) {
-                response.ec = std::make_error_code(error::query_errc::index_failure);
+                response.ctx.ec = error::query_errc::index_failure;
             } else if (planning_failure) {
-                response.ec = std::make_error_code(error::query_errc::planning_failure);
+                response.ctx.ec = error::query_errc::planning_failure;
             } else if (index_not_found) {
-                response.ec = std::make_error_code(error::common_errc::index_not_found);
+                response.ctx.ec = error::common_errc::index_not_found;
+            } else if (cas_mismatch) {
+                response.ctx.ec = error::common_errc::cas_mismatch;
+            } else if (authentication_failure) {
+                response.ctx.ec = error::common_errc::authentication_failure;
             } else {
-                response.ec = std::make_error_code(error::common_errc::internal_server_failure);
+                response.ctx.ec = error::common_errc::internal_server_failure;
             }
         }
     }

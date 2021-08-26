@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -65,8 +65,8 @@ TEST_CASE("native: upsert document into default collection", "[native]")
         auto f = barrier->get_future();
         cluster.execute(req, [barrier](couchbase::operations::upsert_response resp) mutable { barrier->set_value(resp); });
         auto resp = f.get();
-        INFO(resp.ec.message());
-        REQUIRE_FALSE(resp.ec);
+        INFO(resp.ctx.ec.message());
+        REQUIRE_FALSE(resp.ctx.ec);
         INFO("rc=" << resp.cas);
         REQUIRE(resp.cas != 0);
         INFO("seqno=" << resp.token.sequence_number);

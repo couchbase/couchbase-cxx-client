@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@
 
 #include <string>
 
-#include <tao/json/external/pegtl.hpp>
-#include <tao/json/external/pegtl/contrib/uri.hpp>
+#include <tao/pegtl.hpp>
+#include <tao/pegtl/contrib/uri.hpp>
 
 #include <cluster_options.hxx>
 
@@ -63,7 +63,7 @@ struct connection_string {
 
 namespace priv
 {
-using namespace tao::json::pegtl;
+using namespace tao::pegtl;
 
 struct bucket_name : seq<uri::segment_nz> {
 };
@@ -86,7 +86,7 @@ using opt_bucket_name = opt_must<one<'/'>, bucket_name>;
 using opt_params = opt_must<one<'?'>, list_must<param, one<'&'>>>;
 using opt_nodes = seq<list_must<node, one<',', ';'>>, opt_bucket_name>;
 
-using grammar = must<seq<uri::scheme, one<':'>, uri::dslash, opt_nodes, opt_params, eof>>;
+using grammar = must<seq<uri::scheme, one<':'>, uri::dslash, opt_nodes, opt_params, tao::pegtl::eof>>;
 
 template<typename Rule>
 struct action {
@@ -330,6 +330,59 @@ extract_options(connection_string& connstr)
                 } else if (param.second == "false" || param.second == "no" || param.second == "off") {
                     connstr.options.show_queries = false;
                 }
+            } else if (param.first == "enable_clustermap_notification") {
+                /**
+                 * Allow the server to push configuration updates asynchronously.
+                 */
+                if (param.second == "true" || param.second == "yes" || param.second == "on") {
+                    connstr.options.enable_clustermap_notification = true;
+                } else if (param.second == "false" || param.second == "no" || param.second == "off") {
+                    connstr.options.enable_clustermap_notification = false;
+                }
+            } else if (param.first == "enable_unordered_execution") {
+                /**
+                 * Allow the server to reorder commands
+                 */
+                if (param.second == "true" || param.second == "yes" || param.second == "on") {
+                    connstr.options.enable_unordered_execution = true;
+                } else if (param.second == "false" || param.second == "no" || param.second == "off") {
+                    connstr.options.enable_unordered_execution = false;
+                }
+            } else if (param.first == "enable_compression") {
+                /**
+                 * Announce support of compression (snappy) to server
+                 */
+                if (param.second == "true" || param.second == "yes" || param.second == "on") {
+                    connstr.options.enable_compression = true;
+                } else if (param.second == "false" || param.second == "no" || param.second == "off") {
+                    connstr.options.enable_compression = false;
+                }
+            } else if (param.first == "enable_tracing") {
+                /**
+                 * true - use threshold_logging_tracer
+                 * false - use noop_tracer
+                 */
+                if (param.second == "true" || param.second == "yes" || param.second == "on") {
+                    connstr.options.enable_tracing = true;
+                } else if (param.second == "false" || param.second == "no" || param.second == "off") {
+                    connstr.options.enable_tracing = false;
+                }
+            } else if (param.first == "enable_metrics") {
+                /**
+                 * true - use logging_meter
+                 * false - use noop_meter
+                 */
+                if (param.second == "true" || param.second == "yes" || param.second == "on") {
+                    connstr.options.enable_metrics = true;
+                } else if (param.second == "false" || param.second == "no" || param.second == "off") {
+                    connstr.options.enable_metrics = false;
+                }
+            } else if (param.first == "tls_verify") {
+                if (param.second == "none") {
+                    connstr.options.tls_verify = tls_verify_mode::none;
+                } else if (param.second == "peer") {
+                    connstr.options.tls_verify = tls_verify_mode::peer;
+                }
             } else {
                 spdlog::warn(R"(unknown parameter "{}" in connection string (value "{}"))", param.first, param.second);
             }
@@ -357,11 +410,11 @@ parse_connection_string(const std::string& input)
         return res;
     }
 
-    auto in = tao::json::pegtl::memory_input(input, __FUNCTION__);
+    auto in = tao::pegtl::memory_input(input, __FUNCTION__);
     try {
         connection_string::node node{};
-        tao::json::pegtl::parse<priv::grammar, priv::action>(in, res, node);
-    } catch (tao::json::pegtl::parse_error& e) {
+        tao::pegtl::parse<priv::grammar, priv::action>(in, res, node);
+    } catch (const tao::pegtl::parse_error& e) {
         for (const auto& position : e.positions()) {
             if (position.source == __FUNCTION__) {
                 res.error = fmt::format(

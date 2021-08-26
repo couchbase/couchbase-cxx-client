@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@ class hello_response_body
                std::uint16_t key_size,
                std::uint8_t extras_size,
                const std::vector<uint8_t>& body,
-               const cmd_info&)
+               const cmd_info& /* info */)
     {
         Expects(header[1] == static_cast<uint8_t>(opcode));
         if (status == protocol::status::success) {
@@ -80,17 +80,15 @@ class hello_request_body
         hello_feature::xattr,
         hello_feature::xerror,
         hello_feature::select_bucket,
-        hello_feature::snappy,
         hello_feature::json,
         hello_feature::duplex,
-        hello_feature::clustermap_change_notification,
-        hello_feature::unordered_execution,
         hello_feature::alt_request_support,
         hello_feature::tracing,
         hello_feature::sync_replication,
         hello_feature::vattr,
         hello_feature::collections,
         hello_feature::subdoc_create_as_deleted,
+        hello_feature::preserve_ttl,
     };
     std::vector<std::uint8_t> value_;
 
@@ -105,29 +103,42 @@ class hello_request_body
         return key_;
     }
 
+    void enable_unordered_execution()
+    {
+        features_.emplace_back(hello_feature::unordered_execution);
+    }
+
+    void enable_clustermap_change_notification()
+    {
+        features_.emplace_back(hello_feature::clustermap_change_notification);
+    }
+
+    void enable_compression()
+    {
+        features_.emplace_back(hello_feature::snappy);
+    }
+
     [[nodiscard]] const std::vector<hello_feature>& features() const
     {
         return features_;
     }
 
-    const std::string& key()
+    [[nodiscard]] const std::string& key() const
     {
         return key_;
     }
 
-    const std::vector<std::uint8_t>& framing_extras()
+    [[nodiscard]] const std::vector<std::uint8_t>& framing_extras() const
     {
-        static std::vector<std::uint8_t> empty;
-        return empty;
+        return empty_buffer;
     }
 
-    const std::vector<std::uint8_t>& extras()
+    [[nodiscard]] const std::vector<std::uint8_t>& extras() const
     {
-        static std::vector<std::uint8_t> empty;
-        return empty;
+        return empty_buffer;
     }
 
-    const std::vector<std::uint8_t>& value()
+    [[nodiscard]] const std::vector<std::uint8_t>& value()
     {
         if (value_.empty()) {
             fill_body();
@@ -135,7 +146,7 @@ class hello_request_body
         return value_;
     }
 
-    std::size_t size()
+    [[nodiscard]] std::size_t size()
     {
         if (value_.empty()) {
             fill_body();

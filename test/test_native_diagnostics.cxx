@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ TEST_CASE("native: serializing diagnostics report", "[native]")
 {
     couchbase::diag::diagnostics_result res{
         "0xdeadbeef",
-        "cxx/1.0.0",
+        "ruby/1.0.0",
         {
           {
             {
@@ -112,7 +112,7 @@ TEST_CASE("native: serializing diagnostics report", "[native]")
 {
   "version": 2,
   "id": "0xdeadbeef",
-  "sdk": "cxx/1.0.0",
+  "sdk": "ruby/1.0.0",
   "services": {
     "kv": [
       {
@@ -182,7 +182,7 @@ TEST_CASE("native: serializing ping report", "[native]")
 
     couchbase::diag::ping_result res{
         "0xdeadbeef",
-        "cxx/1.0.0",
+        "ruby/1.0.0",
         {
           {
             {
@@ -261,7 +261,8 @@ TEST_CASE("native: serializing ping report", "[native]")
 {
   "version": 2,
   "id": "0xdeadbeef",
-  "sdk": "cxx/1.0.0",
+  "config_rev": 53,
+  "sdk": "ruby/1.0.0",
   "services": {
     "search": [
       {
@@ -354,8 +355,8 @@ TEST_CASE("native: fetch diagnostics after N1QL query", "[native]")
         auto f = barrier->get_future();
         cluster.execute_http(req, [barrier](couchbase::operations::query_response&& resp) mutable { barrier->set_value(resp); });
         auto resp = f.get();
-        INFO(resp.ec.message());
-        REQUIRE_FALSE(resp.ec);
+        INFO(resp.ctx.ec.message());
+        REQUIRE_FALSE(resp.ctx.ec);
         INFO("rows.size() =" << resp.payload.rows.size());
         REQUIRE(resp.payload.rows.size() == 1);
         INFO("row=" << resp.payload.rows[0]);
@@ -367,7 +368,7 @@ TEST_CASE("native: fetch diagnostics after N1QL query", "[native]")
         cluster.diagnostics("my_report_id", [barrier](couchbase::diag::diagnostics_result&& resp) mutable { barrier->set_value(resp); });
         auto res = f.get();
         REQUIRE(res.id == "my_report_id");
-        REQUIRE(res.sdk.find("cxx/") == 0);
+        REQUIRE(res.sdk.find("ruby/") == 0);
         REQUIRE(res.services[couchbase::service_type::kv].size() > 1);
         REQUIRE(res.services[couchbase::service_type::query].size() == 1);
         REQUIRE(res.services[couchbase::service_type::query][0].state == couchbase::diag::endpoint_state::connected);
@@ -419,7 +420,10 @@ TEST_CASE("native: ping", "[native]")
         cluster.ping("my_report_id", {}, {}, [barrier](couchbase::diag::ping_result&& resp) mutable { barrier->set_value(resp); });
         auto res = f.get();
         REQUIRE(res.id == "my_report_id");
-        REQUIRE(res.sdk.find("cxx/") == 0);
+        REQUIRE(res.sdk.find("ruby/") == 0);
+
+        auto report = tao::json::value(res);
+        spdlog::critical("XXX {}", tao::json::to_string(report));
     }
     {
         auto barrier = std::make_shared<std::promise<void>>();

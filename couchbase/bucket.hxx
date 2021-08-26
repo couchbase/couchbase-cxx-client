@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -22,6 +22,8 @@
 
 #include <operations.hxx>
 #include <origin.hxx>
+#include <tracing/request_tracer.hxx>
+#include <metrics/meter.hxx>
 
 namespace couchbase
 {
@@ -31,6 +33,8 @@ class bucket : public std::enable_shared_from_this<bucket>
     explicit bucket(const std::string& client_id,
                     asio::io_context& ctx,
                     asio::ssl::context& tls,
+                    tracing::request_tracer* tracer,
+                    metrics::meter* meter,
                     std::string name,
                     couchbase::origin origin,
                     const std::vector<protocol::hello_feature>& known_features)
@@ -38,6 +42,8 @@ class bucket : public std::enable_shared_from_this<bucket>
       : client_id_(client_id)
       , ctx_(ctx)
       , tls_(tls)
+      , tracer_(tracer)
+      , meter_(meter)
       , name_(std::move(name))
       , origin_(std::move(origin))
       , known_features_(known_features)
@@ -80,7 +86,7 @@ class bucket : public std::enable_shared_from_this<bucket>
     {
         if (!config_) {
             spdlog::debug("{} initialize configuration rev={}", log_prefix_, config.rev_str());
-        } else if (config.rev && config_->rev && *config.rev > *config_->rev) {
+        } else if (config_ < config) {
             spdlog::debug("{} will update the configuration old={} -> new={}", log_prefix_, config_->rev_str(), config.rev_str());
         } else {
             return;
@@ -98,12 +104,13 @@ class bucket : public std::enable_shared_from_this<bucket>
         if (!added.empty() || removed.empty()) {
             std::map<size_t, std::shared_ptr<io::mcbp_session>> new_sessions{};
 
-            for (auto entry : sessions_) {
+            for (auto& [index, session] : sessions_) {
                 std::size_t new_index = config.nodes.size() + 1;
                 for (const auto& node : config.nodes) {
-                    if (entry.second->bootstrap_hostname() == node.hostname_for(origin_.options().network) &&
-                        entry.second->bootstrap_port() ==
-                          std::to_string(node.port_or(origin_.options().network, service_type::kv, origin_.options().enable_tls, 0))) {
+                    if (session->bootstrap_hostname() == node.hostname_for(origin_.options().network) &&
+                        session->bootstrap_port() ==
+                          std::to_string(
+                            node.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0))) {
                         new_index = node.index;
                         break;
                     }
@@ -112,18 +119,18 @@ class bucket : public std::enable_shared_from_this<bucket>
                     spdlog::debug(R"({} rev={}, preserve session="{}", address="{}:{}")",
                                   log_prefix_,
                                   config.rev_str(),
-                                  entry.second->id(),
-                                  entry.second->bootstrap_hostname(),
-                                  entry.second->bootstrap_port());
-                    new_sessions.emplace(new_index, std::move(entry.second));
+                                  session->id(),
+                                  session->bootstrap_hostname(),
+                                  session->bootstrap_port());
+                    new_sessions.emplace(new_index, std::move(session));
                 } else {
                     spdlog::debug(R"({} rev={}, drop session="{}", address="{}:{}")",
                                   log_prefix_,
                                   config.rev_str(),
-                                  entry.second->id(),
-                                  entry.second->bootstrap_hostname(),
-                                  entry.second->bootstrap_port());
-                    entry.second.reset();
+                                  session->id(),
+                                  session->bootstrap_hostname(),
+                                  session->bootstrap_port());
+                    session.reset();
                 }
             }
 
@@ -132,8 +139,8 @@ class bucket : public std::enable_shared_from_this<bucket>
                     continue;
                 }
 
-                auto hostname = node.hostname_for(origin_.options().network);
-                auto port = node.port_or(origin_.options().network, service_type::kv, origin_.options().enable_tls, 0);
+                const auto& hostname = node.hostname_for(origin_.options().network);
+                auto port = node.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0);
                 if (port == 0) {
                     continue;
                 }
@@ -172,7 +179,7 @@ class bucket : public std::enable_shared_from_this<bucket>
             spdlog::debug(R"({} requested to restart session idx={}, which does not exist, ignoring)", log_prefix_, index);
             return;
         }
-        auto& old_session = ptr->second;
+        const auto& old_session = ptr->second;
         auto hostname = old_session->bootstrap_hostname();
         auto port = old_session->bootstrap_port();
         auto old_id = old_session->id();
@@ -242,7 +249,28 @@ class bucket : public std::enable_shared_from_this<bucket>
         auto cmd = std::make_shared<operations::mcbp_command<bucket, Request>>(ctx_, shared_from_this(), request);
         cmd->start([cmd, handler = std::forward<Handler>(handler)](std::error_code ec, std::optional<io::mcbp_message> msg) mutable {
             using encoded_response_type = typename Request::encoded_response_type;
-            handler(make_response(ec, cmd->request, msg ? encoded_response_type(*msg) : encoded_response_type{}));
+            auto resp = msg ? encoded_response_type(std::move(*msg)) : encoded_response_type{};
+            error_context::key_value ctx{};
+            ctx.id = cmd->request.id;
+            ctx.opaque = resp.opaque();
+            ctx.ec = ec;
+            if (ctx.ec && ctx.opaque == 0) {
+                ctx.opaque = cmd->request.opaque;
+            }
+            if (msg) {
+                ctx.status_code = resp.status();
+            }
+            ctx.retry_attempts = cmd->request.retries.retry_attempts;
+            ctx.retry_reasons = cmd->request.retries.reasons;
+            if (cmd->session_) {
+                ctx.last_dispatched_from = cmd->session_->local_address();
+                ctx.last_dispatched_to = cmd->session_->remote_address();
+                if (msg) {
+                    ctx.error_map_info = cmd->session_->decode_error_code(msg->header.status());
+                }
+            }
+            ctx.enhanced_error_info = resp.error_info();
+            handler(make_response(std::move(ctx), cmd->request, std::move(resp)));
         });
         if (config_) {
             map_and_send(cmd);
@@ -259,10 +287,10 @@ class bucket : public std::enable_shared_from_this<bucket>
         closed_ = true;
 
         drain_deferred_queue();
-        for (auto& session : sessions_) {
-            if (session.second) {
-                spdlog::debug(R"({} shutdown session session="{}", idx={})", log_prefix_, session.second->id(), session.first);
-                session.second->stop(io::retry_reason::do_not_retry);
+        for (auto& [index, session] : sessions_) {
+            if (session) {
+                spdlog::debug(R"({} shutdown session session="{}", idx={})", log_prefix_, session->id(), index);
+                session->stop(io::retry_reason::do_not_retry);
             }
         }
     }
@@ -284,10 +312,15 @@ class bucket : public std::enable_shared_from_this<bucket>
             std::tie(cmd->request.partition, index) = config_->map_key(cmd->request.id.key);
             if (index < 0) {
                 return io::retry_orchestrator::maybe_retry(
-                  cmd->manager_, cmd, io::retry_reason::node_not_available, std::make_error_code(error::common_errc::request_canceled));
+                  cmd->manager_, cmd, io::retry_reason::node_not_available, error::common_errc::request_canceled);
             }
         }
-        cmd->send_to(sessions_.at(static_cast<std::size_t>(index)));
+        auto session = sessions_.at(static_cast<std::size_t>(index));
+        if (session->is_stopped()) {
+            return io::retry_orchestrator::maybe_retry(
+              cmd->manager_, cmd, io::retry_reason::node_not_available, error::common_errc::request_canceled);
+        }
+        cmd->send_to(session);
     }
 
     template<typename Request>
@@ -305,30 +338,42 @@ class bucket : public std::enable_shared_from_this<bucket>
         });
     }
 
-    [[nodiscard]] const std::string& log_prefix()
+    [[nodiscard]] const std::string& log_prefix() const
     {
         return log_prefix_;
     }
 
     void export_diag_info(diag::diagnostics_result& res) const
     {
-        for (const auto& session : sessions_) {
-            res.services[service_type::kv].emplace_back(session.second->diag_info());
+        for (const auto& [index, session] : sessions_) {
+            res.services[service_type::key_value].emplace_back(session->diag_info());
         }
     }
 
     template<typename Collector>
     void ping(std::shared_ptr<Collector> collector)
     {
-        for (const auto& session : sessions_) {
-            session.second->ping(collector->build_reporter());
+        for (const auto& [index, session] : sessions_) {
+            session->ping(collector->build_reporter());
         }
+    }
+
+    auto tracer() const
+    {
+        return tracer_;
+    }
+
+    auto meter() const
+    {
+        return meter_;
     }
 
   private:
     std::string client_id_;
     asio::io_context& ctx_;
     asio::ssl::context& tls_;
+    tracing::request_tracer* tracer_;
+    metrics::meter* meter_;
     std::string name_;
     origin origin_;
 

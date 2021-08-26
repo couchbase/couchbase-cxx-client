@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -244,6 +244,9 @@ enum class analytics_errc {
 
     /// Raised When 24006
     link_not_found,
+
+    /// Raised When 24055
+    link_exists,
 };
 
 /// Errors related to Search service (CBFT)
@@ -313,12 +316,12 @@ namespace detail
 struct common_error_category : std::error_category {
     [[nodiscard]] const char* name() const noexcept override
     {
-        return "common";
+        return "couchbase.common";
     }
 
     [[nodiscard]] std::string message(int ev) const noexcept override
     {
-        switch (static_cast<common_errc>(ev)) {
+        switch (common_errc(ev)) {
             case common_errc::unambiguous_timeout:
                 return "unambiguous_timeout";
             case common_errc::ambiguous_timeout:
@@ -372,12 +375,12 @@ get_common_category()
 struct key_value_error_category : std::error_category {
     [[nodiscard]] const char* name() const noexcept override
     {
-        return "key_value";
+        return "couchbase.key_value";
     }
 
     [[nodiscard]] std::string message(int ev) const noexcept override
     {
-        switch (static_cast<key_value_errc>(ev)) {
+        switch (key_value_errc(ev)) {
             case key_value_errc::document_not_found:
                 return "document_not_found";
             case key_value_errc::document_irretrievable:
@@ -442,12 +445,12 @@ get_key_value_category()
 struct query_error_category : std::error_category {
     [[nodiscard]] const char* name() const noexcept override
     {
-        return "query";
+        return "couchbase.query";
     }
 
     [[nodiscard]] std::string message(int ev) const noexcept override
     {
-        switch (static_cast<query_errc>(ev)) {
+        switch (query_errc(ev)) {
             case query_errc::planning_failure:
                 return "planning_failure";
             case query_errc::index_failure:
@@ -469,12 +472,12 @@ get_query_category()
 struct search_error_category : std::error_category {
     [[nodiscard]] const char* name() const noexcept override
     {
-        return "search";
+        return "couchbase.search";
     }
 
     [[nodiscard]] std::string message(int ev) const noexcept override
     {
-        switch (static_cast<search_errc>(ev)) {
+        switch (search_errc(ev)) {
             case search_errc::index_not_ready:
                 return "index_not_ready";
             case search_errc::consistency_mismatch:
@@ -494,12 +497,12 @@ get_search_category()
 struct view_error_category : std::error_category {
     [[nodiscard]] const char* name() const noexcept override
     {
-        return "view";
+        return "couchbase.view";
     }
 
     [[nodiscard]] std::string message(int ev) const noexcept override
     {
-        switch (static_cast<view_errc>(ev)) {
+        switch (view_errc(ev)) {
             case view_errc::view_not_found:
                 return "view_not_found";
             case view_errc::design_document_not_found:
@@ -519,12 +522,12 @@ get_view_category()
 struct analytics_error_category : std::error_category {
     [[nodiscard]] const char* name() const noexcept override
     {
-        return "analytics";
+        return "couchbase.analytics";
     }
 
     [[nodiscard]] std::string message(int ev) const noexcept override
     {
-        switch (static_cast<analytics_errc>(ev)) {
+        switch (analytics_errc(ev)) {
             case analytics_errc::compilation_failure:
                 return "compilation_failure";
             case analytics_errc::job_queue_full:
@@ -539,6 +542,8 @@ struct analytics_error_category : std::error_category {
                 return "dataverse_exists";
             case analytics_errc::link_not_found:
                 return "link_not_found";
+            case analytics_errc::link_exists:
+                return "link_exists";
         }
         return "FIXME: unknown error code in analytics category (recompile with newer library)";
     }
@@ -554,12 +559,12 @@ get_analytics_category()
 struct management_error_category : std::error_category {
     [[nodiscard]] const char* name() const noexcept override
     {
-        return "management";
+        return "couchbase.management";
     }
 
     [[nodiscard]] std::string message(int ev) const noexcept override
     {
-        switch (static_cast<management_errc>(ev)) {
+        switch (management_errc(ev)) {
             case management_errc::collection_exists:
                 return "collection_exists";
             case management_errc::scope_exists:
@@ -589,12 +594,12 @@ get_management_category()
 struct network_error_category : std::error_category {
     [[nodiscard]] const char* name() const noexcept override
     {
-        return "network";
+        return "couchbase.network";
     }
 
     [[nodiscard]] std::string message(int ev) const noexcept override
     {
-        switch (static_cast<network_errc>(ev)) {
+        switch (network_errc(ev)) {
             case network_errc::resolve_failure:
                 return "resolve_failure";
             case network_errc::no_endpoints_left:
@@ -654,7 +659,10 @@ struct is_error_code_enum<couchbase::error::management_errc> : true_type {
 template<>
 struct is_error_code_enum<couchbase::error::network_errc> : true_type {
 };
+} // namespace std
 
+namespace couchbase::error
+{
 inline std::error_code
 make_error_code(couchbase::error::common_errc e)
 {
@@ -703,4 +711,4 @@ make_error_code(couchbase::error::network_errc e)
     return { static_cast<int>(e), couchbase::error::detail::get_network_category() };
 }
 
-} // namespace std
+} // namespace couchbase::error

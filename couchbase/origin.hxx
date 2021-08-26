@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 
 #include <string>
 
+#include <utility>
 #include <utils/connection_string.hxx>
 
 namespace couchbase
@@ -28,6 +29,7 @@ struct cluster_credentials {
     std::string password{};
     std::string certificate_path{};
     std::string key_path{};
+    std::vector<std::string> allowed_sasl_mechanisms{ "SCRAM-SHA512", "SCRAM-SHA256", "SCRAM-SHA1", "PLAIN" };
 
     [[nodiscard]] bool uses_certificate() const
     {
@@ -41,26 +43,28 @@ struct origin {
 
     origin() = default;
 
+    ~origin() = default;
+
     origin(origin&& other) = default;
 
     origin(const origin& other)
       : options_(other.options_)
-      , credentials_(std::move(other.credentials_))
+      , credentials_(other.credentials_)
       , nodes_(other.nodes_)
       , next_node_(nodes_.begin())
     {
     }
 
-    origin(cluster_credentials auth, const std::string& hostname, std::uint16_t port, const cluster_options& options)
-      : options_(options)
+    origin(cluster_credentials auth, const std::string& hostname, std::uint16_t port, cluster_options options)
+      : options_(std::move(options))
       , credentials_(std::move(auth))
       , nodes_{ { hostname, std::to_string(port) } }
       , next_node_(nodes_.begin())
     {
     }
 
-    origin(cluster_credentials auth, const std::string& hostname, const std::string& port, const cluster_options& options)
-      : options_(options)
+    origin(cluster_credentials auth, const std::string& hostname, const std::string& port, cluster_options options)
+      : options_(std::move(options))
       , credentials_(std::move(auth))
       , nodes_{ { hostname, port } }
       , next_node_(nodes_.begin())
@@ -73,11 +77,12 @@ struct origin {
     {
         nodes_.reserve(connstr.bootstrap_nodes.size());
         for (const auto& node : connstr.bootstrap_nodes) {
-            nodes_.emplace_back(
-              std::make_pair(node.address, node.port > 0 ? std::to_string(node.port) : std::to_string(connstr.default_port)));
+            nodes_.emplace_back(std::pair(node.address, node.port > 0 ? std::to_string(node.port) : std::to_string(connstr.default_port)));
         }
         next_node_ = nodes_.begin();
     }
+
+    origin& operator=(origin&& other) = default;
 
     origin& operator=(const origin& other)
     {
@@ -115,8 +120,8 @@ struct origin {
     {
         std::vector<std::string> res;
         res.reserve(nodes_.size());
-        for (const auto& node : nodes_) {
-            res.emplace_back(fmt::format("\"{}:{}\"", node.first, node.second));
+        for (const auto& [hostname, port] : nodes_) {
+            res.emplace_back(fmt::format("\"{}:{}\"", hostname, port));
         }
         return res;
     }

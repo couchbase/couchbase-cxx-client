@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@
 #include <platform/uuid.h>
 #include <timeout_defaults.hxx>
 #include <io/http_message.hxx>
+#include <error_context/analytics.hxx>
 
 namespace couchbase::operations
 {
@@ -78,18 +79,16 @@ struct traits<couchbase::operations::analytics_response_payload> {
         result.meta_data.request_id = v.at("requestID").get_string();
         result.meta_data.client_context_id = v.at("clientContextID").get_string();
         result.meta_data.status = v.at("status").get_string();
-        const auto s = v.find("signature");
-        if (s != nullptr) {
+
+        if (const auto* s = v.find("signature"); s != nullptr) {
             result.meta_data.signature = tao::json::to_string(*s);
         }
 
-        const auto p = v.find("profile");
-        if (p != nullptr) {
+        if (const auto* p = v.find("profile"); p != nullptr) {
             result.meta_data.profile = tao::json::to_string(*p);
         }
 
-        const auto m = v.find("metrics");
-        if (m != nullptr) {
+        if (const auto* m = v.find("metrics"); m != nullptr) {
             result.meta_data.metrics.result_count = m->at("resultCount").get_unsigned();
             result.meta_data.metrics.result_size = m->at("resultSize").get_unsigned();
             result.meta_data.metrics.elapsed_time = m->at("elapsedTime").get_string();
@@ -100,8 +99,7 @@ struct traits<couchbase::operations::analytics_response_payload> {
             result.meta_data.metrics.warning_count = m->template optional<std::uint64_t>("warningCount");
         }
 
-        const auto e = v.find("errors");
-        if (e != nullptr) {
+        if (const auto* e = v.find("errors"); e != nullptr) {
             std::vector<couchbase::operations::analytics_response_payload::analytics_problem> problems{};
             for (auto& err : e->get_array()) {
                 couchbase::operations::analytics_response_payload::analytics_problem problem;
@@ -112,8 +110,7 @@ struct traits<couchbase::operations::analytics_response_payload> {
             result.meta_data.errors.emplace(problems);
         }
 
-        const auto w = v.find("warnings");
-        if (w != nullptr) {
+        if (const auto* w = v.find("warnings"); w != nullptr) {
             std::vector<couchbase::operations::analytics_response_payload::analytics_problem> problems{};
             for (auto& warn : w->get_array()) {
                 couchbase::operations::analytics_response_payload::analytics_problem problem;
@@ -123,8 +120,8 @@ struct traits<couchbase::operations::analytics_response_payload> {
             }
             result.meta_data.warnings.emplace(problems);
         }
-        const auto r = v.find("results");
-        if (r != nullptr) {
+
+        if (const auto* r = v.find("results"); r != nullptr) {
             result.rows.reserve(result.meta_data.metrics.result_count);
             for (auto& row : r->get_array()) {
                 result.rows.emplace_back(tao::json::to_string(row));
@@ -139,8 +136,7 @@ struct traits<couchbase::operations::analytics_response_payload> {
 namespace couchbase::operations
 {
 struct analytics_response {
-    std::string client_context_id;
-    std::error_code ec;
+    error_context::analytics ctx;
     analytics_response_payload payload{};
 };
 
@@ -148,6 +144,7 @@ struct analytics_request {
     using response_type = analytics_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
+    using error_context_type = error_context::analytics;
 
     enum class scan_consistency_type { not_bounded, request_plus };
 
@@ -159,6 +156,9 @@ struct analytics_request {
 
     bool readonly{ false };
     bool priority{ false };
+    std::optional<std::string> bucket_name{};
+    std::optional<std::string> scope_name{};
+    std::optional<std::string> scope_qualifier{};
 
     std::optional<scan_consistency_type> scan_consistency{};
 
@@ -166,19 +166,21 @@ struct analytics_request {
     std::vector<tao::json::value> positional_parameters{};
     std::map<std::string, tao::json::value> named_parameters{};
 
+    std::string body_str{};
+
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context)
     {
         tao::json::value body{ { "statement", statement },
                                { "client_context_id", client_context_id },
                                { "timeout", fmt::format("{}ms", timeout.count()) } };
         if (positional_parameters.empty()) {
-            for (auto& param : named_parameters) {
-                Expects(param.first.empty() == false);
-                std::string key = param.first;
+            for (const auto& [name, value] : named_parameters) {
+                Expects(name.empty() == false);
+                std::string key = name;
                 if (key[0] != '$') {
                     key.insert(key.begin(), '$');
                 }
-                body[key] = param.second;
+                body[key] = value;
             }
         } else {
             body["args"] = positional_parameters;
@@ -196,8 +198,13 @@ struct analytics_request {
                     break;
             }
         }
-        for (auto& param : raw) {
-            body[param.first] = param.second;
+        if (scope_qualifier) {
+            body["query_context"] = scope_qualifier;
+        } else if (scope_name && bucket_name) {
+            body["query_context"] = fmt::format("default:`{}`.`{}`", *bucket_name, *scope_name);
+        }
+        for (const auto& [name, value] : raw) {
+            body[name] = value;
         }
         encoded.type = type;
         encoded.headers["content-type"] = "application/json";
@@ -206,7 +213,8 @@ struct analytics_request {
         }
         encoded.method = "POST";
         encoded.path = "/query/service";
-        encoded.body = tao::json::to_string(body);
+        body_str = tao::json::to_string(body);
+        encoded.body = body_str;
         if (context.options.show_queries) {
             spdlog::info("ANALYTICS: {}", tao::json::to_string(body["statement"]));
         } else {
@@ -217,11 +225,18 @@ struct analytics_request {
 };
 
 analytics_response
-make_response(std::error_code ec, analytics_request& request, analytics_request::encoded_response_type&& encoded)
+make_response(error_context::analytics&& ctx, const analytics_request& request, analytics_request::encoded_response_type&& encoded)
 {
-    analytics_response response{ request.client_context_id, ec };
-    if (!ec) {
-        response.payload = tao::json::from_string(encoded.body).as<analytics_response_payload>();
+    analytics_response response{ std::move(ctx) };
+    response.ctx.statement = request.statement;
+    response.ctx.parameters = request.body_str;
+    if (!response.ctx.ec) {
+        try {
+            response.payload = tao::json::from_string(encoded.body).as<analytics_response_payload>();
+        } catch (const tao::pegtl::parse_error&) {
+            response.ctx.ec = error::common_errc::parsing_failure;
+            return response;
+        }
         Expects(response.payload.meta_data.client_context_id == request.client_context_id);
         if (response.payload.meta_data.status != "success") {
             bool server_timeout = false;
@@ -268,23 +283,23 @@ make_response(std::error_code ec, analytics_request& request, analytics_request:
                 }
             }
             if (compilation_failure) {
-                response.ec = std::make_error_code(error::analytics_errc::compilation_failure);
+                response.ctx.ec = error::analytics_errc::compilation_failure;
             } else if (link_not_found) {
-                response.ec = std::make_error_code(error::analytics_errc::link_not_found);
+                response.ctx.ec = error::analytics_errc::link_not_found;
             } else if (dataset_not_found) {
-                response.ec = std::make_error_code(error::analytics_errc::dataset_not_found);
+                response.ctx.ec = error::analytics_errc::dataset_not_found;
             } else if (dataverse_not_found) {
-                response.ec = std::make_error_code(error::analytics_errc::dataverse_not_found);
+                response.ctx.ec = error::analytics_errc::dataverse_not_found;
             } else if (server_timeout) {
-                response.ec = std::make_error_code(error::common_errc::unambiguous_timeout);
+                response.ctx.ec = error::common_errc::unambiguous_timeout;
             } else if (dataset_exists) {
-                response.ec = std::make_error_code(error::analytics_errc::dataset_exists);
+                response.ctx.ec = error::analytics_errc::dataset_exists;
             } else if (dataverse_exists) {
-                response.ec = std::make_error_code(error::analytics_errc::dataverse_exists);
+                response.ctx.ec = error::analytics_errc::dataverse_exists;
             } else if (job_queue_is_full) {
-                response.ec = std::make_error_code(error::analytics_errc::job_queue_full);
+                response.ctx.ec = error::analytics_errc::job_queue_full;
             } else {
-                response.ec = std::make_error_code(error::common_errc::internal_server_failure);
+                response.ctx.ec = error::common_errc::internal_server_failure;
             }
         }
     }

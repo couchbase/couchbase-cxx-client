@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
 
 #include <tao/json.hpp>
 
-#include <version.hxx>
+#include <utils/name_codec.hxx>
 
 namespace couchbase::operations
 {
@@ -29,8 +29,7 @@ struct analytics_link_disconnect_response {
         std::string message;
     };
 
-    std::string client_context_id;
-    std::error_code ec;
+    error_context::http ctx;
     std::string status{};
     std::vector<problem> errors{};
 };
@@ -39,6 +38,7 @@ struct analytics_link_disconnect_request {
     using response_type = analytics_link_disconnect_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
+    using error_context_type = error_context::http;
 
     static const inline service_type type = service_type::analytics;
 
@@ -46,12 +46,12 @@ struct analytics_link_disconnect_request {
     std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
 
     std::string dataverse_name{ "Default" };
-    std::string link_name;
+    std::string link_name{ "Local" };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& /* context */) const
     {
         tao::json::value body{
-            { "statement", fmt::format("DISCONNECT LINK `{}`.`{}`", dataverse_name, link_name) },
+            { "statement", fmt::format("DISCONNECT LINK {}.`{}`", utils::analytics::uncompound_name(dataverse_name), link_name) },
         };
         encoded.headers["content-type"] = "application/json";
         encoded.method = "POST";
@@ -62,20 +62,25 @@ struct analytics_link_disconnect_request {
 };
 
 analytics_link_disconnect_response
-make_response(std::error_code ec,
-              analytics_link_disconnect_request& request,
+make_response(error_context::http&& ctx,
+              const analytics_link_disconnect_request& /* request */,
               analytics_link_disconnect_request::encoded_response_type&& encoded)
 {
-    analytics_link_disconnect_response response{ request.client_context_id, ec };
-    if (!ec) {
-        auto payload = tao::json::from_string(encoded.body);
+    analytics_link_disconnect_response response{ std::move(ctx) };
+    if (!response.ctx.ec) {
+        tao::json::value payload{};
+        try {
+            payload = tao::json::from_string(encoded.body);
+        } catch (const tao::pegtl::parse_error& e) {
+            response.ctx.ec = error::common_errc::parsing_failure;
+            return response;
+        }
         response.status = payload.at("status").get_string();
 
         if (response.status != "success") {
             bool link_not_found = false;
 
-            auto* errors = payload.find("errors");
-            if (errors != nullptr && errors->is_array()) {
+            if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
                 for (const auto& error : errors->get_array()) {
                     analytics_link_disconnect_response::problem err{
                         error.at("code").as<std::uint32_t>(),
@@ -90,9 +95,9 @@ make_response(std::error_code ec,
                 }
             }
             if (link_not_found) {
-                response.ec = std::make_error_code(error::analytics_errc::link_not_found);
+                response.ctx.ec = error::analytics_errc::link_not_found;
             } else {
-                response.ec = std::make_error_code(error::common_errc::internal_server_failure);
+                response.ctx.ec = error::common_errc::internal_server_failure;
             }
         }
     }

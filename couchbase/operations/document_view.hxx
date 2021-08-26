@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 #include <tao/json.hpp>
 #include <operations/design_document.hxx>
 #include <utils/url_codec.hxx>
+#include <error_context/view.hxx>
 
 namespace couchbase::operations
 {
@@ -40,8 +41,7 @@ struct document_view_response {
         std::string message;
     };
 
-    std::string client_context_id;
-    std::error_code ec;
+    error_context::view ctx;
     document_view_response::meta_data meta_data{};
     std::vector<document_view_response::row> rows{};
     std::optional<problem> error{};
@@ -51,8 +51,9 @@ struct document_view_request {
     using response_type = document_view_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
+    using error_context_type = error_context::view;
 
-    static const inline service_type type = service_type::views;
+    static const inline service_type type = service_type::view;
 
     std::string client_context_id{ uuid::to_string(uuid::random()) };
     std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
@@ -88,11 +89,10 @@ struct document_view_request {
 
     enum class sort_order { ascending, descending };
     std::optional<sort_order> order;
+    std::vector<std::string> query_string{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& /* context */)
     {
-        std::vector<std::string> query_string;
-
         if (debug) {
             query_string.emplace_back("debug=true");
         }
@@ -177,26 +177,36 @@ struct document_view_request {
 };
 
 document_view_response
-make_response(std::error_code ec, document_view_request& request, document_view_request::encoded_response_type&& encoded)
+make_response(error_context::view&& ctx, const document_view_request& request, document_view_request::encoded_response_type&& encoded)
 {
-    document_view_response response{ request.client_context_id, ec };
-    if (!ec) {
+    document_view_response response{ std::move(ctx) };
+    response.ctx.client_context_id = request.client_context_id;
+    response.ctx.design_document_name = request.document_name;
+    response.ctx.view_name = request.view_name;
+    response.ctx.query_string = request.query_string;
+    if (!response.ctx.ec) {
         if (encoded.status_code == 200) {
-            tao::json::value payload = tao::json::from_string(encoded.body);
-            const auto* total_rows = payload.find("total_rows");
-            if (total_rows != nullptr && total_rows->is_unsigned()) {
+            tao::json::value payload{};
+            try {
+                payload = tao::json::from_string(encoded.body);
+            } catch (const tao::pegtl::parse_error& e) {
+                response.ctx.ec = error::common_errc::parsing_failure;
+                return response;
+            }
+
+            if (const auto* total_rows = payload.find("total_rows"); total_rows != nullptr && total_rows->is_unsigned()) {
                 response.meta_data.total_rows = total_rows->get_unsigned();
             }
-            const auto* debug_info = payload.find("debug_info");
-            if (debug_info != nullptr && debug_info->is_object()) {
+
+            if (const auto* debug_info = payload.find("debug_info"); debug_info != nullptr && debug_info->is_object()) {
                 response.meta_data.debug_info.emplace(tao::json::to_string(*debug_info));
             }
-            const auto* rows = payload.find("rows");
-            if (rows != nullptr && rows->is_array()) {
+
+            if (const auto* rows = payload.find("rows"); rows != nullptr && rows->is_array()) {
                 for (const auto& entry : rows->get_array()) {
                     document_view_response::row row{};
-                    const auto* id = entry.find("id");
-                    if (id != nullptr && id->is_string()) {
+
+                    if (const auto* id = entry.find("id"); id != nullptr && id->is_string()) {
                         row.id = id->get_string();
                     }
                     row.key = tao::json::to_string(entry.at("key"));
@@ -205,22 +215,28 @@ make_response(std::error_code ec, document_view_request& request, document_view_
                 }
             }
         } else if (encoded.status_code == 400) {
-            tao::json::value payload = tao::json::from_string(encoded.body);
+            tao::json::value payload{};
+            try {
+                payload = tao::json::from_string(encoded.body);
+            } catch (const tao::pegtl::parse_error& e) {
+                response.ctx.ec = error::common_errc::parsing_failure;
+                return response;
+            }
             document_view_response::problem problem{};
-            const auto* error = payload.find("error");
-            if (error != nullptr && error->is_string()) {
+
+            if (const auto* error = payload.find("error"); error != nullptr && error->is_string()) {
                 problem.code = error->get_string();
             }
-            const auto* reason = payload.find("reason");
-            if (reason != nullptr && reason->is_string()) {
+
+            if (const auto* reason = payload.find("reason"); reason != nullptr && reason->is_string()) {
                 problem.message = reason->get_string();
             }
             response.error.emplace(problem);
-            response.ec = std::make_error_code(error::common_errc::invalid_argument);
+            response.ctx.ec = error::common_errc::invalid_argument;
         } else if (encoded.status_code == 404) {
-            response.ec = std::make_error_code(error::view_errc::design_document_not_found);
+            response.ctx.ec = error::view_errc::design_document_not_found;
         } else {
-            response.ec = std::make_error_code(error::common_errc::internal_server_failure);
+            response.ctx.ec = error::common_errc::internal_server_failure;
         }
     }
     return response;

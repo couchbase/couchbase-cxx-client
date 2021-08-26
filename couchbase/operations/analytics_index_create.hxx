@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -29,8 +29,7 @@ struct analytics_index_create_response {
         std::string message;
     };
 
-    std::string client_context_id;
-    std::error_code ec;
+    error_context::http ctx;
     std::string status{};
     std::vector<problem> errors{};
 };
@@ -39,6 +38,7 @@ struct analytics_index_create_request {
     using response_type = analytics_index_create_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
+    using error_context_type = error_context::http;
 
     static const inline service_type type = service_type::analytics;
 
@@ -52,13 +52,13 @@ struct analytics_index_create_request {
 
     bool ignore_if_exists{ false };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& /* context */) const
     {
         std::string if_not_exists_clause = ignore_if_exists ? "IF NOT EXISTS" : "";
         std::vector<std::string> field_specs;
         field_specs.reserve(fields.size());
-        for (const auto& entry : fields) {
-            field_specs.emplace_back(entry.first + ": " + entry.second);
+        for (const auto& [field_name, field_type] : fields) {
+            field_specs.emplace_back(fmt::format("{}:{}", field_name, field_type));
         }
 
         tao::json::value body{
@@ -79,11 +79,19 @@ struct analytics_index_create_request {
 };
 
 analytics_index_create_response
-make_response(std::error_code ec, analytics_index_create_request& request, analytics_index_create_request::encoded_response_type&& encoded)
+make_response(error_context::http&& ctx,
+              const analytics_index_create_request& /* request */,
+              analytics_index_create_request::encoded_response_type&& encoded)
 {
-    analytics_index_create_response response{ request.client_context_id, ec };
-    if (!ec) {
-        auto payload = tao::json::from_string(encoded.body);
+    analytics_index_create_response response{ std::move(ctx) };
+    if (!response.ctx.ec) {
+        tao::json::value payload{};
+        try {
+            payload = tao::json::from_string(encoded.body);
+        } catch (const tao::pegtl::parse_error& e) {
+            response.ctx.ec = error::common_errc::parsing_failure;
+            return response;
+        }
         response.status = payload.at("status").get_string();
 
         if (response.status != "success") {
@@ -91,8 +99,7 @@ make_response(std::error_code ec, analytics_index_create_request& request, analy
             bool dataset_not_found = false;
             bool link_not_found = false;
 
-            auto* errors = payload.find("errors");
-            if (errors != nullptr && errors->is_array()) {
+            if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
                 for (const auto& error : errors->get_array()) {
                     analytics_index_create_response::problem err{
                         error.at("code").as<std::uint32_t>(),
@@ -113,13 +120,13 @@ make_response(std::error_code ec, analytics_index_create_request& request, analy
                 }
             }
             if (index_exists) {
-                response.ec = std::make_error_code(error::common_errc::index_exists);
+                response.ctx.ec = error::common_errc::index_exists;
             } else if (dataset_not_found) {
-                response.ec = std::make_error_code(error::analytics_errc::dataset_not_found);
+                response.ctx.ec = error::analytics_errc::dataset_not_found;
             } else if (link_not_found) {
-                response.ec = std::make_error_code(error::analytics_errc::link_not_found);
+                response.ctx.ec = error::analytics_errc::link_not_found;
             } else {
-                response.ec = std::make_error_code(error::common_errc::internal_server_failure);
+                response.ctx.ec = error::common_errc::internal_server_failure;
             }
         }
     }

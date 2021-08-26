@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -24,8 +24,7 @@
 namespace couchbase::operations
 {
 struct search_index_stats_response {
-    std::string client_context_id;
-    std::error_code ec;
+    error_context::http ctx;
     std::string stats{};
 };
 
@@ -33,13 +32,14 @@ struct search_index_stats_request {
     using response_type = search_index_stats_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
+    using error_context_type = error_context::http;
 
     static const inline service_type type = service_type::search;
 
     std::string client_context_id{ uuid::to_string(uuid::random()) };
     std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& /* context */) const
     {
         encoded.method = "GET";
         encoded.path = "/api/nsstats";
@@ -48,10 +48,12 @@ struct search_index_stats_request {
 };
 
 search_index_stats_response
-make_response(std::error_code ec, search_index_stats_request& request, search_index_stats_request::encoded_response_type&& encoded)
+make_response(error_context::http&& ctx,
+              const search_index_stats_request& /* request */,
+              search_index_stats_request::encoded_response_type&& encoded)
 {
-    search_index_stats_response response{ request.client_context_id, ec };
-    if (!ec) {
+    search_index_stats_response response{ std::move(ctx) };
+    if (!response.ctx.ec) {
         response.stats = encoded.body;
     }
     return response;

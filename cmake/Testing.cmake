@@ -1,4 +1,3 @@
-option(ENABLE_TESTING "Enable testing" ON)
 if(ENABLE_TESTING)
   add_subdirectory(third_party/catch2)
   list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/third_party/catch2/contrib")
@@ -19,6 +18,7 @@ if(ENABLE_TESTING)
       cbcrypto
       cbsasl
       http_parser
+      hdr_histogram_static
       snappy
       spdlog::spdlog_header_only)
     catch_discover_tests(test_native_${name})

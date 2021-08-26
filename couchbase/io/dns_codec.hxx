@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -19,8 +19,7 @@
 
 #include <cstring>
 
-#include <arpa/inet.h>
-
+#include <asio/ip/udp.hpp>
 #include <io/dns_message.hxx>
 
 namespace couchbase::io::dns
@@ -66,7 +65,7 @@ class dns_codec
             std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t);
             val = ntohs(val);
-            qr.type = static_cast<resource_type>(val);
+            qr.type = resource_type(val);
 
             std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t);
@@ -85,12 +84,12 @@ class dns_codec
             std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t);
             val = ntohs(val);
-            ar.type = static_cast<resource_type>(val);
+            ar.type = resource_type(val);
 
             std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t);
             val = ntohs(val);
-            ar.klass = static_cast<resource_class>(val);
+            ar.klass = resource_class(val);
 
             std::memcpy(&ar.ttl, payload.data() + offset, sizeof(std::uint32_t));
             offset += static_cast<std::uint16_t>(4U);
@@ -197,8 +196,7 @@ class dns_codec
                 save_offset = offset + sizeof(std::uint16_t);
                 offset = ptr;
             } else {
-                std::string label(payload.data() + offset + 1, payload.data() + offset + 1 + len);
-                name.labels.emplace_back(label);
+                name.labels.emplace_back(payload.data() + offset + 1, payload.data() + offset + 1 + len);
                 offset += static_cast<std::uint16_t>(1U + len);
             }
         }

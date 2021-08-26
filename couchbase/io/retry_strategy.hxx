@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <gsl/gsl_assert>
+#include <gsl/assert>
 
 #include <io/retry_reason.hxx>
 #include <io/retry_action.hxx>
@@ -124,11 +124,6 @@ class exponential
 class best_effort
 {
   public:
-    best_effort()
-      : backoff_(std::chrono::milliseconds(1), 2, std::chrono::milliseconds(500))
-    {
-    }
-
     template<class Request>
     retry_action should_retry(Request& request, retry_reason reason)
     {
@@ -140,7 +135,7 @@ class best_effort
     }
 
   private:
-    backoff::exponential backoff_;
+    backoff::exponential backoff_{ std::chrono::milliseconds(1), 2, std::chrono::milliseconds(500) };
 };
 
 class fail_fast

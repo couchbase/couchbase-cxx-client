@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -25,9 +25,7 @@ namespace couchbase::operations
 {
 
 struct decrement_response {
-    document_id id;
-    std::uint32_t opaque;
-    std::error_code ec{};
+    error_context::key_value ctx;
     std::uint64_t content{};
     std::uint64_t cas{};
     mutation_token token{};
@@ -47,8 +45,9 @@ struct decrement_request {
     std::optional<std::uint16_t> durability_timeout{};
     std::chrono::milliseconds timeout{ timeout_defaults::key_value_timeout };
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
+    bool preserve_expiry{ false };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& /* context */) const
     {
         encoded.opaque(opaque);
         encoded.partition(partition);
@@ -64,23 +63,23 @@ struct decrement_request {
         if (durability_level != protocol::durability_level::none) {
             encoded.body().durability(durability_level, durability_timeout);
         }
+        if (preserve_expiry) {
+            encoded.body().preserve_expiry();
+        }
         return {};
     }
 };
 
 decrement_response
-make_response(std::error_code ec, decrement_request& request, decrement_request::encoded_response_type&& encoded)
+make_response(error_context::key_value&& ctx, const decrement_request& request, decrement_request::encoded_response_type&& encoded)
 {
-    decrement_response response{ request.id, encoded.opaque(), ec };
-    if (ec && response.opaque == 0) {
-        response.opaque = request.opaque;
-    }
-    if (!ec) {
+    decrement_response response{ std::move(ctx) };
+    if (!ctx.ec) {
         response.cas = encoded.cas();
         response.content = encoded.body().content();
         response.token = encoded.body().token();
         response.token.partition_id = request.partition;
-        response.token.bucket_name = response.id.bucket;
+        response.token.bucket_name = response.ctx.id.bucket;
     }
     return response;
 }

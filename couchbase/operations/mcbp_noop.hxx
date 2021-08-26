@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -25,10 +25,7 @@ namespace couchbase::operations
 {
 
 struct mcbp_noop_response {
-    std::uint32_t opaque;
-    std::error_code ec{};
-    std::chrono::steady_clock::time_point start{};
-    std::chrono::steady_clock::time_point stop{};
+    error_context::key_value ctx;
 };
 
 struct mcbp_noop_request {
@@ -40,7 +37,7 @@ struct mcbp_noop_request {
     std::chrono::milliseconds timeout{ timeout_defaults::key_value_timeout };
     io::retry_context<io::retry_strategy::best_effort> retries{ true };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& /* context */) const
     {
         encoded.opaque(opaque);
         encoded.partition(partition);
@@ -49,12 +46,9 @@ struct mcbp_noop_request {
 };
 
 mcbp_noop_response
-make_response(std::error_code ec, mcbp_noop_request& request, mcbp_noop_request::encoded_response_type&& encoded)
+make_response(error_context::key_value&& ctx, const mcbp_noop_request& /* request */, mcbp_noop_request::encoded_response_type&&)
 {
-    mcbp_noop_response response{ encoded.opaque(), ec };
-    if (ec && response.opaque == 0) {
-        response.opaque = request.opaque;
-    }
+    mcbp_noop_response response{ std::move(ctx) };
     return response;
 }
 

@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -24,10 +24,10 @@ enum class server_opcode : uint8_t {
     invalid = 0xff,
 };
 
-constexpr inline bool
+constexpr bool
 is_valid_server_request_opcode(uint8_t code)
 {
-    switch (static_cast<server_opcode>(code)) {
+    switch (server_opcode(code)) {
         case server_opcode::cluster_map_change_notification:
             return true;
         case server_opcode::invalid:

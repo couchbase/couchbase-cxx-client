@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
 
 #include <snappy.h>
 
-#include <gsl/gsl_assert>
+#include <gsl/assert>
 #include <protocol/magic.hxx>
 #include <protocol/datatype.hxx>
 
@@ -28,7 +28,7 @@
 namespace couchbase::io
 {
 struct mcbp_parser {
-    enum result { ok, need_data, failure };
+    enum class result { ok, need_data, failure };
 
     template<typename Iterator>
     void feed(Iterator begin, Iterator end)
@@ -46,12 +46,12 @@ struct mcbp_parser {
     {
         static const size_t header_size = 24;
         if (buf.size() < header_size) {
-            return need_data;
+            return result::need_data;
         }
         std::memcpy(&msg.header, buf.data(), header_size);
         uint32_t body_size = ntohl(msg.header.bodylen);
         if (body_size > 0 && buf.size() - header_size < body_size) {
-            return need_data;
+            return result::need_data;
         }
         msg.body.clear();
         msg.body.reserve(body_size);
@@ -93,7 +93,7 @@ struct mcbp_parser {
                          spdlog::to_hex(buf));
             reset();
         }
-        return ok;
+        return result::ok;
     }
 
     std::vector<std::uint8_t> buf;

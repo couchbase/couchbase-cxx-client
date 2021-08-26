@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -23,6 +23,9 @@
 #include <operations/http_noop.hxx>
 #include <io/http_command.hxx>
 
+#include <tracing/noop_tracer.hxx>
+#include <metrics/meter.hxx>
+
 #include <random>
 
 namespace couchbase::io
@@ -36,6 +39,16 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
       , ctx_(ctx)
       , tls_(tls)
     {
+    }
+
+    void set_tracer(tracing::request_tracer* tracer)
+    {
+        tracer_ = tracer;
+    }
+
+    void set_meter(metrics::meter* meter)
+    {
+        meter_ = meter;
     }
 
     void set_configuration(const configuration& config, const cluster_options& options)
@@ -74,7 +87,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
     template<typename Collector>
     void ping(std::set<service_type> services, std::shared_ptr<Collector> collector, const couchbase::cluster_credentials& credentials)
     {
-        std::array<service_type, 4> known_types{ service_type::query, service_type::analytics, service_type::search, service_type::views };
+        std::array<service_type, 4> known_types{ service_type::query, service_type::analytics, service_type::search, service_type::view };
         for (auto& node : config_.nodes) {
             for (auto type : known_types) {
                 if (services.find(type) == services.end()) {
@@ -116,31 +129,32 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
                     busy_sessions_[type].push_back(session);
                     operations::http_noop_request request{};
                     request.type = type;
-                    auto cmd = std::make_shared<operations::http_command<operations::http_noop_request>>(ctx_, request);
-                    cmd->send_to(session,
-                                 [start = std::chrono::steady_clock::now(),
-                                  self = shared_from_this(),
-                                  type,
-                                  session,
-                                  handler = collector->build_reporter()](operations::http_noop_response&& resp) mutable {
-                                     diag::ping_state state = diag::ping_state::ok;
-                                     std::optional<std::string> error{};
-                                     if (resp.ec) {
-                                         state = diag::ping_state::error;
-                                         error.emplace(fmt::format(
-                                           "code={}, message={}, http_code={}", resp.ec.value(), resp.ec.message(), resp.status_code));
-                                     }
-                                     handler(diag::endpoint_ping_info{
-                                       type,
-                                       session->id(),
-                                       std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start),
-                                       session->remote_address(),
-                                       session->local_address(),
-                                       state,
-                                       {},
-                                       error });
-                                     self->check_in(type, session);
-                                 });
+                    auto cmd = std::make_shared<operations::http_command<operations::http_noop_request>>(ctx_, request, tracer_, meter_);
+                    cmd->send_to(
+                      session,
+                      [start = std::chrono::steady_clock::now(),
+                       self = shared_from_this(),
+                       type,
+                       session,
+                       handler = collector->build_reporter()](operations::http_noop_response&& resp) mutable {
+                          diag::ping_state state = diag::ping_state::ok;
+                          std::optional<std::string> error{};
+                          if (resp.ctx.ec) {
+                              state = diag::ping_state::error;
+                              error.emplace(fmt::format(
+                                "code={}, message={}, http_code={}", resp.ctx.ec.value(), resp.ctx.ec.message(), resp.ctx.http_status));
+                          }
+                          handler(diag::endpoint_ping_info{
+                            type,
+                            session->id(),
+                            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start),
+                            session->remote_address(),
+                            session->local_address(),
+                            state,
+                            {},
+                            error });
+                          self->check_in(type, session);
+                      });
                 }
             }
         }
@@ -152,9 +166,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
         idle_sessions_[type].remove_if([](const auto& s) -> bool { return !s; });
         busy_sessions_[type].remove_if([](const auto& s) -> bool { return !s; });
         if (idle_sessions_[type].empty()) {
-            std::string hostname;
-            std::uint16_t port = 0;
-            std::tie(hostname, port) = next_node(type);
+            auto [hostname, port] = next_node(type);
             if (port == 0) {
                 return nullptr;
             }
@@ -213,21 +225,17 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
 
     void close()
     {
-        {
-            for (auto& sessions : idle_sessions_) {
-                for (auto& s : sessions.second) {
-                    if (s) {
-                        s->reset_idle();
-                        s.reset();
-                    }
+        for (auto& sessions : idle_sessions_) {
+            for (auto& s : sessions.second) {
+                if (s) {
+                    s->reset_idle();
+                    s.reset();
                 }
             }
         }
-        {
-            for (auto& sessions : busy_sessions_) {
-                for (auto& s : sessions.second) {
-                    s.reset();
-                }
+        for (auto& sessions : busy_sessions_) {
+            for (auto& s : sessions.second) {
+                s.reset();
             }
         }
     }
@@ -238,7 +246,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
         auto candidates = config_.nodes.size();
         while (candidates > 0) {
             --candidates;
-            auto& node = config_.nodes[next_index_];
+            const auto& node = config_.nodes[next_index_];
             next_index_ = (next_index_ + 1) % config_.nodes.size();
             std::uint16_t port = node.port_or(options_.network, type, options_.enable_tls, 0);
             if (port != 0) {
@@ -251,7 +259,9 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
     std::string client_id_;
     asio::io_context& ctx_;
     asio::ssl::context& tls_;
-    cluster_options options_;
+    tracing::request_tracer* tracer_{ nullptr };
+    metrics::meter* meter_{ nullptr };
+    cluster_options options_{};
 
     configuration config_{};
     std::map<service_type, std::list<std::shared_ptr<http_session>>> busy_sessions_{};

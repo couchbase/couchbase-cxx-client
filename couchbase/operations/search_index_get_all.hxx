@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -25,8 +25,7 @@
 namespace couchbase::operations
 {
 struct search_index_get_all_response {
-    std::string client_context_id;
-    std::error_code ec;
+    error_context::http ctx;
     std::string status{};
     std::string impl_version{};
     std::vector<search_index> indexes{};
@@ -36,6 +35,7 @@ struct search_index_get_all_request {
     using response_type = search_index_get_all_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
+    using error_context_type = error_context::http;
 
     static const inline service_type type = service_type::search;
 
@@ -44,7 +44,7 @@ struct search_index_get_all_request {
 
     std::string index_name;
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& /* context */) const
     {
         encoded.method = "GET";
         encoded.path = fmt::format("/api/index");
@@ -53,23 +53,29 @@ struct search_index_get_all_request {
 };
 
 search_index_get_all_response
-make_response(std::error_code ec, search_index_get_all_request& request, search_index_get_all_request::encoded_response_type&& encoded)
+make_response(error_context::http&& ctx,
+              const search_index_get_all_request& /* request */,
+              search_index_get_all_request::encoded_response_type&& encoded)
 {
-    search_index_get_all_response response{ request.client_context_id, ec };
-    if (!ec) {
+    search_index_get_all_response response{ std::move(ctx) };
+    if (!response.ctx.ec) {
         if (encoded.status_code == 200) {
-            auto payload = tao::json::from_string(encoded.body);
+            tao::json::value payload{};
+            try {
+                payload = tao::json::from_string(encoded.body);
+            } catch (const tao::pegtl::parse_error& e) {
+                response.ctx.ec = error::common_errc::parsing_failure;
+                return response;
+            }
             response.status = payload.at("status").get_string();
             if (response.status == "ok") {
-                const auto* indexDefs = payload.find("indexDefs");
-                if (indexDefs != nullptr && indexDefs->is_object()) {
-                    const auto* impl_ver = indexDefs->find("implVersion");
-                    if (impl_ver != nullptr && impl_ver->is_string()) {
+                if (const auto* indexDefs = payload.find("indexDefs"); indexDefs != nullptr && indexDefs->is_object()) {
+                    if (const auto* impl_ver = indexDefs->find("implVersion"); impl_ver != nullptr && impl_ver->is_string()) {
                         response.impl_version = impl_ver->get_string();
                     }
                     const auto* indexes = indexDefs->find("indexDefs");
-                    for (const auto& entry : indexes->get_object()) {
-                        response.indexes.emplace_back(entry.second.as<search_index>());
+                    for (const auto& [name, index] : indexes->get_object()) {
+                        response.indexes.emplace_back(index.as<search_index>());
                     }
                 }
                 return response;

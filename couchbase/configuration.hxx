@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -19,15 +19,15 @@
 
 #include <set>
 
-#include <gsl/gsl_util>
+#include <gsl/util>
 
-#include <tao/json.hpp>
-#include <spdlog/spdlog.h>
-#include <utils/crc32.hxx>
 #include <platform/uuid.h>
+#include <spdlog/spdlog.h>
+#include <tao/json.hpp>
+#include <utils/crc32.hxx>
 
-#include <service_type.hxx>
 #include <capabilities.hxx>
+#include <service_type.hxx>
 
 namespace couchbase
 {
@@ -73,13 +73,13 @@ struct configuration {
                     case service_type::search:
                         return services_tls.search.value_or(default_value);
 
-                    case service_type::views:
+                    case service_type::view:
                         return services_tls.views.value_or(default_value);
 
                     case service_type::management:
                         return services_tls.management.value_or(default_value);
 
-                    case service_type::kv:
+                    case service_type::key_value:
                         return services_tls.key_value.value_or(default_value);
                 }
             }
@@ -93,13 +93,13 @@ struct configuration {
                 case service_type::search:
                     return services_plain.search.value_or(default_value);
 
-                case service_type::views:
+                case service_type::view:
                     return services_plain.views.value_or(default_value);
 
                 case service_type::management:
                     return services_plain.management.value_or(default_value);
 
-                case service_type::kv:
+                case service_type::key_value:
                     return services_plain.key_value.value_or(default_value);
             }
             return default_value;
@@ -139,13 +139,13 @@ struct configuration {
                     case service_type::search:
                         return address->second.services_tls.search.value_or(default_value);
 
-                    case service_type::views:
+                    case service_type::view:
                         return address->second.services_tls.views.value_or(default_value);
 
                     case service_type::management:
                         return address->second.services_tls.management.value_or(default_value);
 
-                    case service_type::kv:
+                    case service_type::key_value:
                         return address->second.services_tls.key_value.value_or(default_value);
                 }
             }
@@ -159,13 +159,13 @@ struct configuration {
                 case service_type::search:
                     return address->second.services_plain.search.value_or(default_value);
 
-                case service_type::views:
+                case service_type::view:
                     return address->second.services_plain.views.value_or(default_value);
 
                 case service_type::management:
                     return address->second.services_plain.management.value_or(default_value);
 
-                case service_type::kv:
+                case service_type::key_value:
                     return address->second.services_plain.key_value.value_or(default_value);
             }
             return default_value;
@@ -191,7 +191,8 @@ struct configuration {
 
     using vbucket_map = typename std::vector<std::vector<std::int16_t>>;
 
-    std::optional<std::uint64_t> rev{};
+    std::optional<std::int64_t> epoch{};
+    std::optional<std::int64_t> rev{};
     couchbase::uuid::uuid_t id{};
     std::optional<std::uint32_t> num_replicas{};
     std::vector<node> nodes{};
@@ -203,8 +204,26 @@ struct configuration {
     std::set<cluster_capability> cluster_capabilities{};
     node_locator_type node_locator{ node_locator_type::unknown };
 
+    bool operator==(const configuration& other) const
+    {
+        return epoch == other.epoch && rev == other.rev;
+    }
+
+    bool operator<(const configuration& other) const
+    {
+        return epoch < other.epoch && rev < other.rev;
+    }
+
+    bool operator>(const configuration& other) const
+    {
+        return other < *this;
+    }
+
     [[nodiscard]] std::string rev_str() const
     {
+        if (epoch) {
+            return fmt::format("{}:{}", epoch.value(), rev.value_or(0));
+        }
         return rev ? fmt::format("{}", *rev) : "(none)";
     }
 
@@ -240,8 +259,8 @@ struct configuration {
             throw std::runtime_error("cannot map key: partition map is not available");
         }
         uint32_t crc = utils::hash_crc32(key.data(), key.size());
-        uint16_t vbucket = uint16_t(crc % vbmap->size());
-        return std::make_pair(vbucket, vbmap->at(vbucket)[0]);
+        auto vbucket = uint16_t(crc % vbmap->size());
+        return { vbucket, vbmap->at(vbucket)[0] };
     }
 };
 
@@ -250,6 +269,7 @@ make_blank_configuration(const std::string& hostname, std::uint16_t plain_port, 
 {
     configuration result;
     result.id = couchbase::uuid::random();
+    result.epoch = 0;
     result.rev = 0;
     result.nodes.resize(1);
     result.nodes[0].hostname = hostname;
@@ -400,7 +420,8 @@ struct traits<couchbase::configuration> {
     {
         couchbase::configuration result;
         result.id = couchbase::uuid::random();
-        result.rev = v.template optional<std::uint64_t>("rev");
+        result.epoch = v.template optional<std::int64_t>("revEpoch");
+        result.rev = v.template optional<std::int64_t>("rev");
         auto* node_locator = v.find("nodeLocator");
         if (node_locator != nullptr && node_locator->is_string()) {
             if (node_locator->get_string() == "ketama") {
@@ -423,7 +444,7 @@ struct traits<couchbase::configuration> {
                 const auto& hostname = o.find("hostname");
                 if (hostname != o.end()) {
                     n.hostname = hostname->second.get_string();
-                    n.hostname = n.hostname.substr(0, n.hostname.rfind(":"));
+                    n.hostname = n.hostname.substr(0, n.hostname.rfind(':'));
                 }
                 const auto& s = o.at("services");
                 n.services_plain.key_value = s.template optional<std::uint16_t>("kv");

@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -36,10 +36,10 @@ enum class magic : uint8_t {
     server_response = 0x83
 };
 
-constexpr inline bool
+constexpr bool
 is_valid_magic(uint8_t code)
 {
-    switch (static_cast<magic>(code)) {
+    switch (magic(code)) {
         case magic::client_request:
         case magic::alt_client_request:
         case magic::client_response:

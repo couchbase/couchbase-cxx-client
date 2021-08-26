@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -35,12 +35,12 @@ struct query_index_get_all_response {
         std::string collection_name;
         std::string type;
         std::vector<std::string> index_key{};
+        std::optional<std::string> partition{};
         std::optional<std::string> condition{};
         std::optional<std::string> bucket_id{};
         std::optional<std::string> scope_id{};
     };
-    std::string client_context_id;
-    std::error_code ec;
+    error_context::http ctx;
     std::string status{};
     std::vector<query_index> indexes{};
 };
@@ -49,6 +49,7 @@ struct query_index_get_all_request {
     using response_type = query_index_get_all_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
+    using error_context_type = error_context::http;
 
     static const inline service_type type = service_type::query;
 
@@ -56,7 +57,7 @@ struct query_index_get_all_request {
     std::string bucket_name;
     std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& /* context */) const
     {
         encoded.headers["content-type"] = "application/json";
         tao::json::value body{
@@ -75,40 +76,49 @@ struct query_index_get_all_request {
 };
 
 query_index_get_all_response
-make_response(std::error_code ec, query_index_get_all_request& request, query_index_get_all_request::encoded_response_type&& encoded)
+make_response(error_context::http&& ctx,
+              const query_index_get_all_request& /* request */,
+              query_index_get_all_request::encoded_response_type&& encoded)
 {
-    query_index_get_all_response response{ request.client_context_id, ec };
-    if (!ec) {
-        if (encoded.status_code == 200) {
-            auto payload = tao::json::from_string(encoded.body);
-            response.status = payload.at("status").get_string();
-            if (response.status == "success") {
-                for (const auto& entry : payload.at("results").get_array()) {
-                    query_index_get_all_response::query_index index;
-                    index.id = entry.at("id").get_string();
-                    index.datastore_id = entry.at("datastore_id").get_string();
-                    index.namespace_id = entry.at("namespace_id").get_string();
-                    index.keyspace_id = entry.at("keyspace_id").get_string();
-                    index.type = entry.at("using").get_string();
-                    index.name = entry.at("name").get_string();
-                    index.state = entry.at("state").get_string();
-                    if (const auto* prop = entry.find("bucket_id")) {
-                        index.bucket_id = prop->get_string();
-                    }
-                    if (const auto* prop = entry.find("scope_id")) {
-                        index.scope_id = prop->get_string();
-                    }
-                    if (const auto* prop = entry.find("is_primary")) {
-                        index.is_primary = prop->get_boolean();
-                    }
-                    if (const auto* prop = entry.find("condition")) {
-                        index.condition = prop->get_string();
-                    }
-                    for (const auto& key : entry.at("index_key").get_array()) {
-                        index.index_key.emplace_back(key.get_string());
-                    }
-                    response.indexes.emplace_back(index);
+    query_index_get_all_response response{ std::move(ctx) };
+    if (!response.ctx.ec && encoded.status_code == 200) {
+        tao::json::value payload{};
+        try {
+            payload = tao::json::from_string(encoded.body);
+        } catch (const tao::pegtl::parse_error& e) {
+            response.ctx.ec = error::common_errc::parsing_failure;
+            return response;
+        }
+        response.status = payload.at("status").get_string();
+        if (response.status == "success") {
+            for (const auto& entry : payload.at("results").get_array()) {
+                query_index_get_all_response::query_index index;
+                index.id = entry.at("id").get_string();
+                index.datastore_id = entry.at("datastore_id").get_string();
+                index.namespace_id = entry.at("namespace_id").get_string();
+                index.keyspace_id = entry.at("keyspace_id").get_string();
+                index.type = entry.at("using").get_string();
+                index.name = entry.at("name").get_string();
+                index.state = entry.at("state").get_string();
+                if (const auto* prop = entry.find("bucket_id")) {
+                    index.bucket_id = prop->get_string();
                 }
+                if (const auto* prop = entry.find("scope_id")) {
+                    index.scope_id = prop->get_string();
+                }
+                if (const auto* prop = entry.find("is_primary")) {
+                    index.is_primary = prop->get_boolean();
+                }
+                if (const auto* prop = entry.find("condition")) {
+                    index.condition = prop->get_string();
+                }
+                if (const auto* prop = entry.find("partition")) {
+                    index.partition = prop->get_string();
+                }
+                for (const auto& key : entry.at("index_key").get_array()) {
+                    index.index_key.emplace_back(key.get_string());
+                }
+                response.indexes.emplace_back(index);
             }
         }
     }

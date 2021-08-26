@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -20,26 +20,26 @@
 #include <tao/json.hpp>
 
 #include <version.hxx>
+#include <error_context/http.hxx>
 
 namespace couchbase::operations
 {
 struct http_noop_response {
-    std::string client_context_id;
-    std::error_code ec;
-    uint32_t status_code;
+    error_context::http ctx;
 };
 
 struct http_noop_request {
     using response_type = http_noop_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
+    using error_context_type = error_context::http;
 
     service_type type;
     std::chrono::milliseconds timeout;
 
     std::string client_context_id{ uuid::to_string(uuid::random()) };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& /* context */)
     {
         encoded.headers["connection"] = "keep-alive";
         encoded.method = "GET";
@@ -56,22 +56,22 @@ struct http_noop_request {
                 timeout = timeout_defaults::search_timeout;
                 encoded.path = "/api/ping";
                 break;
-            case service_type::views:
+            case service_type::view:
                 timeout = timeout_defaults::view_timeout;
                 encoded.path = "/";
                 break;
             case service_type::management:
-            case service_type::kv:
-                return std::make_error_code(error::common_errc::feature_not_available);
+            case service_type::key_value:
+                return error::common_errc::feature_not_available;
         }
         return {};
     }
 };
 
 http_noop_response
-make_response(std::error_code ec, http_noop_request& request, http_noop_request::encoded_response_type&& encoded)
+make_response(error_context::http&& ctx, const http_noop_request& /* request */, http_noop_request::encoded_response_type&&)
 {
-    http_noop_response response{ request.client_context_id, ec, encoded.status_code };
+    http_noop_response response{ std::move(ctx) };
     return response;
 }
 

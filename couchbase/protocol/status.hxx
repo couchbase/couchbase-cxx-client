@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,9 +17,7 @@
 
 #pragma once
 
-namespace couchbase
-{
-namespace protocol
+namespace couchbase::protocol
 {
 enum class status : uint16_t {
     success = 0x00,
@@ -81,10 +79,10 @@ enum class status : uint16_t {
     subdoc_invalid_xattr_order = 0xd4,
 };
 
-constexpr inline bool
+constexpr bool
 is_valid_status(uint16_t code)
 {
-    switch (static_cast<status>(code)) {
+    switch (status(code)) {
         case status::success:
         case status::not_found:
         case status::exists:
@@ -156,8 +154,7 @@ status_to_string(uint16_t code)
     return fmt::format("{} (unknown)", code);
 }
 
-} // namespace protocol
-} // namespace couchbase
+} // namespace couchbase::protocol
 
 template<>
 struct fmt::formatter<couchbase::protocol::status> : formatter<string_view> {

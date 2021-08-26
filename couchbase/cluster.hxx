@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <utility>
-#include <thread>
 #include <fstream>
+#include <thread>
+#include <utility>
 
 #include <asio/ssl.hpp>
 
@@ -31,6 +31,11 @@
 #include <bucket.hxx>
 #include <operations.hxx>
 #include <operations/document_query.hxx>
+
+#include <tracing/noop_tracer.hxx>
+#include <tracing/threshold_logging_tracer.hxx>
+#include <metrics/noop_meter.hxx>
+#include <metrics/logging_meter.hxx>
 
 #include <diagnostics.hxx>
 
@@ -47,8 +52,7 @@ class ping_collector : public std::enable_shared_from_this<ping_collector>
 
   public:
     ping_collector(std::string report_id, std::function<void(diag::ping_result)> handler)
-      : res_{ std::move(report_id),
-              fmt::format("cxx/{}.{}.{}/{}", BACKEND_VERSION_MAJOR, BACKEND_VERSION_MINOR, BACKEND_VERSION_PATCH, BACKEND_GIT_REVISION) }
+      : res_{ std::move(report_id), couchbase::sdk_id() }
       , handler_(std::move(handler))
     {
     }
@@ -89,12 +93,9 @@ class cluster
 {
   public:
     explicit cluster(asio::io_context& ctx)
-      : id_(uuid::to_string(uuid::random()))
-      , ctx_(ctx)
+      : ctx_(ctx)
       , work_(asio::make_work_guard(ctx_))
-      , tls_(asio::ssl::context::tls_client)
       , session_manager_(std::make_shared<io::http_session_manager>(id_, ctx_, tls_))
-      , dns_config_(io::dns::dns_config::get())
       , dns_client_(ctx_)
     {
     }
@@ -103,6 +104,17 @@ class cluster
     void open(const couchbase::origin& origin, Handler&& handler)
     {
         origin_ = origin;
+        if (origin_.options().enable_tracing) {
+            tracer_ = new tracing::threshold_logging_tracer(ctx_, origin.options().tracing_options);
+        } else {
+            tracer_ = new tracing::noop_tracer();
+        }
+        if (origin_.options().enable_metrics) {
+            meter_ = new metrics::logging_meter(ctx_, origin.options().metrics_options);
+        } else {
+            meter_ = new metrics::noop_meter();
+        }
+        session_manager_->set_tracer(tracer_);
         if (origin_.options().enable_dns_srv) {
             return asio::post(asio::bind_executor(
               ctx_, [this, handler = std::forward<Handler>(handler)]() mutable { return do_dns_srv(std::forward<Handler>(handler)); }));
@@ -123,21 +135,24 @@ class cluster
             session_manager_->close();
             handler();
             work_.reset();
+            delete tracer_;
+            tracer_ = nullptr;
+            delete meter_;
+            meter_ = nullptr;
         }));
     }
 
     template<typename Handler>
     void open_bucket(const std::string& bucket_name, Handler&& handler)
     {
-        auto ptr = buckets_.find(bucket_name);
-        if (ptr != buckets_.end()) {
+        if (buckets_.find(bucket_name) != buckets_.end()) {
             return handler({});
         }
         std::vector<protocol::hello_feature> known_features;
         if (session_ && session_->has_config()) {
             known_features = session_->supported_features();
         }
-        auto b = std::make_shared<bucket>(id_, ctx_, tls_, bucket_name, origin_, known_features);
+        auto b = std::make_shared<bucket>(id_, ctx_, tls_, tracer_, meter_, bucket_name, origin_, known_features);
         b->bootstrap([this, handler = std::forward<Handler>(handler)](std::error_code ec, const configuration& config) mutable {
             if (!ec && !session_->supports_gcccp()) {
                 session_manager_->set_configuration(config, origin_.options());
@@ -152,7 +167,11 @@ class cluster
     {
         auto bucket = buckets_.find(request.id.bucket);
         if (bucket == buckets_.end()) {
-            return handler(operations::make_response(std::make_error_code(error::common_errc::bucket_not_found), request, {}));
+            error_context::key_value ctx{};
+            ctx.id = request.id;
+            ctx.ec = error::common_errc::bucket_not_found;
+            using response_type = typename Request::encoded_response_type;
+            return handler(operations::make_response(std::move(ctx), request, response_type{}));
         }
         return bucket->second->execute(request, std::forward<Handler>(handler));
     }
@@ -162,9 +181,11 @@ class cluster
     {
         auto session = session_manager_->check_out(Request::type, origin_.credentials());
         if (!session) {
-            return handler(operations::make_response(std::make_error_code(error::common_errc::service_not_available), request, {}));
+            typename Request::error_context_type ctx{};
+            ctx.ec = error::common_errc::service_not_available;
+            return handler(operations::make_response(std::move(ctx), request, {}));
         }
-        auto cmd = std::make_shared<operations::http_command<Request>>(ctx_, request);
+        auto cmd = std::make_shared<operations::http_command<Request>>(ctx_, request, tracer_, meter_);
         cmd->send_to(session, [this, session, handler = std::forward<Handler>(handler)](typename Request::response_type resp) mutable {
             handler(std::move(resp));
             session_manager_->check_in(Request::type, session);
@@ -178,15 +199,12 @@ class cluster
             report_id = std::make_optional(uuid::to_string(uuid::random()));
         }
         asio::post(asio::bind_executor(ctx_, [this, report_id, handler = std::forward<Handler>(handler)]() mutable {
-            diag::diagnostics_result res{
-                report_id.value(),
-                fmt::format("cxx/{}.{}.{}/{}", BACKEND_VERSION_MAJOR, BACKEND_VERSION_MINOR, BACKEND_VERSION_PATCH, BACKEND_GIT_REVISION)
-            };
+            diag::diagnostics_result res{ report_id.value(), couchbase::sdk_id() };
             if (session_) {
-                res.services[service_type::kv].emplace_back(session_->diag_info());
+                res.services[service_type::key_value].emplace_back(session_->diag_info());
             }
-            for (const auto& bucket : buckets_) {
-                bucket.second->export_diag_info(res);
+            for (const auto& [name, bucket] : buckets_) {
+                bucket->export_diag_info(res);
             }
             session_manager_->export_diag_info(res);
             handler(std::move(res));
@@ -202,19 +220,19 @@ class cluster
             report_id = std::make_optional(uuid::to_string(uuid::random()));
         }
         if (services.empty()) {
-            services = { service_type::kv, service_type::views, service_type::query, service_type::search, service_type::analytics };
+            services = { service_type::key_value, service_type::view, service_type::query, service_type::search, service_type::analytics };
         }
         asio::post(asio::bind_executor(ctx_, [this, report_id, bucket_name, services, handler = std::move(handler)]() mutable {
             auto collector = std::make_shared<ping_collector>(report_id.value(), std::move(handler));
             if (bucket_name) {
-                if (services.find(service_type::kv) != services.end()) {
+                if (services.find(service_type::key_value) != services.end()) {
                     auto bucket = buckets_.find(bucket_name.value());
                     if (bucket != buckets_.end()) {
                         bucket->second->ping(collector);
                     }
                 }
             } else {
-                if (services.find(service_type::kv) != services.end()) {
+                if (services.find(service_type::key_value) != services.end()) {
                     if (session_) {
                         session_->ping(collector->build_reporter());
                     }
@@ -268,6 +286,15 @@ class cluster
     {
         if (origin_.options().enable_tls) {
             tls_.set_options(asio::ssl::context::default_workarounds | asio::ssl::context::no_sslv2 | asio::ssl::context::no_sslv3);
+            switch (origin_.options().tls_verify) {
+                case tls_verify_mode::none:
+                    tls_.set_verify_mode(asio::ssl::verify_none);
+                    break;
+
+                case tls_verify_mode::peer:
+                    tls_.set_verify_mode(asio::ssl::verify_peer);
+                    break;
+            }
             if (!origin_.options().trust_certificate.empty()) {
                 std::error_code ec{};
                 spdlog::debug(R"([{}]: use TLS certificate chain: "{}")", id_, origin_.options().trust_certificate);
@@ -320,7 +347,7 @@ class cluster
                     origin::node_list nodes;
                     nodes.reserve(config.nodes.size());
                     for (const auto& address : config.nodes) {
-                        auto port = address.port_or(origin_.options().network, service_type::kv, origin_.options().enable_tls, 0);
+                        auto port = address.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0);
                         if (port == 0) {
                             continue;
                         }
@@ -340,15 +367,17 @@ class cluster
         });
     }
 
-    std::string id_;
+    std::string id_{ uuid::to_string(uuid::random()) };
     asio::io_context& ctx_;
     asio::executor_work_guard<asio::io_context::executor_type> work_;
-    asio::ssl::context tls_;
+    asio::ssl::context tls_{ asio::ssl::context::tls_client };
     std::shared_ptr<io::http_session_manager> session_manager_;
-    io::dns::dns_config& dns_config_;
+    io::dns::dns_config& dns_config_{ io::dns::dns_config::get() };
     couchbase::io::dns::dns_client dns_client_;
     std::shared_ptr<io::mcbp_session> session_{};
     std::map<std::string, std::shared_ptr<bucket>> buckets_{};
     couchbase::origin origin_{};
+    tracing::request_tracer* tracer_{ nullptr };
+    metrics::meter* meter_{ nullptr };
 };
 } // namespace couchbase

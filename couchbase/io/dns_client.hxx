@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -81,7 +81,7 @@ class dns_client
                                                                                     std::size_t /* bytes_transferred */) mutable {
                   if (ec1 == asio::error::operation_aborted) {
                       self->deadline_.cancel();
-                      return handler({ std::make_error_code(error::common_errc::unambiguous_timeout) });
+                      return handler({ error::common_errc::unambiguous_timeout });
                   }
                   if (ec1) {
                       self->deadline_.cancel();
@@ -148,7 +148,7 @@ class dns_client
                         if (ec2) {
                             self->deadline_.cancel();
                             if (ec2 == asio::error::operation_aborted) {
-                                ec2 = std::make_error_code(error::common_errc::unambiguous_timeout);
+                                ec2 = error::common_errc::unambiguous_timeout;
                             }
                             return handler({ ec2 });
                         }
@@ -207,7 +207,7 @@ class dns_client
     template<class Handler>
     void query_srv(const std::string& name, const std::string& service, Handler&& handler)
     {
-        dns_config& config = dns_config::get();
+        const dns_config& config = dns_config::get();
         auto cmd = std::make_shared<dns_srv_command>(ctx_, name, service, config.address(), config.port());
         cmd->execute(config.timeout(), std::forward<Handler>(handler));
     }

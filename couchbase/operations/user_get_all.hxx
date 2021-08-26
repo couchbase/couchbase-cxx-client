@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -27,8 +27,7 @@ namespace couchbase::operations
 {
 
 struct user_get_all_response {
-    std::string client_context_id;
-    std::error_code ec;
+    error_context::http ctx;
     std::vector<rbac::user_and_metadata> users{};
 };
 
@@ -36,6 +35,7 @@ struct user_get_all_request {
     using response_type = user_get_all_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
+    using error_context_type = error_context::http;
 
     static const inline service_type type = service_type::management;
 
@@ -43,7 +43,7 @@ struct user_get_all_request {
     std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
     std::string client_context_id{ uuid::to_string(uuid::random()) };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& /* context */) const
     {
         encoded.method = "GET";
         encoded.path = fmt::format("/settings/rbac/users/{}", domain);
@@ -53,17 +53,23 @@ struct user_get_all_request {
 };
 
 user_get_all_response
-make_response(std::error_code ec, user_get_all_request& request, user_get_all_request::encoded_response_type&& encoded)
+make_response(error_context::http&& ctx, const user_get_all_request& /* request */, user_get_all_request::encoded_response_type&& encoded)
 {
-    user_get_all_response response{ request.client_context_id, ec };
-    if (!ec) {
+    user_get_all_response response{ std::move(ctx) };
+    if (!response.ctx.ec) {
         if (encoded.status_code == 200) {
-            tao::json::value payload = tao::json::from_string(encoded.body);
+            tao::json::value payload{};
+            try {
+                payload = tao::json::from_string(encoded.body);
+            } catch (const tao::pegtl::parse_error& e) {
+                response.ctx.ec = error::common_errc::parsing_failure;
+                return response;
+            }
             for (const auto& entry : payload.get_array()) {
                 response.users.emplace_back(entry.as<rbac::user_and_metadata>());
             }
         } else {
-            response.ec = std::make_error_code(error::common_errc::internal_server_failure);
+            response.ctx.ec = error::common_errc::internal_server_failure;
         }
     }
     return response;

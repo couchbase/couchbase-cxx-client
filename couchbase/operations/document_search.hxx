@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 #include <tao/json.hpp>
 
 #include <version.hxx>
+#include <error_context/search.hxx>
 
 namespace couchbase::operations
 {
@@ -87,7 +88,7 @@ struct search_response {
         std::vector<numeric_range_facet> numeric_ranges{};
     };
 
-    std::error_code ec;
+    error_context::search ctx;
     std::string status{};
     search_meta_data meta_data{};
     std::string error{};
@@ -99,6 +100,7 @@ struct search_request {
     using response_type = search_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
+    using error_context_type = error_context::search;
 
     static const inline service_type type = service_type::search;
 
@@ -117,6 +119,8 @@ struct search_request {
     std::optional<highlight_style_type> highlight_style{};
     std::vector<std::string> highlight_fields{};
     std::vector<std::string> fields{};
+    std::optional<std::string> scope_name{};
+    std::vector<std::string> collections{};
 
     enum class scan_consistency_type { not_bounded };
     std::optional<scan_consistency_type> scan_consistency{};
@@ -127,10 +131,11 @@ struct search_request {
     std::map<std::string, std::string> facets{};
 
     std::map<std::string, tao::json::value> raw{};
+    std::string body_str{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context)
     {
-        tao::json::value body{
+        tao::json::value body = tao::json::value{
             { "query", query },
             { "explain", explain },
             { "ctl", { { "timeout", timeout.count() } } },
@@ -172,8 +177,8 @@ struct search_request {
         }
         if (!facets.empty()) {
             body["facets"] = tao::json::empty_object;
-            for (const auto& facet : facets) {
-                body["facets"][facet.first] = tao::json::from_string(facet.second);
+            for (const auto& [name, facet] : facets) {
+                body["facets"][name] = tao::json::from_string(facet);
             }
         }
         if (!mutation_state.empty()) {
@@ -190,12 +195,17 @@ struct search_request {
                 { "vectors", { { index_name, scan_vectors } } },
             };
         }
+        if (scope_name) {
+            body["scope"] = scope_name.value();
+            body["collections"] = collections;
+        }
 
         encoded.type = type;
         encoded.headers["content-type"] = "application/json";
         encoded.method = "POST";
         encoded.path = fmt::format("/api/index/{}/query", index_name);
-        encoded.body = tao::json::to_string(body);
+        body_str = tao::json::to_string(body);
+        encoded.body = body_str;
         if (context.options.show_queries) {
             spdlog::info("SEARCH: {}", tao::json::to_string(body["query"]));
         } else {
@@ -206,18 +216,27 @@ struct search_request {
 };
 
 search_response
-make_response(std::error_code ec, search_request& request, search_request::encoded_response_type&& encoded)
+make_response(error_context::search&& ctx, const search_request& request, search_request::encoded_response_type&& encoded)
 {
-    search_response response{ ec };
+    search_response response{ std::move(ctx) };
     response.meta_data.client_context_id = request.client_context_id;
-    if (!ec) {
+    response.ctx.index_name = request.index_name;
+    response.ctx.query = tao::json::to_string(request.query);
+    response.ctx.parameters = request.body_str;
+    if (!response.ctx.ec) {
         if (encoded.status_code == 200) {
-            auto payload = tao::json::from_string(encoded.body);
+            tao::json::value payload{};
+            try {
+                payload = tao::json::from_string(encoded.body);
+            } catch (const tao::pegtl::parse_error& e) {
+                response.ctx.ec = error::common_errc::parsing_failure;
+                return response;
+            }
             response.meta_data.metrics.took = std::chrono::nanoseconds(payload.at("took").get_unsigned());
             response.meta_data.metrics.max_score = payload.at("max_score").as<double>();
             response.meta_data.metrics.total_rows = payload.at("total_hits").get_unsigned();
-            auto status_prop = payload.at("status");
-            if (status_prop.is_string()) {
+
+            if (auto& status_prop = payload.at("status"); status_prop.is_string()) {
                 response.status = status_prop.get_string();
                 if (response.status == "ok") {
                     return response;
@@ -225,36 +244,33 @@ make_response(std::error_code ec, search_request& request, search_request::encod
             } else if (status_prop.is_object()) {
                 response.meta_data.metrics.error_partition_count = status_prop.at("failed").get_unsigned();
                 response.meta_data.metrics.success_partition_count = status_prop.at("successful").get_unsigned();
-                const auto* errors = status_prop.find("errors");
-                if (errors != nullptr && errors->is_object()) {
-                    for (const auto& error : errors->get_object()) {
-                        response.meta_data.errors.emplace(error.first, error.second.get_string());
+                if (const auto* errors = status_prop.find("errors"); errors != nullptr && errors->is_object()) {
+                    for (const auto& [location, message] : errors->get_object()) {
+                        response.meta_data.errors.try_emplace(location, message.get_string());
                     }
                 }
             } else {
-                response.ec = std::make_error_code(error::common_errc::internal_server_failure);
+                response.ctx.ec = error::common_errc::internal_server_failure;
                 return response;
             }
-            const auto* rows = payload.find("hits");
-            if (rows != nullptr && rows->is_array()) {
+
+            if (const auto* rows = payload.find("hits"); rows != nullptr && rows->is_array()) {
                 for (const auto& entry : rows->get_array()) {
                     search_response::search_row row{};
                     row.index = entry.at("index").get_string();
                     row.id = entry.at("id").get_string();
                     row.score = entry.at("score").as<double>();
-                    const auto* locations = entry.find("locations");
-                    if (locations != nullptr && locations->is_object()) {
-                        for (const auto& field : locations->get_object()) {
-                            for (const auto& term : field.second.get_object()) {
-                                for (const auto& loc : term.second.get_array()) {
+                    if (const auto* locations_map = entry.find("locations"); locations_map != nullptr && locations_map->is_object()) {
+                        for (const auto& [field, terms] : locations_map->get_object()) {
+                            for (const auto& [term, locations] : terms.get_object()) {
+                                for (const auto& loc : locations.get_array()) {
                                     search_response::search_location location{};
-                                    location.field = field.first;
-                                    location.term = term.first;
+                                    location.field = field;
+                                    location.term = term;
                                     location.position = loc.at("pos").get_unsigned();
                                     location.start_offset = loc.at("start").get_unsigned();
                                     location.end_offset = loc.at("end").get_unsigned();
-                                    const auto* ap = loc.find("array_positions");
-                                    if (ap != nullptr && ap->is_array()) {
+                                    if (const auto* ap = loc.find("array_positions"); ap != nullptr && ap->is_array()) {
                                         location.array_positions.emplace(ap->as<std::vector<std::uint64_t>>());
                                     }
                                     row.locations.emplace_back(location);
@@ -262,67 +278,60 @@ make_response(std::error_code ec, search_request& request, search_request::encod
                             }
                         }
                     }
-                    const auto* fragments_map = entry.find("fragments");
-                    if (fragments_map != nullptr && fragments_map->is_object()) {
-                        for (const auto& field : fragments_map->get_object()) {
-                            row.fragments.emplace(field.first, field.second.as<std::vector<std::string>>());
+
+                    if (const auto* fragments_map = entry.find("fragments"); fragments_map != nullptr && fragments_map->is_object()) {
+                        for (const auto& [field, fragments] : fragments_map->get_object()) {
+                            row.fragments.emplace(field, fragments.as<std::vector<std::string>>());
                         }
                     }
-                    const auto* fields = entry.find("fields");
-                    if (fields != nullptr && fields->is_object()) {
+                    if (const auto* fields = entry.find("fields"); fields != nullptr && fields->is_object()) {
                         row.fields = tao::json::to_string(*fields);
                     }
-                    const auto* explanation = entry.find("explanation");
-                    if (explanation != nullptr && explanation->is_object()) {
+                    if (const auto* explanation = entry.find("explanation"); explanation != nullptr && explanation->is_object()) {
                         row.explanation = tao::json::to_string(*explanation);
                     }
                     response.rows.emplace_back(row);
                 }
             }
-            const auto* facets = payload.find("facets");
-            if (facets != nullptr && facets->is_object()) {
-                for (const auto& entry : facets->get_object()) {
-                    search_response::search_facet facet;
-                    facet.name = entry.first;
-                    facet.field = entry.second.at("field").get_string();
-                    facet.total = entry.second.at("total").get_unsigned();
-                    facet.missing = entry.second.at("missing").get_unsigned();
-                    facet.other = entry.second.at("other").get_unsigned();
 
-                    const auto& date_ranges = entry.second.find("date_ranges");
-                    if (date_ranges != nullptr && date_ranges->is_array()) {
+            if (const auto* facets = payload.find("facets"); facets != nullptr && facets->is_object()) {
+                for (const auto& [name, object] : facets->get_object()) {
+                    search_response::search_facet facet;
+                    facet.name = name;
+                    facet.field = object.at("field").get_string();
+                    facet.total = object.at("total").get_unsigned();
+                    facet.missing = object.at("missing").get_unsigned();
+                    facet.other = object.at("other").get_unsigned();
+
+                    if (const auto* date_ranges = object.find("date_ranges"); date_ranges != nullptr && date_ranges->is_array()) {
                         for (const auto& date_range : date_ranges->get_array()) {
                             search_response::search_facet::date_range_facet drf;
                             drf.name = date_range.at("name").get_string();
                             drf.count = date_range.at("count").get_unsigned();
-                            const auto* start = date_range.find("start");
-                            if (start != nullptr && start->is_string()) {
+                            if (const auto* start = date_range.find("start"); start != nullptr && start->is_string()) {
                                 drf.start = start->get_string();
                             }
-                            const auto* end = date_range.find("end");
-                            if (end != nullptr && end->is_string()) {
+                            if (const auto* end = date_range.find("end"); end != nullptr && end->is_string()) {
                                 drf.end = end->get_string();
                             }
                             facet.date_ranges.emplace_back(drf);
                         }
                     }
 
-                    const auto& numeric_ranges = entry.second.find("numeric_ranges");
-                    if (numeric_ranges != nullptr && numeric_ranges->is_array()) {
+                    if (const auto& numeric_ranges = object.find("numeric_ranges");
+                        numeric_ranges != nullptr && numeric_ranges->is_array()) {
                         for (const auto& numeric_range : numeric_ranges->get_array()) {
                             search_response::search_facet::numeric_range_facet nrf;
                             nrf.name = numeric_range.at("name").get_string();
                             nrf.count = numeric_range.at("count").get_unsigned();
-                            const auto* min = numeric_range.find("min");
-                            if (min != nullptr) {
+                            if (const auto* min = numeric_range.find("min"); min != nullptr) {
                                 if (min->is_double()) {
                                     nrf.min = min->as<double>();
                                 } else if (min->is_integer()) {
                                     nrf.min = min->get_unsigned();
                                 }
                             }
-                            const auto* max = numeric_range.find("max");
-                            if (max != nullptr) {
+                            if (const auto* max = numeric_range.find("max"); max != nullptr) {
                                 if (max->is_double()) {
                                     nrf.max = max->as<double>();
                                 } else if (max->is_integer()) {
@@ -333,8 +342,7 @@ make_response(std::error_code ec, search_request& request, search_request::encod
                         }
                     }
 
-                    const auto& terms = entry.second.find("terms");
-                    if (terms != nullptr && terms->is_array()) {
+                    if (const auto* terms = object.find("terms"); terms != nullptr && terms->is_array()) {
                         for (const auto& term : terms->get_array()) {
                             search_response::search_facet::term_facet tf;
                             tf.term = term.at("term").get_string();
@@ -349,21 +357,29 @@ make_response(std::error_code ec, search_request& request, search_request::encod
             return response;
         }
         if (encoded.status_code == 400) {
-            auto payload = tao::json::from_string(encoded.body);
+            tao::json::value payload{};
+            try {
+                payload = tao::json::from_string(encoded.body);
+            } catch (const tao::pegtl::parse_error& e) {
+                response.ctx.ec = error::common_errc::parsing_failure;
+                return response;
+            }
             response.status = payload.at("status").get_string();
             response.error = payload.at("error").get_string();
             if (response.error.find("index not found") != std::string::npos) {
-                response.ec = std::make_error_code(error::common_errc::index_not_found);
+                response.ctx.ec = error::common_errc::index_not_found;
                 return response;
-            } else if (response.error.find("no planPIndexes for indexName") != std::string::npos) {
-                response.ec = std::make_error_code(error::search_errc::index_not_ready);
+            }
+            if (response.error.find("no planPIndexes for indexName") != std::string::npos) {
+                response.ctx.ec = error::search_errc::index_not_ready;
                 return response;
-            } else if (response.error.find("pindex_consistency mismatched partition") != std::string::npos) {
-                response.ec = std::make_error_code(error::search_errc::consistency_mismatch);
+            }
+            if (response.error.find("pindex_consistency mismatched partition") != std::string::npos) {
+                response.ctx.ec = error::search_errc::consistency_mismatch;
                 return response;
             }
         }
-        response.ec = std::make_error_code(error::common_errc::internal_server_failure);
+        response.ctx.ec = error::common_errc::internal_server_failure;
     }
     return response;
 }

@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -23,8 +23,7 @@
 namespace couchbase::operations
 {
 struct view_index_get_response {
-    std::string client_context_id;
-    std::error_code ec;
+    error_context::http ctx;
     design_document document{};
 };
 
@@ -32,8 +31,9 @@ struct view_index_get_request {
     using response_type = view_index_get_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
+    using error_context_type = error_context::http;
 
-    static const inline service_type type = service_type::views;
+    static const inline service_type type = service_type::view;
 
     std::string client_context_id{ uuid::to_string(uuid::random()) };
     std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
@@ -42,7 +42,7 @@ struct view_index_get_request {
     std::string document_name;
     design_document::name_space name_space;
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& /* context */) const
     {
         encoded.method = "GET";
         encoded.path =
@@ -52,27 +52,31 @@ struct view_index_get_request {
 };
 
 view_index_get_response
-make_response(std::error_code ec, view_index_get_request& request, view_index_get_request::encoded_response_type&& encoded)
+make_response(error_context::http&& ctx, const view_index_get_request& request, view_index_get_request::encoded_response_type&& encoded)
 {
-    view_index_get_response response{ request.client_context_id, ec };
-    if (!ec) {
+    view_index_get_response response{ std::move(ctx) };
+    if (!response.ctx.ec) {
         if (encoded.status_code == 200) {
             response.document.name = request.document_name;
             response.document.ns = request.name_space;
 
-            auto payload = tao::json::from_string(encoded.body);
+            tao::json::value payload{};
+            try {
+                payload = tao::json::from_string(encoded.body);
+            } catch (const tao::pegtl::parse_error& e) {
+                response.ctx.ec = error::common_errc::parsing_failure;
+                return response;
+            }
             const auto* views = payload.find("views");
             if (views != nullptr && views->is_object()) {
-                for (const auto& view_entry : views->get_object()) {
+                for (const auto& [name, view_entry] : views->get_object()) {
                     couchbase::operations::design_document::view view;
-                    view.name = view_entry.first;
-                    if (view_entry.second.is_object()) {
-                        const auto* map = view_entry.second.find("map");
-                        if (map != nullptr && map->is_string()) {
+                    view.name = name;
+                    if (view_entry.is_object()) {
+                        if (const auto* map = view_entry.find("map"); map != nullptr && map->is_string()) {
                             view.map = map->get_string();
                         }
-                        const auto* reduce = view_entry.second.find("reduce");
-                        if (reduce != nullptr && reduce->is_string()) {
+                        if (const auto* reduce = view_entry.find("reduce"); reduce != nullptr && reduce->is_string()) {
                             view.reduce = reduce->get_string();
                         }
                     }
@@ -80,9 +84,9 @@ make_response(std::error_code ec, view_index_get_request& request, view_index_ge
                 }
             }
         } else if (encoded.status_code == 404) {
-            response.ec = std::make_error_code(error::view_errc::design_document_not_found);
+            response.ctx.ec = error::view_errc::design_document_not_found;
         } else {
-            response.ec = std::make_error_code(error::common_errc::internal_server_failure);
+            response.ctx.ec = error::common_errc::internal_server_failure;
         }
     }
     return response;

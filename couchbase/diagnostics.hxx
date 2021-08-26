@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -65,7 +65,7 @@ struct diagnostics_result {
     std::string sdk;
     std::map<service_type, std::vector<endpoint_diag_info>> services{};
 
-    const int version{ 2 };
+    int version{ 2 };
 };
 
 enum class ping_state {
@@ -92,7 +92,7 @@ struct ping_result {
     std::string sdk;
     std::map<service_type, std::vector<endpoint_ping_info>> services{};
 
-    const int version{ 2 };
+    int version{ 2 };
 };
 } // namespace couchbase::diag
 

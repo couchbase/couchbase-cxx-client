@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -23,10 +23,11 @@
 
 #include <snappy.h>
 
-#include <gsl/gsl_util>
+#include <gsl/util>
 #include <protocol/client_opcode.hxx>
 #include <protocol/magic.hxx>
 #include <protocol/client_response.hxx>
+#include <utils/byteswap.hxx>
 
 namespace couchbase::protocol
 {
@@ -49,7 +50,7 @@ class client_request
     std::vector<std::uint8_t> payload_;
 
   public:
-    client_opcode opcode()
+    [[nodiscard]] client_opcode opcode() const
     {
         return opcode_;
     }
@@ -61,10 +62,10 @@ class client_request
 
     void cas(std::uint64_t val)
     {
-        cas_ = val;
+        cas_ = utils::byte_swap_64(val);
     }
 
-    std::uint32_t opaque()
+    [[nodiscard]] std::uint32_t opaque() const
     {
         return opaque_;
     }

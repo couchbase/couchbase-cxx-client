@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -31,9 +31,7 @@ namespace couchbase::operations
 {
 
 struct collections_manifest_get_response {
-    document_id id;
-    std::uint32_t opaque;
-    std::error_code ec{};
+    error_context::key_value ctx;
     collections_manifest manifest{};
 };
 
@@ -47,7 +45,7 @@ struct collections_manifest_get_request {
     std::chrono::milliseconds timeout{ timeout_defaults::key_value_timeout };
     io::retry_context<io::retry_strategy::best_effort> retries{ true };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& /* context */) const
     {
         encoded.opaque(opaque);
         return {};
@@ -55,15 +53,12 @@ struct collections_manifest_get_request {
 };
 
 collections_manifest_get_response
-make_response(std::error_code ec,
-              collections_manifest_get_request& request,
+make_response(error_context::key_value&& ctx,
+              const collections_manifest_get_request& /* request */,
               collections_manifest_get_request::encoded_response_type&& encoded)
 {
-    collections_manifest_get_response response{ request.id, encoded.opaque(), ec };
-    if (ec && response.opaque == 0) {
-        response.opaque = request.opaque;
-    }
-    if (!ec) {
+    collections_manifest_get_response response{ std::move(ctx) };
+    if (!response.ctx.ec) {
         response.manifest = encoded.body().manifest();
     }
     return response;

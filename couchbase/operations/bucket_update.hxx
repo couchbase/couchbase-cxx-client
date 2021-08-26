@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -27,8 +27,7 @@ namespace couchbase::operations
 {
 
 struct bucket_update_response {
-    std::string client_context_id;
-    std::error_code ec;
+    error_context::http ctx;
     bucket_settings bucket{};
     std::string error_message{};
 };
@@ -37,6 +36,7 @@ struct bucket_update_request {
     using response_type = bucket_update_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
+    using error_context_type = error_context::http;
 
     static const inline service_type type = service_type::management;
     std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
@@ -44,7 +44,7 @@ struct bucket_update_request {
 
     bucket_settings bucket{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context&)
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& /* context */) const
     {
         encoded.method = "POST";
         encoded.path = fmt::format("/pools/default/buckets/{}", bucket.name);
@@ -84,22 +84,44 @@ struct bucket_update_request {
             case bucket_settings::compression_mode::unknown:
                 break;
         }
+        if (bucket.minimum_durability_level) {
+            switch (bucket.minimum_durability_level.value()) {
+                case protocol::durability_level::none:
+                    encoded.body.append("&durabilityMinLevel=none");
+                    break;
+                case protocol::durability_level::majority:
+                    encoded.body.append("&durabilityMinLevel=majority");
+                    break;
+                case protocol::durability_level::majority_and_persist_to_active:
+                    encoded.body.append("&durabilityMinLevel=majorityAndPersistActive");
+                    break;
+                case protocol::durability_level::persist_to_majority:
+                    encoded.body.append("&durabilityMinLevel=persistToMajority");
+                    break;
+            }
+        }
         return {};
     }
 };
 
 bucket_update_response
-make_response(std::error_code ec, bucket_update_request& request, bucket_update_request::encoded_response_type&& encoded)
+make_response(error_context::http&& ctx, const bucket_update_request& /* request */, bucket_update_request::encoded_response_type&& encoded)
 {
-    bucket_update_response response{ request.client_context_id, ec };
-    if (!ec) {
+    bucket_update_response response{ std::move(ctx) };
+    if (!response.ctx.ec) {
         switch (encoded.status_code) {
             case 404:
-                response.ec = std::make_error_code(error::common_errc::bucket_not_found);
+                response.ctx.ec = error::common_errc::bucket_not_found;
                 break;
             case 400: {
-                response.ec = std::make_error_code(error::common_errc::invalid_argument);
-                auto payload = tao::json::from_string(encoded.body);
+                tao::json::value payload{};
+                try {
+                    payload = tao::json::from_string(encoded.body);
+                } catch (const tao::pegtl::parse_error& e) {
+                    response.ctx.ec = error::common_errc::parsing_failure;
+                    return response;
+                }
+                response.ctx.ec = error::common_errc::invalid_argument;
                 auto* errors = payload.find("errors");
                 if (errors != nullptr) {
                     std::vector<std::string> error_list{};
@@ -115,7 +137,7 @@ make_response(std::error_code ec, bucket_update_request& request, bucket_update_
             case 202:
                 break;
             default:
-                response.ec = std::make_error_code(error::common_errc::internal_server_failure);
+                response.ctx.ec = error::common_errc::internal_server_failure;
                 break;
         }
     }

@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include <gsl/gsl_assert>
+#include <gsl/assert>
 
-#include <protocol/server_opcode.hxx>
 #include <protocol/cmd_info.hxx>
+#include <protocol/server_opcode.hxx>
 
 #include <configuration.hxx>
 
@@ -38,12 +38,12 @@ class cluster_map_change_notification_request_body
     std::optional<configuration> config_;
 
   public:
-    [[nodiscard]] uint32_t protocol_revision()
+    [[nodiscard]] uint32_t protocol_revision() const
     {
         return protocol_revision_;
     }
 
-    [[nodiscard]] const std::string& bucket()
+    [[nodiscard]] const std::string& bucket() const
     {
         return bucket_;
     }
@@ -53,7 +53,7 @@ class cluster_map_change_notification_request_body
         return config_;
     }
 
-    bool parse(const header_buffer& header, const std::vector<uint8_t>& body, const cmd_info&)
+    bool parse(const header_buffer& header, const std::vector<uint8_t>& body, const cmd_info& /* info */)
     {
         Expects(header[1] == static_cast<uint8_t>(opcode));
         using offset_type = std::vector<uint8_t>::difference_type;

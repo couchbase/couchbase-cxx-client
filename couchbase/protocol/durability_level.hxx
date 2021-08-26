@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -44,10 +44,10 @@ enum class durability_level : uint8_t {
     persist_to_majority = 0x03,
 };
 
-constexpr inline bool
+constexpr bool
 is_valid_durability_level(uint8_t value)
 {
-    switch (static_cast<durability_level>(value)) {
+    switch (durability_level(value)) {
         case durability_level::none:
         case durability_level::majority:
         case durability_level::majority_and_persist_to_active:
