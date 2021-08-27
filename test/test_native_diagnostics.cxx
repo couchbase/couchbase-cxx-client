@@ -44,10 +44,10 @@ TEST_CASE("native: serializing diagnostics report", "[native]")
               },
             },
             {
-              couchbase::service_type::kv,
+              couchbase::service_type::key_value,
               {
                 {
-                  couchbase::service_type::kv,
+                  couchbase::service_type::key_value,
                   "0x1415F12",
                   1182000us,
                   "centos7-lx1.home.ingenthron.org:11210",
@@ -92,10 +92,10 @@ TEST_CASE("native: serializing diagnostics report", "[native]")
               },
             },
             {
-              couchbase::service_type::views,
+              couchbase::service_type::view,
               {
                 {
-                  couchbase::service_type::views,
+                  couchbase::service_type::view,
                   "0x1415F16",
                   1182000us,
                   "centos7-lx1.home.ingenthron.org:8092",
@@ -199,10 +199,10 @@ TEST_CASE("native: serializing ping report", "[native]")
               },
             },
             {
-              couchbase::service_type::kv,
+              couchbase::service_type::key_value,
               {
                 {
-                  couchbase::service_type::kv,
+                  couchbase::service_type::key_value,
                   "0x1415F12",
                   1182000us,
                   "centos7-lx1.home.ingenthron.org:11210",
@@ -241,10 +241,10 @@ TEST_CASE("native: serializing ping report", "[native]")
               },
             },
             {
-              couchbase::service_type::views,
+              couchbase::service_type::view,
               {
                 {
-                  couchbase::service_type::views,
+                  couchbase::service_type::view,
                   "0x1415F16",
                   45585us,
                   "centos7-lx1.home.ingenthron.org:8092",
@@ -261,7 +261,6 @@ TEST_CASE("native: serializing ping report", "[native]")
 {
   "version": 2,
   "id": "0xdeadbeef",
-  "config_rev": 53,
   "sdk": "ruby/1.0.0",
   "services": {
     "search": [
@@ -369,7 +368,7 @@ TEST_CASE("native: fetch diagnostics after N1QL query", "[native]")
         auto res = f.get();
         REQUIRE(res.id == "my_report_id");
         REQUIRE(res.sdk.find("ruby/") == 0);
-        REQUIRE(res.services[couchbase::service_type::kv].size() > 1);
+        REQUIRE(res.services[couchbase::service_type::key_value].size() > 1);
         REQUIRE(res.services[couchbase::service_type::query].size() == 1);
         REQUIRE(res.services[couchbase::service_type::query][0].state == couchbase::diag::endpoint_state::connected);
     }

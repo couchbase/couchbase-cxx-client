@@ -92,9 +92,7 @@ set_target_properties(
   snappy
   PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 
-if(APPLE)
-  target_link_libraries(couchbase PRIVATE -Wl,-undefined,dynamic_lookup)
-else()
+if(!APPLE)
   set_target_properties(cbcrypto cbsasl platform PROPERTIES CXX_VISIBILITY_PRESET hidden)
 endif()
 
