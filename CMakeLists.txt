@@ -55,7 +55,7 @@ endif()
 
 include(cmake/VersionInfo.cmake)
 
-include_directories(${CMAKE_SOURCE_DIR}/couchbase)
+include_directories(${PROJECT_SOURCE_DIR}/couchbase)
 
 add_library(
   platform OBJECT

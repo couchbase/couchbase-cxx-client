@@ -121,9 +121,11 @@ struct test_context {
         if (var != nullptr) {
             ctx.bucket = var;
         }
+
+        // TODO: I believe this + TEST_DEVELOPER_PREVIEW will conflict
         var = getenv("TEST_SERVER_VERSION");
         if (var != nullptr) {
-            ctx.bucket = var;
+            ctx.version = test_server_version::parse(var);
         }
         var = getenv("TEST_DEVELOPER_PREVIEW");
         if (var != nullptr) {
