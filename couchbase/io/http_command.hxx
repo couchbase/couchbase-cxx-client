@@ -101,9 +101,10 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
                   { "db.couchbase.service", fmt::format("{}", self->request.type) },
                   { "db.operation", self->encoded.path },
               };
-              self->meter_->get_value_recorder(meter_name, tags)
-                ->record_value(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count());
-
+              if(self->meter_) {
+                  self->meter_->get_value_recorder(meter_name, tags)
+                    ->record_value(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count());
+              }
               self->deadline.cancel();
               self->finish_dispatch(session->remote_address(), session->local_address());
               encoded_response_type resp(msg);
