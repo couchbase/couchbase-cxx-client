@@ -110,6 +110,15 @@ endif()
 
 add_library(couchbase_cxx_client STATIC couchbase/version.cxx)
 target_include_directories(couchbase_cxx_client PUBLIC ${PROJECT_BINARY_DIR}/generated ${PROJECT_SOURCE_DIR})
+target_include_directories(
+  couchbase_cxx_client SYSTEM
+  PUBLIC ${PROJECT_SOURCE_DIR}/third_party/asio/asio/include
+         ${PROJECT_SOURCE_DIR}/third_party/gsl/include
+         ${PROJECT_SOURCE_DIR}/third_party/hdr_histogram_c/src
+         ${PROJECT_SOURCE_DIR}/third_party/http_parser
+         ${PROJECT_SOURCE_DIR}/third_party/json/external/PEGTL/include
+         ${PROJECT_SOURCE_DIR}/third_party/json/include
+         ${PROJECT_SOURCE_DIR}/third_party/spdlog/include)
 target_link_libraries(
   couchbase_cxx_client
   project_options
