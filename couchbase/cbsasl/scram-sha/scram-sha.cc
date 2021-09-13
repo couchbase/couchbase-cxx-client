@@ -17,14 +17,14 @@
 
 #include <spdlog/spdlog.h>
 
-#include <platform/base64.h>
-#include <platform/random.h>
-#include <platform/string_hex.h>
+#include <couchbase/platform/base64.h>
+#include <couchbase/platform/random.h>
+#include <couchbase/platform/string_hex.h>
 
-#include <cbcrypto/cbcrypto.h>
+#include <couchbase/cbcrypto/cbcrypto.h>
 
-#include <cbsasl/scram-sha/scram-sha.h>
-#include <cbsasl/scram-sha/stringutils.h>
+#include <couchbase/cbsasl/scram-sha/scram-sha.h>
+#include <couchbase/cbsasl/scram-sha/stringutils.h>
 
 #include <cstring>
 #include <iostream>

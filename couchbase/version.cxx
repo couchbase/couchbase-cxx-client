@@ -15,10 +15,9 @@
  *   limitations under the License.
  */
 
-#include <version.hxx>
+#include <couchbase/version.hxx>
 
-#include <build_info.hxx>
-
+#include <couchbase/build_info.hxx>
 #include <spdlog/fmt/fmt.h>
 #include <tao/json.hpp>
 

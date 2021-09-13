@@ -24,10 +24,10 @@
 #include <snappy.h>
 
 #include <gsl/util>
-#include <protocol/client_opcode.hxx>
-#include <protocol/magic.hxx>
-#include <protocol/client_response.hxx>
-#include <utils/byteswap.hxx>
+#include <couchbase/protocol/client_opcode.hxx>
+#include <couchbase/protocol/magic.hxx>
+#include <couchbase/protocol/client_response.hxx>
+#include <couchbase/utils/byteswap.hxx>
 
 namespace couchbase::protocol
 {

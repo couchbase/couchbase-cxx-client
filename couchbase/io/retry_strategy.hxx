@@ -19,8 +19,8 @@
 
 #include <gsl/assert>
 
-#include <io/retry_reason.hxx>
-#include <io/retry_action.hxx>
+#include <couchbase/io/retry_reason.hxx>
+#include <couchbase/io/retry_action.hxx>
 
 namespace couchbase::io::retry_strategy
 {

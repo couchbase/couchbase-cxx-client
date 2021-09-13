@@ -19,11 +19,11 @@
 
 #include <gsl/assert>
 
-#include <protocol/client_opcode.hxx>
-#include <protocol/cmd_info.hxx>
-#include <protocol/status.hxx>
+#include <couchbase/protocol/client_opcode.hxx>
+#include <couchbase/protocol/cmd_info.hxx>
+#include <couchbase/protocol/status.hxx>
 
-#include <collections_manifest.hxx>
+#include <couchbase/collections_manifest.hxx>
 
 namespace couchbase::protocol
 {

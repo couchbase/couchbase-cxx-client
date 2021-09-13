@@ -30,10 +30,10 @@
  * don't advertise the -PLUS)
  */
 
-#include <cbcrypto/cbcrypto.h>
+#include <couchbase/cbcrypto/cbcrypto.h>
 
-#include <cbsasl/client.h>
-#include <cbsasl/mechanism.h>
+#include <couchbase/cbsasl/client.h>
+#include <couchbase/cbsasl/mechanism.h>
 
 namespace couchbase::sasl::mechanism::scram
 {

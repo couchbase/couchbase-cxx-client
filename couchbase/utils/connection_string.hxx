@@ -22,7 +22,7 @@
 #include <tao/pegtl.hpp>
 #include <tao/pegtl/contrib/uri.hpp>
 
-#include <cluster_options.hxx>
+#include <couchbase/cluster_options.hxx>
 
 namespace couchbase::utils
 {

@@ -17,11 +17,11 @@
 
 #pragma once
 
-#include <protocol/cmd_increment.hxx>
-#include <protocol/durability_level.hxx>
-#include <operations.hxx>
-#include <protocol/client_response.hxx>
-#include <io/retry_context.hxx>
+#include <couchbase/protocol/cmd_increment.hxx>
+#include <couchbase/protocol/durability_level.hxx>
+#include <couchbase/operations.hxx>
+#include <couchbase/protocol/client_response.hxx>
+#include <couchbase/io/retry_context.hxx>
 
 namespace couchbase::operations
 {

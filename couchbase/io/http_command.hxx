@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include <io/http_session.hxx>
+#include <couchbase/io/http_session.hxx>
 
-#include <tracing/request_tracer.hxx>
-#include <metrics/meter.hxx>
+#include <couchbase/tracing/request_tracer.hxx>
+#include <couchbase/metrics/meter.hxx>
 
 namespace couchbase::operations
 {

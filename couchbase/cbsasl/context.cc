@@ -15,8 +15,8 @@
  *   limitations under the License.
  */
 
-#include <cbsasl/context.h>
-#include <platform/uuid.h>
+#include <couchbase/cbsasl/context.h>
+#include <couchbase/platform/uuid.h>
 
 namespace couchbase::sasl
 {

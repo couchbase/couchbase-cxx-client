@@ -19,8 +19,8 @@
 
 #include <tao/json.hpp>
 
-#include <version.hxx>
-#include <error_context/search.hxx>
+#include <couchbase/version.hxx>
+#include <couchbase/error_context/search.hxx>
 
 namespace couchbase::operations
 {

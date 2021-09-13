@@ -17,13 +17,13 @@
 
 #pragma once
 
-#include <protocol/status.hxx>
-#include <protocol/client_opcode.hxx>
-#include <protocol/frame_info_id.hxx>
-#include <protocol/unsigned_leb128.h>
-#include <protocol/durability_level.hxx>
-#include <mutation_token.hxx>
-#include <utils/byteswap.hxx>
+#include <couchbase/protocol/status.hxx>
+#include <couchbase/protocol/client_opcode.hxx>
+#include <couchbase/protocol/frame_info_id.hxx>
+#include <couchbase/protocol/unsigned_leb128.h>
+#include <couchbase/protocol/durability_level.hxx>
+#include <couchbase/mutation_token.hxx>
+#include <couchbase/utils/byteswap.hxx>
 
 namespace couchbase::protocol
 {

@@ -19,7 +19,7 @@
 
 #include <tao/json.hpp>
 
-#include <utils/name_codec.hxx>
+#include <couchbase/utils/name_codec.hxx>
 
 namespace couchbase::operations
 {

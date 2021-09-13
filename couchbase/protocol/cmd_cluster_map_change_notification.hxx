@@ -19,10 +19,10 @@
 
 #include <gsl/assert>
 
-#include <protocol/cmd_info.hxx>
-#include <protocol/server_opcode.hxx>
+#include <couchbase/protocol/cmd_info.hxx>
+#include <couchbase/protocol/server_opcode.hxx>
 
-#include <configuration.hxx>
+#include <couchbase/configuration.hxx>
 
 namespace couchbase::protocol
 {

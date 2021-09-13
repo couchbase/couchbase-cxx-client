@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <service_type.hxx>
+#include <couchbase/service_type.hxx>
 
 namespace couchbase::io
 {

@@ -8,12 +8,12 @@ if(GIT)
 endif()
 
 string(TIMESTAMP COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP "%Y-%m-%d %H:%M:%S" UTC)
-configure_file(${PROJECT_SOURCE_DIR}/build_version.hxx.in ${PROJECT_BINARY_DIR}/generated/build_version.hxx @ONLY)
-configure_file(${PROJECT_SOURCE_DIR}/build_config.hxx.in ${PROJECT_BINARY_DIR}/generated/build_config.hxx @ONLY)
+configure_file(${PROJECT_SOURCE_DIR}/cmake/build_version.hxx.in ${PROJECT_BINARY_DIR}/generated/couchbase/build_version.hxx @ONLY)
+configure_file(${PROJECT_SOURCE_DIR}/cmake/build_config.hxx.in ${PROJECT_BINARY_DIR}/generated/couchbase/build_config.hxx @ONLY)
 
 file(
   GENERATE
-  OUTPUT ${PROJECT_BINARY_DIR}/generated/build_info.hxx
+  OUTPUT ${PROJECT_BINARY_DIR}/generated/couchbase/build_info.hxx
   CONTENT
     "
 #pragma once

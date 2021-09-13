@@ -19,8 +19,8 @@
 
 #include <tao/json.hpp>
 
-#include <utils/url_codec.hxx>
-#include <operations/analytics_link.hxx>
+#include <couchbase/utils/url_codec.hxx>
+#include <couchbase/operations/analytics_link.hxx>
 
 namespace couchbase::operations
 {

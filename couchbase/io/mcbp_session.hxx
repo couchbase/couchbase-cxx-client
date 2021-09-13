@@ -23,39 +23,39 @@
 
 #include <asio.hpp>
 
-#include <platform/uuid.h>
+#include <couchbase/platform/uuid.h>
 
-#include <io/mcbp_message.hxx>
-#include <io/mcbp_parser.hxx>
-#include <io/streams.hxx>
-#include <io/retry_orchestrator.hxx>
-#include <io/mcbp_context.hxx>
+#include <couchbase/io/mcbp_message.hxx>
+#include <couchbase/io/mcbp_parser.hxx>
+#include <couchbase/io/streams.hxx>
+#include <couchbase/io/retry_orchestrator.hxx>
+#include <couchbase/io/mcbp_context.hxx>
 
-#include <timeout_defaults.hxx>
+#include <couchbase/timeout_defaults.hxx>
 
-#include <protocol/hello_feature.hxx>
-#include <protocol/client_request.hxx>
-#include <protocol/client_response.hxx>
-#include <protocol/server_request.hxx>
-#include <protocol/cmd_noop.hxx>
-#include <protocol/cmd_hello.hxx>
-#include <protocol/cmd_sasl_list_mechs.hxx>
-#include <protocol/cmd_sasl_auth.hxx>
-#include <protocol/cmd_sasl_step.hxx>
-#include <protocol/cmd_select_bucket.hxx>
-#include <protocol/cmd_get_cluster_config.hxx>
-#include <protocol/cmd_get_error_map.hxx>
-#include <protocol/cmd_get.hxx>
-#include <protocol/cmd_cluster_map_change_notification.hxx>
+#include <couchbase/protocol/hello_feature.hxx>
+#include <couchbase/protocol/client_request.hxx>
+#include <couchbase/protocol/client_response.hxx>
+#include <couchbase/protocol/server_request.hxx>
+#include <couchbase/protocol/cmd_noop.hxx>
+#include <couchbase/protocol/cmd_hello.hxx>
+#include <couchbase/protocol/cmd_sasl_list_mechs.hxx>
+#include <couchbase/protocol/cmd_sasl_auth.hxx>
+#include <couchbase/protocol/cmd_sasl_step.hxx>
+#include <couchbase/protocol/cmd_select_bucket.hxx>
+#include <couchbase/protocol/cmd_get_cluster_config.hxx>
+#include <couchbase/protocol/cmd_get_error_map.hxx>
+#include <couchbase/protocol/cmd_get.hxx>
+#include <couchbase/protocol/cmd_cluster_map_change_notification.hxx>
 
-#include <cbsasl/client.h>
+#include <couchbase/cbsasl/client.h>
 
 #include <spdlog/fmt/bin_to_hex.h>
 
-#include <origin.hxx>
-#include <errors.hxx>
-#include <version.hxx>
-#include <diagnostics.hxx>
+#include <couchbase/origin.hxx>
+#include <couchbase/errors.hxx>
+#include <couchbase/version.hxx>
+#include <couchbase/diagnostics.hxx>
 
 namespace couchbase::io
 {

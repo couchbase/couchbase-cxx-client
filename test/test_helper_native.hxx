@@ -28,13 +28,13 @@
 
 #include <snappy.h>
 
-#include <version.hxx>
+#include <couchbase/version.hxx>
 
-#include <cluster.hxx>
-#include <operations.hxx>
+#include <couchbase/cluster.hxx>
+#include <couchbase/operations.hxx>
 
-#include <io/dns_client.hxx>
-#include <utils/connection_string.hxx>
+#include <couchbase/io/dns_client.hxx>
+#include <couchbase/utils/connection_string.hxx>
 
 void
 native_init_logger()

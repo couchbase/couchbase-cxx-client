@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include <configuration.hxx>
-#include <io/query_cache.hxx>
+#include <couchbase/configuration.hxx>
+#include <couchbase/io/query_cache.hxx>
 
 namespace couchbase
 {

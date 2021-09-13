@@ -18,9 +18,9 @@
 #pragma once
 
 #include <gsl/assert>
-#include <document_id.hxx>
-#include <protocol/cmd_lookup_in.hxx>
-#include <io/retry_context.hxx>
+#include <couchbase/document_id.hxx>
+#include <couchbase/protocol/cmd_lookup_in.hxx>
+#include <couchbase/io/retry_context.hxx>
 
 namespace couchbase::operations
 {

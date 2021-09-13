@@ -20,7 +20,7 @@
 #include <string>
 
 #include <utility>
-#include <utils/connection_string.hxx>
+#include <couchbase/utils/connection_string.hxx>
 
 namespace couchbase
 {

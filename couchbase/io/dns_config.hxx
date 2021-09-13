@@ -24,7 +24,7 @@
 
 #include <asio/ip/address.hpp>
 
-#include <timeout_defaults.hxx>
+#include <couchbase/timeout_defaults.hxx>
 
 namespace couchbase::io::dns
 {

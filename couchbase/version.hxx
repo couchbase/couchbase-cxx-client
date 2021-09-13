@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <build_version.hxx>
+#include <couchbase/build_version.hxx>
 
 #include <string>
 #include <map>

@@ -15,7 +15,7 @@
  */
 #pragma once
 
-#include <cbsasl/client.h>
+#include <couchbase/cbsasl/client.h>
 #include <vector>
 
 namespace couchbase::sasl::mechanism::plain

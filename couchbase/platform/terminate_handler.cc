@@ -15,15 +15,15 @@
  *   limitations under the License.
  */
 
-#include <platform/terminate_handler.h>
+#include <couchbase/platform/terminate_handler.h>
 
 #include <cstdlib>
 #include <exception>
 
 #include <spdlog/spdlog.h>
-#include <platform/backtrace.h>
+#include <couchbase/platform/backtrace.h>
 
-#include <version.hxx>
+#include <couchbase/version.hxx>
 
 namespace couchbase::platform
 {

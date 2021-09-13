@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-#include <cbsasl/mechanism.h>
+#include <couchbase/cbsasl/mechanism.h>
 
 #include <algorithm>
 #include <iterator>

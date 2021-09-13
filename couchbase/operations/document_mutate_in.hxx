@@ -20,17 +20,17 @@
 #include <gsl/assert>
 #include <algorithm>
 
-#include <protocol/cmd_mutate_in.hxx>
-#include <protocol/status.hxx>
-#include <protocol/durability_level.hxx>
-#include <protocol/client_request.hxx>
+#include <couchbase/protocol/cmd_mutate_in.hxx>
+#include <couchbase/protocol/status.hxx>
+#include <couchbase/protocol/durability_level.hxx>
+#include <couchbase/protocol/client_request.hxx>
 
-#include <io/retry_context.hxx>
+#include <couchbase/io/retry_context.hxx>
 
-#include <mutation_token.hxx>
-#include <document_id.hxx>
-#include <timeout_defaults.hxx>
-#include <errors.hxx>
+#include <couchbase/mutation_token.hxx>
+#include <couchbase/document_id.hxx>
+#include <couchbase/timeout_defaults.hxx>
+#include <couchbase/errors.hxx>
 
 namespace couchbase::operations
 {

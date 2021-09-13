@@ -15,9 +15,9 @@
  *   limitations under the License.
  */
 
-#include <cbsasl/client.h>
-#include <cbsasl/plain/plain.h>
-#include <cbsasl/scram-sha/scram-sha.h>
+#include <couchbase/cbsasl/client.h>
+#include <couchbase/cbsasl/plain/plain.h>
+#include <couchbase/cbsasl/scram-sha/scram-sha.h>
 #include <memory>
 
 namespace couchbase::sasl

@@ -21,11 +21,11 @@
 #include <set>
 #include <string>
 
-#include <document_id.hxx>
-#include <error_map.hxx>
-#include <io/retry_reason.hxx>
-#include <protocol/enhanced_error_info.hxx>
-#include <protocol/status.hxx>
+#include <couchbase/document_id.hxx>
+#include <couchbase/error_map.hxx>
+#include <couchbase/io/retry_reason.hxx>
+#include <couchbase/protocol/enhanced_error_info.hxx>
+#include <couchbase/protocol/status.hxx>
 
 namespace couchbase::error_context
 {

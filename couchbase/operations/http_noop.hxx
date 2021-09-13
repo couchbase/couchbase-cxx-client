@@ -19,8 +19,8 @@
 
 #include <tao/json.hpp>
 
-#include <version.hxx>
-#include <error_context/http.hxx>
+#include <couchbase/version.hxx>
+#include <couchbase/error_context/http.hxx>
 
 namespace couchbase::operations
 {

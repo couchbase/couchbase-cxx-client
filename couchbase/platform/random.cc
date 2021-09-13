@@ -14,7 +14,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
-#include <platform/random.h>
+#include <couchbase/platform/random.h>
 
 #include <cerrno>
 #include <chrono>

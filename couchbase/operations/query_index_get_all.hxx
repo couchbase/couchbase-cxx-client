@@ -19,7 +19,7 @@
 
 #include <tao/json.hpp>
 
-#include <version.hxx>
+#include <couchbase/version.hxx>
 
 namespace couchbase::operations
 {

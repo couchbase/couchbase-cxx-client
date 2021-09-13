@@ -14,7 +14,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
-#include <cbcrypto/cbcrypto.h>
+#include <couchbase/cbcrypto/cbcrypto.h>
 
 #include <memory>
 #include <stdexcept>

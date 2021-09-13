@@ -18,7 +18,7 @@
 #pragma once
 
 #include <tao/json.hpp>
-#include <error_context/http.hxx>
+#include <couchbase/error_context/http.hxx>
 
 namespace couchbase::operations
 {

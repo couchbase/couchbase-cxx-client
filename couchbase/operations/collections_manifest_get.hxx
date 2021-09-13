@@ -19,13 +19,13 @@
 
 #include <tao/json.hpp>
 
-#include <document_id.hxx>
-#include <operations/bucket_settings.hxx>
-#include <protocol/cmd_get_collections_manifest.hxx>
-#include <collections_manifest.hxx>
-#include <io/retry_context.hxx>
-#include <protocol/client_request.hxx>
-#include <timeout_defaults.hxx>
+#include <couchbase/document_id.hxx>
+#include <couchbase/operations/bucket_settings.hxx>
+#include <couchbase/protocol/cmd_get_collections_manifest.hxx>
+#include <couchbase/collections_manifest.hxx>
+#include <couchbase/io/retry_context.hxx>
+#include <couchbase/protocol/client_request.hxx>
+#include <couchbase/timeout_defaults.hxx>
 
 namespace couchbase::operations
 {

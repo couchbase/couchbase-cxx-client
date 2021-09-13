@@ -16,7 +16,7 @@
  */
 
 #include <inttypes.h>
-#include <platform/backtrace.h>
+#include <couchbase/platform/backtrace.h>
 #include <strings.h>
 
 #if defined(WIN32) && defined(HAVE_BACKTRACE_SUPPORT)

@@ -18,8 +18,8 @@
 #pragma once
 
 #include <vector>
-#include <configuration.hxx>
-#include <protocol/hello_feature.hxx>
+#include <couchbase/configuration.hxx>
+#include <couchbase/protocol/hello_feature.hxx>
 
 namespace couchbase
 {

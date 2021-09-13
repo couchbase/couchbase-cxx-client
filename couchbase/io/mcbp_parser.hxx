@@ -20,8 +20,8 @@
 #include <snappy.h>
 
 #include <gsl/assert>
-#include <protocol/magic.hxx>
-#include <protocol/datatype.hxx>
+#include <couchbase/protocol/magic.hxx>
+#include <couchbase/protocol/datatype.hxx>
 
 #include <spdlog/fmt/bin_to_hex.h>
 

@@ -21,9 +21,9 @@
 #include <sstream>
 #include <string>
 
-#include <operations/analytics_link_azure_blob_external.hxx>
-#include <operations/analytics_link_couchbase_remote.hxx>
-#include <operations/analytics_link_s3_external.hxx>
+#include <couchbase/operations/analytics_link_azure_blob_external.hxx>
+#include <couchbase/operations/analytics_link_couchbase_remote.hxx>
+#include <couchbase/operations/analytics_link_s3_external.hxx>
 
 namespace couchbase::operations::analytics_link
 {

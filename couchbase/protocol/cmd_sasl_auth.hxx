@@ -19,7 +19,7 @@
 
 #include <algorithm>
 
-#include <protocol/hello_feature.hxx>
+#include <couchbase/protocol/hello_feature.hxx>
 
 namespace couchbase::protocol
 {

@@ -21,7 +21,7 @@
 #include <set>
 #include <string>
 
-#include <io/retry_reason.hxx>
+#include <couchbase/io/retry_reason.hxx>
 
 namespace couchbase::error_context
 {

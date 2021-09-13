@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include <document_id.hxx>
-#include <protocol/cmd_insert.hxx>
-#include <protocol/durability_level.hxx>
-#include <io/retry_context.hxx>
+#include <couchbase/document_id.hxx>
+#include <couchbase/protocol/cmd_insert.hxx>
+#include <couchbase/protocol/durability_level.hxx>
+#include <couchbase/io/retry_context.hxx>
 
 namespace couchbase::operations
 {

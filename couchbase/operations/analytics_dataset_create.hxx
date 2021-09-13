@@ -19,9 +19,9 @@
 
 #include <tao/json.hpp>
 
-#include <error_context/http.hxx>
-#include <utils/name_codec.hxx>
-#include <version.hxx>
+#include <couchbase/error_context/http.hxx>
+#include <couchbase/utils/name_codec.hxx>
+#include <couchbase/version.hxx>
 
 namespace couchbase::operations
 {

@@ -18,9 +18,9 @@
 #pragma once
 
 #include <tao/json.hpp>
-#include <operations/search_index.hxx>
+#include <couchbase/operations/search_index.hxx>
 
-#include <version.hxx>
+#include <couchbase/version.hxx>
 
 namespace couchbase::operations
 {

@@ -28,7 +28,7 @@
 #include <string>
 #include <vector>
 
-#include <platform/base64.h>
+#include <couchbase/platform/base64.h>
 
 /**
  * An array of the legal characters used for direct lookup

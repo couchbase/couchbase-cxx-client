@@ -20,14 +20,13 @@
 #include <set>
 
 #include <gsl/util>
-
-#include <platform/uuid.h>
 #include <spdlog/spdlog.h>
 #include <tao/json.hpp>
-#include <utils/crc32.hxx>
 
-#include <capabilities.hxx>
-#include <service_type.hxx>
+#include <couchbase/capabilities.hxx>
+#include <couchbase/platform/uuid.h>
+#include <couchbase/service_type.hxx>
+#include <couchbase/utils/crc32.hxx>
 
 namespace couchbase
 {

@@ -14,7 +14,7 @@
  *   limitations under the License.
  */
 
-#include <cbsasl/plain/plain.h>
+#include <couchbase/cbsasl/plain/plain.h>
 
 namespace couchbase::sasl::mechanism::plain
 {

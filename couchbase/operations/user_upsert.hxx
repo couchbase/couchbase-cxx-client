@@ -20,12 +20,12 @@
 #include <tao/json.hpp>
 #include <spdlog/spdlog.h>
 
-#include <platform/uuid.h>
-#include <io/http_message.hxx>
-#include <operations/rbac.hxx>
-#include <utils/url_codec.hxx>
-#include <timeout_defaults.hxx>
-#include <errors.hxx>
+#include <couchbase/platform/uuid.h>
+#include <couchbase/io/http_message.hxx>
+#include <couchbase/operations/rbac.hxx>
+#include <couchbase/utils/url_codec.hxx>
+#include <couchbase/timeout_defaults.hxx>
+#include <couchbase/errors.hxx>
 
 namespace couchbase::operations
 {

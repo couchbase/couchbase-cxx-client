@@ -20,8 +20,8 @@
 #include <chrono>
 #include <set>
 
-#include <io/retry_reason.hxx>
-#include <io/retry_strategy.hxx>
+#include <couchbase/io/retry_reason.hxx>
+#include <couchbase/io/retry_strategy.hxx>
 
 namespace couchbase::io
 {

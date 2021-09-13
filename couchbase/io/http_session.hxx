@@ -25,16 +25,16 @@
 #include <tao/json.hpp>
 
 #include <asio.hpp>
-#include <platform/uuid.h>
+#include <couchbase/platform/uuid.h>
 
-#include <errors.hxx>
-#include <version.hxx>
+#include <couchbase/errors.hxx>
+#include <couchbase/version.hxx>
 
-#include <io/http_context.hxx>
-#include <io/http_message.hxx>
-#include <io/http_parser.hxx>
-#include <platform/base64.h>
-#include <timeout_defaults.hxx>
+#include <couchbase/io/http_context.hxx>
+#include <couchbase/io/http_message.hxx>
+#include <couchbase/io/http_parser.hxx>
+#include <couchbase/platform/base64.h>
+#include <couchbase/timeout_defaults.hxx>
 
 namespace couchbase::io
 {

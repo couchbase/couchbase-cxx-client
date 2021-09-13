@@ -20,7 +20,7 @@
 #include <cstring>
 
 #include <asio/ip/udp.hpp>
-#include <io/dns_message.hxx>
+#include <couchbase/io/dns_message.hxx>
 
 namespace couchbase::io::dns
 {

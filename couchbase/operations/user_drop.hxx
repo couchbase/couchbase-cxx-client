@@ -19,9 +19,9 @@
 
 #include <tao/json.hpp>
 
-#include <operations/rbac.hxx>
-#include <utils/url_codec.hxx>
-#include <version.hxx>
+#include <couchbase/operations/rbac.hxx>
+#include <couchbase/utils/url_codec.hxx>
+#include <couchbase/version.hxx>
 
 namespace couchbase::operations
 {

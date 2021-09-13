@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include <cbsasl/context.h>
-#include <cbsasl/error.h>
+#include <couchbase/cbsasl/context.h>
+#include <couchbase/cbsasl/error.h>
 
 #include <functional>
 #include <memory>

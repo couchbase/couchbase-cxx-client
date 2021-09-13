@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <cbsasl/error.h>
+#include <couchbase/cbsasl/error.h>
 
 #include <stdexcept>
 #include <string>

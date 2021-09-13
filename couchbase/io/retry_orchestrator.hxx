@@ -19,8 +19,8 @@
 
 #include <spdlog/spdlog.h>
 
-#include <io/retry_reason.hxx>
-#include <io/retry_action.hxx>
+#include <couchbase/io/retry_reason.hxx>
+#include <couchbase/io/retry_action.hxx>
 
 namespace couchbase::io::retry_orchestrator
 {

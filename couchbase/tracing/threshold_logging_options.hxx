@@ -19,7 +19,7 @@
 
 #include <chrono>
 
-#include <service_type.hxx>
+#include <couchbase/service_type.hxx>
 
 namespace couchbase::tracing
 {

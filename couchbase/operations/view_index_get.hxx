@@ -18,7 +18,7 @@
 #pragma once
 
 #include <tao/json.hpp>
-#include <operations/design_document.hxx>
+#include <couchbase/operations/design_document.hxx>
 
 namespace couchbase::operations
 {

@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <timeout_defaults.hxx>
-#include <tracing/threshold_logging_options.hxx>
-#include <metrics/logging_meter_options.hxx>
+#include <couchbase/timeout_defaults.hxx>
+#include <couchbase/tracing/threshold_logging_options.hxx>
+#include <couchbase/metrics/logging_meter_options.hxx>
 
 namespace couchbase
 {

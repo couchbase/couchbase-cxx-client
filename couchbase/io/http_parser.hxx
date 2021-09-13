@@ -18,7 +18,7 @@
 #pragma once
 
 #include <http_parser.h>
-#include <io/http_message.hxx>
+#include <couchbase/io/http_message.hxx>
 #include <algorithm>
 
 namespace couchbase::io

@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <protocol/cmd_prepend.hxx>
-#include <protocol/durability_level.hxx>
-#include <io/retry_context.hxx>
+#include <couchbase/protocol/cmd_prepend.hxx>
+#include <couchbase/protocol/durability_level.hxx>
+#include <couchbase/io/retry_context.hxx>
 
 namespace couchbase::operations
 {

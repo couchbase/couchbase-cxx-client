@@ -19,8 +19,8 @@
 
 #include <string_view>
 
-#include <protocol/client_opcode.hxx>
-#include <service_type.hxx>
+#include <couchbase/protocol/client_opcode.hxx>
+#include <couchbase/service_type.hxx>
 
 namespace couchbase::tracing
 {

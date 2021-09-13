@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <document_id.hxx>
-#include <protocol/cmd_exists.hxx>
-#include <io/retry_context.hxx>
+#include <couchbase/document_id.hxx>
+#include <couchbase/protocol/cmd_exists.hxx>
+#include <couchbase/io/retry_context.hxx>
 
 namespace couchbase::operations
 {

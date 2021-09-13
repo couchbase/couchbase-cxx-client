@@ -22,11 +22,11 @@
 #include <tao/json.hpp>
 #include <tao/json/contrib/traits.hpp>
 
-#include <protocol/server_opcode.hxx>
-#include <protocol/magic.hxx>
-#include <protocol/status.hxx>
-#include <protocol/datatype.hxx>
-#include <protocol/cmd_info.hxx>
+#include <couchbase/protocol/server_opcode.hxx>
+#include <couchbase/protocol/magic.hxx>
+#include <couchbase/protocol/status.hxx>
+#include <couchbase/protocol/datatype.hxx>
+#include <couchbase/protocol/cmd_info.hxx>
 
 namespace couchbase::protocol
 {

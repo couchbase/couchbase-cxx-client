@@ -23,7 +23,7 @@
 
 #include "request_tracer.hxx"
 #include "threshold_logging_options.hxx"
-#include "version.hxx"
+#include <couchbase/version.hxx>
 
 namespace couchbase::tracing
 {

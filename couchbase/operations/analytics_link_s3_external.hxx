@@ -21,8 +21,8 @@
 #include <sstream>
 #include <string>
 
-#include <errors.hxx>
-#include <utils/url_codec.hxx>
+#include <couchbase/errors.hxx>
+#include <couchbase/utils/url_codec.hxx>
 
 namespace couchbase::operations::analytics_link
 {

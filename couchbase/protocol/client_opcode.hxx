@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <io/mcbp_message.hxx>
+#include <couchbase/io/mcbp_message.hxx>
 
 namespace couchbase::protocol
 {

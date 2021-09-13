@@ -20,8 +20,8 @@
 #include <memory>
 #include <sstream>
 
-#include <io/dns_codec.hxx>
-#include <io/dns_config.hxx>
+#include <couchbase/io/dns_codec.hxx>
+#include <couchbase/io/dns_config.hxx>
 
 #include <asio/read.hpp>
 

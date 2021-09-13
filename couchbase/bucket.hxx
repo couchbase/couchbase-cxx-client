@@ -20,10 +20,10 @@
 #include <queue>
 #include <utility>
 
-#include <operations.hxx>
-#include <origin.hxx>
-#include <tracing/request_tracer.hxx>
-#include <metrics/meter.hxx>
+#include <couchbase/operations.hxx>
+#include <couchbase/origin.hxx>
+#include <couchbase/tracing/request_tracer.hxx>
+#include <couchbase/metrics/meter.hxx>
 
 namespace couchbase
 {

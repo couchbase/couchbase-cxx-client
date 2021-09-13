@@ -23,15 +23,15 @@
 
 #include <tao/json.hpp>
 
-#include <version.hxx>
+#include <couchbase/version.hxx>
 
-#include <errors.hxx>
-#include <mutation_token.hxx>
-#include <service_type.hxx>
-#include <platform/uuid.h>
-#include <timeout_defaults.hxx>
-#include <io/http_message.hxx>
-#include <error_context/analytics.hxx>
+#include <couchbase/errors.hxx>
+#include <couchbase/mutation_token.hxx>
+#include <couchbase/service_type.hxx>
+#include <couchbase/platform/uuid.h>
+#include <couchbase/timeout_defaults.hxx>
+#include <couchbase/io/http_message.hxx>
+#include <couchbase/error_context/analytics.hxx>
 
 namespace couchbase::operations
 {

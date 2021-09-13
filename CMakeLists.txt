@@ -67,8 +67,6 @@ option(COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE
 
 include(cmake/VersionInfo.cmake)
 
-include_directories(${PROJECT_SOURCE_DIR}/couchbase)
-
 add_library(
   platform OBJECT
   couchbase/platform/string_hex.cc
@@ -77,7 +75,7 @@ add_library(
   couchbase/platform/base64.cc
   couchbase/platform/backtrace.c
   couchbase/platform/terminate_handler.cc)
-target_include_directories(platform PRIVATE ${PROJECT_BINARY_DIR}/generated)
+target_include_directories(platform PRIVATE ${PROJECT_BINARY_DIR}/generated ${PROJECT_SOURCE_DIR})
 target_link_libraries(platform PRIVATE ${PLATFORM_LIBRARIES})
 
 add_library(cbcrypto OBJECT couchbase/cbcrypto/cbcrypto.cc)
@@ -87,6 +85,7 @@ target_link_libraries(
           project_warnings
           OpenSSL::SSL
           OpenSSL::Crypto)
+target_include_directories(cbcrypto PRIVATE ${PROJECT_SOURCE_DIR})
 
 add_library(
   cbsasl OBJECT
@@ -96,6 +95,7 @@ add_library(
   couchbase/cbsasl/plain/plain.cc
   couchbase/cbsasl/scram-sha/scram-sha.cc
   couchbase/cbsasl/scram-sha/stringutils.cc)
+target_include_directories(cbsasl PRIVATE ${PROJECT_SOURCE_DIR})
 
 set_target_properties(
   cbcrypto
@@ -109,8 +109,7 @@ if(!APPLE)
 endif()
 
 add_library(couchbase_cxx_client STATIC couchbase/version.cxx)
-target_include_directories(couchbase_cxx_client PRIVATE ${PROJECT_BINARY_DIR}/generated)
-target_include_directories(couchbase_cxx_client PUBLIC ${PROJECT_SOURCE_DIR})
+target_include_directories(couchbase_cxx_client PUBLIC ${PROJECT_BINARY_DIR}/generated ${PROJECT_SOURCE_DIR})
 target_link_libraries(
   couchbase_cxx_client
   project_options

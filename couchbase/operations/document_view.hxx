@@ -18,9 +18,9 @@
 #pragma once
 
 #include <tao/json.hpp>
-#include <operations/design_document.hxx>
-#include <utils/url_codec.hxx>
-#include <error_context/view.hxx>
+#include <couchbase/operations/design_document.hxx>
+#include <couchbase/utils/url_codec.hxx>
+#include <couchbase/error_context/view.hxx>
 
 namespace couchbase::operations
 {

@@ -23,21 +23,21 @@
 
 #include <asio/ssl.hpp>
 
-#include <io/mcbp_session.hxx>
-#include <io/http_session_manager.hxx>
-#include <io/http_command.hxx>
-#include <io/dns_client.hxx>
-#include <origin.hxx>
-#include <bucket.hxx>
-#include <operations.hxx>
-#include <operations/document_query.hxx>
+#include <couchbase/io/mcbp_session.hxx>
+#include <couchbase/io/http_session_manager.hxx>
+#include <couchbase/io/http_command.hxx>
+#include <couchbase/io/dns_client.hxx>
+#include <couchbase/origin.hxx>
+#include <couchbase/bucket.hxx>
+#include <couchbase/operations.hxx>
+#include <couchbase/operations/document_query.hxx>
 
-#include <tracing/noop_tracer.hxx>
-#include <tracing/threshold_logging_tracer.hxx>
-#include <metrics/noop_meter.hxx>
-#include <metrics/logging_meter.hxx>
+#include <couchbase/tracing/noop_tracer.hxx>
+#include <couchbase/tracing/threshold_logging_tracer.hxx>
+#include <couchbase/metrics/noop_meter.hxx>
+#include <couchbase/metrics/logging_meter.hxx>
 
-#include <diagnostics.hxx>
+#include <couchbase/diagnostics.hxx>
 
 namespace couchbase
 {

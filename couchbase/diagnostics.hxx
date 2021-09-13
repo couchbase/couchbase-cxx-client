@@ -24,7 +24,7 @@
 
 #include <spdlog/fmt/fmt.h>
 
-#include <service_type.hxx>
+#include <couchbase/service_type.hxx>
 
 namespace couchbase::diag
 {

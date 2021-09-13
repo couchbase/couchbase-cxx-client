@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include <protocol/unsigned_leb128.h>
+#include <couchbase/protocol/unsigned_leb128.h>
 
-#include <document_id.hxx>
-#include <protocol/client_opcode.hxx>
+#include <couchbase/document_id.hxx>
+#include <couchbase/protocol/client_opcode.hxx>
 
 namespace couchbase::protocol
 {

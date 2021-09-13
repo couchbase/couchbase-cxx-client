@@ -20,15 +20,15 @@
 #include <functional>
 #include <utility>
 
-#include <platform/uuid.h>
+#include <couchbase/platform/uuid.h>
 
-#include <io/mcbp_session.hxx>
-#include <io/retry_orchestrator.hxx>
+#include <couchbase/io/mcbp_session.hxx>
+#include <couchbase/io/retry_orchestrator.hxx>
 
-#include <protocol/cmd_get_collection_id.hxx>
+#include <couchbase/protocol/cmd_get_collection_id.hxx>
 
-#include <tracing/request_tracer.hxx>
-#include <metrics/meter.hxx>
+#include <couchbase/tracing/request_tracer.hxx>
+#include <couchbase/metrics/meter.hxx>
 
 namespace couchbase::operations
 {

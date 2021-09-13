@@ -22,13 +22,13 @@
 #include <tao/json.hpp>
 #include <tao/json/contrib/traits.hpp>
 
-#include <protocol/magic.hxx>
-#include <protocol/status.hxx>
-#include <protocol/datatype.hxx>
-#include <protocol/cmd_info.hxx>
-#include <protocol/frame_info_id.hxx>
-#include <protocol/enhanced_error_info.hxx>
-#include <utils/byteswap.hxx>
+#include <couchbase/protocol/magic.hxx>
+#include <couchbase/protocol/status.hxx>
+#include <couchbase/protocol/datatype.hxx>
+#include <couchbase/protocol/cmd_info.hxx>
+#include <couchbase/protocol/frame_info_id.hxx>
+#include <couchbase/protocol/enhanced_error_info.hxx>
+#include <couchbase/utils/byteswap.hxx>
 
 namespace couchbase::protocol
 {
