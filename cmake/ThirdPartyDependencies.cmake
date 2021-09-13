@@ -8,6 +8,8 @@ add_subdirectory(${PROJECT_SOURCE_DIR}/third_party/spdlog)
 
 option(SNAPPY_BUILD_TESTS OFF)
 option(SNAPPY_INSTALL OFF)
+option(PEGTL_BUILD_TESTS OFF)
+option(PEGTL_BUILD_EXAMPLES OFF)
 add_subdirectory(${PROJECT_SOURCE_DIR}/third_party/snappy)
 
 option(HDR_LOG_REQUIRED OFF)
