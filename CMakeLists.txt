@@ -1,5 +1,16 @@
 cmake_minimum_required(VERSION 3.15)
-project(couchbase_cxx_client LANGUAGES CXX C)
+
+set(couchbase_cxx_client_BUILD_NUMBER 0)
+if(defined $ENV{BUILD_NUMBER})
+  set(couchbase_cxx_client_BUILD_NUMBER $ENV{BUILD_NUMBER})
+endif()
+
+project(
+  couchbase_cxx_client
+  VERSION "1.0.0.${couchbase_cxx_client_BUILD_NUMBER}"
+  LANGUAGES CXX C)
+message(STATUS "Couchbase C++ client ${couchbase_cxx_client_VERSION}")
+
 include(cmake/PreventInSourceBuilds.cmake)
 include(cmake/StandardProjectSettings.cmake)
 
@@ -97,12 +108,12 @@ if(!APPLE)
   set_target_properties(cbcrypto cbsasl platform PROPERTIES CXX_VISIBILITY_PRESET hidden)
 endif()
 
-add_library(couchbase_cxx_client STATIC)
+add_library(couchbase_cxx_client STATIC couchbase/version.cxx)
+target_include_directories(couchbase_cxx_client PRIVATE ${PROJECT_BINARY_DIR}/generated)
 target_link_libraries(
   couchbase_cxx_client
   project_options
   project_warnings
-  Catch2::Catch2
   OpenSSL::SSL
   OpenSSL::Crypto
   platform

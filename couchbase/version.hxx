@@ -20,19 +20,22 @@
 #include <build_version.hxx>
 
 #include <string>
+#include <map>
 
 namespace couchbase
 {
-constexpr auto BACKEND_VERSION_MAJOR = 1;
-constexpr auto BACKEND_VERSION_MINOR = 6;
-constexpr auto BACKEND_VERSION_PATCH = 1;
-
 inline const std::string&
 sdk_id()
 {
-    static const std::string identifier{ std::string("ruby/") + std::to_string(BACKEND_VERSION_MAJOR) + "/" +
-                                         std::to_string(BACKEND_VERSION_MINOR) + "/" + std::to_string(BACKEND_VERSION_PATCH) + "/" +
-                                         BACKEND_GIT_REVISION };
+    static const std::string identifier{ std::string("cxx/") + std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MAJOR) + "/" +
+                                         std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MINOR) + "/" +
+                                         std::to_string(COUCHBASE_CXX_CLIENT_VERSION_PATCH) + "/" + COUCHBASE_CXX_CLIENT_GIT_REVISION };
     return identifier;
 }
+
+std::map<std::string, std::string>
+sdk_build_info();
+
+std::string
+sdk_build_info_json();
 } // namespace couchbase

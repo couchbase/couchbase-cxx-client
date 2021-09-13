@@ -84,10 +84,10 @@ backtrace_terminate_handler()
     static bool meta_reported = false;
     if (!meta_reported) {
         spdlog::critical(R"(*** Fatal error encountered during exception handling (rev="{}", compiler="{}", system="{}", date="{}") ***)",
-                         BACKEND_GIT_REVISION,
-                         BACKEND_CXX_COMPILER,
-                         BACKEND_SYSTEM,
-                         BACKEND_BUILD_TIMESTAMP);
+                         COUCHBASE_CXX_CLIENT_GIT_REVISION,
+                         COUCHBASE_CXX_CLIENT_CXX_COMPILER,
+                         COUCHBASE_CXX_CLIENT_SYSTEM,
+                         COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP);
         meta_reported = true;
     }
     log_handled_exception();

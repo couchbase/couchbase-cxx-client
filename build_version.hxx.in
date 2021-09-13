@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *     Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,11 +17,15 @@
 
 #pragma once
 
-constexpr auto BACKEND_BUILD_TIMESTAMP = "@BACKEND_BUILD_TIMESTAMP@";
-constexpr auto BACKEND_CXX_COMPILER = "@CMAKE_CXX_COMPILER_ID@ @CMAKE_CXX_COMPILER_VERSION@";
-constexpr auto BACKEND_C_COMPILER = "@CMAKE_C_COMPILER_ID@ @CMAKE_C_COMPILER_VERSION@";
-constexpr auto BACKEND_SYSTEM = "@CMAKE_SYSTEM@";
-constexpr auto BACKEND_SYSTEM_PROCESSOR = "@CMAKE_SYSTEM_PROCESSOR@";
-constexpr auto BACKEND_GIT_REVISION = "@BACKEND_GIT_REVISION@";
-#cmakedefine STATIC_STDLIB 1
-#cmakedefine STATIC_OPENSSL 1
+constexpr auto COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP = "@COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP@";
+constexpr auto COUCHBASE_CXX_CLIENT_CXX_COMPILER = "@CMAKE_CXX_COMPILER_ID@ @CMAKE_CXX_COMPILER_VERSION@";
+constexpr auto COUCHBASE_CXX_CLIENT_C_COMPILER = "@CMAKE_C_COMPILER_ID@ @CMAKE_C_COMPILER_VERSION@";
+constexpr auto COUCHBASE_CXX_CLIENT_SYSTEM = "@CMAKE_SYSTEM@";
+constexpr auto COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR = "@CMAKE_SYSTEM_PROCESSOR@";
+constexpr auto COUCHBASE_CXX_CLIENT_VERSION_MAJOR = @couchbase_cxx_client_VERSION_MAJOR@;
+constexpr auto COUCHBASE_CXX_CLIENT_VERSION_MINOR = @couchbase_cxx_client_VERSION_MINOR@;
+constexpr auto COUCHBASE_CXX_CLIENT_VERSION_PATCH = @couchbase_cxx_client_VERSION_PATCH@;
+constexpr auto COUCHBASE_CXX_CLIENT_VERSION_BUILD = @couchbase_cxx_client_BUILD_NUMBER@;
+constexpr auto COUCHBASE_CXX_CLIENT_GIT_REVISION = "@COUCHBASE_CXX_CLIENT_GIT_REVISION@";
+#cmakedefine COUCHBASE_CXX_CLIENT_STATIC_STDLIB 1
+#cmakedefine COUCHBASE_CXX_CLIENT_STATIC_OPENSSL 1
