@@ -1,15 +1,21 @@
-find_program(GIT git)
-if(GIT)
-  execute_process(
-    COMMAND git rev-parse HEAD
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    OUTPUT_VARIABLE COUCHBASE_CXX_CLIENT_GIT_REVISION)
+if(NOT COUCHBASE_CXX_CLIENT_GIT_REVISION)
+  find_program(GIT git)
+  if(GIT)
+    execute_process(
+      COMMAND git rev-parse HEAD
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      OUTPUT_VARIABLE COUCHBASE_CXX_CLIENT_GIT_REVISION)
+  else()
+    set(COUCHBASE_CXX_CLIENT_GIT_REVISION "unknown")
+  endif()
 endif()
 
 string(TIMESTAMP COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP "%Y-%m-%d %H:%M:%S" UTC)
-configure_file(${PROJECT_SOURCE_DIR}/cmake/build_version.hxx.in ${PROJECT_BINARY_DIR}/generated/couchbase/build_version.hxx @ONLY)
-configure_file(${PROJECT_SOURCE_DIR}/cmake/build_config.hxx.in ${PROJECT_BINARY_DIR}/generated/couchbase/build_config.hxx @ONLY)
+configure_file(${PROJECT_SOURCE_DIR}/cmake/build_version.hxx.in
+               ${PROJECT_BINARY_DIR}/generated/couchbase/build_version.hxx @ONLY)
+configure_file(${PROJECT_SOURCE_DIR}/cmake/build_config.hxx.in
+               ${PROJECT_BINARY_DIR}/generated/couchbase/build_config.hxx @ONLY)
 
 file(
   GENERATE
