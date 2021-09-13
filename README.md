@@ -1,17 +1,59 @@
-## Build
+# Couchbase C++ Client
 
-```text
+This repo is under active development and is not yet ready for release as a public SDK.
+
+
+## Getting the Source Code
+
+This repo uses several git submodules. If you are fetching the repo for the first time by command line, the
+`--recurse-submodules` option will init the submodules recursively as well:
+```shell
 git clone --recurse-submodules git@github.com:couchbaselabs/couchbase-cxx-client.git
+```
+
+However, if you fetched using a simple clone command (or another IDE or tool) **you must also perform** the following
+command to recursively update and initialize the submodules:
+```shell
+git submodule update --init --recursive
+```
+
+
+## Building with CMake
+
+This repo is being built with `CMake` so everything should build easily once the basic dev dependencies are satisfied.
+
+### Dev Dependencies
+
+The following dependencies must be installed before the project can be built. We recommend using OS specific utilities
+such as `brew`, `apt-get`, and similar package management utilities (depending on your environment).
+- **cmake >= 3.20.0+** (e.g., `brew install cmake`)
+- **c++ compiler >= std_17** (e.g., `xcode-select --install`)
+- **openssl >= 1.1+** (e.g., `brew install openssl`)
+
+**IMPORTANT:** On macOS, the **OpenSSL** `brew` install command mentioned above is not sufficient to be able to build.
+The easiest way to fix this is to add the `OPENSSL_ROOT_DIR` env variable to your exports (e.g., `.zshenv`). If this is
+not sufficient, see the other tips mentioned when you run `brew info openssl`.
+```shell
+export OPENSSL_ROOT_DIR=/usr/local/opt/openssl/ 
+```
+
+### Building (command-line)
+```shell
 cd couchbase-cxx-client
-mkdir build
-cd build
+mkdir build; cd build
 cmake ..
-make -j8
+cmake --build .
 ```
 
-## Test
 
-```
+## Running Tests
+
+The tests are located in the `/test` directory. More tests will be added and this directory will be organized more in
+the near future to differentiate between the common tests types that might be used for different types of testing
+(e.g., `unit tests`, `integration tests`, `system tests`).
+
+### Testing (command-line)
+```shell
 cd build
 export TEST_CONNECTION_STRING=couchbase://127.0.0.1
 export TEST_USERNAME=Administrator
