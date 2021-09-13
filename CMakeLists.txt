@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 
 set(couchbase_cxx_client_BUILD_NUMBER 0)
 if(defined $ENV{BUILD_NUMBER})
