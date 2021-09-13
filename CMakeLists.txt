@@ -97,13 +97,6 @@ add_library(
   couchbase/cbsasl/scram-sha/stringutils.cc)
 target_include_directories(cbsasl PRIVATE ${PROJECT_SOURCE_DIR})
 
-set_target_properties(
-  cbcrypto
-  cbsasl
-  platform
-  snappy
-  PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
-
 if(!APPLE)
   set_target_properties(cbcrypto cbsasl platform PROPERTIES CXX_VISIBILITY_PRESET hidden)
 endif()
@@ -132,6 +125,15 @@ target_link_libraries(
   http_parser
   snappy
   spdlog::spdlog_header_only)
+
+set_target_properties(
+  cbcrypto
+  cbsasl
+  platform
+  snappy
+  hdr_histogram_static
+  couchbase_cxx_client
+  PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 
 option(COUCHBASE_CXX_CLIENT_BUILD_TESTS "Build test programs" TRUE)
 if(COUCHBASE_CXX_CLIENT_BUILD_TESTS)
