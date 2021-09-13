@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 set(couchbase_cxx_client_BUILD_NUMBER 0)
-if(defined $ENV{BUILD_NUMBER})
+if(DEFINED ENV{BUILD_NUMBER})
   set(couchbase_cxx_client_BUILD_NUMBER $ENV{BUILD_NUMBER})
 endif()
 
