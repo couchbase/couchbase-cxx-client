@@ -47,12 +47,10 @@ function(set_project_warnings project_name)
       -Wnull-dereference # warn if a null dereference is detected
       -Wdouble-promotion # warn if float is implicit promoted to double
       -Wformat=2 # warn on security issues around functions that format output (ie printf)
-
       # TODO: make it local to ext/couchbase/couchbase.cxx
       -Wno-unknown-warning-option
       -Wno-gnu-statement-expression
-      -Wno-compound-token-split-by-macro
-  )
+      -Wno-compound-token-split-by-macro)
 
   if(WARNINGS_AS_ERRORS)
     set(CLANG_WARNINGS ${CLANG_WARNINGS} -Werror)

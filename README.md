@@ -1,7 +1,7 @@
 ## Build
 
 ```text
-git clone git@github.com:couchbaselabs/couchbase-cxx-client.git
+git clone --recurse-submodules git@github.com:couchbaselabs/couchbase-cxx-client.git
 cd couchbase-cxx-client
 mkdir build
 cd build

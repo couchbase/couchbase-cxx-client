@@ -30,18 +30,16 @@ include(cmake/Backtrace.cmake)
 
 include(cmake/ThirdPartyDependencies.cmake)
 
-option(STATIC_STDLIB "Statically link C++ standard library" FALSE)
+option(COUCHBASE_CXX_CLIENT_STATIC_STDLIB "Statically link C++ standard library" FALSE)
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-  if(STATIC_STDLIB)
+  if(COUCHBASE_CXX_CLIENT_STATIC_STDLIB)
     target_compile_options(project_options INTERFACE -static-libgcc -static-libstdc++)
     target_link_libraries(project_options INTERFACE -static-libgcc -static-libstdc++)
   endif()
 endif()
 
-option(STATIC_OPENSSL "Statically link OpenSSL library" FALSE)
-# Read more at https://wiki.wireshark.org/TLS
-option(TLS_KEY_LOG_FILE "Path to file to write per-session secrets (Useful for Wireshark SSL/TLS dissection)")
-if(STATIC_OPENSSL)
+option(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL "Statically link OpenSSL library" FALSE)
+if(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL)
   set(OPENSSL_USE_STATIC_LIBS ON)
 endif()
 include(FindOpenSSL)
@@ -52,6 +50,9 @@ if(OPENSSL_LIBRARIES AND OPENSSL_INCLUDE_DIR)
 else()
   message(FATAL_ERROR "Cannot build couchbase extension without OpenSSL")
 endif()
+# Read more at https://wiki.wireshark.org/TLS
+option(COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE
+       "Path to file to write per-session secrets (Useful for Wireshark SSL/TLS dissection)")
 
 include(cmake/VersionInfo.cmake)
 
@@ -96,5 +97,23 @@ if(!APPLE)
   set_target_properties(cbcrypto cbsasl platform PROPERTIES CXX_VISIBILITY_PRESET hidden)
 endif()
 
+add_library(couchbase_cxx_client STATIC)
+target_link_libraries(
+  couchbase_cxx_client
+  project_options
+  project_warnings
+  Catch2::Catch2
+  OpenSSL::SSL
+  OpenSSL::Crypto
+  platform
+  cbcrypto
+  cbsasl
+  hdr_histogram_static
+  http_parser
+  snappy
+  spdlog::spdlog_header_only)
 
-include(cmake/Testing.cmake)
+option(COUCHBASE_CXX_CLIENT_BUILD_TESTS "Build test programs" TRUE)
+if(COUCHBASE_CXX_CLIENT_BUILD_TESTS)
+  include(cmake/Testing.cmake)
+endif()

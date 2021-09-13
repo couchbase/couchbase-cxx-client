@@ -305,14 +305,15 @@ class cluster
                     return handler(ec);
                 }
             }
-#ifdef TLS_KEY_LOG_FILE
+#ifdef COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE
             SSL_CTX_set_keylog_callback(tls_.native_handle(), [](const SSL* /* ssl */, const char* line) {
-                std::ofstream keylog(TLS_KEY_LOG_FILE, std::ios::out | std::ios::app | std::ios::binary);
+                std::ofstream keylog(COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE, std::ios::out | std::ios::app | std::ios::binary);
                 keylog << std::string_view(line) << std::endl;
             });
-            spdlog::critical("TLS_KEY_LOG_FILE was set to \"{}\" during build, all TLS keys will be logged for network analysis "
-                             "(https://wiki.wireshark.org/TLS). DO NOT USE THIS BUILD IN PRODUCTION",
-                             TLS_KEY_LOG_FILE);
+            spdlog::critical(
+              "COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE was set to \"{}\" during build, all TLS keys will be logged for network analysis "
+              "(https://wiki.wireshark.org/TLS). DO NOT USE THIS BUILD IN PRODUCTION",
+              COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE);
 #endif
             if (origin_.credentials().uses_certificate()) {
                 std::error_code ec{};

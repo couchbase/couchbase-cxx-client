@@ -18,4 +18,4 @@ function(AssureOutOfSourceBuilds)
   endif()
 endfunction()
 
-AssureOutOfSourceBuilds()
+assureoutofsourcebuilds()
