@@ -110,6 +110,7 @@ endif()
 
 add_library(couchbase_cxx_client STATIC couchbase/version.cxx)
 target_include_directories(couchbase_cxx_client PRIVATE ${PROJECT_BINARY_DIR}/generated)
+target_include_directories(couchbase_cxx_client PUBLIC ${PROJECT_SOURCE_DIR})
 target_link_libraries(
   couchbase_cxx_client
   project_options
