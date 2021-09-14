@@ -1,6 +1,7 @@
 # Couchbase C++ Client
 
 [![linters](https://img.shields.io/github/workflow/status/couchbaselabs/couchbase-cxx-client/linters?label=linters)](https://github.com/couchbaselabs/couchbase-cxx-client/actions?query=workflow%3Alinters)
+[![tests](https://img.shields.io/github/workflow/status/couchbaselabs/couchbase-cxx-client/tests?label=tests)](https://github.com/couchbaselabs/couchbase-cxx-client/actions?query=workflow%3Atests)
 
 This repo is under active development and is not yet ready for release as a public SDK.
 
