@@ -25,7 +25,7 @@ TEST_CASE("native: serializing diagnostics report", "[native]")
 {
     couchbase::diag::diagnostics_result res{
         "0xdeadbeef",
-        "ruby/1.0.0",
+        "cxx/1.0.0",
         {
           {
             {
@@ -112,7 +112,7 @@ TEST_CASE("native: serializing diagnostics report", "[native]")
 {
   "version": 2,
   "id": "0xdeadbeef",
-  "sdk": "ruby/1.0.0",
+  "sdk": "cxx/1.0.0",
   "services": {
     "kv": [
       {
@@ -182,7 +182,7 @@ TEST_CASE("native: serializing ping report", "[native]")
 
     couchbase::diag::ping_result res{
         "0xdeadbeef",
-        "ruby/1.0.0",
+        "cxx/1.0.0",
         {
           {
             {
@@ -261,7 +261,7 @@ TEST_CASE("native: serializing ping report", "[native]")
 {
   "version": 2,
   "id": "0xdeadbeef",
-  "sdk": "ruby/1.0.0",
+  "sdk": "cxx/1.0.0",
   "services": {
     "search": [
       {
@@ -367,7 +367,7 @@ TEST_CASE("native: fetch diagnostics after N1QL query", "[native]")
         cluster.diagnostics("my_report_id", [barrier](couchbase::diag::diagnostics_result&& resp) mutable { barrier->set_value(resp); });
         auto res = f.get();
         REQUIRE(res.id == "my_report_id");
-        REQUIRE(res.sdk.find("ruby/") == 0);
+        REQUIRE(res.sdk.find("cxx/") == 0);
         REQUIRE(res.services[couchbase::service_type::key_value].size() > 1);
         REQUIRE(res.services[couchbase::service_type::query].size() == 1);
         REQUIRE(res.services[couchbase::service_type::query][0].state == couchbase::diag::endpoint_state::connected);
@@ -419,10 +419,8 @@ TEST_CASE("native: ping", "[native]")
         cluster.ping("my_report_id", {}, {}, [barrier](couchbase::diag::ping_result&& resp) mutable { barrier->set_value(resp); });
         auto res = f.get();
         REQUIRE(res.id == "my_report_id");
-        REQUIRE(res.sdk.find("ruby/") == 0);
-
-        auto report = tao::json::value(res);
-        spdlog::critical("XXX {}", tao::json::to_string(report));
+        INFO(res.sdk);
+        REQUIRE(res.sdk.find("cxx/") == 0);
     }
     {
         auto barrier = std::make_shared<std::promise<void>>();

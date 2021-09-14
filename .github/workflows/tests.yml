@@ -1,0 +1,66 @@
+name: tests
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  neo:
+    runs-on: ubuntu-20.04
+    services:
+      couchbase:
+        image: couchbase:enterprise-7.0.1
+        ports:
+          - 8091-8095:8091-8095
+          - 11210:11210
+    steps:
+      - name: Install build environment
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libssl-dev cmake gcc g++ curl
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Initialize couchbase
+        run: ./bin/init-cluster
+      - name: Build tests
+        run: ./bin/build-tests
+      - name: Check couchbase
+        run: ./bin/check-cluster
+      - name: Run tests
+        timeout-minutes: 15
+        env:
+          TEST_SERVER_VERSION: 7.0.1
+          TEST_CONNECTION_STRING: couchbase://127.0.0.1
+        run: ./bin/run-tests
+
+  mad_hatter:
+    runs-on: ubuntu-20.04
+    services:
+      couchbase:
+        image: couchbase:enterprise-6.6.3
+        ports:
+          - 8091-8095:8091-8095
+          - 11210:11210
+    steps:
+      - name: Install build environment
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libssl-dev cmake gcc g++ curl
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Initialize couchbase
+        run: ./bin/init-cluster
+      - name: Build tests
+        run: ./bin/build-tests
+      - name: Check couchbase
+        run: ./bin/check-cluster
+      - name: Run tests
+        timeout-minutes: 15
+        env:
+          TEST_SERVER_VERSION: 6.6.3
+          TEST_CONNECTION_STRING: couchbase://127.0.0.1
+        run: ./bin/run-tests

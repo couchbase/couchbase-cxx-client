@@ -2,3 +2,4 @@
 /cmake-build-*/
 /cmake-build-report.tar.gz
 .idea/workspace.xml
+.idea/sonarlint
