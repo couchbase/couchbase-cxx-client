@@ -1,0 +1,48 @@
+name: linters
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  clang_format:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y clang-format
+      - name: Run clang-format
+        run: ./bin/check-clang-format
+
+  clang_static_analyzer:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libssl-dev cmake curl wget gnupg2
+          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo bash -c "echo 'deb https://apt.llvm.org/focal/ llvm-toolchain-focal-11 main' >> /etc/apt/sources.list"
+          sudo apt-get update -y
+          sudo apt-get install -y clang-11 clang-tools-11
+      - name: Run scan build
+        run: ./bin/check-clang-static-analyzer
+        env:
+          CB_CC: /usr/bin/clang-11
+          CB_CXX: /usr/bin/clang++-11
+          CB_SCAN_BUILD: /usr/bin/scan-build-11
+      - name: Upload scan-build report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: report
+          path: cmake-build-report.tar.gz
