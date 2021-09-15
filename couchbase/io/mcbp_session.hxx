@@ -1312,7 +1312,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     std::vector<std::function<void(const configuration&)>> config_listeners_{};
     std::function<void(io::retry_reason)> on_stop_handler_{};
 
-    bool bootstrapped_{ false };
+    std::atomic_bool bootstrapped_{ false };
     std::atomic_bool stopped_{ false };
     bool authenticated_{ false };
     bool bucket_selected_{ false };
