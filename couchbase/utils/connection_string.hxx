@@ -23,6 +23,7 @@
 #include <tao/pegtl/contrib/uri.hpp>
 
 #include <couchbase/cluster_options.hxx>
+#include <ostream>
 
 namespace couchbase::utils
 {
@@ -45,6 +46,16 @@ struct connection_string {
         std::uint16_t port;
         address_type type;
         bootstrap_mode mode{ bootstrap_mode::unspecified };
+
+        bool operator==(const node& rhs) const
+        {
+            return address == rhs.address && port == rhs.port && type == rhs.type && mode == rhs.mode;
+        }
+
+        bool operator!=(const node& rhs) const
+        {
+            return !(rhs == *this);
+        }
     };
 
     std::string scheme{};
@@ -222,12 +233,12 @@ extract_options(connection_string& connstr)
                  * connection, reconnecting, node added, etc.
                  */
                 connstr.options.connect_timeout = std::chrono::milliseconds(std::stoull(param.second));
-            } else if (param.first == "kv_timeout") {
+            } else if (param.first == "kv_timeout" || param.first == "key_value_timeout") {
                 /**
                  * Number of milliseconds to wait before timing out a KV operation by the client.
                  */
                 connstr.options.key_value_timeout = std::chrono::milliseconds(std::stoull(param.second));
-            } else if (param.first == "kv_durable_timeout") {
+            } else if (param.first == "kv_durable_timeout" || param.first == "key_value_durable_timeout") {
                 /**
                  * Number of milliseconds to wait before timing out a KV operation that is either using synchronous durability or
                  * observe-based durability.

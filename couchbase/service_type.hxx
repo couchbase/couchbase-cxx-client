@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <spdlog/spdlog.h>
+
 namespace couchbase
 {
 enum class service_type {
