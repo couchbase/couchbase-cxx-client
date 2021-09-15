@@ -17,13 +17,18 @@
 PROJECT_ROOT="$( cd "$(dirname "$0"/..)" >/dev/null 2>&1 ; pwd -P )"
 
 CB_CMAKE=${CB_CMAKE:-$(which cmake)}
+CB_SANITIZER=${CB_SANITIZER:-""}
+CTEST_OUTPUT_ON_FAILURE=1
 
 echo "CB_CMAKE=${CB_CMAKE}"
 
 set -exuo pipefail
 
 BUILD_DIR="${PROJECT_ROOT}/cmake-build-tests"
+if [ "x${CB_SANITIZER}" != "x" ]; then
+    BUILD_DIR="${BUILD_DIR}-${CB_SANITIZER}"
+fi
 
 cd "${BUILD_DIR}"
 
-${CB_CMAKE} --build . --target test --verbose
+${CB_CMAKE} --build "${BUILD_DIR}" --target test --verbose
