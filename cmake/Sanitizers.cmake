@@ -60,6 +60,7 @@ function(enable_sanitizers project_name)
        "")
       target_compile_options(${project_name} INTERFACE -fsanitize=${LIST_OF_SANITIZERS})
       target_link_libraries(${project_name} INTERFACE -fsanitize=${LIST_OF_SANITIZERS})
+      message(STATUS "Enabled stanitizers: ${LIST_OF_SANITIZERS}")
     endif()
   endif()
 
