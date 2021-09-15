@@ -199,6 +199,7 @@ class http_session : public std::enable_shared_from_this<http_session>
         if (stopped_) {
             return;
         }
+        std::scoped_lock lock(output_buffer_mutex_);
         output_buffer_.push_back(buf);
     }
 
@@ -207,6 +208,7 @@ class http_session : public std::enable_shared_from_this<http_session>
         if (stopped_) {
             return;
         }
+        std::scoped_lock lock(output_buffer_mutex_);
         output_buffer_.emplace_back(std::vector<uint8_t>{ buf.begin(), buf.end() });
     }
 
@@ -377,7 +379,8 @@ class http_session : public std::enable_shared_from_this<http_session>
         if (stopped_) {
             return;
         }
-        if (!writing_buffer_.empty()) {
+        std::scoped_lock lock(writing_buffer_mutex_, output_buffer_mutex_);
+        if (!writing_buffer_.empty() || output_buffer_.empty()) {
             return;
         }
         std::swap(writing_buffer_, output_buffer_);
@@ -395,8 +398,16 @@ class http_session : public std::enable_shared_from_this<http_session>
                 spdlog::error("{} IO error while writing to the socket: {}", self->log_prefix_, ec.message());
                 return self->stop();
             }
-            self->writing_buffer_.clear();
-            if (!self->output_buffer_.empty()) {
+            {
+                std::scoped_lock inner_lock(self->writing_buffer_mutex_);
+                self->writing_buffer_.clear();
+            }
+            bool want_write;
+            {
+                std::scoped_lock inner_lock(self->output_buffer_mutex_);
+                want_write = self->output_buffer_.empty();
+            }
+            if (!want_write) {
                 self->do_write();
             }
             self->do_read();
@@ -430,6 +441,8 @@ class http_session : public std::enable_shared_from_this<http_session>
     std::array<std::uint8_t, 16384> input_buffer_{};
     std::vector<std::vector<std::uint8_t>> output_buffer_{};
     std::vector<std::vector<std::uint8_t>> writing_buffer_{};
+    std::mutex output_buffer_mutex_{};
+    std::mutex writing_buffer_mutex_{};
     asio::ip::tcp::endpoint endpoint_{}; // connected endpoint
     std::string endpoint_address_{};     // cached string with endpoint address
     asio::ip::tcp::endpoint local_endpoint_{};
