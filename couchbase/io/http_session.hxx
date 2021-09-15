@@ -39,6 +39,72 @@
 namespace couchbase::io
 {
 
+class http_session_info
+{
+  public:
+    http_session_info(const std::string& client_id, const std::string& session_id)
+      : log_prefix_(fmt::format("[{}/{}]", client_id, session_id))
+    {
+    }
+
+    http_session_info(const std::string& client_id,
+                      const std::string& session_id,
+                      const asio::ip::tcp::endpoint& local_endpoint,
+                      const asio::ip::tcp::endpoint& remote_endpoint)
+    {
+        local_endpoint_ = local_endpoint;
+        local_endpoint_address_ = local_endpoint_.address().to_string();
+        if (local_endpoint_.protocol() == asio::ip::tcp::v6()) {
+            local_endpoint_address_ = fmt::format("[{}]:{}", local_endpoint_address_, local_endpoint_.port());
+        } else {
+            local_endpoint_address_ = fmt::format("{}:{}", local_endpoint_address_, local_endpoint_.port());
+        }
+
+        remote_endpoint_ = remote_endpoint;
+        remote_endpoint_address_ = remote_endpoint_.address().to_string();
+        if (remote_endpoint_.protocol() == asio::ip::tcp::v6()) {
+            remote_endpoint_address_ = fmt::format("[{}]:{}", remote_endpoint_address_, remote_endpoint_.port());
+        } else {
+            remote_endpoint_address_ = fmt::format("{}:{}", remote_endpoint_address_, remote_endpoint_.port());
+        }
+
+        log_prefix_ =
+          fmt::format("[{}/{}] <{}:{}>", client_id, session_id, remote_endpoint_.address().to_string(), remote_endpoint_.port());
+    }
+
+    [[nodiscard]] const asio::ip::tcp::endpoint& remote_endpoint() const
+    {
+        return remote_endpoint_;
+    }
+
+    [[nodiscard]] const std::string& remote_address() const
+    {
+        return remote_endpoint_address_;
+    }
+
+    [[nodiscard]] const asio::ip::tcp::endpoint& local_endpoint() const
+    {
+        return local_endpoint_;
+    }
+
+    [[nodiscard]] const std::string& local_address() const
+    {
+        return local_endpoint_address_;
+    }
+
+    [[nodiscard]] const std::string& log_prefix() const
+    {
+        return log_prefix_;
+    }
+
+  private:
+    std::string log_prefix_;
+    asio::ip::tcp::endpoint remote_endpoint_{}; // connected endpoint
+    std::string remote_endpoint_address_{};     // cached string with endpoint address
+    asio::ip::tcp::endpoint local_endpoint_{};
+    std::string local_endpoint_address_{};
+};
+
 class http_session : public std::enable_shared_from_this<http_session>
 {
   public:
@@ -61,7 +127,7 @@ class http_session : public std::enable_shared_from_this<http_session>
       , hostname_(hostname)
       , service_(service)
       , user_agent_(fmt::format("{}; client/{}; session/{}; {}", couchbase::sdk_id(), client_id_, id_, COUCHBASE_CXX_CLIENT_SYSTEM))
-      , log_prefix_(fmt::format("[{}/{}]", client_id_, id_))
+      , info_(client_id_, id_)
       , http_ctx_(std::move(http_ctx))
     {
     }
@@ -86,7 +152,7 @@ class http_session : public std::enable_shared_from_this<http_session>
       , hostname_(hostname)
       , service_(service)
       , user_agent_(fmt::format("{}; client/{}; session/{}; {}", couchbase::sdk_id(), client_id_, id_, COUCHBASE_CXX_CLIENT_SYSTEM))
-      , log_prefix_(fmt::format("[{}/{}]", client_id_, id_))
+      , info_(client_id_, id_)
       , http_ctx_(std::move(http_ctx))
     {
     }
@@ -101,23 +167,19 @@ class http_session : public std::enable_shared_from_this<http_session>
         return http_ctx_;
     }
 
-    std::string remote_address() const
+    [[nodiscard]] std::string remote_address()
     {
-        if (endpoint_.protocol() == asio::ip::tcp::v6()) {
-            return fmt::format("[{}]:{}", endpoint_address_, endpoint_.port());
-        }
-        return fmt::format("{}:{}", endpoint_address_, endpoint_.port());
+        std::scoped_lock lock(info_mutex_);
+        return info_.remote_address();
     }
 
-    std::string local_address() const
+    [[nodiscard]] std::string local_address()
     {
-        if (endpoint_.protocol() == asio::ip::tcp::v6()) {
-            return fmt::format("[{}]:{}", local_endpoint_address_, local_endpoint_.port());
-        }
-        return fmt::format("{}:{}", local_endpoint_address_, local_endpoint_.port());
+        std::scoped_lock lock(info_mutex_);
+        return info_.local_address();
     }
 
-    [[nodiscard]] diag::endpoint_diag_info diag_info() const
+    [[nodiscard]] diag::endpoint_diag_info diag_info()
     {
         return { type_,
                  id_,
@@ -136,9 +198,10 @@ class http_session : public std::enable_shared_from_this<http_session>
           hostname_, service_, std::bind(&http_session::on_resolve, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
     }
 
-    [[nodiscard]] const std::string& log_prefix() const
+    [[nodiscard]] std::string log_prefix()
     {
-        return log_prefix_;
+        std::scoped_lock lock(info_mutex_);
+        return info_.log_prefix();
     }
 
     [[nodiscard]] const std::string& id() const
@@ -146,9 +209,10 @@ class http_session : public std::enable_shared_from_this<http_session>
         return id_;
     }
 
-    [[nodiscard]] const asio::ip::tcp::endpoint& endpoint() const
+    [[nodiscard]] const asio::ip::tcp::endpoint& endpoint()
     {
-        return endpoint_;
+        std::scoped_lock lock(info_mutex_);
+        return info_.remote_endpoint();
     }
 
     void on_stop(std::function<void()> handler)
@@ -237,14 +301,14 @@ class http_session : public std::enable_shared_from_this<http_session>
         if (!request.body.empty()) {
             request.headers["content-length"] = std::to_string(request.body.size());
         }
-        for (auto& header : request.headers) {
-            write(fmt::format("{}: {}\r\n", header.first, header.second));
+        for (const auto& [name, value] : request.headers) {
+            write(fmt::format("{}: {}\r\n", name, value));
         }
         write("\r\n");
         write(request.body);
         {
             std::scoped_lock lock(command_handlers_mutex_);
-            command_handlers_.push_back(std::move(handler));
+            command_handlers_.push_back(std::forward<Handler>(handler));
         }
         flush();
     }
@@ -269,7 +333,7 @@ class http_session : public std::enable_shared_from_this<http_session>
     void on_resolve(std::error_code ec, const asio::ip::tcp::resolver::results_type& endpoints)
     {
         if (ec) {
-            spdlog::error("{} error on resolve: {}", log_prefix_, ec.message());
+            spdlog::error("{} error on resolve: {}", info_.log_prefix(), ec.message());
             return;
         }
         last_active_ = std::chrono::steady_clock::now();
@@ -281,11 +345,11 @@ class http_session : public std::enable_shared_from_this<http_session>
     void do_connect(asio::ip::tcp::resolver::results_type::iterator it)
     {
         if (it != endpoints_.end()) {
-            spdlog::debug("{} connecting to {}:{}", log_prefix_, it->endpoint().address().to_string(), it->endpoint().port());
+            spdlog::debug("{} connecting to {}:{}", info_.log_prefix(), it->endpoint().address().to_string(), it->endpoint().port());
             deadline_timer_.expires_after(timeout_defaults::connect_timeout);
             stream_->async_connect(it->endpoint(), std::bind(&http_session::on_connect, shared_from_this(), std::placeholders::_1, it));
         } else {
-            spdlog::error("{} no more endpoints left to connect", log_prefix_);
+            spdlog::error("{} no more endpoints left to connect", info_.log_prefix());
             stop();
         }
     }
@@ -297,18 +361,20 @@ class http_session : public std::enable_shared_from_this<http_session>
         }
         last_active_ = std::chrono::steady_clock::now();
         if (!stream_->is_open() || ec) {
-            spdlog::warn(
-              "{} unable to connect to {}:{}: {}", log_prefix_, it->endpoint().address().to_string(), it->endpoint().port(), ec.message());
+            spdlog::warn("{} unable to connect to {}:{}: {}",
+                         info_.log_prefix(),
+                         it->endpoint().address().to_string(),
+                         it->endpoint().port(),
+                         ec.message());
             do_connect(++it);
         } else {
             state_ = diag::endpoint_state::connected;
             connected_ = true;
-            local_endpoint_ = stream_->local_endpoint();
-            local_endpoint_address_ = local_endpoint_.address().to_string();
-            endpoint_ = it->endpoint();
-            endpoint_address_ = endpoint_.address().to_string();
-            spdlog::debug("{} connected to {}:{}", log_prefix_, it->endpoint().address().to_string(), it->endpoint().port());
-            log_prefix_ = fmt::format("[{}/{}] <{}:{}>", client_id_, id_, endpoint_.address().to_string(), endpoint_.port());
+            spdlog::debug("{} connected to {}:{}", info_.log_prefix(), it->endpoint().address().to_string(), it->endpoint().port());
+            {
+                std::scoped_lock lock(info_mutex_);
+                info_ = http_session_info(client_id_, id_, stream_->local_endpoint(), it->endpoint());
+            }
             deadline_timer_.expires_at(asio::steady_timer::time_point::max());
             deadline_timer_.cancel();
             flush();
@@ -342,7 +408,7 @@ class http_session : public std::enable_shared_from_this<http_session>
               }
               self->last_active_ = std::chrono::steady_clock::now();
               if (ec) {
-                  spdlog::error("{} IO error while reading from the socket: {}", self->log_prefix_, ec.message());
+                  spdlog::error("{} IO error while reading from the socket: {}", self->info_.log_prefix(), ec.message());
                   return self->stop();
               }
 
@@ -366,7 +432,7 @@ class http_session : public std::enable_shared_from_this<http_session>
                       }
                       return self->do_read();
                   case http_parser::status::failure:
-                      spdlog::error("{} failed to parse HTTP response", self->log_prefix_);
+                      spdlog::error("{} failed to parse HTTP response", self->info_.log_prefix());
                       return self->stop();
               }
           });
@@ -392,7 +458,7 @@ class http_session : public std::enable_shared_from_this<http_session>
             }
             self->last_active_ = std::chrono::steady_clock::now();
             if (ec) {
-                spdlog::error("{} IO error while writing to the socket: {}", self->log_prefix_, ec.message());
+                spdlog::error("{} IO error while writing to the socket: {}", self->info_.log_prefix(), ec.message());
                 return self->stop();
             }
             self->writing_buffer_.clear();
@@ -417,9 +483,9 @@ class http_session : public std::enable_shared_from_this<http_session>
     std::string service_;
     std::string user_agent_;
 
-    bool stopped_{ false };
-    bool connected_{ false };
-    bool keep_alive_{ false };
+    std::atomic_bool stopped_{ false };
+    std::atomic_bool connected_{ false };
+    std::atomic_bool keep_alive_{ false };
 
     std::function<void()> on_stop_handler_{ nullptr };
 
@@ -430,13 +496,9 @@ class http_session : public std::enable_shared_from_this<http_session>
     std::array<std::uint8_t, 16384> input_buffer_{};
     std::vector<std::vector<std::uint8_t>> output_buffer_{};
     std::vector<std::vector<std::uint8_t>> writing_buffer_{};
-    asio::ip::tcp::endpoint endpoint_{}; // connected endpoint
-    std::string endpoint_address_{};     // cached string with endpoint address
-    asio::ip::tcp::endpoint local_endpoint_{};
-    std::string local_endpoint_address_{};
     asio::ip::tcp::resolver::results_type endpoints_{};
-
-    std::string log_prefix_{};
+    http_session_info info_;
+    std::mutex info_mutex_{};
     couchbase::http_context http_ctx_;
 
     std::chrono::time_point<std::chrono::steady_clock> last_active_{};
