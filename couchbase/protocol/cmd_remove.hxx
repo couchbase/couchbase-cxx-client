@@ -124,7 +124,7 @@ class remove_request_body
 
     [[nodiscard]] std::size_t size() const
     {
-        return key_.size();
+        return key_.size() + framing_extras_.size();
     }
 };
 
