@@ -20,6 +20,7 @@ CB_CMAKE=${CB_CMAKE:-$(which cmake)}
 CB_CC=${CB_CC:-$(which clang)}
 CB_CXX=${CB_CXX:-$(which clang++)}
 CB_SCAN_BUILD=${CB_SCAN_BUILD:-$(which scan-build)}
+CB_NUMBER_OF_JOBS=${CB_NUMBER_OF_JOBS:-2}
 
 echo "CB_CC=${CB_CC}"
 echo "CB_CXX=${CB_CXX}"
@@ -39,7 +40,7 @@ SCAN_BUILD_ARGS="--exclude third_party -o ${REPORT_DIR} --use-analyzer=${CB_CC} 
 
 ${CB_SCAN_BUILD} ${SCAN_BUILD_ARGS} ${CB_CMAKE} -DENABLE_CACHE=OFF  ..
 set +e
-${CB_SCAN_BUILD} ${SCAN_BUILD_ARGS} ${CB_CMAKE} --build . --parallel 8 --verbose
+${CB_SCAN_BUILD} ${SCAN_BUILD_ARGS} ${CB_CMAKE} --build . --parallel ${CB_NUMBER_OF_JOBS} --verbose
 STATUS=$?
 set -e
 

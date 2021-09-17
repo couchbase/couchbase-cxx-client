@@ -188,6 +188,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
             session->start();
 
             session->on_stop([type, id = session->id(), self = this->shared_from_this()]() {
+                std::scoped_lock inner_lock(self->sessions_mutex_);
                 for (auto& s : self->busy_sessions_[type]) {
                     if (s && s->id() == id) {
                         s.reset();
