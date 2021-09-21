@@ -32,14 +32,9 @@ TEST_CASE("native: trivial non-data query", "[native]")
     couchbase::cluster cluster(io);
     auto io_thread = std::thread([&io]() { io.run(); });
 
-    {
-        auto barrier = std::make_shared<std::promise<std::error_code>>();
-        auto f = barrier->get_future();
-        cluster.open(couchbase::origin(auth, connstr), [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
-        auto rc = f.get();
-        INFO(rc.message());
-        REQUIRE_FALSE(rc);
-    }
+    open_cluster(cluster, couchbase::origin(auth, connstr));
+    open_bucket(cluster, ctx.bucket);
+
     {
         couchbase::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
         auto barrier = std::make_shared<std::promise<couchbase::operations::query_response>>();
@@ -49,12 +44,8 @@ TEST_CASE("native: trivial non-data query", "[native]")
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
     }
-    {
-        auto barrier = std::make_shared<std::promise<void>>();
-        auto f = barrier->get_future();
-        cluster.close([barrier]() { barrier->set_value(); });
-        f.get();
-    }
+
+    close_cluster(cluster);
 
     io_thread.join();
 }

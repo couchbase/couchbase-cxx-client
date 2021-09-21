@@ -43,3 +43,36 @@ native_init_logger()
         initialized = true;
     }
 }
+
+std::error_code
+open_cluster(couchbase::cluster& cluster, const couchbase::origin& origin)
+{
+    auto barrier = std::make_shared<std::promise<std::error_code>>();
+    auto f = barrier->get_future();
+    cluster.open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
+    auto rc = f.get();
+    INFO(rc.message());
+    REQUIRE_FALSE(rc);
+    return rc;
+}
+
+void
+close_cluster(couchbase::cluster& cluster)
+{
+    auto barrier = std::make_shared<std::promise<void>>();
+    auto f = barrier->get_future();
+    cluster.close([barrier]() { barrier->set_value(); });
+    f.get();
+}
+
+std::error_code
+open_bucket(couchbase::cluster& cluster, const std::string& bucket_name)
+{
+    auto barrier = std::make_shared<std::promise<std::error_code>>();
+    auto f = barrier->get_future();
+    cluster.open_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
+    auto rc = f.get();
+    INFO(rc.message());
+    REQUIRE_FALSE(rc);
+    return rc;
+}
