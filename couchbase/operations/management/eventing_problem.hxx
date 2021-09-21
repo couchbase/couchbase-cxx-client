@@ -17,15 +17,15 @@
 
 #pragma once
 
-namespace couchbase
+#include <string>
+
+namespace couchbase::operations::management::eventing
 {
-enum class service_type {
-    key_value = 0,
-    query,
-    analytics,
-    search,
-    view,
-    management,
-    eventing,
+
+struct problem {
+    std::uint64_t code{};
+    std::string name{};
+    std::string description{};
 };
-} // namespace couchbase
+
+} // namespace couchbase::operations::management::eventing

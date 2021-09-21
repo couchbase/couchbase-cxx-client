@@ -45,6 +45,7 @@ http_noop_request::encode_to(http_noop_request::encoded_request_type& encoded, h
             break;
         case service_type::management:
         case service_type::key_value:
+        case service_type::eventing:
             return error::common_errc::feature_not_available;
     }
     return {};

@@ -52,6 +52,9 @@ struct fmt::formatter<couchbase::service_type> {
             case couchbase::service_type::management:
                 name = "mgmt";
                 break;
+            case couchbase::service_type::eventing:
+                name = "eventing";
+                break;
         }
         return format_to(ctx.out(), "{}", name);
     }

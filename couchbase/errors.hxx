@@ -362,6 +362,34 @@ enum class management_errc {
 
     /// Raised from the bucket management API
     bucket_not_flushable = 607,
+
+    /// Occurs if the function is not found
+    /// name is "ERR_APP_NOT_FOUND_TS"
+    eventing_function_not_found = 608,
+
+    /// Occurs if the function is not deployed, but the action expects it to
+    /// name is "ERR_APP_NOT_DEPLOYED"
+    eventing_function_not_deployed = 609,
+
+    /// Occurs when the compilation of the function code failed
+    /// name is "ERR_HANDLER_COMPILATION"
+    eventing_function_compilation_failure = 610,
+
+    /// Occurs when source and metadata keyspaces are the same.
+    /// name is "ERR_SRC_MB_SAME"
+    eventing_function_identical_keyspace = 611,
+
+    /// Occurs when a function is deployed but not “fully” bootstrapped
+    /// name is "ERR_APP_NOT_BOOTSTRAPPED"
+    eventing_function_not_bootstrapped = 612,
+
+    /// Occurs when a function is deployed but the action does not expect it to
+    /// name is "ERR_APP_NOT_UNDEPLOYED"
+    eventing_function_deployed = 613,
+
+    /// Occurs when a function is paused but the action does not expect it to
+    /// name is "ERR_APP_PAUSED"
+    eventing_function_paused = 614,
 };
 
 /// Field-Level Encryption Error Definitions
@@ -689,6 +717,20 @@ struct management_error_category : std::error_category {
                 return "bucket_exists";
             case management_errc::bucket_not_flushable:
                 return "bucket_not_flushable";
+            case management_errc::eventing_function_not_found:
+                return "eventing_function_not_found";
+            case management_errc::eventing_function_not_deployed:
+                return "eventing_function_not_deployed";
+            case management_errc::eventing_function_compilation_failure:
+                return "eventing_function_compilation_failure";
+            case management_errc::eventing_function_identical_keyspace:
+                return "eventing_function_identical_keyspace";
+            case management_errc::eventing_function_not_bootstrapped:
+                return "eventing_function_not_bootstrapped";
+            case management_errc::eventing_function_deployed:
+                return "eventing_function_deployed";
+            case management_errc::eventing_function_paused:
+                return "eventing_function_paused";
         }
         return "FIXME: unknown error code in management category (recompile with newer library)";
     }

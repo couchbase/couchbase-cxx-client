@@ -31,6 +31,7 @@ freeform_request::encode_to(encoded_request_type& encoded, http_context& /* cont
         case service_type::search:
         case service_type::view:
         case service_type::management:
+        case service_type::eventing:
             break;
         default:
             return error::common_errc::invalid_argument;

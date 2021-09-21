@@ -35,6 +35,7 @@ struct threshold_logging_options {
     std::chrono::milliseconds search_threshold{ 1'000 };
     std::chrono::milliseconds analytics_threshold{ 1'000 };
     std::chrono::milliseconds management_threshold{ 1'000 };
+    std::chrono::milliseconds eventing_threshold{ 1'000 };
 
     [[nodiscard]] std::chrono::milliseconds threshold_for_service(service_type service) const
     {
@@ -56,6 +57,9 @@ struct threshold_logging_options {
 
             case service_type::management:
                 return management_threshold;
+
+            case service_type::eventing:
+                return eventing_threshold;
         }
         return {};
     }
