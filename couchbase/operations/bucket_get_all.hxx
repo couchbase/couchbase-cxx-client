@@ -22,6 +22,7 @@
 #include <couchbase/version.hxx>
 #include <couchbase/operations/bucket_settings.hxx>
 #include <couchbase/error_context/http.hxx>
+#include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations
 {
@@ -58,7 +59,7 @@ make_response(error_context::http&& ctx,
     if (!response.ctx.ec) {
         tao::json::value payload{};
         try {
-            payload = tao::json::from_string(encoded.body);
+            payload = tao::json::from_string<utils::json::last_key_wins>(encoded.body);
         } catch (const tao::pegtl::parse_error& e) {
             response.ctx.ec = error::common_errc::parsing_failure;
             return response;
