@@ -70,7 +70,8 @@ class cluster_map_change_notification_request_body
         bucket_.assign(body.begin() + offset, body.begin() + offset + key_size);
         offset += key_size;
         if (body.size() > static_cast<std::size_t>(offset)) {
-            config_ = tao::json::from_string<deduplicate_keys>(std::string(body.begin() + offset, body.end())).as<configuration>();
+            config_ =
+              tao::json::from_string<utils::json::last_key_wins>(std::string(body.begin() + offset, body.end())).as<configuration>();
         }
         return true;
     }

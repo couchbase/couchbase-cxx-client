@@ -24,34 +24,16 @@
 #include <couchbase/protocol/cmd_info.hxx>
 
 #include <couchbase/configuration.hxx>
+#include <couchbase/utils/json.hxx>
 
 namespace couchbase::protocol
 {
-
-namespace
-{
-// For some reason "projector" field gets duplicated in the configuration JSON
-template<typename Consumer>
-struct deduplicate_keys : Consumer {
-    using Consumer::Consumer;
-
-    using Consumer::keys_;
-    using Consumer::stack_;
-    using Consumer::value;
-
-    void member()
-    {
-        Consumer::stack_.back().prepare_object().emplace(std::move(Consumer::keys_.back()), std::move(Consumer::value));
-        Consumer::keys_.pop_back();
-    }
-};
-} // namespace
 
 template<typename Iterator>
 configuration
 parse_config(Iterator begin, Iterator end)
 {
-    return tao::json::from_string<deduplicate_keys>(std::string(begin, end)).as<configuration>();
+    return tao::json::from_string<utils::json::last_key_wins>(std::string(begin, end)).as<configuration>();
 }
 
 class get_cluster_config_response_body
