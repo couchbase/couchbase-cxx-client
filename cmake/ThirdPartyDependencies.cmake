@@ -1,20 +1,20 @@
 add_subdirectory(${PROJECT_SOURCE_DIR}/third_party/gsl)
 
-option(TAOCPP_JSON_BUILD_TESTS OFF)
-option(TAOCPP_JSON_BUILD_EXAMPLES OFF)
+set(TAOCPP_JSON_BUILD_TESTS OFF)
+set(TAOCPP_JSON_BUILD_EXAMPLES OFF)
 add_subdirectory(third_party/json)
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/third_party/spdlog)
 
-option(SNAPPY_BUILD_TESTS OFF)
-option(SNAPPY_INSTALL OFF)
-option(PEGTL_BUILD_TESTS OFF)
-option(PEGTL_BUILD_EXAMPLES OFF)
+set(SNAPPY_BUILD_TESTS OFF)
+set(SNAPPY_INSTALL OFF)
+set(PEGTL_BUILD_TESTS OFF)
+set(PEGTL_BUILD_EXAMPLES OFF)
 add_subdirectory(${PROJECT_SOURCE_DIR}/third_party/snappy)
 
-option(HDR_LOG_REQUIRED OFF)
-option(HDR_HISTOGRAM_BUILD_SHARED OFF)
-option(HDR_HISTOGRAM_BUILD_PROGRAMS OFF)
+set(HDR_LOG_REQUIRED OFF)
+set(HDR_HISTOGRAM_BUILD_SHARED OFF)
+set(HDR_HISTOGRAM_BUILD_PROGRAMS OFF)
 add_subdirectory(${PROJECT_SOURCE_DIR}/third_party/hdr_histogram_c)
 include_directories(BEFORE SYSTEM ${PROJECT_SOURCE_DIR}/third_party/hdr_histogram_c/src)
 

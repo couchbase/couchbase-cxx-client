@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.17)
+# node.js uses cmake 3.17
 
 set(couchbase_cxx_client_BUILD_NUMBER 0)
 if(DEFINED ENV{BUILD_NUMBER})
@@ -49,21 +50,7 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
   endif()
 endif()
 
-option(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL "Statically link OpenSSL library" FALSE)
-if(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL)
-  set(OPENSSL_USE_STATIC_LIBS ON)
-endif()
-include(FindOpenSSL)
-if(OPENSSL_LIBRARIES AND OPENSSL_INCLUDE_DIR)
-  message(STATUS "OPENSSL_VERSION: ${OPENSSL_VERSION}")
-  message(STATUS "OPENSSL_INCLUDE_DIR: ${OPENSSL_INCLUDE_DIR}")
-  message(STATUS "OPENSSL_LIBRARIES: ${OPENSSL_LIBRARIES}")
-else()
-  message(FATAL_ERROR "Cannot build couchbase extension without OpenSSL")
-endif()
-# Read more at https://wiki.wireshark.org/TLS
-option(COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE
-       "Path to file to write per-session secrets (Useful for Wireshark SSL/TLS dissection)")
+include(cmake/OpenSSL.cmake)
 
 include(cmake/VersionInfo.cmake)
 
@@ -79,13 +66,11 @@ target_include_directories(platform PRIVATE ${PROJECT_BINARY_DIR}/generated ${PR
 target_link_libraries(platform PRIVATE ${PLATFORM_LIBRARIES})
 
 add_library(cbcrypto OBJECT couchbase/cbcrypto/cbcrypto.cc)
-target_link_libraries(
-  cbcrypto
-  PRIVATE project_options
-          project_warnings
-          OpenSSL::SSL
-          OpenSSL::Crypto)
+target_link_libraries(cbcrypto PRIVATE project_options project_warnings)
 target_include_directories(cbcrypto PRIVATE ${PROJECT_SOURCE_DIR})
+if(NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
+  target_link_libraries(cbcrypto PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+endif()
 
 add_library(
   cbsasl OBJECT
@@ -97,7 +82,7 @@ add_library(
   couchbase/cbsasl/scram-sha/stringutils.cc)
 target_include_directories(cbsasl PRIVATE ${PROJECT_SOURCE_DIR})
 
-if(!APPLE)
+if(NOT APPLE)
   set_target_properties(cbcrypto cbsasl platform PROPERTIES CXX_VISIBILITY_PRESET hidden)
 endif()
 
@@ -114,17 +99,18 @@ target_include_directories(
          ${PROJECT_SOURCE_DIR}/third_party/spdlog/include)
 target_link_libraries(
   couchbase_cxx_client
-  project_options
-  project_warnings
-  OpenSSL::SSL
-  OpenSSL::Crypto
-  platform
-  cbcrypto
-  cbsasl
-  hdr_histogram_static
-  http_parser
-  snappy
-  spdlog::spdlog_header_only)
+  PRIVATE project_options
+          project_warnings
+          platform
+          cbcrypto
+          cbsasl
+          hdr_histogram_static
+          http_parser
+          snappy
+          spdlog::spdlog_header_only)
+if(NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
+  target_link_libraries(couchbase_cxx_client PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+endif()
 
 set_target_properties(
   cbcrypto
