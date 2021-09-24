@@ -6,3 +6,4 @@ native_test(binary_operations)
 native_test(durability)
 
 native_test(connection_string)
+native_test(utils)
