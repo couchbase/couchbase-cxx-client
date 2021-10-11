@@ -37,7 +37,6 @@ function(set_project_warnings project_name)
       -Wshadow # warn the user if a variable declaration shadows one from a parent context
       -Wnon-virtual-dtor # warn the user if a class with virtual functions has a non-virtual destructor. This helps
                          # catch hard to track down memory errors
-      -Wold-style-cast # warn for c-style casts
       -Wcast-align # warn for potential performance problem casts
       -Wunused # warn on anything being unused
       -Woverloaded-virtual # warn if you overload (not override) a virtual function
@@ -51,6 +50,12 @@ function(set_project_warnings project_name)
       -Wno-unknown-warning-option
       -Wno-gnu-statement-expression
       -Wno-compound-token-split-by-macro)
+
+  if(COUCHBASE_CXX_CLIENT_PYTHON_WARNINGS)
+    message("not warning for old-style-cast")
+  else()
+    set(CLANG_WARNINGS ${CLANG_WARNINGS} -Wold-style-cast) # warn for c-style casts (suppress this for python extensions)
+  endif()
 
   if(WARNINGS_AS_ERRORS)
     set(CLANG_WARNINGS ${CLANG_WARNINGS} -Werror)
