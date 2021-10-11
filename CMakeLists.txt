@@ -27,6 +27,8 @@ include(cmake/BuildTracing.cmake)
 include(cmake/Cache.cmake)
 
 # standard compiler warnings
+
+option(COUCHBASE_CXX_CLIENT_PYTHON_WARNINGS "Suppress warnings to build with Python.h" OFF)
 include(cmake/CompilerWarnings.cmake)
 set_project_warnings(project_warnings)
 
