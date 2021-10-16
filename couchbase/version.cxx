@@ -68,6 +68,7 @@ sdk_build_info()
       "false"
 #endif
       ;
+    info["post_linked_openssl"] = COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL;
     info["static_openssl"] =
 #if defined(STATIC_OPENSSL)
       "true"
