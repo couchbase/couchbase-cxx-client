@@ -17,10 +17,11 @@
 
 #pragma once
 
-#include <couchbase/protocol/unsigned_leb128.h>
-
 #include <couchbase/document_id.hxx>
+#include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/protocol/client_opcode.hxx>
+#include <couchbase/protocol/cmd_info.hxx>
+#include <couchbase/protocol/status.hxx>
 
 namespace couchbase::protocol
 {
@@ -50,40 +51,7 @@ class lookup_in_response_body
                std::uint16_t key_size,
                std::uint8_t extras_size,
                const std::vector<uint8_t>& body,
-               const cmd_info& /* info */)
-    {
-        Expects(header[1] == static_cast<uint8_t>(opcode));
-        if (status == protocol::status::success || status == protocol::status::subdoc_multi_path_failure ||
-            status == protocol::status::subdoc_success_deleted || status == protocol::status::subdoc_multi_path_failure_deleted) {
-            using offset_type = std::vector<uint8_t>::difference_type;
-            offset_type offset = framing_extras_size + key_size + extras_size;
-            fields_.reserve(16); /* we won't have more than 16 entries anyway */
-            while (static_cast<std::size_t>(offset) < body.size()) {
-                lookup_in_field field;
-
-                std::uint16_t entry_status = 0;
-                memcpy(&entry_status, body.data() + offset, sizeof(entry_status));
-                entry_status = ntohs(entry_status);
-                Expects(is_valid_status(entry_status));
-                field.status = protocol::status(entry_status);
-                offset += static_cast<offset_type>(sizeof(entry_status));
-
-                std::uint32_t entry_size = 0;
-                memcpy(&entry_size, body.data() + offset, sizeof(entry_size));
-                entry_size = ntohl(entry_size);
-                Expects(entry_size < 20 * 1024 * 1024);
-                offset += static_cast<offset_type>(sizeof(entry_size));
-
-                field.value.resize(entry_size);
-                memcpy(field.value.data(), body.data() + offset, entry_size);
-                offset += static_cast<offset_type>(entry_size);
-
-                fields_.emplace_back(field);
-            }
-            return true;
-        }
-        return false;
-    }
+               const cmd_info& info);
 };
 
 class lookup_in_request_body
@@ -133,14 +101,7 @@ class lookup_in_request_body
     lookup_in_specs specs_;
 
   public:
-    void id(const document_id& id)
-    {
-        key_ = id.key;
-        if (id.collection_uid) {
-            unsigned_leb128<uint32_t> encoded(*id.collection_uid);
-            key_.insert(0, encoded.get());
-        }
-    }
+    void id(const document_id& id);
 
     void access_deleted(bool value)
     {
@@ -169,7 +130,7 @@ class lookup_in_request_body
     [[nodiscard]] const std::vector<std::uint8_t>& extras()
     {
         if (extras_.empty()) {
-            fill_extention();
+            fill_extras();
         }
         return extras_;
     }
@@ -185,7 +146,7 @@ class lookup_in_request_body
     [[nodiscard]] std::size_t size()
     {
         if (extras_.empty()) {
-            fill_extention();
+            fill_extras();
         }
         if (value_.empty()) {
             fill_value();
@@ -194,33 +155,9 @@ class lookup_in_request_body
     }
 
   private:
-    void fill_extention()
-    {
-        if (flags_ != 0) {
-            extras_.resize(sizeof(flags_));
-            extras_[0] = flags_;
-        }
-    }
+    void fill_extras();
 
-    void fill_value()
-    {
-        size_t value_size = 0;
-        for (const auto& spec : specs_.entries) {
-            value_size += sizeof(spec.opcode) + sizeof(spec.flags) + sizeof(std::uint16_t) + spec.path.size();
-        }
-        Expects(value_size > 0);
-        value_.resize(value_size);
-        std::vector<std::uint8_t>::size_type offset = 0;
-        for (auto& spec : specs_.entries) {
-            value_[offset++] = spec.opcode;
-            value_[offset++] = spec.flags;
-            std::uint16_t path_size = ntohs(gsl::narrow_cast<std::uint16_t>(spec.path.size()));
-            std::memcpy(value_.data() + offset, &path_size, sizeof(path_size));
-            offset += sizeof(path_size);
-            std::memcpy(value_.data() + offset, spec.path.data(), spec.path.size());
-            offset += spec.path.size();
-        }
-    }
+    void fill_value();
 };
 
 } // namespace couchbase::protocol

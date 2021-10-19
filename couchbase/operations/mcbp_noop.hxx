@@ -17,9 +17,13 @@
 
 #pragma once
 
-#include <couchbase/document_id.hxx>
-#include <couchbase/protocol/cmd_noop.hxx>
+#include <couchbase/error_context/key_value.hxx>
+#include <couchbase/io/mcbp_context.hxx>
 #include <couchbase/io/retry_context.hxx>
+#include <couchbase/protocol/client_request.hxx>
+#include <couchbase/timeout_defaults.hxx>
+
+#include <couchbase/protocol/cmd_noop.hxx>
 
 namespace couchbase::operations
 {
@@ -37,19 +41,9 @@ struct mcbp_noop_request {
     std::chrono::milliseconds timeout{ timeout_defaults::key_value_timeout };
     io::retry_context<io::retry_strategy::best_effort> retries{ true };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& /* context */) const
-    {
-        encoded.opaque(opaque);
-        encoded.partition(partition);
-        return {};
-    }
-};
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 
-mcbp_noop_response
-make_response(error_context::key_value&& ctx, const mcbp_noop_request& /* request */, mcbp_noop_request::encoded_response_type&&)
-{
-    mcbp_noop_response response{ std::move(ctx) };
-    return response;
-}
+    [[nodiscard]] mcbp_noop_response make_response(error_context::key_value&& ctx, const encoded_response_type& encoded) const;
+};
 
 } // namespace couchbase::operations

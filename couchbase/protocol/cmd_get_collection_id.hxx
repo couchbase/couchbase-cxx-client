@@ -17,11 +17,10 @@
 
 #pragma once
 
-#include <gsl/assert>
-
+#include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/protocol/client_opcode.hxx>
-#include <couchbase/protocol/status.hxx>
 #include <couchbase/protocol/cmd_info.hxx>
+#include <couchbase/protocol/status.hxx>
 
 namespace couchbase::protocol
 {
@@ -52,22 +51,7 @@ class get_collection_id_response_body
                std::uint16_t key_size,
                std::uint8_t extras_size,
                const std::vector<uint8_t>& body,
-               const cmd_info& /* info */)
-    {
-        Expects(header[1] == static_cast<uint8_t>(opcode));
-        if (status == protocol::status::success && extras_size == 12) {
-            std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size;
-
-            memcpy(&manifest_uid_, body.data() + offset, sizeof(manifest_uid_));
-            manifest_uid_ = utils::byte_swap_64(manifest_uid_);
-            offset += 8;
-
-            memcpy(&collection_uid_, body.data() + offset, sizeof(collection_uid_));
-            collection_uid_ = ntohl(collection_uid_);
-            return true;
-        }
-        return false;
-    }
+               const cmd_info& info);
 };
 
 class get_collection_id_request_body

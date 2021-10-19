@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "request_tracer.hxx"
+#include <couchbase/tracing/request_tracer.hxx>
 
 namespace couchbase::tracing
 {
@@ -26,14 +26,17 @@ class noop_span : public request_span
 {
     void add_tag(const std::string& /* name */, std::uint64_t /* value */) override
     {
+        /* do nothing */
     }
 
     void add_tag(const std::string& /* name */, const std::string& /* value */) override
     {
+        /* do nothing */
     }
 
     void end() override
     {
+        /* do nothing */
     }
 };
 

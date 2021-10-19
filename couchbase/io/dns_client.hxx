@@ -20,10 +20,15 @@
 #include <memory>
 #include <sstream>
 
+#include <spdlog/fmt/fmt.h>
+
+#include <asio/ip/tcp.hpp>
+#include <asio/read.hpp>
+
+#include <couchbase/errors.hxx>
+
 #include <couchbase/io/dns_codec.hxx>
 #include <couchbase/io/dns_config.hxx>
-
-#include <asio/read.hpp>
 
 namespace couchbase::io::dns
 {

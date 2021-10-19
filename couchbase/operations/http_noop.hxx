@@ -17,9 +17,12 @@
 
 #pragma once
 
-#include <tao/json.hpp>
+#include <couchbase/platform/uuid.h>
 
-#include <couchbase/version.hxx>
+#include <couchbase/io/http_context.hxx>
+#include <couchbase/io/http_message.hxx>
+#include <couchbase/timeout_defaults.hxx>
+
 #include <couchbase/error_context/http.hxx>
 
 namespace couchbase::operations
@@ -39,40 +42,9 @@ struct http_noop_request {
 
     std::string client_context_id{ uuid::to_string(uuid::random()) };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& /* context */)
-    {
-        encoded.headers["connection"] = "keep-alive";
-        encoded.method = "GET";
-        switch (type) {
-            case service_type::query:
-                timeout = timeout_defaults::query_timeout;
-                encoded.path = "/admin/ping";
-                break;
-            case service_type::analytics:
-                timeout = timeout_defaults::analytics_timeout;
-                encoded.path = "/admin/ping";
-                break;
-            case service_type::search:
-                timeout = timeout_defaults::search_timeout;
-                encoded.path = "/api/ping";
-                break;
-            case service_type::view:
-                timeout = timeout_defaults::view_timeout;
-                encoded.path = "/";
-                break;
-            case service_type::management:
-            case service_type::key_value:
-                return error::common_errc::feature_not_available;
-        }
-        return {};
-    }
-};
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
 
-http_noop_response
-make_response(error_context::http&& ctx, const http_noop_request& /* request */, http_noop_request::encoded_response_type&&)
-{
-    http_noop_response response{ std::move(ctx) };
-    return response;
-}
+    [[nodiscard]] http_noop_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
+};
 
 } // namespace couchbase::operations

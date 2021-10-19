@@ -35,4 +35,5 @@ Checks: |-
   -misc-non-private-member-variables-in-classes,
   -modernize-use-trailing-return-type,
   -readability-function-cognitive-complexity,
+  -readability-identifier-length,
   -readability-magic-numbers

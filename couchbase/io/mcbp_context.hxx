@@ -18,14 +18,15 @@
 #pragma once
 
 #include <vector>
-#include <couchbase/configuration.hxx>
+
+#include <couchbase/topology/configuration.hxx>
 #include <couchbase/protocol/hello_feature.hxx>
 
 namespace couchbase
 {
 
 struct mcbp_context {
-    const std::optional<configuration>& config;
+    const std::optional<topology::configuration>& config;
     const std::vector<protocol::hello_feature>& supported_features;
 
     [[nodiscard]] bool supports_feature(protocol::hello_feature feature) const

@@ -17,7 +17,9 @@
 
 #pragma once
 
-#include <couchbase/io/mcbp_message.hxx>
+#include <vector>
+
+#include <spdlog/fmt/fmt.h>
 
 namespace couchbase::protocol
 {

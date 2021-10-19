@@ -17,13 +17,12 @@
 
 #pragma once
 
-#include <gsl/assert>
-
+#include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/protocol/client_opcode.hxx>
 #include <couchbase/protocol/cmd_info.hxx>
 #include <couchbase/protocol/status.hxx>
 
-#include <couchbase/error_map.hxx>
+#include <couchbase/topology/error_map.hxx>
 
 namespace couchbase::protocol
 {
@@ -48,20 +47,7 @@ class get_error_map_response_body
                std::uint16_t key_size,
                std::uint8_t extras_size,
                const std::vector<uint8_t>& body,
-               const cmd_info& /* info */)
-    {
-        Expects(header[1] == static_cast<uint8_t>(opcode));
-        if (status == protocol::status::success) {
-            try {
-                std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
-                errmap_ = tao::json::from_string(std::string(body.begin() + offset, body.end())).as<error_map>();
-            } catch (const tao::pegtl::parse_error& e) {
-                spdlog::critical("unable to parse JSON: {}, {}", e.message(), std::string(body.begin(), body.end()));
-            }
-            return true;
-        }
-        return false;
-    }
+               const cmd_info& info);
 };
 
 class get_error_map_request_body
@@ -112,12 +98,7 @@ class get_error_map_request_body
     }
 
   private:
-    void fill_body()
-    {
-        std::uint16_t version = htons(version_);
-        value_.resize(sizeof(version));
-        std::memcpy(value_.data(), &version, sizeof(version));
-    }
+    void fill_body();
 };
 
 } // namespace couchbase::protocol

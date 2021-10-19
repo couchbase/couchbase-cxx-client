@@ -18,6 +18,7 @@
 #include "test_helper_native.hxx"
 
 #include <couchbase/diagnostics.hxx>
+#include <couchbase/diagnostics_json.hxx>
 
 using namespace std::literals::chrono_literals;
 

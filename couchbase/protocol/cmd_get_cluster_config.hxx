@@ -17,24 +17,18 @@
 
 #pragma once
 
-#include <gsl/assert>
-
+#include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/protocol/client_opcode.hxx>
-#include <couchbase/protocol/status.hxx>
 #include <couchbase/protocol/cmd_info.hxx>
+#include <couchbase/protocol/status.hxx>
 
-#include <couchbase/configuration.hxx>
-#include <couchbase/utils/json.hxx>
+#include <couchbase/topology/configuration.hxx>
 
 namespace couchbase::protocol
 {
 
-template<typename Iterator>
-configuration
-parse_config(Iterator begin, Iterator end)
-{
-    return tao::json::from_string<utils::json::last_key_wins>(std::string(begin, end)).as<configuration>();
-}
+topology::configuration
+parse_config(const std::string& input);
 
 class get_cluster_config_response_body
 {
@@ -42,10 +36,10 @@ class get_cluster_config_response_body
     static const inline client_opcode opcode = client_opcode::get_cluster_config;
 
   private:
-    configuration config_{};
+    topology::configuration config_{};
 
   public:
-    [[nodiscard]] configuration&& config()
+    [[nodiscard]] topology::configuration&& config()
     {
         return std::move(config_);
     }
@@ -56,16 +50,7 @@ class get_cluster_config_response_body
                std::uint16_t key_size,
                std::uint8_t extras_size,
                const std::vector<uint8_t>& body,
-               const cmd_info& /* info */)
-    {
-        Expects(header[1] == static_cast<uint8_t>(opcode));
-        if (status == protocol::status::success) {
-            std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
-            config_ = parse_config(body.begin() + offset, body.end());
-            return true;
-        }
-        return false;
-    }
+               const cmd_info& info);
 };
 
 class get_cluster_config_request_body

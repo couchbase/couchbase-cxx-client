@@ -19,8 +19,7 @@
 
 #include <gsl/assert>
 
-#include <tao/json.hpp>
-#include <tao/json/contrib/traits.hpp>
+#include <tao/json/forward.hpp>
 
 #include <couchbase/protocol/server_opcode.hxx>
 #include <couchbase/protocol/magic.hxx>

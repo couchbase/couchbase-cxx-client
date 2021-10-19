@@ -17,9 +17,13 @@
 
 #pragma once
 
-#include <couchbase/document_id.hxx>
-#include <couchbase/protocol/cmd_touch.hxx>
+#include <couchbase/error_context/key_value.hxx>
+#include <couchbase/io/mcbp_context.hxx>
 #include <couchbase/io/retry_context.hxx>
+#include <couchbase/protocol/client_request.hxx>
+#include <couchbase/timeout_defaults.hxx>
+
+#include <couchbase/protocol/cmd_touch.hxx>
 
 namespace couchbase::operations
 {
@@ -40,24 +44,9 @@ struct touch_request {
     std::chrono::milliseconds timeout{ timeout_defaults::key_value_timeout };
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& /* context */) const
-    {
-        encoded.opaque(opaque);
-        encoded.partition(partition);
-        encoded.body().id(id);
-        encoded.body().expiry(expiry);
-        return {};
-    }
-};
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 
-touch_response
-make_response(error_context::key_value&& ctx, const touch_request& /* request */, touch_request::encoded_response_type&& encoded)
-{
-    touch_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        response.cas = encoded.cas();
-    }
-    return response;
-}
+    [[nodiscard]] touch_response make_response(error_context::key_value&& ctx, const encoded_response_type& encoded) const;
+};
 
 } // namespace couchbase::operations

@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <map>
+
 #include <couchbase/service_type.hxx>
 
 namespace couchbase::io
@@ -37,8 +39,7 @@ struct http_response {
 
     [[nodiscard]] bool must_close_connection() const
     {
-        const auto it = headers.find("connection");
-        if (it != headers.end()) {
+        if (const auto it = headers.find("connection"); it != headers.end()) {
             return it->second == "close";
         }
         return false;

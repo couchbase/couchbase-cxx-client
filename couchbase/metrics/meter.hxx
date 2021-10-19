@@ -17,9 +17,11 @@
 
 #pragma once
 
+#include <string>
+#include <map>
+
 namespace couchbase::metrics
 {
-
 class value_recorder
 {
   public:
@@ -43,7 +45,7 @@ class meter
     meter& operator=(meter&& other) = default;
     virtual ~meter() = default;
 
-    virtual value_recorder* get_value_recorder(const std::string& /* name */, const std::map<std::string, std::string>& /* tags */) = 0;
+    virtual value_recorder* get_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags) = 0;
 };
 
 } // namespace couchbase::metrics

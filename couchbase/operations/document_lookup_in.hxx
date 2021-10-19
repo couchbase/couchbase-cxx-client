@@ -17,10 +17,13 @@
 
 #pragma once
 
-#include <gsl/assert>
-#include <couchbase/document_id.hxx>
-#include <couchbase/protocol/cmd_lookup_in.hxx>
+#include <couchbase/error_context/key_value.hxx>
+#include <couchbase/io/mcbp_context.hxx>
 #include <couchbase/io/retry_context.hxx>
+#include <couchbase/protocol/client_request.hxx>
+#include <couchbase/timeout_defaults.hxx>
+
+#include <couchbase/protocol/cmd_lookup_in.hxx>
 
 namespace couchbase::operations
 {
@@ -52,55 +55,9 @@ struct lookup_in_request {
     std::chrono::milliseconds timeout{ timeout_defaults::key_value_timeout };
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& /* context */)
-    {
-        for (std::size_t i = 0; i < specs.entries.size(); ++i) {
-            specs.entries[i].original_index = i;
-        }
-        std::stable_sort(specs.entries.begin(), specs.entries.end(), [](const auto& lhs, const auto& rhs) {
-            return (lhs.flags & protocol::lookup_in_request_body::lookup_in_specs::path_flag_xattr) >
-                   (rhs.flags & protocol::lookup_in_request_body::lookup_in_specs::path_flag_xattr);
-        });
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context);
 
-        encoded.opaque(opaque);
-        encoded.partition(partition);
-        encoded.body().id(id);
-        encoded.body().access_deleted(access_deleted);
-        encoded.body().specs(specs);
-        return {};
-    }
+    [[nodiscard]] lookup_in_response make_response(error_context::key_value&& ctx, const encoded_response_type& encoded) const;
 };
-
-lookup_in_response
-make_response(error_context::key_value&& ctx, const lookup_in_request& request, lookup_in_request::encoded_response_type&& encoded)
-{
-    lookup_in_response response{ std::move(ctx) };
-    if (encoded.status() == protocol::status::subdoc_success_deleted ||
-        encoded.status() == protocol::status::subdoc_multi_path_failure_deleted) {
-        response.deleted = true;
-    }
-    if (!ctx.ec) {
-        response.cas = encoded.cas();
-        response.fields.resize(request.specs.entries.size());
-        for (size_t i = 0; i < request.specs.entries.size(); ++i) {
-            auto& req_entry = request.specs.entries[i];
-            response.fields[i].original_index = req_entry.original_index;
-            response.fields[i].opcode = protocol::subdoc_opcode(req_entry.opcode);
-            response.fields[i].path = req_entry.path;
-            response.fields[i].status = protocol::status::success;
-        }
-        for (size_t i = 0; i < encoded.body().fields().size(); ++i) {
-            auto& res_entry = encoded.body().fields()[i];
-            response.fields[i].status = res_entry.status;
-            response.fields[i].exists =
-              res_entry.status == protocol::status::success || res_entry.status == protocol::status::subdoc_success_deleted;
-            response.fields[i].value = res_entry.value;
-        }
-        std::sort(response.fields.begin(), response.fields.end(), [](const auto& lhs, const auto& rhs) {
-            return lhs.original_index < rhs.original_index;
-        });
-    }
-    return response;
-}
 
 } // namespace couchbase::operations

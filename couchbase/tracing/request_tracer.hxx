@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "constants.hxx"
+#include <couchbase/tracing/constants.hxx>
 
 namespace couchbase::tracing
 {

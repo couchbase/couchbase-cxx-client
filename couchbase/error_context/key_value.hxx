@@ -22,10 +22,10 @@
 #include <string>
 
 #include <couchbase/document_id.hxx>
-#include <couchbase/error_map.hxx>
 #include <couchbase/io/retry_reason.hxx>
 #include <couchbase/protocol/enhanced_error_info.hxx>
 #include <couchbase/protocol/status.hxx>
+#include <couchbase/topology/error_map.hxx>
 
 namespace couchbase::error_context
 {

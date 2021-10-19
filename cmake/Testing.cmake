@@ -11,6 +11,7 @@ macro(native_test name)
     project_options
     project_warnings
     Catch2::Catch2
+    Threads::Threads
     snappy
     couchbase_cxx_client)
   catch_discover_tests(test_native_${name})
