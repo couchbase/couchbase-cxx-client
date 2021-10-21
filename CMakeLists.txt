@@ -87,7 +87,7 @@ if(NOT APPLE)
 endif()
 
 add_library(couchbase_cxx_client STATIC couchbase/version.cxx)
-target_include_directories(couchbase_cxx_client PUBLIC ${PROJECT_BINARY_DIR}/generated ${PROJECT_SOURCE_DIR})
+target_include_directories(couchbase_cxx_client PUBLIC ${PROJECT_BINARY_DIR}/generated ${PROJECT_BINARY_DIR}/third_party/snappy ${PROJECT_SOURCE_DIR} )
 target_include_directories(
   couchbase_cxx_client SYSTEM
   PUBLIC ${PROJECT_SOURCE_DIR}/third_party/asio/asio/include
@@ -96,7 +96,8 @@ target_include_directories(
          ${PROJECT_SOURCE_DIR}/third_party/http_parser
          ${PROJECT_SOURCE_DIR}/third_party/json/external/PEGTL/include
          ${PROJECT_SOURCE_DIR}/third_party/json/include
-         ${PROJECT_SOURCE_DIR}/third_party/spdlog/include)
+         ${PROJECT_SOURCE_DIR}/third_party/spdlog/include
+         ${PROJECT_SOURCE_DIR}/third_party/snappy)
 target_link_libraries(
   couchbase_cxx_client
   PRIVATE project_options
