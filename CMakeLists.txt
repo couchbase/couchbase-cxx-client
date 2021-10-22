@@ -69,7 +69,7 @@ add_library(cbcrypto OBJECT couchbase/cbcrypto/cbcrypto.cc)
 target_link_libraries(cbcrypto PRIVATE project_options project_warnings)
 target_include_directories(cbcrypto PRIVATE ${PROJECT_SOURCE_DIR})
 if(NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
-  target_link_libraries(cbcrypto PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+  target_link_libraries(cbcrypto PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 endif()
 
 add_library(
@@ -109,7 +109,7 @@ target_link_libraries(
           snappy
           spdlog::spdlog_header_only)
 if(NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
-  target_link_libraries(couchbase_cxx_client PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+  target_link_libraries(couchbase_cxx_client PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 endif()
 
 set_target_properties(
