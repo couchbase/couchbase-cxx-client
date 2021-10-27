@@ -17,9 +17,11 @@
 
 #pragma once
 
+#include <cstdint>
+
 namespace couchbase::protocol
 {
-enum class status : uint16_t {
+enum class status : std::uint16_t {
     success = 0x00,
     not_found = 0x01,
     exists = 0x02,
@@ -146,13 +148,7 @@ is_valid_status(uint16_t code)
 }
 
 [[nodiscard]] std::string
-status_to_string(uint16_t code)
-{
-    if (is_valid_status(code)) {
-        return fmt::format("{} ({})", code, static_cast<status>(code));
-    }
-    return fmt::format("{} (unknown)", code);
-}
+status_to_string(uint16_t code);
 
 } // namespace couchbase::protocol
 

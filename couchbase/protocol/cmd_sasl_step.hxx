@@ -17,7 +17,10 @@
 
 #pragma once
 
-#include <algorithm>
+#include <couchbase/io/mcbp_message.hxx>
+#include <couchbase/protocol/client_opcode.hxx>
+#include <couchbase/protocol/cmd_info.hxx>
+#include <couchbase/protocol/status.hxx>
 
 namespace couchbase::protocol
 {
@@ -36,15 +39,7 @@ class sasl_step_response_body
                std::uint16_t key_size,
                std::uint8_t extras_size,
                const std::vector<uint8_t>& body,
-               const cmd_info& /* info */)
-    {
-        Expects(header[1] == static_cast<uint8_t>(opcode));
-        if (status == protocol::status::success) {
-            value_ = { body.begin() + framing_extras_size + extras_size + key_size, body.end() };
-            return true;
-        }
-        return false;
-    }
+               const cmd_info& info);
 
     [[nodiscard]] std::string_view value() const
     {

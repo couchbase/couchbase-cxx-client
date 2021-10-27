@@ -19,7 +19,7 @@
 
 #include <utility>
 
-#include <tao/json.hpp>
+#include <couchbase/utils/json.hxx>
 
 #include <asio.hpp>
 
@@ -48,13 +48,13 @@
 #include <couchbase/protocol/cmd_get.hxx>
 #include <couchbase/protocol/cmd_cluster_map_change_notification.hxx>
 
-#include <couchbase/cbsasl/client.h>
+#include <couchbase/sasl/client.h>
 
 #include <spdlog/fmt/bin_to_hex.h>
 
 #include <couchbase/origin.hxx>
 #include <couchbase/errors.hxx>
-#include <couchbase/version.hxx>
+#include <couchbase/meta/version.hxx>
 #include <couchbase/diagnostics.hxx>
 
 namespace couchbase::io
@@ -128,7 +128,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                   session_->origin_.credentials().allowed_sasl_mechanisms)
         {
             tao::json::value user_agent{
-                { "a", couchbase::sdk_id() },
+                { "a", couchbase::meta::sdk_id() },
                 { "i", fmt::format("{}/{}", session_->client_id_, session_->id_) },
             };
             protocol::client_request<protocol::hello_request_body> hello_req;
@@ -142,7 +142,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                 hello_req.body().enable_compression();
             }
             hello_req.opaque(session_->next_opaque());
-            hello_req.body().user_agent(tao::json::to_string(user_agent));
+            hello_req.body().user_agent(utils::json::generate(user_agent));
             spdlog::debug("{} user_agent={}, requested_features=[{}]",
                           session_->log_prefix_,
                           hello_req.body().user_agent(),
@@ -319,7 +319,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                         spdlog::warn("{} this server does not support GCCCP, open bucket before making any cluster-level command",
                                      session_->log_prefix_);
                         session_->update_configuration(
-                          make_blank_configuration(session_->endpoint_address_, session_->endpoint_.port(), 0));
+                          topology::make_blank_configuration(session_->endpoint_address_, session_->endpoint_.port(), 0));
                         complete({});
                     } else {
                         spdlog::warn("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
@@ -448,7 +448,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                     switch (auto opcode = static_cast<protocol::server_opcode>(msg.header.opcode)) {
                         case protocol::server_opcode::cluster_map_change_notification: {
                             protocol::server_request<protocol::cluster_map_change_notification_request_body> req(msg);
-                            std::optional<configuration> config = req.body().config();
+                            std::optional<topology::configuration> config = req.body().config();
                             if (session_ && config.has_value()) {
                                 if ((!config->bucket.has_value() && req.body().bucket().empty()) ||
                                     (session_->bucket_name_.has_value() && !req.body().bucket().empty() &&
@@ -607,7 +607,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         return { config_, supported_features_ };
     }
 
-    void bootstrap(std::function<void(std::error_code, configuration)>&& handler, bool retry_on_bucket_not_found = false)
+    void bootstrap(std::function<void(std::error_code, topology::configuration)>&& handler, bool retry_on_bucket_not_found = false)
     {
         retry_bootstrap_on_bucket_not_found_ = retry_on_bucket_not_found;
         bootstrap_handler_ = std::move(handler);
@@ -816,7 +816,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         return config_.has_value();
     }
 
-    [[nodiscard]] configuration config() const
+    [[nodiscard]] topology::configuration config() const
     {
         return config_.value();
     }
@@ -991,12 +991,12 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         return {};
     }
 
-    void on_configuration_update(std::function<void(const configuration&)> handler)
+    void on_configuration_update(std::function<void(const topology::configuration&)> handler)
     {
         config_listeners_.emplace_back(std::move(handler));
     }
 
-    void update_configuration(configuration&& config)
+    void update_configuration(topology::configuration&& config)
     {
         if (stopped_) {
             return;
@@ -1060,7 +1060,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
 
             std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
             if (ntohl(msg.header.bodylen) - offset > 0) {
-                auto config = protocol::parse_config(msg.body.begin() + offset, msg.body.end());
+                auto config = protocol::parse_config(std::string(msg.body.begin() + offset, msg.body.end()));
                 spdlog::debug("{} received not_my_vbucket status for {}, opaque={} with config rev={} in the payload",
                               log_prefix_,
                               protocol::client_opcode(msg.header.opcode),
@@ -1097,7 +1097,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
 
         if (!bootstrapped_ && bootstrap_handler_) {
             bootstrap_deadline_.cancel();
-            bootstrap_handler_(ec, config_.value_or(configuration{}));
+            bootstrap_handler_(ec, config_.value_or(topology::configuration{}));
             bootstrap_handler_ = nullptr;
         }
         if (ec) {
@@ -1306,10 +1306,10 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     std::optional<std::string> bucket_name_;
     mcbp_parser parser_;
     std::unique_ptr<message_handler> handler_;
-    std::function<void(std::error_code, const configuration&)> bootstrap_handler_{};
+    std::function<void(std::error_code, const topology::configuration&)> bootstrap_handler_{};
     std::mutex command_handlers_mutex_{};
     std::map<uint32_t, std::function<void(std::error_code, retry_reason, io::mcbp_message&&)>> command_handlers_{};
-    std::vector<std::function<void(const configuration&)>> config_listeners_{};
+    std::vector<std::function<void(const topology::configuration&)>> config_listeners_{};
     std::function<void(io::retry_reason)> on_stop_handler_{};
 
     std::atomic_bool bootstrapped_{ false };
@@ -1336,7 +1336,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     std::string local_endpoint_address_{};
     asio::ip::tcp::resolver::results_type endpoints_;
     std::vector<protocol::hello_feature> supported_features_;
-    std::optional<configuration> config_;
+    std::optional<topology::configuration> config_;
     std::optional<error_map> error_map_;
     collection_cache collection_cache_;
 

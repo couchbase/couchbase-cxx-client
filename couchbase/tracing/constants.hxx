@@ -19,6 +19,8 @@
 
 #include <string_view>
 
+#include <gsl/assert>
+
 #include <couchbase/protocol/client_opcode.hxx>
 #include <couchbase/service_type.hxx>
 
@@ -97,7 +99,7 @@ constexpr auto analytics = "analytics";
 constexpr auto management = "management";
 } // namespace service
 
-auto
+constexpr auto
 span_name_for_http_service(service_type type)
 {
     switch (type) {
@@ -117,12 +119,12 @@ span_name_for_http_service(service_type type)
             return operation::http_manager;
 
         case service_type::key_value:
-            Expects(false);
+            return "unexpected_http_service";
     }
-    Expects(false);
+    return "unknown_http_service";
 }
 
-auto
+constexpr auto
 service_name_for_http_service(service_type type)
 {
     switch (type) {
@@ -142,12 +144,12 @@ service_name_for_http_service(service_type type)
             return service::management;
 
         case service_type::key_value:
-            Expects(false);
+            return "unexpected_http_service";
     }
-    Expects(false);
+    return "unknown_http_service";
 }
 
-auto
+constexpr auto
 span_name_for_mcbp_command(protocol::client_opcode opcode)
 {
     switch (opcode) {
@@ -257,9 +259,9 @@ span_name_for_mcbp_command(protocol::client_opcode opcode)
             return operation::mcbp_internal;
 
         case protocol::client_opcode::invalid:
-            Expects(false);
+            return "invalid_command";
     }
-    Expects(false);
+    return "unknown_command";
 }
 
 } // namespace couchbase::tracing

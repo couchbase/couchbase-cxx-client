@@ -17,13 +17,14 @@
 
 #pragma once
 
-#include <couchbase/configuration.hxx>
+#include <couchbase/cluster_options.hxx>
 #include <couchbase/io/query_cache.hxx>
+#include <couchbase/topology/configuration.hxx>
 
 namespace couchbase
 {
 struct http_context {
-    const configuration& config;
+    const topology::configuration& config;
     const cluster_options& options;
     query_cache& cache;
 };

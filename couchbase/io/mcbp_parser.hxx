@@ -17,13 +17,7 @@
 
 #pragma once
 
-#include <snappy.h>
-
-#include <gsl/assert>
-#include <couchbase/protocol/magic.hxx>
-#include <couchbase/protocol/datatype.hxx>
-
-#include <spdlog/fmt/bin_to_hex.h>
+#include <couchbase/io/mcbp_message.hxx>
 
 namespace couchbase::io
 {
@@ -42,59 +36,7 @@ struct mcbp_parser {
         buf.clear();
     }
 
-    result next(mcbp_message& msg)
-    {
-        static const size_t header_size = 24;
-        if (buf.size() < header_size) {
-            return result::need_data;
-        }
-        std::memcpy(&msg.header, buf.data(), header_size);
-        uint32_t body_size = ntohl(msg.header.bodylen);
-        if (body_size > 0 && buf.size() - header_size < body_size) {
-            return result::need_data;
-        }
-        msg.body.clear();
-        msg.body.reserve(body_size);
-        uint32_t key_size = ntohs(msg.header.keylen);
-        uint32_t prefix_size = uint32_t(msg.header.extlen) + key_size;
-        if (msg.header.magic == static_cast<uint8_t>(protocol::magic::alt_client_response)) {
-            uint8_t framing_extras_size = msg.header.keylen & 0xfU;
-            key_size = (msg.header.keylen & 0xf0U) >> 8U;
-            prefix_size = uint32_t(framing_extras_size) + uint32_t(msg.header.extlen) + key_size;
-        }
-        std::copy(buf.begin() + header_size, buf.begin() + header_size + prefix_size, std::back_inserter(msg.body));
-
-        bool is_compressed = (msg.header.datatype & static_cast<uint8_t>(protocol::datatype::snappy)) != 0;
-        bool use_raw_value = true;
-        if (is_compressed) {
-            std::string uncompressed;
-            size_t offset = header_size + prefix_size;
-            bool success = snappy::Uncompress(reinterpret_cast<const char*>(buf.data() + offset), body_size - prefix_size, &uncompressed);
-            if (success) {
-                std::copy(uncompressed.begin(), uncompressed.end(), std::back_inserter(msg.body));
-                use_raw_value = false;
-                // patch header with new body size
-                msg.header.bodylen = htonl(static_cast<std::uint32_t>(prefix_size + uncompressed.size()));
-            }
-        }
-        if (use_raw_value) {
-            std::copy(buf.begin() + header_size + prefix_size, buf.begin() + header_size + body_size, std::back_inserter(msg.body));
-        }
-        buf.erase(buf.begin(), buf.begin() + header_size + body_size);
-        if (!protocol::is_valid_magic(buf[0])) {
-            spdlog::warn("parsed frame for magic={:x}, opcode={:x}, opaque={}, body_len={}. Invalid magic of the next frame: {:x}, {} "
-                         "bytes to parse{}",
-                         msg.header.magic,
-                         msg.header.opcode,
-                         msg.header.opaque,
-                         body_size,
-                         buf[0],
-                         buf.size(),
-                         spdlog::to_hex(buf));
-            reset();
-        }
-        return result::ok;
-    }
+    result next(mcbp_message& msg);
 
     std::vector<std::uint8_t> buf;
 };

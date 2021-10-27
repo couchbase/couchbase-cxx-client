@@ -172,10 +172,10 @@ memory_cb(void* ctx, const char* frame)
 
         int length = snprintf(c->buffer + c->offset, c->size - c->offset, "%s%s\n", c->indent, frame);
 
-        if ((length < 0) || (length >= (c->size - c->offset))) {
+        if ((length < 0) || (length >= (int)(c->size - c->offset))) {
             c->error = true;
         } else {
-            c->offset += length;
+            c->offset += (size_t)length;
         }
     }
 }

@@ -1,0 +1,119 @@
+/* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
+/*
+ *   Copyright 2020-2021 Couchbase, Inc.
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ */
+
+#include <couchbase/operations/management/query_index_create.hxx>
+
+#include <couchbase/errors.hxx>
+
+#include <couchbase/utils/json.hxx>
+
+namespace couchbase::operations::management
+{
+std::error_code
+query_index_create_request::encode_to(encoded_request_type& encoded, http_context&) const
+{
+    encoded.headers["content-type"] = "application/json";
+    tao::json::value with{};
+    if (deferred) {
+        with["defer_build"] = *deferred;
+    }
+    if (num_replicas) {
+        with["num_replica"] = *num_replicas; /* no 's' in key name */
+    }
+    std::string where_clause{};
+    if (condition) {
+        where_clause = fmt::format("WHERE {}", *condition);
+    }
+    std::string with_clause{};
+    if (with) {
+        with_clause = fmt::format("WITH {}", utils::json::generate(with));
+    }
+    std::string keyspace = fmt::format("{}:`{}`", namespace_id, bucket_name);
+    if (!scope_name.empty()) {
+        keyspace += ".`" + scope_name + "`";
+    }
+    if (!collection_name.empty()) {
+        keyspace += ".`" + collection_name + "`";
+    }
+    tao::json::value body{ { "statement",
+                             is_primary ? fmt::format(R"(CREATE PRIMARY INDEX {} ON {} USING GSI {})",
+                                                      index_name.empty() ? "" : fmt::format("`{}`", index_name),
+                                                      keyspace,
+                                                      with_clause)
+                                        : fmt::format(R"(CREATE INDEX `{}` ON {}({}) {} USING GSI {})",
+                                                      index_name,
+                                                      keyspace,
+                                                      fmt::join(fields, ", "),
+                                                      where_clause,
+                                                      with_clause) },
+                           { "client_context_id", client_context_id } };
+    encoded.method = "POST";
+    encoded.path = "/query/service";
+    encoded.body = utils::json::generate(body);
+    return {};
+}
+
+query_index_create_response
+query_index_create_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+{
+    query_index_create_response response{ std::move(ctx) };
+    if (!response.ctx.ec) {
+        tao::json::value payload{};
+        try {
+            payload = utils::json::parse(encoded.body);
+        } catch (const tao::pegtl::parse_error&) {
+            response.ctx.ec = error::common_errc::parsing_failure;
+            return response;
+        }
+        response.status = payload.at("status").get_string();
+
+        if (response.status != "success") {
+            bool index_already_exists = false;
+            bool bucket_not_found = false;
+            for (const auto& entry : payload.at("errors").get_array()) {
+                query_index_create_response::query_problem error;
+                error.code = entry.at("code").get_unsigned();
+                error.message = entry.at("msg").get_string();
+                switch (error.code) {
+                    case 5000: /* IKey: "Internal Error" */
+                        if (error.message.find(" already exists") != std::string::npos) {
+                            index_already_exists = true;
+                        }
+                        break;
+                    case 12003: /* IKey: "datastore.couchbase.keyspace_not_found" */
+                        bucket_not_found = true;
+                        break;
+                    case 4300: /* IKey: "plan.new_index_already_exists" */
+                        index_already_exists = true;
+                        break;
+                }
+                response.errors.emplace_back(error);
+            }
+            if (index_already_exists) {
+                if (!ignore_if_exists) {
+                    response.ctx.ec = error::common_errc::index_exists;
+                }
+            } else if (bucket_not_found) {
+                response.ctx.ec = error::common_errc::bucket_not_found;
+            } else if (!response.errors.empty()) {
+                response.ctx.ec = error::common_errc::internal_server_failure;
+            }
+        }
+    }
+    return response;
+}
+} // namespace couchbase::operations::management

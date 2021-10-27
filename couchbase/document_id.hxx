@@ -17,6 +17,10 @@
 
 #pragma once
 
+#include <optional>
+
+#include <spdlog/fmt/fmt.h>
+
 namespace couchbase
 {
 struct document_id {

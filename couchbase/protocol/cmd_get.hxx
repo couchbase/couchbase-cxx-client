@@ -17,10 +17,11 @@
 
 #pragma once
 
-#include <couchbase/protocol/unsigned_leb128.h>
-
 #include <couchbase/document_id.hxx>
+#include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/protocol/client_opcode.hxx>
+#include <couchbase/protocol/cmd_info.hxx>
+#include <couchbase/protocol/status.hxx>
 
 namespace couchbase::protocol
 {
@@ -40,6 +41,11 @@ class get_response_body
         return value_;
     }
 
+    [[nodiscard]] std::string&& value()
+    {
+        return std::move(value_);
+    }
+
     [[nodiscard]] std::uint32_t flags() const
     {
         return flags_;
@@ -51,24 +57,7 @@ class get_response_body
                std::uint16_t key_size,
                std::uint8_t extras_size,
                const std::vector<uint8_t>& body,
-               const cmd_info& /* info */)
-    {
-        Expects(header[1] == static_cast<uint8_t>(opcode));
-        if (status == protocol::status::success) {
-            std::vector<uint8_t>::difference_type offset = framing_extras_size;
-            if (extras_size == 4) {
-                memcpy(&flags_, body.data() + offset, sizeof(flags_));
-                flags_ = ntohl(flags_);
-                offset += 4;
-            } else {
-                offset += extras_size;
-            }
-            offset += key_size;
-            value_.assign(body.begin() + offset, body.end());
-            return true;
-        }
-        return false;
-    }
+               const cmd_info& info);
 };
 
 class get_request_body
@@ -81,14 +70,7 @@ class get_request_body
     std::string key_;
 
   public:
-    void id(const document_id& id)
-    {
-        key_ = id.key;
-        if (id.collection_uid) {
-            unsigned_leb128<uint32_t> encoded(*id.collection_uid);
-            key_.insert(0, encoded.get());
-        }
-    }
+    void id(const document_id& id);
 
     [[nodiscard]] const std::string& key() const
     {

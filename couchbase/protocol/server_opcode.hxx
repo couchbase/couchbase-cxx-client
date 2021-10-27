@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <spdlog/fmt/fmt.h>
+
 namespace couchbase::protocol
 {
 enum class server_opcode : uint8_t {

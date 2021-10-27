@@ -66,7 +66,8 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
             error_context_type ctx{};
             ctx.ec = ec;
             ctx.client_context_id = request.client_context_id;
-            return handler(make_response(std::move(ctx), request, {}));
+            using response_type = typename Request::encoded_response_type;
+            return handler(request.make_response(std::move(ctx), response_type{}));
         }
         encoded.headers["client-context-id"] = request.client_context_id;
         auto log_prefix = session->log_prefix();
@@ -101,7 +102,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
                   { "db.couchbase.service", fmt::format("{}", self->request.type) },
                   { "db.operation", self->encoded.path },
               };
-              if(self->meter_) {
+              if (self->meter_) {
                   self->meter_->get_value_recorder(meter_name, tags)
                     ->record_value(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count());
               }
@@ -129,7 +130,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
                   ctx.last_dispatched_to = session->remote_address();
                   ctx.http_status = msg.status_code;
                   ctx.http_body = msg.body;
-                  handler(make_response(std::move(ctx), self->request, std::move(msg)));
+                  handler(self->request.make_response(std::move(ctx), msg));
               } catch (const priv::retry_http_request&) {
                   self->send_to(session, std::forward<Handler>(handler));
               }

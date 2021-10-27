@@ -17,10 +17,15 @@
 
 #pragma once
 
-#include <tao/json.hpp>
-#include <couchbase/operations/design_document.hxx>
-#include <couchbase/utils/url_codec.hxx>
+#include <couchbase/platform/uuid.h>
+
+#include <couchbase/io/http_context.hxx>
+#include <couchbase/io/http_message.hxx>
+#include <couchbase/timeout_defaults.hxx>
+
 #include <couchbase/error_context/view.hxx>
+
+#include <couchbase/operations/management/design_document.hxx>
 
 namespace couchbase::operations
 {
@@ -91,155 +96,9 @@ struct document_view_request {
     std::optional<sort_order> order;
     std::vector<std::string> query_string{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& /* context */)
-    {
-        if (debug) {
-            query_string.emplace_back("debug=true");
-        }
-        if (limit) {
-            query_string.emplace_back(fmt::format("limit={}", *limit));
-        }
-        if (skip) {
-            query_string.emplace_back(fmt::format("skip={}", *skip));
-        }
-        if (consistency) {
-            switch (*consistency) {
-                case scan_consistency::not_bounded:
-                    query_string.emplace_back("stale=ok");
-                    break;
-                case scan_consistency::update_after:
-                    query_string.emplace_back("stale=update_after");
-                    break;
-                case scan_consistency::request_plus:
-                    query_string.emplace_back("stale=false");
-                    break;
-            }
-        }
-        if (key) {
-            query_string.emplace_back(fmt::format("key={}", utils::string_codec::form_encode(*key)));
-        }
-        if (start_key) {
-            query_string.emplace_back(fmt::format("start_key={}", utils::string_codec::form_encode(*start_key)));
-        }
-        if (end_key) {
-            query_string.emplace_back(fmt::format("end_key={}", utils::string_codec::form_encode(*end_key)));
-        }
-        if (start_key_doc_id) {
-            query_string.emplace_back(fmt::format("start_key_doc_id={}", utils::string_codec::form_encode(*start_key_doc_id)));
-        }
-        if (end_key_doc_id) {
-            query_string.emplace_back(fmt::format("end_key_doc_id={}", utils::string_codec::form_encode(*end_key_doc_id)));
-        }
-        if (inclusive_end) {
-            query_string.emplace_back(fmt::format("inclusive_end={}", inclusive_end.value() ? "true" : "false"));
-        }
-        if (reduce) {
-            query_string.emplace_back(fmt::format("reduce={}", reduce.value() ? "true" : "false"));
-        }
-        if (group) {
-            query_string.emplace_back(fmt::format("group={}", group.value() ? "true" : "false"));
-        }
-        if (group_level) {
-            query_string.emplace_back(fmt::format("group_level={}", *group_level));
-        }
-        if (order) {
-            switch (*order) {
-                case sort_order::descending:
-                    query_string.emplace_back("descending=true");
-                    break;
-                case sort_order::ascending:
-                    query_string.emplace_back("descending=false");
-                    break;
-            }
-        }
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
 
-        tao::json::value body = tao::json::empty_object;
-        if (!keys.empty()) {
-            tao::json::value keys_array = tao::json::empty_array;
-            for (const auto& entry : keys) {
-                keys_array.push_back(tao::json::from_string(entry));
-            }
-            body["keys"] = keys_array;
-        }
-
-        encoded.type = type;
-        encoded.method = "POST";
-        encoded.headers["content-type"] = "application/json";
-        encoded.path = fmt::format("/{}/_design/{}{}/_view/{}?{}",
-                                   bucket_name,
-                                   name_space == design_document::name_space::development ? "dev_" : "",
-                                   document_name,
-                                   view_name,
-                                   fmt::join(query_string, "&"));
-        encoded.body = tao::json::to_string(body);
-        return {};
-    }
+    [[nodiscard]] document_view_response make_response(error_context::view&& ctx, const encoded_response_type& encoded) const;
 };
-
-document_view_response
-make_response(error_context::view&& ctx, const document_view_request& request, document_view_request::encoded_response_type&& encoded)
-{
-    document_view_response response{ std::move(ctx) };
-    response.ctx.client_context_id = request.client_context_id;
-    response.ctx.design_document_name = request.document_name;
-    response.ctx.view_name = request.view_name;
-    response.ctx.query_string = request.query_string;
-    if (!response.ctx.ec) {
-        if (encoded.status_code == 200) {
-            tao::json::value payload{};
-            try {
-                payload = tao::json::from_string(encoded.body);
-            } catch (const tao::pegtl::parse_error& e) {
-                response.ctx.ec = error::common_errc::parsing_failure;
-                return response;
-            }
-
-            if (const auto* total_rows = payload.find("total_rows"); total_rows != nullptr && total_rows->is_unsigned()) {
-                response.meta_data.total_rows = total_rows->get_unsigned();
-            }
-
-            if (const auto* debug_info = payload.find("debug_info"); debug_info != nullptr && debug_info->is_object()) {
-                response.meta_data.debug_info.emplace(tao::json::to_string(*debug_info));
-            }
-
-            if (const auto* rows = payload.find("rows"); rows != nullptr && rows->is_array()) {
-                for (const auto& entry : rows->get_array()) {
-                    document_view_response::row row{};
-
-                    if (const auto* id = entry.find("id"); id != nullptr && id->is_string()) {
-                        row.id = id->get_string();
-                    }
-                    row.key = tao::json::to_string(entry.at("key"));
-                    row.value = tao::json::to_string(entry.at("value"));
-                    response.rows.emplace_back(row);
-                }
-            }
-        } else if (encoded.status_code == 400) {
-            tao::json::value payload{};
-            try {
-                payload = tao::json::from_string(encoded.body);
-            } catch (const tao::pegtl::parse_error& e) {
-                response.ctx.ec = error::common_errc::parsing_failure;
-                return response;
-            }
-            document_view_response::problem problem{};
-
-            if (const auto* error = payload.find("error"); error != nullptr && error->is_string()) {
-                problem.code = error->get_string();
-            }
-
-            if (const auto* reason = payload.find("reason"); reason != nullptr && reason->is_string()) {
-                problem.message = reason->get_string();
-            }
-            response.error.emplace(problem);
-            response.ctx.ec = error::common_errc::invalid_argument;
-        } else if (encoded.status_code == 404) {
-            response.ctx.ec = error::view_errc::design_document_not_found;
-        } else {
-            response.ctx.ec = error::common_errc::internal_server_failure;
-        }
-    }
-    return response;
-}
 
 } // namespace couchbase::operations

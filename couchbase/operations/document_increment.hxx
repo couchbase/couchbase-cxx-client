@@ -17,11 +17,15 @@
 
 #pragma once
 
-#include <couchbase/protocol/cmd_increment.hxx>
-#include <couchbase/protocol/durability_level.hxx>
-#include <couchbase/operations.hxx>
-#include <couchbase/protocol/client_response.hxx>
+#include <couchbase/error_context/key_value.hxx>
+#include <couchbase/io/mcbp_context.hxx>
 #include <couchbase/io/retry_context.hxx>
+#include <couchbase/protocol/client_request.hxx>
+#include <couchbase/timeout_defaults.hxx>
+
+#include <couchbase/protocol/durability_level.hxx>
+
+#include <couchbase/protocol/cmd_increment.hxx>
 
 namespace couchbase::operations
 {
@@ -49,41 +53,9 @@ struct increment_request {
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
     bool preserve_expiry{ false };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& /* context */) const
-    {
-        encoded.opaque(opaque);
-        encoded.partition(partition);
-        encoded.body().id(id);
-        encoded.body().delta(delta);
-        if (initial_value) {
-            encoded.body().initial_value(initial_value.value());
-            encoded.body().expiry(expiry);
-        } else {
-            encoded.body().initial_value(0);
-            encoded.body().expiry(0xffff'ffff);
-        }
-        if (durability_level != protocol::durability_level::none) {
-            encoded.body().durability(durability_level, durability_timeout);
-        }
-        if (preserve_expiry) {
-            encoded.body().preserve_expiry();
-        }
-        return {};
-    }
-};
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 
-increment_response
-make_response(error_context::key_value&& ctx, const increment_request& request, increment_request::encoded_response_type&& encoded)
-{
-    increment_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        response.cas = encoded.cas();
-        response.content = encoded.body().content();
-        response.token = encoded.body().token();
-        response.token.partition_id = request.partition;
-        response.token.bucket_name = response.ctx.id.bucket;
-    }
-    return response;
-}
+    [[nodiscard]] increment_response make_response(error_context::key_value&& ctx, const encoded_response_type& encoded) const;
+};
 
 } // namespace couchbase::operations

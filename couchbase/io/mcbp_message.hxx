@@ -42,22 +42,14 @@ struct binary_header {
     std::uint32_t opaque;
     std::uint64_t cas;
 
-    std::uint16_t status()
-    {
-        return htons(specific);
-    }
+    [[nodiscard]] std::uint16_t status() const;
 };
 
 struct mcbp_message {
     binary_header header;
     std::vector<std::uint8_t> body;
 
-    protocol::header_buffer header_data()
-    {
-        protocol::header_buffer buf;
-        std::memcpy(buf.data(), &header, sizeof(header));
-        return buf;
-    }
+    [[nodiscard]] protocol::header_buffer header_data() const;
 };
 } // namespace io
 } // namespace couchbase

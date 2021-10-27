@@ -24,19 +24,9 @@
 #include <spdlog/cfg/env.h>
 #include <spdlog/spdlog.h>
 
-#include <http_parser.h>
-
-#include <snappy.h>
-
-#include <couchbase/version.hxx>
-
 #include <couchbase/cluster.hxx>
-#include <couchbase/operations.hxx>
 
-#include <couchbase/io/dns_client.hxx>
-#include <couchbase/utils/connection_string.hxx>
-
-void
+inline void
 native_init_logger()
 {
     static bool initialized = false;
@@ -44,8 +34,7 @@ native_init_logger()
     if (!initialized) {
         spdlog::set_pattern("[%Y-%m-%d %T.%e] [%P,%t] [%^%l%$] %oms, %v");
 
-        auto env_val = spdlog::details::os::getenv("COUCHBASE_BACKEND_LOG_LEVEL");
-        if (env_val.empty()) {
+        if (auto env_val = spdlog::details::os::getenv("COUCHBASE_BACKEND_LOG_LEVEL"); env_val.empty()) {
             spdlog::set_level(spdlog::level::warn);
         } else {
             spdlog::cfg::helpers::load_levels(env_val);

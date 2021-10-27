@@ -51,7 +51,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
         meter_ = meter;
     }
 
-    void set_configuration(const configuration& config, const cluster_options& options)
+    void set_configuration(const topology::configuration& config, const cluster_options& options)
     {
         options_ = options;
         config_ = config;
@@ -264,7 +264,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
     metrics::meter* meter_{ nullptr };
     cluster_options options_{};
 
-    configuration config_{};
+    topology::configuration config_{};
     std::map<service_type, std::list<std::shared_ptr<http_session>>> busy_sessions_{};
     std::map<service_type, std::list<std::shared_ptr<http_session>>> idle_sessions_{};
     std::size_t next_index_{ 0 };

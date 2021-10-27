@@ -17,9 +17,13 @@
 
 #pragma once
 
-#include <couchbase/document_id.hxx>
-#include <couchbase/protocol/cmd_exists.hxx>
+#include <couchbase/error_context/key_value.hxx>
+#include <couchbase/io/mcbp_context.hxx>
 #include <couchbase/io/retry_context.hxx>
+#include <couchbase/protocol/client_request.hxx>
+#include <couchbase/timeout_defaults.hxx>
+
+#include <couchbase/protocol/cmd_exists.hxx>
 
 namespace couchbase::operations
 {
@@ -43,41 +47,9 @@ struct exists_request {
     std::chrono::milliseconds timeout{ timeout_defaults::key_value_timeout };
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& /* context */) const
-    {
-        encoded.opaque(opaque);
-        encoded.body().id(partition, id);
-        return {};
-    }
-};
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 
-exists_response
-make_response(error_context::key_value&& ctx, const exists_request& request, exists_request::encoded_response_type&& encoded)
-{
-    exists_response response{ ctx, request.partition };
-    if (!ctx.ec) {
-        response.cas = encoded.body().cas();
-        response.partition_id = encoded.body().partition_id();
-        switch (encoded.body().status()) {
-            case 0x00:
-                response.status = exists_response::observe_status::found;
-                break;
-            case 0x01:
-                response.status = exists_response::observe_status::persisted;
-                break;
-            case 0x80:
-                response.status = exists_response::observe_status::not_found;
-                break;
-            case 0x81:
-                response.status = exists_response::observe_status::logically_deleted;
-                break;
-            default:
-                spdlog::warn("invalid observe status for \"{}\": {:x}", request.id, encoded.body().status());
-                response.status = exists_response::observe_status::invalid;
-                break;
-        }
-    }
-    return response;
-}
+    [[nodiscard]] exists_response make_response(error_context::key_value&& ctx, const encoded_response_type& encoded) const;
+};
 
 } // namespace couchbase::operations

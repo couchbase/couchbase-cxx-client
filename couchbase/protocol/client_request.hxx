@@ -17,13 +17,8 @@
 
 #pragma once
 
-#ifndef WIN32
-#include <arpa/inet.h>
-#endif
-
-#include <snappy.h>
-
 #include <gsl/util>
+
 #include <couchbase/protocol/client_opcode.hxx>
 #include <couchbase/protocol/magic.hxx>
 #include <couchbase/protocol/client_response.hxx>
@@ -31,6 +26,12 @@
 
 namespace couchbase::protocol
 {
+bool
+compress_value(const std::vector<std::uint8_t>& value,
+               std::size_t body_size,
+               std::vector<std::uint8_t> payload,
+               std::vector<std::uint8_t>::iterator& output);
+
 template<typename Body>
 class client_request
 {
@@ -140,18 +141,9 @@ class client_request
         body_itr = std::copy(body_.key().begin(), body_.key().end(), body_itr);
 
         static const std::size_t min_size_to_compress = 32;
-        static const double min_ratio = 0.83;
         if (try_to_compress && body_.value().size() > min_size_to_compress) {
-            std::string compressed;
-            std::size_t compressed_size =
-              snappy::Compress(reinterpret_cast<const char*>(body_.value().data()), body_.value().size(), &compressed);
-            if (gsl::narrow_cast<double>(compressed_size) / gsl::narrow_cast<double>(body().value().size()) < min_ratio) {
-                std::copy(compressed.begin(), compressed.end(), body_itr);
-                payload_[5] |= static_cast<uint8_t>(protocol::datatype::snappy);
-                size_t new_body_size = body_.size() - (body_.value().size() - compressed_size);
-                body_size = htonl(gsl::narrow_cast<uint32_t>(new_body_size));
-                memcpy(payload_.data() + 8, &body_size, sizeof(body_size));
-                payload_.resize(header_size + new_body_size);
+            if (compress_value(body_.value(), body_.size(), payload_, body_itr)) {
+                /* the compressed value meets requirements and was copied to the payload */
                 return;
             }
         }

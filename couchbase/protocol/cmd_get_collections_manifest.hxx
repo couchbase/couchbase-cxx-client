@@ -17,13 +17,12 @@
 
 #pragma once
 
-#include <gsl/assert>
-
+#include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/protocol/client_opcode.hxx>
 #include <couchbase/protocol/cmd_info.hxx>
 #include <couchbase/protocol/status.hxx>
 
-#include <couchbase/collections_manifest.hxx>
+#include <couchbase/topology/collections_manifest.hxx>
 
 namespace couchbase::protocol
 {
@@ -34,10 +33,10 @@ class get_collections_manifest_response_body
     static const inline client_opcode opcode = client_opcode::get_collections_manifest;
 
   private:
-    collections_manifest manifest_;
+    topology::collections_manifest manifest_;
 
   public:
-    [[nodiscard]] const couchbase::collections_manifest& manifest() const
+    [[nodiscard]] const couchbase::topology::collections_manifest& manifest() const
     {
         return manifest_;
     }
@@ -48,16 +47,7 @@ class get_collections_manifest_response_body
                std::uint16_t key_size,
                std::uint8_t extras_size,
                const std::vector<uint8_t>& body,
-               const cmd_info& /* info */)
-    {
-        Expects(header[1] == static_cast<uint8_t>(opcode));
-        if (status == protocol::status::success) {
-            std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
-            manifest_ = tao::json::from_string(std::string(body.begin() + offset, body.end())).as<collections_manifest>();
-            return true;
-        }
-        return false;
-    }
+               const cmd_info& info);
 };
 
 class get_collections_manifest_request_body

@@ -17,30 +17,13 @@
 
 #pragma once
 
-#include <spdlog/spdlog.h>
+#include <tao/json.hpp>
 
 namespace couchbase::utils::json
 {
-/**
- *
- * This transformer is necessary to handle invalid JSON sent by the server.
- *
- * 1) For some reason "projector" field gets duplicated in the configuration JSON
- *
- * 2) CXXCBC-13, ns_server sends response to list buckets request with duplicated keys.
- */
-template<typename Consumer>
-struct last_key_wins : Consumer {
-    using Consumer::Consumer;
+tao::json::value
+parse(const std::string& input);
 
-    using Consumer::keys_;
-    using Consumer::stack_;
-    using Consumer::value;
-
-    void member()
-    {
-        Consumer::stack_.back().prepare_object()[Consumer::keys_.back()] = std::move(Consumer::value);
-        Consumer::keys_.pop_back();
-    }
-};
+std::string
+generate(const tao::json::value& object);
 } // namespace couchbase::utils::json

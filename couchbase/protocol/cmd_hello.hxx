@@ -17,6 +17,11 @@
 
 #pragma once
 
+#include <couchbase/io/mcbp_message.hxx>
+#include <couchbase/protocol/client_opcode.hxx>
+#include <couchbase/protocol/cmd_info.hxx>
+#include <couchbase/protocol/status.hxx>
+
 #include <couchbase/protocol/hello_feature.hxx>
 
 namespace couchbase::protocol
@@ -42,28 +47,7 @@ class hello_response_body
                std::uint16_t key_size,
                std::uint8_t extras_size,
                const std::vector<uint8_t>& body,
-               const cmd_info& /* info */)
-    {
-        Expects(header[1] == static_cast<uint8_t>(opcode));
-        if (status == protocol::status::success) {
-            std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
-            size_t value_size = body.size() - static_cast<std::size_t>(offset);
-            Expects(value_size % 2 == 0);
-            size_t num_features = value_size / 2;
-            supported_features_.reserve(num_features);
-            const auto* value = body.data() + offset;
-            for (size_t i = 0; i < num_features; i++) {
-                std::uint16_t field = 0;
-                std::memcpy(&field, value + i * 2, sizeof(std::uint16_t));
-                field = ntohs(field);
-                if (is_valid_hello_feature(field)) {
-                    supported_features_.push_back(static_cast<hello_feature>(field));
-                }
-            }
-            return true;
-        }
-        return false;
-    }
+               const cmd_info& info);
 };
 
 class hello_request_body
@@ -155,14 +139,7 @@ class hello_request_body
     }
 
   private:
-    void fill_body()
-    {
-        value_.resize(2 * features_.size());
-        for (std::size_t idx = 0; idx < features_.size(); idx++) {
-            value_[idx * 2] = 0; // we don't need this byte while feature codes fit the 8-bit
-            value_[idx * 2 + 1] = static_cast<uint8_t>(features_[idx]);
-        }
-    }
+    void fill_body();
 };
 
 } // namespace couchbase::protocol

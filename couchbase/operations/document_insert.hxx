@@ -17,10 +17,15 @@
 
 #pragma once
 
-#include <couchbase/document_id.hxx>
-#include <couchbase/protocol/cmd_insert.hxx>
-#include <couchbase/protocol/durability_level.hxx>
+#include <couchbase/error_context/key_value.hxx>
+#include <couchbase/io/mcbp_context.hxx>
 #include <couchbase/io/retry_context.hxx>
+#include <couchbase/protocol/client_request.hxx>
+#include <couchbase/timeout_defaults.hxx>
+
+#include <couchbase/protocol/durability_level.hxx>
+
+#include <couchbase/protocol/cmd_insert.hxx>
 
 namespace couchbase::operations
 {
@@ -46,32 +51,9 @@ struct insert_request {
     std::chrono::milliseconds timeout{ timeout_defaults::key_value_timeout };
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& /* context */) const
-    {
-        encoded.opaque(opaque);
-        encoded.partition(partition);
-        encoded.body().id(id);
-        encoded.body().expiry(expiry);
-        encoded.body().flags(flags);
-        encoded.body().content(value);
-        if (durability_level != protocol::durability_level::none) {
-            encoded.body().durability(durability_level, durability_timeout);
-        }
-        return {};
-    }
-};
+    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 
-insert_response
-make_response(error_context::key_value&& ctx, const insert_request& request, insert_request::encoded_response_type&& encoded)
-{
-    insert_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        response.cas = encoded.cas();
-        response.token = encoded.body().token();
-        response.token.partition_id = request.partition;
-        response.token.bucket_name = response.ctx.id.bucket;
-    }
-    return response;
-}
+    [[nodiscard]] insert_response make_response(error_context::key_value&& ctx, const encoded_response_type& encoded) const;
+};
 
 } // namespace couchbase::operations

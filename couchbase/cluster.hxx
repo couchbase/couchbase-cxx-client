@@ -23,14 +23,16 @@
 
 #include <asio/ssl.hpp>
 
-#include <couchbase/io/mcbp_session.hxx>
-#include <couchbase/io/http_session_manager.hxx>
-#include <couchbase/io/http_command.hxx>
 #include <couchbase/io/dns_client.hxx>
+#include <couchbase/io/http_command.hxx>
+#include <couchbase/io/http_session_manager.hxx>
+#include <couchbase/io/mcbp_command.hxx>
+#include <couchbase/io/mcbp_session.hxx>
+
 #include <couchbase/origin.hxx>
 #include <couchbase/bucket.hxx>
 #include <couchbase/operations.hxx>
-#include <couchbase/operations/document_query.hxx>
+#include <couchbase/operations/management/bucket_create.hxx>
 
 #include <couchbase/tracing/noop_tracer.hxx>
 #include <couchbase/tracing/threshold_logging_tracer.hxx>
@@ -41,54 +43,6 @@
 
 namespace couchbase
 {
-namespace
-{
-class ping_collector : public std::enable_shared_from_this<ping_collector>
-{
-    diag::ping_result res_;
-    std::function<void(diag::ping_result)> handler_;
-    std::atomic_int expected_{ 0 };
-    std::mutex mutex_{};
-
-  public:
-    ping_collector(std::string report_id, std::function<void(diag::ping_result)> handler)
-      : res_{ std::move(report_id), couchbase::sdk_id() }
-      , handler_(std::move(handler))
-    {
-    }
-
-    ~ping_collector()
-    {
-        invoke_handler();
-    }
-
-    [[nodiscard]] diag::ping_result& result()
-    {
-        return res_;
-    }
-
-    auto build_reporter()
-    {
-        expected_++;
-        return [self = this->shared_from_this()](diag::endpoint_ping_info&& info) {
-            std::scoped_lock lock(self->mutex_);
-            self->res_.services[info.type].emplace_back(info);
-            if (--self->expected_ == 0) {
-                self->invoke_handler();
-            }
-        };
-    }
-
-    void invoke_handler()
-    {
-        if (handler_ != nullptr) {
-            handler_(std::move(res_));
-            handler_ = nullptr;
-        }
-    }
-};
-} // namespace
-
 class cluster
 {
   public:
@@ -129,8 +83,8 @@ class cluster
             if (session_) {
                 session_->stop(io::retry_reason::do_not_retry);
             }
-            for (auto& bucket : buckets_) {
-                bucket.second->close();
+            for (auto& [name, bucket] : buckets_) {
+                bucket->close();
             }
             session_manager_->close();
             handler();
@@ -153,7 +107,7 @@ class cluster
             known_features = session_->supported_features();
         }
         auto b = std::make_shared<bucket>(id_, ctx_, tls_, tracer_, meter_, bucket_name, origin_, known_features);
-        b->bootstrap([this, handler = std::forward<Handler>(handler)](std::error_code ec, const configuration& config) mutable {
+        b->bootstrap([this, handler = std::forward<Handler>(handler)](std::error_code ec, const topology::configuration& config) mutable {
             if (!ec && !session_->supports_gcccp()) {
                 session_manager_->set_configuration(config, origin_.options());
             }
@@ -171,7 +125,7 @@ class cluster
             ctx.id = request.id;
             ctx.ec = error::common_errc::bucket_not_found;
             using response_type = typename Request::encoded_response_type;
-            return handler(operations::make_response(std::move(ctx), request, response_type{}));
+            return handler(request.make_response(std::move(ctx), response_type{}));
         }
         return bucket->second->execute(request, std::forward<Handler>(handler));
     }
@@ -183,7 +137,8 @@ class cluster
         if (!session) {
             typename Request::error_context_type ctx{};
             ctx.ec = error::common_errc::service_not_available;
-            return handler(operations::make_response(std::move(ctx), request, {}));
+            using response_type = typename Request::encoded_response_type;
+            return handler(request.make_response(std::move(ctx), response_type{}));
         }
         auto cmd = std::make_shared<operations::http_command<Request>>(ctx_, request, tracer_, meter_);
         cmd->send_to(session, [this, session, handler = std::forward<Handler>(handler)](typename Request::response_type resp) mutable {
@@ -199,7 +154,7 @@ class cluster
             report_id = std::make_optional(uuid::to_string(uuid::random()));
         }
         asio::post(asio::bind_executor(ctx_, [this, report_id, handler = std::forward<Handler>(handler)]() mutable {
-            diag::diagnostics_result res{ report_id.value(), couchbase::sdk_id() };
+            diag::diagnostics_result res{ report_id.value(), couchbase::meta::sdk_id() };
             if (session_) {
                 res.services[service_type::key_value].emplace_back(session_->diag_info());
             }
@@ -214,36 +169,7 @@ class cluster
     void ping(std::optional<std::string> report_id,
               std::optional<std::string> bucket_name,
               std::set<service_type> services,
-              std::function<void(diag::ping_result)> handler)
-    {
-        if (!report_id) {
-            report_id = std::make_optional(uuid::to_string(uuid::random()));
-        }
-        if (services.empty()) {
-            services = { service_type::key_value, service_type::view, service_type::query, service_type::search, service_type::analytics };
-        }
-        asio::post(asio::bind_executor(ctx_, [this, report_id, bucket_name, services, handler = std::move(handler)]() mutable {
-            auto collector = std::make_shared<ping_collector>(report_id.value(), std::move(handler));
-            if (bucket_name) {
-                if (services.find(service_type::key_value) != services.end()) {
-                    auto bucket = buckets_.find(bucket_name.value());
-                    if (bucket != buckets_.end()) {
-                        bucket->second->ping(collector);
-                    }
-                }
-            } else {
-                if (services.find(service_type::key_value) != services.end()) {
-                    if (session_) {
-                        session_->ping(collector->build_reporter());
-                    }
-                    for (auto& bucket : buckets_) {
-                        bucket.second->ping(collector);
-                    }
-                }
-                session_manager_->ping(services, collector, origin_.credentials());
-            }
-        }));
-    }
+              std::function<void(diag::ping_result)> handler);
 
   private:
     template<typename Handler>
@@ -334,38 +260,39 @@ class cluster
         } else {
             session_ = std::make_shared<io::mcbp_session>(id_, ctx_, origin_);
         }
-        session_->bootstrap([this, handler = std::forward<Handler>(handler)](std::error_code ec, const configuration& config) mutable {
-            if (!ec) {
-                if (origin_.options().network == "auto") {
-                    origin_.options().network = config.select_network(session_->bootstrap_hostname());
-                    if (origin_.options().network == "default") {
-                        spdlog::debug(R"({} detected network is "{}")", session_->log_prefix(), origin_.options().network);
-                    } else {
-                        spdlog::info(R"({} detected network is "{}")", session_->log_prefix(), origin_.options().network);
-                    }
-                }
-                if (origin_.options().network != "default") {
-                    origin::node_list nodes;
-                    nodes.reserve(config.nodes.size());
-                    for (const auto& address : config.nodes) {
-                        auto port = address.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0);
-                        if (port == 0) {
-                            continue;
-                        }
-                        origin::node_entry node;
-                        node.first = address.hostname_for(origin_.options().network);
-                        node.second = std::to_string(port);
-                        nodes.emplace_back(node);
-                    }
-                    origin_.set_nodes(nodes);
-                    spdlog::info("replace list of bootstrap nodes with addresses of alternative network \"{}\": [{}]",
-                                 origin_.options().network,
-                                 fmt::join(origin_.get_nodes(), ","));
-                }
-                session_manager_->set_configuration(config, origin_.options());
-            }
-            handler(ec);
-        });
+        session_->bootstrap(
+          [this, handler = std::forward<Handler>(handler)](std::error_code ec, const topology::configuration& config) mutable {
+              if (!ec) {
+                  if (origin_.options().network == "auto") {
+                      origin_.options().network = config.select_network(session_->bootstrap_hostname());
+                      if (origin_.options().network == "default") {
+                          spdlog::debug(R"({} detected network is "{}")", session_->log_prefix(), origin_.options().network);
+                      } else {
+                          spdlog::info(R"({} detected network is "{}")", session_->log_prefix(), origin_.options().network);
+                      }
+                  }
+                  if (origin_.options().network != "default") {
+                      origin::node_list nodes;
+                      nodes.reserve(config.nodes.size());
+                      for (const auto& address : config.nodes) {
+                          auto port = address.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0);
+                          if (port == 0) {
+                              continue;
+                          }
+                          origin::node_entry node;
+                          node.first = address.hostname_for(origin_.options().network);
+                          node.second = std::to_string(port);
+                          nodes.emplace_back(node);
+                      }
+                      origin_.set_nodes(nodes);
+                      spdlog::info("replace list of bootstrap nodes with addresses of alternative network \"{}\": [{}]",
+                                   origin_.options().network,
+                                   fmt::join(origin_.get_nodes(), ","));
+                  }
+                  session_manager_->set_configuration(config, origin_.options());
+              }
+              handler(ec);
+          });
     }
 
     std::string id_{ uuid::to_string(uuid::random()) };

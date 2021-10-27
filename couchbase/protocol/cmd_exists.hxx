@@ -17,10 +17,11 @@
 
 #pragma once
 
-#include <couchbase/protocol/unsigned_leb128.h>
-
-#include <couchbase/protocol/client_opcode.hxx>
 #include <couchbase/document_id.hxx>
+#include <couchbase/io/mcbp_message.hxx>
+#include <couchbase/protocol/client_opcode.hxx>
+#include <couchbase/protocol/cmd_info.hxx>
+#include <couchbase/protocol/status.hxx>
 
 namespace couchbase::protocol
 {
@@ -63,34 +64,7 @@ class exists_response_body
                std::uint16_t key_size,
                std::uint8_t extras_size,
                const std::vector<uint8_t>& body,
-               const cmd_info& /* info */)
-    {
-        Expects(header[1] == static_cast<uint8_t>(opcode));
-        if (status == protocol::status::success) {
-            using offset_type = std::vector<uint8_t>::difference_type;
-            offset_type offset = framing_extras_size + extras_size + key_size;
-
-            memcpy(&partition_id_, body.data() + offset, sizeof(partition_id_));
-            partition_id_ = ntohs(partition_id_);
-            offset += static_cast<offset_type>(sizeof(partition_id_));
-
-            std::uint16_t key_len{};
-            memcpy(&key_len, body.data() + offset, sizeof(key_len));
-            key_len = ntohs(key_len);
-            offset += static_cast<offset_type>(sizeof(key_len));
-
-            key_.resize(key_len);
-            memcpy(key_.data(), body.data() + offset, key_len);
-            offset += key_len;
-
-            status_ = body[static_cast<std::size_t>(offset)];
-            offset++;
-
-            memcpy(&cas_, body.data() + offset, sizeof(cas_));
-            cas_ = utils::byte_swap_64(cas_);
-        }
-        return false;
-    }
+               const cmd_info& info);
 };
 
 class exists_request_body
@@ -105,15 +79,7 @@ class exists_request_body
     std::vector<std::uint8_t> value_{};
 
   public:
-    void id(std::uint16_t partition_id, const document_id& id)
-    {
-        partition_id_ = partition_id;
-        key_ = id.key;
-        if (id.collection_uid) {
-            unsigned_leb128<uint32_t> encoded(*id.collection_uid);
-            key_.insert(0, encoded.get());
-        }
-    }
+    void id(std::uint16_t partition_id, const document_id& id);
 
     [[nodiscard]] const std::string& key() const
     {
@@ -148,22 +114,7 @@ class exists_request_body
     }
 
   private:
-    void fill_body()
-    {
-        std::vector<std::uint8_t>::size_type offset = 0;
-
-        value_.resize(2 * sizeof(std::uint16_t) + key_.size());
-
-        uint16_t field = htons(partition_id_);
-        memcpy(value_.data() + offset, &field, sizeof(field));
-        offset += sizeof(field);
-
-        field = htons(static_cast<uint16_t>(key_.size()));
-        memcpy(value_.data() + offset, &field, sizeof(field));
-        offset += sizeof(field);
-
-        std::memcpy(value_.data() + offset, key_.data(), key_.size());
-    }
+    void fill_body();
 };
 
 } // namespace couchbase::protocol

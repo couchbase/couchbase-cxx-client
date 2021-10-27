@@ -17,10 +17,11 @@
 
 #pragma once
 
-#include <couchbase/protocol/unsigned_leb128.h>
-
 #include <couchbase/document_id.hxx>
+#include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/protocol/client_opcode.hxx>
+#include <couchbase/protocol/cmd_info.hxx>
+#include <couchbase/protocol/status.hxx>
 
 namespace couchbase::protocol
 {
@@ -30,17 +31,13 @@ class mcbp_noop_response_body
   public:
     static const inline client_opcode opcode = client_opcode::noop;
 
-    bool parse(protocol::status /* status */,
+    bool parse(protocol::status status,
                const header_buffer& header,
-               std::uint8_t /* framing_extras_size */,
-               std::uint16_t /* key_size */,
-               std::uint8_t /* extras_size */,
-               const std::vector<uint8_t>& /* body */,
-               const cmd_info& /* info */)
-    {
-        Expects(header[1] == static_cast<uint8_t>(opcode));
-        return false;
-    }
+               std::uint8_t framing_extras_size,
+               std::uint16_t key_size,
+               std::uint8_t extras_size,
+               const std::vector<uint8_t>& body,
+               const cmd_info& info);
 };
 
 class mcbp_noop_request_body

@@ -18,6 +18,7 @@
 #pragma once
 
 #include <cstring>
+#include <optional>
 
 #include <asio/ip/udp.hpp>
 #include <couchbase/io/dns_message.hxx>

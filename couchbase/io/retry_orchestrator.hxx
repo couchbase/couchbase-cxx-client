@@ -43,7 +43,7 @@ cap_duration(std::chrono::milliseconds uncapped, std::shared_ptr<Command> comman
     return uncapped;
 }
 
-std::chrono::milliseconds
+inline std::chrono::milliseconds
 controlled_backoff(int retry_attempts)
 {
     switch (retry_attempts) {

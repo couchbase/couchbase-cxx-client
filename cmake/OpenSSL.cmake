@@ -15,7 +15,7 @@ else()
     message(STATUS "OPENSSL_INCLUDE_DIR: ${OPENSSL_INCLUDE_DIR}")
     message(STATUS "OPENSSL_LIBRARIES: ${OPENSSL_LIBRARIES}")
   else()
-    message(FATAL_ERROR "Cannot build couchbase extension without OpenSSL")
+    message(FATAL_ERROR "Cannot build Couchbase C++ SDK without OpenSSL")
   endif()
 endif()
 

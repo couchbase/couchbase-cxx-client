@@ -64,9 +64,9 @@ class bucket : public std::enable_shared_from_this<bucket>
     /**
      * copies nodes from rhs that are not in lhs to output vector
      */
-    static void diff_nodes(const std::vector<configuration::node>& lhs,
-                           const std::vector<configuration::node>& rhs,
-                           std::vector<configuration::node>& output)
+    static void diff_nodes(const std::vector<topology::configuration::node>& lhs,
+                           const std::vector<topology::configuration::node>& rhs,
+                           std::vector<topology::configuration::node>& output)
     {
         for (const auto& re : rhs) {
             bool known = false;
@@ -82,7 +82,7 @@ class bucket : public std::enable_shared_from_this<bucket>
         }
     }
 
-    void update_config(const configuration& config)
+    void update_config(const topology::configuration& config)
     {
         if (!config_) {
             spdlog::debug("{} initialize configuration rev={}", log_prefix_, config.rev_str());
@@ -92,8 +92,8 @@ class bucket : public std::enable_shared_from_this<bucket>
             return;
         }
 
-        std::vector<configuration::node> added{};
-        std::vector<configuration::node> removed{};
+        std::vector<topology::configuration::node> added{};
+        std::vector<topology::configuration::node> removed{};
         if (config_) {
             diff_nodes(config_->nodes, config.nodes, added);
             diff_nodes(config.nodes, config_->nodes, removed);
@@ -154,10 +154,11 @@ class bucket : public std::enable_shared_from_this<bucket>
                 spdlog::debug(
                   R"({} rev={}, add session="{}", address="{}:{}")", log_prefix_, config.rev_str(), session->id(), hostname, port);
                 session->bootstrap(
-                  [self = shared_from_this(), session](std::error_code err, const configuration& cfg) {
+                  [self = shared_from_this(), session](std::error_code err, const topology::configuration& cfg) {
                       if (!err) {
                           self->update_config(cfg);
-                          session->on_configuration_update([self](const configuration& new_config) { self->update_config(new_config); });
+                          session->on_configuration_update(
+                            [self](const topology::configuration& new_config) { self->update_config(new_config); });
                           session->on_stop([index = session->index(), self](io::retry_reason reason) {
                               if (reason == io::retry_reason::socket_closed_while_in_flight) {
                                   self->restart_node(index);
@@ -194,10 +195,10 @@ class bucket : public std::enable_shared_from_this<bucket>
         spdlog::debug(
           R"({} restarting session idx={}, id=("{}" -> "{}"), address="{}")", log_prefix_, index, old_id, session->id(), hostname, port);
         session->bootstrap(
-          [self = shared_from_this(), session](std::error_code err, const configuration& config) {
+          [self = shared_from_this(), session](std::error_code err, const topology::configuration& config) {
               if (!err) {
                   self->update_config(config);
-                  session->on_configuration_update([self](const configuration& new_config) { self->update_config(new_config); });
+                  session->on_configuration_update([self](const topology::configuration& new_config) { self->update_config(new_config); });
               }
           },
           true);
@@ -214,10 +215,10 @@ class bucket : public std::enable_shared_from_this<bucket>
             new_session = std::make_shared<io::mcbp_session>(client_id_, ctx_, origin_, name_, known_features_);
         }
         new_session->bootstrap([self = shared_from_this(), new_session, h = std::forward<Handler>(handler)](
-                                 std::error_code ec, const configuration& cfg) mutable {
+                                 std::error_code ec, const topology::configuration& cfg) mutable {
             if (!ec) {
                 size_t this_index = new_session->index();
-                new_session->on_configuration_update([self](const configuration& config) { self->update_config(config); });
+                new_session->on_configuration_update([self](const topology::configuration& config) { self->update_config(config); });
                 new_session->on_stop([this_index, self](io::retry_reason reason) {
                     if (reason == io::retry_reason::socket_closed_while_in_flight) {
                         self->restart_node(this_index);
@@ -270,7 +271,7 @@ class bucket : public std::enable_shared_from_this<bucket>
                 }
             }
             ctx.enhanced_error_info = resp.error_info();
-            handler(make_response(std::move(ctx), cmd->request, std::move(resp)));
+            handler(cmd->request.make_response(std::move(ctx), resp));
         });
         if (config_) {
             map_and_send(cmd);
@@ -377,7 +378,7 @@ class bucket : public std::enable_shared_from_this<bucket>
     std::string name_;
     origin origin_;
 
-    std::optional<configuration> config_{};
+    std::optional<topology::configuration> config_{};
     std::vector<protocol::hello_feature> known_features_;
 
     std::queue<std::function<void()>> deferred_commands_{};

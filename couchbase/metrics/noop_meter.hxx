@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "meter.hxx"
+#include <couchbase/metrics/meter.hxx>
 
 namespace couchbase::metrics
 {
@@ -27,13 +27,14 @@ class noop_value_recorder : public value_recorder
   public:
     void record_value(std::int64_t /* value */) override
     {
+        /* do nothing */
     }
 };
 
 class noop_meter : public meter
 {
   public:
-    value_recorder* get_value_recorder(const std::string& /* name */, const std::map<std::string, std::string>& /* tags */)
+    value_recorder* get_value_recorder(const std::string& /* name */, const std::map<std::string, std::string>& /* tags */) override
     {
         static noop_value_recorder instance{};
         return &instance;

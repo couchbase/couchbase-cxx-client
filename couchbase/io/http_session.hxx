@@ -19,21 +19,27 @@
 
 #include <memory>
 #include <utility>
+#include <list>
 
 #include <spdlog/spdlog.h>
 
-#include <tao/json.hpp>
+#include <tao/json/forward.hpp>
 
 #include <asio.hpp>
+
 #include <couchbase/platform/uuid.h>
+#include <couchbase/platform/base64.h>
+#include <couchbase/meta/version.hxx>
 
 #include <couchbase/errors.hxx>
-#include <couchbase/version.hxx>
+#include <couchbase/origin.hxx>
+#include <couchbase/diagnostics.hxx>
 
+#include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
 #include <couchbase/io/http_parser.hxx>
-#include <couchbase/platform/base64.h>
+#include <couchbase/io/streams.hxx>
 #include <couchbase/timeout_defaults.hxx>
 
 namespace couchbase::io
@@ -126,7 +132,7 @@ class http_session : public std::enable_shared_from_this<http_session>
       , credentials_(credentials)
       , hostname_(hostname)
       , service_(service)
-      , user_agent_(fmt::format("{}; client/{}; session/{}; {}", couchbase::sdk_id(), client_id_, id_, COUCHBASE_CXX_CLIENT_SYSTEM))
+      , user_agent_(fmt::format("{}; client/{}; session/{}; {}", couchbase::meta::sdk_id(), client_id_, id_, couchbase::meta::os()))
       , info_(client_id_, id_)
       , http_ctx_(std::move(http_ctx))
     {
@@ -151,7 +157,7 @@ class http_session : public std::enable_shared_from_this<http_session>
       , credentials_(credentials)
       , hostname_(hostname)
       , service_(service)
-      , user_agent_(fmt::format("{}; client/{}; session/{}; {}", couchbase::sdk_id(), client_id_, id_, COUCHBASE_CXX_CLIENT_SYSTEM))
+      , user_agent_(fmt::format("{}; client/{}; session/{}; {}", couchbase::meta::sdk_id(), client_id_, id_, couchbase::meta::os()))
       , info_(client_id_, id_)
       , http_ctx_(std::move(http_ctx))
     {

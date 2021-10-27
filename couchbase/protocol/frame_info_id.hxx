@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <spdlog/fmt/fmt.h>
+
 namespace couchbase::protocol
 {
 enum class request_frame_info_id : uint8_t {

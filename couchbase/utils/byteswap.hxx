@@ -16,6 +16,9 @@
  */
 
 #pragma once
+#ifndef WIN32
+#include <arpa/inet.h>
+#endif
 
 namespace couchbase::utils
 {

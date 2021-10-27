@@ -19,47 +19,22 @@
 
 #include <gsl/assert>
 
-#include <tao/json.hpp>
-#include <tao/json/contrib/traits.hpp>
-
+#include <couchbase/io/mcbp_message.hxx>
+#include <couchbase/protocol/client_opcode.hxx>
+#include <couchbase/protocol/cmd_info.hxx>
+#include <couchbase/protocol/datatype.hxx>
+#include <couchbase/protocol/enhanced_error_info.hxx>
+#include <couchbase/protocol/frame_info_id.hxx>
 #include <couchbase/protocol/magic.hxx>
 #include <couchbase/protocol/status.hxx>
-#include <couchbase/protocol/datatype.hxx>
-#include <couchbase/protocol/cmd_info.hxx>
-#include <couchbase/protocol/frame_info_id.hxx>
-#include <couchbase/protocol/enhanced_error_info.hxx>
 #include <couchbase/utils/byteswap.hxx>
+#include <couchbase/utils/json.hxx>
 
 namespace couchbase::protocol
 {
 
 double
-parse_server_duration_us(const io::mcbp_message& msg)
-{
-    if (msg.header.magic != static_cast<std::uint8_t>(magic::alt_client_response)) {
-        return 0;
-    }
-    std::uint8_t framing_extras_size = static_cast<std::uint8_t>(msg.header.keylen & 0xfU);
-    if (framing_extras_size == 0) {
-        return 0;
-    }
-    std::size_t offset = 0;
-    while (offset < framing_extras_size) {
-        std::uint8_t frame_size = static_cast<std::uint8_t>(msg.body[offset] & 0xfU);
-        std::uint8_t frame_id = static_cast<std::uint8_t>((static_cast<std::uint32_t>(msg.body[offset]) >> 4U) & 0xfU);
-        offset++;
-        if (frame_id == static_cast<std::uint8_t>(response_frame_info_id::server_duration)) {
-            if (frame_size == 2 && framing_extras_size - offset >= frame_size) {
-                std::uint16_t encoded_duration{};
-                std::memcpy(&encoded_duration, msg.body.data() + offset, sizeof(encoded_duration));
-                encoded_duration = ntohs(encoded_duration);
-                return std::pow(encoded_duration, 1.74) / 2;
-            }
-        }
-        offset += frame_size;
-    }
-    return 0;
-}
+parse_server_duration_us(const io::mcbp_message& msg);
 
 template<typename Body>
 class client_response
@@ -84,9 +59,9 @@ class client_response
   public:
     client_response() = default;
     explicit client_response(io::mcbp_message&& msg)
+      : header_(msg.header_data())
+      , data_(std::move(msg.body))
     {
-        header_ = msg.header_data();
-        data_ = std::move(msg.body);
         verify_header();
         parse_body();
     }
@@ -117,6 +92,11 @@ class client_response
     }
 
     Body& body()
+    {
+        return body_;
+    }
+
+    [[nodiscard]] const Body& body() const
     {
         return body_;
     }
@@ -184,15 +164,15 @@ class client_response
         parse_framing_extras();
         bool parsed = body_.parse(status_, header_, framing_extras_size_, key_size_, extras_size_, data_, info_);
         if (status_ != protocol::status::success && !parsed && has_json_datatype(data_type_)) {
-            auto error = tao::json::from_string(std::string(data_.begin() + framing_extras_size_ + extras_size_ + key_size_, data_.end()));
+            auto error = utils::json::parse(std::string(data_.begin() + framing_extras_size_ + extras_size_ + key_size_, data_.end()));
             if (error.is_object()) {
                 auto& err_obj = error["error"];
                 if (err_obj.is_object()) {
                     enhanced_error_info err{};
-                    if (auto& ref = err_obj["ref"]; ref.is_string()) {
+                    if (const auto& ref = err_obj["ref"]; ref.is_string()) {
                         err.reference = ref.get_string();
                     }
-                    if (auto& ctx = err_obj["context"]; ctx.is_string()) {
+                    if (const auto& ctx = err_obj["context"]; ctx.is_string()) {
                         err.context = ctx.get_string();
                     }
                     error_.emplace(err);
