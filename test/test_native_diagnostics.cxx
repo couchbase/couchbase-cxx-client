@@ -351,10 +351,7 @@ TEST_CASE("native: fetch diagnostics after N1QL query", "[native]")
     }
     {
         couchbase::operations::query_request req{ "SELECT 'hello, couchbase' AS greetings" };
-        auto barrier = std::make_shared<std::promise<couchbase::operations::query_response>>();
-        auto f = barrier->get_future();
-        cluster.execute_http(req, [barrier](couchbase::operations::query_response&& resp) mutable { barrier->set_value(resp); });
-        auto resp = f.get();
+        auto resp = execute_http(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
         INFO("rows.size() =" << resp.payload.rows.size());
