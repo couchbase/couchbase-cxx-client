@@ -33,6 +33,7 @@ struct mcbp_noop_response {
 };
 
 struct mcbp_noop_request {
+    using response_type = mcbp_noop_response;
     using encoded_request_type = protocol::client_request<protocol::mcbp_noop_request_body>;
     using encoded_response_type = protocol::client_response<protocol::mcbp_noop_response_body>;
 

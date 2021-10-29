@@ -37,6 +37,7 @@ struct insert_response {
 };
 
 struct insert_request {
+    using response_type = insert_response;
     using encoded_request_type = protocol::client_request<protocol::insert_request_body>;
     using encoded_response_type = protocol::client_response<protocol::insert_response_body>;
 

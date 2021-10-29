@@ -38,6 +38,7 @@ struct increment_response {
 };
 
 struct increment_request {
+    using response_type = increment_response;
     using encoded_request_type = protocol::client_request<protocol::increment_request_body>;
     using encoded_response_type = protocol::client_response<protocol::increment_response_body>;
 

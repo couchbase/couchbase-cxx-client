@@ -38,6 +38,7 @@ struct decrement_response {
 };
 
 struct decrement_request {
+    using response_type = decrement_response;
     using encoded_request_type = protocol::client_request<protocol::decrement_request_body>;
     using encoded_response_type = protocol::client_response<protocol::decrement_response_body>;
 

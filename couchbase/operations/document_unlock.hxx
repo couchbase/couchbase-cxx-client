@@ -34,6 +34,7 @@ struct unlock_response {
 };
 
 struct unlock_request {
+    using response_type = unlock_response;
     using encoded_request_type = protocol::client_request<protocol::unlock_request_body>;
     using encoded_response_type = protocol::client_response<protocol::unlock_response_body>;
 

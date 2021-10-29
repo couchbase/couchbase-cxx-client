@@ -47,6 +47,7 @@ struct mutate_in_response {
 };
 
 struct mutate_in_request {
+    using response_type = mutate_in_response;
     using encoded_request_type = protocol::client_request<protocol::mutate_in_request_body>;
     using encoded_response_type = protocol::client_response<protocol::mutate_in_response_body>;
 

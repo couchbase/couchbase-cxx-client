@@ -49,10 +49,7 @@ TEST_CASE("native: durable operations", "[native]")
         };
         couchbase::operations::upsert_request req{ id, tao::json::to_string(value) };
         req.durability_level = couchbase::protocol::durability_level::majority_and_persist_to_active;
-        auto barrier = std::make_shared<std::promise<couchbase::operations::upsert_response>>();
-        auto f = barrier->get_future();
-        cluster.execute(req, [barrier](couchbase::operations::upsert_response resp) mutable { barrier->set_value(std::move(resp)); });
-        auto resp = f.get();
+        auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.cas != 0);
@@ -64,10 +61,7 @@ TEST_CASE("native: durable operations", "[native]")
         };
         couchbase::operations::replace_request req{ id, tao::json::to_string(value) };
         req.durability_level = couchbase::protocol::durability_level::majority_and_persist_to_active;
-        auto barrier = std::make_shared<std::promise<couchbase::operations::replace_response>>();
-        auto f = barrier->get_future();
-        cluster.execute(req, [barrier](couchbase::operations::replace_response resp) mutable { barrier->set_value(std::move(resp)); });
-        auto resp = f.get();
+        auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.cas != 0);
@@ -77,10 +71,7 @@ TEST_CASE("native: durable operations", "[native]")
         couchbase::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::dict_upsert, false, false, false, "baz", "42");
         req.durability_level = couchbase::protocol::durability_level::majority_and_persist_to_active;
-        auto barrier = std::make_shared<std::promise<couchbase::operations::mutate_in_response>>();
-        auto f = barrier->get_future();
-        cluster.execute(req, [barrier](couchbase::operations::mutate_in_response resp) mutable { barrier->set_value(std::move(resp)); });
-        auto resp = f.get();
+        auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.cas != 0);
@@ -88,10 +79,7 @@ TEST_CASE("native: durable operations", "[native]")
     }
     {
         couchbase::operations::get_request req{ id };
-        auto barrier = std::make_shared<std::promise<couchbase::operations::get_response>>();
-        auto f = barrier->get_future();
-        cluster.execute(req, [barrier](couchbase::operations::get_response resp) mutable { barrier->set_value(std::move(resp)); });
-        auto resp = f.get();
+        auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.cas != 0);
@@ -100,10 +88,7 @@ TEST_CASE("native: durable operations", "[native]")
     {
         couchbase::operations::remove_request req{ id };
         req.durability_level = couchbase::protocol::durability_level::majority_and_persist_to_active;
-        auto barrier = std::make_shared<std::promise<couchbase::operations::remove_response>>();
-        auto f = barrier->get_future();
-        cluster.execute(req, [barrier](couchbase::operations::remove_response resp) mutable { barrier->set_value(std::move(resp)); });
-        auto resp = f.get();
+        auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.cas != 0);

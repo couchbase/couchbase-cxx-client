@@ -37,6 +37,7 @@ struct remove_response {
 };
 
 struct remove_request {
+    using response_type = remove_response;
     using encoded_request_type = protocol::client_request<protocol::remove_request_body>;
     using encoded_response_type = protocol::client_response<protocol::remove_response_body>;
 

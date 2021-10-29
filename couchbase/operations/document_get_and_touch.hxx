@@ -36,6 +36,7 @@ struct get_and_touch_response {
 };
 
 struct get_and_touch_request {
+    using response_type = get_and_touch_response;
     using encoded_request_type = protocol::client_request<protocol::get_and_touch_request_body>;
     using encoded_response_type = protocol::client_response<protocol::get_and_touch_response_body>;
 
