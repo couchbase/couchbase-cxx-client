@@ -32,15 +32,14 @@ struct traits<couchbase::error_map> {
         result.id = couchbase::uuid::random();
         result.version = v.at("revision").template as<std::uint16_t>();
         result.revision = v.at("revision").template as<std::uint16_t>();
-        for (const auto& j : v.at("errors").get_object()) {
+        for (const auto& [code, definition] : v.at("errors").get_object()) {
             couchbase::error_map::error_info ei;
-            ei.code = gsl::narrow_cast<std::uint16_t>(std::stoul(j.first, nullptr, 16));
-            const auto& info = j.second.get_object();
+            ei.code = gsl::narrow_cast<std::uint16_t>(std::stoul(code, nullptr, 16));
+            const auto& info = definition.get_object();
             ei.name = info.at("name").get_string();
             ei.description = info.at("desc").get_string();
-            for (const auto& a : info.at("attrs").get_array()) {
-                const std::string& attr_val = a.get_string();
-                if (attr_val == "success") {
+            for (const auto& attribute : info.at("attrs").get_array()) {
+                if (const std::string& attr_val = attribute.get_string(); attr_val == "success") {
                     ei.attributes.insert(couchbase::error_map::attribute::success);
                 } else if (attr_val == "item-only") {
                     ei.attributes.insert(couchbase::error_map::attribute::item_only);
@@ -74,6 +73,8 @@ struct traits<couchbase::error_map> {
                     ei.attributes.insert(couchbase::error_map::attribute::item_locked);
                 } else if (attr_val == "item-deleted") {
                     ei.attributes.insert(couchbase::error_map::attribute::item_deleted);
+                } else if (attr_val == "rate-limit") {
+                    ei.attributes.insert(couchbase::error_map::attribute::rate_limit);
                 } else {
                     spdlog::warn(R"(skipping unknown attribute "{}" in error map for code={} and name="{}")", attr_val, ei.code, ei.name);
                 }

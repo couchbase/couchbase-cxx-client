@@ -31,6 +31,8 @@ enum class status : std::uint16_t {
     delta_bad_value = 0x06,
     not_my_vbucket = 0x07,
     no_bucket = 0x08,
+    dcp_stream_not_found = 0x0a,
+    opaque_no_match = 0x0b,
     locked = 0x09,
     auth_stale = 0x1f,
     auth_error = 0x20,
@@ -39,6 +41,11 @@ enum class status : std::uint16_t {
     rollback = 0x23,
     no_access = 0x24,
     not_initialized = 0x25,
+    rate_limited_network_ingress = 0x30,
+    rate_limited_network_egress = 0x31,
+    rate_limited_max_connections = 0x32,
+    rate_limited_max_commands = 0x33,
+    scope_size_limit_exceeded = 0x34,
     unknown_frame_info = 0x80,
     unknown_command = 0x81,
     no_memory = 0x82,
@@ -79,6 +86,9 @@ enum class status : std::uint16_t {
     subdoc_xattr_cannot_modify_vattr = 0xd2,
     subdoc_multi_path_failure_deleted = 0xd3,
     subdoc_invalid_xattr_order = 0xd4,
+    subdoc_xattr_unknown_vattr_macro = 0xd5,
+    subdoc_can_only_revive_deleted_documents = 0xd6,
+    subdoc_deleted_document_cannot_have_value = 0xd7,
 };
 
 constexpr bool
@@ -142,6 +152,16 @@ is_valid_status(uint16_t code)
         case status::subdoc_xattr_cannot_modify_vattr:
         case status::subdoc_multi_path_failure_deleted:
         case status::subdoc_invalid_xattr_order:
+        case status::dcp_stream_not_found:
+        case status::opaque_no_match:
+        case status::rate_limited_network_ingress:
+        case status::rate_limited_network_egress:
+        case status::rate_limited_max_connections:
+        case status::rate_limited_max_commands:
+        case status::scope_size_limit_exceeded:
+        case status::subdoc_xattr_unknown_vattr_macro:
+        case status::subdoc_can_only_revive_deleted_documents:
+        case status::subdoc_deleted_document_cannot_have_value:
             return true;
     }
     return false;
@@ -329,6 +349,36 @@ struct fmt::formatter<couchbase::protocol::status> : formatter<string_view> {
                 break;
             case couchbase::protocol::status::subdoc_invalid_xattr_order:
                 name = "subdoc_invalid_xattr_order (0xd4)";
+                break;
+            case couchbase::protocol::status::dcp_stream_not_found:
+                name = "dcp_stream_not_found (0x0a)";
+                break;
+            case couchbase::protocol::status::opaque_no_match:
+                name = "opaque_no_match (0x0b)";
+                break;
+            case couchbase::protocol::status::rate_limited_network_ingress:
+                name = "rate_limited_network_ingress (0x30)";
+                break;
+            case couchbase::protocol::status::rate_limited_network_egress:
+                name = "opaque_no_match (0x31)";
+                break;
+            case couchbase::protocol::status::rate_limited_max_connections:
+                name = "rate_limited_max_connections (0x32)";
+                break;
+            case couchbase::protocol::status::rate_limited_max_commands:
+                name = "rate_limited_max_commands (0x33)";
+                break;
+            case couchbase::protocol::status::scope_size_limit_exceeded:
+                name = "scope_size_limit_exceeded (0x34)";
+                break;
+            case couchbase::protocol::status::subdoc_xattr_unknown_vattr_macro:
+                name = "subdoc_xattr_unknown_vattr_macro (0xd5)";
+                break;
+            case couchbase::protocol::status::subdoc_can_only_revive_deleted_documents:
+                name = "subdoc_can_only_revive_deleted_documents (0xd6)";
+                break;
+            case couchbase::protocol::status::subdoc_deleted_document_cannot_have_value:
+                name = "subdoc_deleted_document_cannot_have_value (0xd7)";
                 break;
         }
         return formatter<string_view>::format(name, ctx);

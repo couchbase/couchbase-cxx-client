@@ -867,6 +867,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             case protocol::status::invalid:
             case protocol::status::xattr_invalid:
             case protocol::status::subdoc_invalid_combo:
+            case protocol::status::subdoc_deleted_document_cannot_have_value:
                 return error::common_errc::invalid_argument;
 
             case protocol::status::delta_bad_value:
@@ -955,6 +956,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                 return error::key_value_errc::xattr_invalid_key_combo;
 
             case protocol::status::subdoc_xattr_unknown_macro:
+            case protocol::status::subdoc_xattr_unknown_vattr_macro:
                 return error::key_value_errc::xattr_unknown_macro;
 
             case protocol::status::subdoc_xattr_unknown_vattr:
@@ -962,6 +964,16 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
 
             case protocol::status::subdoc_xattr_cannot_modify_vattr:
                 return error::key_value_errc::xattr_cannot_modify_virtual_attribute;
+
+            case protocol::status::subdoc_can_only_revive_deleted_documents:
+                return error::key_value_errc::cannot_revive_living_document;
+
+            case protocol::status::rate_limited_network_ingress:
+            case protocol::status::rate_limited_network_egress:
+            case protocol::status::rate_limited_max_connections:
+            case protocol::status::rate_limited_max_commands:
+            case protocol::status::scope_size_limit_exceeded:
+                return error::common_errc::rate_limiting_failure;
 
             case protocol::status::subdoc_invalid_xattr_order:
             case protocol::status::not_my_vbucket:
@@ -973,6 +985,8 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             case protocol::status::cannot_apply_collections_manifest:
             case protocol::status::collections_manifest_is_ahead:
             case protocol::status::dcp_stream_id_invalid:
+            case protocol::status::dcp_stream_not_found:
+            case protocol::status::opaque_no_match:
                 break;
         }
         // FIXME: use error map here

@@ -102,6 +102,42 @@ enum class common_errc {
 
     /// Raised when decoding of the data into the user object failed
     decoding_failure,
+
+    /**
+     * Raised when a service decides that the caller must be rate limited due to exceeding a rate threshold of some sort.
+     *
+     * * KeyValue
+     *   0x30 RateLimitedNetworkIngress -> NetworkIngressRateLimitReached
+     *   0x31 RateLimitedNetworkEgress -> NetworkEgressRateLimitReached
+     *   0x32 RateLimitedMaxConnections -> MaximumConnectionsReached
+     *   0x33 RateLimitedMaxCommands -> RequestRateLimitReached
+     *
+     * * Cluster Manager (body check tbd)
+     *   HTTP 429, Body contains "Limit(s) exceeded [num_concurrent_requests]" -> ConcurrentRequestLimitReached
+     *   HTTP 429, Body contains "Limit(s) exceeded [ingress]" -> NetworkIngressRateLimitReached
+     *   HTTP 429, Body contains "Limit(s) exceeded [egress]" -> NetworkEgressRateLimitReached
+     *   Note: when multiple user limits are exceeded the array would contain all the limits exceeded, as "Limit(s) exceeded
+     *   [num_concurrent_requests,egress]"
+     *
+     * * Query
+     *   Code 1191, Message E_SERVICE_USER_REQUEST_EXCEEDED -> RequestRateLimitReached
+     *   Code 1192, Message E_SERVICE_USER_REQUEST_RATE_EXCEEDED -> ConcurrentRequestLimitReached
+     *   Code 1193, Message E_SERVICE_USER_REQUEST_SIZE_EXCEEDED -> NetworkIngressRateLimitReached
+     *   Code 1194, Message E_SERVICE_USER_RESULT_SIZE_EXCEEDED -> NetworkEgressRateLimitReached
+     *
+     * * Search
+     *   HTTP 429, {"status": "fail", "error": "num_concurrent_requests, value >= limit"} -> ConcurrentRequestLimitReached
+     *   HTTP 429, {"status": "fail", "error": "num_queries_per_min, value >= limit"}: -> RequestRateLimitReached
+     *   HTTP 429, {"status": "fail", "error": "ingress_mib_per_min >= limit"} -> NetworkIngressRateLimitReached
+     *   HTTP 429, {"status": "fail", "error": "egress_mib_per_min >= limit"} -> NetworkEgressRateLimitReached
+     *
+     * * Analytics
+     *   Not applicable at the moment.
+     *
+     * * Views
+     *   Not applicable.
+     */
+    rate_limiting_failure,
 };
 
 /// Errors for related to KeyValue service (kv_engine)
@@ -208,6 +244,10 @@ enum class key_value_errc {
     /// A sub-document operation attempts to modify a virtual attribute.
     /// KV Code: 0xd2
     xattr_cannot_modify_virtual_attribute,
+
+    /// Only deleted document could be revived
+    /// KV Code: 0xd6
+    cannot_revive_living_document,
 };
 
 /// Errors related to Query service (N1QL)
@@ -360,6 +400,8 @@ struct common_error_category : std::error_category {
                 return "index_not_found";
             case common_errc::index_exists:
                 return "index_exists";
+            case common_errc::rate_limiting_failure:
+                return "rate_limiting_failure";
         }
         return "FIXME: unknown error code common (recompile with newer library)";
     }
@@ -431,6 +473,8 @@ struct key_value_error_category : std::error_category {
                 return "xattr_unknown_virtual_attribute";
             case key_value_errc::xattr_cannot_modify_virtual_attribute:
                 return "xattr_cannot_modify_virtual_attribute";
+            case key_value_errc::cannot_revive_living_document:
+                return "cannot_revive_living_document";
         }
         return "FIXME: unknown error code key_value (recompile with newer library)";
     }

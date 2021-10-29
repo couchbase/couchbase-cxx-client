@@ -57,7 +57,7 @@ class get_error_map_request_body
     static const inline client_opcode opcode = client_opcode::get_error_map;
 
   private:
-    std::uint16_t version_{ 1 };
+    std::uint16_t version_{ 2 };
     std::vector<std::uint8_t> value_;
 
   public:

@@ -25,10 +25,14 @@
 namespace couchbase
 {
 struct error_map {
+    /**
+     * This enum defines known attributes, that could be associated with the error code in the error map.
+     * Complete list could be found at https://github.com/couchbase/kv_engine/blob/master/docs/ErrorMap.md#error-attributes.
+     */
     enum class attribute {
         /**
-         * The operation was successful for those situations where the error code is indicating successful (i.e. subdoc operations carried
-         * out on a deleted document)
+         * The operation was successful for those situations where the error code is indicating successful (i.e. subdocument operations
+         * carried out on a deleted document)
          */
         success,
 
@@ -109,7 +113,7 @@ struct error_map {
         auto_retry,
 
         /**
-         * This attribute specifies that the requested item is currently locked.
+         * This attribute means that the error is related to operating on a locked document.
          */
         item_locked,
 
@@ -117,6 +121,11 @@ struct error_map {
          * This attribute means that the error is related to operating on a soft-deleted document.
          */
         item_deleted,
+
+        /**
+         * The error is related to rate limitation for the client (version 2)
+         */
+        rate_limit,
     };
 
     struct error_info {
@@ -195,6 +204,9 @@ struct fmt::formatter<couchbase::error_map::attribute> : formatter<string_view> 
                 break;
             case couchbase::error_map::attribute::item_deleted:
                 name = "item-deleted";
+                break;
+            case couchbase::error_map::attribute::rate_limit:
+                name = "rate-limit";
                 break;
         }
         return formatter<string_view>::format(name, ctx);
