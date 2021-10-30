@@ -37,10 +37,7 @@ TEST_CASE("native: trivial non-data query", "[native]")
 
     {
         couchbase::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
-        auto barrier = std::make_shared<std::promise<couchbase::operations::query_response>>();
-        auto f = barrier->get_future();
-        cluster.execute_http(req, [barrier](couchbase::operations::query_response resp) mutable { barrier->set_value(resp); });
-        auto resp = f.get();
+        auto resp = execute_http(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
     }

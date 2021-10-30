@@ -47,21 +47,13 @@ TEST_CASE("native: bucket management", "[native]")
     {
         couchbase::operations::management::bucket_create_request req;
         req.bucket.name = bucket_name;
-        auto barrier = std::make_shared<std::promise<couchbase::operations::management::bucket_create_response>>();
-        auto f = barrier->get_future();
-        cluster.execute_http(
-          req, [barrier](couchbase::operations::management::bucket_create_response resp) mutable { barrier->set_value(std::move(resp)); });
-        auto resp = f.get();
+        auto resp = execute_http(cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
     {
         couchbase::operations::management::bucket_get_all_request req;
-        auto barrier = std::make_shared<std::promise<couchbase::operations::management::bucket_get_all_response>>();
-        auto f = barrier->get_future();
-        cluster.execute_http(
-          req, [barrier](couchbase::operations::management::bucket_get_all_response resp) mutable { barrier->set_value(std::move(resp)); });
-        auto resp = f.get();
+        auto resp = execute_http(cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(!resp.buckets.empty());
         auto known_buckets =
@@ -71,22 +63,13 @@ TEST_CASE("native: bucket management", "[native]")
 
     {
         couchbase::operations::management::bucket_drop_request req{ bucket_name };
-        auto barrier = std::make_shared<std::promise<couchbase::operations::management::bucket_drop_response>>();
-        auto f = barrier->get_future();
-        cluster.execute_http(
-          req, [barrier](couchbase::operations::management::bucket_drop_response resp) mutable { barrier->set_value(std::move(resp)); });
-        auto resp = f.get();
+        auto resp = execute_http(cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
     {
         couchbase::operations::management::bucket_get_all_request req;
-        auto barrier = std::make_shared<std::promise<couchbase::operations::management::bucket_get_all_response>>();
-        auto f = barrier->get_future();
-        cluster.execute_http(
-          req, [barrier](couchbase::operations::management::bucket_get_all_response resp) mutable { barrier->set_value(std::move(resp)); });
-        auto resp = f.get();
-        REQUIRE_FALSE(resp.ctx.ec);
+        auto resp = execute_http(cluster, req);
         REQUIRE(!resp.buckets.empty());
         auto known_buckets =
           std::count_if(resp.buckets.begin(), resp.buckets.end(), [bucket_name](auto& entry) { return entry.name == bucket_name; });
