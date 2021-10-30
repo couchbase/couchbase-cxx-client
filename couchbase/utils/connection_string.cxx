@@ -15,12 +15,11 @@
  *   limitations under the License.
  */
 
-#include <ostream>
-
 #include <tao/pegtl.hpp>
 #include <tao/pegtl/contrib/uri.hpp>
 
 #include <couchbase/utils/connection_string.hxx>
+#include <couchbase/utils/duration_parser.hxx>
 
 namespace couchbase::utils
 {
@@ -170,6 +169,56 @@ struct action<bucket_name> {
 };
 } // namespace priv
 
+void
+parse_option(bool& receiver, const std::string& /* name */, const std::string& value)
+{
+    if (value == "true" || value == "yes" || value == "on") {
+        receiver = true;
+    } else if (value == "false" || value == "no" || value == "off") {
+        receiver = false;
+    }
+}
+
+void
+parse_option(tls_verify_mode& receiver, const std::string& /* name */, const std::string& value)
+{
+    if (value == "none") {
+        receiver = tls_verify_mode::none;
+    } else if (value == "peer") {
+        receiver = tls_verify_mode::peer;
+    }
+}
+
+void
+parse_option(std::size_t& receiver, const std::string& name, const std::string& value)
+{
+    try {
+        receiver = std::stoull(value, nullptr, 10);
+    } catch (const std::invalid_argument& ex1) {
+        spdlog::warn(R"(unable to parse "{}" parameter in connection string (value "{}" is not a number): {})", name, value, ex1.what());
+    } catch (const std::out_of_range& ex2) {
+        spdlog::warn(R"(unable to parse "{}" parameter in connection string (value "{}" is out of range): {})", name, value, ex2.what());
+    }
+}
+
+void
+parse_option(std::chrono::milliseconds& receiver, const std::string& name, const std::string& value)
+{
+    try {
+        receiver = std::chrono::duration_cast<std::chrono::milliseconds>(parse_duration(value));
+    } catch (const duration_parse_error&) {
+        try {
+            receiver = std::chrono::milliseconds(std::stoull(value, nullptr, 10));
+        } catch (const std::invalid_argument& ex1) {
+            spdlog::warn(
+              R"(unable to parse "{}" parameter in connection string (value "{}" is not a number): {})", name, value, ex1.what());
+        } catch (const std::out_of_range& ex2) {
+            spdlog::warn(
+              R"(unable to parse "{}" parameter in connection string (value "{}" is out of range): {})", name, value, ex2.what());
+        }
+    }
+}
+
 static void
 extract_options(connection_string& connstr)
 {
@@ -177,191 +226,135 @@ extract_options(connection_string& connstr)
     if (connstr.bootstrap_nodes.size() != 1 || connstr.bootstrap_nodes[0].type != connection_string::address_type::dns) {
         connstr.options.enable_dns_srv = false;
     }
-    for (const auto& param : connstr.params) {
-        try {
-            if (param.first == "kv_connect_timeout") {
-                /**
-                 * Number of seconds the client should wait while attempting to connect to a node’s KV service via a socket.  Initial
-                 * connection, reconnecting, node added, etc.
-                 */
-                connstr.options.connect_timeout = std::chrono::milliseconds(std::stoull(param.second));
-            } else if (param.first == "kv_timeout" || param.first == "key_value_timeout") {
-                /**
-                 * Number of milliseconds to wait before timing out a KV operation by the client.
-                 */
-                connstr.options.key_value_timeout = std::chrono::milliseconds(std::stoull(param.second));
-            } else if (param.first == "kv_durable_timeout" || param.first == "key_value_durable_timeout") {
-                /**
-                 * Number of milliseconds to wait before timing out a KV operation that is either using synchronous durability or
-                 * observe-based durability.
-                 */
-                connstr.options.key_value_durable_timeout = std::chrono::milliseconds(std::stoull(param.second));
-            } else if (param.first == "view_timeout") {
-                /**
-                 * Number of seconds to wait before timing out a View request  by the client..
-                 */
-                connstr.options.view_timeout = std::chrono::milliseconds(std::stoull(param.second));
-            } else if (param.first == "query_timeout") {
-                /**
-                 * Number of seconds to wait before timing out a Query or N1QL request by the client.
-                 */
-                connstr.options.query_timeout = std::chrono::milliseconds(std::stoull(param.second));
-            } else if (param.first == "analytics_timeout") {
-                /**
-                 * Number of seconds to wait before timing out an Analytics request by the client.
-                 */
-                connstr.options.analytics_timeout = std::chrono::milliseconds(std::stoull(param.second));
-            } else if (param.first == "search_timeout") {
-                /**
-                 * Number of seconds to wait before timing out a Search request by the client.
-                 */
-                connstr.options.search_timeout = std::chrono::milliseconds(std::stoull(param.second));
-            } else if (param.first == "management_timeout") {
-                /**
-                 * Number of seconds to wait before timing out a Management API request by the client.
-                 */
-                connstr.options.management_timeout = std::chrono::milliseconds(std::stoull(param.second));
-            } else if (param.first == "trust_certificate") {
-                connstr.options.trust_certificate = param.second;
-            } else if (param.first == "enable_mutation_tokens") {
-                /**
-                 * Request mutation tokens at connection negotiation time. Turning this off will save 16 bytes per operation response.
-                 */
-                if (param.second == "true" || param.second == "yes" || param.second == "on") {
-                    connstr.options.enable_mutation_tokens = true;
-                } else if (param.second == "false" || param.second == "no" || param.second == "off") {
-                    connstr.options.enable_mutation_tokens = false;
-                }
-            } else if (param.first == "enable_tcp_keep_alive") {
-                /**
-                 * Gets or sets a value indicating whether enable TCP keep-alive.
-                 */
-                if (param.second == "true" || param.second == "yes" || param.second == "on") {
-                    connstr.options.enable_tcp_keep_alive = true;
-                } else if (param.second == "false" || param.second == "no" || param.second == "off") {
-                    connstr.options.enable_tcp_keep_alive = false;
-                }
-            } else if (param.first == "tcp_keep_alive_interval") {
-                /**
-                 * Specifies the timeout, in milliseconds, with no activity until the first keep-alive packet is sent. This applies to all
-                 * services, but is advisory: if the underlying platform does not support this on all connections, it will be applied only
-                 * on those it can be.
-                 */
-                connstr.options.tcp_keep_alive_interval = std::chrono::milliseconds(std::stoull(param.second));
-            } else if (param.first == "force_ipv4") {
-                /**
-                 * Sets the SDK configuration to do IPv4 Name Resolution
-                 */
-                if (param.second == "true" || param.second == "yes" || param.second == "on") {
-                    connstr.options.force_ipv4 = true;
-                } else if (param.second == "false" || param.second == "no" || param.second == "off") {
-                    connstr.options.force_ipv4 = false;
-                }
-            } else if (param.first == "config_poll_interval") {
-                connstr.options.config_poll_interval = std::chrono::milliseconds(std::stoull(param.second));
-            } else if (param.first == "config_poll_floor") {
-                connstr.options.config_poll_floor = std::chrono::milliseconds(std::stoull(param.second));
-            } else if (param.first == "max_http_connections") {
-                /**
-                 * The maximum number of HTTP connections allowed on a per-host and per-port basis.  0 indicates an unlimited number of
-                 * connections are permitted.
-                 */
-                connstr.options.max_http_connections = std::stoul(param.second);
-            } else if (param.first == "idle_http_connection_timeout") {
-                /**
-                 * The period of time an HTTP connection can be idle before it is forcefully disconnected.
-                 */
-                connstr.options.idle_http_connection_timeout = std::chrono::milliseconds(std::stoull(param.second));
-            } else if (param.first == "enable_dns_srv") {
-                if (connstr.bootstrap_nodes.size() == 1) {
-                    if (param.second == "true" || param.second == "yes" || param.second == "on") {
-                        connstr.options.enable_dns_srv = true;
-                    } else if (param.second == "false" || param.second == "no" || param.second == "off") {
-                        connstr.options.enable_dns_srv = false;
-                    }
-                } else {
-                    spdlog::warn(
-                      R"(parameter "{}" require single entry in bootstrap nodes list of the connection string, ignoring (value "{}"))",
-                      param.first,
-                      param.second);
-                }
-            } else if (param.first == "network") {
-                connstr.options.network = param.second; /* current known values are "auto", "default" and "external" */
-            } else if (param.first == "show_queries") {
-                /**
-                 * Whether to display N1QL, Analytics, Search queries on info level (default false)
-                 */
-                if (param.second == "true" || param.second == "yes" || param.second == "on") {
-                    connstr.options.show_queries = true;
-                } else if (param.second == "false" || param.second == "no" || param.second == "off") {
-                    connstr.options.show_queries = false;
-                }
-            } else if (param.first == "enable_clustermap_notification") {
-                /**
-                 * Allow the server to push configuration updates asynchronously.
-                 */
-                if (param.second == "true" || param.second == "yes" || param.second == "on") {
-                    connstr.options.enable_clustermap_notification = true;
-                } else if (param.second == "false" || param.second == "no" || param.second == "off") {
-                    connstr.options.enable_clustermap_notification = false;
-                }
-            } else if (param.first == "enable_unordered_execution") {
-                /**
-                 * Allow the server to reorder commands
-                 */
-                if (param.second == "true" || param.second == "yes" || param.second == "on") {
-                    connstr.options.enable_unordered_execution = true;
-                } else if (param.second == "false" || param.second == "no" || param.second == "off") {
-                    connstr.options.enable_unordered_execution = false;
-                }
-            } else if (param.first == "enable_compression") {
-                /**
-                 * Announce support of compression (snappy) to server
-                 */
-                if (param.second == "true" || param.second == "yes" || param.second == "on") {
-                    connstr.options.enable_compression = true;
-                } else if (param.second == "false" || param.second == "no" || param.second == "off") {
-                    connstr.options.enable_compression = false;
-                }
-            } else if (param.first == "enable_tracing") {
-                /**
-                 * true - use threshold_logging_tracer
-                 * false - use noop_tracer
-                 */
-                if (param.second == "true" || param.second == "yes" || param.second == "on") {
-                    connstr.options.enable_tracing = true;
-                } else if (param.second == "false" || param.second == "no" || param.second == "off") {
-                    connstr.options.enable_tracing = false;
-                }
-            } else if (param.first == "enable_metrics") {
-                /**
-                 * true - use logging_meter
-                 * false - use noop_meter
-                 */
-                if (param.second == "true" || param.second == "yes" || param.second == "on") {
-                    connstr.options.enable_metrics = true;
-                } else if (param.second == "false" || param.second == "no" || param.second == "off") {
-                    connstr.options.enable_metrics = false;
-                }
-            } else if (param.first == "tls_verify") {
-                if (param.second == "none") {
-                    connstr.options.tls_verify = tls_verify_mode::none;
-                } else if (param.second == "peer") {
-                    connstr.options.tls_verify = tls_verify_mode::peer;
-                }
+    for (const auto& [name, value] : connstr.params) {
+        if (name == "kv_connect_timeout") {
+            /**
+             * Number of seconds the client should wait while attempting to connect to a node’s KV service via a socket.  Initial
+             * connection, reconnecting, node added, etc.
+             */
+            parse_option(connstr.options.connect_timeout, name, value);
+        } else if (name == "kv_timeout" || name == "key_value_timeout") {
+            /**
+             * Number of milliseconds to wait before timing out a KV operation by the client.
+             */
+            parse_option(connstr.options.key_value_timeout, name, value);
+        } else if (name == "kv_durable_timeout" || name == "key_value_durable_timeout") {
+            /**
+             * Number of milliseconds to wait before timing out a KV operation that is either using synchronous durability or
+             * observe-based durability.
+             */
+            parse_option(connstr.options.key_value_durable_timeout, name, value);
+        } else if (name == "view_timeout") {
+            /**
+             * Number of seconds to wait before timing out a View request  by the client..
+             */
+            parse_option(connstr.options.view_timeout, name, value);
+        } else if (name == "query_timeout") {
+            /**
+             * Number of seconds to wait before timing out a Query or N1QL request by the client.
+             */
+            parse_option(connstr.options.query_timeout, name, value);
+        } else if (name == "analytics_timeout") {
+            /**
+             * Number of seconds to wait before timing out an Analytics request by the client.
+             */
+            parse_option(connstr.options.analytics_timeout, name, value);
+        } else if (name == "search_timeout") {
+            /**
+             * Number of seconds to wait before timing out a Search request by the client.
+             */
+            parse_option(connstr.options.search_timeout, name, value);
+        } else if (name == "management_timeout") {
+            /**
+             * Number of seconds to wait before timing out a Management API request by the client.
+             */
+            parse_option(connstr.options.management_timeout, name, value);
+        } else if (name == "trust_certificate") {
+            connstr.options.trust_certificate = value;
+        } else if (name == "enable_mutation_tokens") {
+            /**
+             * Request mutation tokens at connection negotiation time. Turning this off will save 16 bytes per operation response.
+             */
+            parse_option(connstr.options.enable_mutation_tokens, name, value);
+        } else if (name == "enable_tcp_keep_alive") {
+            /**
+             * Gets or sets a value indicating whether enable TCP keep-alive.
+             */
+            parse_option(connstr.options.enable_tcp_keep_alive, name, value);
+        } else if (name == "tcp_keep_alive_interval") {
+            /**
+             * Specifies the timeout, in milliseconds, with no activity until the first keep-alive packet is sent. This applies to all
+             * services, but is advisory: if the underlying platform does not support this on all connections, it will be applied only
+             * on those it can be.
+             */
+            parse_option(connstr.options.tcp_keep_alive_interval, name, value);
+        } else if (name == "force_ipv4") {
+            /**
+             * Sets the SDK configuration to do IPv4 Name Resolution
+             */
+            parse_option(connstr.options.force_ipv4, name, value);
+        } else if (name == "config_poll_interval") {
+            parse_option(connstr.options.config_poll_interval, name, value);
+        } else if (name == "config_poll_floor") {
+            parse_option(connstr.options.config_poll_floor, name, value);
+        } else if (name == "max_http_connections") {
+            /**
+             * The maximum number of HTTP connections allowed on a per-host and per-port basis.  0 indicates an unlimited number of
+             * connections are permitted.
+             */
+            parse_option(connstr.options.max_http_connections, name, value);
+        } else if (name == "idle_http_connection_timeout") {
+            /**
+             * The period of time an HTTP connection can be idle before it is forcefully disconnected.
+             */
+            parse_option(connstr.options.idle_http_connection_timeout, name, value);
+        } else if (name == "enable_dns_srv") {
+            if (connstr.bootstrap_nodes.size() == 1) {
+                parse_option(connstr.options.enable_dns_srv, name, value);
             } else {
-                spdlog::warn(R"(unknown parameter "{}" in connection string (value "{}"))", param.first, param.second);
+                spdlog::warn(
+                  R"(parameter "{}" require single entry in bootstrap nodes list of the connection string, ignoring (value "{}"))",
+                  name,
+                  value);
             }
-        } catch (std::invalid_argument& ex1) {
-            spdlog::warn(R"(unable to parse "{}" parameter in connection string (value "{}" cannot be converted): {})",
-                         param.first,
-                         param.second,
-                         ex1.what());
-        } catch (std::out_of_range& ex2) {
-            spdlog::warn(R"(unable to parse "{}" parameter in connection string (value "{}" is out of range): {})",
-                         param.first,
-                         param.second,
-                         ex2.what());
+        } else if (name == "network") {
+            connstr.options.network = value; /* current known values are "auto", "default" and "external" */
+        } else if (name == "show_queries") {
+            /**
+             * Whether to display N1QL, Analytics, Search queries on info level (default false)
+             */
+            parse_option(connstr.options.show_queries, name, value);
+        } else if (name == "enable_clustermap_notification") {
+            /**
+             * Allow the server to push configuration updates asynchronously.
+             */
+            parse_option(connstr.options.enable_clustermap_notification, name, value);
+        } else if (name == "enable_unordered_execution") {
+            /**
+             * Allow the server to reorder commands
+             */
+            parse_option(connstr.options.enable_unordered_execution, name, value);
+        } else if (name == "enable_compression") {
+            /**
+             * Announce support of compression (snappy) to server
+             */
+            parse_option(connstr.options.enable_compression, name, value);
+        } else if (name == "enable_tracing") {
+            /**
+             * true - use threshold_logging_tracer
+             * false - use noop_tracer
+             */
+            parse_option(connstr.options.enable_tracing, name, value);
+        } else if (name == "enable_metrics") {
+            /**
+             * true - use logging_meter
+             * false - use noop_meter
+             */
+            parse_option(connstr.options.enable_metrics, name, value);
+        } else if (name == "tls_verify") {
+            parse_option(connstr.options.tls_verify, name, value);
+        } else {
+            spdlog::warn(R"(unknown parameter "{}" in connection string (value "{}"))", name, value);
         }
     }
 }

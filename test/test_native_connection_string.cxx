@@ -355,6 +355,12 @@ TEST_CASE("unit: connection string", "[unit]")
                                    { "foo", "bar" },
                                  });
             CHECK(spec.options.key_value_timeout == std::chrono::milliseconds(42));
+
+            spec = couchbase::utils::parse_connection_string("couchbase://127.0.0.1?kv_timeout=4s2ms");
+            CHECK(spec.params == std::map<std::string, std::string>{
+                                   { "kv_timeout", "4s2ms" },
+                                 });
+            CHECK(spec.options.key_value_timeout == std::chrono::milliseconds(4002));
         }
     }
 
