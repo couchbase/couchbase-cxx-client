@@ -40,22 +40,7 @@ TEST_CASE("native: bucket management", "[native]")
     couchbase::cluster cluster(io);
     auto io_thread = std::thread([&io]() { io.run(); });
 
-    {
-        auto barrier = std::make_shared<std::promise<std::error_code>>();
-        auto f = barrier->get_future();
-        cluster.open(couchbase::origin(auth, connstr), [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
-        auto rc = f.get();
-        INFO(rc.message());
-        REQUIRE_FALSE(rc);
-    }
-    {
-        auto barrier = std::make_shared<std::promise<std::error_code>>();
-        auto f = barrier->get_future();
-        cluster.open_bucket(ctx.bucket, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
-        auto rc = f.get();
-        INFO(rc.message());
-        REQUIRE_FALSE(rc);
-    }
+    open_cluster(cluster, couchbase::origin(auth, connstr));
 
     auto bucket_name = uniq_id("bucket");
 
@@ -108,12 +93,7 @@ TEST_CASE("native: bucket management", "[native]")
         REQUIRE(known_buckets == 0);
     }
 
-    {
-        auto barrier = std::make_shared<std::promise<void>>();
-        auto f = barrier->get_future();
-        cluster.close([barrier]() { barrier->set_value(); });
-        f.get();
-    }
+    close_cluster(cluster);
 
     io_thread.join();
 }

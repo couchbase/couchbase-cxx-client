@@ -38,22 +38,9 @@ TEST_CASE("native: append", "[native]")
     couchbase::cluster cluster(io);
     auto io_thread = std::thread([&io]() { io.run(); });
 
-    {
-        auto barrier = std::make_shared<std::promise<std::error_code>>();
-        auto f = barrier->get_future();
-        cluster.open(couchbase::origin(auth, connstr), [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
-        auto rc = f.get();
-        INFO(rc.message());
-        REQUIRE_FALSE(rc);
-    }
-    {
-        auto barrier = std::make_shared<std::promise<std::error_code>>();
-        auto f = barrier->get_future();
-        cluster.open_bucket(ctx.bucket, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
-        auto rc = f.get();
-        INFO(rc.message());
-        REQUIRE_FALSE(rc);
-    }
+    open_cluster(cluster, couchbase::origin(auth, connstr));
+    open_bucket(cluster, ctx.bucket);
+
     couchbase::document_id id{ ctx.bucket, "_default._default", uniq_id("foo") };
     {
         couchbase::operations::upsert_request req{ id, "world" };
@@ -94,12 +81,8 @@ TEST_CASE("native: append", "[native]")
         INFO("value=" << resp.value);
         REQUIRE(resp.value == "world!");
     }
-    {
-        auto barrier = std::make_shared<std::promise<void>>();
-        auto f = barrier->get_future();
-        cluster.close([barrier]() { barrier->set_value(); });
-        f.get();
-    }
+
+    close_cluster(cluster);
 
     io_thread.join();
 }
@@ -119,22 +102,9 @@ TEST_CASE("native: prepend", "[native]")
     couchbase::cluster cluster(io);
     auto io_thread = std::thread([&io]() { io.run(); });
 
-    {
-        auto barrier = std::make_shared<std::promise<std::error_code>>();
-        auto f = barrier->get_future();
-        cluster.open(couchbase::origin(auth, connstr), [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
-        auto rc = f.get();
-        INFO(rc.message());
-        REQUIRE_FALSE(rc);
-    }
-    {
-        auto barrier = std::make_shared<std::promise<std::error_code>>();
-        auto f = barrier->get_future();
-        cluster.open_bucket(ctx.bucket, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
-        auto rc = f.get();
-        INFO(rc.message());
-        REQUIRE_FALSE(rc);
-    }
+    open_cluster(cluster, couchbase::origin(auth, connstr));
+    open_bucket(cluster, ctx.bucket);
+
     couchbase::document_id id{ ctx.bucket, "_default._default", uniq_id("foo") };
     {
         couchbase::operations::upsert_request req{ id, "world" };
@@ -175,12 +145,8 @@ TEST_CASE("native: prepend", "[native]")
         INFO("value=" << resp.value);
         REQUIRE(resp.value == "Hello, world");
     }
-    {
-        auto barrier = std::make_shared<std::promise<void>>();
-        auto f = barrier->get_future();
-        cluster.close([barrier]() { barrier->set_value(); });
-        f.get();
-    }
+
+    close_cluster(cluster);
 
     io_thread.join();
 }
