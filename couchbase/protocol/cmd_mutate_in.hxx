@@ -105,11 +105,18 @@ class mutate_in_request_body
     static const inline uint8_t doc_flag_access_deleted = 0b0000'0100;
 
     /**
-     * Used with `doc_flag_mkdoc` / `doc_flag_add`; if the document does not exist then creat
+     * Used with `doc_flag_mkdoc` / `doc_flag_add`; if the document does not exist then create
      * it in the "Deleted" state, instead of the normal "Alive" state.
      * Not valid unless `doc_flag_mkdoc` or `doc_flag_add` specified.
      */
     static const inline uint8_t doc_flag_create_as_deleted = 0b0000'1000;
+
+    /**
+     * If the document exists and isn't deleted the operation will fail with .
+     * If the input document _is_ deleted the result of the operation will store the
+     * document as a "live" document instead of a deleted document.
+     */
+    static const inline uint8_t doc_flag_revive_document = 0b0001'0000;
 
     struct mutate_in_specs {
         /**
