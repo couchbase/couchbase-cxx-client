@@ -48,10 +48,7 @@ TEST_CASE("native: upsert document into default collection", "[native]")
             { "b", 2.0 },
         };
         couchbase::operations::upsert_request req{ id, tao::json::to_string(value) };
-        auto barrier = std::make_shared<std::promise<couchbase::operations::upsert_response>>();
-        auto f = barrier->get_future();
-        cluster.execute(req, [barrier](couchbase::operations::upsert_response resp) mutable { barrier->set_value(resp); });
-        auto resp = f.get();
+        auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
         INFO("rc=" << resp.cas);

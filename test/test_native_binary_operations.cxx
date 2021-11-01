@@ -44,10 +44,7 @@ TEST_CASE("native: append", "[native]")
     couchbase::document_id id{ ctx.bucket, "_default._default", uniq_id("foo") };
     {
         couchbase::operations::upsert_request req{ id, "world" };
-        auto barrier = std::make_shared<std::promise<couchbase::operations::upsert_response>>();
-        auto f = barrier->get_future();
-        cluster.execute(req, [barrier](couchbase::operations::upsert_response&& resp) mutable { barrier->set_value(resp); });
-        auto resp = f.get();
+        auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
         INFO("rc=" << resp.cas);
@@ -57,10 +54,7 @@ TEST_CASE("native: append", "[native]")
     }
     {
         couchbase::operations::append_request req{ id, "!" };
-        auto barrier = std::make_shared<std::promise<couchbase::operations::append_response>>();
-        auto f = barrier->get_future();
-        cluster.execute(req, [barrier](couchbase::operations::append_response&& resp) mutable { barrier->set_value(resp); });
-        auto resp = f.get();
+        auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
         INFO("rc=" << resp.cas);
@@ -70,10 +64,7 @@ TEST_CASE("native: append", "[native]")
     }
     {
         couchbase::operations::get_request req{ id };
-        auto barrier = std::make_shared<std::promise<couchbase::operations::get_response>>();
-        auto f = barrier->get_future();
-        cluster.execute(req, [barrier](couchbase::operations::get_response&& resp) mutable { barrier->set_value(resp); });
-        auto resp = f.get();
+        auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
         INFO("rc=" << resp.cas);
@@ -108,10 +99,7 @@ TEST_CASE("native: prepend", "[native]")
     couchbase::document_id id{ ctx.bucket, "_default._default", uniq_id("foo") };
     {
         couchbase::operations::upsert_request req{ id, "world" };
-        auto barrier = std::make_shared<std::promise<couchbase::operations::upsert_response>>();
-        auto f = barrier->get_future();
-        cluster.execute(req, [barrier](couchbase::operations::upsert_response&& resp) mutable { barrier->set_value(resp); });
-        auto resp = f.get();
+        auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
         INFO("rc=" << resp.cas);
@@ -121,10 +109,7 @@ TEST_CASE("native: prepend", "[native]")
     }
     {
         couchbase::operations::prepend_request req{ id, "Hello, " };
-        auto barrier = std::make_shared<std::promise<couchbase::operations::prepend_response>>();
-        auto f = barrier->get_future();
-        cluster.execute(req, [barrier](couchbase::operations::prepend_response&& resp) mutable { barrier->set_value(resp); });
-        auto resp = f.get();
+        auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
         INFO("rc=" << resp.cas);
@@ -134,10 +119,7 @@ TEST_CASE("native: prepend", "[native]")
     }
     {
         couchbase::operations::get_request req{ id };
-        auto barrier = std::make_shared<std::promise<couchbase::operations::get_response>>();
-        auto f = barrier->get_future();
-        cluster.execute(req, [barrier](couchbase::operations::get_response&& resp) mutable { barrier->set_value(resp); });
-        auto resp = f.get();
+        auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
         INFO("rc=" << resp.cas);

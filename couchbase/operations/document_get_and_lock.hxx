@@ -36,6 +36,7 @@ struct get_and_lock_response {
 };
 
 struct get_and_lock_request {
+    using response_type = get_and_lock_response;
     using encoded_request_type = protocol::client_request<protocol::get_and_lock_request_body>;
     using encoded_response_type = protocol::client_response<protocol::get_and_lock_response_body>;
 

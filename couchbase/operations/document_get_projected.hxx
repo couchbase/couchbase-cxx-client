@@ -37,6 +37,7 @@ struct get_projected_response {
 };
 
 struct get_projected_request {
+    using response_type = get_projected_response;
     using encoded_request_type = protocol::client_request<protocol::lookup_in_request_body>;
     using encoded_response_type = protocol::client_response<protocol::lookup_in_response_body>;
 

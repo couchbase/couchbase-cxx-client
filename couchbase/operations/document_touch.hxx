@@ -34,6 +34,7 @@ struct touch_response {
 };
 
 struct touch_request {
+    using response_type = touch_response;
     using encoded_request_type = protocol::client_request<protocol::touch_request_body>;
     using encoded_response_type = protocol::client_response<protocol::touch_response_body>;
 

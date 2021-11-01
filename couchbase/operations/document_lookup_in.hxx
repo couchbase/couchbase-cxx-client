@@ -44,6 +44,7 @@ struct lookup_in_response {
 };
 
 struct lookup_in_request {
+    using response_type = lookup_in_response;
     using encoded_request_type = protocol::client_request<protocol::lookup_in_request_body>;
     using encoded_response_type = protocol::client_response<protocol::lookup_in_response_body>;
 

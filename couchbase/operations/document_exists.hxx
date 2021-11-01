@@ -38,6 +38,7 @@ struct exists_response {
 };
 
 struct exists_request {
+    using response_type = exists_response;
     using encoded_request_type = protocol::client_request<protocol::exists_request_body>;
     using encoded_response_type = protocol::client_response<protocol::exists_response_body>;
 

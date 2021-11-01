@@ -37,6 +37,7 @@ struct replace_response {
 };
 
 struct replace_request {
+    using response_type = replace_response;
     using encoded_request_type = protocol::client_request<protocol::replace_request_body>;
     using encoded_response_type = protocol::client_response<protocol::replace_response_body>;
 
