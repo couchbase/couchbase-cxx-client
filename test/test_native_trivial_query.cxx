@@ -33,7 +33,9 @@ TEST_CASE("native: trivial non-data query", "[native]")
     auto io_thread = std::thread([&io]() { io.run(); });
 
     open_cluster(cluster, couchbase::origin(auth, connstr));
-    open_bucket(cluster, ctx.bucket);
+    if (!ctx.version.supports_gcccp()) {
+        open_bucket(cluster, ctx.bucket);
+    }
 
     {
         couchbase::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };

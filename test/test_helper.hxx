@@ -81,6 +81,11 @@ struct test_server_version {
         return is_mad_hatter() || is_cheshire_cat();
     }
 
+    [[nodiscard]] bool supports_enhanced_durability() const
+    {
+        return is_mad_hatter() || is_cheshire_cat();
+    }
+
     [[nodiscard]] bool supports_scoped_queries() const
     {
         return is_cheshire_cat();

@@ -28,6 +28,10 @@ TEST_CASE("native: durable operations", "[native]")
     auto ctx = test_context::load_from_environment();
     native_init_logger();
 
+    if (!ctx.version.supports_enhanced_durability()) {
+        return;
+    }
+
     auto connstr = couchbase::utils::parse_connection_string(ctx.connection_string);
     couchbase::cluster_credentials auth{};
     auth.username = ctx.username;
