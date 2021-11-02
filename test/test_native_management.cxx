@@ -41,6 +41,9 @@ TEST_CASE("native: bucket management", "[native]")
     auto io_thread = std::thread([&io]() { io.run(); });
 
     open_cluster(cluster, couchbase::origin(auth, connstr));
+    if (!ctx.version.supports_gcccp()) {
+        open_bucket(cluster, ctx.bucket);
+    }
 
     auto bucket_name = uniq_id("bucket");
 
