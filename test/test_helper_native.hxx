@@ -68,7 +68,7 @@ execute(couchbase::cluster& cluster, Request request)
     return resp;
 }
 
-std::error_code
+inline std::error_code
 open_cluster(couchbase::cluster& cluster, const couchbase::origin& origin)
 {
     auto barrier = std::make_shared<std::promise<std::error_code>>();
@@ -80,7 +80,7 @@ open_cluster(couchbase::cluster& cluster, const couchbase::origin& origin)
     return rc;
 }
 
-void
+inline void
 close_cluster(couchbase::cluster& cluster)
 {
     auto barrier = std::make_shared<std::promise<void>>();
@@ -89,7 +89,7 @@ close_cluster(couchbase::cluster& cluster)
     f.get();
 }
 
-std::error_code
+inline std::error_code
 open_bucket(couchbase::cluster& cluster, const std::string& bucket_name)
 {
     auto barrier = std::make_shared<std::promise<std::error_code>>();
