@@ -22,6 +22,7 @@
 #include <string>
 
 #define CATCH_CONFIG_MAIN
+
 #include <catch2/catch.hpp>
 
 struct test_server_version {

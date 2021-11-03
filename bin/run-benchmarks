@@ -17,7 +17,6 @@
 PROJECT_ROOT="$( cd "$(dirname "$0"/..)" >/dev/null 2>&1 ; pwd -P )"
 
 CB_CTEST=${CB_CTEST:-$(which ctest)}
-CB_SANITIZER=${CB_SANITIZER:-""}
 CTEST_OUTPUT_ON_FAILURE=1
 
 echo "CB_CTEST=${CB_CTEST}"
@@ -25,10 +24,7 @@ echo "CB_CTEST=${CB_CTEST}"
 set -exuo pipefail
 
 BUILD_DIR="${PROJECT_ROOT}/cmake-build-tests"
-if [ "x${CB_SANITIZER}" != "x" ]; then
-    BUILD_DIR="${BUILD_DIR}-${CB_SANITIZER}"
-fi
 
 cd "${BUILD_DIR}"
 
-${CB_CTEST} --label-regex 'integration|unit'
+${CB_CTEST} --label-regex 'benchmark'

@@ -1,4 +1,4 @@
-name: tests
+name: benchmarks
 
 on:
   push:
@@ -26,15 +26,30 @@ jobs:
       - name: Initialize couchbase
         run: ./bin/init-cluster
       - name: Build tests
+        env:
+          # replace with RelWithDebInfo when the build become faster
+          CB_CMAKE_BUILD_TYPE: Debug 
         run: ./bin/build-tests
       - name: Check couchbase
         run: ./bin/check-cluster
-      - name: Run tests
+      - name: Run benchmarks
         timeout-minutes: 15
         env:
           TEST_SERVER_VERSION: 7.0.2
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
-        run: ./bin/run-tests
+        run: ./bin/run-benchmarks
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Neo
+          tool: "catch2"
+          output-file-path: cmake-build-tests/Testing/Temporary/LastTest.log
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          alert-threshold: "200%"
+          comment-on-alert: true
+          fail-on-alert: true
+          alert-comment-cc-users: "@avsej"
 
   mad_hatter:
     runs-on: ubuntu-20.04
@@ -55,12 +70,27 @@ jobs:
       - name: Initialize couchbase
         run: ./bin/init-cluster
       - name: Build tests
+        env:
+          # replace with RelWithDebInfo when the build become faster
+          CB_CMAKE_BUILD_TYPE: Debug
         run: ./bin/build-tests
       - name: Check couchbase
         run: ./bin/check-cluster
-      - name: Run tests
+      - name: Run benchmarks
         timeout-minutes: 15
         env:
           TEST_SERVER_VERSION: 6.6.3
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
-        run: ./bin/run-tests
+        run: ./bin/run-benchmarks
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Mad Hatter
+          tool: "catch2"
+          output-file-path: cmake-build-tests/Testing/Temporary/LastTest.log
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          alert-threshold: "200%"
+          comment-on-alert: true
+          fail-on-alert: true
+          alert-comment-cc-users: "@avsej"
