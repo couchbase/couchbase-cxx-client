@@ -13,7 +13,7 @@ This repo is under active development and is not yet ready for release as a publ
 This repo uses several git submodules. If you are fetching the repo for the first time by command line, the
 `--recurse-submodules` option will init the submodules recursively as well:
 ```shell
-git clone --recurse-submodules git://github.com/couchbaselabs/couchbase-cxx-client.git
+git clone --recurse-submodules https://github.com/couchbaselabs/couchbase-cxx-client.git
 ```
 
 However, if you fetched using a simple clone command (or another IDE or tool) **you must also perform** the following
