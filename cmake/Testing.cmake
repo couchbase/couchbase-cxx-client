@@ -14,7 +14,29 @@ macro(native_test name)
     Threads::Threads
     snappy
     couchbase_cxx_client)
-  catch_discover_tests(test_native_${name})
+  catch_discover_tests(
+    test_native_${name}
+    PROPERTIES
+    LABELS
+    "integration")
+endmacro()
+
+macro(native_benchmark name)
+  add_executable(benchmark_native_${name} "${PROJECT_SOURCE_DIR}/test/benchmark_native_${name}.cxx")
+  target_include_directories(benchmark_native_${name} PRIVATE ${PROJECT_BINARY_DIR}/generated)
+  target_link_libraries(
+    benchmark_native_${name}
+    project_options
+    project_warnings
+    Catch2::Catch2
+    Threads::Threads
+    snappy
+    couchbase_cxx_client)
+  catch_discover_tests(
+    benchmark_native_${name}
+    PROPERTIES
+    LABELS
+    "benchmark")
 endmacro()
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/test)
