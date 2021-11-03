@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-#include <tao/json.hpp>
+#include <algorithm>
 
 #include <couchbase/operations/management/analytics_link_couchbase_remote.hxx>
 

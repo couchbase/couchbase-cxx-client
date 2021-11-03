@@ -47,7 +47,7 @@ TEST_CASE("native: upsert document into default collection", "[native]")
             { "a", 1.0 },
             { "b", 2.0 },
         };
-        couchbase::operations::upsert_request req{ id, tao::json::to_string(value) };
+        couchbase::operations::upsert_request req{ id, couchbase::utils::json::generate(value) };
         auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);

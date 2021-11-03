@@ -109,7 +109,7 @@ TEST_CASE("native: serializing diagnostics report", "[native]")
         },
     };
 
-    auto expected = tao::json::from_string(R"(
+    auto expected = couchbase::utils::json::parse(R"(
 {
   "version": 2,
   "id": "0xdeadbeef",
@@ -258,7 +258,7 @@ TEST_CASE("native: serializing ping report", "[native]")
         },
     };
 
-    auto expected = tao::json::from_string(R"(
+    auto expected = couchbase::utils::json::parse(R"(
 {
   "version": 2,
   "id": "0xdeadbeef",

@@ -30,7 +30,7 @@ TEST_CASE("unit: transformer to deduplicate JSON keys", "[unit]")
     CHECK_THROWS_WITH(tao::json::from_string(input), Contains("duplicate JSON object key \"answer\""));
 
     auto result = couchbase::utils::json::parse(input);
-    INFO(tao::json::to_string(result))
+    INFO(couchbase::utils::json::generate(result))
     CHECK(result.is_object());
     CHECK(result.find("answer") != nullptr);
     CHECK(result["answer"].is_integer());

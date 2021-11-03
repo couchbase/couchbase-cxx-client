@@ -15,11 +15,8 @@
  *   limitations under the License.
  */
 
-#include <tao/json.hpp>
-
 #include <couchbase/operations/document_prepend.hxx>
 
-#include <couchbase/utils/name_codec.hxx>
 #include <couchbase/errors.hxx>
 
 namespace couchbase::operations

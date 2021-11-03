@@ -19,6 +19,7 @@
 
 #include <optional>
 #include <string>
+#include <system_error>
 
 namespace couchbase::operations::management::analytics_link
 {
