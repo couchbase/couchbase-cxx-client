@@ -87,7 +87,7 @@ sdk_build_info()
 #if defined(OPENSSL_VERSION)
     info["openssl_runtime"] = OpenSSL_version(OPENSSL_VERSION);
 #elif defined(SSLEAY_VERSION)
-    info["openssl_runtime"] = OpenSSL_version(SSLEAY_VERSION);
+    info["openssl_runtime"] = SSLeay_version(SSLEAY_VERSION);
 #endif
 
     return info;
