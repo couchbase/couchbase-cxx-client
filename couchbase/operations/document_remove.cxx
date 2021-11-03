@@ -15,8 +15,6 @@
  *   limitations under the License.
  */
 
-#include <tao/json.hpp>
-
 #include <couchbase/operations/document_remove.hxx>
 
 #include <couchbase/errors.hxx>

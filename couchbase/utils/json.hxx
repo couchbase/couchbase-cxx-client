@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <tao/json.hpp>
+#include <tao/json/value.hpp>
 
 namespace couchbase::utils::json
 {

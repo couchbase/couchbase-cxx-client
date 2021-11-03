@@ -51,7 +51,7 @@ TEST_CASE("native: durable operations", "[native]")
             { "a", 1.0 },
             { "b", 2.0 },
         };
-        couchbase::operations::upsert_request req{ id, tao::json::to_string(value) };
+        couchbase::operations::upsert_request req{ id, couchbase::utils::json::generate(value) };
         req.durability_level = couchbase::protocol::durability_level::majority_and_persist_to_active;
         auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
@@ -63,7 +63,7 @@ TEST_CASE("native: durable operations", "[native]")
         const tao::json::value value = {
             { "foo", "bar" },
         };
-        couchbase::operations::replace_request req{ id, tao::json::to_string(value) };
+        couchbase::operations::replace_request req{ id, couchbase::utils::json::generate(value) };
         req.durability_level = couchbase::protocol::durability_level::majority_and_persist_to_active;
         auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());

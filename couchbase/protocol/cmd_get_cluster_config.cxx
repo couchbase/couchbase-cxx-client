@@ -17,8 +17,6 @@
 
 #include <gsl/assert>
 
-#include <tao/json.hpp>
-
 #include <couchbase/protocol/cmd_get_cluster_config.hxx>
 
 #include <couchbase/utils/json.hxx>
