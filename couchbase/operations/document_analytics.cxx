@@ -17,7 +17,7 @@
 
 #include <gsl/gsl>
 
-#include <spdlog/spdlog.h>
+#include <couchbase/logger/logger.hxx>
 
 #include <couchbase/operations/document_analytics.hxx>
 
@@ -141,9 +141,9 @@ analytics_request::encode_to(analytics_request::encoded_request_type& encoded, h
     body_str = utils::json::generate(body);
     encoded.body = body_str;
     if (context.options.show_queries) {
-        spdlog::info("ANALYTICS: {}", utils::json::generate(body["statement"]));
+        LOG_INFO("ANALYTICS: {}", utils::json::generate(body["statement"]));
     } else {
-        spdlog::debug("ANALYTICS: {}", utils::json::generate(body["statement"]));
+        LOG_DEBUG("ANALYTICS: {}", utils::json::generate(body["statement"]));
     }
     return {};
 }

@@ -21,7 +21,7 @@
 #include <utility>
 #include <list>
 
-#include <spdlog/spdlog.h>
+#include <couchbase/logger/logger.hxx>
 
 #include <tao/json/forward.hpp>
 
@@ -341,7 +341,7 @@ class http_session : public std::enable_shared_from_this<http_session>
     void on_resolve(std::error_code ec, const asio::ip::tcp::resolver::results_type& endpoints)
     {
         if (ec) {
-            spdlog::error("{} error on resolve: {}", info_.log_prefix(), ec.message());
+            LOG_ERROR("{} error on resolve: {}", info_.log_prefix(), ec.message());
             return;
         }
         last_active_ = std::chrono::steady_clock::now();
@@ -353,11 +353,11 @@ class http_session : public std::enable_shared_from_this<http_session>
     void do_connect(asio::ip::tcp::resolver::results_type::iterator it)
     {
         if (it != endpoints_.end()) {
-            spdlog::debug("{} connecting to {}:{}", info_.log_prefix(), it->endpoint().address().to_string(), it->endpoint().port());
+            LOG_DEBUG("{} connecting to {}:{}", info_.log_prefix(), it->endpoint().address().to_string(), it->endpoint().port());
             deadline_timer_.expires_after(timeout_defaults::connect_timeout);
             stream_->async_connect(it->endpoint(), std::bind(&http_session::on_connect, shared_from_this(), std::placeholders::_1, it));
         } else {
-            spdlog::error("{} no more endpoints left to connect", info_.log_prefix());
+            LOG_ERROR("{} no more endpoints left to connect", info_.log_prefix());
             stop();
         }
     }
@@ -369,16 +369,16 @@ class http_session : public std::enable_shared_from_this<http_session>
         }
         last_active_ = std::chrono::steady_clock::now();
         if (!stream_->is_open() || ec) {
-            spdlog::warn("{} unable to connect to {}:{}: {}",
-                         info_.log_prefix(),
-                         it->endpoint().address().to_string(),
-                         it->endpoint().port(),
-                         ec.message());
+            LOG_WARNING("{} unable to connect to {}:{}: {}",
+                        info_.log_prefix(),
+                        it->endpoint().address().to_string(),
+                        it->endpoint().port(),
+                        ec.message());
             do_connect(++it);
         } else {
             state_ = diag::endpoint_state::connected;
             connected_ = true;
-            spdlog::debug("{} connected to {}:{}", info_.log_prefix(), it->endpoint().address().to_string(), it->endpoint().port());
+            LOG_DEBUG("{} connected to {}:{}", info_.log_prefix(), it->endpoint().address().to_string(), it->endpoint().port());
             {
                 std::scoped_lock lock(info_mutex_);
                 info_ = http_session_info(client_id_, id_, stream_->local_endpoint(), it->endpoint());
@@ -416,7 +416,7 @@ class http_session : public std::enable_shared_from_this<http_session>
               }
               self->last_active_ = std::chrono::steady_clock::now();
               if (ec) {
-                  spdlog::error("{} IO error while reading from the socket: {}", self->info_.log_prefix(), ec.message());
+                  LOG_ERROR("{} IO error while reading from the socket: {}", self->info_.log_prefix(), ec.message());
                   return self->stop();
               }
 
@@ -440,7 +440,7 @@ class http_session : public std::enable_shared_from_this<http_session>
                       }
                       return self->do_read();
                   case http_parser::status::failure:
-                      spdlog::error("{} failed to parse HTTP response", self->info_.log_prefix());
+                      LOG_ERROR("{} failed to parse HTTP response", self->info_.log_prefix());
                       return self->stop();
               }
           });
@@ -467,7 +467,7 @@ class http_session : public std::enable_shared_from_this<http_session>
             }
             self->last_active_ = std::chrono::steady_clock::now();
             if (ec) {
-                spdlog::error("{} IO error while writing to the socket: {}", self->info_.log_prefix(), ec.message());
+                LOG_ERROR("{} IO error while writing to the socket: {}", self->info_.log_prefix(), ec.message());
                 return self->stop();
             }
             {

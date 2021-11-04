@@ -218,7 +218,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
         if (!session->is_stopped()) {
             session->set_idle(options_.idle_http_connection_timeout);
             std::scoped_lock lock(sessions_mutex_);
-            spdlog::debug("{} put HTTP session back to idle connections", session->log_prefix());
+            LOG_DEBUG("{} put HTTP session back to idle connections", session->log_prefix());
             idle_sessions_[type].push_back(session);
             busy_sessions_[type].remove_if([id = session->id()](const auto& s) -> bool { return !s || s->id() == id; });
         }

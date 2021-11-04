@@ -17,8 +17,6 @@
 
 #pragma once
 
-#include <spdlog/fmt/fmt.h>
-
 namespace couchbase::sasl
 {
 
@@ -28,45 +26,3 @@ namespace couchbase::sasl
 enum class error { OK, CONTINUE, FAIL, BAD_PARAM, NO_MEM, NO_MECH, NO_USER, PASSWORD_ERROR, NO_RBAC_PROFILE, AUTH_PROVIDER_DIED };
 
 } // namespace couchbase::sasl
-
-template<>
-struct fmt::formatter<couchbase::sasl::error> : formatter<string_view> {
-    template<typename FormatContext>
-    auto format(couchbase::sasl::error err, FormatContext& ctx)
-    {
-        string_view name = "unknown";
-        switch (err) {
-            case couchbase::sasl::error::OK:
-                name = "ok";
-                break;
-            case couchbase::sasl::error::CONTINUE:
-                name = "continue";
-                break;
-            case couchbase::sasl::error::FAIL:
-                name = "fail";
-                break;
-            case couchbase::sasl::error::BAD_PARAM:
-                name = "bad_param";
-                break;
-            case couchbase::sasl::error::NO_MEM:
-                name = "no_mem";
-                break;
-            case couchbase::sasl::error::NO_MECH:
-                name = "no_mech";
-                break;
-            case couchbase::sasl::error::NO_USER:
-                name = "no_user";
-                break;
-            case couchbase::sasl::error::PASSWORD_ERROR:
-                name = "password_error";
-                break;
-            case couchbase::sasl::error::NO_RBAC_PROFILE:
-                name = "no_rbac_profile";
-                break;
-            case couchbase::sasl::error::AUTH_PROVIDER_DIED:
-                name = "auth_provider_died";
-                break;
-        }
-        return formatter<string_view>::format(name, ctx);
-    }
-};

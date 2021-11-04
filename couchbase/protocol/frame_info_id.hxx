@@ -17,8 +17,6 @@
 
 #pragma once
 
-#include <spdlog/fmt/fmt.h>
-
 namespace couchbase::protocol
 {
 enum class request_frame_info_id : uint8_t {
@@ -142,48 +140,3 @@ is_valid_response_frame_info_id(uint8_t value)
 }
 
 } // namespace couchbase::protocol
-
-template<>
-struct fmt::formatter<couchbase::protocol::request_frame_info_id> : formatter<string_view> {
-    template<typename FormatContext>
-    auto format(couchbase::protocol::request_frame_info_id opcode, FormatContext& ctx)
-    {
-        string_view name = "unknown";
-        switch (opcode) {
-            case couchbase::protocol::request_frame_info_id::barrier:
-                name = "barrier";
-                break;
-            case couchbase::protocol::request_frame_info_id::durability_requirement:
-                name = "durability_requirement";
-                break;
-            case couchbase::protocol::request_frame_info_id::dcp_stream_id:
-                name = "dcp_stream_id";
-                break;
-            case couchbase::protocol::request_frame_info_id::open_tracing_context:
-                name = "open_tracing_context";
-                break;
-            case couchbase::protocol::request_frame_info_id::impersonate_user:
-                name = "impersonate_user";
-                break;
-            case couchbase::protocol::request_frame_info_id::preserve_ttl:
-                name = "preserve_ttl";
-                break;
-        }
-        return formatter<string_view>::format(name, ctx);
-    }
-};
-
-template<>
-struct fmt::formatter<couchbase::protocol::response_frame_info_id> : formatter<string_view> {
-    template<typename FormatContext>
-    auto format(couchbase::protocol::response_frame_info_id opcode, FormatContext& ctx)
-    {
-        string_view name = "unknown";
-        switch (opcode) {
-            case couchbase::protocol::response_frame_info_id::server_duration:
-                name = "server_duration";
-                break;
-        }
-        return formatter<string_view>::format(name, ctx);
-    }
-};

@@ -17,8 +17,10 @@
 
 #pragma once
 
-#include <couchbase/io/http_message.hxx>
 #include <algorithm>
+#include <memory>
+
+#include <couchbase/io/http_message.hxx>
 
 namespace couchbase::io
 {

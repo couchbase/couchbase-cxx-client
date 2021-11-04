@@ -17,8 +17,6 @@
 
 #pragma once
 
-#include <spdlog/spdlog.h>
-
 namespace couchbase
 {
 enum class service_type {
@@ -30,33 +28,3 @@ enum class service_type {
     management,
 };
 } // namespace couchbase
-
-template<>
-struct fmt::formatter<couchbase::service_type> : formatter<std::string_view> {
-    template<typename FormatContext>
-    auto format(couchbase::service_type type, FormatContext& ctx)
-    {
-        string_view name = "unknown";
-        switch (type) {
-            case couchbase::service_type::key_value:
-                name = "kv";
-                break;
-            case couchbase::service_type::query:
-                name = "query";
-                break;
-            case couchbase::service_type::analytics:
-                name = "analytics";
-                break;
-            case couchbase::service_type::search:
-                name = "search";
-                break;
-            case couchbase::service_type::view:
-                name = "views";
-                break;
-            case couchbase::service_type::management:
-                name = "mgmt";
-                break;
-        }
-        return formatter<string_view>::format(name, ctx);
-    }
-};

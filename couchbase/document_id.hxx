@@ -17,9 +17,9 @@
 
 #pragma once
 
+#include <cstdint>
+#include <string>
 #include <optional>
-
-#include <spdlog/fmt/fmt.h>
 
 namespace couchbase
 {
@@ -32,13 +32,3 @@ struct document_id {
     bool use_any_session{ false };
 };
 } // namespace couchbase
-
-template<>
-struct fmt::formatter<couchbase::document_id> : formatter<std::string> {
-    template<typename FormatContext>
-    auto format(const couchbase::document_id& id, FormatContext& ctx)
-    {
-        format_to(ctx.out(), "{}/{}/{}", id.bucket, id.collection, id.key);
-        return formatter<std::string>::format("", ctx);
-    }
-};

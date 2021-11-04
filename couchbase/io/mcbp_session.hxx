@@ -50,6 +50,7 @@
 
 #include <couchbase/sasl/client.h>
 
+#include <couchbase/logger/logger.hxx>
 #include <spdlog/fmt/bin_to_hex.h>
 
 #include <couchbase/origin.hxx>
@@ -143,10 +144,10 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             }
             hello_req.opaque(session_->next_opaque());
             hello_req.body().user_agent(utils::json::generate(user_agent));
-            spdlog::debug("{} user_agent={}, requested_features=[{}]",
-                          session_->log_prefix_,
-                          hello_req.body().user_agent(),
-                          fmt::join(hello_req.body().features(), ", "));
+            LOG_DEBUG("{} user_agent={}, requested_features=[{}]",
+                      session_->log_prefix_,
+                      hello_req.body().user_agent(),
+                      fmt::join(hello_req.body().features(), ", "));
             session_->write(hello_req.data());
 
             if (!session->origin_.credentials().uses_certificate()) {
@@ -202,26 +203,26 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                     protocol::client_response<protocol::hello_response_body> resp(std::move(msg));
                     if (resp.status() == protocol::status::success) {
                         session_->supported_features_ = resp.body().supported_features();
-                        spdlog::debug("{} supported_features=[{}]", session_->log_prefix_, fmt::join(session_->supported_features_, ", "));
+                        LOG_DEBUG("{} supported_features=[{}]", session_->log_prefix_, fmt::join(session_->supported_features_, ", "));
                         if (session_->origin_.credentials().uses_certificate()) {
-                            spdlog::debug("{} skip SASL authentication, because TLS certificate was specified", session_->log_prefix_);
+                            LOG_DEBUG("{} skip SASL authentication, because TLS certificate was specified", session_->log_prefix_);
                             return auth_success();
                         }
                     } else {
-                        spdlog::warn("{} unexpected message status during bootstrap: {} (opaque={})",
-                                     session_->log_prefix_,
-                                     resp.error_message(),
-                                     resp.opaque());
+                        LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
+                                    session_->log_prefix_,
+                                    resp.error_message(),
+                                    resp.opaque());
                         return complete(error::network_errc::handshake_failure);
                     }
                 } break;
                 case protocol::client_opcode::sasl_list_mechs: {
                     protocol::client_response<protocol::sasl_list_mechs_response_body> resp(std::move(msg));
                     if (resp.status() != protocol::status::success) {
-                        spdlog::warn("{} unexpected message status during bootstrap: {} (opaque={})",
-                                     session_->log_prefix_,
-                                     resp.error_message(),
-                                     resp.opaque());
+                        LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
+                                    session_->log_prefix_,
+                                    resp.error_message(),
+                                    resp.opaque());
                         return complete(error::common_errc::authentication_failure);
                     }
                 } break;
@@ -242,15 +243,15 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                             req.body().sasl_data(sasl_payload);
                             session_->write_and_flush(req.data());
                         } else {
-                            spdlog::error(
+                            LOG_ERROR(
                               "{} unable to authenticate: (sasl_code={}, opaque={})", session_->log_prefix_, sasl_code, resp.opaque());
                             return complete(error::common_errc::authentication_failure);
                         }
                     } else {
-                        spdlog::warn("{} unexpected message status during bootstrap: {} (opaque={})",
-                                     session_->log_prefix_,
-                                     resp.error_message(),
-                                     resp.opaque());
+                        LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
+                                    session_->log_prefix_,
+                                    resp.error_message(),
+                                    resp.opaque());
                         return complete(error::common_errc::authentication_failure);
                     }
                 } break;
@@ -266,38 +267,38 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                     if (resp.status() == protocol::status::success) {
                         session_->error_map_.emplace(resp.body().errmap());
                     } else {
-                        spdlog::warn("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
-                                     session_->log_prefix_,
-                                     resp.error_message(),
-                                     resp.opaque(),
-                                     spdlog::to_hex(msg.header_data()));
+                        LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
+                                    session_->log_prefix_,
+                                    resp.error_message(),
+                                    resp.opaque(),
+                                    spdlog::to_hex(msg.header_data()));
                         return complete(error::network_errc::protocol_error);
                     }
                 } break;
                 case protocol::client_opcode::select_bucket: {
                     protocol::client_response<protocol::select_bucket_response_body> resp(std::move(msg));
                     if (resp.status() == protocol::status::success) {
-                        spdlog::debug("{} selected bucket: {}", session_->log_prefix_, session_->bucket_name_.value_or(""));
+                        LOG_DEBUG("{} selected bucket: {}", session_->log_prefix_, session_->bucket_name_.value_or(""));
                         session_->bucket_selected_ = true;
                     } else if (resp.status() == protocol::status::not_found) {
-                        spdlog::debug("{} kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
-                                      session_->log_prefix_,
-                                      opcode,
-                                      resp.status(),
-                                      resp.opaque());
+                        LOG_DEBUG("{} kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
+                                  session_->log_prefix_,
+                                  opcode,
+                                  resp.status(),
+                                  resp.opaque());
                         return complete(error::network_errc::configuration_not_available);
                     } else if (resp.status() == protocol::status::no_access) {
-                        spdlog::debug("{} unable to select bucket: {}, probably the bucket does not exist",
-                                      session_->log_prefix_,
-                                      session_->bucket_name_.value_or(""));
+                        LOG_DEBUG("{} unable to select bucket: {}, probably the bucket does not exist",
+                                  session_->log_prefix_,
+                                  session_->bucket_name_.value_or(""));
                         session_->bucket_selected_ = false;
                         return complete(error::common_errc::bucket_not_found);
                     } else {
-                        spdlog::warn("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
-                                     session_->log_prefix_,
-                                     resp.error_message(),
-                                     resp.opaque(),
-                                     spdlog::to_hex(msg.header_data()));
+                        LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
+                                    session_->log_prefix_,
+                                    resp.error_message(),
+                                    resp.opaque(),
+                                    spdlog::to_hex(msg.header_data()));
                         return complete(error::common_errc::bucket_not_found);
                     }
                 } break;
@@ -307,31 +308,31 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                         session_->update_configuration(resp.body().config());
                         complete({});
                     } else if (resp.status() == protocol::status::not_found) {
-                        spdlog::debug("{} kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
-                                      session_->log_prefix_,
-                                      opcode,
-                                      resp.status(),
-                                      resp.opaque());
+                        LOG_DEBUG("{} kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
+                                  session_->log_prefix_,
+                                  opcode,
+                                  resp.status(),
+                                  resp.opaque());
                         return complete(error::network_errc::configuration_not_available);
                     } else if (resp.status() == protocol::status::no_bucket && !session_->bucket_name_) {
                         // bucket-less session, but the server wants bucket
                         session_->supports_gcccp_ = false;
-                        spdlog::warn("{} this server does not support GCCCP, open bucket before making any cluster-level command",
-                                     session_->log_prefix_);
+                        LOG_WARNING("{} this server does not support GCCCP, open bucket before making any cluster-level command",
+                                    session_->log_prefix_);
                         session_->update_configuration(
                           topology::make_blank_configuration(session_->endpoint_address_, session_->endpoint_.port(), 0));
                         complete({});
                     } else {
-                        spdlog::warn("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
-                                     session_->log_prefix_,
-                                     resp.error_message(),
-                                     resp.opaque(),
-                                     spdlog::to_hex(msg.header_data()));
+                        LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
+                                    session_->log_prefix_,
+                                    resp.error_message(),
+                                    resp.opaque(),
+                                    spdlog::to_hex(msg.header_data()));
                         return complete(error::network_errc::protocol_error);
                     }
                 } break;
                 default:
-                    spdlog::warn("{} unexpected message during bootstrap: {}", session_->log_prefix_, opcode);
+                    LOG_WARNING("{} unexpected message during bootstrap: {}", session_->log_prefix_, opcode);
                     return complete(error::network_errc::protocol_error);
             }
         }
@@ -384,10 +385,10 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                                     session_->update_configuration(resp.body().config());
                                 }
                             } else {
-                                spdlog::warn("{} unexpected message status: {} (opaque={})",
-                                             session_->log_prefix_,
-                                             resp.error_message(),
-                                             resp.opaque());
+                                LOG_WARNING("{} unexpected message status: {} (opaque={})",
+                                            session_->log_prefix_,
+                                            resp.error_message(),
+                                            resp.opaque());
                             }
                         } break;
                         case protocol::client_opcode::noop:
@@ -415,37 +416,37 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                             auto handler = session_->command_handlers_.find(opaque);
                             if (handler != session_->command_handlers_.end() && handler->second) {
                                 auto ec = session_->map_status_code(opcode, status);
-                                spdlog::trace("{} MCBP invoke operation handler: opcode={}, opaque={}, status={}, ec={}",
-                                              session_->log_prefix_,
-                                              opcode,
-                                              opaque,
-                                              protocol::status_to_string(status),
-                                              ec.message());
+                                LOG_TRACE("{} MCBP invoke operation handler: opcode={}, opaque={}, status={}, ec={}",
+                                          session_->log_prefix_,
+                                          opcode,
+                                          opaque,
+                                          protocol::status_to_string(status),
+                                          ec.message());
                                 auto fun = std::move(handler->second);
                                 session_->command_handlers_.erase(handler);
                                 session_->command_handlers_mutex_.unlock();
                                 fun(ec, retry_reason::do_not_retry, std::move(msg));
                             } else {
                                 session_->command_handlers_mutex_.unlock();
-                                spdlog::debug("{} unexpected orphan response: opcode={}, opaque={}, status={}",
-                                              session_->log_prefix_,
-                                              opcode,
-                                              msg.header.opaque,
-                                              protocol::status_to_string(status));
+                                LOG_DEBUG("{} unexpected orphan response: opcode={}, opaque={}, status={}",
+                                          session_->log_prefix_,
+                                          opcode,
+                                          msg.header.opaque,
+                                          protocol::status_to_string(status));
                             }
                         } break;
                         default:
-                            spdlog::warn("{} unexpected client response: opcode={}, opaque={}{:a}{:a})",
-                                         session_->log_prefix_,
-                                         opcode,
-                                         msg.header.opaque,
-                                         spdlog::to_hex(msg.header_data()),
-                                         spdlog::to_hex(msg.body));
+                            LOG_WARNING("{} unexpected client response: opcode={}, opaque={}{:a}{:a})",
+                                        session_->log_prefix_,
+                                        opcode,
+                                        msg.header.opaque,
+                                        spdlog::to_hex(msg.header_data()),
+                                        spdlog::to_hex(msg.body));
                     }
                     break;
                 case protocol::magic::server_request:
                     Expects(protocol::is_valid_server_request_opcode(msg.header.opcode));
-                    switch (auto opcode = static_cast<protocol::server_opcode>(msg.header.opcode)) {
+                    switch (static_cast<protocol::server_opcode>(msg.header.opcode)) {
                         case protocol::server_opcode::cluster_map_change_notification: {
                             protocol::server_request<protocol::cluster_map_change_notification_request_body> req(msg);
                             std::optional<topology::configuration> config = req.body().config();
@@ -458,24 +459,24 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                             }
                         } break;
                         default:
-                            spdlog::warn("{} unexpected server request: opcode={:x}, opaque={}{:a}{:a}",
-                                         session_->log_prefix_,
-                                         opcode,
-                                         msg.header.opaque,
-                                         spdlog::to_hex(msg.header_data()),
-                                         spdlog::to_hex(msg.body));
+                            LOG_WARNING("{} unexpected server request: opcode={:x}, opaque={}{:a}{:a}",
+                                        session_->log_prefix_,
+                                        msg.header.opcode,
+                                        msg.header.opaque,
+                                        spdlog::to_hex(msg.header_data()),
+                                        spdlog::to_hex(msg.body));
                     }
                     break;
                 case protocol::magic::client_request:
                 case protocol::magic::alt_client_request:
                 case protocol::magic::server_response:
-                    spdlog::warn("{} unexpected magic: {} (opcode={:x}, opaque={}){:a}{:a}",
-                                 session_->log_prefix_,
-                                 magic,
-                                 msg.header.opcode,
-                                 msg.header.opaque,
-                                 spdlog::to_hex(msg.header_data()),
-                                 spdlog::to_hex(msg.body));
+                    LOG_WARNING("{} unexpected magic: {} (opcode={:x}, opaque={}){:a}{:a}",
+                                session_->log_prefix_,
+                                magic,
+                                msg.header.opcode,
+                                msg.header.opaque,
+                                spdlog::to_hex(msg.header_data()),
+                                spdlog::to_hex(msg.body));
                     break;
             }
         }
@@ -616,7 +617,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             if (ec == asio::error::operation_aborted || self->stopped_) {
                 return;
             }
-            spdlog::warn("{} unable to bootstrap in time", self->log_prefix_);
+            LOG_WARNING("{} unable to bootstrap in time", self->log_prefix_);
             self->bootstrap_handler_(error::common_errc::unambiguous_timeout, {});
             self->bootstrap_handler_ = nullptr;
             self->stop(retry_reason::socket_closed_while_in_flight);
@@ -633,16 +634,16 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         if (stream_->is_open()) {
             std::string old_id = stream_->id();
             stream_->reopen();
-            spdlog::trace(R"({} reopen socket connection "{}" -> "{}", host="{}", port={})",
-                          log_prefix_,
-                          old_id,
-                          stream_->id(),
-                          bootstrap_hostname_,
-                          bootstrap_port_);
+            LOG_TRACE(R"({} reopen socket connection "{}" -> "{}", host="{}", port={})",
+                      log_prefix_,
+                      old_id,
+                      stream_->id(),
+                      bootstrap_hostname_,
+                      bootstrap_port_);
         }
         if (origin_.exhausted()) {
             auto backoff = std::chrono::milliseconds(500);
-            spdlog::debug("{} reached the end of list of bootstrap nodes, waiting for {}ms before restart", log_prefix_, backoff.count());
+            LOG_DEBUG("{} reached the end of list of bootstrap nodes, waiting for {}ms before restart", log_prefix_, backoff.count());
             retry_backoff_.expires_after(backoff);
             retry_backoff_.async_wait([self = shared_from_this()](std::error_code ec) mutable {
                 if (ec == asio::error::operation_aborted || self->stopped_) {
@@ -661,7 +662,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                                   bucket_name_.value_or("-"),
                                   bootstrap_hostname_,
                                   bootstrap_port_);
-        spdlog::debug("{} attempt to establish MCBP connection", log_prefix_);
+        LOG_DEBUG("{} attempt to establish MCBP connection", log_prefix_);
         resolver_.async_resolve(bootstrap_hostname_,
                                 bootstrap_port_,
                                 std::bind(&mcbp_session::on_resolve, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
@@ -688,7 +689,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             return;
         }
         state_ = diag::endpoint_state::disconnecting;
-        spdlog::debug("{} stop MCBP connection, reason={}", log_prefix_, reason);
+        LOG_DEBUG("{} stop MCBP connection, reason={}", log_prefix_, reason);
         stopped_ = true;
         bootstrap_deadline_.cancel();
         connection_deadline_.cancel();
@@ -709,7 +710,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             std::scoped_lock lock(command_handlers_mutex_);
             for (auto& [opaque, handler] : command_handlers_) {
                 if (handler) {
-                    spdlog::debug("{} MCBP cancel operation during session close, opaque={}, ec={}", log_prefix_, opaque, ec.message());
+                    LOG_DEBUG("{} MCBP cancel operation during session close, opaque={}, ec={}", log_prefix_, opaque, ec.message());
                     auto fun = std::move(handler);
                     fun(ec, reason, {});
                 }
@@ -731,8 +732,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         }
         std::uint32_t opaque{ 0 };
         std::memcpy(&opaque, buf.data() + 12, sizeof(opaque));
-        spdlog::trace("{} MCBP send, opaque={}, {:n}", log_prefix_, opaque, spdlog::to_hex(buf.begin(), buf.begin() + 24));
-        SPDLOG_TRACE("{} MCBP send, opaque={}{:a}", log_prefix_, opaque, spdlog::to_hex(data));
+        LOG_TRACE("{} MCBP send, opaque={}, {:n}", log_prefix_, opaque, spdlog::to_hex(buf.begin(), buf.begin() + 24));
         std::scoped_lock lock(output_buffer_mutex_);
         output_buffer_.push_back(buf);
     }
@@ -759,7 +759,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                              std::function<void(std::error_code, retry_reason, io::mcbp_message&&)> handler)
     {
         if (stopped_) {
-            spdlog::warn("{} MCBP cancel operation, while trying to write to closed session, opaque={}", log_prefix_, opaque);
+            LOG_WARNING("{} MCBP cancel operation, while trying to write to closed session, opaque={}", log_prefix_, opaque);
             handler(error::common_errc::request_canceled, retry_reason::socket_closed_while_in_flight, {});
             return;
         }
@@ -770,7 +770,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         if (bootstrapped_ && stream_->is_open()) {
             write_and_flush(data);
         } else {
-            spdlog::debug("{} the stream is not ready yet, put the message into pending buffer, opaque={}", log_prefix_, opaque);
+            LOG_DEBUG("{} the stream is not ready yet, put the message into pending buffer, opaque={}", log_prefix_, opaque);
             std::scoped_lock lock(pending_buffer_mutex_);
             pending_buffer_.push_back(data);
         }
@@ -783,7 +783,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         }
         command_handlers_mutex_.lock();
         if (auto handler = command_handlers_.find(opaque); handler != command_handlers_.end()) {
-            spdlog::debug("{} MCBP cancel operation, opaque={}, ec={} ({})", log_prefix_, opaque, ec.value(), ec.message());
+            LOG_DEBUG("{} MCBP cancel operation, opaque={}, ec={} ({})", log_prefix_, opaque, ec.value(), ec.message());
             if (handler->second) {
                 auto fun = std::move(handler->second);
                 command_handlers_.erase(handler);
@@ -990,7 +990,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                 break;
         }
         // FIXME: use error map here
-        spdlog::warn("{} unknown status code: {} (opcode={})", log_prefix_, protocol::status_to_string(status), opcode);
+        LOG_WARNING("{} unknown status code: {} (opcode={})", log_prefix_, protocol::status_to_string(status), opcode);
         return error::network_errc::protocol_error;
     }
 
@@ -1017,15 +1017,15 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         }
         if (config_) {
             if (config_->vbmap && config.vbmap && config_->vbmap->size() != config.vbmap->size()) {
-                spdlog::debug("{} received a configuration with a different number of vbuckets, ignoring", log_prefix_);
+                LOG_DEBUG("{} received a configuration with a different number of vbuckets, ignoring", log_prefix_);
                 return;
             }
             if (config == config_) {
-                spdlog::trace("{} received a configuration with identical revision (rev={}), ignoring", log_prefix_, config.rev_str());
+                LOG_TRACE("{} received a configuration with identical revision (rev={}), ignoring", log_prefix_, config.rev_str());
                 return;
             }
             if (config < config_) {
-                spdlog::debug("{} received a configuration with older revision, ignoring", log_prefix_);
+                LOG_DEBUG("{} received a configuration with older revision, ignoring", log_prefix_);
                 return;
             }
         }
@@ -1049,7 +1049,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             }
         }
         config_.emplace(config);
-        spdlog::debug("{} received new configuration: {}", log_prefix_, config_.value());
+        LOG_DEBUG("{} received new configuration: {}", log_prefix_, config_.value());
         for (const auto& listener : config_listeners_) {
             listener(*config_);
         }
@@ -1075,11 +1075,11 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
             if (ntohl(msg.header.bodylen) - offset > 0) {
                 auto config = protocol::parse_config(std::string(msg.body.begin() + offset, msg.body.end()));
-                spdlog::debug("{} received not_my_vbucket status for {}, opaque={} with config rev={} in the payload",
-                              log_prefix_,
-                              protocol::client_opcode(msg.header.opcode),
-                              msg.header.opaque,
-                              config.rev_str());
+                LOG_DEBUG("{} received not_my_vbucket status for {}, opaque={} with config rev={} in the payload",
+                          log_prefix_,
+                          protocol::client_opcode(msg.header.opcode),
+                          msg.header.opaque,
+                          config.rev_str());
                 update_configuration(std::move(config));
             }
         }
@@ -1105,7 +1105,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             return initiate_bootstrap();
         }
         if (retry_bootstrap_on_bucket_not_found_ && ec == error::common_errc::bucket_not_found) {
-            spdlog::debug(R"({} server returned {} ({}), it must be transient condition, retrying)", log_prefix_, ec.value(), ec.message());
+            LOG_DEBUG(R"({} server returned {} ({}), it must be transient condition, retrying)", log_prefix_, ec.value(), ec.message());
             return initiate_bootstrap();
         }
 
@@ -1137,7 +1137,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         }
         last_active_ = std::chrono::steady_clock::now();
         if (ec) {
-            spdlog::error("{} error on resolve: {} ({})", log_prefix_, ec.value(), ec.message());
+            LOG_ERROR("{} error on resolve: {} ({})", log_prefix_, ec.value(), ec.message());
             return initiate_bootstrap();
         }
         endpoints_ = endpoints;
@@ -1153,11 +1153,11 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         }
         last_active_ = std::chrono::steady_clock::now();
         if (it != endpoints_.end()) {
-            spdlog::debug("{} connecting to {}:{}", log_prefix_, it->endpoint().address().to_string(), it->endpoint().port());
+            LOG_DEBUG("{} connecting to {}:{}", log_prefix_, it->endpoint().address().to_string(), it->endpoint().port());
             connection_deadline_.expires_after(timeout_defaults::connect_timeout);
             stream_->async_connect(it->endpoint(), std::bind(&mcbp_session::on_connect, shared_from_this(), std::placeholders::_1, it));
         } else {
-            spdlog::error("{} no more endpoints left to connect, will try another address", log_prefix_);
+            LOG_ERROR("{} no more endpoints left to connect, will try another address", log_prefix_);
             return initiate_bootstrap();
         }
     }
@@ -1169,13 +1169,13 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         }
         last_active_ = std::chrono::steady_clock::now();
         if (!stream_->is_open() || ec) {
-            spdlog::warn("{} unable to connect to {}:{}: {} ({}), is_open={}",
-                         log_prefix_,
-                         it->endpoint().address().to_string(),
-                         it->endpoint().port(),
-                         ec.value(),
-                         ec.message(),
-                         stream_->is_open());
+            LOG_WARNING("{} unable to connect to {}:{}: {} ({}), is_open={}",
+                        log_prefix_,
+                        it->endpoint().address().to_string(),
+                        it->endpoint().port(),
+                        ec.value(),
+                        ec.message(),
+                        stream_->is_open());
             do_connect(++it);
         } else {
             stream_->set_options();
@@ -1183,7 +1183,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             local_endpoint_address_ = local_endpoint_.address().to_string();
             endpoint_ = it->endpoint();
             endpoint_address_ = endpoint_.address().to_string();
-            spdlog::debug("{} connected to {}:{}", log_prefix_, endpoint_address_, it->endpoint().port());
+            LOG_DEBUG("{} connected to {}:{}", log_prefix_, endpoint_address_, it->endpoint().port());
             log_prefix_ = fmt::format("[{}/{}/{}/{}] <{}/{}:{}>",
                                       client_id_,
                                       id_,
@@ -1225,19 +1225,19 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
               self->last_active_ = std::chrono::steady_clock::now();
               if (ec) {
                   if (stream_id != self->stream_->id()) {
-                      spdlog::error(R"({} ignore IO error while reading from the socket: {} ({}), old_id="{}", new_id="{}")",
-                                    self->log_prefix_,
-                                    ec.value(),
-                                    ec.message(),
-                                    stream_id,
-                                    self->stream_->id());
+                      LOG_ERROR(R"({} ignore IO error while reading from the socket: {} ({}), old_id="{}", new_id="{}")",
+                                self->log_prefix_,
+                                ec.value(),
+                                ec.message(),
+                                stream_id,
+                                self->stream_->id());
                       return;
                   }
-                  spdlog::error(R"({} IO error while reading from the socket("{}"): {} ({}))",
-                                self->log_prefix_,
-                                self->stream_->id(),
-                                ec.value(),
-                                ec.message());
+                  LOG_ERROR(R"({} IO error while reading from the socket("{}"): {} ({}))",
+                            self->log_prefix_,
+                            self->stream_->id(),
+                            ec.value(),
+                            ec.message());
                   return self->stop(retry_reason::socket_closed_while_in_flight);
               }
               self->parser_.feed(self->input_buffer_.data(), self->input_buffer_.data() + ssize_t(bytes_transferred));
@@ -1246,13 +1246,8 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                   mcbp_message msg{};
                   switch (self->parser_.next(msg)) {
                       case mcbp_parser::result::ok:
-                          spdlog::trace(
+                          LOG_TRACE(
                             "{} MCBP recv, opaque={}, {:n}", self->log_prefix_, msg.header.opaque, spdlog::to_hex(msg.header_data()));
-                          SPDLOG_TRACE("{} MCBP recv, opaque={}{:a}{:a}",
-                                       self->log_prefix_,
-                                       msg.header.opaque,
-                                       spdlog::to_hex(msg.header_data()),
-                                       spdlog::to_hex(msg.body));
                           self->handler_->handle(std::move(msg));
                           if (self->stopped_) {
                               return;
@@ -1292,11 +1287,11 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             }
             self->last_active_ = std::chrono::steady_clock::now();
             if (ec) {
-                spdlog::error(R"({} IO error while writing to the socket("{}"): {} ({}))",
-                              self->log_prefix_,
-                              self->stream_->id(),
-                              ec.value(),
-                              ec.message());
+                LOG_ERROR(R"({} IO error while writing to the socket("{}"): {} ({}))",
+                          self->log_prefix_,
+                          self->stream_->id(),
+                          ec.value(),
+                          ec.message());
                 return self->stop(retry_reason::socket_closed_while_in_flight);
             }
             {

@@ -18,6 +18,8 @@
 #include <tao/pegtl.hpp>
 #include <tao/pegtl/contrib/uri.hpp>
 
+#include <couchbase/logger/logger.hxx>
+
 #include <couchbase/utils/connection_string.hxx>
 #include <couchbase/utils/duration_parser.hxx>
 
@@ -195,9 +197,9 @@ parse_option(std::size_t& receiver, const std::string& name, const std::string& 
     try {
         receiver = std::stoull(value, nullptr, 10);
     } catch (const std::invalid_argument& ex1) {
-        spdlog::warn(R"(unable to parse "{}" parameter in connection string (value "{}" is not a number): {})", name, value, ex1.what());
+        LOG_WARNING(R"(unable to parse "{}" parameter in connection string (value "{}" is not a number): {})", name, value, ex1.what());
     } catch (const std::out_of_range& ex2) {
-        spdlog::warn(R"(unable to parse "{}" parameter in connection string (value "{}" is out of range): {})", name, value, ex2.what());
+        LOG_WARNING(R"(unable to parse "{}" parameter in connection string (value "{}" is out of range): {})", name, value, ex2.what());
     }
 }
 
@@ -210,11 +212,9 @@ parse_option(std::chrono::milliseconds& receiver, const std::string& name, const
         try {
             receiver = std::chrono::milliseconds(std::stoull(value, nullptr, 10));
         } catch (const std::invalid_argument& ex1) {
-            spdlog::warn(
-              R"(unable to parse "{}" parameter in connection string (value "{}" is not a number): {})", name, value, ex1.what());
+            LOG_WARNING(R"(unable to parse "{}" parameter in connection string (value "{}" is not a number): {})", name, value, ex1.what());
         } catch (const std::out_of_range& ex2) {
-            spdlog::warn(
-              R"(unable to parse "{}" parameter in connection string (value "{}" is out of range): {})", name, value, ex2.what());
+            LOG_WARNING(R"(unable to parse "{}" parameter in connection string (value "{}" is out of range): {})", name, value, ex2.what());
         }
     }
 }
@@ -312,7 +312,7 @@ extract_options(connection_string& connstr)
             if (connstr.bootstrap_nodes.size() == 1) {
                 parse_option(connstr.options.enable_dns_srv, name, value);
             } else {
-                spdlog::warn(
+                LOG_WARNING(
                   R"(parameter "{}" require single entry in bootstrap nodes list of the connection string, ignoring (value "{}"))",
                   name,
                   value);
@@ -354,7 +354,7 @@ extract_options(connection_string& connstr)
         } else if (name == "tls_verify") {
             parse_option(connstr.options.tls_verify, name, value);
         } else {
-            spdlog::warn(R"(unknown parameter "{}" in connection string (value "{}"))", name, value);
+            LOG_WARNING(R"(unknown parameter "{}" in connection string (value "{}"))", name, value);
         }
     }
 }

@@ -16,6 +16,7 @@
 #pragma once
 
 #include <vector>
+#include <stdexcept>
 
 #include <couchbase/sasl/client.h>
 

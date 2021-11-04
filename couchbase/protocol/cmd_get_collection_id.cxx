@@ -15,6 +15,8 @@
  *   limitations under the License.
  */
 
+#include <cstring>
+
 #include <gsl/assert>
 
 #include <couchbase/protocol/cmd_get_collection_id.hxx>
@@ -36,11 +38,11 @@ get_collection_id_response_body::parse(protocol::status status,
     if (status == protocol::status::success && extras_size == 12) {
         std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size;
 
-        memcpy(&manifest_uid_, body.data() + offset, sizeof(manifest_uid_));
+        std::memcpy(&manifest_uid_, body.data() + offset, sizeof(manifest_uid_));
         manifest_uid_ = utils::byte_swap_64(manifest_uid_);
         offset += 8;
 
-        memcpy(&collection_uid_, body.data() + offset, sizeof(collection_uid_));
+        std::memcpy(&collection_uid_, body.data() + offset, sizeof(collection_uid_));
         collection_uid_ = ntohl(collection_uid_);
         return true;
     }

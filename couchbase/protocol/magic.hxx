@@ -17,11 +17,11 @@
 
 #pragma once
 
-#include <spdlog/spdlog.h>
+#include <cstdint>
 
 namespace couchbase::protocol
 {
-enum class magic : uint8_t {
+enum class magic : std::uint8_t {
     /// Request packet from client to server
     client_request = 0x80,
     /// The alternative request packet containing frame extras
@@ -37,7 +37,7 @@ enum class magic : uint8_t {
 };
 
 constexpr bool
-is_valid_magic(uint8_t code)
+is_valid_magic(std::uint8_t code)
 {
     switch (magic(code)) {
         case magic::client_request:
@@ -51,33 +51,3 @@ is_valid_magic(uint8_t code)
     return false;
 }
 } // namespace couchbase::protocol
-
-template<>
-struct fmt::formatter<couchbase::protocol::magic> : formatter<string_view> {
-    template<typename FormatContext>
-    auto format(couchbase::protocol::magic code, FormatContext& ctx)
-    {
-        string_view name = "unknown";
-        switch (code) {
-            case couchbase::protocol::magic::client_request:
-                name = "client_request (0x80)";
-                break;
-            case couchbase::protocol::magic::alt_client_request:
-                name = "alt_client_request (0x08)";
-                break;
-            case couchbase::protocol::magic::client_response:
-                name = "client_response (0x81)";
-                break;
-            case couchbase::protocol::magic::alt_client_response:
-                name = "alt_client_response (0x18)";
-                break;
-            case couchbase::protocol::magic::server_request:
-                name = "server_request (0x82)";
-                break;
-            case couchbase::protocol::magic::server_response:
-                name = "server_response (0x83)";
-                break;
-        }
-        return formatter<string_view>::format(name, ctx);
-    }
-};

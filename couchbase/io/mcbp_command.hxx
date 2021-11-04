@@ -138,13 +138,13 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     {
         auto backoff = std::chrono::milliseconds(500);
         auto time_left = deadline.expiry() - std::chrono::steady_clock::now();
-        spdlog::debug(R"({} unknown collection response for "{}/{}/{}", time_left={}ms, id="{}")",
-                      session_->log_prefix(),
-                      request.id.bucket,
-                      request.id.collection,
-                      request.id.key,
-                      std::chrono::duration_cast<std::chrono::milliseconds>(time_left).count(),
-                      id_);
+        LOG_DEBUG(R"({} unknown collection response for "{}/{}/{}", time_left={}ms, id="{}")",
+                  session_->log_prefix(),
+                  request.id.bucket,
+                  request.id.collection,
+                  request.id.key,
+                  std::chrono::duration_cast<std::chrono::milliseconds>(time_left).count(),
+                  id_);
         if (time_left < backoff) {
             return invoke_handler(make_error_code(request.retries.idempotent ? error::common_errc::unambiguous_timeout
                                                                              : error::common_errc::ambiguous_timeout));
@@ -169,13 +169,13 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                 if (collection_id) {
                     request.id.collection_uid = *collection_id;
                 } else {
-                    spdlog::debug(R"({} no cache entry for collection, resolve collection id for "{}/{}/{}", timeout={}ms, id="{}")",
-                                  session_->log_prefix(),
-                                  request.id.bucket,
-                                  request.id.collection,
-                                  request.id.key,
-                                  request.timeout.count(),
-                                  id_);
+                    LOG_DEBUG(R"({} no cache entry for collection, resolve collection id for "{}/{}/{}", timeout={}ms, id="{}")",
+                              session_->log_prefix(),
+                              request.id.bucket,
+                              request.id.collection,
+                              request.id.key,
+                              request.timeout.count(),
+                              id_);
                     return request_collection_id();
                 }
             } else {

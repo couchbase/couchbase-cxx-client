@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-#include <spdlog/spdlog.h>
+#include <couchbase/logger/logger.hxx>
 
 #include <couchbase/platform/base64.h>
 #include <couchbase/platform/random.h>
@@ -51,18 +51,18 @@ decodeAttributeList(const std::string& list, AttributeMap& attributes)
 {
     size_t pos = 0;
 
-    spdlog::trace("decoding attribute list [{}]", list);
+    LOG_TRACE("decoding attribute list [{}]", list);
 
     while (pos < list.length()) {
         auto equal = list.find('=', pos);
         if (equal == std::string::npos) {
             // syntax error!!
-            spdlog::error("decode attribute list [{}] failed: no '='", list);
+            LOG_ERROR("decode attribute list [{}] failed: no '='", list);
             return false;
         }
 
         if ((equal - pos) != 1) {
-            spdlog::error("decode attribute list [{}] failed: no key is multichar", list);
+            LOG_ERROR("decode attribute list [{}] failed: no key is multichar", list);
             return false;
         }
 
@@ -71,7 +71,7 @@ decodeAttributeList(const std::string& list, AttributeMap& attributes)
 
         // Make sure we haven't seen this key before..
         if (attributes.find(key) != attributes.end()) {
-            spdlog::error("decode attribute list [{}] failed: key [{}] is multichar", list, key);
+            LOG_ERROR("decode attribute list [{}] failed: key [{}] is multichar", list, key);
             return false;
         }
 
@@ -95,16 +95,13 @@ std::string
 ScramShaBackend::getAuthMessage()
 {
     if (client_first_message_bare.empty()) {
-        throw std::logic_error("can't call getAuthMessage without client_first_message_bare "
-                               "is set");
+        throw std::logic_error("can't call getAuthMessage without client_first_message_bare is set");
     }
     if (server_first_message.empty()) {
-        throw std::logic_error("can't call getAuthMessage without server_first_message is "
-                               "set");
+        throw std::logic_error("can't call getAuthMessage without server_first_message is set");
     }
     if (client_final_message_without_proof.empty()) {
-        throw std::logic_error("can't call getAuthMessage without "
-                               "client_final_message_without_proof is set");
+        throw std::logic_error("can't call getAuthMessage without client_final_message_without_proof is set");
     }
     return client_first_message_bare + "," + server_first_message + "," + client_final_message_without_proof;
 }
@@ -122,8 +119,7 @@ ScramShaBackend::addAttribute(std::ostream& out, char key, const std::string& va
         case 'r': // client nonce.. printable characters
             for (const auto& c : value) {
                 if (c == ',' || (isprint(c) == 0)) {
-                    throw std::invalid_argument("ScramShaBackend::addAttribute: Invalid character in "
-                                                "client nonce");
+                    throw std::invalid_argument("ScramShaBackend::addAttribute: Invalid character in client nonce");
                 }
             }
             out << value;
@@ -141,9 +137,7 @@ ScramShaBackend::addAttribute(std::ostream& out, char key, const std::string& va
             try {
                 std::stoi(value);
             } catch (...) {
-                throw std::invalid_argument("ScramShaBackend::addAttribute: "
-                                            "Iteration count must be a numeric"
-                                            " value");
+                throw std::invalid_argument("ScramShaBackend::addAttribute: Iteration count must be a numeric value");
             }
             out << value;
             break;
@@ -151,16 +145,14 @@ ScramShaBackend::addAttribute(std::ostream& out, char key, const std::string& va
         case 'e':
             for (const auto& c : value) {
                 if (c == ',' || (isprint(c) == 0)) {
-                    throw std::invalid_argument("ScramShaBackend::addAttribute: Invalid character in "
-                                                "error message");
+                    throw std::invalid_argument("ScramShaBackend::addAttribute: Invalid character in error message");
                 }
             }
             out << value;
             break;
 
         default:
-            throw std::invalid_argument("ScramShaBackend::addAttribute:"
-                                        " Invalid key");
+            throw std::invalid_argument("ScramShaBackend::addAttribute: Invalid key");
     }
 
     if (more) {
@@ -183,16 +175,14 @@ ScramShaBackend::addAttribute(std::ostream& out, char key, int value, bool more)
         case 'p': // base64 encoded client proof
         case 'v': // base64 encoded server signature
         case 'e': // error message
-            throw std::invalid_argument("ScramShaBackend::addAttribute:"
-                                        " Invalid value (should not be int)");
+            throw std::invalid_argument("ScramShaBackend::addAttribute: Invalid value (should not be int)");
 
         case 'i': // iterator count
             out << value;
             break;
 
         default:
-            throw std::invalid_argument("ScramShaBackend::addAttribute:"
-                                        " Invalid key");
+            throw std::invalid_argument("ScramShaBackend::addAttribute: Invalid key");
     }
 
     if (more) {
@@ -262,7 +252,7 @@ ClientBackend::ClientBackend(GetUsernameCallback& user_cb,
 
     std::array<char, 8> nonce{};
     if (!randomGenerator.getBytes(nonce.data(), nonce.size())) {
-        spdlog::error("failed to generate server nonce");
+        LOG_ERROR_RAW("failed to generate server nonce");
         throw std::bad_alloc();
     }
 
@@ -320,13 +310,13 @@ ClientBackend::step(std::string_view input)
 
         if (attributes.find('r') == attributes.end() || attributes.find('s') == attributes.end() ||
             attributes.find('i') == attributes.end()) {
-            spdlog::error("missing r/s/i in server message");
+            LOG_ERROR_RAW("missing r/s/i in server message");
             return { error::BAD_PARAM, {} };
         }
 
         // I've got the SALT, lets generate the salted password
         if (!generateSaltedPassword(passwordCallback())) {
-            spdlog::error("failed to generated salted password");
+            LOG_ERROR_RAW("failed to generated salted password");
             return { error::FAIL, {} };
         }
 
@@ -348,22 +338,22 @@ ClientBackend::step(std::string_view input)
 
     AttributeMap attributes;
     if (!decodeAttributeList(server_final_message, attributes)) {
-        spdlog::error("SCRAM: failed to decode server-final-message");
+        LOG_ERROR_RAW("SCRAM: failed to decode server-final-message");
         return { error::BAD_PARAM, {} };
     }
 
     if (attributes.find('e') != attributes.end()) {
-        spdlog::error("failed to authenticate: {}", attributes['e']);
+        LOG_ERROR("failed to authenticate: {}", attributes['e']);
         return { error::FAIL, {} };
     }
 
     if (attributes.find('v') == attributes.end()) {
-        spdlog::error("syntax error server final message is missing 'v'");
+        LOG_ERROR_RAW("syntax error server final message is missing 'v'");
         return { error::BAD_PARAM, {} };
     }
 
     if (auto encoded = couchbase::base64::encode(getServerSignature()); encoded != attributes['v']) {
-        spdlog::error("incorrect ServerKey received");
+        LOG_ERROR_RAW("incorrect ServerKey received");
         return { error::FAIL, {} };
     }
 

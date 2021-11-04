@@ -17,6 +17,8 @@
 
 #include <gsl/assert>
 
+#include <couchbase/logger/logger.hxx>
+
 #include <couchbase/protocol/cmd_get_cluster_config.hxx>
 
 #include <couchbase/utils/json.hxx>
@@ -46,7 +48,7 @@ get_cluster_config_response_body::parse(protocol::status status,
         try {
             config_ = parse_config(std::string(body.begin() + offset, body.end()));
         } catch (const tao::pegtl::parse_error& e) {
-            spdlog::debug("unable to parse cluster configuration as JSON: {}, {}", e.message(), std::string(body.begin(), body.end()));
+            LOG_DEBUG("unable to parse cluster configuration as JSON: {}, {}", e.message(), std::string(body.begin(), body.end()));
         }
         return true;
     }

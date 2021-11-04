@@ -28,6 +28,8 @@
 
 #include <couchbase/utils/byteswap.hxx>
 
+#include <couchbase/logger/logger.hxx>
+
 namespace couchbase::io
 {
 mcbp_parser::result
@@ -71,15 +73,15 @@ mcbp_parser::next(mcbp_message& msg)
     }
     buf.erase(buf.begin(), buf.begin() + header_size + body_size);
     if (!protocol::is_valid_magic(buf[0])) {
-        spdlog::warn("parsed frame for magic={:x}, opcode={:x}, opaque={}, body_len={}. Invalid magic of the next frame: {:x}, {} "
-                     "bytes to parse{}",
-                     msg.header.magic,
-                     msg.header.opcode,
-                     msg.header.opaque,
-                     body_size,
-                     buf[0],
-                     buf.size(),
-                     spdlog::to_hex(buf));
+        LOG_WARNING("parsed frame for magic={:x}, opcode={:x}, opaque={}, body_len={}. Invalid magic of the next frame: {:x}, {} "
+                    "bytes to parse{}",
+                    msg.header.magic,
+                    msg.header.opcode,
+                    msg.header.opaque,
+                    body_size,
+                    buf[0],
+                    buf.size(),
+                    spdlog::to_hex(buf));
         reset();
     }
     return result::ok;

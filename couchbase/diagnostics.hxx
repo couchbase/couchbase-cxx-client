@@ -22,8 +22,6 @@
 #include <vector>
 #include <chrono>
 
-#include <spdlog/fmt/fmt.h>
-
 #include <couchbase/service_type.hxx>
 
 namespace couchbase::diag
@@ -95,76 +93,3 @@ struct ping_result {
     int version{ 2 };
 };
 } // namespace couchbase::diag
-
-template<>
-struct fmt::formatter<couchbase::diag::cluster_state> : formatter<std::string_view> {
-    template<typename FormatContext>
-    auto format(couchbase::diag::cluster_state state, FormatContext& ctx)
-    {
-        string_view name = "unknown";
-        switch (state) {
-            case couchbase::diag::cluster_state::online:
-                name = "online";
-                break;
-
-            case couchbase::diag::cluster_state::degraded:
-                name = "degraded";
-                break;
-
-            case couchbase::diag::cluster_state::offline:
-                name = "offline";
-                break;
-        }
-        return formatter<string_view>::format(name, ctx);
-    }
-};
-
-template<>
-struct fmt::formatter<couchbase::diag::endpoint_state> : formatter<std::string_view> {
-    template<typename FormatContext>
-    auto format(couchbase::diag::endpoint_state state, FormatContext& ctx)
-    {
-        string_view name = "unknown";
-        switch (state) {
-            case couchbase::diag::endpoint_state::disconnected:
-                name = "disconnected";
-                break;
-
-            case couchbase::diag::endpoint_state::connecting:
-                name = "connecting";
-                break;
-
-            case couchbase::diag::endpoint_state::connected:
-                name = "connected";
-                break;
-
-            case couchbase::diag::endpoint_state::disconnecting:
-                name = "disconnecting";
-                break;
-        }
-        return formatter<string_view>::format(name, ctx);
-    }
-};
-
-template<>
-struct fmt::formatter<couchbase::diag::ping_state> : formatter<std::string_view> {
-    template<typename FormatContext>
-    auto format(couchbase::diag::ping_state state, FormatContext& ctx)
-    {
-        string_view name = "unknown";
-        switch (state) {
-            case couchbase::diag::ping_state::ok:
-                name = "ok";
-                break;
-
-            case couchbase::diag::ping_state::timeout:
-                name = "timeout";
-                break;
-
-            case couchbase::diag::ping_state::error:
-                name = "error";
-                break;
-        }
-        return formatter<string_view>::format(name, ctx);
-    }
-};

@@ -20,6 +20,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <system_error>
 
 #include <couchbase/document_id.hxx>
 #include <couchbase/io/retry_reason.hxx>

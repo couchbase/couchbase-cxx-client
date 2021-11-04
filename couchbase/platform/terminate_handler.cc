@@ -20,7 +20,7 @@
 #include <cstdlib>
 #include <exception>
 
-#include <spdlog/spdlog.h>
+#include <couchbase/logger/logger.hxx>
 #include <couchbase/platform/backtrace.h>
 
 #include <couchbase/meta/version.hxx>
@@ -50,9 +50,9 @@ log_handled_exception()
             throw;
         }
     } catch (const std::exception& e) {
-        spdlog::critical("Caught unhandled std::exception-derived exception. what(): {}", e.what());
+        LOG_CRITICAL("Caught unhandled std::exception-derived exception. what(): {}", e.what());
     } catch (...) {
-        spdlog::critical("Caught unknown/unhandled exception.");
+        LOG_CRITICAL_RAW("Caught unknown/unhandled exception.");
     }
 #endif
 }
@@ -65,14 +65,14 @@ log_backtrace()
 
     char buffer[8192];
     if (print_backtrace_to_buffer("    ", buffer, sizeof(buffer))) {
-        spdlog::critical("Call stack:\n{}", buffer);
+        LOG_CRITICAL("Call stack:\n{}", buffer);
     } else {
         // Exceeded buffer space - print directly to stderr FD (requires no
         // buffering, but has the disadvantage that we don't get it in the log).
         fprintf(stderr, format_str, "");
         print_backtrace_to_file(stderr);
         fflush(stderr);
-        spdlog::critical("Call stack exceeds 8k, rendered to STDERR");
+        LOG_CRITICAL_RAW("Call stack exceeds 8k, rendered to STDERR");
     }
 }
 
@@ -83,7 +83,7 @@ backtrace_terminate_handler()
 {
     static bool meta_reported = false;
     if (!meta_reported) {
-        spdlog::critical(R"(*** Fatal error encountered during exception handling ({}) ***)", meta::sdk_build_info_short());
+        LOG_CRITICAL(R"(*** Fatal error encountered during exception handling ({}) ***)", meta::sdk_build_info_short());
         meta_reported = true;
     }
     log_handled_exception();
@@ -101,7 +101,7 @@ backtrace_terminate_handler()
 #if !defined(HAVE_BREAKPAD)
     // Shut down the logger (and flush everything). If breakpad is installed
     // then we'll let it do it.
-    spdlog::shutdown();
+    logger::shutdown();
 #endif
 
     std::abort();

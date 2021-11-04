@@ -17,11 +17,11 @@
 
 #pragma once
 
-#include <spdlog/spdlog.h>
+#include <cstdint>
 
 namespace couchbase::protocol
 {
-enum class durability_level : uint8_t {
+enum class durability_level : std::uint8_t {
     /**
      * no enhanced durability required for the mutation
      */
@@ -45,7 +45,7 @@ enum class durability_level : uint8_t {
 };
 
 constexpr bool
-is_valid_durability_level(uint8_t value)
+is_valid_durability_level(std::uint8_t value)
 {
     switch (durability_level(value)) {
         case durability_level::none:
@@ -57,27 +57,3 @@ is_valid_durability_level(uint8_t value)
     return false;
 }
 } // namespace couchbase::protocol
-
-template<>
-struct fmt::formatter<couchbase::protocol::durability_level> : formatter<string_view> {
-    template<typename FormatContext>
-    auto format(couchbase::protocol::durability_level value, FormatContext& ctx)
-    {
-        string_view name = "unknown";
-        switch (value) {
-            case couchbase::protocol::durability_level::none:
-                name = "none";
-                break;
-            case couchbase::protocol::durability_level::majority:
-                name = "majority";
-                break;
-            case couchbase::protocol::durability_level::majority_and_persist_to_active:
-                name = "majority_and_persist_to_active";
-                break;
-            case couchbase::protocol::durability_level::persist_to_majority:
-                name = "persist_to_majority";
-                break;
-        }
-        return formatter<string_view>::format(name, ctx);
-    }
-};
