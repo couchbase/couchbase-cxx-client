@@ -51,8 +51,7 @@ TEST_CASE("native: upsert document into default collection", "[native]")
         auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
-        INFO("rc=" << resp.cas);
-        REQUIRE(resp.cas != 0);
+        REQUIRE(!resp.cas.empty());
         INFO("seqno=" << resp.token.sequence_number);
         REQUIRE(resp.token.sequence_number != 0);
     }

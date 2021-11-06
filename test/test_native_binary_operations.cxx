@@ -17,6 +17,8 @@
 
 #include "test_helper_native.hxx"
 
+#include <couchbase/protocol/cas_fmt.hxx>
+
 std::string
 uniq_id(const std::string& prefix)
 {
@@ -47,8 +49,8 @@ TEST_CASE("native: append", "[native]")
         auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
-        INFO("rc=" << resp.cas);
-        REQUIRE(resp.cas != 0);
+        INFO("cas=" << fmt::to_string(resp.cas));
+        REQUIRE(!resp.cas.empty());
         INFO("seqno=" << resp.token.sequence_number);
         REQUIRE(resp.token.sequence_number != 0);
     }
@@ -57,8 +59,7 @@ TEST_CASE("native: append", "[native]")
         auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
-        INFO("rc=" << resp.cas);
-        REQUIRE(resp.cas != 0);
+        REQUIRE(!resp.cas.empty());
         INFO("seqno=" << resp.token.sequence_number);
         REQUIRE(resp.token.sequence_number != 0);
     }
@@ -67,8 +68,7 @@ TEST_CASE("native: append", "[native]")
         auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
-        INFO("rc=" << resp.cas);
-        REQUIRE(resp.cas != 0);
+        REQUIRE(!resp.cas.empty());
         INFO("value=" << resp.value);
         REQUIRE(resp.value == "world!");
     }
@@ -102,8 +102,7 @@ TEST_CASE("native: prepend", "[native]")
         auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
-        INFO("rc=" << resp.cas);
-        REQUIRE(resp.cas != 0);
+        REQUIRE(!resp.cas.empty());
         INFO("seqno=" << resp.token.sequence_number);
         REQUIRE(resp.token.sequence_number != 0);
     }
@@ -112,8 +111,7 @@ TEST_CASE("native: prepend", "[native]")
         auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
-        INFO("rc=" << resp.cas);
-        REQUIRE(resp.cas != 0);
+        REQUIRE(!resp.cas.empty());
         INFO("seqno=" << resp.token.sequence_number);
         REQUIRE(resp.token.sequence_number != 0);
     }
@@ -122,8 +120,7 @@ TEST_CASE("native: prepend", "[native]")
         auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
-        INFO("rc=" << resp.cas);
-        REQUIRE(resp.cas != 0);
+        REQUIRE(!resp.cas.empty());
         INFO("value=" << resp.value);
         REQUIRE(resp.value == "Hello, world");
     }

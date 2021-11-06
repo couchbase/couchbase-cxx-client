@@ -32,7 +32,7 @@ namespace couchbase::operations
 
 struct prepend_response {
     error_context::key_value ctx;
-    std::uint64_t cas{};
+    protocol::cas cas{};
     mutation_token token{};
 };
 
