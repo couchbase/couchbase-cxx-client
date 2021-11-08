@@ -116,7 +116,9 @@ class cluster
         buckets_.emplace(bucket_name, b);
     }
 
-    template<class Request, class Handler>
+    template<class Request,
+             class Handler,
+             typename std::enable_if_t<!std::is_same_v<typename Request::encoded_request_type, io::http_request>, int> = 0>
     void execute(Request request, Handler&& handler)
     {
         auto bucket = buckets_.find(request.id.bucket);
@@ -130,8 +132,10 @@ class cluster
         return bucket->second->execute(request, std::forward<Handler>(handler));
     }
 
-    template<class Request, class Handler>
-    void execute_http(Request request, Handler&& handler)
+    template<class Request,
+             class Handler,
+             typename std::enable_if_t<std::is_same_v<typename Request::encoded_request_type, io::http_request>, int> = 0>
+    void execute(Request request, Handler&& handler)
     {
         auto session = session_manager_->check_out(Request::type, origin_.credentials());
         if (!session) {

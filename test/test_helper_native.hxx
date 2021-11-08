@@ -46,18 +46,6 @@ native_init_logger()
 
 template<class Request>
 auto
-execute_http(couchbase::cluster& cluster, Request request)
-{
-    using response_type = typename Request::response_type;
-    auto barrier = std::make_shared<std::promise<response_type>>();
-    auto f = barrier->get_future();
-    cluster.execute_http(request, [barrier](response_type resp) mutable { barrier->set_value(std::move(resp)); });
-    auto resp = f.get();
-    return resp;
-}
-
-template<class Request>
-auto
 execute(couchbase::cluster& cluster, Request request)
 {
     using response_type = typename Request::response_type;

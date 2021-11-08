@@ -351,7 +351,7 @@ TEST_CASE("native: fetch diagnostics after N1QL query", "[native]")
     }
     {
         couchbase::operations::query_request req{ "SELECT 'hello, couchbase' AS greetings" };
-        auto resp = execute_http(cluster, req);
+        auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
         INFO("rows.size() =" << resp.payload.rows.size());
