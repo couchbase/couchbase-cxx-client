@@ -21,12 +21,15 @@
 
 #include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/protocol/client_opcode.hxx>
+#include <couchbase/protocol/client_opcode_fmt.hxx>
 #include <couchbase/protocol/cmd_info.hxx>
 #include <couchbase/protocol/datatype.hxx>
 #include <couchbase/protocol/enhanced_error_info.hxx>
 #include <couchbase/protocol/frame_info_id.hxx>
 #include <couchbase/protocol/magic.hxx>
+#include <couchbase/protocol/magic_fmt.hxx>
 #include <couchbase/protocol/status.hxx>
+#include <couchbase/protocol/status_fmt.hxx>
 #include <couchbase/utils/byteswap.hxx>
 #include <couchbase/utils/json.hxx>
 

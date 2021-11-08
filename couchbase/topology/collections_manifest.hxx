@@ -38,25 +38,3 @@ struct collections_manifest {
     std::vector<scope> scopes;
 };
 } // namespace couchbase::topology
-
-template<>
-struct fmt::formatter<couchbase::topology::collections_manifest> : formatter<std::string> {
-    template<typename FormatContext>
-    auto format(const couchbase::topology::collections_manifest& manifest, FormatContext& ctx)
-    {
-        std::vector<std::string> collections;
-        for (const auto& scope : manifest.scopes) {
-            for (const auto& collection : scope.collections) {
-                collections.emplace_back(fmt::format("{}.{}={}", scope.name, collection.name, collection.uid));
-            }
-        }
-
-        format_to(ctx.out(),
-                  R"(#<manifest:{} uid={}, collections({})=[{}]>)",
-                  couchbase::uuid::to_string(manifest.id),
-                  manifest.uid,
-                  collections.size(),
-                  fmt::join(collections, ", "));
-        return formatter<std::string>::format("", ctx);
-    }
-};

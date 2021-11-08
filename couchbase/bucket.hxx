@@ -85,9 +85,9 @@ class bucket : public std::enable_shared_from_this<bucket>
     void update_config(const topology::configuration& config)
     {
         if (!config_) {
-            spdlog::debug("{} initialize configuration rev={}", log_prefix_, config.rev_str());
+            LOG_DEBUG("{} initialize configuration rev={}", log_prefix_, config.rev_str());
         } else if (config_ < config) {
-            spdlog::debug("{} will update the configuration old={} -> new={}", log_prefix_, config_->rev_str(), config.rev_str());
+            LOG_DEBUG("{} will update the configuration old={} -> new={}", log_prefix_, config_->rev_str(), config.rev_str());
         } else {
             return;
         }
@@ -116,20 +116,20 @@ class bucket : public std::enable_shared_from_this<bucket>
                     }
                 }
                 if (new_index < config.nodes.size()) {
-                    spdlog::debug(R"({} rev={}, preserve session="{}", address="{}:{}")",
-                                  log_prefix_,
-                                  config.rev_str(),
-                                  session->id(),
-                                  session->bootstrap_hostname(),
-                                  session->bootstrap_port());
+                    LOG_DEBUG(R"({} rev={}, preserve session="{}", address="{}:{}")",
+                              log_prefix_,
+                              config.rev_str(),
+                              session->id(),
+                              session->bootstrap_hostname(),
+                              session->bootstrap_port());
                     new_sessions.emplace(new_index, std::move(session));
                 } else {
-                    spdlog::debug(R"({} rev={}, drop session="{}", address="{}:{}")",
-                                  log_prefix_,
-                                  config.rev_str(),
-                                  session->id(),
-                                  session->bootstrap_hostname(),
-                                  session->bootstrap_port());
+                    LOG_DEBUG(R"({} rev={}, drop session="{}", address="{}:{}")",
+                              log_prefix_,
+                              config.rev_str(),
+                              session->id(),
+                              session->bootstrap_hostname(),
+                              session->bootstrap_port());
                     session.reset();
                 }
             }
@@ -151,8 +151,7 @@ class bucket : public std::enable_shared_from_this<bucket>
                 } else {
                     session = std::make_shared<io::mcbp_session>(client_id_, ctx_, origin, name_, known_features_);
                 }
-                spdlog::debug(
-                  R"({} rev={}, add session="{}", address="{}:{}")", log_prefix_, config.rev_str(), session->id(), hostname, port);
+                LOG_DEBUG(R"({} rev={}, add session="{}", address="{}:{}")", log_prefix_, config.rev_str(), session->id(), hostname, port);
                 session->bootstrap(
                   [self = shared_from_this(), session](std::error_code err, const topology::configuration& cfg) {
                       if (!err) {
@@ -177,7 +176,7 @@ class bucket : public std::enable_shared_from_this<bucket>
     {
         auto ptr = sessions_.find(index);
         if (ptr == sessions_.end()) {
-            spdlog::debug(R"({} requested to restart session idx={}, which does not exist, ignoring)", log_prefix_, index);
+            LOG_DEBUG(R"({} requested to restart session idx={}, which does not exist, ignoring)", log_prefix_, index);
             return;
         }
         const auto& old_session = ptr->second;
@@ -192,7 +191,7 @@ class bucket : public std::enable_shared_from_this<bucket>
         } else {
             session = std::make_shared<io::mcbp_session>(client_id_, ctx_, origin, name_, known_features_);
         }
-        spdlog::debug(
+        LOG_DEBUG(
           R"({} restarting session idx={}, id=("{}" -> "{}"), address="{}")", log_prefix_, index, old_id, session->id(), hostname, port);
         session->bootstrap(
           [self = shared_from_this(), session](std::error_code err, const topology::configuration& config) {
@@ -290,7 +289,7 @@ class bucket : public std::enable_shared_from_this<bucket>
         drain_deferred_queue();
         for (auto& [index, session] : sessions_) {
             if (session) {
-                spdlog::debug(R"({} shutdown session session="{}", idx={})", log_prefix_, session->id(), index);
+                LOG_DEBUG(R"({} shutdown session session="{}", idx={})", log_prefix_, session->id(), index);
                 session->stop(io::retry_reason::do_not_retry);
             }
         }

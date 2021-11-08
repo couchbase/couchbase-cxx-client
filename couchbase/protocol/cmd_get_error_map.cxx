@@ -17,7 +17,7 @@
 
 #include <gsl/assert>
 
-#include <spdlog/spdlog.h>
+#include <couchbase/logger/logger.hxx>
 
 #include <couchbase/protocol/cmd_get_error_map.hxx>
 
@@ -43,7 +43,7 @@ get_error_map_response_body::parse(protocol::status status,
             std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
             errmap_ = utils::json::parse(std::string(body.begin() + offset, body.end())).as<error_map>();
         } catch (const tao::pegtl::parse_error& e) {
-            spdlog::debug("unable to parse error map as JSON: {}, {}", e.message(), std::string(body.begin(), body.end()));
+            LOG_DEBUG("unable to parse error map as JSON: {}, {}", e.message(), std::string(body.begin(), body.end()));
         }
         return true;
     }

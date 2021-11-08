@@ -21,6 +21,8 @@
 
 #include <couchbase/errors.hxx>
 
+#include <couchbase/logger/logger.hxx>
+
 #include <couchbase/utils/json.hxx>
 
 namespace tao::json
@@ -220,9 +222,9 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
         prep = false;
     }
     if (ctx_->options.show_queries) {
-        spdlog::info("QUERY: prep={}, {}", utils::json::generate(prep), utils::json::generate(stmt));
+        LOG_INFO("QUERY: prep={}, {}", utils::json::generate(prep), utils::json::generate(stmt));
     } else {
-        spdlog::debug("QUERY: prep={}, {}", utils::json::generate(prep), utils::json::generate(stmt));
+        LOG_DEBUG("QUERY: prep={}, {}", utils::json::generate(prep), utils::json::generate(stmt));
     }
     return {};
 }

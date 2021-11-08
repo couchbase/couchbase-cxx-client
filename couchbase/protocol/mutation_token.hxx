@@ -26,13 +26,3 @@ struct mutation_token {
     std::string bucket_name{};
 };
 } // namespace couchbase
-
-template<>
-struct fmt::formatter<couchbase::mutation_token> : formatter<std::string> {
-    template<typename FormatContext>
-    auto format(const couchbase::mutation_token& token, FormatContext& ctx)
-    {
-        format_to(ctx.out(), "{}:{}:{}:{}", token.bucket_name, token.partition_id, token.partition_uuid, token.sequence_number);
-        return formatter<std::string>::format("", ctx);
-    }
-};

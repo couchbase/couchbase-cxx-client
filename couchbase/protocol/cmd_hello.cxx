@@ -15,6 +15,8 @@
  *   limitations under the License.
  */
 
+#include <cstring>
+
 #include <gsl/assert>
 
 #include <couchbase/protocol/cmd_hello.hxx>

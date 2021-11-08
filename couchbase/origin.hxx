@@ -77,7 +77,7 @@ struct origin {
     {
         nodes_.reserve(connstr.bootstrap_nodes.size());
         for (const auto& node : connstr.bootstrap_nodes) {
-            nodes_.emplace_back(std::pair(node.address, node.port > 0 ? std::to_string(node.port) : std::to_string(connstr.default_port)));
+            nodes_.emplace_back(node.address, node.port > 0 ? std::to_string(node.port) : std::to_string(connstr.default_port));
         }
         next_node_ = nodes_.begin();
     }

@@ -59,6 +59,7 @@ include(cmake/VersionInfo.cmake)
 
 add_subdirectory(couchbase/meta)
 add_subdirectory(couchbase/platform)
+add_subdirectory(couchbase/logger)
 add_subdirectory(couchbase/crypto)
 add_subdirectory(couchbase/sasl)
 add_subdirectory(couchbase/topology)
@@ -88,6 +89,7 @@ target_link_libraries(
   PRIVATE project_options
           project_warnings
           couchbase_backtrace
+          couchbase_logger
           couchbase_platform
           couchbase_io
           couchbase_meta

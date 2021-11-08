@@ -18,6 +18,8 @@
 #pragma once
 
 #include <couchbase/diagnostics.hxx>
+#include <couchbase/diagnostics_fmt.hxx>
+#include <couchbase/service_type_fmt.hxx>
 
 namespace tao::json
 {
@@ -27,9 +29,9 @@ struct traits<couchbase::diag::diagnostics_result> {
     static void assign(tao::json::basic_value<Traits>& v, const couchbase::diag::diagnostics_result& r)
     {
         tao::json::value services = tao::json::empty_object;
-        for (const auto& entry : r.services) {
+        for (const auto& [service_type, endpoints] : r.services) {
             tao::json::value service{};
-            for (const auto& endpoint : entry.second) {
+            for (const auto& endpoint : endpoints) {
                 tao::json::value e = tao::json::empty_object;
                 if (endpoint.last_activity) {
                     e["last_activity_us"] = endpoint.last_activity->count();
@@ -46,7 +48,7 @@ struct traits<couchbase::diag::diagnostics_result> {
                 }
                 service.push_back(e);
             }
-            services[fmt::format("{}", entry.first)] = service;
+            services[fmt::format("{}", service_type)] = service;
         }
 
         v = {
