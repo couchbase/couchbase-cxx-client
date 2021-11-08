@@ -20,6 +20,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <system_error>
 
 #include <couchbase/document_id.hxx>
 #include <couchbase/io/retry_reason.hxx>
@@ -31,7 +32,7 @@ namespace couchbase::error_context
 {
 
 struct key_value {
-    document_id id{};
+    document_id id;
     std::error_code ec{};
     std::uint32_t opaque{};
     std::optional<protocol::status> status_code{};

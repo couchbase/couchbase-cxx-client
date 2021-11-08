@@ -16,11 +16,11 @@
 
 PROJECT_ROOT="$( cd "$(dirname "$0"/..)" >/dev/null 2>&1 ; pwd -P )"
 
-CB_CMAKE=${CB_CMAKE:-$(which cmake)}
+CB_CTEST=${CB_CTEST:-$(which ctest)}
 CB_SANITIZER=${CB_SANITIZER:-""}
 CTEST_OUTPUT_ON_FAILURE=1
 
-echo "CB_CMAKE=${CB_CMAKE}"
+echo "CB_CTEST=${CB_CTEST}"
 
 set -exuo pipefail
 
@@ -31,4 +31,4 @@ fi
 
 cd "${BUILD_DIR}"
 
-${CB_CMAKE} --build "${BUILD_DIR}" --target test --verbose
+${CB_CTEST} --label-regex 'integration|unit'

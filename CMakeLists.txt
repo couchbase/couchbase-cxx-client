@@ -59,6 +59,7 @@ include(cmake/VersionInfo.cmake)
 
 add_subdirectory(couchbase/meta)
 add_subdirectory(couchbase/platform)
+add_subdirectory(couchbase/logger)
 add_subdirectory(couchbase/crypto)
 add_subdirectory(couchbase/sasl)
 add_subdirectory(couchbase/topology)
@@ -70,9 +71,9 @@ add_subdirectory(couchbase/tracing)
 add_subdirectory(couchbase/metrics)
 
 if(COUCHBASE_CXX_CLIENT_BUILD_SHARED)
-  add_library(couchbase_cxx_client SHARED couchbase/cluster.cxx)
+  add_library(couchbase_cxx_client SHARED couchbase/cluster.cxx couchbase/document_id.cxx)
 else()
-  add_library(couchbase_cxx_client STATIC couchbase/cluster.cxx)
+  add_library(couchbase_cxx_client STATIC couchbase/cluster.cxx couchbase/document_id.cxx)
 endif()
 set_target_properties(couchbase_cxx_client PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(couchbase_cxx_client PUBLIC ${PROJECT_SOURCE_DIR})
@@ -88,6 +89,7 @@ target_link_libraries(
   PRIVATE project_options
           project_warnings
           couchbase_backtrace
+          couchbase_logger
           couchbase_platform
           couchbase_io
           couchbase_meta

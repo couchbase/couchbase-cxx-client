@@ -18,6 +18,7 @@
 #pragma once
 
 #include <map>
+#include <string>
 
 #include <couchbase/service_type.hxx>
 

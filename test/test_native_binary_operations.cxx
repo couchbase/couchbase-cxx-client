@@ -19,12 +19,6 @@
 
 #include <couchbase/protocol/cas_fmt.hxx>
 
-std::string
-uniq_id(const std::string& prefix)
-{
-    return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
-}
-
 TEST_CASE("native: append", "[native]")
 {
     auto ctx = test_context::load_from_environment();
@@ -43,7 +37,7 @@ TEST_CASE("native: append", "[native]")
     open_cluster(cluster, couchbase::origin(auth, connstr));
     open_bucket(cluster, ctx.bucket);
 
-    couchbase::document_id id{ ctx.bucket, "_default._default", uniq_id("foo") };
+    couchbase::document_id id{ ctx.bucket, "_default", "_default", uniq_id("foo") };
     {
         couchbase::operations::upsert_request req{ id, "world" };
         auto resp = execute(cluster, req);
@@ -96,7 +90,7 @@ TEST_CASE("native: prepend", "[native]")
     open_cluster(cluster, couchbase::origin(auth, connstr));
     open_bucket(cluster, ctx.bucket);
 
-    couchbase::document_id id{ ctx.bucket, "_default._default", uniq_id("foo") };
+    couchbase::document_id id{ ctx.bucket, "_default", "_default", uniq_id("foo") };
     {
         couchbase::operations::upsert_request req{ id, "world" };
         auto resp = execute(cluster, req);

@@ -17,11 +17,11 @@
 
 #pragma once
 
-#include <spdlog/spdlog.h>
+#include <cstdint>
 
 namespace couchbase::protocol
 {
-enum class hello_feature : uint16_t {
+enum class hello_feature : std::uint16_t {
     /**
      * The client wants to TLS and send STARTTLS
      */
@@ -153,7 +153,7 @@ enum class hello_feature : uint16_t {
 };
 
 constexpr bool
-is_valid_hello_feature(uint16_t code)
+is_valid_hello_feature(std::uint16_t code)
 {
     switch (hello_feature(code)) {
         case hello_feature::tls:
@@ -184,81 +184,3 @@ is_valid_hello_feature(uint16_t code)
 }
 
 } // namespace couchbase::protocol
-
-template<>
-struct fmt::formatter<couchbase::protocol::hello_feature> : formatter<string_view> {
-    template<typename FormatContext>
-    auto format(couchbase::protocol::hello_feature feature, FormatContext& ctx)
-    {
-        string_view name = "unknown";
-        switch (feature) {
-            case couchbase::protocol::hello_feature::tls:
-                name = "tls";
-                break;
-            case couchbase::protocol::hello_feature::tcp_nodelay:
-                name = "tcp_nodelay";
-                break;
-            case couchbase::protocol::hello_feature::mutation_seqno:
-                name = "mutation_seqno";
-                break;
-            case couchbase::protocol::hello_feature::xattr:
-                name = "xattr";
-                break;
-            case couchbase::protocol::hello_feature::xerror:
-                name = "xerror";
-                break;
-            case couchbase::protocol::hello_feature::select_bucket:
-                name = "select_bucket";
-                break;
-            case couchbase::protocol::hello_feature::snappy:
-                name = "snappy";
-                break;
-            case couchbase::protocol::hello_feature::json:
-                name = "json";
-                break;
-            case couchbase::protocol::hello_feature::duplex:
-                name = "duplex";
-                break;
-            case couchbase::protocol::hello_feature::clustermap_change_notification:
-                name = "clustermap_change_notification";
-                break;
-            case couchbase::protocol::hello_feature::unordered_execution:
-                name = "unordered_execution";
-                break;
-            case couchbase::protocol::hello_feature::alt_request_support:
-                name = "alt_request_support";
-                break;
-            case couchbase::protocol::hello_feature::sync_replication:
-                name = "sync_replication";
-                break;
-            case couchbase::protocol::hello_feature::vattr:
-                name = "vattr";
-                break;
-            case couchbase::protocol::hello_feature::collections:
-                name = "collections";
-                break;
-            case couchbase::protocol::hello_feature::open_tracing:
-                name = "open_tracing";
-                break;
-            case couchbase::protocol::hello_feature::preserve_ttl:
-                name = "preserve_ttl";
-                break;
-            case couchbase::protocol::hello_feature::point_in_time_recovery:
-                name = "point_in_time_recovery";
-                break;
-            case couchbase::protocol::hello_feature::tcp_delay:
-                name = "tcp_delay";
-                break;
-            case couchbase::protocol::hello_feature::tracing:
-                name = "tracing";
-                break;
-            case couchbase::protocol::hello_feature::subdoc_create_as_deleted:
-                name = "subdoc_create_as_deleted";
-                break;
-            case couchbase::protocol::hello_feature::subdoc_document_macro_support:
-                name = "subdoc_document_macro_support";
-                break;
-        }
-        return formatter<string_view>::format(name, ctx);
-    }
-};

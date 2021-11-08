@@ -19,6 +19,7 @@
 
 #include <map>
 #include <set>
+#include <vector>
 
 #include <spdlog/fmt/fmt.h>
 

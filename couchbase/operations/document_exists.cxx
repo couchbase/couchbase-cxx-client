@@ -19,6 +19,10 @@
 
 #include <couchbase/errors.hxx>
 
+#include <couchbase/logger/logger.hxx>
+
+#include <couchbase/document_id_fmt.hxx>
+
 namespace couchbase::operations
 {
 std::error_code
@@ -50,7 +54,7 @@ exists_request::make_response(error_context::key_value&& ctx, const encoded_resp
                 response.status = exists_response::observe_status::logically_deleted;
                 break;
             default:
-                spdlog::warn("invalid observe status for \"{}\": {:x}", id, encoded.body().status());
+                LOG_WARNING("invalid observe status for \"{}\": {:x}", id, encoded.body().status());
                 response.status = exists_response::observe_status::invalid;
                 break;
         }

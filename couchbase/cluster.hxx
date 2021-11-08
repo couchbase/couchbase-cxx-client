@@ -116,13 +116,14 @@ class cluster
         buckets_.emplace(bucket_name, b);
     }
 
-    template<class Request, class Handler>
+    template<class Request,
+             class Handler,
+             typename std::enable_if_t<!std::is_same_v<typename Request::encoded_request_type, io::http_request>, int> = 0>
     void execute(Request request, Handler&& handler)
     {
-        auto bucket = buckets_.find(request.id.bucket);
+        auto bucket = buckets_.find(request.id.bucket());
         if (bucket == buckets_.end()) {
-            error_context::key_value ctx{};
-            ctx.id = request.id;
+            error_context::key_value ctx{ request.id };
             ctx.ec = error::common_errc::bucket_not_found;
             using response_type = typename Request::encoded_response_type;
             return handler(request.make_response(std::move(ctx), response_type{}));
@@ -130,8 +131,10 @@ class cluster
         return bucket->second->execute(request, std::forward<Handler>(handler));
     }
 
-    template<class Request, class Handler>
-    void execute_http(Request request, Handler&& handler)
+    template<class Request,
+             class Handler,
+             typename std::enable_if_t<std::is_same_v<typename Request::encoded_request_type, io::http_request>, int> = 0>
+    void execute(Request request, Handler&& handler)
     {
         auto session = session_manager_->check_out(Request::type, origin_.credentials());
         if (!session) {
@@ -184,11 +187,11 @@ class cluster
           service,
           [hostname, this, handler = std::forward<Handler>(handler)](couchbase::io::dns::dns_client::dns_srv_response&& resp) mutable {
               if (resp.ec) {
-                  spdlog::warn("failed to fetch DNS SRV records for \"{}\" ({}), assuming that cluster is listening this address",
-                               hostname,
-                               resp.ec.message());
+                  LOG_WARNING("failed to fetch DNS SRV records for \"{}\" ({}), assuming that cluster is listening this address",
+                              hostname,
+                              resp.ec.message());
               } else if (resp.targets.empty()) {
-                  spdlog::warn("DNS SRV query returned 0 records for \"{}\", assuming that cluster is listening this address", hostname);
+                  LOG_WARNING("DNS SRV query returned 0 records for \"{}\", assuming that cluster is listening this address", hostname);
               } else {
                   origin::node_list nodes;
                   nodes.reserve(resp.targets.size());
@@ -199,9 +202,9 @@ class cluster
                       nodes.emplace_back(node);
                   }
                   origin_.set_nodes(nodes);
-                  spdlog::info("replace list of bootstrap nodes with addresses from DNS SRV of \"{}\": [{}]",
-                               hostname,
-                               fmt::join(origin_.get_nodes(), ", "));
+                  LOG_INFO("replace list of bootstrap nodes with addresses from DNS SRV of \"{}\": [{}]",
+                           hostname,
+                           fmt::join(origin_.get_nodes(), ", "));
               }
               return do_open(std::forward<Handler>(handler));
           });
@@ -223,11 +226,10 @@ class cluster
             }
             if (!origin_.options().trust_certificate.empty()) {
                 std::error_code ec{};
-                spdlog::debug(R"([{}]: use TLS certificate chain: "{}")", id_, origin_.options().trust_certificate);
+                LOG_DEBUG(R"([{}]: use TLS certificate chain: "{}")", id_, origin_.options().trust_certificate);
                 tls_.use_certificate_chain_file(origin_.options().trust_certificate, ec);
                 if (ec) {
-                    spdlog::error(
-                      "[{}]: unable to load certificate chain \"{}\": {}", id_, origin_.options().trust_certificate, ec.message());
+                    LOG_ERROR("[{}]: unable to load certificate chain \"{}\": {}", id_, origin_.options().trust_certificate, ec.message());
                     return handler(ec);
                 }
             }
@@ -236,23 +238,23 @@ class cluster
                 std::ofstream keylog(COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE, std::ios::out | std::ios::app | std::ios::binary);
                 keylog << std::string_view(line) << std::endl;
             });
-            spdlog::critical(
+            LOG_CRITICAL(
               "COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE was set to \"{}\" during build, all TLS keys will be logged for network analysis "
               "(https://wiki.wireshark.org/TLS). DO NOT USE THIS BUILD IN PRODUCTION",
               COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE);
 #endif
             if (origin_.credentials().uses_certificate()) {
                 std::error_code ec{};
-                spdlog::debug(R"([{}]: use TLS certificate: "{}")", id_, origin_.certificate_path());
+                LOG_DEBUG(R"([{}]: use TLS certificate: "{}")", id_, origin_.certificate_path());
                 tls_.use_certificate_file(origin_.certificate_path(), asio::ssl::context::file_format::pem, ec);
                 if (ec) {
-                    spdlog::error("[{}]: unable to load certificate \"{}\": {}", id_, origin_.certificate_path(), ec.message());
+                    LOG_ERROR("[{}]: unable to load certificate \"{}\": {}", id_, origin_.certificate_path(), ec.message());
                     return handler(ec);
                 }
-                spdlog::debug(R"([{}]: use TLS private key: "{}")", id_, origin_.key_path());
+                LOG_DEBUG(R"([{}]: use TLS private key: "{}")", id_, origin_.key_path());
                 tls_.use_private_key_file(origin_.key_path(), asio::ssl::context::file_format::pem, ec);
                 if (ec) {
-                    spdlog::error("[{}]: unable to load private key \"{}\": {}", id_, origin_.key_path(), ec.message());
+                    LOG_ERROR("[{}]: unable to load private key \"{}\": {}", id_, origin_.key_path(), ec.message());
                     return handler(ec);
                 }
             }
@@ -266,9 +268,9 @@ class cluster
                   if (origin_.options().network == "auto") {
                       origin_.options().network = config.select_network(session_->bootstrap_hostname());
                       if (origin_.options().network == "default") {
-                          spdlog::debug(R"({} detected network is "{}")", session_->log_prefix(), origin_.options().network);
+                          LOG_DEBUG(R"({} detected network is "{}")", session_->log_prefix(), origin_.options().network);
                       } else {
-                          spdlog::info(R"({} detected network is "{}")", session_->log_prefix(), origin_.options().network);
+                          LOG_INFO(R"({} detected network is "{}")", session_->log_prefix(), origin_.options().network);
                       }
                   }
                   if (origin_.options().network != "default") {
@@ -285,9 +287,9 @@ class cluster
                           nodes.emplace_back(node);
                       }
                       origin_.set_nodes(nodes);
-                      spdlog::info("replace list of bootstrap nodes with addresses of alternative network \"{}\": [{}]",
-                                   origin_.options().network,
-                                   fmt::join(origin_.get_nodes(), ","));
+                      LOG_INFO("replace list of bootstrap nodes with addresses of alternative network \"{}\": [{}]",
+                               origin_.options().network,
+                               fmt::join(origin_.get_nodes(), ","));
                   }
                   session_manager_->set_configuration(config, origin_.options());
               }

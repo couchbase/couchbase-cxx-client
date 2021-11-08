@@ -5,9 +5,10 @@ set_target_properties(couchbase_backtrace PROPERTIES POSITION_INDEPENDENT_CODE O
 
 add_library(
   couchbase_platform STATIC
+  dirutils.cc
+  random.cc
   string_hex.cc
   uuid.cc
-  random.cc
   base64.cc
   terminate_handler.cc)
 set_target_properties(couchbase_platform PROPERTIES POSITION_INDEPENDENT_CODE ON)

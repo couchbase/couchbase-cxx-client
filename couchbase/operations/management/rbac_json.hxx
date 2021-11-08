@@ -19,7 +19,7 @@
 
 #include <tao/json/forward.hpp>
 
-#include <spdlog/spdlog.h>
+#include <couchbase/logger/logger.hxx>
 
 #include <couchbase/operations/management/rbac.hxx>
 
@@ -36,7 +36,7 @@ struct traits<couchbase::operations::management::rbac::user_and_metadata> {
         } else if (domain == "external") {
             result.domain = couchbase::operations::management::rbac::auth_domain::external;
         } else {
-            spdlog::error(R"("unexpected domain for user with metadata: "{}")", domain);
+            LOG_ERROR(R"("unexpected domain for user with metadata: "{}")", domain);
         }
         result.username = v.at("id").get_string();
         if (const auto* display_name = v.find("name"); display_name != nullptr && !display_name->get_string().empty()) {

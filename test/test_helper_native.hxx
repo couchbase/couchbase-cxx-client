@@ -22,7 +22,8 @@
 #include <asio/version.hpp>
 
 #include <spdlog/cfg/env.h>
-#include <spdlog/spdlog.h>
+
+#include <couchbase/logger/configuration.hxx>
 
 #include <couchbase/cluster.hxx>
 
@@ -32,28 +33,12 @@ native_init_logger()
     static bool initialized = false;
 
     if (!initialized) {
-        spdlog::set_pattern("[%Y-%m-%d %T.%e] [%P,%t] [%^%l%$] %oms, %v");
-
-        if (auto env_val = spdlog::details::os::getenv("COUCHBASE_BACKEND_LOG_LEVEL"); env_val.empty()) {
-            spdlog::set_level(spdlog::level::warn);
-        } else {
-            spdlog::cfg::helpers::load_levels(env_val);
+        couchbase::logger::create_console_logger();
+        if (auto env_val = spdlog::details::os::getenv("COUCHBASE_CXX_CLIENT_LOG_LEVEL"); !env_val.empty()) {
+            couchbase::logger::set_log_levels(spdlog::level::from_str(env_val));
         }
-
         initialized = true;
     }
-}
-
-template<class Request>
-auto
-execute_http(couchbase::cluster& cluster, Request request)
-{
-    using response_type = typename Request::response_type;
-    auto barrier = std::make_shared<std::promise<response_type>>();
-    auto f = barrier->get_future();
-    cluster.execute_http(request, [barrier](response_type resp) mutable { barrier->set_value(std::move(resp)); });
-    auto resp = f.get();
-    return resp;
 }
 
 template<class Request>
@@ -99,4 +84,10 @@ open_bucket(couchbase::cluster& cluster, const std::string& bucket_name)
     INFO(rc.message());
     REQUIRE_FALSE(rc);
     return rc;
+}
+
+inline std::string
+uniq_id(const std::string& prefix)
+{
+    return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
 }

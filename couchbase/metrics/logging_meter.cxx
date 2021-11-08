@@ -21,7 +21,8 @@
 #include <gsl/assert>
 
 #include <hdr_histogram.h>
-#include <spdlog/spdlog.h>
+
+#include <couchbase/logger/logger.hxx>
 
 #include <couchbase/metrics/logging_meter.hxx>
 #include <couchbase/metrics/noop_meter.hxx>
@@ -155,7 +156,7 @@ logging_meter::log_report() const
             report["operations"][service][operation] = recorder->emit();
         }
     }
-    spdlog::info("Metrics: {}", utils::json::generate(report));
+    LOG_INFO("Metrics: {}", utils::json::generate(report));
 }
 
 value_recorder*

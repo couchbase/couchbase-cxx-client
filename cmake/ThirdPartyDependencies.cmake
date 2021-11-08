@@ -5,6 +5,7 @@ set(TAOCPP_JSON_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/json)
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/third_party/spdlog)
+set_target_properties(spdlog PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 set(SNAPPY_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(SNAPPY_INSTALL OFF CACHE BOOL "" FORCE)

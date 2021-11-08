@@ -52,9 +52,9 @@ remove_response_body::parse(protocol::status status,
 void
 remove_request_body::id(const document_id& id)
 {
-    key_ = id.key;
-    if (id.collection_uid) {
-        utils::unsigned_leb128<uint32_t> encoded(*id.collection_uid);
+    key_ = id.key();
+    if (id.is_collection_resolved()) {
+        utils::unsigned_leb128<uint32_t> encoded(id.collection_uid());
         key_.insert(0, encoded.get());
     }
 }

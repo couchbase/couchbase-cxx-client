@@ -39,7 +39,7 @@ TEST_CASE("native: trivial non-data query", "[native]")
 
     {
         couchbase::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
-        auto resp = execute_http(cluster, req);
+        auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
     }

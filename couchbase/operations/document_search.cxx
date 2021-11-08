@@ -19,6 +19,8 @@
 
 #include <couchbase/errors.hxx>
 
+#include <couchbase/logger/logger.hxx>
+
 #include <couchbase/utils/json.hxx>
 
 #include <tao/json/contrib/traits.hpp>
@@ -100,9 +102,9 @@ search_request::encode_to(search_request::encoded_request_type& encoded, http_co
     body_str = utils::json::generate(body);
     encoded.body = body_str;
     if (context.options.show_queries) {
-        spdlog::info("SEARCH: {}", utils::json::generate(body["query"]));
+        LOG_INFO("SEARCH: {}", utils::json::generate(body["query"]));
     } else {
-        spdlog::debug("SEARCH: {}", utils::json::generate(body["query"]));
+        LOG_DEBUG("SEARCH: {}", utils::json::generate(body["query"]));
     }
     return {};
 }

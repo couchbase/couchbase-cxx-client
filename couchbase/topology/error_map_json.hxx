@@ -76,7 +76,7 @@ struct traits<couchbase::error_map> {
                 } else if (attr_val == "rate-limit") {
                     ei.attributes.insert(couchbase::error_map::attribute::rate_limit);
                 } else {
-                    spdlog::warn(R"(skipping unknown attribute "{}" in error map for code={} and name="{}")", attr_val, ei.code, ei.name);
+                    LOG_WARNING(R"(skipping unknown attribute "{}" in error map for code={} and name="{}")", attr_val, ei.code, ei.name);
                 }
             }
             result.errors.emplace(ei.code, ei);

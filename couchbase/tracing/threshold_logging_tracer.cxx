@@ -26,6 +26,8 @@
 
 #include <couchbase/meta/version.hxx>
 
+#include <couchbase/logger/logger.hxx>
+
 #include <couchbase/tracing/threshold_logging_tracer.hxx>
 
 #include <couchbase/utils/json.hxx>
@@ -305,7 +307,7 @@ class threshold_logging_tracer_impl
             queue.pop();
         }
         report["top"] = entries;
-        spdlog::warn("Orphan responses observed: {}", utils::json::generate(report));
+        LOG_WARNING("Orphan responses observed: {}", utils::json::generate(report));
     }
 
     void log_threshold_report()
@@ -331,7 +333,7 @@ class threshold_logging_tracer_impl
                 queue.pop();
             }
             report["top"] = entries;
-            spdlog::warn("Operations over threshold: {}", utils::json::generate(report));
+            LOG_WARNING("Operations over threshold: {}", utils::json::generate(report));
         }
     }
 

@@ -30,6 +30,8 @@
 #include <couchbase/tracing/request_tracer.hxx>
 #include <couchbase/metrics/meter.hxx>
 
+#include <couchbase/document_id_fmt.hxx>
+
 namespace couchbase::operations
 {
 
@@ -63,7 +65,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     {
         span_ = manager_->tracer()->start_span(tracing::span_name_for_mcbp_command(encoded_request_type::body_type::opcode), nullptr);
         span_->add_tag(tracing::attributes::service, tracing::service::key_value);
-        span_->add_tag(tracing::attributes::instance, request.id.bucket);
+        span_->add_tag(tracing::attributes::instance, request.id.bucket());
 
         handler_ = std::move(handler);
         deadline.expires_after(request.timeout);
@@ -89,7 +91,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
     void invoke_handler(std::error_code ec, std::optional<io::mcbp_message> msg = {})
     {
-        if (span_) {
+        if (span_ != nullptr) {
             if (msg) {
                 auto server_duration_us = static_cast<std::uint64_t>(protocol::parse_server_duration_us(msg.value()));
                 span_->add_tag(tracing::attributes::server_duration, server_duration_us);
@@ -110,7 +112,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         }
         protocol::client_request<protocol::get_collection_id_request_body> req;
         req.opaque(session_->next_opaque());
-        req.body().collection_path(request.id.collection);
+        req.body().collection_path(request.id.collection_path());
         session_->write_and_subscribe(
           req.opaque(),
           req.data(session_->supports_feature(protocol::hello_feature::snappy)),
@@ -119,7 +121,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                   return self->invoke_handler(error::common_errc::ambiguous_timeout);
               }
               if (ec == error::common_errc::collection_not_found) {
-                  if (self->request.id.collection_uid) {
+                  if (self->request.id.is_collection_resolved()) {
                       return self->invoke_handler(ec);
                   }
                   return self->handle_unknown_collection();
@@ -128,8 +130,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                   return self->invoke_handler(ec);
               }
               protocol::client_response<protocol::get_collection_id_response_body> resp(std::move(msg));
-              self->session_->update_collection_uid(self->request.id.collection, resp.body().collection_uid());
-              self->request.id.collection_uid = resp.body().collection_uid();
+              self->session_->update_collection_uid(self->request.id.collection_path(), resp.body().collection_uid());
+              self->request.id.collection_uid(resp.body().collection_uid());
               return self->send();
           });
     }
@@ -138,13 +140,11 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     {
         auto backoff = std::chrono::milliseconds(500);
         auto time_left = deadline.expiry() - std::chrono::steady_clock::now();
-        spdlog::debug(R"({} unknown collection response for "{}/{}/{}", time_left={}ms, id="{}")",
-                      session_->log_prefix(),
-                      request.id.bucket,
-                      request.id.collection,
-                      request.id.key,
-                      std::chrono::duration_cast<std::chrono::milliseconds>(time_left).count(),
-                      id_);
+        LOG_DEBUG(R"({} unknown collection response for "{}", time_left={}ms, id="{}")",
+                  session_->log_prefix(),
+                  request.id,
+                  std::chrono::duration_cast<std::chrono::milliseconds>(time_left).count(),
+                  id_);
         if (time_left < backoff) {
             return invoke_handler(make_error_code(request.retries.idempotent ? error::common_errc::unambiguous_timeout
                                                                              : error::common_errc::ambiguous_timeout));
@@ -163,23 +163,21 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         opaque_ = session_->next_opaque();
         request.opaque = *opaque_;
         span_->add_tag(tracing::attributes::operation_id, fmt::format("0x{:x}", request.opaque));
-        if (request.id.use_collections && !request.id.collection_uid) {
+        if (request.id.use_collections() && !request.id.is_collection_resolved()) {
             if (session_->supports_feature(protocol::hello_feature::collections)) {
-                auto collection_id = session_->get_collection_uid(request.id.collection);
+                auto collection_id = session_->get_collection_uid(request.id.collection_path());
                 if (collection_id) {
-                    request.id.collection_uid = *collection_id;
+                    request.id.collection_uid(collection_id.value());
                 } else {
-                    spdlog::debug(R"({} no cache entry for collection, resolve collection id for "{}/{}/{}", timeout={}ms, id="{}")",
-                                  session_->log_prefix(),
-                                  request.id.bucket,
-                                  request.id.collection,
-                                  request.id.key,
-                                  request.timeout.count(),
-                                  id_);
+                    LOG_DEBUG(R"({} no cache entry for collection, resolve collection id for "{}", timeout={}ms, id="{}")",
+                              session_->log_prefix(),
+                              request.id,
+                              request.timeout.count(),
+                              id_);
                     return request_collection_id();
                 }
             } else {
-                if (!request.id.collection.empty() && request.id.collection != "_default._default") {
+                if (!request.id.has_default_collection()) {
                     return invoke_handler(error::common_errc::unsupported_operation);
                 }
             }

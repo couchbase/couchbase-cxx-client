@@ -21,8 +21,6 @@
 #include <optional>
 #include <set>
 
-#include <spdlog/fmt/fmt.h>
-
 namespace couchbase::operations::management::rbac
 {
 struct role {
@@ -76,24 +74,3 @@ struct group {
 };
 
 } // namespace couchbase::operations::management::rbac
-
-template<>
-struct fmt::formatter<couchbase::operations::management::rbac::auth_domain> : formatter<string_view> {
-    template<typename FormatContext>
-    auto format(couchbase::operations::management::rbac::auth_domain domain, FormatContext& ctx)
-    {
-        string_view name = "unknown";
-        switch (domain) {
-            case couchbase::operations::management::rbac::auth_domain::unknown:
-                name = "unknown";
-                break;
-            case couchbase::operations::management::rbac::auth_domain::local:
-                name = "local";
-                break;
-            case couchbase::operations::management::rbac::auth_domain::external:
-                name = "external";
-                break;
-        }
-        return formatter<string_view>::format(name, ctx);
-    }
-};
