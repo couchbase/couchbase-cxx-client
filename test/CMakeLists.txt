@@ -7,3 +7,5 @@ native_test(durability)
 
 native_test(connection_string)
 native_test(utils)
+
+native_benchmark(get)
