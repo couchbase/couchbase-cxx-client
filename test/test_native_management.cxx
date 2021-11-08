@@ -19,12 +19,6 @@
 
 #include <couchbase/operations/management/bucket.hxx>
 
-std::string
-uniq_id(const std::string& prefix)
-{
-    return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
-}
-
 TEST_CASE("native: bucket management", "[native]")
 {
     auto ctx = test_context::load_from_environment();
@@ -60,7 +54,7 @@ TEST_CASE("native: bucket management", "[native]")
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(!resp.buckets.empty());
         auto known_buckets =
-          std::count_if(resp.buckets.begin(), resp.buckets.end(), [bucket_name](auto& entry) { return entry.name == bucket_name; });
+          std::count_if(resp.buckets.begin(), resp.buckets.end(), [bucket_name](const auto& entry) { return entry.name == bucket_name; });
         REQUIRE(known_buckets > 0);
     }
 
@@ -75,7 +69,7 @@ TEST_CASE("native: bucket management", "[native]")
         auto resp = execute(cluster, req);
         REQUIRE(!resp.buckets.empty());
         auto known_buckets =
-          std::count_if(resp.buckets.begin(), resp.buckets.end(), [bucket_name](auto& entry) { return entry.name == bucket_name; });
+          std::count_if(resp.buckets.begin(), resp.buckets.end(), [bucket_name](const auto& entry) { return entry.name == bucket_name; });
         REQUIRE(known_buckets == 0);
     }
 

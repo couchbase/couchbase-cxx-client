@@ -250,8 +250,7 @@ class bucket : public std::enable_shared_from_this<bucket>
         cmd->start([cmd, handler = std::forward<Handler>(handler)](std::error_code ec, std::optional<io::mcbp_message> msg) mutable {
             using encoded_response_type = typename Request::encoded_response_type;
             auto resp = msg ? encoded_response_type(std::move(*msg)) : encoded_response_type{};
-            error_context::key_value ctx{};
-            ctx.id = cmd->request.id;
+            error_context::key_value ctx{ cmd->request.id };
             ctx.opaque = resp.opaque();
             ctx.ec = ec;
             if (ctx.ec && ctx.opaque == 0) {
@@ -302,14 +301,14 @@ class bucket : public std::enable_shared_from_this<bucket>
             return cmd->cancel(io::retry_reason::do_not_retry);
         }
         std::int16_t index = 0;
-        if (cmd->request.id.use_any_session) {
+        if (cmd->request.id.use_any_session()) {
             index = round_robin_next_;
             ++round_robin_next_;
             if (static_cast<std::size_t>(round_robin_next_) >= sessions_.size()) {
                 round_robin_next_ = 0;
             }
         } else {
-            std::tie(cmd->request.partition, index) = config_->map_key(cmd->request.id.key);
+            std::tie(cmd->request.partition, index) = config_->map_key(cmd->request.id.key());
             if (index < 0) {
                 return io::retry_orchestrator::maybe_retry(
                   cmd->manager_, cmd, io::retry_reason::node_not_available, error::common_errc::request_canceled);
