@@ -33,7 +33,7 @@ struct exists_response {
 
     error_context::key_value ctx;
     std::uint16_t partition_id{};
-    std::uint64_t cas{};
+    protocol::cas cas{};
     observe_status status{ observe_status::invalid };
 };
 

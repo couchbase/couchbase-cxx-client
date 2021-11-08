@@ -20,6 +20,7 @@
 #include <gsl/assert>
 
 #include <couchbase/io/mcbp_message.hxx>
+#include <couchbase/protocol/cas.hxx>
 #include <couchbase/protocol/client_opcode.hxx>
 #include <couchbase/protocol/client_opcode_fmt.hxx>
 #include <couchbase/protocol/cmd_info.hxx>
@@ -84,9 +85,9 @@ class client_response
         return body_size_;
     }
 
-    [[nodiscard]] std::uint64_t cas() const
+    [[nodiscard]] protocol::cas cas() const
     {
-        return cas_;
+        return protocol::cas{ cas_ };
     }
 
     [[nodiscard]] std::uint32_t opaque() const

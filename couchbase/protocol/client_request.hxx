@@ -61,9 +61,9 @@ class client_request
         opaque_ = val;
     }
 
-    void cas(std::uint64_t val)
+    void cas(protocol::cas val)
     {
-        cas_ = utils::byte_swap_64(val);
+        cas_ = utils::byte_swap_64(val.value);
     }
 
     [[nodiscard]] std::uint32_t opaque() const

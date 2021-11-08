@@ -31,7 +31,7 @@ namespace couchbase::operations
 struct get_response {
     error_context::key_value ctx;
     std::string value{};
-    std::uint64_t cas{};
+    protocol::cas cas{};
     std::uint32_t flags{};
 };
 

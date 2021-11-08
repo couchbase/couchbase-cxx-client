@@ -66,9 +66,9 @@ class server_request
         return body_size_;
     }
 
-    [[nodiscard]] std::uint64_t cas() const
+    [[nodiscard]] protocol::cas cas() const
     {
-        return cas_;
+        return protocol::cas{ cas_ };
     }
 
     [[nodiscard]] std::uint32_t opaque() const

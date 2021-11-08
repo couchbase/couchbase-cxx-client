@@ -38,7 +38,7 @@ struct lookup_in_response {
         std::size_t original_index;
     };
     error_context::key_value ctx;
-    std::uint64_t cas{};
+    protocol::cas cas{};
     std::vector<field> fields{};
     bool deleted{ false };
 };

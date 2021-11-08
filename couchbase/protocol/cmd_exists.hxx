@@ -19,6 +19,7 @@
 
 #include <couchbase/document_id.hxx>
 #include <couchbase/io/mcbp_message.hxx>
+#include <couchbase/protocol/cas.hxx>
 #include <couchbase/protocol/client_opcode.hxx>
 #include <couchbase/protocol/cmd_info.hxx>
 #include <couchbase/protocol/status.hxx>
@@ -43,9 +44,9 @@ class exists_response_body
         return partition_id_;
     }
 
-    [[nodiscard]] std::uint64_t cas() const
+    [[nodiscard]] protocol::cas cas() const
     {
-        return cas_;
+        return protocol::cas{ cas_ };
     }
 
     [[nodiscard]] const std::string& key() const

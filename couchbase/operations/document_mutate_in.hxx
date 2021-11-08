@@ -39,7 +39,7 @@ struct mutate_in_response {
         std::size_t original_index;
     };
     error_context::key_value ctx;
-    std::uint64_t cas{};
+    protocol::cas cas{};
     mutation_token token{};
     std::vector<field> fields{};
     std::optional<std::size_t> first_error_index{};
@@ -54,7 +54,7 @@ struct mutate_in_request {
     document_id id;
     uint16_t partition{};
     uint32_t opaque{};
-    uint64_t cas{ 0 };
+    protocol::cas cas{ 0 };
     bool access_deleted{ false };
     bool create_as_deleted{ false };
     std::optional<std::uint32_t> expiry{};

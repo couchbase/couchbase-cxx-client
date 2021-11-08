@@ -50,7 +50,7 @@ TEST_CASE("native: durable operations", "[native]")
         auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.cas != 0);
+        REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number != 0);
     }
     {
@@ -62,7 +62,7 @@ TEST_CASE("native: durable operations", "[native]")
         auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.cas != 0);
+        REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number != 0);
     }
     {
@@ -72,7 +72,7 @@ TEST_CASE("native: durable operations", "[native]")
         auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.cas != 0);
+        REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number != 0);
     }
     {
@@ -80,7 +80,7 @@ TEST_CASE("native: durable operations", "[native]")
         auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.cas != 0);
+        REQUIRE(!resp.cas.empty());
         REQUIRE(resp.value == R"({"foo":"bar","baz":42})");
     }
     {
@@ -89,7 +89,7 @@ TEST_CASE("native: durable operations", "[native]")
         auto resp = execute(cluster, req);
         INFO(resp.ctx.ec.message());
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.cas != 0);
+        REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number != 0);
     }
     {

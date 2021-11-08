@@ -30,7 +30,7 @@ namespace couchbase::operations
 
 struct unlock_response {
     error_context::key_value ctx;
-    std::uint64_t cas{};
+    protocol::cas cas{};
 };
 
 struct unlock_request {
@@ -41,7 +41,7 @@ struct unlock_request {
     document_id id;
     uint16_t partition{};
     uint32_t opaque{};
-    uint64_t cas{};
+    protocol::cas cas{};
     std::chrono::milliseconds timeout{ timeout_defaults::key_value_timeout };
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
 
