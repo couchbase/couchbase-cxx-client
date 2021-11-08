@@ -17,12 +17,6 @@
 
 #include "test_helper_native.hxx"
 
-std::string
-uniq_id(const std::string& prefix)
-{
-    return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
-}
-
 TEST_CASE("native: upsert document into default collection", "[native]")
 {
     auto ctx = test_context::load_from_environment();
@@ -42,7 +36,7 @@ TEST_CASE("native: upsert document into default collection", "[native]")
     open_bucket(cluster, ctx.bucket);
 
     {
-        couchbase::document_id id{ ctx.bucket, "_default._default", uniq_id("foo") };
+        couchbase::document_id id{ ctx.bucket, "_default", "_default", uniq_id("foo") };
         const tao::json::value value = {
             { "a", 1.0 },
             { "b", 2.0 },

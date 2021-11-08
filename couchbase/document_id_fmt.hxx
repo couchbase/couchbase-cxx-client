@@ -26,7 +26,7 @@ struct fmt::formatter<couchbase::document_id> : formatter<std::string> {
     template<typename FormatContext>
     auto format(const couchbase::document_id& id, FormatContext& ctx)
     {
-        format_to(ctx.out(), "{}/{}/{}", id.bucket, id.collection, id.key);
+        format_to(ctx.out(), "{}/{}/{}", id.bucket(), id.collection_path(), id.key());
         return formatter<std::string>::format("", ctx);
     }
 };

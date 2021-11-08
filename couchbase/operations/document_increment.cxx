@@ -53,7 +53,7 @@ increment_request::make_response(error_context::key_value&& ctx, const encoded_r
         response.content = encoded.body().content();
         response.token = encoded.body().token();
         response.token.partition_id = partition;
-        response.token.bucket_name = response.ctx.id.bucket;
+        response.token.bucket_name = response.ctx.id.bucket();
     }
     return response;
 }

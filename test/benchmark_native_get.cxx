@@ -17,12 +17,6 @@
 
 #include "benchmark_helper_native.hxx"
 
-std::string
-uniq_id(const std::string& prefix)
-{
-    return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
-}
-
 TEST_CASE("benchmark: get a document", "[native]")
 {
     auto ctx = test_context::load_from_environment();
@@ -41,7 +35,7 @@ TEST_CASE("benchmark: get a document", "[native]")
     open_cluster(cluster, couchbase::origin(auth, connstr));
     open_bucket(cluster, ctx.bucket);
 
-    couchbase::document_id id{ ctx.bucket, "_default._default", uniq_id("foo") };
+    couchbase::document_id id{ ctx.bucket, "_default", "_default", uniq_id("foo") };
 
     {
         const tao::json::value value = {

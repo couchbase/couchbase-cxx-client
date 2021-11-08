@@ -121,10 +121,9 @@ class cluster
              typename std::enable_if_t<!std::is_same_v<typename Request::encoded_request_type, io::http_request>, int> = 0>
     void execute(Request request, Handler&& handler)
     {
-        auto bucket = buckets_.find(request.id.bucket);
+        auto bucket = buckets_.find(request.id.bucket());
         if (bucket == buckets_.end()) {
-            error_context::key_value ctx{};
-            ctx.id = request.id;
+            error_context::key_value ctx{ request.id };
             ctx.ec = error::common_errc::bucket_not_found;
             using response_type = typename Request::encoded_response_type;
             return handler(request.make_response(std::move(ctx), response_type{}));

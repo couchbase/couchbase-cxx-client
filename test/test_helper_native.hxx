@@ -85,3 +85,9 @@ open_bucket(couchbase::cluster& cluster, const std::string& bucket_name)
     REQUIRE_FALSE(rc);
     return rc;
 }
+
+inline std::string
+uniq_id(const std::string& prefix)
+{
+    return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
+}
