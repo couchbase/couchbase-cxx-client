@@ -24,6 +24,7 @@
 namespace couchbase
 {
 struct document_id {
+    document_id();
     document_id(std::string bucket, std::string scope, std::string collection, std::string key, bool use_collections = true);
 
     [[nodiscard]] const std::string& bucket() const
@@ -89,10 +90,10 @@ struct document_id {
     }
 
   private:
-    std::string bucket_;
+    std::string bucket_{};
     std::string scope_;
     std::string collection_;
-    std::string key_;
+    std::string key_{};
     std::string collection_path_{};
     std::optional<std::uint32_t> collection_uid_{}; // filled with resolved UID during request lifetime
     bool use_collections_{ true };
