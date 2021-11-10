@@ -21,6 +21,13 @@
 
 namespace couchbase
 {
+document_id::document_id()
+  : scope_("_default")
+  , collection_("_default")
+  , collection_path_("_default._default")
+{
+}
+
 static bool
 is_valid_collection_char(char ch)
 {
