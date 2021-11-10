@@ -21,25 +21,12 @@
 
 #include <asio/version.hpp>
 
-#include <spdlog/cfg/env.h>
-
 #include <couchbase/logger/configuration.hxx>
 
 #include <couchbase/cluster.hxx>
 
-inline void
-native_init_logger()
-{
-    static bool initialized = false;
-
-    if (!initialized) {
-        couchbase::logger::create_console_logger();
-        if (auto env_val = spdlog::details::os::getenv("COUCHBASE_CXX_CLIENT_LOG_LEVEL"); !env_val.empty()) {
-            couchbase::logger::set_log_levels(spdlog::level::from_str(env_val));
-        }
-        initialized = true;
-    }
-}
+void
+native_init_logger();
 
 template<class Request>
 auto
