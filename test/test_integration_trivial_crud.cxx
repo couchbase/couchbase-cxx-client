@@ -15,47 +15,26 @@
  *   limitations under the License.
  */
 
-#include "benchmark_helper_native.hxx"
+#include "test_helper_integration.hxx"
 
-TEST_CASE("benchmark: get a document", "[native]")
+TEST_CASE("integration: upsert document into default collection", "[integration]")
 {
-    auto ctx = test_context::load_from_environment();
-    native_init_logger();
+    test::utils::integration_test_guard integration;
 
-    auto connstr = couchbase::utils::parse_connection_string(ctx.connection_string);
-    couchbase::cluster_credentials auth{};
-    auth.username = ctx.username;
-    auth.password = ctx.password;
-
-    asio::io_context io;
-
-    couchbase::cluster cluster(io);
-    auto io_thread = std::thread([&io]() { io.run(); });
-
-    open_cluster(cluster, couchbase::origin(auth, connstr));
-    open_bucket(cluster, ctx.bucket);
-
-    couchbase::document_id id{ ctx.bucket, "_default", "_default", uniq_id("foo") };
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     {
+        couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
         const tao::json::value value = {
             { "a", 1.0 },
             { "b", 2.0 },
         };
         couchbase::operations::upsert_request req{ id, couchbase::utils::json::generate(value) };
-        auto resp = execute(cluster, req);
+        auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec.message())
         REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(!resp.cas.empty());
+        INFO("seqno=" << resp.token.sequence_number)
+        REQUIRE(resp.token.sequence_number != 0);
     }
-
-    BENCHMARK("get")
-    {
-        couchbase::operations::get_request req{ id };
-        auto resp = execute(cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
-    };
-
-    close_cluster(cluster);
-
-    io_thread.join();
 }

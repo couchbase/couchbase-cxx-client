@@ -1,11 +1,13 @@
-native_test(management)
-native_test(trivial_crud)
-native_test(trivial_query)
-native_test(diagnostics)
-native_test(binary_operations)
-native_test(durability)
+add_subdirectory(utils)
 
-native_test(connection_string)
-native_test(utils)
+integration_test(management)
+integration_test(trivial_crud)
+integration_test(trivial_query)
+integration_test(diagnostics)
+integration_test(binary_operations)
+integration_test(durability)
 
-native_benchmark(get)
+unit_test(connection_string)
+unit_test(utils)
+
+integration_benchmark(get)

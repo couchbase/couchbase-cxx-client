@@ -15,57 +15,23 @@
  *   limitations under the License.
  */
 
-#pragma once
+#include "integration_shortcuts.hxx"
 
-#include "test_helper.hxx"
-
-#include <asio/version.hpp>
-
-#include <spdlog/cfg/env.h>
-
-#include <couchbase/logger/configuration.hxx>
-
-#include <couchbase/cluster.hxx>
-
-inline void
-native_init_logger()
+namespace test::utils
 {
-    static bool initialized = false;
-
-    if (!initialized) {
-        couchbase::logger::create_console_logger();
-        if (auto env_val = spdlog::details::os::getenv("COUCHBASE_CXX_CLIENT_LOG_LEVEL"); !env_val.empty()) {
-            couchbase::logger::set_log_levels(spdlog::level::from_str(env_val));
-        }
-        initialized = true;
-    }
-}
-
-template<class Request>
-auto
-execute(couchbase::cluster& cluster, Request request)
-{
-    using response_type = typename Request::response_type;
-    auto barrier = std::make_shared<std::promise<response_type>>();
-    auto f = barrier->get_future();
-    cluster.execute(request, [barrier](response_type resp) mutable { barrier->set_value(std::move(resp)); });
-    auto resp = f.get();
-    return resp;
-}
-
-inline std::error_code
+void
 open_cluster(couchbase::cluster& cluster, const couchbase::origin& origin)
 {
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();
     cluster.open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
-    INFO(rc.message());
-    REQUIRE_FALSE(rc);
-    return rc;
+    if (rc) {
+        LOG_CRITICAL("unable to connect to the cluster: {}, nodes={}", rc.message(), fmt::join(origin.get_nodes(), ", "));
+        throw std::system_error(rc);
+    }
 }
-
-inline void
+void
 close_cluster(couchbase::cluster& cluster)
 {
     auto barrier = std::make_shared<std::promise<void>>();
@@ -74,20 +40,16 @@ close_cluster(couchbase::cluster& cluster)
     f.get();
 }
 
-inline std::error_code
+void
 open_bucket(couchbase::cluster& cluster, const std::string& bucket_name)
 {
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();
     cluster.open_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
-    INFO(rc.message());
-    REQUIRE_FALSE(rc);
-    return rc;
+    if (rc) {
+        LOG_CRITICAL("unable to open bucket: {}, name={}", rc.message(), bucket_name);
+        throw std::system_error(rc);
+    }
 }
-
-inline std::string
-uniq_id(const std::string& prefix)
-{
-    return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
-}
+} // namespace test::utils

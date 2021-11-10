@@ -17,9 +17,6 @@
 
 #pragma once
 
-#define CATCH_CONFIG_MAIN
+#define CATCH_CONFIG_ENABLE_BENCHMARKING
 
-#include <catch2/catch.hpp>
-
-#include "utils/test_context.hxx"
-#include "utils/uniq_id.hxx"
+#include "test_helper_integration.hxx"

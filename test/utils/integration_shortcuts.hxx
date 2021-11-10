@@ -17,9 +17,28 @@
 
 #pragma once
 
-#define CATCH_CONFIG_MAIN
+#include <couchbase/cluster.hxx>
 
-#include <catch2/catch.hpp>
+namespace test::utils
+{
+template<class Request>
+auto
+execute(couchbase::cluster& cluster, Request request)
+{
+    using response_type = typename Request::response_type;
+    auto barrier = std::make_shared<std::promise<response_type>>();
+    auto f = barrier->get_future();
+    cluster.execute(request, [barrier](response_type resp) mutable { barrier->set_value(std::move(resp)); });
+    auto resp = f.get();
+    return resp;
+}
 
-#include "utils/test_context.hxx"
-#include "utils/uniq_id.hxx"
+void
+open_cluster(couchbase::cluster& cluster, const couchbase::origin& origin);
+
+void
+close_cluster(couchbase::cluster& cluster);
+
+void
+open_bucket(couchbase::cluster& cluster, const std::string& bucket_name);
+} // namespace test::utils
