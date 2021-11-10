@@ -15,11 +15,22 @@
  *   limitations under the License.
  */
 
-#pragma once
+#include "test_helper_integration.hxx"
 
-#define CATCH_CONFIG_MAIN
+TEST_CASE("integration: trivial non-data query", "[integration]")
+{
+    test::utils::integration_test_guard integration;
 
-#include <catch2/catch.hpp>
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-#include "utils/test_context.hxx"
-#include "utils/uniq_id.hxx"
+    if (!integration.ctx.version.supports_gcccp()) {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    }
+
+    {
+        couchbase::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec.message())
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+}

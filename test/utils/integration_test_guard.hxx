@@ -17,9 +17,21 @@
 
 #pragma once
 
-#define CATCH_CONFIG_MAIN
+#include "test_context.hxx"
 
-#include <catch2/catch.hpp>
+#include "integration_shortcuts.hxx"
 
-#include "utils/test_context.hxx"
-#include "utils/uniq_id.hxx"
+namespace test::utils
+{
+class integration_test_guard
+{
+  public:
+    integration_test_guard();
+    ~integration_test_guard();
+
+    std::thread io_thread{};
+    asio::io_context io{};
+    couchbase::cluster cluster;
+    test_context ctx;
+};
+} // namespace test::utils

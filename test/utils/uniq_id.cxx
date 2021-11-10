@@ -15,11 +15,16 @@
  *   limitations under the License.
  */
 
-#pragma once
+#include <string>
+#include <chrono>
 
-#define CATCH_CONFIG_MAIN
+#include <spdlog/fmt/fmt.h>
 
-#include <catch2/catch.hpp>
-
-#include "utils/test_context.hxx"
-#include "utils/uniq_id.hxx"
+namespace test::utils
+{
+std::string
+uniq_id(const std::string& prefix)
+{
+    return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
+}
+} // namespace test::utils

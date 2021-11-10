@@ -17,9 +17,20 @@
 
 #pragma once
 
-#define CATCH_CONFIG_MAIN
+#include <string>
 
-#include <catch2/catch.hpp>
+#include "server_version.hxx"
 
-#include "utils/test_context.hxx"
-#include "utils/uniq_id.hxx"
+namespace test::utils
+{
+struct test_context {
+    std::string connection_string{ "couchbase://127.0.0.1" };
+    std::string username{ "Administrator" };
+    std::string password{ "password" };
+    std::string bucket{ "default" };
+    server_version version{ 6, 6, 0 };
+
+    static test_context load_from_environment();
+};
+
+} // namespace test::utils

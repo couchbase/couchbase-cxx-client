@@ -15,8 +15,21 @@
  *   limitations under the License.
  */
 
-#pragma once
+#include <couchbase/logger/logger.hxx>
 
-#define CATCH_CONFIG_ENABLE_BENCHMARKING
+namespace test::utils
+{
+void
+init_logger()
+{
+    static bool initialized = false;
 
-#include "test_helper_native.hxx"
+    if (!initialized) {
+        couchbase::logger::create_console_logger();
+        if (auto env_val = spdlog::details::os::getenv("COUCHBASE_CXX_CLIENT_LOG_LEVEL"); !env_val.empty()) {
+            couchbase::logger::set_log_levels(spdlog::level::from_str(env_val));
+        }
+        initialized = true;
+    }
+}
+} // namespace test::utils

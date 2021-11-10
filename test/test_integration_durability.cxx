@@ -15,31 +15,15 @@
  *   limitations under the License.
  */
 
-#include "test_helper_native.hxx"
+#include "test_helper_integration.hxx"
 
-TEST_CASE("native: durable operations", "[native]")
+TEST_CASE("integration: durable operations", "[integration]")
 {
-    auto ctx = test_context::load_from_environment();
-    native_init_logger();
+    test::utils::integration_test_guard integration;
 
-    if (!ctx.version.supports_enhanced_durability()) {
-        return;
-    }
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    auto connstr = couchbase::utils::parse_connection_string(ctx.connection_string);
-    couchbase::cluster_credentials auth{};
-    auth.username = ctx.username;
-    auth.password = ctx.password;
-
-    asio::io_context io;
-
-    couchbase::cluster cluster(io);
-    auto io_thread = std::thread([&io]() { io.run(); });
-
-    open_cluster(cluster, couchbase::origin(auth, connstr));
-    open_bucket(cluster, ctx.bucket);
-
-    couchbase::document_id id{ ctx.bucket, "_default", "_default", uniq_id("foo") };
+    couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
     {
         const tao::json::value value = {
             { "a", 1.0 },
@@ -47,8 +31,8 @@ TEST_CASE("native: durable operations", "[native]")
         };
         couchbase::operations::upsert_request req{ id, couchbase::utils::json::generate(value) };
         req.durability_level = couchbase::protocol::durability_level::majority_and_persist_to_active;
-        auto resp = execute(cluster, req);
-        INFO(resp.ctx.ec.message());
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec.message())
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number != 0);
@@ -59,8 +43,8 @@ TEST_CASE("native: durable operations", "[native]")
         };
         couchbase::operations::replace_request req{ id, couchbase::utils::json::generate(value) };
         req.durability_level = couchbase::protocol::durability_level::majority_and_persist_to_active;
-        auto resp = execute(cluster, req);
-        INFO(resp.ctx.ec.message());
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec.message())
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number != 0);
@@ -69,16 +53,16 @@ TEST_CASE("native: durable operations", "[native]")
         couchbase::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::dict_upsert, false, false, false, "baz", "42");
         req.durability_level = couchbase::protocol::durability_level::majority_and_persist_to_active;
-        auto resp = execute(cluster, req);
-        INFO(resp.ctx.ec.message());
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec.message())
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number != 0);
     }
     {
         couchbase::operations::get_request req{ id };
-        auto resp = execute(cluster, req);
-        INFO(resp.ctx.ec.message());
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec.message())
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.value == R"({"foo":"bar","baz":42})");
@@ -86,18 +70,10 @@ TEST_CASE("native: durable operations", "[native]")
     {
         couchbase::operations::remove_request req{ id };
         req.durability_level = couchbase::protocol::durability_level::majority_and_persist_to_active;
-        auto resp = execute(cluster, req);
-        INFO(resp.ctx.ec.message());
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec.message())
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number != 0);
     }
-    {
-        auto barrier = std::make_shared<std::promise<void>>();
-        auto f = barrier->get_future();
-        cluster.close([barrier]() { barrier->set_value(); });
-        f.get();
-    }
-
-    io_thread.join();
 }
