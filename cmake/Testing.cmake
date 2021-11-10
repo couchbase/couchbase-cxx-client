@@ -4,7 +4,8 @@ enable_testing()
 include(Catch)
 
 macro(native_test name)
-  add_executable(test_native_${name} "${PROJECT_SOURCE_DIR}/test/test_native_${name}.cxx")
+  add_executable(test_native_${name} "${PROJECT_SOURCE_DIR}/test/test_native_${name}.cxx"
+                                     "${PROJECT_SOURCE_DIR}/test/test_helper_native.cxx")
   target_include_directories(test_native_${name} PRIVATE ${PROJECT_BINARY_DIR}/generated)
   target_link_libraries(
     test_native_${name}

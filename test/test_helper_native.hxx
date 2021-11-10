@@ -91,3 +91,14 @@ uniq_id(const std::string& prefix)
 {
     return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
 }
+
+class IntegrationTest
+{
+  public:
+    std::thread io_thread;
+    asio::io_context io;
+    couchbase::cluster cluster;
+    test_context ctx;
+    IntegrationTest();
+    ~IntegrationTest();
+};
