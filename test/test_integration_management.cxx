@@ -37,6 +37,15 @@ TEST_CASE("integration: bucket management", "[integration]")
     }
 
     {
+        auto created = test::utils::wait_until([&integration, bucket_name]() {
+            couchbase::operations::management::bucket_get_request req{ bucket_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            return !resp.ctx.ec;
+        });
+        REQUIRE(created);
+    }
+
+    {
         couchbase::operations::management::bucket_get_all_request req;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
@@ -50,6 +59,15 @@ TEST_CASE("integration: bucket management", "[integration]")
         couchbase::operations::management::bucket_drop_request req{ bucket_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
+    }
+
+    {
+        auto dropped = test::utils::wait_until([&integration, bucket_name]() {
+            couchbase::operations::management::bucket_get_request req{ bucket_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            return resp.ctx.ec == couchbase::error::common_errc::bucket_not_found;
+        });
+        REQUIRE(dropped);
     }
 
     {

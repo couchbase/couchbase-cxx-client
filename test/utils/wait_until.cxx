@@ -15,8 +15,28 @@
  *   limitations under the License.
  */
 
-#pragma once
+#include "wait_until.hxx"
 
-#include "test_helper.hxx"
-#include "utils/integration_test_guard.hxx"
-#include "utils/wait_until.hxx"
+namespace test::utils
+{
+bool
+wait_until_bucket_healthy(couchbase::cluster& cluster, const std::string& bucket_name)
+{
+    return wait_until([&cluster, bucket_name]() {
+        couchbase::operations::management::bucket_get_request req{ bucket_name };
+        auto resp = test::utils::execute(cluster, req);
+        if (resp.ctx.ec) {
+            return false;
+        }
+        if (resp.bucket.nodes.empty()) {
+            return false;
+        }
+        for (const auto& node : resp.bucket.nodes) {
+            if (node.status != "healthy") {
+                return false;
+            }
+        }
+        return true;
+    });
+}
+} // namespace test::utils
