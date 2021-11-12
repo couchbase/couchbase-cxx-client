@@ -240,6 +240,8 @@ TEST_CASE("integration: exists", "[integration]")
         couchbase::operations::exists_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.status == couchbase::operations::exists_response::observe_status::found);
+        REQUIRE(resp.exists());
+        REQUIRE((resp.status == couchbase::operations::exists_response::observe_status::found ||
+                 resp.status == couchbase::operations::exists_response::observe_status::persisted));
     }
 }
