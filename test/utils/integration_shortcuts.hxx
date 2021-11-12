@@ -28,7 +28,7 @@ execute(couchbase::cluster& cluster, Request request)
     using response_type = typename Request::response_type;
     auto barrier = std::make_shared<std::promise<response_type>>();
     auto f = barrier->get_future();
-    cluster.execute(request, [barrier](response_type resp) mutable { barrier->set_value(std::move(resp)); });
+    cluster.execute(request, [barrier](response_type resp) { barrier->set_value(std::move(resp)); });
     auto resp = f.get();
     return resp;
 }

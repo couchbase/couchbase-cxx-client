@@ -34,8 +34,8 @@ namespace couchbase::io
 class http_session_manager : public std::enable_shared_from_this<http_session_manager>
 {
   public:
-    http_session_manager(const std::string& client_id, asio::io_context& ctx, asio::ssl::context& tls)
-      : client_id_(client_id)
+    http_session_manager(std::string client_id, asio::io_context& ctx, asio::ssl::context& tls)
+      : client_id_(std::move(client_id))
       , ctx_(ctx)
       , tls_(tls)
     {
@@ -68,17 +68,17 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
     {
         std::scoped_lock lock(sessions_mutex_);
 
-        for (const auto& list : busy_sessions_) {
-            for (const auto& session : list.second) {
+        for (const auto& [type, sessions] : busy_sessions_) {
+            for (const auto& session : sessions) {
                 if (session) {
-                    res.services[list.first].emplace_back(session->diag_info());
+                    res.services[type].emplace_back(session->diag_info());
                 }
             }
         }
-        for (const auto& list : idle_sessions_) {
-            for (const auto& session : list.second) {
+        for (const auto& [type, sessions] : idle_sessions_) {
+            for (const auto& session : sessions) {
                 if (session) {
-                    res.services[list.first].emplace_back(session->diag_info());
+                    res.services[type].emplace_back(session->diag_info());
                 }
             }
         }
@@ -88,13 +88,12 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
     void ping(std::set<service_type> services, std::shared_ptr<Collector> collector, const couchbase::cluster_credentials& credentials)
     {
         std::array<service_type, 4> known_types{ service_type::query, service_type::analytics, service_type::search, service_type::view };
-        for (auto& node : config_.nodes) {
+        for (const auto& node : config_.nodes) {
             for (auto type : known_types) {
                 if (services.find(type) == services.end()) {
                     continue;
                 }
-                std::uint16_t port = 0;
-                port = node.port_or(options_.network, type, options_.enable_tls, 0);
+                std::uint16_t port = node.port_or(options_.network, type, options_.enable_tls, 0);
                 if (port != 0) {
                     std::scoped_lock lock(sessions_mutex_);
                     std::shared_ptr<http_session> session;
@@ -130,31 +129,29 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
                     operations::http_noop_request request{};
                     request.type = type;
                     auto cmd = std::make_shared<operations::http_command<operations::http_noop_request>>(ctx_, request, tracer_, meter_);
-                    cmd->send_to(
-                      session,
-                      [start = std::chrono::steady_clock::now(),
-                       self = shared_from_this(),
-                       type,
-                       session,
-                       handler = collector->build_reporter()](operations::http_noop_response&& resp) mutable {
-                          diag::ping_state state = diag::ping_state::ok;
-                          std::optional<std::string> error{};
-                          if (resp.ctx.ec) {
-                              state = diag::ping_state::error;
-                              error.emplace(fmt::format(
-                                "code={}, message={}, http_code={}", resp.ctx.ec.value(), resp.ctx.ec.message(), resp.ctx.http_status));
-                          }
-                          handler(diag::endpoint_ping_info{
-                            type,
-                            session->id(),
-                            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start),
-                            session->remote_address(),
-                            session->local_address(),
-                            state,
-                            {},
-                            error });
-                          self->check_in(type, session);
-                      });
+                    cmd->start([start = std::chrono::steady_clock::now(),
+                                self = shared_from_this(),
+                                type,
+                                cmd,
+                                handler = std::move(collector->build_reporter())](std::error_code ec, io::http_response&& msg) {
+                        diag::ping_state state = diag::ping_state::ok;
+                        std::optional<std::string> error{};
+                        if (ec) {
+                            state = diag::ping_state::error;
+                            error.emplace(fmt::format("code={}, message={}, http_code={}", ec.value(), ec.message(), msg.status_code));
+                        }
+                        handler(diag::endpoint_ping_info{
+                          type,
+                          cmd->session_->id(),
+                          std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start),
+                          cmd->session_->remote_address(),
+                          cmd->session_->local_address(),
+                          state,
+                          {},
+                          error });
+                        self->check_in(type, std::move(cmd->session_));
+                    });
+                    cmd->send_to(session);
                 }
             }
         }
@@ -226,19 +223,51 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
 
     void close()
     {
-        for (auto& sessions : idle_sessions_) {
-            for (auto& s : sessions.second) {
+        for (auto& [type, sessions] : idle_sessions_) {
+            for (auto& s : sessions) {
                 if (s) {
                     s->reset_idle();
                     s.reset();
                 }
             }
         }
-        for (auto& sessions : busy_sessions_) {
-            for (auto& s : sessions.second) {
+        for (auto& [type, sessions] : busy_sessions_) {
+            for (auto& s : sessions) {
                 s.reset();
             }
         }
+    }
+
+    template<typename Request, typename Handler>
+    void execute(Request request, Handler&& handler, const couchbase::cluster_credentials& credentials)
+    {
+        auto session = check_out(Request::type, credentials);
+        if (!session) {
+            typename Request::error_context_type ctx{};
+            ctx.ec = error::common_errc::service_not_available;
+            using response_type = typename Request::encoded_response_type;
+            return handler(request.make_response(std::move(ctx), response_type{}));
+        }
+
+        auto cmd = std::make_shared<operations::http_command<Request>>(ctx_, request, tracer_, meter_);
+        cmd->start([self = shared_from_this(), cmd, handler = std::forward<Handler>(handler)](std::error_code ec, io::http_response&& msg) {
+            using command_type = typename decltype(cmd)::element_type;
+            using encoded_response_type = typename command_type::encoded_response_type;
+            using error_context_type = typename command_type::error_context_type;
+            encoded_response_type resp{ std::move(msg) };
+            error_context_type ctx{};
+            ctx.ec = ec;
+            ctx.client_context_id = cmd->request.client_context_id;
+            ctx.method = cmd->encoded.method;
+            ctx.path = cmd->encoded.path;
+            ctx.last_dispatched_from = cmd->session_->local_address();
+            ctx.last_dispatched_to = cmd->session_->remote_address();
+            ctx.http_status = resp.status_code;
+            ctx.http_body = resp.body;
+            handler(cmd->request.make_response(std::move(ctx), std::move(resp)));
+            self->check_in(Request::type, std::move(cmd->session_));
+        });
+        cmd->send_to(session);
     }
 
   private:

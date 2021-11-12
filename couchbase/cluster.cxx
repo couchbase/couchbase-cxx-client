@@ -48,7 +48,7 @@ class ping_collector : public std::enable_shared_from_this<ping_collector>
         expected_++;
         return [self = this->shared_from_this()](diag::endpoint_ping_info&& info) {
             std::scoped_lock lock(self->mutex_);
-            self->res_.services[info.type].emplace_back(info);
+            self->res_.services[info.type].emplace_back(std::move(info));
             if (--self->expected_ == 0) {
                 self->invoke_handler();
             }
@@ -90,7 +90,7 @@ cluster::ping(std::optional<std::string> report_id,
                 if (session_) {
                     session_->ping(collector->build_reporter());
                 }
-                for (auto& [name, bucket] : buckets_) {
+                for (const auto& [name, bucket] : buckets_) {
                     bucket->ping(collector);
                 }
             }

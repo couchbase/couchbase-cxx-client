@@ -26,6 +26,7 @@ include_directories(BEFORE SYSTEM ${PROJECT_SOURCE_DIR}/third_party/asio/asio/in
 include_directories(BEFORE SYSTEM ${PROJECT_SOURCE_DIR}/third_party/json/include)
 include_directories(BEFORE SYSTEM ${PROJECT_SOURCE_DIR}/third_party/json/external/PEGTL/include)
 include_directories(BEFORE SYSTEM ${PROJECT_SOURCE_DIR}/third_party/spdlog/include)
+include_directories(BEFORE SYSTEM ${PROJECT_SOURCE_DIR}/third_party/cxx_function)
 
 add_library(http_parser OBJECT ${PROJECT_SOURCE_DIR}/third_party/http_parser/http_parser.c)
 set_target_properties(http_parser PROPERTIES C_VISIBILITY_PRESET hidden POSITION_INDEPENDENT_CODE TRUE)

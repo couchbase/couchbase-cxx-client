@@ -27,6 +27,8 @@
 
 #include <asio.hpp>
 
+#include <cxx_function.hpp>
+
 #include <couchbase/platform/uuid.h>
 #include <couchbase/platform/base64.h>
 #include <couchbase/meta/version.hxx>
@@ -44,7 +46,6 @@
 
 namespace couchbase::io
 {
-
 class http_session_info
 {
   public:
@@ -241,7 +242,7 @@ class http_session : public std::enable_shared_from_this<http_session>
 
         {
             std::scoped_lock lock(command_handlers_mutex_);
-            for (auto& handler : command_handlers_) {
+            for (const auto& handler : command_handlers_) {
                 handler(error::common_errc::ambiguous_timeout, {});
             }
             command_handlers_.clear();
@@ -279,7 +280,7 @@ class http_session : public std::enable_shared_from_this<http_session>
             return;
         }
         std::scoped_lock lock(output_buffer_mutex_);
-        output_buffer_.emplace_back(std::vector<uint8_t>{ buf.begin(), buf.end() });
+        output_buffer_.emplace_back(buf.begin(), buf.end());
     }
 
     void flush()
@@ -316,7 +317,7 @@ class http_session : public std::enable_shared_from_this<http_session>
         write(request.body);
         {
             std::scoped_lock lock(command_handlers_mutex_);
-            command_handlers_.push_back(std::forward<Handler>(handler));
+            command_handlers_.emplace_back(std::forward<Handler>(handler));
         }
         flush();
     }
@@ -427,7 +428,7 @@ class http_session : public std::enable_shared_from_this<http_session>
                               decltype(self->command_handlers_)::value_type handler{};
                               {
                                   std::scoped_lock lock(self->command_handlers_mutex_);
-                                  handler = self->command_handlers_.front();
+                                  handler = std::move(self->command_handlers_.front());
                                   self->command_handlers_.pop_front();
                               }
                               if (self->parser_.response.must_close_connection()) {
@@ -506,7 +507,7 @@ class http_session : public std::enable_shared_from_this<http_session>
 
     std::function<void()> on_stop_handler_{ nullptr };
 
-    std::list<std::function<void(std::error_code, io::http_response&&)>> command_handlers_{};
+    std::list<cxx_function::unique_function<void(std::error_code, io::http_response&&) const>> command_handlers_{};
     std::mutex command_handlers_mutex_{};
 
     http_parser parser_{};
@@ -515,10 +516,6 @@ class http_session : public std::enable_shared_from_this<http_session>
     std::vector<std::vector<std::uint8_t>> writing_buffer_{};
     std::mutex output_buffer_mutex_{};
     std::mutex writing_buffer_mutex_{};
-    asio::ip::tcp::endpoint endpoint_{}; // connected endpoint
-    std::string endpoint_address_{};     // cached string with endpoint address
-    asio::ip::tcp::endpoint local_endpoint_{};
-    std::string local_endpoint_address_{};
     asio::ip::tcp::resolver::results_type endpoints_{};
     http_session_info info_;
     std::mutex info_mutex_{};
