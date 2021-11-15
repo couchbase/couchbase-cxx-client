@@ -29,35 +29,22 @@ std::error_code
 exists_request::encode_to(exists_request::encoded_request_type& encoded, mcbp_context&& /* context */) const
 {
     encoded.opaque(opaque);
-    encoded.body().id(partition, id);
+    encoded.partition(partition);
+    encoded.body().id(id);
     return {};
 }
 
 exists_response
 exists_request::make_response(error_context::key_value&& ctx, const encoded_response_type& encoded) const
 {
-    exists_response response{ std::move(ctx), partition };
+    exists_response response{ std::move(ctx) };
     if (!response.ctx.ec) {
-        response.cas = encoded.body().cas();
-        response.partition_id = encoded.body().partition_id();
-        switch (encoded.body().status()) {
-            case 0x00:
-                response.status = exists_response::observe_status::found;
-                break;
-            case 0x01:
-                response.status = exists_response::observe_status::persisted;
-                break;
-            case 0x80:
-                response.status = exists_response::observe_status::not_found;
-                break;
-            case 0x81:
-                response.status = exists_response::observe_status::logically_deleted;
-                break;
-            default:
-                LOG_WARNING("invalid observe status for \"{}\": {:x}", id, encoded.body().status());
-                response.status = exists_response::observe_status::invalid;
-                break;
-        }
+        response.cas = encoded.cas();
+        response.deleted = encoded.body().is_deleted();
+        response.flags = encoded.body().flags();
+        response.expiry = encoded.body().expiry();
+        response.sequence_number = encoded.body().sequence_number();
+        response.datatype = encoded.body().datatype();
     }
     return response;
 }
