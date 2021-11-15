@@ -20,6 +20,9 @@
 TEST_CASE("integration: durable operations", "[integration]")
 {
     test::utils::integration_test_guard integration;
+    if (!integration.ctx.version.supports_enhanced_durability()) {
+        return;
+    }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
