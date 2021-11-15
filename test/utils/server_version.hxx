@@ -73,6 +73,11 @@ struct server_version {
     {
         return (is_mad_hatter() && developer_preview) || is_cheshire_cat();
     }
+
+    [[nodiscard]] bool supports_preserve_expiry() const
+    {
+        return is_cheshire_cat();
+    }
 };
 
 } // namespace test::utils

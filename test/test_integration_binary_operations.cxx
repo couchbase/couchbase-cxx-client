@@ -91,3 +91,25 @@ TEST_CASE("integration: prepend", "[integration]")
         REQUIRE(resp.value == "Hello, world");
     }
 }
+
+TEST_CASE("integration: binary ops on missing document", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", "missing_key" };
+
+    SECTION("append")
+    {
+        couchbase::operations::append_request req{ id, "" };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec == couchbase::error::key_value_errc::document_not_found);
+    }
+
+    SECTION("prepend")
+    {
+        couchbase::operations::prepend_request req{ id, "" };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec == couchbase::error::key_value_errc::document_not_found);
+    }
+}

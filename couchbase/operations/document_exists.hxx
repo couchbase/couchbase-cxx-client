@@ -35,6 +35,12 @@ struct exists_response {
     std::uint16_t partition_id{};
     protocol::cas cas{};
     observe_status status{ observe_status::invalid };
+
+    [[nodiscard]] constexpr bool exists() const
+    {
+        return status == couchbase::operations::exists_response::observe_status::found ||
+               status == couchbase::operations::exists_response::observe_status::persisted;
+    }
 };
 
 struct exists_request {
