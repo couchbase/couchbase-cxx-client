@@ -317,23 +317,30 @@ TEST_CASE("integration: exists", "[integration]")
     {
         couchbase::operations::exists_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.status == couchbase::operations::exists_response::observe_status::not_found);
+        REQUIRE_FALSE(resp.exists());
+        REQUIRE(resp.ctx.ec == couchbase::error::key_value_errc::document_not_found);
+        REQUIRE_FALSE(resp.deleted);
+        REQUIRE(resp.cas.empty());
+        REQUIRE(resp.sequence_number == 0);
     }
 
     {
         couchbase::operations::insert_request req{ id, basic_doc_json };
+        req.expiry = 1878422400;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_FALSE(resp.cas.empty());
     }
 
     {
         couchbase::operations::exists_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.exists());
-        REQUIRE((resp.status == couchbase::operations::exists_response::observe_status::found ||
-                 resp.status == couchbase::operations::exists_response::observe_status::persisted));
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_FALSE(resp.deleted);
+        REQUIRE_FALSE(resp.cas.empty());
+        REQUIRE(resp.sequence_number != 0);
+        REQUIRE(resp.expiry == 1878422400);
     }
 
     {
@@ -345,10 +352,12 @@ TEST_CASE("integration: exists", "[integration]")
     {
         couchbase::operations::exists_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE_FALSE(resp.exists());
-        REQUIRE((resp.status == couchbase::operations::exists_response::observe_status::logically_deleted ||
-                 resp.status == couchbase::operations::exists_response::observe_status::not_found));
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.deleted);
+        REQUIRE_FALSE(resp.cas.empty());
+        REQUIRE(resp.sequence_number != 0);
+        REQUIRE(resp.expiry != 0);
     }
 }
 

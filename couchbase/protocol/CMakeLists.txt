@@ -13,6 +13,7 @@ add_library(
   cmd_get_collection_id.cxx
   cmd_get_collections_manifest.cxx
   cmd_get_error_map.cxx
+  cmd_get_meta.cxx
   cmd_hello.cxx
   cmd_increment.cxx
   cmd_insert.cxx

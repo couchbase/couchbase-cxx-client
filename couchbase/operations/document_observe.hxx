@@ -23,33 +23,33 @@
 #include <couchbase/protocol/client_request.hxx>
 #include <couchbase/timeout_defaults.hxx>
 
-#include <couchbase/protocol/cmd_get_meta.hxx>
+#include <couchbase/protocol/cmd_exists.hxx>
 
 namespace couchbase::operations
 {
 
 struct exists_response {
-    error_context::key_value ctx;
-    bool deleted{};
-    protocol::cas cas{};
-    std::uint32_t flags{};
-    std::uint32_t expiry{};
-    std::uint64_t sequence_number{};
-    std::uint8_t datatype{};
+    enum class observe_status { invalid, found, not_found, persisted, logically_deleted };
 
-    [[nodiscard]] inline bool exists() const
+    error_context::key_value ctx;
+    std::uint16_t partition_id{};
+    protocol::cas cas{};
+    observe_status status{ observe_status::invalid };
+
+    [[nodiscard]] constexpr bool exists() const
     {
-        return ctx.ec.value() == 0 && !deleted;
+        return status == couchbase::operations::exists_response::observe_status::found ||
+               status == couchbase::operations::exists_response::observe_status::persisted;
     }
 };
 
 struct exists_request {
     using response_type = exists_response;
-    using encoded_request_type = protocol::client_request<protocol::get_meta_request_body>;
-    using encoded_response_type = protocol::client_response<protocol::get_meta_response_body>;
+    using encoded_request_type = protocol::client_request<protocol::exists_request_body>;
+    using encoded_response_type = protocol::client_response<protocol::exists_response_body>;
 
     document_id id;
-    uint16_t partition{};
+    std::uint16_t partition{};
     std::uint32_t opaque{};
     std::chrono::milliseconds timeout{ timeout_defaults::key_value_timeout };
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
