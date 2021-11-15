@@ -8,5 +8,5 @@ add_library(
   uniq_id.cxx
   wait_until.cxx)
 set_target_properties(test_utils PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(test_utils PRIVATE project_options project_warnings)
+target_link_libraries(test_utils PRIVATE project_options project_warnings OpenSSL::SSL)
 target_include_directories(test_utils PRIVATE ${PROJECT_SOURCE_DIR})
