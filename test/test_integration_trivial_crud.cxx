@@ -498,3 +498,56 @@ TEST_CASE("integration: upsert preserve expiry", "[integration]")
         REQUIRE(0 == std::stoul(resp.fields[0].value));
     }
 }
+
+TEST_CASE("integration: upsert with handler capturing non-copyable object", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    if (!integration.ctx.version.supports_gcccp()) {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    }
+
+    {
+        struct move_only_context {
+          public:
+            explicit move_only_context(std::string input)
+              : payload_(std::move(input))
+            {
+            }
+
+            move_only_context(move_only_context&& other) = default;
+
+            move_only_context& operator=(move_only_context&& other) = default;
+
+            ~move_only_context() = default;
+
+            move_only_context(const move_only_context& other) = delete;
+
+            move_only_context& operator=(const move_only_context& other) = delete;
+
+            [[nodiscard]] const std::string& payload() const
+            {
+                return payload_;
+            }
+
+          private:
+            std::string payload_;
+        };
+
+        couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
+        couchbase::operations::upsert_request req{ id, R"({"foo":"bar"})" };
+        auto barrier = std::make_shared<std::promise<couchbase::operations::upsert_response>>();
+        auto f = barrier->get_future();
+        move_only_context ctx("foobar");
+        auto handler = [barrier, ctx = std::move(ctx)](couchbase::operations::upsert_response&& resp) {
+            CHECK(ctx.payload() == "foobar");
+            barrier->set_value(std::move(resp));
+        };
+        integration.cluster.execute(req, std::move(handler));
+        auto resp = f.get();
+        INFO(resp.ctx.ec.message())
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+}

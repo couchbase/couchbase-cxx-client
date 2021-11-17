@@ -25,6 +25,8 @@
 namespace couchbase::operations
 {
 
+using http_command_handler = cxx_function::unique_function<void(std::error_code, io::http_response&&)>;
+
 template<typename Request>
 struct http_command : public std::enable_shared_from_this<http_command<Request>> {
     using encoded_request_type = typename Request::encoded_request_type;
@@ -37,6 +39,8 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     tracing::request_tracer* tracer_;
     tracing::request_span* span_{ nullptr };
     metrics::meter* meter_;
+    std::shared_ptr<io::http_session> session_{};
+    http_command_handler handler_{};
 
     http_command(asio::io_context& ctx, Request req, tracing::request_tracer* tracer, metrics::meter* meter)
       : deadline(ctx)
@@ -58,37 +62,64 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
         span_ = nullptr;
     }
 
-    template<typename Handler>
-    void send_to(std::shared_ptr<io::http_session> session, Handler&& handler)
+    void start(http_command_handler&& handler)
+    {
+        span_ = tracer_->start_span(tracing::span_name_for_http_service(request.type), nullptr);
+        span_->add_tag(tracing::attributes::service, tracing::service_name_for_http_service(request.type));
+        span_->add_tag(tracing::attributes::operation_id, request.client_context_id);
+        handler_ = std::move(handler);
+
+        deadline.expires_after(request.timeout);
+        deadline.async_wait([self = this->shared_from_this()](std::error_code ec) {
+            if (ec == asio::error::operation_aborted) {
+                return;
+            }
+            self->cancel();
+        });
+    }
+
+    void cancel()
+    {
+        if (session_) {
+            session_->stop();
+        }
+        invoke_handler(error::common_errc::unambiguous_timeout, {});
+        retry_backoff.cancel();
+        deadline.cancel();
+    }
+
+    void invoke_handler(std::error_code ec, io::http_response&& msg)
+    {
+        if (span_ != nullptr) {
+            span_->end();
+            span_ = nullptr;
+        }
+        if (handler_) {
+            handler_(ec, std::move(msg));
+        }
+        handler_ = nullptr;
+    }
+
+    void send()
     {
         encoded.type = request.type;
-        if (auto ec = request.encode_to(encoded, session->http_context()); ec) {
-            error_context_type ctx{};
-            ctx.ec = ec;
-            ctx.client_context_id = request.client_context_id;
-            using response_type = typename Request::encoded_response_type;
-            return handler(request.make_response(std::move(ctx), response_type{}));
+        if (auto ec = request.encode_to(encoded, session_->http_context()); ec) {
+            return invoke_handler(ec, {});
         }
         encoded.headers["client-context-id"] = request.client_context_id;
-        auto log_prefix = session->log_prefix();
         LOG_TRACE(R"({} HTTP request: {}, method={}, path="{}", client_context_id="{}", timeout={}ms)",
-                  log_prefix,
+                  session_->log_prefix(),
                   encoded.type,
                   encoded.method,
                   encoded.path,
                   request.client_context_id,
                   request.timeout.count());
-        span_ = tracer_->start_span(tracing::span_name_for_http_service(request.type), nullptr);
-        span_->add_tag(tracing::attributes::service, tracing::service_name_for_http_service(request.type));
-        span_->add_tag(tracing::attributes::operation_id, request.client_context_id);
-        span_->add_tag(tracing::attributes::local_id, session->id());
-        session->write_and_subscribe(
+        session_->write_and_subscribe(
           encoded,
-          [self = this->shared_from_this(),
-           log_prefix,
-           session,
-           handler = std::forward<Handler>(handler),
-           start = std::chrono::steady_clock::now()](std::error_code ec, io::http_response&& msg) mutable {
+          [self = this->shared_from_this(), start = std::chrono::steady_clock::now()](std::error_code ec, io::http_response&& msg) {
+              if (ec == asio::error::operation_aborted) {
+                  return self->invoke_handler(error::common_errc::ambiguous_timeout, std::move(msg));
+              }
               static std::string meter_name = "db.couchbase.operations";
               static std::map<std::string, std::string> tags = {
                   { "db.couchbase.service", fmt::format("{}", self->request.type) },
@@ -99,35 +130,28 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
                     ->record_value(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count());
               }
               self->deadline.cancel();
-              self->finish_dispatch(session->remote_address(), session->local_address());
-              encoded_response_type resp(msg);
+              self->finish_dispatch(self->session_->remote_address(), self->session_->local_address());
               LOG_TRACE(R"({} HTTP response: {}, client_context_id="{}", status={})",
-                        log_prefix,
+                        self->session_->log_prefix(),
                         self->request.type,
                         self->request.client_context_id,
-                        resp.status_code);
+                        msg.status_code);
               try {
-                  error_context_type ctx{};
-                  ctx.ec = ec;
-                  ctx.client_context_id = self->request.client_context_id;
-                  ctx.method = self->encoded.method;
-                  ctx.path = self->encoded.path;
-                  ctx.last_dispatched_from = session->local_address();
-                  ctx.last_dispatched_to = session->remote_address();
-                  ctx.http_status = msg.status_code;
-                  ctx.http_body = msg.body;
-                  handler(self->request.make_response(std::move(ctx), msg));
+                  self->invoke_handler(ec, std::move(msg));
               } catch (const priv::retry_http_request&) {
-                  self->send_to(session, std::forward<Handler>(handler));
+                  self->send();
               }
           });
-        deadline.expires_after(request.timeout);
-        deadline.async_wait([session](std::error_code ec) {
-            if (ec == asio::error::operation_aborted) {
-                return;
-            }
-            session->stop();
-        });
+    }
+
+    void send_to(std::shared_ptr<io::http_session> session)
+    {
+        if (!handler_) {
+            return;
+        }
+        session_ = std::move(session);
+        span_->add_tag(tracing::attributes::local_id, session_->id());
+        send();
     }
 };
 

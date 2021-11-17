@@ -34,3 +34,51 @@ TEST_CASE("integration: trivial non-data query", "[integration]")
         REQUIRE_FALSE(resp.ctx.ec);
     }
 }
+
+TEST_CASE("integration: query with handler capturing non-copyable object", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    if (!integration.ctx.version.supports_gcccp()) {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    }
+
+    {
+        struct move_only_context {
+          public:
+            explicit move_only_context(std::string input)
+              : payload_(std::move(input))
+            {
+            }
+            move_only_context(move_only_context&& other) = default;
+            move_only_context& operator=(move_only_context&& other) = default;
+            ~move_only_context() = default;
+
+            move_only_context(const move_only_context& other) = delete;
+            move_only_context& operator=(const move_only_context& other) = delete;
+
+            [[nodiscard]] const std::string& payload() const
+            {
+                return payload_;
+            }
+
+          private:
+            std::string payload_;
+        };
+
+        couchbase::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
+        auto barrier = std::make_shared<std::promise<couchbase::operations::query_response>>();
+        auto f = barrier->get_future();
+        move_only_context ctx("foobar");
+        auto handler = [barrier, ctx = std::move(ctx)](couchbase::operations::query_response&& resp) {
+            CHECK(ctx.payload() == "foobar");
+            barrier->set_value(std::move(resp));
+        };
+        integration.cluster.execute(req, std::move(handler));
+        auto resp = f.get();
+        INFO(resp.ctx.ec.message())
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+}

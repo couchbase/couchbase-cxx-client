@@ -136,18 +136,7 @@ class cluster
              typename std::enable_if_t<std::is_same_v<typename Request::encoded_request_type, io::http_request>, int> = 0>
     void execute(Request request, Handler&& handler)
     {
-        auto session = session_manager_->check_out(Request::type, origin_.credentials());
-        if (!session) {
-            typename Request::error_context_type ctx{};
-            ctx.ec = error::common_errc::service_not_available;
-            using response_type = typename Request::encoded_response_type;
-            return handler(request.make_response(std::move(ctx), response_type{}));
-        }
-        auto cmd = std::make_shared<operations::http_command<Request>>(ctx_, request, tracer_, meter_);
-        cmd->send_to(session, [this, session, handler = std::forward<Handler>(handler)](typename Request::response_type resp) mutable {
-            handler(std::move(resp));
-            session_manager_->check_in(Request::type, session);
-        });
+        return session_manager_->execute(request, std::forward<Handler>(handler), origin_.credentials());
     }
 
     template<typename Handler>

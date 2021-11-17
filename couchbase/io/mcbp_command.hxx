@@ -20,6 +20,8 @@
 #include <functional>
 #include <utility>
 
+#include <cxx_function.hpp>
+
 #include <couchbase/platform/uuid.h>
 
 #include <couchbase/io/mcbp_session.hxx>
@@ -35,7 +37,7 @@
 namespace couchbase::operations
 {
 
-using mcbp_command_handler = std::function<void(std::error_code, std::optional<io::mcbp_message>)>;
+using mcbp_command_handler = cxx_function::unique_function<void(std::error_code, std::optional<io::mcbp_message>) const>;
 
 template<typename Manager, typename Request>
 struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, Request>> {
@@ -49,7 +51,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     std::shared_ptr<io::mcbp_session> session_{};
     mcbp_command_handler handler_{};
     std::shared_ptr<Manager> manager_{};
-    std::string id_;
+    std::string id_{ uuid::to_string(uuid::random()) };
     tracing::request_span* span_{ nullptr };
 
     mcbp_command(asio::io_context& ctx, std::shared_ptr<Manager> manager, Request req)
@@ -57,7 +59,6 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
       , retry_backoff(ctx)
       , request(req)
       , manager_(manager)
-      , id_(uuid::to_string(uuid::random()))
     {
     }
 
