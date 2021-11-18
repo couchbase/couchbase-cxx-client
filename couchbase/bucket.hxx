@@ -130,7 +130,8 @@ class bucket : public std::enable_shared_from_this<bucket>
                               session->id(),
                               session->bootstrap_hostname(),
                               session->bootstrap_port());
-                    session.reset();
+                    asio::post(asio::bind_executor(
+                      ctx_, [session = std::move(session)]() { return session->stop(io::retry_reason::do_not_retry); }));
                 }
             }
 
