@@ -605,3 +605,37 @@ TEST_CASE("integration: upsert may trigger snappy compression", "[integration]")
         REQUIRE(resp.value == compressible_json);
     }
 }
+
+TEST_CASE("integration: multi-threaded open/close bucket", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    std::vector<std::thread> threads;
+    threads.reserve(100);
+
+    for (auto i = 0; i < 100; ++i) {
+        threads.emplace_back([&integration]() { test::utils::open_bucket(integration.cluster, integration.ctx.bucket); });
+    }
+    std::for_each(threads.begin(), threads.end(), [](auto& thread) { thread.join(); });
+
+    threads.clear();
+
+    for (auto i = 0; i < 100; ++i) {
+        threads.emplace_back([&integration]() {
+            couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
+            couchbase::operations::insert_request req{ id, basic_doc_json };
+            if (auto resp = test::utils::execute(integration.cluster, req); resp.ctx.ec) {
+                throw std::system_error(resp.ctx.ec);
+            }
+        });
+    }
+
+    std::for_each(threads.begin(), threads.end(), [](auto& thread) { thread.join(); });
+
+    threads.clear();
+
+    for (auto i = 0; i < 100; ++i) {
+        threads.emplace_back([&integration]() { test::utils::close_bucket(integration.cluster, integration.ctx.bucket); });
+    }
+    std::for_each(threads.begin(), threads.end(), [](auto& thread) { thread.join(); });
+}

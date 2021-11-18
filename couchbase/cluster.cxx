@@ -80,22 +80,29 @@ cluster::ping(std::optional<std::string> report_id,
         auto collector = std::make_shared<ping_collector>(report_id.value(), std::move(handler));
         if (bucket_name) {
             if (services.find(service_type::key_value) != services.end()) {
-                auto bucket = buckets_.find(bucket_name.value());
-                if (bucket != buckets_.end()) {
-                    bucket->second->ping(collector);
-                }
+                for_each_bucket([&collector](auto& bucket) { bucket->ping(collector); });
             }
         } else {
             if (services.find(service_type::key_value) != services.end()) {
                 if (session_) {
                     session_->ping(collector->build_reporter());
                 }
-                for (const auto& [name, bucket] : buckets_) {
-                    bucket->ping(collector);
-                }
+                for_each_bucket([&collector](auto& bucket) { bucket->ping(collector); });
             }
             session_manager_->ping(services, collector, origin_.credentials());
         }
     }));
+}
+
+std::shared_ptr<bucket>
+cluster::find_bucket_by_name(const std::string& name)
+{
+    std::scoped_lock lock(buckets_mutex_);
+
+    auto bucket = buckets_.find(name);
+    if (bucket == buckets_.end()) {
+        return {};
+    }
+    return bucket->second;
 }
 } // namespace couchbase
