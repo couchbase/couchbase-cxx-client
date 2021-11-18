@@ -150,14 +150,20 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
         REQUIRE(resp.value == key);
     }
 
+    std::uint64_t current_manifest_uid = 0;
     {
         couchbase::operations::management::scope_drop_request req{ integration.ctx.bucket, scope_name };
         auto resp = test::utils::execute(integration.cluster, req);
+        current_manifest_uid = resp.uid;
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
-    // TODO: Replace with a wait until condition when https://github.com/couchbaselabs/couchbase-cxx-client/pull/41 merged
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    auto dropped = test::utils::wait_until([&integration, current_manifest_uid]() {
+        couchbase::operations::management::collections_manifest_get_request req{ { integration.ctx.bucket, "_default", "_default", "" } };
+        auto resp = test::utils::execute(integration.cluster, req);
+        return resp.manifest.uid >= current_manifest_uid;
+    });
+    REQUIRE(dropped);
 
     {
         couchbase::operations::upsert_request req{ id, key };
