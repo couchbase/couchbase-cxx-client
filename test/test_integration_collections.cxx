@@ -91,11 +91,20 @@ TEST_CASE("integration: get and insert non default scope and collection", "[inte
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
+    std::uint64_t current_manifest_uid = 0;
     {
         couchbase::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
+        current_manifest_uid = resp.uid;
     }
+
+    auto created = test::utils::wait_until([&integration, current_manifest_uid]() {
+        couchbase::operations::management::collections_manifest_get_request req{ { integration.ctx.bucket, "_default", "_default", "" } };
+        auto resp = test::utils::execute(integration.cluster, req);
+        return resp.manifest.uid >= current_manifest_uid;
+    });
+    REQUIRE(created);
 
     {
         couchbase::operations::insert_request req{ id, key };
@@ -131,11 +140,20 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
+    std::uint64_t current_manifest_uid = 0;
     {
         couchbase::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
+        current_manifest_uid = resp.uid;
     }
+
+    auto created = test::utils::wait_until([&integration, current_manifest_uid]() {
+        couchbase::operations::management::collections_manifest_get_request req{ { integration.ctx.bucket, "_default", "_default", "" } };
+        auto resp = test::utils::execute(integration.cluster, req);
+        return resp.manifest.uid >= current_manifest_uid;
+    });
+    REQUIRE(created);
 
     {
         couchbase::operations::insert_request req{ id, key };
@@ -150,7 +168,6 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
         REQUIRE(resp.value == key);
     }
 
-    std::uint64_t current_manifest_uid = 0;
     {
         couchbase::operations::management::scope_drop_request req{ integration.ctx.bucket, scope_name };
         auto resp = test::utils::execute(integration.cluster, req);
