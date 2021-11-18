@@ -35,6 +35,7 @@ struct collections_manifest_get_response {
 };
 
 struct collections_manifest_get_request {
+    using response_type = collections_manifest_get_response;
     using encoded_request_type = protocol::client_request<protocol::get_collections_manifest_request_body>;
     using encoded_response_type = protocol::client_response<protocol::get_collections_manifest_response_body>;
 
