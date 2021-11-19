@@ -22,71 +22,71 @@
 namespace couchbase::error
 {
 enum class common_errc {
-    /// A timeout occurs and we are confident that the operation could not have succeeded.  This normally would occur because we received
-    /// confident failures from the server, or never managed to successfully dispatch the operation.
-    unambiguous_timeout = 1,
-
-    /// A timeout occurs and we aren't sure if the underlying operation has completed.  This normally occurs because we sent the request to
-    /// the server successfully, but timed out waiting for the response.  Note that idempotent operations should never return this, as they
-    /// do not have ambiguity.
-    ambiguous_timeout,
-
     /// A request is cancelled and cannot be resolved in a non-ambiguous way. Most likely the request is in-flight on the socket and the
     /// socket gets closed.
-    request_canceled,
+    request_canceled = 2,
 
     /// It is unambiguously determined that the error was caused because of invalid arguments from the user.
     /// Usually only thrown directly when doing request arg validation
-    invalid_argument,
+    invalid_argument = 3,
 
     /// It can be determined from the config unambiguously that a given service is not available. I.e. no query node in the config, or a
     /// memcached bucket is accessed and views or n1ql queries should be performed
-    service_not_available,
+    service_not_available = 4,
 
     /// Query: Error range 5xxx
     /// Analytics: Error range 25xxx
     /// KV: error code ERR_INTERNAL (0x84)
     /// Search: HTTP 500
-    internal_server_failure,
+    internal_server_failure = 5,
 
     /// Query: Error range 10xxx
     /// Analytics: Error range 20xxx
     /// View: HTTP status 401
     /// KV: error code ERR_ACCESS (0x24), ERR_AUTH_ERROR (0x20), AUTH_STALE (0x1f)
     /// Search: HTTP status 401, 403
-    authentication_failure,
+    authentication_failure = 6,
 
     /// Analytics: Errors: 23000, 23003
     /// KV: Error code ERR_TMPFAIL (0x86), ERR_BUSY (0x85) ERR_OUT_OF_MEMORY (0x82), ERR_NOT_INITIALIZED (0x25)
-    temporary_failure,
+    temporary_failure = 7,
 
     /// Query: code 3000
     /// Analytics: codes 24000
-    parsing_failure,
+    parsing_failure = 8,
 
     /// KV: ERR_EXISTS (0x02) when replace or remove with cas
     /// Query: code 12009
-    cas_mismatch,
+    cas_mismatch = 9,
 
     /// A request is made but the current bucket is not found
-    bucket_not_found,
-
-    /// A management API attempts to target a scope which does not exist.
-    scope_not_found,
+    bucket_not_found = 10,
 
     /// A request is made but the current collection (including scope) is not found
-    collection_not_found,
+    collection_not_found = 11,
 
     /// KV: 0x81 (unknown command), 0x83 (not supported)
-    unsupported_operation,
+    unsupported_operation = 12,
+
+    /// A timeout occurs and we aren't sure if the underlying operation has completed.  This normally occurs because we sent the request to
+    /// the server successfully, but timed out waiting for the response.  Note that idempotent operations should never return this, as they
+    /// do not have ambiguity.
+    ambiguous_timeout = 13,
+
+    /// A timeout occurs and we are confident that the operation could not have succeeded.  This normally would occur because we received
+    /// confident failures from the server, or never managed to successfully dispatch the operation.
+    unambiguous_timeout = 14,
 
     /// A feature which is not available was used.
-    feature_not_available,
+    feature_not_available = 15,
+
+    /// A management API attempts to target a scope which does not exist.
+    scope_not_found = 16,
 
     /// Query: Codes 12004, 12016 (warning: regex ahead!) Codes 5000 AND message contains index .+ not found
     /// Analytics: Raised When 24047
     /// Search: Http status code 400 AND text contains “index not found”
-    index_not_found,
+    index_not_found = 17,
 
     /// Query:
     /// Note: the uppercase index for 5000 is not a mistake (also only match on exist not exists because there is a typo
@@ -95,13 +95,13 @@ enum class common_errc {
     /// Code 4300 AND message contains index .+ already exist
     ///
     /// Analytics: Raised When 24048
-    index_exists,
+    index_exists = 18,
 
     /// Raised when encoding of a user object failed while trying to write it to the cluster
-    encoding_failure,
+    encoding_failure = 19,
 
     /// Raised when decoding of the data into the user object failed
-    decoding_failure,
+    decoding_failure = 20,
 
     /**
      * Raised when a service decides that the caller must be rate limited due to exceeding a rate threshold of some sort.
@@ -137,218 +137,278 @@ enum class common_errc {
      * * Views
      *   Not applicable.
      */
-    rate_limiting_failure,
+    rate_limited = 21,
+
+    /**
+     * Raised when a service decides that the caller must be limited due to exceeding a quota threshold of some sort.
+     *
+     * * KeyValue
+     *   0x34 ScopeSizeLimitExceeded
+     *
+     * * Cluster Manager
+     *   HTTP 429, Body contains "Maximum number of collections has been reached for scope "<scope_name>""
+     *
+     * * Query
+     *   Code 5000, Body contains "Limit for number of indexes that can be created per scope has been reached. Limit : value"
+     *
+     * * Search
+     *   HTTP 400 (Bad request), {"status": "fail", "error": "rest_create_index: error creating index: {indexName}, err: manager_api:
+     *                           CreateIndex, Prepare failed, err: num_fts_indexes (active + pending) >= limit"}
+     * * Analytics
+     *   Not applicable at the moment
+     *
+     * * Views
+     *   Not applicable
+     */
+    quota_limited = 22,
 };
 
 /// Errors for related to KeyValue service (kv_engine)
 enum class key_value_errc {
     /// The document requested was not found on the server.
     /// KV Code 0x01
-    document_not_found = 100,
+    document_not_found = 101,
 
     /// In get_any_replica, the get_all_replicas returns an empty stream because all the individual errors are dropped (i.e. all returned a
     /// document_not_found)
-    document_irretrievable,
+    document_irretrievable = 102,
 
     /// The document requested was locked.
     /// KV Code 0x09
-    document_locked,
+    document_locked = 103,
 
     /// The value that was sent was too large to store (typically > 20MB)
     /// KV Code 0x03
-    value_too_large,
+    value_too_large = 104,
 
     /// An operation which relies on the document not existing fails because the document existed.
     /// KV Code 0x02
-    document_exists,
+    document_exists = 105,
 
     /// The specified durability level is invalid.
     /// KV Code 0xa0
-    durability_level_not_available,
+    durability_level_not_available = 107,
 
     /// The specified durability requirements are not currently possible (for example, there are an insufficient number of replicas online).
     /// KV Code 0xa1
-    durability_impossible,
+    durability_impossible = 108,
 
     /// A sync-write has not completed in the specified time and has an ambiguous result - it may have succeeded or failed, but the final
     /// result is not yet known.
     /// A SEQNO OBSERVE operation is performed and the vbucket UUID changes during polling.
     /// KV Code 0xa3
-    durability_ambiguous,
+    durability_ambiguous = 109,
 
     /// A durable write is attempted against a key which already has a pending durable write.
     /// KV Code 0xa2
-    durable_write_in_progress,
+    durable_write_in_progress = 110,
 
     /// The server is currently working to synchronize all replicas for previously performed durable operations (typically occurs after a
     /// rebalance).
     /// KV Code 0xa4
-    durable_write_re_commit_in_progress,
+    durable_write_re_commit_in_progress = 111,
 
     /// The path provided for a sub-document operation was not found.
     /// KV Code 0xc0
-    path_not_found,
+    path_not_found = 113,
 
     /// The path provided for a sub-document operation did not match the actual structure of the document.
     /// KV Code 0xc1
-    path_mismatch,
+    path_mismatch = 114,
 
     /// The path provided for a sub-document operation was not syntactically correct.
     /// KV Code 0xc2
-    path_invalid,
+    path_invalid = 115,
 
     /// The path provided for a sub-document operation is too long, or contains too many independent components.
     /// KV Code 0xc3
-    path_too_big,
+    path_too_big = 116,
 
     /// The document contains too many levels to parse.
     /// KV Code 0xc4
-    path_too_deep,
+    path_too_deep = 117,
 
     /// The value provided, if inserted into the document, would cause the document to become too deep for the server to accept.
     /// KV Code 0xca
-    value_too_deep,
+    value_too_deep = 118,
 
     /// The value provided for a sub-document operation would invalidate the JSON structure of the document if inserted as requested.
     /// KV Code 0xc5
-    value_invalid,
+    value_invalid = 119,
 
     /// A sub-document operation is performed on a non-JSON document.
     /// KV Code 0xc6
-    document_not_json,
+    document_not_json = 120,
 
     /// The existing number is outside the valid range for arithmetic operations.
     /// KV Code 0xc7
-    number_too_big,
+    number_too_big = 121,
 
     /// The delta value specified for an operation is too large.
     /// KV Code 0xc8
-    delta_invalid,
+    delta_invalid = 122,
 
     /// A sub-document operation which relies on a path not existing encountered a path which exists.
     /// KV Code 0xc9
-    path_exists,
+    path_exists = 123,
 
     /// A macro was used which the server did not understand.
     /// KV Code: 0xd0
-    xattr_unknown_macro,
+    xattr_unknown_macro = 124,
 
     /// A sub-document operation attempts to access multiple xattrs in one operation.
     /// KV Code: 0xcf
-    xattr_invalid_key_combo,
+    xattr_invalid_key_combo = 126,
 
     /// A sub-document operation attempts to access an unknown virtual attribute.
     /// KV Code: 0xd1
-    xattr_unknown_virtual_attribute,
+    xattr_unknown_virtual_attribute = 127,
 
     /// A sub-document operation attempts to modify a virtual attribute.
     /// KV Code: 0xd2
-    xattr_cannot_modify_virtual_attribute,
+    xattr_cannot_modify_virtual_attribute = 128,
+
+    /// The user does not have permission to access the attribute. Occurs when the user attempts to read or write a system attribute (name
+    /// starts with underscore) but does not have the SystemXattrRead / SystemXattrWrite permission.
+    /// KV Code: 0x24
+    xattr_no_access = 130,
 
     /// Only deleted document could be revived
     /// KV Code: 0xd6
-    cannot_revive_living_document,
+    cannot_revive_living_document = 131,
 };
 
 /// Errors related to Query service (N1QL)
 enum class query_errc {
     /// Raised When code range 4xxx other than those explicitly covered
-    planning_failure = 200,
+    planning_failure = 201,
 
     /// Raised When code range 12xxx and 14xxx (other than 12004 and 12016)
-    index_failure,
+    index_failure = 202,
 
     /// Raised When codes 4040, 4050, 4060, 4070, 4080, 4090
-    prepared_statement_failure,
+    prepared_statement_failure = 203,
+
+    /// Raised when code 12009 AND message does not contain CAS mismatch
+    dml_failure = 204,
 };
 
 /// Errors related to Analytics service (CBAS)
 enum class analytics_errc {
     /// Error range 24xxx (excluded are specific codes in the errors below)
-    compilation_failure = 300,
+    compilation_failure = 301,
 
     /// Error code 23007
-    job_queue_full,
+    job_queue_full = 302,
 
     /// Error codes 24044, 24045, 24025
-    dataset_not_found,
+    dataset_not_found = 303,
 
     /// Error code 24034
-    dataverse_not_found,
+    dataverse_not_found = 304,
 
     /// Raised When 24040
-    dataset_exists,
+    dataset_exists = 305,
 
     /// Raised When 24039
-    dataverse_exists,
+    dataverse_exists = 306,
 
     /// Raised When 24006
-    link_not_found,
+    link_not_found = 307,
 
     /// Raised When 24055
-    link_exists,
+    link_exists = 308,
 };
 
 /// Errors related to Search service (CBFT)
 enum class search_errc {
-    index_not_ready = 400,
+    index_not_ready = 401,
 
-    consistency_mismatch = 401,
+    consistency_mismatch = 402,
 };
 
 /// Errors related to Views service (CAPI)
 enum class view_errc {
     /// Http status code 404
     /// Reason or error contains "not_found"
-    view_not_found = 500,
+    view_not_found = 501,
 
     /// Raised on the Management APIs only when
     /// * Getting a design document
     /// * Dropping a design document
     /// * And the server returns 404
-    design_document_not_found,
+    design_document_not_found = 502,
 };
 
 /// Errors related to management service (ns_server)
 enum class management_errc {
     /// Raised from the collection management API
-    collection_exists = 600,
+    collection_exists = 601,
 
     /// Raised from the collection management API
-    scope_exists,
+    scope_exists = 602,
 
     /// Raised from the user management API
-    user_not_found,
+    user_not_found = 603,
 
     /// Raised from the user management API
-    group_not_found,
-
-    /// Raised from the user management API
-    user_exists,
+    group_not_found = 604,
 
     /// Raised from the bucket management API
-    bucket_exists,
+    bucket_exists = 605,
+
+    /// Raised from the user management API
+    user_exists = 606,
 
     /// Raised from the bucket management API
-    bucket_not_flushable,
+    bucket_not_flushable = 607,
+};
+
+/// Field-Level Encryption Error Definitions
+enum class field_level_encryption_errc {
+    /// Generic cryptography failure.
+    generic_cryptography_failure = 700,
+
+    /// Raised by CryptoManager.encrypt() when encryption fails for any reason. Should have one of the other Field-Level Encryption errors
+    /// as a cause.
+    encryption_failure = 701,
+
+    /// Raised by CryptoManager.decrypt() when decryption fails for any reason. Should have one of the other Field-Level Encryption errors
+    /// as a cause.
+    decryption_failure = 702,
+
+    /// Raised when a crypto operation fails because a required key is missing.
+    crypto_key_not_found = 703,
+
+    /// Raised by an encrypter or decrypter when the key does not meet expectations (for example, if the key is the wrong size).
+    invalid_crypto_key = 704,
+
+    /// Raised when a message cannot be decrypted because there is no decrypter registered for the algorithm.
+    decrypter_not_found = 705,
+
+    /// Raised when a message cannot be encrypted because there is no encrypter registered under the requested alias.
+    encrypter_not_found = 706,
+
+    /// Raised when decryption fails due to malformed input, integrity check failure, etc.
+    invalid_ciphertext = 707
 };
 
 /// Errors related to networking IO
 enum class network_errc {
     /// Unable to resolve node address
-    resolve_failure = 1000,
+    resolve_failure = 1001,
 
     /// No hosts left to connect
-    no_endpoints_left,
+    no_endpoints_left = 1002,
 
     /// Failed to complete protocol handshake
-    handshake_failure,
+    handshake_failure = 1003,
 
     /// Unexpected protocol state or input
-    protocol_error,
+    protocol_error = 1004,
 
     /// Configuration is not available for some reason
-    configuration_not_available,
+    configuration_not_available = 1005,
 };
 
 namespace detail
@@ -400,8 +460,10 @@ struct common_error_category : std::error_category {
                 return "index_not_found";
             case common_errc::index_exists:
                 return "index_exists";
-            case common_errc::rate_limiting_failure:
-                return "rate_limiting_failure";
+            case common_errc::rate_limited:
+                return "rate_limited";
+            case common_errc::quota_limited:
+                return "quota_limited";
         }
         return "FIXME: unknown error code common (recompile with newer library)";
     }
@@ -475,6 +537,8 @@ struct key_value_error_category : std::error_category {
                 return "xattr_cannot_modify_virtual_attribute";
             case key_value_errc::cannot_revive_living_document:
                 return "cannot_revive_living_document";
+            case key_value_errc::xattr_no_access:
+                return "xattr_no_access";
         }
         return "FIXME: unknown error code key_value (recompile with newer library)";
     }
@@ -501,6 +565,8 @@ struct query_error_category : std::error_category {
                 return "index_failure";
             case query_errc::prepared_statement_failure:
                 return "prepared_statement_failure";
+            case query_errc::dml_failure:
+                return "dml_failure";
         }
         return "FIXME: unknown error code in query category (recompile with newer library)";
     }
@@ -666,6 +732,43 @@ get_network_category()
     return instance;
 }
 
+struct field_level_encryption_error_category : std::error_category {
+    [[nodiscard]] const char* name() const noexcept override
+    {
+        return "couchbase.field_level_encryption";
+    }
+
+    [[nodiscard]] std::string message(int ev) const noexcept override
+    {
+        switch (field_level_encryption_errc(ev)) {
+            case field_level_encryption_errc::generic_cryptography_failure:
+                return "generic_cryptography_failure";
+            case field_level_encryption_errc::encryption_failure:
+                return "encryption_failure";
+            case field_level_encryption_errc::decryption_failure:
+                return "decryption_failure";
+            case field_level_encryption_errc::crypto_key_not_found:
+                return "crypto_key_not_found";
+            case field_level_encryption_errc::invalid_crypto_key:
+                return "invalid_crypto_key";
+            case field_level_encryption_errc::decrypter_not_found:
+                return "decrypter_not_found";
+            case field_level_encryption_errc::encrypter_not_found:
+                return "encrypter_not_found";
+            case field_level_encryption_errc::invalid_ciphertext:
+                return "invalid_ciphertext";
+        }
+        return "FIXME: unknown error code in field level encryption category (recompile with newer library)";
+    }
+};
+
+inline const std::error_category&
+get_field_level_encryption_category()
+{
+    static detail::field_level_encryption_error_category instance;
+    return instance;
+}
+
 } // namespace detail
 
 } // namespace couchbase::error
@@ -702,6 +805,10 @@ struct is_error_code_enum<couchbase::error::management_errc> : true_type {
 
 template<>
 struct is_error_code_enum<couchbase::error::network_errc> : true_type {
+};
+
+template<>
+struct is_error_code_enum<couchbase::error::field_level_encryption_errc> : true_type {
 };
 } // namespace std
 
@@ -753,6 +860,12 @@ inline std::error_code
 make_error_code(couchbase::error::network_errc e)
 {
     return { static_cast<int>(e), couchbase::error::detail::get_network_category() };
+}
+
+inline std::error_code
+make_error_code(couchbase::error::field_level_encryption_errc e)
+{
+    return { static_cast<int>(e), couchbase::error::detail::get_field_level_encryption_category() };
 }
 
 } // namespace couchbase::error
