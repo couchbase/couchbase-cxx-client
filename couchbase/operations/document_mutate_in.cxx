@@ -26,6 +26,9 @@ namespace couchbase::operations
 std::error_code
 mutate_in_request::encode_to(mutate_in_request::encoded_request_type& encoded, mcbp_context&& context)
 {
+    if (store_semantics == protocol::mutate_in_request_body::store_semantics_type::upsert && !cas.empty()) {
+        return error::common_errc::invalid_argument;
+    }
     if (create_as_deleted && !context.supports_feature(protocol::hello_feature::subdoc_create_as_deleted)) {
         return error::common_errc::unsupported_operation;
     }
