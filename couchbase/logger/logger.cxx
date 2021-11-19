@@ -204,7 +204,7 @@ create_console_logger()
     // delete if already exists
     spdlog::drop(logger_name);
 
-    auto stderrsink = std::make_shared<spdlog::sinks::stderr_color_sink_st>();
+    auto stderrsink = std::make_shared<spdlog::sinks::stderr_color_sink_mt>();
 
     file_logger = std::make_shared<spdlog::logger>(logger_name, stderrsink);
     file_logger->set_level(spdlog::level::info);
