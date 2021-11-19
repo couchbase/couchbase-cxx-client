@@ -123,8 +123,8 @@ sdk_build_info_short()
 const std::string&
 sdk_id()
 {
-    static const std::string identifier{ std::string("cxx/") + std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MAJOR) + "/" +
-                                         std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MINOR) + "/" +
+    static const std::string identifier{ std::string("cxx/") + std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MAJOR) + "." +
+                                         std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MINOR) + "." +
                                          std::to_string(COUCHBASE_CXX_CLIENT_VERSION_PATCH) + "/" + COUCHBASE_CXX_CLIENT_GIT_REVISION };
     return identifier;
 }

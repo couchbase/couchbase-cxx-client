@@ -19,8 +19,10 @@
 
 #include <couchbase/io/http_session.hxx>
 
-#include <couchbase/tracing/request_tracer.hxx>
 #include <couchbase/metrics/meter.hxx>
+#include <couchbase/tracing/request_tracer.hxx>
+
+#include <couchbase/service_type_fmt.hxx>
 
 namespace couchbase::operations
 {
