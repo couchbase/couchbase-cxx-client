@@ -222,9 +222,11 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
         prep = false;
     }
     if (ctx_->options.show_queries) {
-        LOG_INFO("QUERY: prep={}, {}", utils::json::generate(prep), utils::json::generate(stmt));
+        LOG_INFO(
+          "QUERY: client_context_id=\"{}\", prep={}, {}", client_context_id, utils::json::generate(prep), utils::json::generate(stmt));
     } else {
-        LOG_DEBUG("QUERY: prep={}, {}", utils::json::generate(prep), utils::json::generate(stmt));
+        LOG_DEBUG(
+          "QUERY: client_context_id=\"{}\", prep={}, {}", client_context_id, utils::json::generate(prep), utils::json::generate(stmt));
     }
     return {};
 }
@@ -340,6 +342,9 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
             } else if (authentication_failure) {
                 response.ctx.ec = error::common_errc::authentication_failure;
             } else {
+                LOG_TRACE("Unexpected error returned by query engine: client_context_id=\"{}\", body={}",
+                          response.ctx.client_context_id,
+                          encoded.body);
                 response.ctx.ec = error::common_errc::internal_server_failure;
             }
         }
