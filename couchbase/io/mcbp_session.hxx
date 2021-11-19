@@ -974,7 +974,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             case protocol::status::rate_limited_max_connections:
             case protocol::status::rate_limited_max_commands:
             case protocol::status::scope_size_limit_exceeded:
-                return error::common_errc::rate_limiting_failure;
+                return error::common_errc::rate_limited;
 
             case protocol::status::subdoc_invalid_xattr_order:
             case protocol::status::not_my_vbucket:

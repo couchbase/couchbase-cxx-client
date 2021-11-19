@@ -21,6 +21,8 @@
 
 #include <couchbase/utils/json.hxx>
 
+#include <couchbase/errors.hxx>
+
 TEST_CASE("unit: transformer to deduplicate JSON keys", "[unit]")
 {
     using Catch::Contains;
@@ -35,4 +37,14 @@ TEST_CASE("unit: transformer to deduplicate JSON keys", "[unit]")
     CHECK(result.find("answer") != nullptr);
     CHECK(result["answer"].is_integer());
     CHECK(result["answer"].as<std::int64_t>() == 42);
+}
+
+TEST_CASE("unit: string representation of the error codes")
+{
+    std::error_code rc = couchbase::error::common_errc::authentication_failure;
+    CHECK(rc.category().name() == std::string("couchbase.common"));
+    CHECK(rc.value() == 6);
+    std::stringstream ss;
+    ss << rc;
+    CHECK(ss.str() == "couchbase.common:6");
 }

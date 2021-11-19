@@ -279,6 +279,7 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
             bool server_timeout = false;
             bool invalid_argument = false;
             bool cas_mismatch = false;
+            bool dml_failure = false;
             bool authentication_failure = false;
 
             if (response.payload.meta_data.errors) {
@@ -304,6 +305,8 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                         case 12009: /* IKey: "datastore.couchbase.DML_error" */
                             if (error.message.find("CAS mismatch") != std::string::npos) {
                                 cas_mismatch = true;
+                            } else {
+                                dml_failure = true;
                             }
                             break;
                         case 12004: /* IKey: "datastore.couchbase.primary_idx_not_found" */
@@ -339,6 +342,8 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                 response.ctx.ec = error::common_errc::index_not_found;
             } else if (cas_mismatch) {
                 response.ctx.ec = error::common_errc::cas_mismatch;
+            } else if (dml_failure) {
+                response.ctx.ec = error::query_errc::dml_failure;
             } else if (authentication_failure) {
                 response.ctx.ec = error::common_errc::authentication_failure;
             } else {
