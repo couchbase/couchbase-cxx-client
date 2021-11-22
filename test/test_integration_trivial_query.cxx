@@ -118,14 +118,10 @@ TEST_CASE("integration: query on a collection", "[integration]")
         collection_uid = resp.uid;
     }
 
-    // wait until scope and collection have propagated
-    test::utils::wait_until([&]() {
-        couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", "" };
-        couchbase::operations::management::collections_manifest_get_request req{ id };
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
-        return resp.manifest.uid >= scope_uid && resp.manifest.uid >= collection_uid;
-    });
+    auto current_manifest_uid = std::max(collection_uid, scope_uid);
+    auto created =
+      test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, current_manifest_uid);
+    REQUIRE(created);
 
     {
         couchbase::operations::management::query_index_create_request req{};

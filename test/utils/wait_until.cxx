@@ -39,4 +39,21 @@ wait_until_bucket_healthy(couchbase::cluster& cluster, const std::string& bucket
         return true;
     });
 }
+
+bool
+wait_until_collection_manifest_propagated(couchbase::cluster& cluster,
+                                          const std::string& bucket_name,
+                                          const std::uint64_t current_manifest_uid)
+{
+    auto propagated = test::utils::wait_until([&cluster, bucket_name, current_manifest_uid]() {
+        couchbase::operations::management::collections_manifest_get_request req{ { bucket_name, "_default", "_default", "" } };
+        auto resp = test::utils::execute(cluster, req);
+        return resp.manifest.uid >= current_manifest_uid;
+    });
+    if (propagated) {
+        // FIXME: The above check does not wait for all nodes to be up to date
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    return propagated;
+}
 } // namespace test::utils

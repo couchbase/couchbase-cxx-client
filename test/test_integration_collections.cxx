@@ -99,11 +99,8 @@ TEST_CASE("integration: get and insert non default scope and collection", "[inte
         current_manifest_uid = resp.uid;
     }
 
-    auto created = test::utils::wait_until([&integration, current_manifest_uid]() {
-        couchbase::operations::management::collections_manifest_get_request req{ { integration.ctx.bucket, "_default", "_default", "" } };
-        auto resp = test::utils::execute(integration.cluster, req);
-        return resp.manifest.uid >= current_manifest_uid;
-    });
+    auto created =
+      test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, current_manifest_uid);
     REQUIRE(created);
 
     {
@@ -148,11 +145,8 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
         current_manifest_uid = resp.uid;
     }
 
-    auto created = test::utils::wait_until([&integration, current_manifest_uid]() {
-        couchbase::operations::management::collections_manifest_get_request req{ { integration.ctx.bucket, "_default", "_default", "" } };
-        auto resp = test::utils::execute(integration.cluster, req);
-        return resp.manifest.uid >= current_manifest_uid;
-    });
+    auto created =
+      test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, current_manifest_uid);
     REQUIRE(created);
 
     {
@@ -175,11 +169,8 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
-    auto dropped = test::utils::wait_until([&integration, current_manifest_uid]() {
-        couchbase::operations::management::collections_manifest_get_request req{ { integration.ctx.bucket, "_default", "_default", "" } };
-        auto resp = test::utils::execute(integration.cluster, req);
-        return resp.manifest.uid >= current_manifest_uid;
-    });
+    auto dropped =
+      test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, current_manifest_uid);
     REQUIRE(dropped);
 
     {
