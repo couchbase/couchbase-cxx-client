@@ -30,7 +30,8 @@ integration_test_guard::integration_test_guard()
     auth.username = ctx.username;
     auth.password = ctx.password;
     io_thread = std::thread([this]() { io.run(); });
-    open_cluster(cluster, couchbase::origin(auth, connstr));
+    origin = couchbase::origin(auth, connstr);
+    open_cluster(cluster, origin);
 }
 
 integration_test_guard::~integration_test_guard()

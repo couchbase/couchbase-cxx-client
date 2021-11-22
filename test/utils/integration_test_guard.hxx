@@ -33,5 +33,6 @@ class integration_test_guard
     asio::io_context io{};
     couchbase::cluster cluster;
     test_context ctx;
+    couchbase::origin origin;
 };
 } // namespace test::utils
