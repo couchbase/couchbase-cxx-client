@@ -52,6 +52,12 @@ parse(const std::string& input)
     return tao::json::from_string<utils::json::last_key_wins>(input);
 }
 
+tao::json::value
+parse(const char* input, std::size_t size)
+{
+    return tao::json::from_string<utils::json::last_key_wins>(input, size);
+}
+
 std::string
 generate(const tao::json::value& object)
 {

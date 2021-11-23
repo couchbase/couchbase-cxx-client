@@ -24,6 +24,9 @@ namespace couchbase::utils::json
 tao::json::value
 parse(const std::string& input);
 
+tao::json::value
+parse(const char* input, std::size_t size);
+
 std::string
 generate(const tao::json::value& object);
 } // namespace couchbase::utils::json
