@@ -83,6 +83,7 @@ target_include_directories(
          ${PROJECT_SOURCE_DIR}/third_party/gsl/include
          ${PROJECT_SOURCE_DIR}/third_party/json/external/PEGTL/include
          ${PROJECT_SOURCE_DIR}/third_party/json/include
+         ${PROJECT_SOURCE_DIR}/third_party/cxx_function
          ${PROJECT_SOURCE_DIR}/third_party/spdlog/include)
 target_link_libraries(
   couchbase_cxx_client
