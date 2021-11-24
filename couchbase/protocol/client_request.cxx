@@ -21,11 +21,8 @@
 
 namespace couchbase::protocol
 {
-bool
-compress_value(const std::vector<std::uint8_t>& value,
-               std::size_t body_size,
-               std::vector<std::uint8_t> payload,
-               std::vector<uint8_t>::iterator& output)
+std::pair<bool, std::uint32_t>
+compress_value(const std::vector<std::uint8_t>& value, std::vector<uint8_t>::iterator& output)
 {
     static const double min_ratio = 0.83;
 
@@ -33,12 +30,8 @@ compress_value(const std::vector<std::uint8_t>& value,
     std::size_t compressed_size = snappy::Compress(reinterpret_cast<const char*>(value.data()), value.size(), &compressed);
     if (gsl::narrow_cast<double>(compressed_size) / gsl::narrow_cast<double>(value.size()) < min_ratio) {
         std::copy(compressed.begin(), compressed.end(), output);
-        payload[5] |= static_cast<uint8_t>(protocol::datatype::snappy);
-        std::uint32_t new_body_size = htonl(gsl::narrow_cast<std::uint32_t>(body_size - (value.size() - compressed_size)));
-        memcpy(payload.data() + 8, &new_body_size, sizeof(new_body_size));
-        payload.resize(header_size + new_body_size);
-        return true;
+        return { true, gsl::narrow_cast<std::uint32_t>(compressed_size) };
     }
-    return false;
+    return { false, 0 };
 }
 } // namespace couchbase::protocol
