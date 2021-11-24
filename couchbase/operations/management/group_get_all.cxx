@@ -39,9 +39,9 @@ group_get_all_request::make_response(error_context::http&& ctx, const encoded_re
     group_get_all_response response{ std::move(ctx) };
     if (!response.ctx.ec) {
         if (encoded.status_code != 200) {
+            response.ctx.ec = error::common_errc::internal_server_failure;
             return response;
         }
-        response.ctx.ec = error::common_errc::internal_server_failure;
         tao::json::value payload{};
         try {
             payload = utils::json::parse(encoded.body);
