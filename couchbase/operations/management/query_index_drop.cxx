@@ -75,7 +75,7 @@ query_index_drop_request::make_response(error_context::http&& ctx, const encoded
                         bucket_not_found = true;
                         break;
                     case 12004: /* IKey: "datastore.couchbase.primary_idx_not_found" */
-                    case 12006: /* IKey: "datastore.couchbase.keyspace_count_error" */
+                    case 12016: /* IKey: "datastore.couchbase.keyspace_count_error" */
                         index_not_found = true;
                         break;
                 }
