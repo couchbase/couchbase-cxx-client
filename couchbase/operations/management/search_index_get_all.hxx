@@ -47,8 +47,6 @@ struct search_index_get_all_request {
     std::string client_context_id{ uuid::to_string(uuid::random()) };
     std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
 
-    std::string index_name;
-
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 
     [[nodiscard]] search_index_get_all_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
