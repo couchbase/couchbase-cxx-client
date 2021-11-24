@@ -21,6 +21,7 @@
 
 #include <couchbase/utils/json.hxx>
 #include <couchbase/operations/management/rbac_json.hxx>
+#include <couchbase/operations/management/rbac_fmt.hxx>
 
 namespace couchbase::operations::management
 {

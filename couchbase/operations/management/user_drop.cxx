@@ -19,6 +19,8 @@
 
 #include <couchbase/errors.hxx>
 
+#include <couchbase/operations/management/rbac_fmt.hxx>
+
 namespace couchbase::operations::management
 {
 std::error_code
