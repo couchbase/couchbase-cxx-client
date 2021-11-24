@@ -33,7 +33,7 @@ search_index_get_stats_request::encode_to(encoded_request_type& encoded, http_co
 }
 
 search_index_get_stats_response
-search_index_get_stats_request::make_response(error_context::http&& ctx, encoded_response_type& encoded) const
+search_index_get_stats_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
 {
     search_index_get_stats_response response{ std::move(ctx) };
     if (!response.ctx.ec) {

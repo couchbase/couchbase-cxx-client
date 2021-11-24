@@ -53,6 +53,7 @@ add_library(
   search_index_get_all.cxx
   search_index_get_documents_count.cxx
   search_index_upsert.cxx
+  search_index_get_stats.cxx
   user_drop.cxx
   user_get.cxx
   user_get_all.cxx
