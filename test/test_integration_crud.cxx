@@ -551,3 +551,57 @@ TEST_CASE("integration: upsert with handler capturing non-copyable object", "[in
         REQUIRE_FALSE(resp.ctx.ec);
     }
 }
+
+TEST_CASE("integration: upsert may trigger snappy compression", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
+
+    std::string compressible_json = R"(
+{
+  "name": "Emmy-lou Dickerson",
+  "age": 26,
+  "animals": ["cat", "dog", "parrot"],
+  "attributes": {
+    "hair": "brown",
+    "dimensions": {
+      "height": 67,
+      "weight": 175
+    },
+    "hobbies": [
+      {
+        "type": "winter sports",
+        "name": "curling"
+      },
+      {
+        "type": "summer sports",
+        "name": "water skiing",
+        "details": {
+          "location": {
+            "lat": 49.282730,
+            "long": -123.120735
+          }
+        }
+      }
+    ]
+  }
+}
+)";
+
+    // create
+    {
+        couchbase::operations::insert_request req{ id, compressible_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec.message())
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+
+    // read
+    {
+        couchbase::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.value == compressible_json);
+    }
+}

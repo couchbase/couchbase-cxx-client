@@ -26,11 +26,8 @@
 
 namespace couchbase::protocol
 {
-bool
-compress_value(const std::vector<std::uint8_t>& value,
-               std::size_t body_size,
-               std::vector<std::uint8_t> payload,
-               std::vector<std::uint8_t>::iterator& output);
+std::pair<bool, std::uint32_t>
+compress_value(const std::vector<std::uint8_t>& value, std::vector<std::uint8_t>::iterator& output);
 
 template<typename Body>
 class client_request
@@ -142,8 +139,13 @@ class client_request
 
         static const std::size_t min_size_to_compress = 32;
         if (try_to_compress && body_.value().size() > min_size_to_compress) {
-            if (compress_value(body_.value(), body_.size(), payload_, body_itr)) {
+            if (auto [compressed, new_value_size] = compress_value(body_.value(), body_itr); compressed) {
                 /* the compressed value meets requirements and was copied to the payload */
+                payload_[5] |= static_cast<std::uint8_t>(protocol::datatype::snappy);
+                std::uint32_t new_body_size = ntohl(body_size) - gsl::narrow_cast<std::uint32_t>(body_.value().size()) + new_value_size;
+                payload_.resize(header_size + new_body_size);
+                new_body_size = htonl(new_body_size);
+                memcpy(payload_.data() + 8, &new_body_size, sizeof(new_body_size));
                 return;
             }
         }
