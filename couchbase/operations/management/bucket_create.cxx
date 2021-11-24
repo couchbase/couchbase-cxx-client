@@ -56,7 +56,9 @@ bucket_create_request::encode_to(encoded_request_type& encoded, http_context& /*
     if (bucket.max_expiry > 0) {
         encoded.body.append(fmt::format("&maxTTL={}", bucket.max_expiry));
     }
-    encoded.body.append(fmt::format("&replicaIndex={}", bucket.replica_indexes ? "1" : "0"));
+    if (bucket.bucket_type != bucket_settings::bucket_type::ephemeral) {
+        encoded.body.append(fmt::format("&replicaIndex={}", bucket.replica_indexes ? "1" : "0"));
+    }
     encoded.body.append(fmt::format("&flushEnabled={}", bucket.flush_enabled ? "1" : "0"));
     switch (bucket.eviction_policy) {
         case bucket_settings::eviction_policy::full:
