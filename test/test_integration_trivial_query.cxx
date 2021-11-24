@@ -146,7 +146,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
 
     SECTION("correct scope and collection")
     {
-        couchbase::operations::query_request req{ "SELECT a, b FROM " + collection_name + " WHERE META().id = \"" + key + "\"" };
+        couchbase::operations::query_request req{ fmt::format(R"(SELECT a, b FROM {} WHERE META().id = "{}")", collection_name, key) };
         req.bucket_name = integration.ctx.bucket;
         req.scope_name = scope_name;
         req.mutation_state = { mutation_token };
@@ -158,7 +158,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
 
     SECTION("missing scope")
     {
-        couchbase::operations::query_request req{ "SELECT a, b FROM " + collection_name + " WHERE META().id = \"" + key + "\"" };
+        couchbase::operations::query_request req{ fmt::format(R"(SELECT a, b FROM {} WHERE META().id = "{}")", collection_name, key) };
         req.bucket_name = integration.ctx.bucket;
         req.scope_name = "missing_scope";
         req.mutation_state = { mutation_token };
@@ -168,7 +168,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
 
     SECTION("missing collection")
     {
-        couchbase::operations::query_request req{ "SELECT a, b FROM missing_collection WHERE META().id = \"" + key + "\"" };
+        couchbase::operations::query_request req{ fmt::format(R"(SELECT a, b FROM missing_collection WHERE META().id = "{}")", key) };
         req.bucket_name = integration.ctx.bucket;
         req.scope_name = scope_name;
         req.mutation_state = { mutation_token };
@@ -178,7 +178,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
 
     SECTION("prepared")
     {
-        couchbase::operations::query_request req{ "SELECT a, b FROM " + collection_name + " WHERE META().id = \"" + key + "\"" };
+        couchbase::operations::query_request req{ fmt::format(R"(SELECT a, b FROM {} WHERE META().id = "{}")", collection_name, key) };
         req.bucket_name = integration.ctx.bucket;
         req.scope_name = scope_name;
         req.mutation_state = { mutation_token };
@@ -199,7 +199,7 @@ TEST_CASE("integration: read only with no results", "[integration]")
     }
 
     {
-        couchbase::operations::query_request req{ "SELECT * FROM " + integration.ctx.bucket + " LIMIT 0" };
+        couchbase::operations::query_request req{ fmt::format("SELECT * FROM {} LIMIT 0", integration.ctx.bucket) };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.payload.rows.empty());
