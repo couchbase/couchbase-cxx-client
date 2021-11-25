@@ -18,6 +18,7 @@
 #include <spdlog/fmt/fmt.h>
 
 #include <couchbase/protocol/status.hxx>
+#include <couchbase/protocol/status_fmt.hxx>
 
 namespace couchbase::protocol
 {

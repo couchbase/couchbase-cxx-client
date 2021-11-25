@@ -177,6 +177,14 @@ class bucket : public std::enable_shared_from_this<bucket>
 
     void restart_node(std::size_t index, const std::string& hostname, const std::string& port)
     {
+        if (closed_) {
+            LOG_DEBUG(R"({} requested to restart session, but the bucket has been closed already. idx={}, address="{}:{}")",
+                      log_prefix_,
+                      index,
+                      hostname,
+                      port);
+            return;
+        }
         couchbase::origin origin(origin_.credentials(), hostname, port, origin_.options());
 
         std::shared_ptr<io::mcbp_session> session{};
@@ -211,6 +219,11 @@ class bucket : public std::enable_shared_from_this<bucket>
         session->bootstrap(
           [self = shared_from_this(), session, this_index = index, hostname, port](std::error_code ec,
                                                                                    const topology::configuration& config) {
+              if (self->closed_) {
+                  asio::post(asio::bind_executor(
+                    self->ctx_, [session = std::move(session)]() { return session->stop(io::retry_reason::do_not_retry); }));
+                  return;
+              }
               if (ec) {
                   LOG_WARNING(R"({} failed to restart session idx={}, ec={})", session->log_prefix(), this_index, ec.message());
                   self->restart_node(this_index, hostname, port);

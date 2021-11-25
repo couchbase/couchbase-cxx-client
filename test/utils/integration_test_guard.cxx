@@ -39,4 +39,26 @@ integration_test_guard::~integration_test_guard()
     close_cluster(cluster);
     io_thread.join();
 }
+
+const couchbase::operations::management::bucket_info&
+integration_test_guard::load_bucket_info(const std::string& bucket_name, bool refresh)
+{
+    if (info.count(bucket_name) > 0 && !refresh) {
+        return info[bucket_name];
+    }
+
+    auto resp = execute(cluster, couchbase::operations::management::bucket_describe_request{ bucket_name });
+    if (resp.ctx.ec == couchbase::error::common_errc::service_not_available) {
+        open_bucket(cluster, ctx.bucket);
+        resp = execute(cluster, couchbase::operations::management::bucket_describe_request{ bucket_name });
+    }
+    if (resp.ctx.ec) {
+        LOG_CRITICAL("unable to load info for bucket \"{}\": {}", bucket_name, resp.ctx.ec.message());
+        throw std::system_error(resp.ctx.ec);
+    }
+
+    info[bucket_name] = resp.info;
+    return info[bucket_name];
+}
+
 } // namespace test::utils

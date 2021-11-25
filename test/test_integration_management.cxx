@@ -348,8 +348,7 @@ TEST_CASE("integration: bucket management", "[integration]")
 
         SECTION("majority")
         {
-            // TODO: get this from the live cluster rather than relying on bootstrap nodes
-            if (integration.origin.get_nodes().size() < 2) {
+            if (integration.number_of_nodes() < 2) {
                 return;
             }
 

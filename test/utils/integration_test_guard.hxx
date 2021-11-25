@@ -21,6 +21,8 @@
 
 #include "integration_shortcuts.hxx"
 
+#include <couchbase/operations/management/bucket_describe.hxx>
+
 namespace test::utils
 {
 class integration_test_guard
@@ -29,10 +31,39 @@ class integration_test_guard
     integration_test_guard();
     ~integration_test_guard();
 
+    inline const couchbase::operations::management::bucket_info& load_bucket_info(bool refresh = false)
+    {
+        return load_bucket_info(ctx.bucket, refresh);
+    }
+
+    const couchbase::operations::management::bucket_info& load_bucket_info(const std::string& bucket_name, bool refresh = false);
+
+    inline std::size_t number_of_nodes()
+    {
+        return load_bucket_info(ctx.bucket).number_of_nodes;
+    }
+
+    std::size_t number_of_nodes(const std::string& bucket_name)
+    {
+        return load_bucket_info(bucket_name).number_of_nodes;
+    }
+
+    inline std::size_t number_of_replicas()
+    {
+        return load_bucket_info(ctx.bucket).number_of_replicas;
+    }
+
+    std::size_t number_of_replicas(const std::string& bucket_name)
+    {
+        return load_bucket_info(bucket_name).number_of_replicas;
+    }
+
     std::thread io_thread{};
     asio::io_context io{};
     couchbase::cluster cluster;
     test_context ctx;
     couchbase::origin origin;
+
+    std::map<std::string, couchbase::operations::management::bucket_info, std::less<>> info{};
 };
 } // namespace test::utils
