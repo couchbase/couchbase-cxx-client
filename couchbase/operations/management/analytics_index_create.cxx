@@ -35,9 +35,9 @@ analytics_index_create_request::encode_to(encoded_request_type& encoded, http_co
 
     tao::json::value body{
         { "statement",
-          fmt::format("CREATE INDEX {} `{}` ON `{}`.`{}` ({})",
-                      if_not_exists_clause,
+          fmt::format("CREATE INDEX `{}` {} ON `{}`.`{}` ({})",
                       index_name,
+                      if_not_exists_clause,
                       dataverse_name,
                       dataset_name,
                       fmt::join(field_specs, ",")) },
