@@ -17,6 +17,7 @@
 
 #include <couchbase/operations/management/analytics_index_create.hxx>
 
+#include <couchbase/utils/name_codec.hxx>
 #include <couchbase/errors.hxx>
 
 #include <couchbase/utils/json.hxx>
@@ -35,10 +36,10 @@ analytics_index_create_request::encode_to(encoded_request_type& encoded, http_co
 
     tao::json::value body{
         { "statement",
-          fmt::format("CREATE INDEX `{}` {} ON `{}`.`{}` ({})",
+          fmt::format("CREATE INDEX `{}` {} ON {}.`{}` ({})",
                       index_name,
                       if_not_exists_clause,
-                      dataverse_name,
+                      utils::analytics::uncompound_name(dataverse_name),
                       dataset_name,
                       fmt::join(field_specs, ",")) },
     };
