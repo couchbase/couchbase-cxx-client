@@ -30,10 +30,12 @@
 #include <couchbase/io/streams.hxx>
 #include <couchbase/io/retry_orchestrator.hxx>
 #include <couchbase/io/mcbp_context.hxx>
+#include <couchbase/io/retry_reason_fmt.hxx>
 
 #include <couchbase/timeout_defaults.hxx>
 
 #include <couchbase/protocol/hello_feature.hxx>
+#include <couchbase/protocol/hello_feature_fmt.hxx>
 #include <couchbase/protocol/client_request.hxx>
 #include <couchbase/protocol/client_response.hxx>
 #include <couchbase/protocol/server_request.hxx>
@@ -540,6 +542,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
 
     ~mcbp_session()
     {
+        LOG_DEBUG("{} destroy MCBP connection", log_prefix_);
         stop(retry_reason::do_not_retry);
     }
 
@@ -621,7 +624,8 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             LOG_WARNING("{} unable to bootstrap in time", self->log_prefix_);
             self->bootstrap_handler_(error::common_errc::unambiguous_timeout, {});
             self->bootstrap_handler_ = nullptr;
-            self->stop(retry_reason::socket_closed_while_in_flight);
+            self->stop(retry_reason::do_not_retry);
+            LOG_WARNING("{} use_count={}", self->log_prefix_, self.use_count());
         });
         initiate_bootstrap();
     }

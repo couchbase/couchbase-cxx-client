@@ -370,6 +370,8 @@ TEST_CASE("integration: bucket management", "[integration]")
         }
     }
 
+    test::utils::close_bucket(integration.cluster, bucket_name);
+
     // drop bucket if not already dropped
     {
         couchbase::operations::management::bucket_drop_request req{ bucket_name };

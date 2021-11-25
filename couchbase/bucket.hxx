@@ -159,11 +159,13 @@ class bucket : public std::enable_shared_from_this<bucket>
                           self->update_config(cfg);
                           session->on_configuration_update(
                             [self](const topology::configuration& new_config) { self->update_config(new_config); });
-                          session->on_stop([index = session->index(), self](io::retry_reason reason) {
-                              if (reason == io::retry_reason::socket_closed_while_in_flight) {
-                                  self->restart_node(index);
-                              }
-                          });
+                          session->on_stop(
+                            [index = session->index(), hostname = session->bootstrap_hostname(), port = session->bootstrap_port(), self](
+                              io::retry_reason reason) {
+                                if (reason == io::retry_reason::socket_closed_while_in_flight) {
+                                    self->restart_node(index, hostname, port);
+                                }
+                            });
                       }
                   },
                   true);
@@ -173,33 +175,56 @@ class bucket : public std::enable_shared_from_this<bucket>
         }
     }
 
-    void restart_node(std::size_t index)
+    void restart_node(std::size_t index, const std::string& hostname, const std::string& port)
     {
-        auto ptr = sessions_.find(index);
-        if (ptr == sessions_.end()) {
-            LOG_DEBUG(R"({} requested to restart session idx={}, which does not exist, ignoring)", log_prefix_, index);
-            return;
-        }
-        const auto& old_session = ptr->second;
-        auto hostname = old_session->bootstrap_hostname();
-        auto port = old_session->bootstrap_port();
-        auto old_id = old_session->id();
         couchbase::origin origin(origin_.credentials(), hostname, port, origin_.options());
-        sessions_.erase(ptr);
-        std::shared_ptr<io::mcbp_session> session;
+
+        std::shared_ptr<io::mcbp_session> session{};
         if (origin_.options().enable_tls) {
             session = std::make_shared<io::mcbp_session>(client_id_, ctx_, tls_, origin, name_, known_features_);
         } else {
             session = std::make_shared<io::mcbp_session>(client_id_, ctx_, origin, name_, known_features_);
         }
-        LOG_DEBUG(
-          R"({} restarting session idx={}, id=("{}" -> "{}"), address="{}")", log_prefix_, index, old_id, session->id(), hostname, port);
+
+        auto ptr = sessions_.find(index);
+        if (ptr == sessions_.end() || ptr->second == nullptr) {
+            LOG_DEBUG(R"({} requested to restart session idx={}, which does not exist yet, initiate new one id="{}", address="{}:{}")",
+                      log_prefix_,
+                      index,
+                      session->id(),
+                      hostname,
+                      port);
+        } else {
+            const auto& old_session = ptr->second;
+            auto old_id = old_session->id();
+            sessions_.erase(ptr);
+            Expects(sessions_[index] == nullptr);
+            LOG_DEBUG(R"({} restarting session idx={}, id=("{}" -> "{}"), address="{}:{}")",
+                      log_prefix_,
+                      index,
+                      old_id,
+                      session->id(),
+                      hostname,
+                      port);
+        }
+
         session->bootstrap(
-          [self = shared_from_this(), session](std::error_code err, const topology::configuration& config) {
-              if (!err) {
-                  self->update_config(config);
-                  session->on_configuration_update([self](const topology::configuration& new_config) { self->update_config(new_config); });
+          [self = shared_from_this(), session, this_index = index, hostname, port](std::error_code ec,
+                                                                                   const topology::configuration& config) {
+              if (ec) {
+                  LOG_WARNING(R"({} failed to restart session idx={}, ec={})", session->log_prefix(), this_index, ec.message());
+                  self->restart_node(this_index, hostname, port);
+                  return;
               }
+              session->on_configuration_update([self](const topology::configuration& new_config) { self->update_config(new_config); });
+              session->on_stop([this_index, hostname, port, self](io::retry_reason reason) {
+                  if (reason == io::retry_reason::socket_closed_while_in_flight) {
+                      self->restart_node(this_index, hostname, port);
+                  }
+              });
+
+              self->update_config(config);
+              self->drain_deferred_queue();
           },
           true);
         sessions_.emplace(index, std::move(session));
@@ -208,7 +233,7 @@ class bucket : public std::enable_shared_from_this<bucket>
     template<typename Handler>
     void bootstrap(Handler&& handler)
     {
-        std::shared_ptr<io::mcbp_session> new_session;
+        std::shared_ptr<io::mcbp_session> new_session{};
         if (origin_.options().enable_tls) {
             new_session = std::make_shared<io::mcbp_session>(client_id_, ctx_, tls_, origin_, name_, known_features_);
         } else {
@@ -216,12 +241,15 @@ class bucket : public std::enable_shared_from_this<bucket>
         }
         new_session->bootstrap([self = shared_from_this(), new_session, h = std::forward<Handler>(handler)](
                                  std::error_code ec, const topology::configuration& cfg) mutable {
-            if (!ec) {
-                size_t this_index = new_session->index();
+            size_t this_index = new_session->index();
+            if (ec) {
+                LOG_WARNING(R"({} failed to bootstrap session idx={}, ec={})", new_session->log_prefix(), this_index, ec.message());
+            } else {
                 new_session->on_configuration_update([self](const topology::configuration& config) { self->update_config(config); });
-                new_session->on_stop([this_index, self](io::retry_reason reason) {
+                new_session->on_stop([this_index, hostname = new_session->bootstrap_hostname(), port = new_session->bootstrap_port(), self](
+                                       io::retry_reason reason) {
                     if (reason == io::retry_reason::socket_closed_while_in_flight) {
-                        self->restart_node(this_index);
+                        self->restart_node(this_index, hostname, port);
                     }
                 });
 
@@ -316,6 +344,10 @@ class bucket : public std::enable_shared_from_this<bucket>
             }
         }
         auto session = sessions_.at(static_cast<std::size_t>(index));
+        if (session == nullptr || !session->has_config()) {
+            deferred_commands_.emplace([self = shared_from_this(), cmd]() { self->map_and_send(cmd); });
+            return;
+        }
         if (session->is_stopped()) {
             return io::retry_orchestrator::maybe_retry(
               cmd->manager_, cmd, io::retry_reason::node_not_available, error::common_errc::request_canceled);
