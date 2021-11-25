@@ -17,6 +17,7 @@ add_library(
   analytics_link_get_all.cxx
   analytics_link_s3_external.cxx
   bucket_create.cxx
+  bucket_describe.cxx
   bucket_drop.cxx
   bucket_flush.cxx
   bucket_get.cxx

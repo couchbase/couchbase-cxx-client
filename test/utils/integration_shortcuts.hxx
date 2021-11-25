@@ -41,4 +41,7 @@ close_cluster(couchbase::cluster& cluster);
 
 void
 open_bucket(couchbase::cluster& cluster, const std::string& bucket_name);
+
+void
+close_bucket(couchbase::cluster& cluster, const std::string& bucket_name);
 } // namespace test::utils

@@ -35,6 +35,13 @@ bucket_flush_request::make_response(error_context::http&& ctx, const encoded_res
     bucket_flush_response response{ std::move(ctx) };
     if (!response.ctx.ec) {
         switch (encoded.status_code) {
+            case 400: {
+                if (encoded.body.find("Flush is disabled") != std::string::npos) {
+                    response.ctx.ec = error::management_errc::bucket_not_flushable;
+                } else {
+                    response.ctx.ec = error::common_errc::invalid_argument;
+                }
+            } break;
             case 404:
                 response.ctx.ec = error::common_errc::bucket_not_found;
                 break;

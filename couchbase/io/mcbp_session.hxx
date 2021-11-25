@@ -30,10 +30,12 @@
 #include <couchbase/io/streams.hxx>
 #include <couchbase/io/retry_orchestrator.hxx>
 #include <couchbase/io/mcbp_context.hxx>
+#include <couchbase/io/retry_reason_fmt.hxx>
 
 #include <couchbase/timeout_defaults.hxx>
 
 #include <couchbase/protocol/hello_feature.hxx>
+#include <couchbase/protocol/hello_feature_fmt.hxx>
 #include <couchbase/protocol/client_request.hxx>
 #include <couchbase/protocol/client_response.hxx>
 #include <couchbase/protocol/server_request.hxx>
@@ -540,6 +542,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
 
     ~mcbp_session()
     {
+        LOG_DEBUG("{} destroy MCBP connection", log_prefix_);
         stop(retry_reason::do_not_retry);
     }
 
@@ -621,7 +624,8 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             LOG_WARNING("{} unable to bootstrap in time", self->log_prefix_);
             self->bootstrap_handler_(error::common_errc::unambiguous_timeout, {});
             self->bootstrap_handler_ = nullptr;
-            self->stop(retry_reason::socket_closed_while_in_flight);
+            self->stop(retry_reason::do_not_retry);
+            LOG_WARNING("{} use_count={}", self->log_prefix_, self.use_count());
         });
         initiate_bootstrap();
     }
@@ -812,18 +816,21 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         return supports_gcccp_;
     }
 
-    [[nodiscard]] bool has_config() const
+    [[nodiscard]] bool has_config()
     {
+        std::scoped_lock lock(config_mutex_);
         return config_.has_value();
     }
 
-    [[nodiscard]] topology::configuration config() const
+    [[nodiscard]] topology::configuration config()
     {
+        std::scoped_lock lock(config_mutex_);
         return config_.value();
     }
 
-    [[nodiscard]] size_t index() const
+    [[nodiscard]] size_t index()
     {
+        std::scoped_lock lock(config_mutex_);
         Expects(config_.has_value());
         return config_->index_for_this_node();
     }
@@ -1016,6 +1023,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         if (stopped_) {
             return;
         }
+        std::scoped_lock lock(config_mutex_);
         if (config_) {
             if (config_->vbmap && config.vbmap && config_->vbmap->size() != config.vbmap->size()) {
                 LOG_DEBUG("{} received a configuration with a different number of vbuckets, ignoring", log_prefix_);
@@ -1347,6 +1355,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     asio::ip::tcp::resolver::results_type endpoints_;
     std::vector<protocol::hello_feature> supported_features_;
     std::optional<topology::configuration> config_;
+    std::mutex config_mutex_{};
     std::optional<error_map> error_map_;
     collection_cache collection_cache_;
 

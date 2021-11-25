@@ -116,6 +116,16 @@ class cluster
         buckets_.emplace(bucket_name, b);
     }
 
+    template<typename Handler>
+    void close_bucket(const std::string& bucket_name, Handler&& handler)
+    {
+        auto ptr = buckets_.find(bucket_name);
+        if (ptr != buckets_.end()) {
+            ptr->second->close();
+        }
+        return handler({});
+    }
+
     template<class Request,
              class Handler,
              typename std::enable_if_t<!std::is_same_v<typename Request::encoded_request_type, io::http_request>, int> = 0>

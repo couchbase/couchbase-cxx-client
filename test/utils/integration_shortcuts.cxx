@@ -52,4 +52,17 @@ open_bucket(couchbase::cluster& cluster, const std::string& bucket_name)
         throw std::system_error(rc);
     }
 }
+
+void
+close_bucket(couchbase::cluster& cluster, const std::string& bucket_name)
+{
+    auto barrier = std::make_shared<std::promise<std::error_code>>();
+    auto f = barrier->get_future();
+    cluster.close_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
+    auto rc = f.get();
+    if (rc) {
+        LOG_CRITICAL("unable to close bucket: {}, name={}", rc.message(), bucket_name);
+        throw std::system_error(rc);
+    }
+}
 } // namespace test::utils
