@@ -816,18 +816,21 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         return supports_gcccp_;
     }
 
-    [[nodiscard]] bool has_config() const
+    [[nodiscard]] bool has_config()
     {
+        std::scoped_lock lock(config_mutex_);
         return config_.has_value();
     }
 
-    [[nodiscard]] topology::configuration config() const
+    [[nodiscard]] topology::configuration config()
     {
+        std::scoped_lock lock(config_mutex_);
         return config_.value();
     }
 
-    [[nodiscard]] size_t index() const
+    [[nodiscard]] size_t index()
     {
+        std::scoped_lock lock(config_mutex_);
         Expects(config_.has_value());
         return config_->index_for_this_node();
     }
@@ -1020,6 +1023,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         if (stopped_) {
             return;
         }
+        std::scoped_lock lock(config_mutex_);
         if (config_) {
             if (config_->vbmap && config.vbmap && config_->vbmap->size() != config.vbmap->size()) {
                 LOG_DEBUG("{} received a configuration with a different number of vbuckets, ignoring", log_prefix_);
@@ -1351,6 +1355,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     asio::ip::tcp::resolver::results_type endpoints_;
     std::vector<protocol::hello_feature> supported_features_;
     std::optional<topology::configuration> config_;
+    std::mutex config_mutex_{};
     std::optional<error_map> error_map_;
     collection_cache collection_cache_;
 
