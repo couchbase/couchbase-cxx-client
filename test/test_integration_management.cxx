@@ -415,7 +415,7 @@ scope_exists(couchbase::cluster& cluster, const std::string& bucket_name, const 
     return false;
 }
 
-TEST_CASE("native: collection management", "[native]")
+TEST_CASE("integration: collection management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 

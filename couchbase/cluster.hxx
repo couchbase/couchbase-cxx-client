@@ -83,9 +83,7 @@ class cluster
             if (session_) {
                 session_->stop(io::retry_reason::do_not_retry);
             }
-            for (auto& [name, bucket] : buckets_) {
-                bucket->close();
-            }
+            for_each_bucket([](auto& bucket) { bucket->close(); });
             session_manager_->close();
             handler();
             work_.reset();
@@ -99,29 +97,45 @@ class cluster
     template<typename Handler>
     void open_bucket(const std::string& bucket_name, Handler&& handler)
     {
-        if (buckets_.find(bucket_name) != buckets_.end()) {
+        std::shared_ptr<bucket> b{};
+        {
+            std::scoped_lock lock(buckets_mutex_);
+            auto ptr = buckets_.find(bucket_name);
+            if (ptr == buckets_.end()) {
+                std::vector<protocol::hello_feature> known_features;
+                if (session_ && session_->has_config()) {
+                    known_features = session_->supported_features();
+                }
+                b = std::make_shared<bucket>(id_, ctx_, tls_, tracer_, meter_, bucket_name, origin_, known_features);
+                buckets_.emplace(bucket_name, b);
+            }
+        }
+        if (b == nullptr) {
             return handler({});
         }
-        std::vector<protocol::hello_feature> known_features;
-        if (session_ && session_->has_config()) {
-            known_features = session_->supported_features();
-        }
-        auto b = std::make_shared<bucket>(id_, ctx_, tls_, tracer_, meter_, bucket_name, origin_, known_features);
+
         b->bootstrap([this, handler = std::forward<Handler>(handler)](std::error_code ec, const topology::configuration& config) mutable {
             if (!ec && !session_->supports_gcccp()) {
                 session_manager_->set_configuration(config, origin_.options());
             }
             handler(ec);
         });
-        buckets_.emplace(bucket_name, b);
     }
 
     template<typename Handler>
     void close_bucket(const std::string& bucket_name, Handler&& handler)
     {
-        auto ptr = buckets_.find(bucket_name);
-        if (ptr != buckets_.end()) {
-            ptr->second->close();
+        std::shared_ptr<bucket> b{};
+        {
+            std::scoped_lock lock(buckets_mutex_);
+            auto ptr = buckets_.find(bucket_name);
+            if (ptr != buckets_.end()) {
+                b = ptr->second;
+                buckets_.erase(ptr);
+            }
+        }
+        if (b != nullptr) {
+            b->close();
         }
         return handler({});
     }
@@ -131,14 +145,14 @@ class cluster
              typename std::enable_if_t<!std::is_same_v<typename Request::encoded_request_type, io::http_request>, int> = 0>
     void execute(Request request, Handler&& handler)
     {
-        auto bucket = buckets_.find(request.id.bucket());
-        if (bucket == buckets_.end()) {
-            error_context::key_value ctx{ request.id };
-            ctx.ec = error::common_errc::bucket_not_found;
-            using response_type = typename Request::encoded_response_type;
-            return handler(request.make_response(std::move(ctx), response_type{}));
+        if (auto bucket = find_bucket_by_name(request.id.bucket()); bucket != nullptr) {
+            return bucket->execute(request, std::forward<Handler>(handler));
         }
-        return bucket->second->execute(request, std::forward<Handler>(handler));
+
+        error_context::key_value ctx{ request.id };
+        ctx.ec = error::common_errc::bucket_not_found;
+        using response_type = typename Request::encoded_response_type;
+        return handler(request.make_response(std::move(ctx), response_type{}));
     }
 
     template<class Request,
@@ -160,9 +174,7 @@ class cluster
             if (session_) {
                 res.services[service_type::key_value].emplace_back(session_->diag_info());
             }
-            for (const auto& [name, bucket] : buckets_) {
-                bucket->export_diag_info(res);
-            }
+            for_each_bucket([&res](auto& bucket) { bucket->export_diag_info(res); });
             session_manager_->export_diag_info(res);
             handler(std::move(res));
         }));
@@ -174,6 +186,24 @@ class cluster
               std::function<void(diag::ping_result)> handler);
 
   private:
+    std::shared_ptr<bucket> find_bucket_by_name(const std::string& name);
+
+    template<typename Handler>
+    void for_each_bucket(Handler handler)
+    {
+        std::vector<std::shared_ptr<bucket>> buckets{};
+        {
+            std::scoped_lock lock(buckets_mutex_);
+            buckets.reserve(buckets_.size());
+            for (const auto& [name, bucket] : buckets_) {
+                buckets.push_back(bucket);
+            }
+        }
+        for (auto bucket : buckets) {
+            handler(bucket);
+        }
+    }
+
     template<typename Handler>
     void do_dns_srv(Handler&& handler)
     {
@@ -304,6 +334,7 @@ class cluster
     io::dns::dns_config& dns_config_{ io::dns::dns_config::get() };
     couchbase::io::dns::dns_client dns_client_;
     std::shared_ptr<io::mcbp_session> session_{};
+    std::mutex buckets_mutex_{};
     std::map<std::string, std::shared_ptr<bucket>> buckets_{};
     couchbase::origin origin_{};
     tracing::request_tracer* tracer_{ nullptr };
