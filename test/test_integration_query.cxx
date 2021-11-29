@@ -23,7 +23,7 @@ TEST_CASE("integration: trivial non-data query", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.ctx.version.supports_gcccp()) {
+    if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
 
@@ -41,7 +41,7 @@ TEST_CASE("integration: query with handler capturing non-copyable object", "[int
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    if (!integration.ctx.version.supports_gcccp()) {
+    if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
 
@@ -86,7 +86,7 @@ TEST_CASE("integration: query with handler capturing non-copyable object", "[int
 TEST_CASE("integration: query on a collection", "[integration]")
 {
     test::utils::integration_test_guard integration;
-    if (!integration.ctx.version.supports_collections()) {
+    if (!integration.cluster_version().supports_collections()) {
         return;
     }
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -194,7 +194,7 @@ TEST_CASE("integration: read only with no results", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.ctx.version.supports_gcccp()) {
+    if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
 
@@ -210,7 +210,7 @@ TEST_CASE("integration: invalid query", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.ctx.version.supports_gcccp()) {
+    if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
 

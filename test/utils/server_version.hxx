@@ -45,38 +45,44 @@ struct server_version {
 
     [[nodiscard]] bool is_cheshire_cat() const
     {
-        // [7.0.0, inf)
-        return major >= 7;
+        // [7.0.0, 7.1.0)
+        return major == 7 && minor < 1;
+    }
+
+    [[nodiscard]] bool is_neo() const
+    {
+        // [7.1.0, inf)
+        return major >= 7 && minor >= 1;
     }
 
     [[nodiscard]] bool supports_gcccp() const
     {
-        return is_mad_hatter() || is_cheshire_cat();
+        return is_mad_hatter() || is_cheshire_cat() || is_neo();
     }
 
     [[nodiscard]] bool supports_sync_replication() const
     {
-        return is_mad_hatter() || is_cheshire_cat();
+        return is_mad_hatter() || is_cheshire_cat() || is_neo();
     }
 
     [[nodiscard]] bool supports_enhanced_durability() const
     {
-        return is_mad_hatter() || is_cheshire_cat();
+        return is_mad_hatter() || is_cheshire_cat() || is_neo();
     }
 
     [[nodiscard]] bool supports_scoped_queries() const
     {
-        return is_cheshire_cat();
+        return is_cheshire_cat() || is_neo();
     }
 
     [[nodiscard]] bool supports_collections() const
     {
-        return (is_mad_hatter() && developer_preview) || is_cheshire_cat();
+        return (is_mad_hatter() && developer_preview) || is_cheshire_cat() || is_neo();
     }
 
     [[nodiscard]] bool supports_preserve_expiry() const
     {
-        return is_cheshire_cat();
+        return is_cheshire_cat() || is_neo();
     }
 };
 

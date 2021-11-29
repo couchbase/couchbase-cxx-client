@@ -17,11 +17,14 @@
 
 #pragma once
 
+#include <optional>
+
 #include "test_context.hxx"
 
 #include "integration_shortcuts.hxx"
 
 #include <couchbase/operations/management/bucket_describe.hxx>
+#include <couchbase/operations/management/cluster_describe.hxx>
 
 namespace test::utils
 {
@@ -58,6 +61,10 @@ class integration_test_guard
         return load_bucket_info(bucket_name).number_of_replicas;
     }
 
+    const couchbase::operations::management::cluster_info& load_cluster_info(bool refresh = false);
+
+    server_version cluster_version();
+
     std::thread io_thread{};
     asio::io_context io{};
     couchbase::cluster cluster;
@@ -65,5 +72,6 @@ class integration_test_guard
     couchbase::origin origin;
 
     std::map<std::string, couchbase::operations::management::bucket_info, std::less<>> info{};
+    std::optional<couchbase::operations::management::cluster_info> cluster_info{};
 };
 } // namespace test::utils
