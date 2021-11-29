@@ -24,6 +24,7 @@ add_library(
   bucket_get_all.cxx
   bucket_update.cxx
   cluster_developer_preview_enable.cxx
+  cluster_describe.cxx
   collection_create.cxx
   collection_drop.cxx
   collections_manifest_get.cxx

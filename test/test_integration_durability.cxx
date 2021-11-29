@@ -20,7 +20,7 @@
 TEST_CASE("integration: durable operations", "[integration]")
 {
     test::utils::integration_test_guard integration;
-    if (!integration.ctx.version.supports_enhanced_durability()) {
+    if (!integration.cluster_version().supports_enhanced_durability()) {
         return;
     }
 

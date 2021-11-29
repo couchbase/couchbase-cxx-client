@@ -61,4 +61,47 @@ integration_test_guard::load_bucket_info(const std::string& bucket_name, bool re
     return info[bucket_name];
 }
 
+const couchbase::operations::management::cluster_info&
+integration_test_guard::load_cluster_info(bool refresh)
+{
+    if (cluster_info && !refresh) {
+        return cluster_info.value();
+    }
+
+    auto resp = execute(cluster, couchbase::operations::management::cluster_describe_request{});
+    if (resp.ctx.ec) {
+        LOG_CRITICAL("unable to load info for cluster: {}", resp.ctx.ec.message());
+        throw std::system_error(resp.ctx.ec);
+    }
+
+    cluster_info.emplace(std::move(resp.info));
+
+    return cluster_info.value();
+}
+
+server_version
+integration_test_guard::cluster_version()
+{
+    load_cluster_info();
+    std::string runtime_version{};
+    for (const auto& node : cluster_info->nodes) {
+        if (runtime_version.empty()) {
+            runtime_version = node.version;
+        } else if (runtime_version != node.version) {
+            /* mixed version cluster, ignore it and fall back to version from test context */
+            runtime_version.clear();
+            break;
+        }
+    }
+    if (runtime_version.empty()) {
+        return ctx.version;
+    }
+    auto parsed_version = server_version::parse(runtime_version);
+    if (parsed_version.major == 0) {
+        /* the build does not specify version properly */
+        return ctx.version;
+    }
+    return parsed_version;
+}
+
 } // namespace test::utils

@@ -447,7 +447,7 @@ TEST_CASE("integration: upsert preserve expiry", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.ctx.version.supports_preserve_expiry()) {
+    if (!integration.cluster_version().supports_preserve_expiry()) {
         return;
     }
 
@@ -505,7 +505,7 @@ TEST_CASE("integration: upsert with handler capturing non-copyable object", "[in
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    if (!integration.ctx.version.supports_gcccp()) {
+    if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
 

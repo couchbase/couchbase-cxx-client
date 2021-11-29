@@ -26,7 +26,7 @@ TEST_CASE("integration: bucket management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.ctx.version.supports_gcccp()) {
+    if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
 
@@ -419,7 +419,7 @@ TEST_CASE("integration: collection management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.ctx.version.supports_collections()) {
+    if (!integration.cluster_version().supports_collections()) {
         return;
     }
 
@@ -757,7 +757,7 @@ TEST_CASE("integration: user management", "[integration]")
 
     SECTION("collections roles")
     {
-        if (!integration.ctx.version.supports_collections()) {
+        if (!integration.cluster_version().supports_collections()) {
             return;
         }
 
@@ -833,7 +833,7 @@ TEST_CASE("integration: query index management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.ctx.version.supports_gcccp()) {
+    if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
 

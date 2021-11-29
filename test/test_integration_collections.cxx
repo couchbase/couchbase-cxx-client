@@ -24,7 +24,7 @@ TEST_CASE("integration: missing scope and collection", "[integration]")
     test::utils::integration_test_guard integration;
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    if (!integration.ctx.version.supports_collections()) {
+    if (!integration.cluster_version().supports_collections()) {
         return;
     }
 
@@ -76,7 +76,7 @@ TEST_CASE("integration: get and insert non default scope and collection", "[inte
     test::utils::integration_test_guard integration;
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    if (!integration.ctx.version.supports_collections()) {
+    if (!integration.cluster_version().supports_collections()) {
         return;
     }
 
@@ -122,7 +122,7 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
     test::utils::integration_test_guard integration;
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    if (!integration.ctx.version.supports_collections()) {
+    if (!integration.cluster_version().supports_collections()) {
         return;
     }
 
