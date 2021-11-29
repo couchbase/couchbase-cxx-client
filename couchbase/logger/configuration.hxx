@@ -47,7 +47,7 @@ struct configuration {
     /**
      * The default log level to initialize the logger to
      */
-    spdlog::level::level_enum log_level{ spdlog::level::level_enum::info };
+    level log_level{ level::info };
 };
 
 } // namespace couchbase::logger
