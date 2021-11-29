@@ -98,6 +98,16 @@ struct server_version {
     {
         return is_mad_hatter() || is_cheshire_cat();
     }
+
+    [[nodiscard]] bool supports_analytics_pending_mutations() const
+    {
+        return is_mad_hatter();
+    }
+
+    [[nodiscard]] bool supports_analytics_link_azure_blob() const
+    {
+        return is_cheshire_cat() && developer_preview;
+    }
 };
 
 } // namespace test::utils
