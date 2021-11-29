@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-#include <gsl/gsl>
+#include <gsl/assert>
 
 #include <couchbase/logger/logger.hxx>
 

@@ -17,7 +17,7 @@
 #pragma once
 
 #include <array>
-#include <gsl/gsl>
+#include <gsl/util>
 #include <optional>
 #include <type_traits>
 #include <stdexcept>

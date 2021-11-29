@@ -19,8 +19,6 @@
 #include <cstdint>
 #include <string>
 
-#include <gsl/gsl>
-
 namespace couchbase::crypto
 {
 enum class Algorithm { SHA1, SHA256, SHA512 };
