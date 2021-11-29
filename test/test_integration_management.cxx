@@ -539,10 +539,13 @@ assert_user_and_metadata(const couchbase::operations::management::rbac::user_and
     }
 }
 
-TEST_CASE("integration: user management", "[integration]")
+TEST_CASE("integration: user groups management", "[integration]")
 {
     test::utils::integration_test_guard integration;
-    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    if (!integration.cluster_version().supports_user_groups()) {
+        return;
+    }
 
     SECTION("group crud")
     {
@@ -732,6 +735,15 @@ TEST_CASE("integration: user management", "[integration]")
             REQUIRE_FALSE(resp.ctx.ec);
         }
     }
+}
+
+TEST_CASE("integration: user management", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_gcccp()) {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    }
 
     SECTION("get missing user")
     {
@@ -754,87 +766,90 @@ TEST_CASE("integration: user management", "[integration]")
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.roles.size() > 0);
     }
+}
 
-    SECTION("collections roles")
-    {
-        if (!integration.cluster_version().supports_collections()) {
-            return;
-        }
+TEST_CASE("integration: user management collections roles", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-        auto scope_name = test::utils::uniq_id("scope");
-        auto collection_name = test::utils::uniq_id("collection");
-        auto user_name = test::utils::uniq_id("user");
-
-        {
-            couchbase::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-            auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
-            REQUIRE(created);
-        }
-
-        {
-            couchbase::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-            auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
-            REQUIRE(created);
-        }
-
-        couchbase::operations::management::rbac::user user{ user_name };
-        user.display_name = "display_name";
-        user.password = "password";
-        user.roles = {
-            couchbase::operations::management::rbac::role{ "data_reader", integration.ctx.bucket, scope_name },
-        };
-
-        {
-            couchbase::operations::management::user_upsert_request req{};
-            req.user = user;
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-        }
-
-        {
-            couchbase::operations::management::user_get_request req{ user_name };
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-            REQUIRE(resp.user.roles.size() == 1);
-            REQUIRE(resp.user.roles[0].name == "data_reader");
-            REQUIRE(resp.user.roles[0].bucket == integration.ctx.bucket);
-            REQUIRE(resp.user.roles[0].scope == scope_name);
-        };
-
-        user.roles = {
-            couchbase::operations::management::rbac::role{ "data_reader", integration.ctx.bucket, scope_name, collection_name },
-        };
-
-        {
-            couchbase::operations::management::user_upsert_request req{};
-            req.user = user;
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-        }
-
-        {
-            couchbase::operations::management::user_get_request req{ user_name };
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-            REQUIRE(resp.user.roles.size() == 1);
-            REQUIRE(resp.user.roles[0].name == "data_reader");
-            REQUIRE(resp.user.roles[0].bucket == integration.ctx.bucket);
-            REQUIRE(resp.user.roles[0].scope == scope_name);
-            REQUIRE(resp.user.roles[0].collection == collection_name);
-        };
+    if (!integration.cluster_version().supports_collections()) {
+        return;
     }
+
+    auto scope_name = test::utils::uniq_id("scope");
+    auto collection_name = test::utils::uniq_id("collection");
+    auto user_name = test::utils::uniq_id("user");
+
+    {
+        couchbase::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+        REQUIRE(created);
+    }
+
+    {
+        couchbase::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+        REQUIRE(created);
+    }
+
+    couchbase::operations::management::rbac::user user{ user_name };
+    user.display_name = "display_name";
+    user.password = "password";
+    user.roles = {
+        couchbase::operations::management::rbac::role{ "data_reader", integration.ctx.bucket, scope_name },
+    };
+
+    {
+        couchbase::operations::management::user_upsert_request req{};
+        req.user = user;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+
+    {
+        couchbase::operations::management::user_get_request req{ user_name };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.user.roles.size() == 1);
+        REQUIRE(resp.user.roles[0].name == "data_reader");
+        REQUIRE(resp.user.roles[0].bucket == integration.ctx.bucket);
+        REQUIRE(resp.user.roles[0].scope == scope_name);
+    };
+
+    user.roles = {
+        couchbase::operations::management::rbac::role{ "data_reader", integration.ctx.bucket, scope_name, collection_name },
+    };
+
+    {
+        couchbase::operations::management::user_upsert_request req{};
+        req.user = user;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+
+    {
+        couchbase::operations::management::user_get_request req{ user_name };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.user.roles.size() == 1);
+        REQUIRE(resp.user.roles[0].name == "data_reader");
+        REQUIRE(resp.user.roles[0].bucket == integration.ctx.bucket);
+        REQUIRE(resp.user.roles[0].scope == scope_name);
+        REQUIRE(resp.user.roles[0].collection == collection_name);
+    };
 }
 
 TEST_CASE("integration: query index management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_gcccp()) {
-        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    if (!integration.cluster_version().supports_query_index_management()) {
+        return;
     }
 
     auto bucket_name = test::utils::uniq_id("bucket");
