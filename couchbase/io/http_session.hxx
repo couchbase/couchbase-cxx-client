@@ -370,11 +370,12 @@ class http_session : public std::enable_shared_from_this<http_session>
         }
         last_active_ = std::chrono::steady_clock::now();
         if (!stream_->is_open() || ec) {
-            LOG_WARNING("{} unable to connect to {}:{}: {}",
+            LOG_WARNING("{} unable to connect to {}:{}: {}{}",
                         info_.log_prefix(),
                         it->endpoint().address().to_string(),
                         it->endpoint().port(),
-                        ec.message());
+                        ec.message(),
+                        (ec == asio::error::connection_refused) ? ", check server ports and cluster encryption setting" : "");
             do_connect(++it);
         } else {
             state_ = diag::endpoint_state::connected;
