@@ -53,7 +53,9 @@ analytics_link_get_all_request::encode_to(encoded_request_type& encoded, http_co
             encoded.path = fmt::format("/analytics/link/{}/{}", utils::string_codec::v2::path_escape(dataverse_name), link_name);
         }
     }
-    encoded.body = utils::string_codec::v2::form_encode(values);
+    if (!values.empty()) {
+        encoded.path.append(fmt::format("?{}", utils::string_codec::v2::form_encode(values)));
+    }
     return {};
 }
 
