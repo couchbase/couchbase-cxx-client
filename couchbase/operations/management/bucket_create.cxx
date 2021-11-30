@@ -115,6 +115,16 @@ bucket_create_request::encode_to(encoded_request_type& encoded, http_context& /*
                 break;
         }
     }
+    switch (bucket.storage_backend) {
+        case bucket_settings::storage_backend_type::unknown:
+            break;
+        case bucket_settings::storage_backend_type::couchstore:
+            encoded.body.append("&storageBackend=couchstore");
+            break;
+        case bucket_settings::storage_backend_type::magma:
+            encoded.body.append("&storageBackend=magma");
+            break;
+    }
     return {};
 }
 bucket_create_response

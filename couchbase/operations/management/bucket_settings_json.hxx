@@ -29,7 +29,7 @@ struct traits<couchbase::operations::management::bucket_settings> {
         couchbase::operations::management::bucket_settings result;
         result.name = v.at("name").get_string();
         result.uuid = v.at("uuid").get_string();
-        const static std::uint64_t megabyte = 1024 * 1024;
+        const static std::uint64_t megabyte = 1024LLU * 1024LLU;
         result.ram_quota_mb = v.at("quota").at("rawRAM").get_unsigned() / megabyte;
         result.max_expiry = v.at("maxTTL").template as<std::uint32_t>();
         result.num_replicas = v.at("replicaNumber").template as<std::uint32_t>();
@@ -58,6 +58,14 @@ struct traits<couchbase::operations::management::bucket_settings> {
             result.eviction_policy = couchbase::operations::management::bucket_settings::eviction_policy::no_eviction;
         } else if (str == "nruEviction") {
             result.eviction_policy = couchbase::operations::management::bucket_settings::eviction_policy::not_recently_used;
+        }
+
+        if (auto* storage_backend = v.find("storageBackend"); storage_backend != nullptr && storage_backend->is_string()) {
+            if (const auto& str = storage_backend->get_string(); str == "couchstore") {
+                result.storage_backend = couchbase::operations::management::bucket_settings::storage_backend_type::couchstore;
+            } else if (str == "magma") {
+                result.storage_backend = couchbase::operations::management::bucket_settings::storage_backend_type::magma;
+            }
         }
 
         if (auto* min_level = v.find("durabilityMinLevel"); min_level != nullptr) {

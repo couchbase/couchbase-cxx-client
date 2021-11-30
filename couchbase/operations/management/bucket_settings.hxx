@@ -61,6 +61,7 @@ struct bucket_settings {
         not_recently_used,
     };
     enum class conflict_resolution_type { unknown, timestamp, sequence_number };
+    enum class storage_backend_type { unknown, couchstore, magma };
     struct node {
         std::string hostname;
         std::string status;
@@ -81,7 +82,20 @@ struct bucket_settings {
     bool flush_enabled{ false };
     eviction_policy eviction_policy{ eviction_policy::unknown };
     conflict_resolution_type conflict_resolution_type{ conflict_resolution_type::unknown };
+
+    /**
+     * UNCOMMITTED: This API may change in the future
+     */
+    storage_backend_type storage_backend{ storage_backend_type::unknown };
+
+    /**
+     * UNCOMMITTED: read-only attribute
+     */
     std::vector<std::string> capabilities{};
+
+    /**
+     * UNCOMMITTED: read-only attribute
+     */
     std::vector<node> nodes{};
 };
 } // namespace couchbase::operations::management
