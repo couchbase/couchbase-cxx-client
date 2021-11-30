@@ -37,6 +37,8 @@ struct http_parser {
 
     void reset();
 
+    std::string error_message() const;
+
     status feed(const char* data, size_t data_len);
 
   private:
