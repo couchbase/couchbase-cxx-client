@@ -156,7 +156,9 @@ logging_meter::log_report() const
             report["operations"][service][operation] = recorder->emit();
         }
     }
-    LOG_INFO("Metrics: {}", utils::json::generate(report));
+    if (report.find("operations") != nullptr) {
+        LOG_INFO("Metrics: {}", utils::json::generate(report));
+    }
 }
 
 value_recorder*
