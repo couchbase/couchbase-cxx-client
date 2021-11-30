@@ -84,6 +84,16 @@ struct server_version {
     {
         return is_cheshire_cat() || is_neo();
     }
+
+    [[nodiscard]] bool supports_user_groups() const
+    {
+        return is_mad_hatter() || is_cheshire_cat();
+    }
+
+    [[nodiscard]] bool supports_query_index_management() const
+    {
+        return is_mad_hatter() || is_cheshire_cat();
+    }
 };
 
 } // namespace test::utils
