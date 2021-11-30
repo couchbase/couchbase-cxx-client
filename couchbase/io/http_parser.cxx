@@ -16,6 +16,8 @@
  */
 #include <algorithm>
 
+#include <spdlog/fmt/fmt.h>
+
 #include <http_parser.h>
 
 #include <couchbase/io/http_parser.hxx>
@@ -90,6 +92,20 @@ http_parser::reset()
     response = {};
     header_field = {};
     ::http_parser_init(&state_->parser_, HTTP_RESPONSE);
+}
+
+std::string
+http_parser::error_message() const
+{
+#define HTTP_ERRNO_GEN(n, s)                                                                                                               \
+    case HPE_##n:                                                                                                                          \
+        return fmt::format("HPE_" #n " ({})", s);
+
+    switch (state_->parser_.http_errno) {
+        HTTP_ERRNO_MAP(HTTP_ERRNO_GEN)
+    };
+#undef HTTP_ERRNO_GEN
+    return "unknown error: " + std::to_string(state_->parser_.http_errno);
 }
 
 http_parser::status

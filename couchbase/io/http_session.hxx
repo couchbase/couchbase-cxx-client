@@ -442,7 +442,7 @@ class http_session : public std::enable_shared_from_this<http_session>
                       }
                       return self->do_read();
                   case http_parser::status::failure:
-                      LOG_ERROR("{} failed to parse HTTP response", self->info_.log_prefix());
+                      LOG_ERROR("{} failed to parse HTTP response: {}", self->info_.log_prefix(), self->parser_.error_message());
                       return self->stop();
               }
           });
@@ -476,13 +476,13 @@ class http_session : public std::enable_shared_from_this<http_session>
                 std::scoped_lock inner_lock(self->writing_buffer_mutex_);
                 self->writing_buffer_.clear();
             }
-            bool want_write;
+            bool want_write = false;
             {
                 std::scoped_lock inner_lock(self->output_buffer_mutex_);
-                want_write = self->output_buffer_.empty();
+                want_write = !self->output_buffer_.empty();
             }
-            if (!want_write) {
-                self->do_write();
+            if (want_write) {
+                return self->do_write();
             }
             self->do_read();
         });
