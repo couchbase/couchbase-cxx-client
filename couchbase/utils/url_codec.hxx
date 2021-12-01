@@ -49,7 +49,7 @@ query_escape(const std::string& s)
 inline std::string
 path_escape(const std::string& s)
 {
-    return escape(s, encoding::encode_path);
+    return escape(s, encoding::encode_path_segment);
 }
 
 inline std::string

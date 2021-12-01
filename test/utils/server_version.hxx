@@ -91,12 +91,32 @@ struct server_version {
 
     [[nodiscard]] bool supports_user_groups() const
     {
-        return is_mad_hatter() || is_cheshire_cat();
+        return is_mad_hatter() || is_cheshire_cat() || is_neo();
     }
 
     [[nodiscard]] bool supports_query_index_management() const
     {
-        return is_mad_hatter() || is_cheshire_cat();
+        return is_mad_hatter() || is_cheshire_cat() || is_neo();
+    }
+
+    [[nodiscard]] bool supports_analytics_indexes() const
+    {
+        return is_alice() || is_mad_hatter() || is_cheshire_cat() || is_neo();
+    }
+
+    [[nodiscard]] bool supports_analytics_pending_mutations() const
+    {
+        return is_mad_hatter() || is_cheshire_cat() || is_neo();
+    }
+
+    [[nodiscard]] bool supports_analytics_link_azure_blob() const
+    {
+        return is_cheshire_cat() && developer_preview;
+    }
+
+    [[nodiscard]] bool supports_analytics_links() const
+    {
+        return (major == 6 && minor >= 6) || major > 6;
     }
 };
 

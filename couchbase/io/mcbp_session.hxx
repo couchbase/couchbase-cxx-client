@@ -493,7 +493,12 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             req.opaque(session_->next_opaque());
             session_->write_and_flush(req.data());
             heartbeat_timer_.expires_after(std::chrono::milliseconds(2500));
-            heartbeat_timer_.async_wait(std::bind(&normal_handler::fetch_config, this, std::placeholders::_1));
+            heartbeat_timer_.async_wait([this](std::error_code e) {
+                if (e == asio::error::operation_aborted) {
+                    return;
+                }
+                fetch_config(e);
+            });
         }
     };
 

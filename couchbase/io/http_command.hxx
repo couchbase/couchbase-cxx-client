@@ -86,8 +86,6 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
             session_->stop();
         }
         invoke_handler(error::common_errc::unambiguous_timeout, {});
-        retry_backoff.cancel();
-        deadline.cancel();
     }
 
     void invoke_handler(std::error_code ec, io::http_response&& msg)
@@ -100,6 +98,8 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
             handler_(ec, std::move(msg));
         }
         handler_ = nullptr;
+        retry_backoff.cancel();
+        deadline.cancel();
     }
 
     void send()

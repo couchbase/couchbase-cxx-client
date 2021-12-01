@@ -20,6 +20,7 @@
 #include <tao/json.hpp>
 
 #include <couchbase/utils/json.hxx>
+#include <couchbase/utils/url_codec.hxx>
 
 #include <couchbase/errors.hxx>
 
@@ -39,7 +40,7 @@ TEST_CASE("unit: transformer to deduplicate JSON keys", "[unit]")
     CHECK(result["answer"].as<std::int64_t>() == 42);
 }
 
-TEST_CASE("unit: string representation of the error codes")
+TEST_CASE("unit: string representation of the error codes", "[unit]")
 {
     std::error_code rc = couchbase::error::common_errc::authentication_failure;
     CHECK(rc.category().name() == std::string("couchbase.common"));
@@ -47,4 +48,9 @@ TEST_CASE("unit: string representation of the error codes")
     std::stringstream ss;
     ss << rc;
     CHECK(ss.str() == "couchbase.common:6");
+}
+
+TEST_CASE("unit: url path escape", "[unit]")
+{
+    REQUIRE(couchbase::utils::string_codec::v2::path_escape("a/b") == "a%2Fb");
 }

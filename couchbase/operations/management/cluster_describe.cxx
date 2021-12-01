@@ -49,7 +49,9 @@ cluster_describe_request::make_response(error_context::http&& ctx, const encoded
             cluster_info::node entry{};
             entry.hostname = node.at("hostname").get_string();
             entry.otp_node = node.at("otpNode").get_string();
-            entry.uuid = node.at("nodeUUID").get_string();
+            if (auto* uuid = node.find("nodeUUID"); uuid != nullptr && uuid->is_string()) {
+                entry.uuid = uuid->get_string();
+            }
             entry.version = node.at("version").get_string();
             entry.os = node.at("os").get_string();
             entry.status = node.at("status").get_string();
