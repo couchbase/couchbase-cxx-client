@@ -129,6 +129,7 @@ TEST_CASE("integration: bucket management", "[integration]")
         {
             couchbase::operations::management::bucket_get_all_request req;
             auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
             REQUIRE(!resp.buckets.empty());
             auto known_buckets =
               std::count_if(resp.buckets.begin(), resp.buckets.end(), [bucket_name](auto& entry) { return entry.name == bucket_name; });
@@ -312,6 +313,50 @@ TEST_CASE("integration: bucket management", "[integration]")
                 REQUIRE_FALSE(resp.ctx.ec);
                 REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::couchbase);
                 REQUIRE(resp.bucket.eviction_policy == couchbase::operations::management::bucket_settings::eviction_policy::full);
+            }
+        }
+
+        if (integration.cluster_version().supports_storage_backend()) {
+            SECTION("storage backend")
+            {
+                SECTION("couchstore")
+                {
+                    {
+                        bucket_settings.storage_backend =
+                          couchbase::operations::management::bucket_settings::storage_backend_type::couchstore;
+                        couchbase::operations::management::bucket_create_request req{ bucket_settings };
+                        auto resp = test::utils::execute(integration.cluster, req);
+                        REQUIRE_FALSE(resp.ctx.ec);
+                    }
+
+                    {
+                        couchbase::operations::management::bucket_get_request req{ bucket_name };
+                        auto resp = test::utils::execute(integration.cluster, req);
+                        REQUIRE_FALSE(resp.ctx.ec);
+                        REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::couchbase);
+                        REQUIRE(resp.bucket.storage_backend ==
+                                couchbase::operations::management::bucket_settings::storage_backend_type::couchstore);
+                    }
+                }
+
+                SECTION("magma")
+                {
+                    {
+                        bucket_settings.storage_backend = couchbase::operations::management::bucket_settings::storage_backend_type::magma;
+                        couchbase::operations::management::bucket_create_request req{ bucket_settings };
+                        auto resp = test::utils::execute(integration.cluster, req);
+                        REQUIRE_FALSE(resp.ctx.ec);
+                    }
+
+                    {
+                        couchbase::operations::management::bucket_get_request req{ bucket_name };
+                        auto resp = test::utils::execute(integration.cluster, req);
+                        REQUIRE_FALSE(resp.ctx.ec);
+                        REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::couchbase);
+                        REQUIRE(resp.bucket.storage_backend ==
+                                couchbase::operations::management::bucket_settings::storage_backend_type::magma);
+                    }
+                }
             }
         }
     }
