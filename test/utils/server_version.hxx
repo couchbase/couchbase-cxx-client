@@ -22,12 +22,16 @@
 
 namespace test::utils
 {
+
+enum class server_edition { unknown, enterprise, community };
+
 struct server_version {
     unsigned long major{ 0 };
     unsigned long minor{ 0 };
     unsigned long micro{ 0 };
     unsigned long build{ 0 };
     bool developer_preview{ false };
+    server_edition edition{ server_edition::unknown };
 
     static server_version parse(const std::string& str);
 
@@ -52,7 +56,7 @@ struct server_version {
     [[nodiscard]] bool is_neo() const
     {
         // [7.1.0, inf)
-        return major >= 7 && minor >= 1;
+        return (major == 7 && minor >= 1) || major > 7;
     }
 
     [[nodiscard]] bool supports_gcccp() const
