@@ -27,6 +27,9 @@ namespace couchbase::operations::management
 std::error_code
 search_index_get_stats_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
+    if (index_name.empty()) {
+        return error::common_errc::invalid_argument;
+    }
     encoded.method = "GET";
     encoded.path = fmt::format("/api/stats/index/{}", index_name);
     return {};

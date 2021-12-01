@@ -27,6 +27,9 @@ namespace couchbase::operations::management
 std::error_code
 search_index_control_ingest_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
+    if (index_name.empty()) {
+        return error::common_errc::invalid_argument;
+    }
     encoded.method = "POST";
     encoded.path = fmt::format("/api/index/{}/ingestControl/{}", index_name, pause ? "pause" : "resume");
     return {};
