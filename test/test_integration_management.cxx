@@ -271,6 +271,27 @@ TEST_CASE("integration: bucket management", "[integration]")
                         couchbase::operations::management::bucket_settings::eviction_policy::not_recently_used);
             }
         }
+
+        if (integration.cluster_version().supports_storage_backend()) {
+            SECTION("storage backend")
+            {
+                {
+                    bucket_settings.storage_backend = couchbase::operations::management::bucket_settings::storage_backend_type::couchstore;
+                    couchbase::operations::management::bucket_create_request req{ bucket_settings };
+                    auto resp = test::utils::execute(integration.cluster, req);
+                    REQUIRE_FALSE(resp.ctx.ec);
+                }
+
+                {
+                    couchbase::operations::management::bucket_get_request req{ bucket_name };
+                    auto resp = test::utils::execute(integration.cluster, req);
+                    REQUIRE_FALSE(resp.ctx.ec);
+                    REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::ephemeral);
+                    REQUIRE(resp.bucket.storage_backend ==
+                            couchbase::operations::management::bucket_settings::storage_backend_type::unknown);
+                }
+            }
+        }
     }
 
     SECTION("couchbase")
@@ -342,6 +363,7 @@ TEST_CASE("integration: bucket management", "[integration]")
                 SECTION("magma")
                 {
                     {
+                        bucket_settings.ram_quota_mb = 256;
                         bucket_settings.storage_backend = couchbase::operations::management::bucket_settings::storage_backend_type::magma;
                         couchbase::operations::management::bucket_create_request req{ bucket_settings };
                         auto resp = test::utils::execute(integration.cluster, req);
