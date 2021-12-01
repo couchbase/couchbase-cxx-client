@@ -250,8 +250,7 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
                 }
             }
             return response;
-        }
-        if (encoded.status_code == 400) {
+        } else if (encoded.status_code == 400) {
             tao::json::value payload{};
             try {
                 payload = utils::json::parse(encoded.body);
@@ -271,6 +270,28 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
             }
             if (response.error.find("pindex_consistency mismatched partition") != std::string::npos) {
                 response.ctx.ec = error::search_errc::consistency_mismatch;
+                return response;
+            }
+            if (response.error.find("num_fts_indexes (active + pending)") != std::string::npos) {
+                response.ctx.ec = error::common_errc::quota_limited;
+                return response;
+            }
+        } else if (encoded.status_code == 429) {
+            tao::json::value payload{};
+            try {
+                payload = utils::json::parse(encoded.body);
+            } catch (const tao::pegtl::parse_error&) {
+                response.ctx.ec = error::common_errc::parsing_failure;
+                return response;
+            }
+            response.status = payload.at("status").get_string();
+            response.error = payload.at("error").get_string();
+
+            if (response.error.find("num_concurrent_requests") != std::string::npos ||
+                response.error.find("num_queries_per_min") != std::string::npos ||
+                response.error.find("ingress_mib_per_min") != std::string::npos ||
+                response.error.find("egress_mib_per_min") != std::string::npos) {
+                response.ctx.ec = error::common_errc::rate_limited;
                 return response;
             }
         }

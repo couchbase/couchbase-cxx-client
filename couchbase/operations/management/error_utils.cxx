@@ -15,30 +15,23 @@
  *   limitations under the License.
  */
 
-#include <couchbase/operations/management/cluster_developer_preview_enable.hxx>
 #include <couchbase/operations/management/error_utils.hxx>
-
-#include <couchbase/errors.hxx>
 
 namespace couchbase::operations::management
 {
+
 std::error_code
-cluster_developer_preview_enable_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+extract_common_error_code(std::uint32_t status_code, const std::string& response_body)
 {
-    encoded.method = "POST";
-    encoded.headers["content-type"] = "application/x-www-form-urlencoded";
-    encoded.path = "/settings/developerPreview";
-    encoded.body = "enabled=true";
-    return {};
+    if (status_code == 429) {
+        if (response_body.find("Limit(s) exceeded") != std::string::npos) {
+            return error::common_errc::rate_limited;
+        }
+        if (response_body.find("Maximum number of collections has been reached for scope") != std::string::npos) {
+            return error::common_errc::quota_limited;
+        }
+    }
+    return error::common_errc::internal_server_failure;
 }
 
-cluster_developer_preview_enable_response
-cluster_developer_preview_enable_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
-{
-    cluster_developer_preview_enable_response response{ std::move(ctx) };
-    if (!response.ctx.ec && encoded.status_code != 200) {
-        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
-    }
-    return response;
-}
 } // namespace couchbase::operations::management

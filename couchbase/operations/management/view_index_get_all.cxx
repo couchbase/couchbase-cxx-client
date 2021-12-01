@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/operations/management/view_index_get_all.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
 
@@ -100,7 +101,7 @@ view_index_get_all_request::make_response(error_context::http&& ctx, const encod
         } else if (encoded.status_code == 404) {
             response.ctx.ec = error::common_errc::bucket_not_found;
         } else {
-            response.ctx.ec = error::common_errc::internal_server_failure;
+            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
         }
     }
     return response;

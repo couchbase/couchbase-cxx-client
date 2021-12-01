@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/operations/management/query_index_build_deferred.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
 
@@ -60,7 +61,7 @@ query_index_build_deferred_request::make_response(error_context::http&& ctx, con
                 error.message = entry.at("msg").get_string();
                 response.errors.emplace_back(error);
             }
-            response.ctx.ec = error::common_errc::internal_server_failure;
+            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
         }
     }
     return response;

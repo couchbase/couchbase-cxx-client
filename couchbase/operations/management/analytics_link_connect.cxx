@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/operations/management/analytics_link_connect.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/utils/name_codec.hxx>
 #include <couchbase/errors.hxx>
@@ -73,7 +74,7 @@ analytics_link_connect_request::make_response(error_context::http&& ctx, const e
             if (link_not_found) {
                 response.ctx.ec = error::analytics_errc::link_not_found;
             } else {
-                response.ctx.ec = error::common_errc::internal_server_failure;
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
             }
         }
     }

@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/operations/management/analytics_dataset_create.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/utils/name_codec.hxx>
 #include <couchbase/errors.hxx>
@@ -86,7 +87,7 @@ analytics_dataset_create_request::make_response(error_context::http&& ctx, const
             } else if (link_not_found) {
                 response.ctx.ec = error::analytics_errc::link_not_found;
             } else {
-                response.ctx.ec = error::common_errc::internal_server_failure;
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
             }
         }
     }

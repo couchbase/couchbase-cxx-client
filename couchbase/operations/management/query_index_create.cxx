@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/operations/management/query_index_create.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
 
@@ -110,7 +111,7 @@ query_index_create_request::make_response(error_context::http&& ctx, const encod
             } else if (bucket_not_found) {
                 response.ctx.ec = error::common_errc::bucket_not_found;
             } else if (!response.errors.empty()) {
-                response.ctx.ec = error::common_errc::internal_server_failure;
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
             }
         }
     }

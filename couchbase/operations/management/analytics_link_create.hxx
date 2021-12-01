@@ -28,6 +28,7 @@
 #include <couchbase/error_context/http.hxx>
 
 #include <couchbase/operations/management/analytics_link.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 namespace couchbase::operations::management
 {
@@ -120,7 +121,7 @@ struct analytics_link_create_request {
             } else if (link_exists) {
                 response.ctx.ec = error::analytics_errc::link_exists;
             } else {
-                response.ctx.ec = error::common_errc::internal_server_failure;
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
             }
         }
         return response;

@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/operations/management/group_get_all.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
 
@@ -39,7 +40,7 @@ group_get_all_request::make_response(error_context::http&& ctx, const encoded_re
     group_get_all_response response{ std::move(ctx) };
     if (!response.ctx.ec) {
         if (encoded.status_code != 200) {
-            response.ctx.ec = error::common_errc::internal_server_failure;
+            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
             return response;
         }
         tao::json::value payload{};

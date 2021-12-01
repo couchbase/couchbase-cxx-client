@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/operations/management/user_get.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
 
@@ -52,7 +53,7 @@ user_get_request::make_response(error_context::http&& ctx, const encoded_respons
                 response.ctx.ec = error::management_errc::user_not_found;
                 break;
             default:
-                response.ctx.ec = error::common_errc::internal_server_failure;
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
                 break;
         }
     }

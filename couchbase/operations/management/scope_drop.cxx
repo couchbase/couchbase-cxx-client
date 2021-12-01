@@ -18,6 +18,7 @@
 #include <regex>
 
 #include <couchbase/operations/management/scope_drop.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
 
@@ -61,7 +62,7 @@ scope_drop_request::make_response(error_context::http&& ctx, const encoded_respo
                 response.uid = std::stoull(payload.at("uid").get_string(), nullptr, 16);
             } break;
             default:
-                response.ctx.ec = error::common_errc::internal_server_failure;
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
                 break;
         }
     }

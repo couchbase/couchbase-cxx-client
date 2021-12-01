@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/operations/management/scope_get_all.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
 
@@ -53,7 +54,7 @@ scope_get_all_request::make_response(error_context::http&& ctx, const encoded_re
                 }
                 break;
             default:
-                response.ctx.ec = error::common_errc::internal_server_failure;
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
                 break;
         }
     }

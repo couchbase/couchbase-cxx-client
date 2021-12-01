@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/operations/management/analytics_dataverse_create.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/utils/name_codec.hxx>
 #include <couchbase/errors.hxx>
@@ -73,7 +74,7 @@ analytics_dataverse_create_request::make_response(error_context::http&& ctx, con
             if (dataverse_exists) {
                 response.ctx.ec = error::analytics_errc::dataverse_exists;
             } else {
-                response.ctx.ec = error::common_errc::internal_server_failure;
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
             }
         }
     }
