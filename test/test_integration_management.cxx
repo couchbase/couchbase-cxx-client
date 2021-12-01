@@ -1026,8 +1026,8 @@ TEST_CASE("integration: analytics index management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.ctx.version.supports_gcccp()) {
-        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    if (!integration.cluster_version().supports_analytics_indexes()) {
+        return;
     }
 
     SECTION("crud")
@@ -1150,7 +1150,7 @@ TEST_CASE("integration: analytics index management", "[integration]")
             REQUIRE_FALSE(index->is_primary);
         }
 
-        if (integration.ctx.version.supports_analytics_pending_mutations()) {
+        if (integration.cluster_version().supports_analytics_pending_mutations()) {
             couchbase::operations::management::analytics_get_pending_mutations_request req{};
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
@@ -1239,74 +1239,76 @@ TEST_CASE("integration: analytics index management", "[integration]")
         }
     }
 
-    SECTION("compound names")
-    {
-        auto dataverse_name = fmt::format("{}/{}", test::utils::uniq_id("dataverse"), test::utils::uniq_id("dataverse"));
-        auto dataset_name = test::utils::uniq_id("dataset");
-        auto index_name = test::utils::uniq_id("index");
-
+    if (integration.cluster_version().supports_collections()) {
+        SECTION("compound names")
         {
-            couchbase::operations::management::analytics_dataverse_create_request req{};
-            req.dataverse_name = dataverse_name;
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-        }
+            auto dataverse_name = fmt::format("{}/{}", test::utils::uniq_id("dataverse"), test::utils::uniq_id("dataverse"));
+            auto dataset_name = test::utils::uniq_id("dataset");
+            auto index_name = test::utils::uniq_id("index");
 
-        {
-            couchbase::operations::management::analytics_dataset_create_request req{};
-            req.bucket_name = integration.ctx.bucket;
-            req.dataverse_name = dataverse_name;
-            req.dataset_name = dataset_name;
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-        }
+            {
+                couchbase::operations::management::analytics_dataverse_create_request req{};
+                req.dataverse_name = dataverse_name;
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+            }
 
-        {
-            couchbase::operations::management::analytics_index_create_request req{};
-            req.dataverse_name = dataverse_name;
-            req.dataset_name = dataset_name;
-            req.index_name = index_name;
-            req.fields["testkey"] = "string";
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-        }
+            {
+                couchbase::operations::management::analytics_dataset_create_request req{};
+                req.bucket_name = integration.ctx.bucket;
+                req.dataverse_name = dataverse_name;
+                req.dataset_name = dataset_name;
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+            }
 
-        {
-            couchbase::operations::management::analytics_link_connect_request req{};
-            req.dataverse_name = dataverse_name;
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-        }
+            {
+                couchbase::operations::management::analytics_index_create_request req{};
+                req.dataverse_name = dataverse_name;
+                req.dataset_name = dataset_name;
+                req.index_name = index_name;
+                req.fields["testkey"] = "string";
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+            }
 
-        {
-            couchbase::operations::management::analytics_link_disconnect_request req{};
-            req.dataverse_name = dataverse_name;
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-        }
+            {
+                couchbase::operations::management::analytics_link_connect_request req{};
+                req.dataverse_name = dataverse_name;
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+            }
 
-        {
-            couchbase::operations::management::analytics_index_drop_request req{};
-            req.dataverse_name = dataverse_name;
-            req.dataset_name = dataset_name;
-            req.index_name = index_name;
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-        }
+            {
+                couchbase::operations::management::analytics_link_disconnect_request req{};
+                req.dataverse_name = dataverse_name;
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+            }
 
-        {
-            couchbase::operations::management::analytics_dataset_drop_request req{};
-            req.dataverse_name = dataverse_name;
-            req.dataset_name = dataset_name;
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-        }
+            {
+                couchbase::operations::management::analytics_index_drop_request req{};
+                req.dataverse_name = dataverse_name;
+                req.dataset_name = dataset_name;
+                req.index_name = index_name;
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+            }
 
-        {
-            couchbase::operations::management::analytics_dataverse_drop_request req{};
-            req.dataverse_name = dataverse_name;
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
+            {
+                couchbase::operations::management::analytics_dataset_drop_request req{};
+                req.dataverse_name = dataverse_name;
+                req.dataset_name = dataset_name;
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+            }
+
+            {
+                couchbase::operations::management::analytics_dataverse_drop_request req{};
+                req.dataverse_name = dataverse_name;
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+            }
         }
     }
 }
@@ -1550,6 +1552,11 @@ run_azure_link_test(test::utils::integration_test_guard& integration, std::strin
 TEST_CASE("integration: analytics external link management", "[integration]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_analytics_links()) {
+        return;
+    }
+
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     auto link_name = test::utils::uniq_id("link");
@@ -1599,29 +1606,32 @@ TEST_CASE("integration: analytics external link management", "[integration]")
         }
     }
 
-    SECTION("link crud scopes")
-    {
-        auto scope_name = test::utils::uniq_id("scope");
-
+    if (integration.cluster_version().supports_collections()) {
+        SECTION("link crud scopes")
         {
-            couchbase::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-            auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
-            REQUIRE(created);
-        }
+            auto scope_name = test::utils::uniq_id("scope");
 
-        auto dataverse_name = fmt::format("{}/{}", integration.ctx.bucket, scope_name);
-
-        SECTION("s3")
-        {
-            run_s3_link_test(integration, dataverse_name, link_name);
-        }
-
-        if (integration.cluster_version().supports_analytics_link_azure_blob()) {
-            SECTION("azure")
             {
-                run_azure_link_test(integration, dataverse_name, link_name);
+                couchbase::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+                auto created =
+                  test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+                REQUIRE(created);
+            }
+
+            auto dataverse_name = fmt::format("{}/{}", integration.ctx.bucket, scope_name);
+
+            SECTION("s3")
+            {
+                run_s3_link_test(integration, dataverse_name, link_name);
+            }
+
+            if (integration.cluster_version().supports_analytics_link_azure_blob()) {
+                SECTION("azure")
+                {
+                    run_azure_link_test(integration, dataverse_name, link_name);
+                }
             }
         }
     }

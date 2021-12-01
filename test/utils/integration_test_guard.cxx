@@ -69,6 +69,10 @@ integration_test_guard::load_cluster_info(bool refresh)
     }
 
     auto resp = execute(cluster, couchbase::operations::management::cluster_describe_request{});
+    if (resp.ctx.ec == couchbase::error::common_errc::service_not_available) {
+        open_bucket(cluster, ctx.bucket);
+        resp = execute(cluster, couchbase::operations::management::cluster_describe_request{});
+    }
     if (resp.ctx.ec) {
         LOG_CRITICAL("unable to load info for cluster: {}", resp.ctx.ec.message());
         throw std::system_error(resp.ctx.ec);
