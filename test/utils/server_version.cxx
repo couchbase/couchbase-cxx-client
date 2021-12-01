@@ -24,7 +24,7 @@ namespace test::utils
 server_version
 server_version::parse(const std::string& str)
 {
-    std::regex version_regex(R"((\d+).(\d+).(\d+(-(\d+))?)?)");
+    std::regex version_regex(R"((\d+).(\d+).(\d+)(-(\d+))?(-(.+))?)");
     std::smatch version_match{};
     server_version ver{};
     if (std::regex_match(str, version_match, version_regex) && version_match.ready()) {
@@ -34,6 +34,13 @@ server_version::parse(const std::string& str)
             ver.micro = std::stoul(version_match[3]);
             if (version_match.length(5) > 0) {
                 ver.build = std::stoul(version_match[5]);
+                if (version_match.length(7) > 0) {
+                    if (version_match[7] == "enterprise") {
+                        ver.edition = server_edition::enterprise;
+                    } else if (version_match[7] == "community") {
+                        ver.edition = server_edition::community;
+                    }
+                }
             }
         }
     } else {
