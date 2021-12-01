@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/operations/management/bucket_get.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
 
@@ -50,7 +51,7 @@ bucket_get_request::make_response(error_context::http&& ctx, const encoded_respo
                 }
                 break;
             default:
-                response.ctx.ec = error::common_errc::internal_server_failure;
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
                 break;
         }
     }

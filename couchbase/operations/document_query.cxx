@@ -281,6 +281,8 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
             bool cas_mismatch = false;
             bool dml_failure = false;
             bool authentication_failure = false;
+            bool rate_limited = false;
+            bool quota_limited = false;
 
             if (response.payload.meta_data.errors) {
                 for (const auto& error : *response.payload.meta_data.errors) {
@@ -309,6 +311,14 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                                 dml_failure = true;
                             }
                             break;
+
+                        case 1191: /* ICode: E_SERVICE_USER_REQUEST_EXCEEDED, IKey: "service.requests.exceeded" */
+                        case 1192: /* ICode: E_SERVICE_USER_REQUEST_RATE_EXCEEDED, IKey: "service.request.rate.exceeded" */
+                        case 1193: /* ICode: E_SERVICE_USER_REQUEST_SIZE_EXCEEDED, IKey: "service.request.size.exceeded" */
+                        case 1194: /* ICode: E_SERVICE_USER_RESULT_SIZE_EXCEEDED, IKey: "service.result.size.exceeded" */
+                            rate_limited = true;
+                            break;
+
                         case 12004: /* IKey: "datastore.couchbase.primary_idx_not_found" */
                         case 12016: /* IKey: "datastore.couchbase.index_not_found" */
                             index_not_found = true;
@@ -321,6 +331,10 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                                 index_failure = true;
                             } else if (error.code >= 4000 && error.code < 5000) {
                                 planning_failure = true;
+                            } else if (error.code == 5000 &&
+                                       error.message.find("Limit for number of indexes that can be created per scope has been reached") !=
+                                         std::string::npos) {
+                                quota_limited = true;
                             }
                             break;
                     }
@@ -346,6 +360,10 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                 response.ctx.ec = error::query_errc::dml_failure;
             } else if (authentication_failure) {
                 response.ctx.ec = error::common_errc::authentication_failure;
+            } else if (rate_limited) {
+                response.ctx.ec = error::common_errc::rate_limited;
+            } else if (quota_limited) {
+                response.ctx.ec = error::common_errc::quota_limited;
             } else {
                 LOG_TRACE("Unexpected error returned by query engine: client_context_id=\"{}\", body={}",
                           response.ctx.client_context_id,

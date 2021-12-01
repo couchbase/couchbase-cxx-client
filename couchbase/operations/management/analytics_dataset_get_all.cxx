@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/operations/management/analytics_dataset_get_all.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
 
@@ -60,7 +61,7 @@ analytics_dataset_get_all_request::make_response(error_context::http&& ctx, cons
                     response.errors.emplace_back(err);
                 }
             }
-            response.ctx.ec = error::common_errc::internal_server_failure;
+            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
             return response;
         }
         auto* results = payload.find("results");

@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/operations/management/view_index_get.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
 
@@ -67,7 +68,7 @@ view_index_get_request::make_response(error_context::http&& ctx, const encoded_r
         } else if (encoded.status_code == 404) {
             response.ctx.ec = error::view_errc::design_document_not_found;
         } else {
-            response.ctx.ec = error::common_errc::internal_server_failure;
+            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
         }
     }
     return response;

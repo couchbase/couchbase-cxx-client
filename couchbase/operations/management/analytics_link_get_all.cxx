@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/operations/management/analytics_link_get_all.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/utils/url_codec.hxx>
 #include <couchbase/errors.hxx>
@@ -122,7 +123,7 @@ analytics_link_get_all_request::make_response(error_context::http&& ctx, const e
         } else if (link_not_found) {
             response.ctx.ec = error::analytics_errc::link_not_found;
         } else if (response.ctx.http_status != 200) {
-            response.ctx.ec = error::common_errc::internal_server_failure;
+            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
         }
     }
     return response;

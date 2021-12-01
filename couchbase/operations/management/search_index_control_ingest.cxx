@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/operations/management/search_index_control_ingest.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
 
@@ -63,7 +64,7 @@ search_index_control_ingest_request::make_response(error_context::http&& ctx, co
                 return response;
             }
         }
-        response.ctx.ec = error::common_errc::internal_server_failure;
+        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
     }
     return response;
 }

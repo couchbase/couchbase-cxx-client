@@ -28,6 +28,7 @@ add_library(
   collection_create.cxx
   collection_drop.cxx
   collections_manifest_get.cxx
+  error_utils.cxx
   group_drop.cxx
   group_get.cxx
   group_get_all.cxx

@@ -18,6 +18,7 @@
 #include <couchbase/protocol/durability_level.hxx>
 
 #include <couchbase/operations/management/bucket_create.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/utils/url_codec.hxx>
 
@@ -150,7 +151,7 @@ bucket_create_request::make_response(error_context::http&& ctx, const encoded_re
             case 202:
                 break;
             default:
-                response.ctx.ec = error::common_errc::internal_server_failure;
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
                 break;
         }
     }

@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/operations/management/user_get_all.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
 
@@ -51,7 +52,7 @@ user_get_all_request::make_response(error_context::http&& ctx, const encoded_res
                 response.users.emplace_back(entry.as<rbac::user_and_metadata>());
             }
         } else {
-            response.ctx.ec = error::common_errc::internal_server_failure;
+            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
         }
     }
     return response;
