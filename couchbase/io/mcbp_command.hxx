@@ -86,8 +86,6 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
             }
         }
         invoke_handler(request.retries.idempotent ? error::common_errc::unambiguous_timeout : error::common_errc::ambiguous_timeout);
-        retry_backoff.cancel();
-        deadline.cancel();
     }
 
     void invoke_handler(std::error_code ec, std::optional<io::mcbp_message> msg = {})
@@ -104,6 +102,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
             handler_(ec, std::move(msg));
         }
         handler_ = nullptr;
+        retry_backoff.cancel();
+        deadline.cancel();
     }
 
     void request_collection_id()
