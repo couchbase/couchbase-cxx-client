@@ -37,7 +37,7 @@
 namespace couchbase::operations
 {
 
-using mcbp_command_handler = cxx_function::unique_function<void(std::error_code, std::optional<io::mcbp_message>) const>;
+using mcbp_command_handler = cxx_function::unique_function<void(std::error_code, std::optional<io::mcbp_message>)>;
 
 template<typename Manager, typename Request>
 struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, Request>> {
