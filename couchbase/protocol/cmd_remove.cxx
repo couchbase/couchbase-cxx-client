@@ -15,6 +15,8 @@
  *   limitations under the License.
  */
 
+#include <cstring>
+
 #include <couchbase/protocol/cmd_remove.hxx>
 
 #include <couchbase/protocol/frame_info_id.hxx>

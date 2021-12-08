@@ -18,6 +18,7 @@
 #pragma once
 
 #include <gsl/util>
+#include <cstring>
 
 #include <couchbase/protocol/client_opcode.hxx>
 #include <couchbase/protocol/magic.hxx>

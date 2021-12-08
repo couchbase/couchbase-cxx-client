@@ -18,6 +18,7 @@
 #pragma once
 
 #include <utility>
+#include <cstring>
 
 #include <couchbase/utils/json.hxx>
 

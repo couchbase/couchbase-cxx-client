@@ -15,6 +15,8 @@
  *   limitations under the License.
  */
 
+#include <cstring>
+
 #include <couchbase/protocol/cmd_get_and_lock.hxx>
 
 #include <couchbase/utils/byteswap.hxx>

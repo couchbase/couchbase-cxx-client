@@ -15,6 +15,7 @@
  *   limitations under the License.
  */
 #include <gsl/assert>
+#include <cstring>
 
 #include <couchbase/protocol/cmd_get.hxx>
 

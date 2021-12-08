@@ -15,6 +15,8 @@
  *   limitations under the License.
  */
 
+#include <cstring>
+
 #include <couchbase/protocol/cmd_prepend.hxx>
 
 #include <couchbase/protocol/frame_info_id.hxx>

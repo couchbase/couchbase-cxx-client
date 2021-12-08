@@ -16,6 +16,7 @@
  */
 
 #include <gsl/assert>
+#include <cstring>
 
 #include <couchbase/protocol/cmd_lookup_in.hxx>
 

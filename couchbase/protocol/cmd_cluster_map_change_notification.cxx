@@ -16,6 +16,7 @@
  */
 
 #include <gsl/assert>
+#include <cstring>
 
 #include <couchbase/protocol/cmd_cluster_map_change_notification.hxx>
 
