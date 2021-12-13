@@ -55,7 +55,7 @@ is_valid_collection_char(char ch)
 static bool
 is_valid_collection_element(const std::string_view element)
 {
-    if (element.empty() || element.size() > 30) {
+    if (element.empty() || element.size() > 251) {
         return false;
     }
     return std::all_of(element.begin(), element.end(), is_valid_collection_char);
