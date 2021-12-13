@@ -1,6 +1,6 @@
 add_library(couchbase_meta OBJECT version.cxx)
 set_target_properties(couchbase_meta PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(couchbase_meta PRIVATE project_options project_warnings snappy)
+target_link_libraries(couchbase_meta PRIVATE project_options project_warnings snappy fmt::fmt spdlog::spdlog)
 target_include_directories(couchbase_meta PRIVATE ${PROJECT_BINARY_DIR}/generated ${PROJECT_SOURCE_DIR}
                                                   ${PROJECT_SOURCE_DIR}/third_party/http_parser)
 

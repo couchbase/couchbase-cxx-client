@@ -22,7 +22,7 @@
 #include <cstring>
 
 #include <gsl/assert>
-#include <spdlog/fmt/bundled/core.h>
+#include <fmt/core.h>
 
 #include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/protocol/cas.hxx>

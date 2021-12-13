@@ -19,7 +19,7 @@
 
 #include <couchbase/protocol/mutation_token.hxx>
 
-#include <spdlog/fmt/bundled/core.h>
+#include <fmt/core.h>
 
 template<>
 struct fmt::formatter<couchbase::mutation_token> {

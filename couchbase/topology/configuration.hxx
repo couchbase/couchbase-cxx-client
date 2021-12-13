@@ -23,7 +23,7 @@
 #include <vector>
 #include <string>
 
-#include <spdlog/fmt/bundled/core.h>
+#include <fmt/core.h>
 
 #include <couchbase/topology/capabilities.hxx>
 #include <couchbase/platform/uuid.h>

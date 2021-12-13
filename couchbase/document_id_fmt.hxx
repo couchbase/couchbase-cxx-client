@@ -19,7 +19,7 @@
 
 #include <couchbase/document_id.hxx>
 
-#include <spdlog/fmt/bundled/core.h>
+#include <fmt/core.h>
 
 template<>
 struct fmt::formatter<couchbase::document_id> {

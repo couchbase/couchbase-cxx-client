@@ -95,6 +95,7 @@ target_include_directories(
          ${PROJECT_SOURCE_DIR}/third_party/json/external/PEGTL/include
          ${PROJECT_SOURCE_DIR}/third_party/json/include
          ${PROJECT_SOURCE_DIR}/third_party/cxx_function
+         ${PROJECT_SOURCE_DIR}/third_party/fmt/include
          ${PROJECT_SOURCE_DIR}/third_party/spdlog/include)
 target_link_libraries(
   couchbase_cxx_client
@@ -113,8 +114,11 @@ target_link_libraries(
           couchbase_operations
           couchbase_operations_management
           couchbase_tracing
-          couchbase_metrics
-          spdlog::spdlog_header_only)
+          couchbase_metrics)
+target_link_libraries(
+  couchbase_cxx_client
+  PUBLIC fmt::fmt
+         spdlog::spdlog)
 if(NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
   target_link_libraries(couchbase_cxx_client PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 endif()

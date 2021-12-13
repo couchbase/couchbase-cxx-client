@@ -19,7 +19,7 @@
 
 #include <couchbase/sasl/error.h>
 
-#include <spdlog/fmt/bundled/core.h>
+#include <fmt/core.h>
 
 template<>
 struct fmt::formatter<couchbase::sasl::error> {

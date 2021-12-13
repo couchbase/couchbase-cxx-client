@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <spdlog/fmt/bundled/core.h>
+#include <fmt/core.h>
 #include <sstream>
 
 namespace couchbase::utils

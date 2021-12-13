@@ -19,7 +19,7 @@
 
 #include <couchbase/protocol/hello_feature.hxx>
 
-#include <spdlog/fmt/bundled/core.h>
+#include <fmt/core.h>
 
 template<>
 struct fmt::formatter<couchbase::protocol::hello_feature> {

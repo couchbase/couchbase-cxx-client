@@ -22,7 +22,9 @@
 [submodule "third_party/hdr_histogram_c"]
 	path = third_party/hdr_histogram_c
 	url = https://github.com/HdrHistogram/HdrHistogram_c.git
-
 [submodule "third_party/cxx_function"]
 	path = third_party/cxx_function
 	url = https://github.com/potswa/cxx_function.git
+[submodule "third_party/fmt"]
+	path = third_party/fmt
+	url = https://github.com/fmtlib/fmt.git

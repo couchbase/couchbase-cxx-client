@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-#include <spdlog/fmt/bundled/core.h>
+#include <fmt/core.h>
 
 #include <asio/version.hpp>
 #include <http_parser.h>

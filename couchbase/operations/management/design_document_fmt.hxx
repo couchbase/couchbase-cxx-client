@@ -19,7 +19,7 @@
 
 #include <couchbase/operations/management/design_document.hxx>
 
-#include <spdlog/fmt/bundled/core.h>
+#include <fmt/core.h>
 
 template<>
 struct fmt::formatter<couchbase::operations::design_document::name_space> {

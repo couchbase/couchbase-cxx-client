@@ -26,7 +26,7 @@
 #pragma once
 
 #include <spdlog/fwd.h>
-#include <spdlog/fmt/bundled/core.h>
+#include <fmt/core.h>
 
 #include <optional>
 #include <memory>
