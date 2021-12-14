@@ -35,3 +35,7 @@ include_directories(BEFORE SYSTEM ${PROJECT_SOURCE_DIR}/third_party/cxx_function
 
 add_library(http_parser OBJECT ${PROJECT_SOURCE_DIR}/third_party/http_parser/http_parser.c)
 set_target_properties(http_parser PROPERTIES C_VISIBILITY_PRESET hidden POSITION_INDEPENDENT_CODE TRUE)
+
+add_library(jsonsl OBJECT ${PROJECT_SOURCE_DIR}/third_party/jsonsl/jsonsl.c)
+set_target_properties(jsonsl PROPERTIES C_VISIBILITY_PRESET hidden POSITION_INDEPENDENT_CODE TRUE)
+target_include_directories(jsonsl PUBLIC SYSTEM ${PROJECT_SOURCE_DIR}/third_party/jsonsl)
