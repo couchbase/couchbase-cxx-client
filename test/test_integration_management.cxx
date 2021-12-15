@@ -802,7 +802,7 @@ TEST_CASE("integration: user groups management", "[integration]")
             REQUIRE_FALSE(resp.ctx.ec);
 
             assert_user_and_metadata(resp.user, expected);
-        };
+        }
 
         user.display_name = "different_display_name";
         expected.display_name = "different_display_name";
@@ -922,14 +922,18 @@ TEST_CASE("integration: user management collections roles", "[integration]")
     }
 
     {
-        couchbase::operations::management::user_get_request req{ user_name };
-        auto resp = test::utils::execute(integration.cluster, req);
+        couchbase::operations::management::user_get_response resp;
+        test::utils::wait_until([&integration, &user_name, &resp]() {
+            couchbase::operations::management::user_get_request req{ user_name };
+            resp = test::utils::execute(integration.cluster, req);
+            return resp.ctx.ec != couchbase::error::management_errc::user_not_found;
+        });
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.user.roles.size() == 1);
         REQUIRE(resp.user.roles[0].name == "data_reader");
         REQUIRE(resp.user.roles[0].bucket == integration.ctx.bucket);
         REQUIRE(resp.user.roles[0].scope == scope_name);
-    };
+    }
 
     user.roles = {
         couchbase::operations::management::rbac::role{ "data_reader", integration.ctx.bucket, scope_name, collection_name },
@@ -951,7 +955,7 @@ TEST_CASE("integration: user management collections roles", "[integration]")
         REQUIRE(resp.user.roles[0].bucket == integration.ctx.bucket);
         REQUIRE(resp.user.roles[0].scope == scope_name);
         REQUIRE(resp.user.roles[0].collection == collection_name);
-    };
+    }
 }
 
 TEST_CASE("integration: query index management", "[integration]")
