@@ -423,50 +423,52 @@ TEST_CASE("integration: bucket management", "[integration]")
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::bucket_not_found);
     }
 
-    SECTION("minimum durability level")
-    {
-        couchbase::operations::management::bucket_settings bucket_settings;
-        bucket_settings.name = bucket_name;
-
-        SECTION("default")
+    if (integration.cluster_version().supports_minimum_durability_level()) {
+        SECTION("minimum durability level")
         {
+            couchbase::operations::management::bucket_settings bucket_settings;
+            bucket_settings.name = bucket_name;
+
+            SECTION("default")
             {
-                couchbase::operations::management::bucket_create_request req{ bucket_settings };
-                auto resp = test::utils::execute(integration.cluster, req);
-                REQUIRE_FALSE(resp.ctx.ec);
+                {
+                    couchbase::operations::management::bucket_create_request req{ bucket_settings };
+                    auto resp = test::utils::execute(integration.cluster, req);
+                    REQUIRE_FALSE(resp.ctx.ec);
+                }
+
+                REQUIRE(wait_for_bucket_created(integration, bucket_name));
+
+                {
+                    couchbase::operations::management::bucket_get_request req{ bucket_name };
+                    auto resp = test::utils::execute(integration.cluster, req);
+                    REQUIRE_FALSE(resp.ctx.ec);
+                    REQUIRE(resp.bucket.minimum_durability_level == couchbase::protocol::durability_level::none);
+                }
             }
 
-            REQUIRE(wait_for_bucket_created(integration, bucket_name));
-
+            SECTION("majority")
             {
-                couchbase::operations::management::bucket_get_request req{ bucket_name };
-                auto resp = test::utils::execute(integration.cluster, req);
-                REQUIRE_FALSE(resp.ctx.ec);
-                REQUIRE(resp.bucket.minimum_durability_level == couchbase::protocol::durability_level::none);
-            }
-        }
+                if (integration.number_of_nodes() < 2) {
+                    return;
+                }
 
-        SECTION("majority")
-        {
-            if (integration.number_of_nodes() < 2) {
-                return;
-            }
+                {
+                    bucket_settings.minimum_durability_level = couchbase::protocol::durability_level::majority;
+                    couchbase::operations::management::bucket_create_request req{ bucket_settings };
+                    auto resp = test::utils::execute(integration.cluster, req);
+                    INFO(resp.error_message);
+                    REQUIRE_FALSE(resp.ctx.ec);
+                }
 
-            {
-                bucket_settings.minimum_durability_level = couchbase::protocol::durability_level::majority;
-                couchbase::operations::management::bucket_create_request req{ bucket_settings };
-                auto resp = test::utils::execute(integration.cluster, req);
-                INFO(resp.error_message);
-                REQUIRE_FALSE(resp.ctx.ec);
-            }
+                REQUIRE(wait_for_bucket_created(integration, bucket_name));
 
-            REQUIRE(wait_for_bucket_created(integration, bucket_name));
-
-            {
-                couchbase::operations::management::bucket_get_request req{ bucket_name };
-                auto resp = test::utils::execute(integration.cluster, req);
-                REQUIRE_FALSE(resp.ctx.ec);
-                REQUIRE(resp.bucket.minimum_durability_level == couchbase::protocol::durability_level::majority);
+                {
+                    couchbase::operations::management::bucket_get_request req{ bucket_name };
+                    auto resp = test::utils::execute(integration.cluster, req);
+                    REQUIRE_FALSE(resp.ctx.ec);
+                    REQUIRE(resp.bucket.minimum_durability_level == couchbase::protocol::durability_level::majority);
+                }
             }
         }
     }
