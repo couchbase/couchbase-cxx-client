@@ -146,7 +146,7 @@ shutdown();
  * @return whether or not the logger has been initialized
  */
 bool
-isInitialized();
+is_initialized();
 
 } // namespace couchbase::logger
 

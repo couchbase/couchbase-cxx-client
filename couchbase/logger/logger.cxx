@@ -73,7 +73,7 @@ shutdown()
 }
 
 bool
-isInitialized()
+is_initialized()
 {
     return file_logger != nullptr;
 }

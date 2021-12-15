@@ -7,6 +7,14 @@ if(DEFINED ENV{BUILD_NUMBER})
   set(couchbase_cxx_client_BUILD_NUMBER $ENV{BUILD_NUMBER})
 endif()
 
+if(NOT DEFINED COUCHBASE_CXX_CLIENT_MASTER_PROJECT)
+    if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+        set(COUCHBASE_CXX_CLIENT_MASTER_PROJECT ON)
+    else()
+        set(COUCHBASE_CXX_CLIENT_MASTER_PROJECT OFF)
+    endif()
+endif()
+
 project(
   couchbase_cxx_client
   VERSION "1.0.0.${couchbase_cxx_client_BUILD_NUMBER}"
@@ -30,16 +38,19 @@ include(cmake/Cache.cmake)
 
 # standard compiler warnings
 include(cmake/CompilerWarnings.cmake)
-set_project_warnings(project_warnings)
 
 # sanitizer options if supported by compiler
 include(cmake/Sanitizers.cmake)
-enable_sanitizers(project_options)
 
 # allow for static analysis options
 include(cmake/StaticAnalyzers.cmake)
 
 include(cmake/Backtrace.cmake)
+
+if (COUCHBASE_CXX_CLIENT_MASTER_PROJECT)
+  set_project_warnings(project_warnings)
+  enable_sanitizers(project_options)
+endif()
 
 find_package(Threads REQUIRED)
 

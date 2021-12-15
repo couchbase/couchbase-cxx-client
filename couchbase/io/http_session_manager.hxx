@@ -250,23 +250,24 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
         }
 
         auto cmd = std::make_shared<operations::http_command<Request>>(ctx_, request, tracer_, meter_);
-        cmd->start([self = shared_from_this(), cmd, handler = std::forward<Handler>(handler)](std::error_code ec, io::http_response&& msg) {
-            using command_type = typename decltype(cmd)::element_type;
-            using encoded_response_type = typename command_type::encoded_response_type;
-            using error_context_type = typename command_type::error_context_type;
-            encoded_response_type resp{ std::move(msg) };
-            error_context_type ctx{};
-            ctx.ec = ec;
-            ctx.client_context_id = cmd->request.client_context_id;
-            ctx.method = cmd->encoded.method;
-            ctx.path = cmd->encoded.path;
-            ctx.last_dispatched_from = cmd->session_->local_address();
-            ctx.last_dispatched_to = cmd->session_->remote_address();
-            ctx.http_status = resp.status_code;
-            ctx.http_body = resp.body;
-            handler(cmd->request.make_response(std::move(ctx), std::move(resp)));
-            self->check_in(Request::type, std::move(cmd->session_));
-        });
+        cmd->start(
+          [self = shared_from_this(), cmd, handler = std::forward<Handler>(handler)](std::error_code ec, io::http_response&& msg) mutable {
+              using command_type = typename decltype(cmd)::element_type;
+              using encoded_response_type = typename command_type::encoded_response_type;
+              using error_context_type = typename command_type::error_context_type;
+              encoded_response_type resp{ std::move(msg) };
+              error_context_type ctx{};
+              ctx.ec = ec;
+              ctx.client_context_id = cmd->request.client_context_id;
+              ctx.method = cmd->encoded.method;
+              ctx.path = cmd->encoded.path;
+              ctx.last_dispatched_from = cmd->session_->local_address();
+              ctx.last_dispatched_to = cmd->session_->remote_address();
+              ctx.http_status = resp.status_code;
+              ctx.http_body = resp.body;
+              handler(cmd->request.make_response(std::move(ctx), std::move(resp)));
+              self->check_in(Request::type, std::move(cmd->session_));
+          });
         cmd->send_to(session);
     }
 
