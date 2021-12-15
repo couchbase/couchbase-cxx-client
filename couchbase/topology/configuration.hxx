@@ -21,6 +21,7 @@
 #include <optional>
 #include <set>
 #include <vector>
+#include <string>
 
 #include <spdlog/fmt/fmt.h>
 

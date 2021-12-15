@@ -17,6 +17,10 @@
 
 #pragma once
 
+#include <string>
+#include <optional>
+#include <map>
+
 namespace couchbase::operations
 {
 struct design_document {

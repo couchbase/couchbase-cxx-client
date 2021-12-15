@@ -17,8 +17,12 @@
 
 #pragma once
 
-#include <gsl/assert>
+#include <cmath>
+#include <optional>
 #include <cstring>
+
+#include <gsl/assert>
+#include <spdlog/fmt/fmt.h>
 
 #include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/protocol/cas.hxx>

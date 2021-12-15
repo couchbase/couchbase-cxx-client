@@ -22,6 +22,8 @@
 
 #include <couchbase/utils/json.hxx>
 
+#include <cxx_function.hpp>
+
 #include <asio.hpp>
 
 #include <couchbase/platform/uuid.h>
