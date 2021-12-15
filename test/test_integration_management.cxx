@@ -962,10 +962,15 @@ TEST_CASE("integration: query index management", "[integration]")
     SECTION("primary index")
     {
         {
-            couchbase::operations::management::query_index_create_request req{};
-            req.bucket_name = bucket_name;
-            req.is_primary = true;
-            auto resp = test::utils::execute(integration.cluster, req);
+            couchbase::operations::management::query_index_create_response resp;
+            bool operation_completed = test::utils::wait_until([&integration, &bucket_name, &resp]() {
+                couchbase::operations::management::query_index_create_request req{};
+                req.bucket_name = bucket_name;
+                req.is_primary = true;
+                resp = test::utils::execute(integration.cluster, req);
+                return resp.ctx.ec != couchbase::error::common_errc::bucket_not_found;
+            });
+            REQUIRE(operation_completed);
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
@@ -983,11 +988,16 @@ TEST_CASE("integration: query index management", "[integration]")
     SECTION("non primary index")
     {
         {
-            couchbase::operations::management::query_index_create_request req{};
-            req.bucket_name = bucket_name;
-            req.index_name = index_name;
-            req.fields = { "field" };
-            auto resp = test::utils::execute(integration.cluster, req);
+            couchbase::operations::management::query_index_create_response resp;
+            bool operation_completed = test::utils::wait_until([&integration, &bucket_name, &index_name, &resp]() {
+                couchbase::operations::management::query_index_create_request req{};
+                req.bucket_name = bucket_name;
+                req.index_name = index_name;
+                req.fields = { "field" };
+                resp = test::utils::execute(integration.cluster, req);
+                return resp.ctx.ec != couchbase::error::common_errc::bucket_not_found;
+            });
+            REQUIRE(operation_completed);
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
@@ -1045,12 +1055,17 @@ TEST_CASE("integration: query index management", "[integration]")
     SECTION("deferred index")
     {
         {
-            couchbase::operations::management::query_index_create_request req{};
-            req.bucket_name = bucket_name;
-            req.index_name = index_name;
-            req.fields = { "field" };
-            req.deferred = true;
-            auto resp = test::utils::execute(integration.cluster, req);
+            couchbase::operations::management::query_index_create_response resp;
+            bool operation_completed = test::utils::wait_until([&integration, &bucket_name, &index_name, &resp]() {
+                couchbase::operations::management::query_index_create_request req{};
+                req.bucket_name = bucket_name;
+                req.index_name = index_name;
+                req.fields = { "field" };
+                req.deferred = true;
+                resp = test::utils::execute(integration.cluster, req);
+                return resp.ctx.ec != couchbase::error::common_errc::bucket_not_found;
+            });
+            REQUIRE(operation_completed);
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
