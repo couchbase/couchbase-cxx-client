@@ -624,6 +624,7 @@ TEST_CASE("integration: multi-threaded open/close bucket", "[integration]")
         threads.emplace_back([&integration]() {
             couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
             couchbase::operations::insert_request req{ id, basic_doc_json };
+            req.timeout = std::chrono::seconds{ 10 };
             if (auto resp = test::utils::execute(integration.cluster, req); resp.ctx.ec) {
                 throw std::system_error(resp.ctx.ec);
             }
