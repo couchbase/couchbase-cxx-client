@@ -84,7 +84,7 @@ TEST_CASE("integration: bucket management", "[integration]")
             REQUIRE(bucket_settings.compression_mode == resp.bucket.compression_mode);
             REQUIRE(bucket_settings.replica_indexes == resp.bucket.replica_indexes);
         }
-
+        std::uint64_t old_quota_mb{ 0 };
         {
             couchbase::operations::management::bucket_get_all_request req{};
             auto resp = test::utils::execute(integration.cluster, req);
@@ -98,6 +98,7 @@ TEST_CASE("integration: bucket management", "[integration]")
                 REQUIRE(bucket_settings.bucket_type == bucket.bucket_type);
                 REQUIRE(bucket_settings.name == bucket.name);
                 REQUIRE(bucket_settings.ram_quota_mb == bucket.ram_quota_mb);
+                old_quota_mb = bucket_settings.ram_quota_mb;
                 REQUIRE(bucket_settings.num_replicas == bucket.num_replicas);
                 REQUIRE(bucket_settings.flush_enabled == bucket.flush_enabled);
                 REQUIRE(bucket_settings.max_expiry == bucket.max_expiry);
@@ -110,19 +111,19 @@ TEST_CASE("integration: bucket management", "[integration]")
         }
 
         {
-            bucket_settings.ram_quota_mb += 20;
+            bucket_settings.ram_quota_mb = old_quota_mb + 20;
             couchbase::operations::management::bucket_update_request req;
             req.bucket = bucket_settings;
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
-        {
+        auto ram_quota_updated = test::utils::wait_until([&integration, &bucket_name, old_quota_mb]() {
             couchbase::operations::management::bucket_get_request req{ bucket_name };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-            REQUIRE(Approx(bucket_settings.ram_quota_mb).margin(5) == resp.bucket.ram_quota_mb);
-        }
+            return !resp.ctx.ec && resp.bucket.ram_quota_mb > old_quota_mb;
+        });
+        REQUIRE(ram_quota_updated);
 
         {
             couchbase::operations::management::bucket_drop_request req{ bucket_name };
