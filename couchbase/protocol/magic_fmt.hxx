@@ -22,9 +22,15 @@
 #include <spdlog/fmt/fmt.h>
 
 template<>
-struct fmt::formatter<couchbase::protocol::magic> : formatter<string_view> {
+struct fmt::formatter<couchbase::protocol::magic> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
     template<typename FormatContext>
-    auto format(couchbase::protocol::magic code, FormatContext& ctx)
+    auto format(couchbase::protocol::magic code, FormatContext& ctx) const
     {
         string_view name = "unknown";
         switch (code) {
@@ -47,6 +53,6 @@ struct fmt::formatter<couchbase::protocol::magic> : formatter<string_view> {
                 name = "server_response (0x83)";
                 break;
         }
-        return formatter<string_view>::format(name, ctx);
+        return format_to(ctx.out(), "{}", name);
     }
 };

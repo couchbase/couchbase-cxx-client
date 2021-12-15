@@ -22,9 +22,15 @@
 #include <spdlog/fmt/fmt.h>
 
 template<>
-struct fmt::formatter<couchbase::diag::cluster_state> : formatter<std::string_view> {
+struct fmt::formatter<couchbase::diag::cluster_state> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
     template<typename FormatContext>
-    auto format(couchbase::diag::cluster_state state, FormatContext& ctx)
+    auto format(couchbase::diag::cluster_state state, FormatContext& ctx) const
     {
         string_view name = "unknown";
         switch (state) {
@@ -40,14 +46,20 @@ struct fmt::formatter<couchbase::diag::cluster_state> : formatter<std::string_vi
                 name = "offline";
                 break;
         }
-        return formatter<string_view>::format(name, ctx);
+        return format_to(ctx.out(), "{}", name);
     }
 };
 
 template<>
-struct fmt::formatter<couchbase::diag::endpoint_state> : formatter<std::string_view> {
+struct fmt::formatter<couchbase::diag::endpoint_state> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
     template<typename FormatContext>
-    auto format(couchbase::diag::endpoint_state state, FormatContext& ctx)
+    auto format(couchbase::diag::endpoint_state state, FormatContext& ctx) const
     {
         string_view name = "unknown";
         switch (state) {
@@ -67,14 +79,20 @@ struct fmt::formatter<couchbase::diag::endpoint_state> : formatter<std::string_v
                 name = "disconnecting";
                 break;
         }
-        return formatter<string_view>::format(name, ctx);
+        return format_to(ctx.out(), "{}", name);
     }
 };
 
 template<>
-struct fmt::formatter<couchbase::diag::ping_state> : formatter<std::string_view> {
+struct fmt::formatter<couchbase::diag::ping_state> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
     template<typename FormatContext>
-    auto format(couchbase::diag::ping_state state, FormatContext& ctx)
+    auto format(couchbase::diag::ping_state state, FormatContext& ctx) const
     {
         string_view name = "unknown";
         switch (state) {
@@ -90,6 +108,6 @@ struct fmt::formatter<couchbase::diag::ping_state> : formatter<std::string_view>
                 name = "error";
                 break;
         }
-        return formatter<string_view>::format(name, ctx);
+        return format_to(ctx.out(), "{}", name);
     }
 };

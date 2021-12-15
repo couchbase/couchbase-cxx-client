@@ -28,6 +28,12 @@
 
 #include <couchbase/platform/uuid.h>
 
+#include <couchbase/sasl/error.h>
+#include <couchbase/sasl/error_fmt.h>
+
+#include <couchbase/topology/configuration_fmt.hxx>
+#include <couchbase/topology/capabilities_fmt.hxx>
+
 #include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/io/mcbp_parser.hxx>
 #include <couchbase/io/streams.hxx>

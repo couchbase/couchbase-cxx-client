@@ -22,9 +22,15 @@
 #include <spdlog/fmt/fmt.h>
 
 template<>
-struct fmt::formatter<couchbase::protocol::hello_feature> : formatter<string_view> {
+struct fmt::formatter<couchbase::protocol::hello_feature> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
     template<typename FormatContext>
-    auto format(couchbase::protocol::hello_feature feature, FormatContext& ctx)
+    auto format(couchbase::protocol::hello_feature feature, FormatContext& ctx) const
     {
         string_view name = "unknown";
         switch (feature) {
@@ -95,6 +101,6 @@ struct fmt::formatter<couchbase::protocol::hello_feature> : formatter<string_vie
                 name = "subdoc_document_macro_support";
                 break;
         }
-        return formatter<string_view>::format(name, ctx);
+        return format_to(ctx.out(), "{}", name);
     }
 };

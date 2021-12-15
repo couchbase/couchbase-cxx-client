@@ -22,9 +22,15 @@
 #include <spdlog/fmt/fmt.h>
 
 template<>
-struct fmt::formatter<couchbase::sasl::error> : formatter<string_view> {
+struct fmt::formatter<couchbase::sasl::error> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
     template<typename FormatContext>
-    auto format(couchbase::sasl::error err, FormatContext& ctx)
+    auto format(couchbase::sasl::error err, FormatContext& ctx) const
     {
         string_view name = "unknown";
         switch (err) {
@@ -59,6 +65,6 @@ struct fmt::formatter<couchbase::sasl::error> : formatter<string_view> {
                 name = "auth_provider_died";
                 break;
         }
-        return formatter<string_view>::format(name, ctx);
+        return format_to(ctx.out(), "{}", name);
     }
 };

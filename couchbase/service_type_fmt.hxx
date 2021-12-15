@@ -22,9 +22,15 @@
 #include <spdlog/fmt/fmt.h>
 
 template<>
-struct fmt::formatter<couchbase::service_type> : formatter<std::string_view> {
+struct fmt::formatter<couchbase::service_type> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
     template<typename FormatContext>
-    auto format(couchbase::service_type type, FormatContext& ctx)
+    auto format(couchbase::service_type type, FormatContext& ctx) const
     {
         string_view name = "unknown";
         switch (type) {
@@ -47,6 +53,6 @@ struct fmt::formatter<couchbase::service_type> : formatter<std::string_view> {
                 name = "mgmt";
                 break;
         }
-        return formatter<string_view>::format(name, ctx);
+        return format_to(ctx.out(), "{}", name);
     }
 };

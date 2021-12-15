@@ -17,12 +17,11 @@
 
 #pragma once
 
-#include <couchbase/protocol/server_opcode.hxx>
-
+#include <couchbase/protocol/enhanced_error_info.hxx>
 #include <spdlog/fmt/fmt.h>
 
 template<>
-struct fmt::formatter<couchbase::protocol::server_opcode> {
+struct fmt::formatter<couchbase::protocol::enhanced_error_info> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext& ctx)
     {
@@ -30,17 +29,15 @@ struct fmt::formatter<couchbase::protocol::server_opcode> {
     }
 
     template<typename FormatContext>
-    auto format(couchbase::protocol::server_opcode opcode, FormatContext& ctx) const
+    auto format(const couchbase::protocol::enhanced_error_info& error, FormatContext& ctx) const
     {
-        string_view name = "unknown";
-        switch (opcode) {
-            case couchbase::protocol::server_opcode::cluster_map_change_notification:
-                name = "cluster_map_change_notification (0x01)";
-                break;
-            case couchbase::protocol::server_opcode::invalid:
-                name = "invalid (0xff)";
-                break;
+        if (!error.reference.empty() && !error.context.empty()) {
+            return format_to(ctx.out(), R"((ref: "{}", ctx: "{}"))", error.reference, error.context);
+        } else if (!error.reference.empty()) {
+            return format_to(ctx.out(), R"((ref: "{}"))", error.reference);
+        } else if (!error.context.empty()) {
+            return format_to(ctx.out(), R"((ctx: "{}"))", error.context);
         }
-        return format_to(ctx.out(), "{}", name);
+        return format_to(ctx.out(), "");
     }
 };

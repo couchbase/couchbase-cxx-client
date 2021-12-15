@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include <couchbase/protocol/server_opcode.hxx>
+#include <couchbase/operations/management/design_document.hxx>
 
 #include <spdlog/fmt/fmt.h>
 
 template<>
-struct fmt::formatter<couchbase::protocol::server_opcode> {
+struct fmt::formatter<couchbase::operations::design_document::name_space> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext& ctx)
     {
@@ -30,15 +30,16 @@ struct fmt::formatter<couchbase::protocol::server_opcode> {
     }
 
     template<typename FormatContext>
-    auto format(couchbase::protocol::server_opcode opcode, FormatContext& ctx) const
+    auto format(couchbase::operations::design_document::name_space ns, FormatContext& ctx) const
     {
         string_view name = "unknown";
-        switch (opcode) {
-            case couchbase::protocol::server_opcode::cluster_map_change_notification:
-                name = "cluster_map_change_notification (0x01)";
+        switch (ns) {
+            case couchbase::operations::design_document::name_space::development:
+                name = "development";
                 break;
-            case couchbase::protocol::server_opcode::invalid:
-                name = "invalid (0xff)";
+
+            case couchbase::operations::design_document::name_space::production:
+                name = "production";
                 break;
         }
         return format_to(ctx.out(), "{}", name);

@@ -22,9 +22,15 @@
 #include <spdlog/fmt/fmt.h>
 
 template<>
-struct fmt::formatter<couchbase::operations::management::rbac::auth_domain> : formatter<string_view> {
+struct fmt::formatter<couchbase::operations::management::rbac::auth_domain> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
     template<typename FormatContext>
-    auto format(couchbase::operations::management::rbac::auth_domain domain, FormatContext& ctx)
+    auto format(couchbase::operations::management::rbac::auth_domain domain, FormatContext& ctx) const
     {
         string_view name = "unknown";
         switch (domain) {
@@ -38,6 +44,6 @@ struct fmt::formatter<couchbase::operations::management::rbac::auth_domain> : fo
                 name = "external";
                 break;
         }
-        return formatter<string_view>::format(name, ctx);
+        return format_to(ctx.out(), "{}", name);
     }
 };

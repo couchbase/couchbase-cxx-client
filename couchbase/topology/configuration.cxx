@@ -19,6 +19,8 @@
 
 #include <couchbase/topology/configuration.hxx>
 
+#include <couchbase/service_type_fmt.hxx>
+
 namespace couchbase::topology
 {
 std::uint16_t

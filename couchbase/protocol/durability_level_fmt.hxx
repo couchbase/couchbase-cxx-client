@@ -22,9 +22,15 @@
 #include <spdlog/fmt/fmt.h>
 
 template<>
-struct fmt::formatter<couchbase::protocol::durability_level> : formatter<string_view> {
+struct fmt::formatter<couchbase::protocol::durability_level> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
     template<typename FormatContext>
-    auto format(couchbase::protocol::durability_level value, FormatContext& ctx)
+    auto format(couchbase::protocol::durability_level value, FormatContext& ctx) const
     {
         string_view name = "unknown";
         switch (value) {
@@ -41,6 +47,6 @@ struct fmt::formatter<couchbase::protocol::durability_level> : formatter<string_
                 name = "persist_to_majority";
                 break;
         }
-        return formatter<string_view>::format(name, ctx);
+        return format_to(ctx.out(), "{}", name);
     }
 };

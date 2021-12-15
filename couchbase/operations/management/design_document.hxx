@@ -42,22 +42,3 @@ struct design_document {
 };
 
 } // namespace couchbase::operations
-
-template<>
-struct fmt::formatter<couchbase::operations::design_document::name_space> : formatter<string_view> {
-    template<typename FormatContext>
-    auto format(couchbase::operations::design_document::name_space ns, FormatContext& ctx)
-    {
-        string_view name = "unknown";
-        switch (ns) {
-            case couchbase::operations::design_document::name_space::development:
-                name = "development";
-                break;
-
-            case couchbase::operations::design_document::name_space::production:
-                name = "production";
-                break;
-        }
-        return formatter<string_view>::format(name, ctx);
-    }
-};

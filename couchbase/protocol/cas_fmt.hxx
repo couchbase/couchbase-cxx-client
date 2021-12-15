@@ -22,11 +22,16 @@
 #include <spdlog/fmt/fmt.h>
 
 template<>
-struct fmt::formatter<couchbase::protocol::cas> : formatter<std::string> {
-    template<typename FormatContext>
-    auto format(const couchbase::protocol::cas& cas, FormatContext& ctx)
+struct fmt::formatter<couchbase::protocol::cas> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
     {
-        format_to(ctx.out(), "{:x}", cas.value);
-        return formatter<std::string>::format("", ctx);
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(const couchbase::protocol::cas& cas, FormatContext& ctx) const
+    {
+        return format_to(ctx.out(), "{:x}", cas.value);
     }
 };

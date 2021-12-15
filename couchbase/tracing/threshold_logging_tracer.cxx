@@ -32,6 +32,8 @@
 
 #include <couchbase/utils/json.hxx>
 
+#include <couchbase/service_type_fmt.hxx>
+
 namespace couchbase::tracing
 {
 struct reported_span {
