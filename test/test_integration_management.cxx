@@ -76,7 +76,7 @@ TEST_CASE("integration: bucket management", "[integration]")
             REQUIRE(created);
             REQUIRE(bucket_settings.bucket_type == resp.bucket.bucket_type);
             REQUIRE(bucket_settings.name == resp.bucket.name);
-            REQUIRE(bucket_settings.ram_quota_mb == resp.bucket.ram_quota_mb);
+            REQUIRE(Approx(bucket_settings.ram_quota_mb).margin(5) == resp.bucket.ram_quota_mb);
             REQUIRE(bucket_settings.num_replicas == resp.bucket.num_replicas);
             REQUIRE(bucket_settings.flush_enabled == resp.bucket.flush_enabled);
             REQUIRE(bucket_settings.max_expiry == resp.bucket.max_expiry);
@@ -110,7 +110,7 @@ TEST_CASE("integration: bucket management", "[integration]")
         }
 
         {
-            bucket_settings.ram_quota_mb += 1;
+            bucket_settings.ram_quota_mb += 20;
             couchbase::operations::management::bucket_update_request req;
             req.bucket = bucket_settings;
             auto resp = test::utils::execute(integration.cluster, req);
@@ -121,7 +121,7 @@ TEST_CASE("integration: bucket management", "[integration]")
             couchbase::operations::management::bucket_get_request req{ bucket_name };
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
-            REQUIRE(bucket_settings.ram_quota_mb == resp.bucket.ram_quota_mb);
+            REQUIRE(Approx(bucket_settings.ram_quota_mb).margin(5) == resp.bucket.ram_quota_mb);
         }
 
         {
