@@ -24,14 +24,16 @@
 #include <couchbase/operations/management/analytics.hxx>
 #include <couchbase/operations/management/analytics_link.hxx>
 
-static bool
+static couchbase::operations::management::bucket_get_response
 wait_for_bucket_created(test::utils::integration_test_guard& integration, const std::string& bucket_name)
 {
-    return test::utils::wait_until([&integration, &bucket_name]() {
+    couchbase::operations::management::bucket_get_response resp;
+    test::utils::wait_until([&integration, &bucket_name, &resp]() {
         couchbase::operations::management::bucket_get_request req{ bucket_name };
-        auto resp = test::utils::execute(integration.cluster, req);
+        resp = test::utils::execute(integration.cluster, req);
         return !resp.ctx.ec;
     });
+    return resp;
 }
 
 TEST_CASE("integration: bucket management", "[integration]")
@@ -212,7 +214,7 @@ TEST_CASE("integration: bucket management", "[integration]")
                 REQUIRE_FALSE(resp.ctx.ec);
             }
 
-            REQUIRE(wait_for_bucket_created(integration, bucket_name));
+            REQUIRE(!wait_for_bucket_created(integration, bucket_name).ctx.ec);
 
             {
                 couchbase::operations::management::bucket_flush_request req{ bucket_name };
@@ -234,11 +236,8 @@ TEST_CASE("integration: bucket management", "[integration]")
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
-        REQUIRE(wait_for_bucket_created(integration, bucket_name));
-
         {
-            couchbase::operations::management::bucket_get_request req{ bucket_name };
-            auto resp = test::utils::execute(integration.cluster, req);
+            auto resp = wait_for_bucket_created(integration, bucket_name);
             REQUIRE_FALSE(resp.ctx.ec);
             REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::memcached);
         }
@@ -259,11 +258,8 @@ TEST_CASE("integration: bucket management", "[integration]")
                 REQUIRE_FALSE(resp.ctx.ec);
             }
 
-            REQUIRE(wait_for_bucket_created(integration, bucket_name));
-
             {
-                couchbase::operations::management::bucket_get_request req{ bucket_name };
-                auto resp = test::utils::execute(integration.cluster, req);
+                auto resp = wait_for_bucket_created(integration, bucket_name);
                 REQUIRE_FALSE(resp.ctx.ec);
                 REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::ephemeral);
                 REQUIRE(resp.bucket.eviction_policy == couchbase::operations::management::bucket_settings::eviction_policy::no_eviction);
@@ -279,11 +275,8 @@ TEST_CASE("integration: bucket management", "[integration]")
                 REQUIRE_FALSE(resp.ctx.ec);
             }
 
-            REQUIRE(wait_for_bucket_created(integration, bucket_name));
-
             {
-                couchbase::operations::management::bucket_get_request req{ bucket_name };
-                auto resp = test::utils::execute(integration.cluster, req);
+                auto resp = wait_for_bucket_created(integration, bucket_name);
                 REQUIRE_FALSE(resp.ctx.ec);
                 REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::ephemeral);
                 REQUIRE(resp.bucket.eviction_policy ==
@@ -301,11 +294,8 @@ TEST_CASE("integration: bucket management", "[integration]")
                     REQUIRE_FALSE(resp.ctx.ec);
                 }
 
-                REQUIRE(wait_for_bucket_created(integration, bucket_name));
-
                 {
-                    couchbase::operations::management::bucket_get_request req{ bucket_name };
-                    auto resp = test::utils::execute(integration.cluster, req);
+                    auto resp = wait_for_bucket_created(integration, bucket_name);
                     REQUIRE_FALSE(resp.ctx.ec);
                     REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::ephemeral);
                     REQUIRE(resp.bucket.storage_backend ==
@@ -331,11 +321,8 @@ TEST_CASE("integration: bucket management", "[integration]")
                 REQUIRE_FALSE(resp.ctx.ec);
             }
 
-            REQUIRE(wait_for_bucket_created(integration, bucket_name));
-
             {
-                couchbase::operations::management::bucket_get_request req{ bucket_name };
-                auto resp = test::utils::execute(integration.cluster, req);
+                auto resp = wait_for_bucket_created(integration, bucket_name);
                 REQUIRE_FALSE(resp.ctx.ec);
                 REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::couchbase);
                 REQUIRE(resp.bucket.eviction_policy == couchbase::operations::management::bucket_settings::eviction_policy::value_only);
@@ -351,11 +338,8 @@ TEST_CASE("integration: bucket management", "[integration]")
                 REQUIRE_FALSE(resp.ctx.ec);
             }
 
-            REQUIRE(wait_for_bucket_created(integration, bucket_name));
-
             {
-                couchbase::operations::management::bucket_get_request req{ bucket_name };
-                auto resp = test::utils::execute(integration.cluster, req);
+                auto resp = wait_for_bucket_created(integration, bucket_name);
                 REQUIRE_FALSE(resp.ctx.ec);
                 REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::couchbase);
                 REQUIRE(resp.bucket.eviction_policy == couchbase::operations::management::bucket_settings::eviction_policy::full);
@@ -375,11 +359,8 @@ TEST_CASE("integration: bucket management", "[integration]")
                         REQUIRE_FALSE(resp.ctx.ec);
                     }
 
-                    REQUIRE(wait_for_bucket_created(integration, bucket_name));
-
                     {
-                        couchbase::operations::management::bucket_get_request req{ bucket_name };
-                        auto resp = test::utils::execute(integration.cluster, req);
+                        auto resp = wait_for_bucket_created(integration, bucket_name);
                         REQUIRE_FALSE(resp.ctx.ec);
                         REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::couchbase);
                         REQUIRE(resp.bucket.storage_backend ==
@@ -397,11 +378,8 @@ TEST_CASE("integration: bucket management", "[integration]")
                         REQUIRE_FALSE(resp.ctx.ec);
                     }
 
-                    REQUIRE(wait_for_bucket_created(integration, bucket_name));
-
                     {
-                        couchbase::operations::management::bucket_get_request req{ bucket_name };
-                        auto resp = test::utils::execute(integration.cluster, req);
+                        auto resp = wait_for_bucket_created(integration, bucket_name);
                         REQUIRE_FALSE(resp.ctx.ec);
                         REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::couchbase);
                         REQUIRE(resp.bucket.storage_backend ==
@@ -437,11 +415,8 @@ TEST_CASE("integration: bucket management", "[integration]")
                     REQUIRE_FALSE(resp.ctx.ec);
                 }
 
-                REQUIRE(wait_for_bucket_created(integration, bucket_name));
-
                 {
-                    couchbase::operations::management::bucket_get_request req{ bucket_name };
-                    auto resp = test::utils::execute(integration.cluster, req);
+                    auto resp = wait_for_bucket_created(integration, bucket_name);
                     REQUIRE_FALSE(resp.ctx.ec);
                     REQUIRE(resp.bucket.minimum_durability_level == couchbase::protocol::durability_level::none);
                 }
@@ -461,11 +436,8 @@ TEST_CASE("integration: bucket management", "[integration]")
                     REQUIRE_FALSE(resp.ctx.ec);
                 }
 
-                REQUIRE(wait_for_bucket_created(integration, bucket_name));
-
                 {
-                    couchbase::operations::management::bucket_get_request req{ bucket_name };
-                    auto resp = test::utils::execute(integration.cluster, req);
+                    auto resp = wait_for_bucket_created(integration, bucket_name);
                     REQUIRE_FALSE(resp.ctx.ec);
                     REQUIRE(resp.bucket.minimum_durability_level == couchbase::protocol::durability_level::majority);
                 }
@@ -985,7 +957,7 @@ TEST_CASE("integration: query index management", "[integration]")
         auto resp = test::utils::execute(integration.cluster, req);
     }
 
-    REQUIRE(wait_for_bucket_created(integration, bucket_name));
+    REQUIRE(!wait_for_bucket_created(integration, bucket_name).ctx.ec);
 
     SECTION("primary index")
     {
