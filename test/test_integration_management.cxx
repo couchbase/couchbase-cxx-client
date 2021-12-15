@@ -758,9 +758,18 @@ TEST_CASE("integration: user groups management", "[integration]")
         user.groups = { group_name };
 
         {
-            couchbase::operations::management::user_upsert_request req{};
-            req.user = user;
-            auto resp = test::utils::execute(integration.cluster, req);
+            couchbase::operations::management::user_upsert_response resp;
+            test::utils::wait_until([&integration, &user, &resp]() {
+                couchbase::operations::management::user_upsert_request req{};
+                req.user = user;
+                resp = test::utils::execute(integration.cluster, req);
+                for (const auto& message : resp.errors) {
+                    if (message.find("Groups do not exist") != std::string::npos) {
+                        return false;
+                    }
+                }
+                return true;
+            });
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
