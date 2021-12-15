@@ -23,6 +23,8 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include <couchbase/utils/join_strings.hxx>
+
 template<>
 struct fmt::formatter<couchbase::topology::collections_manifest> : formatter<std::string> {
     template<typename FormatContext>
@@ -40,7 +42,7 @@ struct fmt::formatter<couchbase::topology::collections_manifest> : formatter<std
                   couchbase::uuid::to_string(manifest.id),
                   manifest.uid,
                   collections.size(),
-                  fmt::join(collections, ", "));
+                  utils::join_strings(collections, ", "));
         return formatter<std::string>::format("", ctx);
     }
 };

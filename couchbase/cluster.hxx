@@ -41,6 +41,8 @@
 
 #include <couchbase/diagnostics.hxx>
 
+#include <couchbase/utils/join_strings.hxx>
+
 namespace couchbase
 {
 class cluster
@@ -233,7 +235,7 @@ class cluster
                   origin_.set_nodes(nodes);
                   LOG_INFO("replace list of bootstrap nodes with addresses from DNS SRV of \"{}\": [{}]",
                            hostname,
-                           fmt::join(origin_.get_nodes(), ", "));
+                           utils::join_strings(origin_.get_nodes(), ", "));
               }
               return do_open(std::forward<Handler>(handler));
           });
@@ -318,7 +320,7 @@ class cluster
                       origin_.set_nodes(nodes);
                       LOG_INFO("replace list of bootstrap nodes with addresses of alternative network \"{}\": [{}]",
                                origin_.options().network,
-                               fmt::join(origin_.get_nodes(), ","));
+                               utils::join_strings(origin_.get_nodes(), ","));
                   }
                   session_manager_->set_configuration(config, origin_.options());
               }

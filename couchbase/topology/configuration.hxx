@@ -28,6 +28,7 @@
 #include <couchbase/platform/uuid.h>
 #include <couchbase/service_type.hxx>
 #include <couchbase/utils/crc32.hxx>
+#include <couchbase/utils/join_strings.hxx>
 
 namespace couchbase::topology
 {
@@ -186,7 +187,7 @@ struct fmt::formatter<couchbase::topology::configuration::node> : formatter<std:
                         ports.push_back(fmt::format("capi={}", *entry.second.services_plain.views));
                     }
                     if (!ports.empty()) {
-                        network += fmt::format(", plain=({})", fmt::join(ports, ","));
+                        network += fmt::format(", plain=({})", couchbase::utils::join_strings(ports, ","));
                     }
                 }
                 {
@@ -210,7 +211,7 @@ struct fmt::formatter<couchbase::topology::configuration::node> : formatter<std:
                         ports.push_back(fmt::format("capi={}", *entry.second.services_tls.views));
                     }
                     if (!ports.empty()) {
-                        network += fmt::format(", tls=({})", fmt::join(ports, ","));
+                        network += fmt::format(", tls=({})", couchbase::utils::join_strings(ports, ","));
                     }
                 }
                 alternate_addresses.emplace_back(network);
@@ -220,9 +221,9 @@ struct fmt::formatter<couchbase::topology::configuration::node> : formatter<std:
                   R"(#<node:{} hostname="{}", plain=({}), tls=({}), alt=[{}]>)",
                   node.index,
                   node.hostname,
-                  fmt::join(plain, ", "),
-                  fmt::join(tls, ", "),
-                  fmt::join(alternate_addresses, ", "));
+                  couchbase::utils::join_strings(plain, ", "),
+                  couchbase::utils::join_strings(tls, ", "),
+                  couchbase::utils::join_strings(alternate_addresses, ", "));
         return formatter<std::string>::format("", ctx);
     }
 };

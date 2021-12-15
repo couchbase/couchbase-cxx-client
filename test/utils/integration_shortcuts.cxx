@@ -17,6 +17,8 @@
 
 #include "integration_shortcuts.hxx"
 
+#include <couchbase/utils/join_strings.hxx>
+
 namespace test::utils
 {
 void
@@ -27,7 +29,8 @@ open_cluster(couchbase::cluster& cluster, const couchbase::origin& origin)
     cluster.open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
     if (rc) {
-        LOG_CRITICAL("unable to connect to the cluster: {}, nodes={}", rc.message(), fmt::join(origin.get_nodes(), ", "));
+        LOG_CRITICAL(
+          "unable to connect to the cluster: {}, nodes={}", rc.message(), couchbase::utils::join_strings(origin.get_nodes(), ", "));
         throw std::system_error(rc);
     }
 }

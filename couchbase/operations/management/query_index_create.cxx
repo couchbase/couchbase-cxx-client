@@ -21,6 +21,7 @@
 #include <couchbase/errors.hxx>
 
 #include <couchbase/utils/json.hxx>
+#include <couchbase/utils/join_strings.hxx>
 
 namespace couchbase::operations::management
 {
@@ -58,7 +59,7 @@ query_index_create_request::encode_to(encoded_request_type& encoded, http_contex
                                         : fmt::format(R"(CREATE INDEX `{}` ON {}({}) {} USING GSI {})",
                                                       index_name,
                                                       keyspace,
-                                                      fmt::join(fields, ", "),
+                                                      utils::join_strings(fields, ", "),
                                                       where_clause,
                                                       with_clause) },
                            { "client_context_id", client_context_id } };
