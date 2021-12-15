@@ -278,7 +278,10 @@ class bucket : public std::enable_shared_from_this<bucket>
     void drain_deferred_queue()
     {
         std::queue<std::function<void()>> commands{};
-        std::swap(deferred_commands_, commands);
+        {
+            std::scoped_lock lock(deferred_commands_mutex_);
+            std::swap(deferred_commands_, commands);
+        }
         while (!commands.empty()) {
             commands.front()();
             commands.pop();
@@ -319,6 +322,7 @@ class bucket : public std::enable_shared_from_this<bucket>
         if (config_) {
             map_and_send(cmd);
         } else {
+            std::scoped_lock lock(deferred_commands_mutex_);
             deferred_commands_.emplace([self = shared_from_this(), cmd]() { self->map_and_send(cmd); });
         }
     }
@@ -361,6 +365,7 @@ class bucket : public std::enable_shared_from_this<bucket>
         }
         auto session = sessions_.at(static_cast<std::size_t>(index));
         if (session == nullptr || !session->has_config()) {
+            std::scoped_lock lock(deferred_commands_mutex_);
             deferred_commands_.emplace([self = shared_from_this(), cmd]() { self->map_and_send(cmd); });
             return;
         }
@@ -429,6 +434,7 @@ class bucket : public std::enable_shared_from_this<bucket>
     std::vector<protocol::hello_feature> known_features_;
 
     std::queue<std::function<void()>> deferred_commands_{};
+    std::mutex deferred_commands_mutex_{};
 
     bool closed_{ false };
     std::map<size_t, std::shared_ptr<io::mcbp_session>> sessions_{};

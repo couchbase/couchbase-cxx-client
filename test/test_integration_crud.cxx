@@ -609,24 +609,27 @@ TEST_CASE("integration: upsert may trigger snappy compression", "[integration]")
 TEST_CASE("integration: multi-threaded open/close bucket", "[integration]")
 {
     test::utils::integration_test_guard integration;
+    constexpr auto number_of_threads{ 100 };
 
     std::vector<std::thread> threads;
-    threads.reserve(100);
+    threads.reserve(number_of_threads);
 
-    for (auto i = 0; i < 100; ++i) {
+    for (auto i = 0; i < number_of_threads; ++i) {
         threads.emplace_back([&integration]() { test::utils::open_bucket(integration.cluster, integration.ctx.bucket); });
     }
     std::for_each(threads.begin(), threads.end(), [](auto& thread) { thread.join(); });
 
     threads.clear();
 
-    for (auto i = 0; i < 100; ++i) {
+    for (auto i = 0; i < number_of_threads; ++i) {
         threads.emplace_back([&integration]() {
             couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
-            couchbase::operations::insert_request req{ id, basic_doc_json };
+            couchbase::operations::upsert_request req{ id, basic_doc_json };
             req.timeout = std::chrono::seconds{ 10 };
             if (auto resp = test::utils::execute(integration.cluster, req); resp.ctx.ec) {
-                throw std::system_error(resp.ctx.ec);
+                if (resp.ctx.ec != couchbase::error::common_errc::ambiguous_timeout) {
+                    throw std::system_error(resp.ctx.ec);
+                }
             }
         });
     }
@@ -635,7 +638,7 @@ TEST_CASE("integration: multi-threaded open/close bucket", "[integration]")
 
     threads.clear();
 
-    for (auto i = 0; i < 100; ++i) {
+    for (auto i = 0; i < number_of_threads; ++i) {
         threads.emplace_back([&integration]() { test::utils::close_bucket(integration.cluster, integration.ctx.bucket); });
     }
     std::for_each(threads.begin(), threads.end(), [](auto& thread) { thread.join(); });
