@@ -19,7 +19,7 @@
 
 #include <couchbase/topology/error_map.hxx>
 
-#include <spdlog/fmt/fmt.h>
+#include <spdlog/fmt/bundled/core.h>
 
 template<>
 struct fmt::formatter<couchbase::error_map::attribute> {

@@ -18,7 +18,7 @@
 #include <string>
 #include <chrono>
 
-#include <spdlog/fmt/fmt.h>
+#include <spdlog/fmt/bundled/core.h>
 
 namespace test::utils
 {

@@ -19,7 +19,7 @@
 
 #include <couchbase/io/retry_reason.hxx>
 
-#include <spdlog/fmt/fmt.h>
+#include <spdlog/fmt/bundled/core.h>
 
 template<>
 struct fmt::formatter<couchbase::io::retry_reason> {

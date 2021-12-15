@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-#include <spdlog/fmt/fmt.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <couchbase/protocol/status.hxx>
 #include <couchbase/protocol/status_fmt.hxx>

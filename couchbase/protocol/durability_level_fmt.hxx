@@ -19,7 +19,7 @@
 
 #include <couchbase/protocol/durability_level.hxx>
 
-#include <spdlog/fmt/fmt.h>
+#include <spdlog/fmt/bundled/core.h>
 
 template<>
 struct fmt::formatter<couchbase::protocol::durability_level> {

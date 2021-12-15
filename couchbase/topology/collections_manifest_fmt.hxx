@@ -21,8 +21,7 @@
 
 #include <couchbase/topology/collections_manifest.hxx>
 
-#include <spdlog/fmt/fmt.h>
-
+#include <spdlog/fmt/bundled/core.h>
 #include <couchbase/utils/join_strings.hxx>
 
 template<>

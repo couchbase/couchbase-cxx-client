@@ -19,7 +19,7 @@
 
 #include <couchbase/operations/management/rbac.hxx>
 
-#include <spdlog/fmt/fmt.h>
+#include <spdlog/fmt/bundled/core.h>
 
 template<>
 struct fmt::formatter<couchbase::operations::management::rbac::auth_domain> {

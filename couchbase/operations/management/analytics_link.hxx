@@ -20,7 +20,7 @@
 #include <string>
 #include <algorithm>
 
-#include <spdlog/fmt/fmt.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <couchbase/utils/url_codec.hxx>
 
