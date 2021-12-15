@@ -18,6 +18,7 @@
 #pragma once
 
 #include <gsl/assert>
+#include <cstring>
 
 #include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/protocol/cas.hxx>

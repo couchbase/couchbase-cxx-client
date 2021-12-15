@@ -123,6 +123,11 @@ struct server_version {
     {
         return (major == 6 && minor >= 6) || major > 6;
     }
+
+    [[nodiscard]] bool supports_minimum_durability_level() const
+    {
+        return (major == 6 && minor >= 6) || major > 6;
+    }
 };
 
 } // namespace test::utils

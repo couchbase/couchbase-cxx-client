@@ -94,6 +94,9 @@ query_index_create_request::make_response(error_context::http&& ctx, const encod
                         if (error.message.find(" already exists") != std::string::npos) {
                             index_already_exists = true;
                         }
+                        if (error.message.find("Bucket Not Found") != std::string::npos) {
+                            bucket_not_found = true;
+                        }
                         break;
                     case 12003: /* IKey: "datastore.couchbase.keyspace_not_found" */
                         bucket_not_found = true;

@@ -20,6 +20,7 @@
 #include <gsl/gsl>
 #include <optional>
 #include <type_traits>
+#include <stdexcept>
 
 namespace couchbase::utils
 {

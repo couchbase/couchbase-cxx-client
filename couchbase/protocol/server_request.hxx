@@ -18,6 +18,7 @@
 #pragma once
 
 #include <gsl/assert>
+#include <cstring>
 
 #include <tao/json/forward.hpp>
 

@@ -16,6 +16,7 @@
  */
 
 #include <gsl/assert>
+#include <cstring>
 
 #include <couchbase/protocol/cmd_insert.hxx>
 

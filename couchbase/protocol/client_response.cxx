@@ -16,6 +16,7 @@
  */
 
 #include <gsl/assert>
+#include <cstring>
 
 #include <couchbase/protocol/client_response.hxx>
 

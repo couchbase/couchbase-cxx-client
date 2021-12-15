@@ -18,6 +18,7 @@
 #pragma once
 
 #include <utility>
+#include <cstring>
 
 #include <couchbase/utils/json.hxx>
 
@@ -630,7 +631,6 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             self->bootstrap_handler_(error::common_errc::unambiguous_timeout, {});
             self->bootstrap_handler_ = nullptr;
             self->stop(retry_reason::do_not_retry);
-            LOG_WARNING("{} use_count={}", self->log_prefix_, self.use_count());
         });
         initiate_bootstrap();
     }
