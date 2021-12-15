@@ -166,6 +166,7 @@ class bucket : public std::enable_shared_from_this<bucket>
                                     self->restart_node(index, hostname, port);
                                 }
                             });
+                          self->drain_deferred_queue();
                       }
                   },
                   true);
@@ -276,9 +277,11 @@ class bucket : public std::enable_shared_from_this<bucket>
 
     void drain_deferred_queue()
     {
-        while (!deferred_commands_.empty()) {
-            deferred_commands_.front()();
-            deferred_commands_.pop();
+        std::queue<std::function<void()>> commands{};
+        std::swap(deferred_commands_, commands);
+        while (!commands.empty()) {
+            commands.front()();
+            commands.pop();
         }
     }
 
