@@ -27,8 +27,13 @@ integration_test_guard::integration_test_guard()
     init_logger();
     auto connstr = couchbase::utils::parse_connection_string(ctx.connection_string);
     couchbase::cluster_credentials auth{};
-    auth.username = ctx.username;
-    auth.password = ctx.password;
+    if (!ctx.certificate_path.empty()) {
+        auth.certificate_path = ctx.certificate_path;
+        auth.key_path = ctx.key_path;
+    } else {
+        auth.username = ctx.username;
+        auth.password = ctx.password;
+    }
     io_thread = std::thread([this]() { io.run(); });
     origin = couchbase::origin(auth, connstr);
     open_cluster(cluster, origin);

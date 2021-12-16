@@ -40,6 +40,14 @@ test_context::load_from_environment()
     if (var != nullptr) {
         ctx.password = var;
     }
+    var = getenv("TEST_CERTIFICATE_PATH");
+    if (var != nullptr) {
+        ctx.certificate_path = var;
+    }
+    var = getenv("TEST_KEY_PATH");
+    if (var != nullptr) {
+        ctx.key_path = var;
+    }
     var = getenv("TEST_BUCKET");
     if (var != nullptr) {
         ctx.bucket = var;
