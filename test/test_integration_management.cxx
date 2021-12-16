@@ -662,8 +662,13 @@ TEST_CASE("integration: user groups management", "[integration]")
         REQUIRE(wait_for_group_created(integration, group_name_1));
 
         {
-            couchbase::operations::management::group_get_request req{ group_name_1 };
-            auto resp = test::utils::execute(integration.cluster, req);
+            couchbase::operations::management::group_get_response resp;
+            bool operation_completed = test::utils::wait_until([&integration, &group_name_1, &resp]() {
+                couchbase::operations::management::group_get_request req{ group_name_1 };
+                resp = test::utils::execute(integration.cluster, req);
+                return resp.ctx.ec != couchbase::error::management_errc::group_not_found;
+            });
+            REQUIRE(operation_completed);
             REQUIRE_FALSE(resp.ctx.ec);
             REQUIRE(resp.group.name == group.name);
             REQUIRE(resp.group.description == group.description);
