@@ -93,6 +93,7 @@ TEST_CASE("integration: bucket management", "[integration]")
         {
             couchbase::operations::management::bucket_get_all_request req{};
             auto resp = test::utils::execute(integration.cluster, req);
+            INFO(resp.ctx.http_body);
             REQUIRE_FALSE(resp.ctx.ec);
             bool found = false;
             for (const auto& bucket : resp.buckets) {
