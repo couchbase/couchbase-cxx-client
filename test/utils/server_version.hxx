@@ -128,6 +128,11 @@ struct server_version {
     {
         return (major == 6 && minor >= 6) || major > 6;
     }
+
+    [[nodiscard]] bool supports_search_analyze() const
+    {
+        return is_mad_hatter() || is_cheshire_cat() || is_neo();
+    }
 };
 
 } // namespace test::utils

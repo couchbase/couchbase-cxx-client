@@ -23,6 +23,7 @@
 #include <couchbase/operations/management/query.hxx>
 #include <couchbase/operations/management/analytics.hxx>
 #include <couchbase/operations/management/analytics_link.hxx>
+#include <couchbase/operations/management/search.hxx>
 
 static couchbase::operations::management::bucket_get_response
 wait_for_bucket_created(test::utils::integration_test_guard& integration, const std::string& bucket_name)
@@ -1769,4 +1770,253 @@ TEST_CASE("integration: analytics external link management", "[integration]")
             }
         }
     }
+}
+
+TEST_CASE("integration: search index management", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_gcccp()) {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    }
+
+    SECTION("search indexes crud")
+    {
+        auto index1_name = test::utils::uniq_id("index");
+        auto index2_name = test::utils::uniq_id("index");
+        auto alias_name = test::utils::uniq_id("alias");
+
+        {
+            couchbase::operations::management::search_index index;
+            index.name = index1_name;
+            index.type = "fulltext-index";
+            index.source_type = "couchbase";
+            index.source_name = integration.ctx.bucket;
+            couchbase::operations::management::search_index_upsert_request req{};
+            req.index = index;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        {
+            couchbase::operations::management::search_index index;
+            index.name = index1_name;
+            index.type = "fulltext-index";
+            index.source_type = "couchbase";
+            index.source_name = integration.ctx.bucket;
+            couchbase::operations::management::search_index_upsert_request req{};
+            req.index = index;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec == couchbase::error::common_errc::index_exists);
+        }
+
+        {
+            couchbase::operations::management::search_index index;
+            index.name = index2_name;
+            index.type = "fulltext-index";
+            index.source_type = "couchbase";
+            index.source_name = integration.ctx.bucket;
+            index.plan_params_json = R"({ "indexPartition": 3 })";
+            index.params_json = R"({ "store": { "indexType": "upside_down", "kvStoreName": "moss" }})";
+            couchbase::operations::management::search_index_upsert_request req{};
+            req.index = index;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        {
+            couchbase::operations::management::search_index index;
+            index.name = alias_name;
+            index.type = "fulltext-alias";
+            index.source_type = "nil";
+            index.params_json = couchbase::utils::json::generate(
+              tao::json::value{ { "targets", { { index1_name, tao::json::empty_object }, { index2_name, tao::json::empty_object } } } });
+            couchbase::operations::management::search_index_upsert_request req{};
+            req.index = index;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        {
+            couchbase::operations::management::search_index_get_request req{};
+            req.index_name = index1_name;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE(resp.index.name == index1_name);
+            REQUIRE(resp.index.type == "fulltext-index");
+        }
+
+        {
+            couchbase::operations::management::search_index_get_request req{};
+            req.index_name = "missing_index";
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec == couchbase::error::common_errc::index_not_found);
+        }
+
+        {
+            couchbase::operations::management::search_index_get_all_request req{};
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE_FALSE(resp.indexes.empty());
+        }
+
+        {
+            couchbase::operations::management::search_index_drop_request req{};
+            req.index_name = index1_name;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        {
+            couchbase::operations::management::search_index_drop_request req{};
+            req.index_name = index2_name;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        {
+            couchbase::operations::management::search_index_drop_request req{};
+            req.index_name = alias_name;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        couchbase::operations::management::search_index_drop_request req{};
+        req.index_name = "missing_index";
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec == couchbase::error::common_errc::index_not_found);
+    }
+
+    SECTION("upsert index no name")
+    {
+        couchbase::operations::management::search_index index;
+        index.type = "fulltext-index";
+        index.source_type = "couchbase";
+        index.source_name = integration.ctx.bucket;
+        couchbase::operations::management::search_index_upsert_request req{};
+        req.index = index;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec == couchbase::error::common_errc::invalid_argument);
+    }
+
+    SECTION("control")
+    {
+        auto index_name = test::utils::uniq_id("index");
+
+        {
+            couchbase::operations::management::search_index index;
+            index.name = index_name;
+            index.type = "fulltext-index";
+            index.source_type = "couchbase";
+            index.source_name = integration.ctx.bucket;
+            couchbase::operations::management::search_index_upsert_request req{};
+            req.index = index;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        SECTION("ingest control")
+        {
+            {
+                couchbase::operations::management::search_index_control_ingest_request req{};
+                req.index_name = index_name;
+                req.pause = true;
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+            }
+
+            {
+                couchbase::operations::management::search_index_control_ingest_request req{};
+                req.index_name = index_name;
+                req.pause = false;
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+            }
+        }
+
+        SECTION("query control")
+        {
+            {
+                couchbase::operations::management::search_index_control_query_request req{};
+                req.index_name = index_name;
+                req.allow = true;
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+            }
+
+            {
+                couchbase::operations::management::search_index_control_query_request req{};
+                req.index_name = index_name;
+                req.allow = false;
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+            }
+        }
+
+        SECTION("partition control")
+        {
+            {
+                couchbase::operations::management::search_index_control_plan_freeze_request req{};
+                req.index_name = index_name;
+                req.freeze = true;
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+            }
+
+            {
+                couchbase::operations::management::search_index_control_plan_freeze_request req{};
+                req.index_name = index_name;
+                req.freeze = false;
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+            }
+        }
+
+        couchbase::operations::management::search_index_drop_request req{};
+        req.index_name = index_name;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+}
+
+TEST_CASE("integration: search index management analyze document", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_search_analyze()) {
+        return;
+    }
+
+    auto index_name = test::utils::uniq_id("index");
+
+    {
+        couchbase::operations::management::search_index index;
+        index.name = index_name;
+        index.type = "fulltext-index";
+        index.source_type = "couchbase";
+        index.source_name = integration.ctx.bucket;
+        couchbase::operations::management::search_index_upsert_request req{};
+        req.index = index;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+
+    auto online = test::utils::wait_until([&integration, index_name]() {
+        couchbase::operations::management::search_index_get_stats_request req{};
+        req.index_name = index_name;
+        auto resp = test::utils::execute(integration.cluster, req);
+        if (resp.ctx.ec) {
+            return false;
+        }
+        auto payload = couchbase::utils::json::parse(resp.stats);
+        return !payload.at("pindexes").get_object().empty();
+    });
+    REQUIRE(online);
+
+    couchbase::operations::management::search_index_analyze_document_request req{};
+    req.index_name = index_name;
+    req.encoded_document = R"({ "name": "hello world" })";
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_FALSE(resp.ctx.ec);
+    REQUIRE_FALSE(resp.analysis.empty());
 }
