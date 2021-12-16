@@ -105,10 +105,14 @@ analytics_request::encode_to(analytics_request::encoded_request_type& encoded, h
             if (key[0] != '$') {
                 key.insert(key.begin(), '$');
             }
-            body[key] = value;
+            body[key] = utils::json::parse(value);
         }
     } else {
-        body["args"] = positional_parameters;
+        std::vector<tao::json::value> parameters;
+        for (const auto& value : positional_parameters) {
+            parameters.emplace_back(utils::json::parse(value));
+        }
+        body["args"] = std::move(parameters);
     }
     if (readonly) {
         body["readonly"] = true;
@@ -129,7 +133,7 @@ analytics_request::encode_to(analytics_request::encoded_request_type& encoded, h
         body["query_context"] = fmt::format("default:`{}`.`{}`", *bucket_name, *scope_name);
     }
     for (const auto& [name, value] : raw) {
-        body[name] = value;
+        body[name] = utils::json::parse(value);
     }
     encoded.type = type;
     encoded.headers["content-type"] = "application/json";

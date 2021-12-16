@@ -19,6 +19,7 @@
 #include <cstring>
 
 #include <couchbase/protocol/client_response.hxx>
+#include <couchbase/utils/json.hxx>
 
 namespace couchbase::protocol
 {
@@ -48,5 +49,27 @@ parse_server_duration_us(const io::mcbp_message& msg)
         offset += frame_size;
     }
     return 0;
+}
+
+bool
+parse_enhanced_error(const std::string& str, enhanced_error_info& info)
+{
+    auto error = utils::json::parse(str);
+    if (error.is_object()) {
+        auto& err_obj = error["error"];
+        if (err_obj.is_object()) {
+            enhanced_error_info err{};
+            if (const auto& ref = err_obj["ref"]; ref.is_string()) {
+                err.reference = ref.get_string();
+            }
+            if (const auto& ctx = err_obj["context"]; ctx.is_string()) {
+                err.context = ctx.get_string();
+            }
+
+            info = std::move(err);
+            return true;
+        }
+    }
+    return false;
 }
 } // namespace couchbase::protocol

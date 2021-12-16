@@ -18,7 +18,7 @@
 #include <chrono>
 #include <queue>
 
-#include <tao/json/forward.hpp>
+#include <tao/json/value.hpp>
 
 #include <asio/steady_timer.hpp>
 

@@ -31,7 +31,7 @@ std::error_code
 search_request::encode_to(search_request::encoded_request_type& encoded, http_context& context)
 {
     auto body = tao::json::value{
-        { "query", query },
+        { "query", utils::json::parse(query) },
         { "explain", explain },
         { "ctl", { { "timeout", timeout.count() } } },
     };
@@ -115,7 +115,7 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
     search_response response{ std::move(ctx) };
     response.meta_data.client_context_id = client_context_id;
     response.ctx.index_name = index_name;
-    response.ctx.query = utils::json::generate(query);
+    response.ctx.query = query.str();
     response.ctx.parameters = body_str;
     if (!response.ctx.ec) {
         if (encoded.status_code == 200) {

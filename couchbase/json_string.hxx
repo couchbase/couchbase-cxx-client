@@ -17,21 +17,32 @@
 
 #pragma once
 
-#include <couchbase/json_string.hxx>
+#include <string>
 
-#include <tao/json/value.hpp>
-
-namespace couchbase::utils::json
+namespace couchbase
 {
-tao::json::value
-parse(const std::string& input);
+struct json_string {
+    json_string()
+    {
+    }
 
-tao::json::value
-parse(const json_string& input);
+    json_string(std::string&& value)
+      : value_(std::move(value))
+    {
+    }
 
-tao::json::value
-parse(const char* input, std::size_t size);
+    json_string& operator=(std::string&& value)
+    {
+        value_ = std::move(value);
+        return *this;
+    }
 
-std::string
-generate(const tao::json::value& object);
-} // namespace couchbase::utils::json
+    [[nodiscard]] const std::string& str() const
+    {
+        return value_;
+    }
+
+  private:
+    std::string value_{};
+};
+} // namespace couchbase

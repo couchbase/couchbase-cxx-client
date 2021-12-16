@@ -129,10 +129,14 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
             if (key[0] != '$') {
                 key.insert(key.begin(), '$');
             }
-            body[key] = value;
+            body[key] = utils::json::parse(value);
         }
     } else {
-        body["args"] = positional_parameters;
+        std::vector<tao::json::value> parameters;
+        for (const auto& value : positional_parameters) {
+            parameters.emplace_back(utils::json::parse(value));
+        }
+        body["args"] = std::move(parameters);
     }
     switch (profile) {
         case profile_mode::phases:
@@ -203,7 +207,7 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
         }
     }
     for (const auto& [name, value] : raw) {
-        body[name] = value;
+        body[name] = utils::json::parse(value);
     }
     encoded.type = type;
     encoded.headers["connection"] = "keep-alive";

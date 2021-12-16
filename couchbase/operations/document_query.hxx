@@ -17,13 +17,12 @@
 
 #pragma once
 
-#include <tao/json/value.hpp>
-
 #include <couchbase/platform/uuid.h>
 
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
 #include <couchbase/timeout_defaults.hxx>
+#include <couchbase/json_string.hxx>
 
 #include <couchbase/protocol/mutation_token.hxx>
 
@@ -109,9 +108,9 @@ struct query_request {
     };
     profile_mode profile{ profile_mode::off };
 
-    std::map<std::string, tao::json::value> raw{};
-    std::vector<tao::json::value> positional_parameters{};
-    std::map<std::string, tao::json::value> named_parameters{};
+    std::map<std::string, couchbase::json_string> raw{};
+    std::vector<couchbase::json_string> positional_parameters{};
+    std::map<std::string, couchbase::json_string> named_parameters{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
 

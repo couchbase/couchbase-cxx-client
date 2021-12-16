@@ -23,8 +23,6 @@
 
 #include <couchbase/logger/logger.hxx>
 
-#include <tao/json/forward.hpp>
-
 #include <asio.hpp>
 
 #include <cxx_function.hpp>

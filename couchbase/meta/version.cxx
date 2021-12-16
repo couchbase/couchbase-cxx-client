@@ -135,4 +135,14 @@ os()
     static const std::string system{ COUCHBASE_CXX_CLIENT_SYSTEM };
     return system;
 }
+
+std::string
+user_agent(const std::string& client_id, const std::string& session_id)
+{
+    tao::json::value user_agent{
+        { "a", couchbase::meta::sdk_id() },
+        { "i", fmt::format("{}/{}", client_id, session_id) },
+    };
+    return utils::json::generate(user_agent);
+}
 } // namespace couchbase::meta

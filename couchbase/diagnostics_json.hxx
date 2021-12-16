@@ -21,6 +21,8 @@
 #include <couchbase/diagnostics_fmt.hxx>
 #include <couchbase/service_type_fmt.hxx>
 
+#include <tao/json/forward.hpp>
+
 namespace tao::json
 {
 template<>

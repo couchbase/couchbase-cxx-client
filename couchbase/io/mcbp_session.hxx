@@ -20,8 +20,6 @@
 #include <utility>
 #include <cstring>
 
-#include <couchbase/utils/json.hxx>
-
 #include <cxx_function.hpp>
 
 #include <asio.hpp>
@@ -140,10 +138,6 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                   [origin = session_->origin_]() { return origin.password(); },
                   session_->origin_.credentials().allowed_sasl_mechanisms)
         {
-            tao::json::value user_agent{
-                { "a", couchbase::meta::sdk_id() },
-                { "i", fmt::format("{}/{}", session_->client_id_, session_->id_) },
-            };
             protocol::client_request<protocol::hello_request_body> hello_req;
             if (session_->origin_.options().enable_unordered_execution) {
                 hello_req.body().enable_unordered_execution();
@@ -155,7 +149,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                 hello_req.body().enable_compression();
             }
             hello_req.opaque(session_->next_opaque());
-            hello_req.body().user_agent(utils::json::generate(user_agent));
+            hello_req.body().user_agent(meta::user_agent(session_->client_id_, session_->id_));
             LOG_DEBUG("{} user_agent={}, requested_features=[{}]",
                       session_->log_prefix_,
                       hello_req.body().user_agent(),

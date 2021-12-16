@@ -20,8 +20,6 @@
 #include <gsl/assert>
 #include <cstring>
 
-#include <tao/json/forward.hpp>
-
 #include <couchbase/protocol/server_opcode.hxx>
 #include <couchbase/protocol/magic.hxx>
 #include <couchbase/protocol/status.hxx>

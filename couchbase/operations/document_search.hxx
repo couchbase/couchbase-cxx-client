@@ -21,13 +21,12 @@
 #include <vector>
 #include <variant>
 
-#include <tao/json/value.hpp>
-
 #include <couchbase/platform/uuid.h>
 
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
 #include <couchbase/timeout_defaults.hxx>
+#include <couchbase/json_string.hxx>
 
 #include <couchbase/protocol/mutation_token.hxx>
 
@@ -119,7 +118,7 @@ struct search_request {
     std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
 
     std::string index_name;
-    tao::json::value query;
+    couchbase::json_string query;
 
     std::optional<std::uint32_t> limit{};
     std::optional<std::uint32_t> skip{};
@@ -141,7 +140,7 @@ struct search_request {
 
     std::map<std::string, std::string> facets{};
 
-    std::map<std::string, tao::json::value> raw{};
+    std::map<std::string, couchbase::json_string> raw{};
     std::string body_str{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);

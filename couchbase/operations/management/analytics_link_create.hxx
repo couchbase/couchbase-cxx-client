@@ -17,8 +17,6 @@
 
 #pragma once
 
-#include <couchbase/errors.hxx>
-
 #include <couchbase/platform/uuid.h>
 
 #include <couchbase/io/http_context.hxx>
@@ -28,7 +26,6 @@
 #include <couchbase/error_context/http.hxx>
 
 #include <couchbase/operations/management/analytics_link.hxx>
-#include <couchbase/operations/management/error_utils.hxx>
 
 namespace couchbase::operations::management
 {
@@ -42,6 +39,12 @@ struct analytics_link_create_response {
     std::string status{};
     std::vector<problem> errors{};
 };
+
+namespace details
+{
+analytics_link_create_response
+make_analytics_link_create_response(error_context::http&& ctx, const io::http_response& encoded);
+} // namespace details
 
 template<typename analytics_link_type>
 struct analytics_link_create_request {
@@ -72,59 +75,7 @@ struct analytics_link_create_request {
 
     [[nodiscard]] analytics_link_create_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
     {
-        management::analytics_link_create_response response{ std::move(ctx) };
-        if (!response.ctx.ec) {
-            if (encoded.body.empty() && response.ctx.http_status == 200) {
-                return response;
-            }
-            tao::json::value payload{};
-            try {
-                payload = utils::json::parse(encoded.body);
-            } catch (const tao::pegtl::parse_error&) {
-                auto colon = encoded.body.find(':');
-                if (colon == std::string::npos) {
-                    response.ctx.ec = error::common_errc::parsing_failure;
-                    return response;
-                }
-                auto code = static_cast<std::uint32_t>(std::stoul(encoded.body));
-                auto msg = encoded.body.substr(colon + 1);
-                response.errors.emplace_back(management::analytics_link_create_response::problem{ code, msg });
-            }
-            if (payload) {
-                response.status = payload.at("status").get_string();
-                if (response.status != "success") {
-                    if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
-                        for (const auto& error : errors->get_array()) {
-                            management::analytics_link_create_response::problem err{
-                                error.at("code").as<std::uint32_t>(),
-                                error.at("msg").get_string(),
-                            };
-                            response.errors.emplace_back(err);
-                        }
-                    }
-                }
-            }
-            bool link_exists = false;
-            bool dataverse_does_not_exist = false;
-            for (const auto& err : response.errors) {
-                switch (err.code) {
-                    case 24055: /* Link [string] already exists */
-                        link_exists = true;
-                        break;
-                    case 24034: /* Cannot find dataverse with name [string] */
-                        dataverse_does_not_exist = true;
-                        break;
-                }
-            }
-            if (dataverse_does_not_exist) {
-                response.ctx.ec = error::analytics_errc::dataverse_not_found;
-            } else if (link_exists) {
-                response.ctx.ec = error::analytics_errc::link_exists;
-            } else {
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
-            }
-        }
-        return response;
+        return details::make_analytics_link_create_response(std::move(ctx), encoded);
     }
 };
 } // namespace couchbase::operations::management
