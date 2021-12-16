@@ -203,145 +203,187 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             if (stopped_ || !session_) {
                 return;
             }
-            Expects(protocol::is_valid_client_opcode(msg.header.opcode));
-            switch (auto opcode = protocol::client_opcode(msg.header.opcode)) {
-                case protocol::client_opcode::hello: {
-                    protocol::client_response<protocol::hello_response_body> resp(std::move(msg));
-                    if (resp.status() == protocol::status::success) {
-                        session_->supported_features_ = resp.body().supported_features();
-                        LOG_DEBUG("{} supported_features=[{}]",
-                                  session_->log_prefix_,
-                                  utils::join_strings_fmt("{}", session_->supported_features_, ", "));
-                        if (session_->origin_.credentials().uses_certificate()) {
-                            LOG_DEBUG("{} skip SASL authentication, because TLS certificate was specified", session_->log_prefix_);
-                            return auth_success();
-                        }
-                    } else {
-                        LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
-                                    session_->log_prefix_,
-                                    resp.error_message(),
-                                    resp.opaque());
-                        return complete(error::network_errc::handshake_failure);
-                    }
-                } break;
-                case protocol::client_opcode::sasl_list_mechs: {
-                    protocol::client_response<protocol::sasl_list_mechs_response_body> resp(std::move(msg));
-                    if (resp.status() != protocol::status::success) {
-                        LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
-                                    session_->log_prefix_,
-                                    resp.error_message(),
-                                    resp.opaque());
-                        return complete(error::common_errc::authentication_failure);
-                    }
-                } break;
-                case protocol::client_opcode::sasl_auth: {
-                    protocol::client_response<protocol::sasl_auth_response_body> resp(std::move(msg));
-                    if (resp.status() == protocol::status::success) {
-                        return auth_success();
-                    }
-                    if (resp.status() == protocol::status::auth_continue) {
-                        auto [sasl_code, sasl_payload] = sasl_.step(resp.body().value());
-                        if (sasl_code == sasl::error::OK) {
-                            return auth_success();
-                        }
-                        if (sasl_code == sasl::error::CONTINUE) {
-                            protocol::client_request<protocol::sasl_step_request_body> req;
-                            req.opaque(session_->next_opaque());
-                            req.body().mechanism(sasl_.get_name());
-                            req.body().sasl_data(sasl_payload);
-                            session_->write_and_flush(req.data());
-                        } else {
-                            LOG_ERROR(
-                              "{} unable to authenticate: (sasl_code={}, opaque={})", session_->log_prefix_, sasl_code, resp.opaque());
+            Expects(protocol::is_valid_magic(msg.header.magic));
+            switch (auto magic = protocol::magic(msg.header.magic)) {
+                case protocol::magic::client_response:
+                case protocol::magic::alt_client_response:
+                    Expects(protocol::is_valid_client_opcode(msg.header.opcode));
+                    switch (auto opcode = protocol::client_opcode(msg.header.opcode)) {
+                        case protocol::client_opcode::hello: {
+                            protocol::client_response<protocol::hello_response_body> resp(std::move(msg));
+                            if (resp.status() == protocol::status::success) {
+                                session_->supported_features_ = resp.body().supported_features();
+                                LOG_DEBUG("{} supported_features=[{}]",
+                                          session_->log_prefix_,
+                                          utils::join_strings_fmt("{}", session_->supported_features_, ", "));
+                                if (session_->origin_.credentials().uses_certificate()) {
+                                    LOG_DEBUG("{} skip SASL authentication, because TLS certificate was specified", session_->log_prefix_);
+                                    return auth_success();
+                                }
+                            } else {
+                                LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
+                                            session_->log_prefix_,
+                                            resp.error_message(),
+                                            resp.opaque());
+                                return complete(error::network_errc::handshake_failure);
+                            }
+                        } break;
+                        case protocol::client_opcode::sasl_list_mechs: {
+                            protocol::client_response<protocol::sasl_list_mechs_response_body> resp(std::move(msg));
+                            if (resp.status() != protocol::status::success) {
+                                LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
+                                            session_->log_prefix_,
+                                            resp.error_message(),
+                                            resp.opaque());
+                                return complete(error::common_errc::authentication_failure);
+                            }
+                        } break;
+                        case protocol::client_opcode::sasl_auth: {
+                            protocol::client_response<protocol::sasl_auth_response_body> resp(std::move(msg));
+                            if (resp.status() == protocol::status::success) {
+                                return auth_success();
+                            }
+                            if (resp.status() == protocol::status::auth_continue) {
+                                auto [sasl_code, sasl_payload] = sasl_.step(resp.body().value());
+                                if (sasl_code == sasl::error::OK) {
+                                    return auth_success();
+                                }
+                                if (sasl_code == sasl::error::CONTINUE) {
+                                    protocol::client_request<protocol::sasl_step_request_body> req;
+                                    req.opaque(session_->next_opaque());
+                                    req.body().mechanism(sasl_.get_name());
+                                    req.body().sasl_data(sasl_payload);
+                                    session_->write_and_flush(req.data());
+                                } else {
+                                    LOG_ERROR("{} unable to authenticate: (sasl_code={}, opaque={})",
+                                              session_->log_prefix_,
+                                              sasl_code,
+                                              resp.opaque());
+                                    return complete(error::common_errc::authentication_failure);
+                                }
+                            } else {
+                                LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
+                                            session_->log_prefix_,
+                                            resp.error_message(),
+                                            resp.opaque());
+                                return complete(error::common_errc::authentication_failure);
+                            }
+                        } break;
+                        case protocol::client_opcode::sasl_step: {
+                            protocol::client_response<protocol::sasl_step_response_body> resp(std::move(msg));
+                            if (resp.status() == protocol::status::success) {
+                                return auth_success();
+                            }
                             return complete(error::common_errc::authentication_failure);
                         }
-                    } else {
-                        LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
-                                    session_->log_prefix_,
-                                    resp.error_message(),
-                                    resp.opaque());
-                        return complete(error::common_errc::authentication_failure);
+                        case protocol::client_opcode::get_error_map: {
+                            protocol::client_response<protocol::get_error_map_response_body> resp(std::move(msg));
+                            if (resp.status() == protocol::status::success) {
+                                session_->error_map_.emplace(resp.body().errmap());
+                            } else {
+                                LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
+                                            session_->log_prefix_,
+                                            resp.error_message(),
+                                            resp.opaque(),
+                                            spdlog::to_hex(msg.header_data()));
+                                return complete(error::network_errc::protocol_error);
+                            }
+                        } break;
+                        case protocol::client_opcode::select_bucket: {
+                            protocol::client_response<protocol::select_bucket_response_body> resp(std::move(msg));
+                            if (resp.status() == protocol::status::success) {
+                                LOG_DEBUG("{} selected bucket: {}", session_->log_prefix_, session_->bucket_name_.value_or(""));
+                                session_->bucket_selected_ = true;
+                            } else if (resp.status() == protocol::status::not_found) {
+                                LOG_DEBUG("{} kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
+                                          session_->log_prefix_,
+                                          opcode,
+                                          resp.status(),
+                                          resp.opaque());
+                                return complete(error::network_errc::configuration_not_available);
+                            } else if (resp.status() == protocol::status::no_access) {
+                                LOG_DEBUG("{} unable to select bucket: {}, probably the bucket does not exist",
+                                          session_->log_prefix_,
+                                          session_->bucket_name_.value_or(""));
+                                session_->bucket_selected_ = false;
+                                return complete(error::common_errc::bucket_not_found);
+                            } else {
+                                LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
+                                            session_->log_prefix_,
+                                            resp.error_message(),
+                                            resp.opaque(),
+                                            spdlog::to_hex(msg.header_data()));
+                                return complete(error::common_errc::bucket_not_found);
+                            }
+                        } break;
+                        case protocol::client_opcode::get_cluster_config: {
+                            protocol::client_response<protocol::get_cluster_config_response_body> resp(std::move(msg));
+                            if (resp.status() == protocol::status::success) {
+                                session_->update_configuration(resp.body().config());
+                                complete({});
+                            } else if (resp.status() == protocol::status::not_found) {
+                                LOG_DEBUG("{} kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
+                                          session_->log_prefix_,
+                                          opcode,
+                                          resp.status(),
+                                          resp.opaque());
+                                return complete(error::network_errc::configuration_not_available);
+                            } else if (resp.status() == protocol::status::no_bucket && !session_->bucket_name_) {
+                                // bucket-less session, but the server wants bucket
+                                session_->supports_gcccp_ = false;
+                                LOG_WARNING("{} this server does not support GCCCP, open bucket before making any cluster-level command",
+                                            session_->log_prefix_);
+                                session_->update_configuration(
+                                  topology::make_blank_configuration(session_->endpoint_address_, session_->endpoint_.port(), 0));
+                                complete({});
+                            } else {
+                                LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
+                                            session_->log_prefix_,
+                                            resp.error_message(),
+                                            resp.opaque(),
+                                            spdlog::to_hex(msg.header_data()));
+                                return complete(error::network_errc::protocol_error);
+                            }
+                        } break;
+                        default:
+                            LOG_WARNING("{} unexpected message during bootstrap: {}", session_->log_prefix_, opcode);
+                            return complete(error::network_errc::protocol_error);
                     }
-                } break;
-                case protocol::client_opcode::sasl_step: {
-                    protocol::client_response<protocol::sasl_step_response_body> resp(std::move(msg));
-                    if (resp.status() == protocol::status::success) {
-                        return auth_success();
+                    break;
+                case protocol::magic::server_request:
+                    Expects(protocol::is_valid_server_request_opcode(msg.header.opcode));
+                    switch (static_cast<protocol::server_opcode>(msg.header.opcode)) {
+                        case protocol::server_opcode::cluster_map_change_notification: {
+                            protocol::server_request<protocol::cluster_map_change_notification_request_body> req(msg);
+                            std::optional<topology::configuration> config = req.body().config();
+                            if (session_ && config.has_value()) {
+                                if ((!config->bucket.has_value() && req.body().bucket().empty()) ||
+                                    (session_->bucket_name_.has_value() && !req.body().bucket().empty() &&
+                                     session_->bucket_name_.value() == req.body().bucket())) {
+                                    session_->update_configuration(std::move(config.value()));
+                                }
+                            }
+                        } break;
+                        default:
+                            LOG_WARNING("{} unexpected server request: opcode={:x}, opaque={}{:a}{:a}",
+                                        session_->log_prefix_,
+                                        msg.header.opcode,
+                                        msg.header.opaque,
+                                        spdlog::to_hex(msg.header_data()),
+                                        spdlog::to_hex(msg.body));
                     }
-                    return complete(error::common_errc::authentication_failure);
-                }
-                case protocol::client_opcode::get_error_map: {
-                    protocol::client_response<protocol::get_error_map_response_body> resp(std::move(msg));
-                    if (resp.status() == protocol::status::success) {
-                        session_->error_map_.emplace(resp.body().errmap());
-                    } else {
-                        LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
-                                    session_->log_prefix_,
-                                    resp.error_message(),
-                                    resp.opaque(),
-                                    spdlog::to_hex(msg.header_data()));
-                        return complete(error::network_errc::protocol_error);
-                    }
-                } break;
-                case protocol::client_opcode::select_bucket: {
-                    protocol::client_response<protocol::select_bucket_response_body> resp(std::move(msg));
-                    if (resp.status() == protocol::status::success) {
-                        LOG_DEBUG("{} selected bucket: {}", session_->log_prefix_, session_->bucket_name_.value_or(""));
-                        session_->bucket_selected_ = true;
-                    } else if (resp.status() == protocol::status::not_found) {
-                        LOG_DEBUG("{} kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
-                                  session_->log_prefix_,
-                                  opcode,
-                                  resp.status(),
-                                  resp.opaque());
-                        return complete(error::network_errc::configuration_not_available);
-                    } else if (resp.status() == protocol::status::no_access) {
-                        LOG_DEBUG("{} unable to select bucket: {}, probably the bucket does not exist",
-                                  session_->log_prefix_,
-                                  session_->bucket_name_.value_or(""));
-                        session_->bucket_selected_ = false;
-                        return complete(error::common_errc::bucket_not_found);
-                    } else {
-                        LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
-                                    session_->log_prefix_,
-                                    resp.error_message(),
-                                    resp.opaque(),
-                                    spdlog::to_hex(msg.header_data()));
-                        return complete(error::common_errc::bucket_not_found);
-                    }
-                } break;
-                case protocol::client_opcode::get_cluster_config: {
-                    protocol::client_response<protocol::get_cluster_config_response_body> resp(std::move(msg));
-                    if (resp.status() == protocol::status::success) {
-                        session_->update_configuration(resp.body().config());
-                        complete({});
-                    } else if (resp.status() == protocol::status::not_found) {
-                        LOG_DEBUG("{} kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
-                                  session_->log_prefix_,
-                                  opcode,
-                                  resp.status(),
-                                  resp.opaque());
-                        return complete(error::network_errc::configuration_not_available);
-                    } else if (resp.status() == protocol::status::no_bucket && !session_->bucket_name_) {
-                        // bucket-less session, but the server wants bucket
-                        session_->supports_gcccp_ = false;
-                        LOG_WARNING("{} this server does not support GCCCP, open bucket before making any cluster-level command",
-                                    session_->log_prefix_);
-                        session_->update_configuration(
-                          topology::make_blank_configuration(session_->endpoint_address_, session_->endpoint_.port(), 0));
-                        complete({});
-                    } else {
-                        LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
-                                    session_->log_prefix_,
-                                    resp.error_message(),
-                                    resp.opaque(),
-                                    spdlog::to_hex(msg.header_data()));
-                        return complete(error::network_errc::protocol_error);
-                    }
-                } break;
-                default:
-                    LOG_WARNING("{} unexpected message during bootstrap: {}", session_->log_prefix_, opcode);
-                    return complete(error::network_errc::protocol_error);
+                    break;
+                case protocol::magic::client_request:
+                case protocol::magic::alt_client_request:
+                case protocol::magic::server_response:
+                    LOG_WARNING("{} unexpected magic: {} (opcode={:x}, opaque={}){:a}{:a}",
+                                session_->log_prefix_,
+                                magic,
+                                msg.header.opcode,
+                                msg.header.opaque,
+                                spdlog::to_hex(msg.header_data()),
+                                spdlog::to_hex(msg.body));
+                    break;
             }
         }
     };
