@@ -19,6 +19,10 @@
 
 #include <couchbase/operations/management/search_index.hxx>
 
+#include <couchbase/utils/json.hxx>
+
+#include <tao/json/forward.hpp>
+
 namespace tao::json
 {
 template<>

@@ -25,6 +25,8 @@
 #include <couchbase/protocol/mutation_token.hxx>
 #include <couchbase/protocol/status.hxx>
 
+#include <gsl/assert>
+
 namespace couchbase::protocol
 {
 

@@ -19,6 +19,8 @@
 
 #include <couchbase/operations/management/analytics_link_azure_blob_external.hxx>
 
+#include <tao/json/forward.hpp>
+
 namespace tao::json
 {
 template<>

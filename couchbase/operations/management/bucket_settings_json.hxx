@@ -19,6 +19,8 @@
 
 #include <couchbase/operations/management/bucket_settings.hxx>
 
+#include <tao/json/forward.hpp>
+
 namespace tao::json
 {
 template<>

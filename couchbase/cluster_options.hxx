@@ -21,6 +21,9 @@
 #include <couchbase/timeout_defaults.hxx>
 #include <couchbase/tracing/threshold_logging_options.hxx>
 
+#include <chrono>
+#include <string>
+
 namespace couchbase
 {
 enum class tls_verify_mode {

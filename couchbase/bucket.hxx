@@ -17,13 +17,17 @@
 
 #pragma once
 
+#include <couchbase/io/mcbp_command.hxx>
 #include <couchbase/metrics/meter.hxx>
 #include <couchbase/operations.hxx>
 #include <couchbase/origin.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
 
+#include <asio/io_context.hpp>
+#include <asio/ssl.hpp>
 #include <queue>
 #include <utility>
+#include <vector>
 
 namespace couchbase
 {

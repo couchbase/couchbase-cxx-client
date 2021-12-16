@@ -22,6 +22,8 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <system_error>
+#include <vector>
 
 namespace couchbase::error_context
 {

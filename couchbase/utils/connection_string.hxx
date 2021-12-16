@@ -21,6 +21,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 namespace couchbase::utils
 {

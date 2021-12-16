@@ -19,6 +19,10 @@
 
 #include <couchbase/io/retry_action.hxx>
 #include <couchbase/io/retry_reason.hxx>
+#include <couchbase/logger/logger.hxx>
+
+#include <chrono>
+#include <memory>
 
 namespace couchbase::io::retry_orchestrator
 {
