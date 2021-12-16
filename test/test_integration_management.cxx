@@ -2001,22 +2001,15 @@ TEST_CASE("integration: search index management analyze document", "[integration
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
-    auto online = test::utils::wait_until([&integration, index_name]() {
-        couchbase::operations::management::search_index_get_stats_request req{};
+    couchbase::operations::management::search_index_analyze_document_response resp;
+    bool operation_completed = test::utils::wait_until([&integration, &index_name, &resp]() {
+        couchbase::operations::management::search_index_analyze_document_request req{};
         req.index_name = index_name;
-        auto resp = test::utils::execute(integration.cluster, req);
-        if (resp.ctx.ec) {
-            return false;
-        }
-        auto payload = couchbase::utils::json::parse(resp.stats);
-        return !payload.at("pindexes").get_object().empty();
+        req.encoded_document = R"({ "name": "hello world" })";
+        resp = test::utils::execute(integration.cluster, req);
+        return resp.ctx.ec != couchbase::error::common_errc::internal_server_failure;
     });
-    REQUIRE(online);
-
-    couchbase::operations::management::search_index_analyze_document_request req{};
-    req.index_name = index_name;
-    req.encoded_document = R"({ "name": "hello world" })";
-    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE(operation_completed);
     REQUIRE_FALSE(resp.ctx.ec);
     REQUIRE_FALSE(resp.analysis.empty());
 }
