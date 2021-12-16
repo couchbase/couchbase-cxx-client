@@ -20,11 +20,17 @@
 #include <utility>
 #include <cstring>
 
-#include <couchbase/utils/json.hxx>
+#include <cxx_function.hpp>
 
 #include <asio.hpp>
 
 #include <couchbase/platform/uuid.h>
+
+#include <couchbase/sasl/error.h>
+#include <couchbase/sasl/error_fmt.h>
+
+#include <couchbase/topology/configuration_fmt.hxx>
+#include <couchbase/topology/capabilities_fmt.hxx>
 
 #include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/io/mcbp_parser.hxx>
@@ -55,6 +61,7 @@
 
 #include <couchbase/logger/logger.hxx>
 #include <spdlog/fmt/bin_to_hex.h>
+#include <couchbase/utils/join_strings.hxx>
 
 #include <couchbase/origin.hxx>
 #include <couchbase/errors.hxx>
@@ -131,10 +138,6 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                   [origin = session_->origin_]() { return origin.password(); },
                   session_->origin_.credentials().allowed_sasl_mechanisms)
         {
-            tao::json::value user_agent{
-                { "a", couchbase::meta::sdk_id() },
-                { "i", fmt::format("{}/{}", session_->client_id_, session_->id_) },
-            };
             protocol::client_request<protocol::hello_request_body> hello_req;
             if (session_->origin_.options().enable_unordered_execution) {
                 hello_req.body().enable_unordered_execution();
@@ -146,11 +149,11 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                 hello_req.body().enable_compression();
             }
             hello_req.opaque(session_->next_opaque());
-            hello_req.body().user_agent(utils::json::generate(user_agent));
+            hello_req.body().user_agent(meta::user_agent(session_->client_id_, session_->id_));
             LOG_DEBUG("{} user_agent={}, requested_features=[{}]",
                       session_->log_prefix_,
                       hello_req.body().user_agent(),
-                      fmt::join(hello_req.body().features(), ", "));
+                      utils::join_strings_fmt("{}", hello_req.body().features(), ", "));
             session_->write(hello_req.data());
 
             if (!session->origin_.credentials().uses_certificate()) {
@@ -206,7 +209,9 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                     protocol::client_response<protocol::hello_response_body> resp(std::move(msg));
                     if (resp.status() == protocol::status::success) {
                         session_->supported_features_ = resp.body().supported_features();
-                        LOG_DEBUG("{} supported_features=[{}]", session_->log_prefix_, fmt::join(session_->supported_features_, ", "));
+                        LOG_DEBUG("{} supported_features=[{}]",
+                                  session_->log_prefix_,
+                                  utils::join_strings_fmt("{}", session_->supported_features_, ", "));
                         if (session_->origin_.credentials().uses_certificate()) {
                             LOG_DEBUG("{} skip SASL authentication, because TLS certificate was specified", session_->log_prefix_);
                             return auth_success();

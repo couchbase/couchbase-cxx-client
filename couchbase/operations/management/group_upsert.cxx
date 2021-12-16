@@ -23,6 +23,7 @@
 #include <couchbase/errors.hxx>
 
 #include <couchbase/utils/json.hxx>
+#include <couchbase/utils/join_strings.hxx>
 
 namespace couchbase::operations::management
 {
@@ -55,10 +56,10 @@ group_upsert_request::encode_to(encoded_request_type& encoded, http_context& /* 
         encoded_roles.push_back(spec);
     }
     if (!encoded_roles.empty()) {
-        std::string concatenated = fmt::format("{}", fmt::join(encoded_roles, ","));
+        std::string concatenated = fmt::format("{}", utils::join_strings(encoded_roles, ","));
         params.push_back(fmt::format("roles={}", utils::string_codec::url_encode(concatenated)));
     }
-    encoded.body = fmt::format("{}", fmt::join(params, "&"));
+    encoded.body = utils::join_strings(params, "&");
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";
     return {};
 }

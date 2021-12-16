@@ -17,12 +17,17 @@
 
 #pragma once
 
+#include <couchbase/json_string.hxx>
+
 #include <tao/json/value.hpp>
 
 namespace couchbase::utils::json
 {
 tao::json::value
 parse(const std::string& input);
+
+tao::json::value
+parse(const json_string& input);
 
 tao::json::value
 parse(const char* input, std::size_t size);

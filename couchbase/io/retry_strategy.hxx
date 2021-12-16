@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <gsl/assert>
 
 #include <couchbase/io/retry_reason.hxx>

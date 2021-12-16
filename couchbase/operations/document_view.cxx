@@ -21,6 +21,7 @@
 #include <couchbase/errors.hxx>
 
 #include <couchbase/utils/json.hxx>
+#include <couchbase/utils/join_strings.hxx>
 
 namespace couchbase::operations
 {
@@ -104,7 +105,7 @@ document_view_request::encode_to(document_view_request::encoded_request_type& en
                                name_space == design_document::name_space::development ? "dev_" : "",
                                document_name,
                                view_name,
-                               fmt::join(query_string, "&"));
+                               utils::join_strings(query_string, "&"));
     encoded.body = utils::json::generate(body);
     return {};
 }

@@ -12,9 +12,11 @@ add_library(
   analytics_link_azure_blob_external.cxx
   analytics_link_connect.cxx
   analytics_link_couchbase_remote.cxx
+  analytics_link_create.cxx
   analytics_link_disconnect.cxx
   analytics_link_drop.cxx
   analytics_link_get_all.cxx
+  analytics_link_replace.cxx
   analytics_link_s3_external.cxx
   bucket_create.cxx
   bucket_describe.cxx
@@ -60,5 +62,5 @@ add_library(
   view_index_get_all.cxx
   view_index_upsert.cxx)
 set_target_properties(couchbase_operations_management PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(couchbase_operations_management PRIVATE project_options project_warnings)
+target_link_libraries(couchbase_operations_management PRIVATE project_options project_warnings fmt::fmt spdlog::spdlog)
 target_include_directories(couchbase_operations_management PRIVATE ${PROJECT_SOURCE_DIR})

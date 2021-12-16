@@ -23,6 +23,7 @@
 #include <couchbase/errors.hxx>
 
 #include <couchbase/utils/json.hxx>
+#include <couchbase/utils/join_strings.hxx>
 
 namespace couchbase::operations::management
 {
@@ -111,7 +112,7 @@ bucket_update_request::make_response(error_context::http&& ctx, const encoded_re
                         error_list.emplace_back(message.get_string());
                     }
                     if (!error_list.empty()) {
-                        response.error_message = fmt::format("{}", fmt::join(error_list.begin(), error_list.end(), ". "));
+                        response.error_message = utils::join_strings(error_list, ". ");
                     }
                 }
             } break;

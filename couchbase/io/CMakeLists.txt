@@ -6,5 +6,7 @@ target_link_libraries(
   PRIVATE project_options
           project_warnings
           snappy
-          http_parser)
+          http_parser
+          fmt::fmt
+          spdlog::spdlog)
 target_include_directories(couchbase_io PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/third_party/http_parser)

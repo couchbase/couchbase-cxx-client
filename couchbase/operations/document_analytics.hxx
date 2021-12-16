@@ -17,13 +17,12 @@
 
 #pragma once
 
-#include <tao/json/value.hpp>
-
 #include <couchbase/platform/uuid.h>
 
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
 #include <couchbase/timeout_defaults.hxx>
+#include <couchbase/json_string.hxx>
 
 #include <couchbase/error_context/analytics.hxx>
 
@@ -88,9 +87,9 @@ struct analytics_request {
 
     std::optional<scan_consistency_type> scan_consistency{};
 
-    std::map<std::string, tao::json::value> raw{};
-    std::vector<tao::json::value> positional_parameters{};
-    std::map<std::string, tao::json::value> named_parameters{};
+    std::map<std::string, couchbase::json_string> raw{};
+    std::vector<couchbase::json_string> positional_parameters{};
+    std::map<std::string, couchbase::json_string> named_parameters{};
 
     std::string body_str{};
 

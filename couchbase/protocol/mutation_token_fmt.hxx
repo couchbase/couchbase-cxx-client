@@ -19,14 +19,19 @@
 
 #include <couchbase/protocol/mutation_token.hxx>
 
-#include <spdlog/fmt/fmt.h>
+#include <fmt/core.h>
 
 template<>
-struct fmt::formatter<couchbase::mutation_token> : formatter<std::string> {
-    template<typename FormatContext>
-    auto format(const couchbase::mutation_token& token, FormatContext& ctx)
+struct fmt::formatter<couchbase::mutation_token> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
     {
-        format_to(ctx.out(), "{}:{}:{}:{}", token.bucket_name, token.partition_id, token.partition_uuid, token.sequence_number);
-        return formatter<std::string>::format("", ctx);
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(const couchbase::mutation_token& token, FormatContext& ctx) const
+    {
+        return format_to(ctx.out(), "{}:{}:{}:{}", token.bucket_name, token.partition_id, token.partition_uuid, token.sequence_number);
     }
 };

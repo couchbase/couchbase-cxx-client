@@ -19,12 +19,18 @@
 
 #include <couchbase/protocol/client_opcode.hxx>
 
-#include <spdlog/fmt/fmt.h>
+#include <fmt/core.h>
 
 template<>
-struct fmt::formatter<couchbase::protocol::client_opcode> : formatter<string_view> {
+struct fmt::formatter<couchbase::protocol::client_opcode> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
     template<typename FormatContext>
-    auto format(couchbase::protocol::client_opcode opcode, FormatContext& ctx)
+    auto format(couchbase::protocol::client_opcode opcode, FormatContext& ctx) const
     {
         string_view name = "unknown";
         switch (opcode) {
@@ -239,14 +245,20 @@ struct fmt::formatter<couchbase::protocol::client_opcode> : formatter<string_vie
                 name = "get_scope_id (0xbc)";
                 break;
         }
-        return formatter<string_view>::format(name, ctx);
+        return format_to(ctx.out(), "{}", name);
     }
 };
 
 template<>
-struct fmt::formatter<couchbase::protocol::subdoc_opcode> : formatter<string_view> {
+struct fmt::formatter<couchbase::protocol::subdoc_opcode> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
     template<typename FormatContext>
-    auto format(couchbase::protocol::subdoc_opcode opcode, FormatContext& ctx)
+    auto format(couchbase::protocol::subdoc_opcode opcode, FormatContext& ctx) const
     {
         string_view name = "unknown";
         switch (opcode) {
@@ -299,6 +311,6 @@ struct fmt::formatter<couchbase::protocol::subdoc_opcode> : formatter<string_vie
                 name = "remove_doc (0x04)";
                 break;
         }
-        return formatter<string_view>::format(name, ctx);
+        return format_to(ctx.out(), "{}", name);
     }
 };

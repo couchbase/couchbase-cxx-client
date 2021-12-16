@@ -22,6 +22,7 @@
 #include <couchbase/errors.hxx>
 
 #include <couchbase/utils/json.hxx>
+#include <couchbase/utils/join_strings.hxx>
 
 namespace couchbase::operations::management
 {
@@ -42,7 +43,7 @@ analytics_index_create_request::encode_to(encoded_request_type& encoded, http_co
                       if_not_exists_clause,
                       utils::analytics::uncompound_name(dataverse_name),
                       dataset_name,
-                      fmt::join(field_specs, ",")) },
+                      utils::join_strings(field_specs, ",")) },
     };
     encoded.headers["content-type"] = "application/json";
     encoded.method = "POST";

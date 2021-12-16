@@ -17,7 +17,7 @@
 
 #include <algorithm>
 
-#include <spdlog/fmt/fmt.h>
+#include <fmt/core.h>
 
 #include <couchbase/document_id.hxx>
 

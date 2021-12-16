@@ -16,7 +16,7 @@
  */
 #include <algorithm>
 
-#include <spdlog/fmt/fmt.h>
+#include <fmt/core.h>
 
 #include <http_parser.h>
 

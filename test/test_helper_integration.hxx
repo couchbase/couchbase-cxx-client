@@ -20,3 +20,5 @@
 #include "test_helper.hxx"
 #include "utils/integration_test_guard.hxx"
 #include "utils/wait_until.hxx"
+
+#include <couchbase/utils/json.hxx>

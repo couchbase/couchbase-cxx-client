@@ -21,6 +21,7 @@
 
 #include <couchbase/utils/json.hxx>
 #include <couchbase/utils/url_codec.hxx>
+#include <couchbase/utils/join_strings.hxx>
 
 #include <couchbase/errors.hxx>
 
@@ -53,4 +54,15 @@ TEST_CASE("unit: string representation of the error codes", "[unit]")
 TEST_CASE("unit: url path escape", "[unit]")
 {
     REQUIRE(couchbase::utils::string_codec::v2::path_escape("a/b") == "a%2Fb");
+}
+
+TEST_CASE("unit: join strings", "[unit]")
+{
+    std::vector<std::string> field_specs{ "testkey:string" };
+
+    REQUIRE(couchbase::utils::join_strings(field_specs, ",") == "testkey:string");
+
+    field_specs.emplace_back("volume:double");
+    field_specs.emplace_back("id:integer");
+    REQUIRE(couchbase::utils::join_strings(field_specs, ",") == "testkey:string,volume:double,id:integer");
 }

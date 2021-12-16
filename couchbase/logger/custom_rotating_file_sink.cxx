@@ -23,7 +23,7 @@
 #include <couchbase/logger/custom_rotating_file_sink.hxx>
 #include <couchbase/platform/dirutils.h>
 
-#include <gsl/gsl>
+#include <gsl/assert>
 
 #include <spdlog/details/file_helper.h>
 

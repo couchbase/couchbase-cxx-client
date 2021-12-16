@@ -17,8 +17,12 @@
 
 #pragma once
 
-#include <gsl/assert>
+#include <cmath>
+#include <optional>
 #include <cstring>
+
+#include <gsl/assert>
+#include <fmt/core.h>
 
 #include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/protocol/cas.hxx>
@@ -27,19 +31,22 @@
 #include <couchbase/protocol/cmd_info.hxx>
 #include <couchbase/protocol/datatype.hxx>
 #include <couchbase/protocol/enhanced_error_info.hxx>
+#include <couchbase/protocol/enhanced_error_info_fmt.hxx>
 #include <couchbase/protocol/frame_info_id.hxx>
 #include <couchbase/protocol/magic.hxx>
 #include <couchbase/protocol/magic_fmt.hxx>
 #include <couchbase/protocol/status.hxx>
 #include <couchbase/protocol/status_fmt.hxx>
 #include <couchbase/utils/byteswap.hxx>
-#include <couchbase/utils/json.hxx>
 
 namespace couchbase::protocol
 {
 
 double
 parse_server_duration_us(const io::mcbp_message& msg);
+
+bool
+parse_enhanced_error(const std::string& str, enhanced_error_info& info);
 
 template<typename Body>
 class client_response
@@ -169,19 +176,9 @@ class client_response
         parse_framing_extras();
         bool parsed = body_.parse(status_, header_, framing_extras_size_, key_size_, extras_size_, data_, info_);
         if (status_ != protocol::status::success && !parsed && has_json_datatype(data_type_)) {
-            auto error = utils::json::parse(std::string(data_.begin() + framing_extras_size_ + extras_size_ + key_size_, data_.end()));
-            if (error.is_object()) {
-                auto& err_obj = error["error"];
-                if (err_obj.is_object()) {
-                    enhanced_error_info err{};
-                    if (const auto& ref = err_obj["ref"]; ref.is_string()) {
-                        err.reference = ref.get_string();
-                    }
-                    if (const auto& ctx = err_obj["context"]; ctx.is_string()) {
-                        err.context = ctx.get_string();
-                    }
-                    error_.emplace(err);
-                }
+            enhanced_error_info err;
+            if (parse_enhanced_error(std::string(data_.begin() + framing_extras_size_ + extras_size_ + key_size_, data_.end()), err)) {
+                error_.emplace(err);
             }
         }
     }
@@ -213,19 +210,3 @@ class client_response
     }
 };
 } // namespace couchbase::protocol
-
-template<>
-struct fmt::formatter<couchbase::protocol::enhanced_error_info> : formatter<std::string> {
-    template<typename FormatContext>
-    auto format(const couchbase::protocol::enhanced_error_info& error, FormatContext& ctx)
-    {
-        if (!error.reference.empty() && !error.context.empty()) {
-            format_to(ctx.out(), R"((ref: "{}", ctx: "{}"))", error.reference, error.context);
-        } else if (!error.reference.empty()) {
-            format_to(ctx.out(), R"((ref: "{}"))", error.reference);
-        } else if (!error.context.empty()) {
-            format_to(ctx.out(), R"((ctx: "{}"))", error.context);
-        }
-        return formatter<std::string>::format("", ctx);
-    }
-};

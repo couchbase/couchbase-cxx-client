@@ -23,6 +23,8 @@
 #include <couchbase/errors.hxx>
 
 #include <couchbase/utils/json.hxx>
+#include <couchbase/utils/join_strings.hxx>
+
 #include <couchbase/operations/management/rbac_fmt.hxx>
 
 namespace couchbase::operations::management
@@ -40,7 +42,7 @@ user_upsert_request::encode_to(encoded_request_type& encoded, http_context& /* c
         params.push_back(fmt::format("password={}", utils::string_codec::url_encode(user.password.value())));
     }
     if (!user.groups.empty()) {
-        std::string encoded_groups = fmt::format("{}", fmt::join(user.groups, ","));
+        std::string encoded_groups = utils::join_strings(user.groups, ",");
         params.push_back(fmt::format("groups={}", utils::string_codec::url_encode(encoded_groups)));
     }
     std::vector<std::string> encoded_roles{};
@@ -60,10 +62,10 @@ user_upsert_request::encode_to(encoded_request_type& encoded, http_context& /* c
         encoded_roles.push_back(spec);
     }
     if (!encoded_roles.empty()) {
-        std::string concatenated = fmt::format("{}", fmt::join(encoded_roles, ","));
+        std::string concatenated = utils::join_strings(encoded_roles, ",");
         params.push_back(fmt::format("roles={}", utils::string_codec::url_encode(concatenated)));
     }
-    encoded.body = fmt::format("{}", fmt::join(params, "&"));
+    encoded.body = utils::join_strings(params, "&");
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";
     return {};
 }

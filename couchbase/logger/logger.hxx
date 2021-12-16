@@ -25,15 +25,25 @@
 
 #pragma once
 
-#include <spdlog/logger.h>
+#include <spdlog/fwd.h>
+#include <fmt/core.h>
 
 #include <optional>
+#include <memory>
 
 #include <string>
 
 namespace couchbase::logger
 {
 struct configuration;
+
+/**
+ * the various severity levels we can log at
+ */
+enum class level { trace, debug, info, warn, err, critical, off };
+
+level
+level_from_str(const std::string& str);
 
 /**
  * Initialize the logger.
@@ -120,14 +130,47 @@ unregister_spdlog_logger(const std::string& n);
  * @return true if all registered loggers have the specified severity level
  */
 bool
-check_log_levels(spdlog::level::level_enum level);
+check_log_levels(level level);
 
 /**
  * Set the log level of all registered spdLoggers
  * @param log severity level
  */
 void
-set_log_levels(spdlog::level::level_enum level);
+set_log_levels(level level);
+
+/**
+ * Checks whether a specific level should be logged based on the current
+ * configuration.
+ * @param level severity level to check
+ * @return true if we should log at this level
+ */
+bool
+should_log(level lvl);
+
+namespace detail
+{
+/**
+ * Logs a message at a specific severity level.
+ * @param lvl severity level to log at
+ * @param msg message to log
+ */
+void
+log(level lvl, std::string_view msg);
+} // namespace detail
+
+/**
+ * Logs a formatted message at a specific severity level.
+ * @param lvl severity level to log at
+ * @param msg message to log
+ * @param args the formatting arguments
+ */
+template<typename String, typename... Args>
+inline void
+log(level lvl, const String& msg, Args&&... args)
+{
+    detail::log(lvl, fmt::format(msg, std::forward<Args>(args)...));
+}
 
 /**
  * Tell the logger to flush its buffers
@@ -150,37 +193,24 @@ is_initialized();
 
 } // namespace couchbase::logger
 
-// Visual Studio prior to 2019 doesn't correctly handle the constexpr
-// format string checking - see https://github.com/fmtlib/fmt/issues/2328.
-// As such, only apply the compile-time check for non-MSVC or VS 2019+
-#if FMT_MSC_VER && FMT_MSC_VER < 1920
-#define CHECK_FMT_STRING(fmt) fmt
-#else
-#define CHECK_FMT_STRING(fmt) FMT_STRING(fmt)
-#endif
-
-#define COUCHBASE_LOG_ENTRY(severity, fmt, ...)                                                                                            \
+/**
+ * We implement this macro to avoid having argument evaluation performed
+ * on log messages which likely will not actually be logged due to their
+ * severity value not matching the logger.
+ */
+#define COUCHBASE_LOG(severity, ...)                                                                                                       \
     do {                                                                                                                                   \
-        auto _logger_ = couchbase::logger::get();                                                                                          \
-        if (_logger_ != nullptr && _logger_->should_log(severity)) {                                                                       \
-            _logger_->log(severity, CHECK_FMT_STRING(fmt), __VA_ARGS__);                                                                   \
+        if (couchbase::logger::should_log(severity)) {                                                                                     \
+            couchbase::logger::log(severity, __VA_ARGS__);                                                                                 \
         }                                                                                                                                  \
     } while (false)
 
-#define COUCHBASE_LOG_RAW(severity, msg)                                                                                                   \
-    do {                                                                                                                                   \
-        auto _logger_ = couchbase::logger::get();                                                                                          \
-        if (_logger_ != nullptr && _logger_->should_log(severity)) {                                                                       \
-            _logger_->log(severity, msg);                                                                                                  \
-        }                                                                                                                                  \
-    } while (false)
-
-#define LOG_TRACE(...) COUCHBASE_LOG_ENTRY(spdlog::level::level_enum::trace, __VA_ARGS__)
-#define LOG_DEBUG(...) COUCHBASE_LOG_ENTRY(spdlog::level::level_enum::debug, __VA_ARGS__)
-#define LOG_INFO(...) COUCHBASE_LOG_ENTRY(spdlog::level::level_enum::info, __VA_ARGS__)
-#define LOG_WARNING(...) COUCHBASE_LOG_ENTRY(spdlog::level::level_enum::warn, __VA_ARGS__)
-#define LOG_ERROR(...) COUCHBASE_LOG_ENTRY(spdlog::level::level_enum::err, __VA_ARGS__)
-#define LOG_CRITICAL(...) COUCHBASE_LOG_ENTRY(spdlog::level::level_enum::critical, __VA_ARGS__)
+#define LOG_TRACE(...) COUCHBASE_LOG(couchbase::logger::level::trace, __VA_ARGS__)
+#define LOG_DEBUG(...) COUCHBASE_LOG(couchbase::logger::level::debug, __VA_ARGS__)
+#define LOG_INFO(...) COUCHBASE_LOG(couchbase::logger::level::info, __VA_ARGS__)
+#define LOG_WARNING(...) COUCHBASE_LOG(couchbase::logger::level::warn, __VA_ARGS__)
+#define LOG_ERROR(...) COUCHBASE_LOG(couchbase::logger::level::err, __VA_ARGS__)
+#define LOG_CRITICAL(...) COUCHBASE_LOG(couchbase::logger::level::critical, __VA_ARGS__)
 
 /**
  * Convenience macros which log with the given level, and message, if the given
@@ -194,9 +224,9 @@ is_initialized();
  *   LOG_INFO(std:string{...});
  */
 
-#define LOG_TRACE_RAW(msg) COUCHBASE_LOG_RAW(spdlog::level::level_enum::trace, msg)
-#define LOG_DEBUG_RAW(msg) COUCHBASE_LOG_RAW(spdlog::level::level_enum::debug, msg)
-#define LOG_INFO_RAW(msg) COUCHBASE_LOG_RAW(spdlog::level::level_enum::info, msg)
-#define LOG_WARNING_RAW(msg) COUCHBASE_LOG_RAW(spdlog::level::level_enum::warn, msg)
-#define LOG_ERROR_RAW(msg) COUCHBASE_LOG_RAW(spdlog::level::level_enum::err, msg)
-#define LOG_CRITICAL_RAW(msg) COUCHBASE_LOG_RAW(spdlog::level::level_enum::critical, msg)
+#define LOG_TRACE_RAW(msg) COUCHBASE_LOG(couchbase::logger::level::trace, msg)
+#define LOG_DEBUG_RAW(msg) COUCHBASE_LOG(couchbase::logger::level::debug, msg)
+#define LOG_INFO_RAW(msg) COUCHBASE_LOG(couchbase::logger::level::info, msg)
+#define LOG_WARNING_RAW(msg) COUCHBASE_LOG(couchbase::logger::level::warn, msg)
+#define LOG_ERROR_RAW(msg) COUCHBASE_LOG(couchbase::logger::level::err, msg)
+#define LOG_CRITICAL_RAW(msg) COUCHBASE_LOG(couchbase::logger::level::critical, msg)

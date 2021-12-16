@@ -32,5 +32,5 @@ add_library(
   cmd_upsert.cxx
   status.cxx)
 set_target_properties(couchbase_protocol PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(couchbase_protocol PRIVATE project_options project_warnings snappy)
+target_link_libraries(couchbase_protocol PRIVATE project_options project_warnings snappy fmt::fmt spdlog::spdlog)
 target_include_directories(couchbase_protocol PRIVATE ${PROJECT_SOURCE_DIR})

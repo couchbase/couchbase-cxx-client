@@ -19,12 +19,18 @@
 
 #include <couchbase/protocol/status.hxx>
 
-#include <spdlog/fmt/fmt.h>
+#include <fmt/core.h>
 
 template<>
-struct fmt::formatter<couchbase::protocol::status> : formatter<string_view> {
+struct fmt::formatter<couchbase::protocol::status> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
     template<typename FormatContext>
-    auto format(couchbase::protocol::status opcode, FormatContext& ctx)
+    auto format(couchbase::protocol::status opcode, FormatContext& ctx) const
     {
         string_view name = "unknown";
         switch (opcode) {
@@ -230,6 +236,6 @@ struct fmt::formatter<couchbase::protocol::status> : formatter<string_view> {
                 name = "subdoc_deleted_document_cannot_have_value (0xd7)";
                 break;
         }
-        return formatter<string_view>::format(name, ctx);
+        return format_to(ctx.out(), "{}", name);
     }
 };

@@ -17,12 +17,11 @@
 
 #pragma once
 
-#include <couchbase/protocol/cas.hxx>
-
+#include <couchbase/protocol/enhanced_error_info.hxx>
 #include <fmt/core.h>
 
 template<>
-struct fmt::formatter<couchbase::protocol::cas> {
+struct fmt::formatter<couchbase::protocol::enhanced_error_info> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext& ctx)
     {
@@ -30,8 +29,15 @@ struct fmt::formatter<couchbase::protocol::cas> {
     }
 
     template<typename FormatContext>
-    auto format(const couchbase::protocol::cas& cas, FormatContext& ctx) const
+    auto format(const couchbase::protocol::enhanced_error_info& error, FormatContext& ctx) const
     {
-        return format_to(ctx.out(), "{:x}", cas.value);
+        if (!error.reference.empty() && !error.context.empty()) {
+            return format_to(ctx.out(), R"((ref: "{}", ctx: "{}"))", error.reference, error.context);
+        } else if (!error.reference.empty()) {
+            return format_to(ctx.out(), R"((ref: "{}"))", error.reference);
+        } else if (!error.context.empty()) {
+            return format_to(ctx.out(), R"((ctx: "{}"))", error.context);
+        }
+        return format_to(ctx.out(), "");
     }
 };

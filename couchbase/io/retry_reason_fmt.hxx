@@ -19,12 +19,18 @@
 
 #include <couchbase/io/retry_reason.hxx>
 
-#include <spdlog/fmt/fmt.h>
+#include <fmt/core.h>
 
 template<>
-struct fmt::formatter<couchbase::io::retry_reason> : formatter<string_view> {
+struct fmt::formatter<couchbase::io::retry_reason> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
     template<typename FormatContext>
-    auto format(couchbase::io::retry_reason reason, FormatContext& ctx)
+    auto format(couchbase::io::retry_reason reason, FormatContext& ctx) const
     {
         string_view name = "unknown";
         switch (reason) {
@@ -92,6 +98,6 @@ struct fmt::formatter<couchbase::io::retry_reason> : formatter<string_view> {
                 name = "views_no_active_partition";
                 break;
         }
-        return formatter<string_view>::format(name, ctx);
+        return format_to(ctx.out(), "{}", name);
     }
 };

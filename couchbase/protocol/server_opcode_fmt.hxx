@@ -19,12 +19,18 @@
 
 #include <couchbase/protocol/server_opcode.hxx>
 
-#include <spdlog/fmt/fmt.h>
+#include <fmt/core.h>
 
 template<>
-struct fmt::formatter<couchbase::protocol::server_opcode> : formatter<string_view> {
+struct fmt::formatter<couchbase::protocol::server_opcode> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
     template<typename FormatContext>
-    auto format(couchbase::protocol::server_opcode opcode, FormatContext& ctx)
+    auto format(couchbase::protocol::server_opcode opcode, FormatContext& ctx) const
     {
         string_view name = "unknown";
         switch (opcode) {
@@ -35,6 +41,6 @@ struct fmt::formatter<couchbase::protocol::server_opcode> : formatter<string_vie
                 name = "invalid (0xff)";
                 break;
         }
-        return formatter<string_view>::format(name, ctx);
+        return format_to(ctx.out(), "{}", name);
     }
 };

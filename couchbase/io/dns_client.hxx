@@ -20,8 +20,6 @@
 #include <memory>
 #include <sstream>
 
-#include <spdlog/fmt/fmt.h>
-
 #include <asio/ip/tcp.hpp>
 #include <asio/read.hpp>
 
@@ -29,6 +27,8 @@
 
 #include <couchbase/io/dns_codec.hxx>
 #include <couchbase/io/dns_config.hxx>
+
+#include <couchbase/utils/join_strings.hxx>
 
 namespace couchbase::io::dns
 {
@@ -79,44 +79,43 @@ class dns_client
         {
             asio::ip::udp::endpoint endpoint(address_, port_);
             udp_.open(endpoint.protocol());
-            udp_.async_send_to(
-              asio::buffer(send_buf_),
-              endpoint,
-              [self = shared_from_this(), handler = std::forward<Handler>(handler)](std::error_code ec1,
-                                                                                    std::size_t /* bytes_transferred */) mutable {
-                  if (ec1 == asio::error::operation_aborted) {
-                      self->deadline_.cancel();
-                      return handler({ error::common_errc::unambiguous_timeout });
-                  }
-                  if (ec1) {
-                      self->deadline_.cancel();
-                      return handler({ ec1 });
-                  }
+            udp_.async_send_to(asio::buffer(send_buf_),
+                               endpoint,
+                               [self = shared_from_this(), handler = std::forward<Handler>(handler)](
+                                 std::error_code ec1, std::size_t /* bytes_transferred */) mutable {
+                                   if (ec1 == asio::error::operation_aborted) {
+                                       self->deadline_.cancel();
+                                       return handler({ error::common_errc::unambiguous_timeout });
+                                   }
+                                   if (ec1) {
+                                       self->deadline_.cancel();
+                                       return handler({ ec1 });
+                                   }
 
-                  self->recv_buf_.resize(512);
-                  self->udp_.async_receive_from(
-                    asio::buffer(self->recv_buf_),
-                    self->udp_sender_,
-                    [self, handler = std::forward<Handler>(handler)](std::error_code ec2, std::size_t bytes_transferred) mutable {
-                        self->deadline_.cancel();
-                        if (ec2) {
-                            return handler({ ec2 });
-                        }
-                        self->recv_buf_.resize(bytes_transferred);
-                        dns_message message = dns_codec::decode(self->recv_buf_);
-                        if (message.header.flags.tc == truncation::yes) {
-                            self->udp_.close();
-                            return self->retry_with_tcp(std::forward<Handler>(handler));
-                        }
-                        dns_srv_response resp{ ec2 };
-                        resp.targets.reserve(message.answers.size());
-                        for (const auto& answer : message.answers) {
-                            resp.targets.emplace_back(
-                              dns_srv_response::address{ fmt::format("{}", fmt::join(answer.target.labels, ".")), answer.port });
-                        }
-                        return handler(std::move(resp));
-                    });
-              });
+                                   self->recv_buf_.resize(512);
+                                   self->udp_.async_receive_from(asio::buffer(self->recv_buf_),
+                                                                 self->udp_sender_,
+                                                                 [self, handler = std::forward<Handler>(handler)](
+                                                                   std::error_code ec2, std::size_t bytes_transferred) mutable {
+                                                                     self->deadline_.cancel();
+                                                                     if (ec2) {
+                                                                         return handler({ ec2 });
+                                                                     }
+                                                                     self->recv_buf_.resize(bytes_transferred);
+                                                                     dns_message message = dns_codec::decode(self->recv_buf_);
+                                                                     if (message.header.flags.tc == truncation::yes) {
+                                                                         self->udp_.close();
+                                                                         return self->retry_with_tcp(std::forward<Handler>(handler));
+                                                                     }
+                                                                     dns_srv_response resp{ ec2 };
+                                                                     resp.targets.reserve(message.answers.size());
+                                                                     for (const auto& answer : message.answers) {
+                                                                         resp.targets.emplace_back(dns_srv_response::address{
+                                                                           utils::join_strings(answer.target.labels, "."), answer.port });
+                                                                     }
+                                                                     return handler(std::move(resp));
+                                                                 });
+                               });
             deadline_.expires_after(timeout);
             deadline_.async_wait([self = shared_from_this()](std::error_code ec) {
                 if (ec == asio::error::operation_aborted) {
@@ -167,25 +166,24 @@ class dns_client
                                              }
                                              self->recv_buf_size_ = ntohs(self->recv_buf_size_);
                                              self->recv_buf_.resize(self->recv_buf_size_);
-                                             asio::async_read(
-                                               self->tcp_,
-                                               asio::buffer(self->recv_buf_),
-                                               [self, handler = std::forward<Handler>(handler)](std::error_code ec4,
-                                                                                                std::size_t bytes_transferred) mutable {
-                                                   self->deadline_.cancel();
-                                                   if (ec4) {
-                                                       return handler({ ec4 });
-                                                   }
-                                                   self->recv_buf_.resize(bytes_transferred);
-                                                   dns_message message = dns_codec::decode(self->recv_buf_);
-                                                   dns_srv_response resp{ ec4 };
-                                                   resp.targets.reserve(message.answers.size());
-                                                   for (const auto& answer : message.answers) {
-                                                       resp.targets.emplace_back(dns_srv_response::address{
-                                                         fmt::format("{}", fmt::join(answer.target.labels, ".")), answer.port });
-                                                   }
-                                                   return handler(std::move(resp));
-                                               });
+                                             asio::async_read(self->tcp_,
+                                                              asio::buffer(self->recv_buf_),
+                                                              [self, handler = std::forward<Handler>(handler)](
+                                                                std::error_code ec4, std::size_t bytes_transferred) mutable {
+                                                                  self->deadline_.cancel();
+                                                                  if (ec4) {
+                                                                      return handler({ ec4 });
+                                                                  }
+                                                                  self->recv_buf_.resize(bytes_transferred);
+                                                                  dns_message message = dns_codec::decode(self->recv_buf_);
+                                                                  dns_srv_response resp{ ec4 };
+                                                                  resp.targets.reserve(message.answers.size());
+                                                                  for (const auto& answer : message.answers) {
+                                                                      resp.targets.emplace_back(dns_srv_response::address{
+                                                                        utils::join_strings(answer.target.labels, "."), answer.port });
+                                                                  }
+                                                                  return handler(std::move(resp));
+                                                              });
                                          });
                     });
               });

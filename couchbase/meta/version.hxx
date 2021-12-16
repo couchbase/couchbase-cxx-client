@@ -37,4 +37,6 @@ sdk_build_info_json();
 const std::string&
 os();
 
+std::string
+user_agent(const std::string& client_id, const std::string& session_id);
 } // namespace couchbase::meta

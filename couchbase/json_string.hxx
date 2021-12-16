@@ -15,22 +15,34 @@
  *   limitations under the License.
  */
 
-#include <couchbase/logger/logger.hxx>
-#include <spdlog/details/os.h>
+#pragma once
 
-namespace test::utils
-{
-void
-init_logger()
-{
-    static bool initialized = false;
+#include <string>
 
-    if (!initialized) {
-        couchbase::logger::create_console_logger();
-        if (auto env_val = spdlog::details::os::getenv("COUCHBASE_CXX_CLIENT_LOG_LEVEL"); !env_val.empty()) {
-            couchbase::logger::set_log_levels(couchbase::logger::level_from_str(env_val));
-        }
-        initialized = true;
+namespace couchbase
+{
+struct json_string {
+    json_string()
+    {
     }
-}
-} // namespace test::utils
+
+    json_string(std::string&& value)
+      : value_(std::move(value))
+    {
+    }
+
+    json_string& operator=(std::string&& value)
+    {
+        value_ = std::move(value);
+        return *this;
+    }
+
+    [[nodiscard]] const std::string& str() const
+    {
+        return value_;
+    }
+
+  private:
+    std::string value_{};
+};
+} // namespace couchbase

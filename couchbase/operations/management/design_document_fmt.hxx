@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include <couchbase/protocol/cas.hxx>
+#include <couchbase/operations/management/design_document.hxx>
 
 #include <fmt/core.h>
 
 template<>
-struct fmt::formatter<couchbase::protocol::cas> {
+struct fmt::formatter<couchbase::operations::design_document::name_space> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext& ctx)
     {
@@ -30,8 +30,18 @@ struct fmt::formatter<couchbase::protocol::cas> {
     }
 
     template<typename FormatContext>
-    auto format(const couchbase::protocol::cas& cas, FormatContext& ctx) const
+    auto format(couchbase::operations::design_document::name_space ns, FormatContext& ctx) const
     {
-        return format_to(ctx.out(), "{:x}", cas.value);
+        string_view name = "unknown";
+        switch (ns) {
+            case couchbase::operations::design_document::name_space::development:
+                name = "development";
+                break;
+
+            case couchbase::operations::design_document::name_space::production:
+                name = "production";
+                break;
+        }
+        return format_to(ctx.out(), "{}", name);
     }
 };

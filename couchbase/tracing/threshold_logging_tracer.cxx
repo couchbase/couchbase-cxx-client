@@ -18,7 +18,7 @@
 #include <chrono>
 #include <queue>
 
-#include <tao/json/forward.hpp>
+#include <tao/json/value.hpp>
 
 #include <asio/steady_timer.hpp>
 
@@ -31,6 +31,8 @@
 #include <couchbase/tracing/threshold_logging_tracer.hxx>
 
 #include <couchbase/utils/json.hxx>
+
+#include <couchbase/service_type_fmt.hxx>
 
 namespace couchbase::tracing
 {
