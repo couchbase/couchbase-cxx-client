@@ -27,6 +27,8 @@ struct test_context {
     std::string connection_string{ "couchbase://127.0.0.1" };
     std::string username{ "Administrator" };
     std::string password{ "password" };
+    std::string certificate_path{};
+    std::string key_path{};
     std::string bucket{ "default" };
     server_version version{ 6, 6, 0 };
 
