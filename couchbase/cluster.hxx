@@ -263,6 +263,13 @@ class cluster
                     LOG_ERROR("[{}]: unable to load certificate chain \"{}\": {}", id_, origin_.options().trust_certificate, ec.message());
                     return handler(ec);
                 }
+
+                LOG_DEBUG(R"([{}]: use TLS verify file: "{}")", id_, origin_.options().trust_certificate);
+                tls_.load_verify_file(origin_.options().trust_certificate, ec);
+                if (ec) {
+                    LOG_ERROR("[{}]: unable to load verify file \"{}\": {}", id_, origin_.options().trust_certificate, ec.message());
+                    return handler(ec);
+                }
             }
 #ifdef COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE
             SSL_CTX_set_keylog_callback(tls_.native_handle(), [](const SSL* /* ssl */, const char* line) {
