@@ -50,17 +50,14 @@ std::string
 join_strings_fmt(const std::string& item_fmt, const Range& values, const std::string& sep)
 {
     std::stringstream stream;
-    bool is_first = false;
-    auto iter_begin = std::begin(values);
-    auto iter_end = std::end(values);
-    for (auto iter = iter_begin; iter != iter_end; ++iter) {
-        if (is_first) {
-            is_first = false;
-        } else {
-            stream << sep;
+    auto sentinel = std::end(values);
+    if (auto it = std::begin(values); it != sentinel) {
+        stream << fmt::format(item_fmt, *it);
+        ++it;
+        while (it != sentinel) {
+            stream << sep << fmt::format(item_fmt, *it);
+            ++it;
         }
-
-        stream << fmt::format(item_fmt, *iter);
     }
     return stream.str();
 }
