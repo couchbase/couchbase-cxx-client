@@ -1771,7 +1771,7 @@ TEST_CASE("integration: search index management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.ctx.version.supports_gcccp()) {
+    if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
 
@@ -1978,7 +1978,7 @@ TEST_CASE("integration: search index management analyze document", "[integration
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.ctx.version.supports_search_analyze()) {
+    if (!integration.cluster_version().supports_search_analyze()) {
         return;
     }
 
