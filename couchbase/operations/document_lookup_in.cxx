@@ -18,7 +18,6 @@
 #include <couchbase/operations/document_lookup_in.hxx>
 
 #include <couchbase/errors.hxx>
-
 #include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations

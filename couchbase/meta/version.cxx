@@ -15,20 +15,18 @@
  *   limitations under the License.
  */
 
-#include <fmt/core.h>
+#include <couchbase/meta/version.hxx>
+
+#include <couchbase/build_info.hxx>
+#include <couchbase/build_version.hxx>
+#include <couchbase/utils/json.hxx>
 
 #include <asio/version.hpp>
+#include <fmt/core.h>
 #include <http_parser.h>
 #include <openssl/crypto.h>
 #include <snappy-stubs-public.h>
 #include <spdlog/version.h>
-
-#include <couchbase/meta/version.hxx>
-
-#include <couchbase/build_version.hxx>
-#include <couchbase/build_info.hxx>
-
-#include <couchbase/utils/json.hxx>
 
 namespace couchbase::meta
 {

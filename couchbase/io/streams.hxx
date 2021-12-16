@@ -17,10 +17,9 @@
 
 #pragma once
 
-#include <functional>
-
 #include <asio.hpp>
 #include <asio/ssl.hpp>
+#include <functional>
 
 namespace couchbase::io
 {

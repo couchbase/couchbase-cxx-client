@@ -17,10 +17,9 @@
 
 #pragma once
 
-#include <couchbase/operations/management/scope_get_all.hxx>
-#include <couchbase/operations/management/scope_create.hxx>
-#include <couchbase/operations/management/scope_drop.hxx>
 #include <couchbase/operations/management/collection_create.hxx>
 #include <couchbase/operations/management/collection_drop.hxx>
-
 #include <couchbase/operations/management/collections_manifest_get.hxx>
+#include <couchbase/operations/management/scope_create.hxx>
+#include <couchbase/operations/management/scope_drop.hxx>
+#include <couchbase/operations/management/scope_get_all.hxx>

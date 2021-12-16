@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/protocol/enhanced_error_info.hxx>
+
 #include <fmt/core.h>
 
 template<>

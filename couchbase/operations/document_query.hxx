@@ -17,16 +17,13 @@
 
 #pragma once
 
-#include <couchbase/platform/uuid.h>
-
+#include <couchbase/error_context/query.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
-#include <couchbase/timeout_defaults.hxx>
 #include <couchbase/json_string.hxx>
-
+#include <couchbase/platform/uuid.h>
 #include <couchbase/protocol/mutation_token.hxx>
-
-#include <couchbase/error_context/query.hxx>
+#include <couchbase/timeout_defaults.hxx>
 
 namespace couchbase::operations
 {

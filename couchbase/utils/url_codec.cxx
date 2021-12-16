@@ -1,6 +1,6 @@
-#include <cctype>
-
 #include <couchbase/utils/url_codec.hxx>
+
+#include <cctype>
 
 namespace couchbase::utils::string_codec
 {

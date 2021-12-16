@@ -16,10 +16,9 @@
  */
 
 #include <couchbase/operations/management/view_index_get.hxx>
-#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
-
+#include <couchbase/operations/management/error_utils.hxx>
 #include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations::management

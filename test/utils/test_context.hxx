@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <string>
-
 #include "server_version.hxx"
+
+#include <string>
 
 namespace test::utils
 {

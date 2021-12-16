@@ -15,14 +15,14 @@
  *   limitations under the License.
  */
 
-#include <gsl/assert>
-#include <cstring>
-
 #include <couchbase/protocol/cmd_mutate_in.hxx>
 
 #include <couchbase/protocol/frame_info_id.hxx>
 #include <couchbase/utils/byteswap.hxx>
 #include <couchbase/utils/unsigned_leb128.hxx>
+
+#include <cstring>
+#include <gsl/assert>
 
 namespace couchbase::protocol
 {

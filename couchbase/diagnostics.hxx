@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include <string>
-#include <map>
-#include <vector>
-#include <chrono>
-
 #include <couchbase/service_type.hxx>
+
+#include <chrono>
+#include <map>
+#include <string>
+#include <vector>
 
 namespace couchbase::diag
 {

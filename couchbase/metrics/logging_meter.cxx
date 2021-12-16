@@ -15,19 +15,16 @@
  *   limitations under the License.
  */
 
-#include <utility>
-#include <memory>
-
-#include <gsl/assert>
-
-#include <hdr_histogram.h>
+#include <couchbase/metrics/logging_meter.hxx>
 
 #include <couchbase/logger/logger.hxx>
-
-#include <couchbase/metrics/logging_meter.hxx>
 #include <couchbase/metrics/noop_meter.hxx>
-
 #include <couchbase/utils/json.hxx>
+
+#include <gsl/assert>
+#include <hdr_histogram.h>
+#include <memory>
+#include <utility>
 
 namespace couchbase::metrics
 {

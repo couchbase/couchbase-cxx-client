@@ -15,9 +15,9 @@
  *   limitations under the License.
  */
 
-#include <snappy.h>
-
 #include <couchbase/protocol/client_request.hxx>
+
+#include <snappy.h>
 
 namespace couchbase::protocol
 {

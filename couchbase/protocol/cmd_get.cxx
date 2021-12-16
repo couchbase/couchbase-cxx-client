@@ -14,13 +14,14 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
-#include <gsl/assert>
-#include <cstring>
 
 #include <couchbase/protocol/cmd_get.hxx>
 
 #include <couchbase/utils/byteswap.hxx>
 #include <couchbase/utils/unsigned_leb128.hxx>
+
+#include <cstring>
+#include <gsl/assert>
 
 namespace couchbase::protocol
 {

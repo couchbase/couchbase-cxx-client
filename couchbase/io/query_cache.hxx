@@ -18,9 +18,9 @@
 #pragma once
 
 #include <map>
-#include <string>
-#include <optional>
 #include <mutex>
+#include <optional>
+#include <string>
 
 namespace couchbase
 {

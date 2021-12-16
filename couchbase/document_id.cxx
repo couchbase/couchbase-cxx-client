@@ -15,11 +15,10 @@
  *   limitations under the License.
  */
 
-#include <algorithm>
-
-#include <fmt/core.h>
-
 #include <couchbase/document_id.hxx>
+
+#include <algorithm>
+#include <fmt/core.h>
 
 namespace couchbase
 {

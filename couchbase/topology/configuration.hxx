@@ -17,18 +17,17 @@
 
 #pragma once
 
+#include <couchbase/platform/uuid.h>
+#include <couchbase/service_type.hxx>
+#include <couchbase/topology/capabilities.hxx>
+#include <couchbase/utils/crc32.hxx>
+
+#include <fmt/core.h>
 #include <map>
 #include <optional>
 #include <set>
-#include <vector>
 #include <string>
-
-#include <fmt/core.h>
-
-#include <couchbase/topology/capabilities.hxx>
-#include <couchbase/platform/uuid.h>
-#include <couchbase/service_type.hxx>
-#include <couchbase/utils/crc32.hxx>
+#include <vector>
 
 namespace couchbase::topology
 {

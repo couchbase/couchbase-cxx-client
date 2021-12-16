@@ -16,15 +16,14 @@
  */
 
 #include <couchbase/operations/management/analytics_link_get_all.hxx>
-#include <couchbase/operations/management/error_utils.hxx>
 
-#include <couchbase/utils/url_codec.hxx>
 #include <couchbase/errors.hxx>
-
-#include <couchbase/utils/json.hxx>
 #include <couchbase/operations/management/analytics_link_azure_blob_external_json.hxx>
 #include <couchbase/operations/management/analytics_link_couchbase_remote_json.hxx>
 #include <couchbase/operations/management/analytics_link_s3_external_json.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
+#include <couchbase/utils/json.hxx>
+#include <couchbase/utils/url_codec.hxx>
 
 namespace couchbase::operations::management
 {

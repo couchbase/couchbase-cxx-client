@@ -15,17 +15,15 @@
  *   limitations under the License.
  */
 
-#include <gsl/assert>
-#include <cstring>
-
-#include <couchbase/logger/logger.hxx>
-
 #include <couchbase/protocol/cmd_get_error_map.hxx>
 
-#include <couchbase/utils/byteswap.hxx>
-
-#include <couchbase/utils/json.hxx>
+#include <couchbase/logger/logger.hxx>
 #include <couchbase/topology/error_map_json.hxx>
+#include <couchbase/utils/byteswap.hxx>
+#include <couchbase/utils/json.hxx>
+
+#include <cstring>
+#include <gsl/assert>
 
 namespace couchbase::protocol
 {

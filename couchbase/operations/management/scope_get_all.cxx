@@ -16,12 +16,11 @@
  */
 
 #include <couchbase/operations/management/scope_get_all.hxx>
-#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
-
-#include <couchbase/utils/json.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 #include <couchbase/topology/collections_manifest_json.hxx>
+#include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations::management
 {

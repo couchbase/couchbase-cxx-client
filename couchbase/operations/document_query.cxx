@@ -15,15 +15,13 @@
  *   limitations under the License.
  */
 
-#include <gsl/assert>
-
 #include <couchbase/operations/document_query.hxx>
 
 #include <couchbase/errors.hxx>
-
 #include <couchbase/logger/logger.hxx>
-
 #include <couchbase/utils/json.hxx>
+
+#include <gsl/assert>
 
 namespace tao::json
 {

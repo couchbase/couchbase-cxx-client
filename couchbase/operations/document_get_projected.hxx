@@ -21,9 +21,8 @@
 #include <couchbase/io/mcbp_context.hxx>
 #include <couchbase/io/retry_context.hxx>
 #include <couchbase/protocol/client_request.hxx>
-#include <couchbase/timeout_defaults.hxx>
-
 #include <couchbase/protocol/cmd_lookup_in.hxx>
+#include <couchbase/timeout_defaults.hxx>
 
 namespace couchbase::operations
 {

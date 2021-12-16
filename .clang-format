@@ -11,5 +11,4 @@ AllowShortFunctionsOnASingleLine: None
 AllowShortBlocksOnASingleLine: Never
 AllowShortCaseLabelsOnASingleLine: false
 BreakBeforeBraces: Linux
-SortIncludes: false
 FixNamespaceComments: true

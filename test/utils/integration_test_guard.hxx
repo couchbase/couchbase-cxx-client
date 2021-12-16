@@ -17,14 +17,13 @@
 
 #pragma once
 
-#include <optional>
-
-#include "test_context.hxx"
-
 #include "integration_shortcuts.hxx"
+#include "test_context.hxx"
 
 #include <couchbase/operations/management/bucket_describe.hxx>
 #include <couchbase/operations/management/cluster_describe.hxx>
+
+#include <optional>
 
 namespace test::utils
 {

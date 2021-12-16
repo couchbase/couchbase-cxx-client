@@ -20,7 +20,6 @@
 #include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/protocol/cmd_info.hxx>
 #include <couchbase/protocol/server_opcode.hxx>
-
 #include <couchbase/topology/configuration.hxx>
 
 namespace couchbase::protocol

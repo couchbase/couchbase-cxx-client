@@ -16,12 +16,11 @@
  */
 
 #include <couchbase/operations/management/bucket_get.hxx>
-#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
-
-#include <couchbase/utils/json.hxx>
 #include <couchbase/operations/management/bucket_settings_json.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
+#include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations::management
 {

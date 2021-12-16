@@ -17,20 +17,17 @@
 
 #pragma once
 
-#include <map>
-#include <vector>
-#include <variant>
-
-#include <couchbase/platform/uuid.h>
-
+#include <couchbase/error_context/search.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
-#include <couchbase/timeout_defaults.hxx>
 #include <couchbase/json_string.hxx>
-
+#include <couchbase/platform/uuid.h>
 #include <couchbase/protocol/mutation_token.hxx>
+#include <couchbase/timeout_defaults.hxx>
 
-#include <couchbase/error_context/search.hxx>
+#include <map>
+#include <variant>
+#include <vector>
 
 namespace couchbase::operations
 {

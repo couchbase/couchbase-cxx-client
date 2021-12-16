@@ -17,14 +17,14 @@
 
 #pragma once
 
-#include <gsl/assert>
-#include <cstring>
-
-#include <couchbase/protocol/server_opcode.hxx>
-#include <couchbase/protocol/magic.hxx>
-#include <couchbase/protocol/status.hxx>
-#include <couchbase/protocol/datatype.hxx>
 #include <couchbase/protocol/cmd_info.hxx>
+#include <couchbase/protocol/datatype.hxx>
+#include <couchbase/protocol/magic.hxx>
+#include <couchbase/protocol/server_opcode.hxx>
+#include <couchbase/protocol/status.hxx>
+
+#include <cstring>
+#include <gsl/assert>
 
 namespace couchbase::protocol
 {

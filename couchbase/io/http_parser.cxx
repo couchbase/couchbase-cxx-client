@@ -14,13 +14,12 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
-#include <algorithm>
-
-#include <fmt/core.h>
-
-#include <http_parser.h>
 
 #include <couchbase/io/http_parser.hxx>
+
+#include <algorithm>
+#include <fmt/core.h>
+#include <http_parser.h>
 
 static inline int
 static_on_status(::http_parser* parser, const char* at, std::size_t length)

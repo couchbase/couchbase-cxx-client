@@ -19,7 +19,7 @@
 
 #define CATCH_CONFIG_MAIN
 
-#include <catch2/catch.hpp>
-
 #include "utils/test_context.hxx"
 #include "utils/uniq_id.hxx"
+
+#include <catch2/catch.hpp>

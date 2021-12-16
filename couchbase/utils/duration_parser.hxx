@@ -18,8 +18,8 @@
 #pragma once
 
 #include <chrono>
-#include <string>
 #include <stdexcept>
+#include <string>
 
 namespace couchbase::utils
 {

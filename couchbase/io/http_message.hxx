@@ -17,10 +17,10 @@
 
 #pragma once
 
+#include <couchbase/service_type.hxx>
+
 #include <map>
 #include <string>
-
-#include <couchbase/service_type.hxx>
 
 namespace couchbase::io
 {

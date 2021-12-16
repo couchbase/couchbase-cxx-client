@@ -16,6 +16,7 @@
  */
 
 #include "test_helper_integration.hxx"
+
 #include <couchbase/operations/management/collections.hxx>
 #include <couchbase/operations/management/query.hxx>
 

@@ -22,7 +22,6 @@
 #include <couchbase/io/retry_context.hxx>
 #include <couchbase/protocol/client_request.hxx>
 #include <couchbase/timeout_defaults.hxx>
-
 #include <couchbase/protocol/cmd_exists.hxx>
 
 namespace couchbase::operations

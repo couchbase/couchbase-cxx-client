@@ -1,8 +1,8 @@
 #pragma once
 
-#include <string>
-#include <sstream>
 #include <map>
+#include <sstream>
+#include <string>
 
 namespace couchbase::utils::string_codec
 {

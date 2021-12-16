@@ -17,12 +17,13 @@
 
 #pragma once
 
+#include <couchbase/sasl/context.h>
+#include <couchbase/sasl/error.h>
+
 #include <functional>
 #include <memory>
 #include <utility>
 
-#include <couchbase/sasl/context.h>
-#include <couchbase/sasl/error.h>
 
 namespace couchbase::sasl
 {

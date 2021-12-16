@@ -17,11 +17,11 @@
 
 #pragma once
 
-#include <vector>
-#include <algorithm>
-
-#include <couchbase/topology/configuration.hxx>
 #include <couchbase/protocol/hello_feature.hxx>
+#include <couchbase/topology/configuration.hxx>
+
+#include <algorithm>
+#include <vector>
 
 namespace couchbase
 {

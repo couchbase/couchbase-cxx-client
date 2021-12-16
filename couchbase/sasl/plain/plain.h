@@ -15,10 +15,10 @@
  */
 #pragma once
 
-#include <vector>
-#include <stdexcept>
-
 #include <couchbase/sasl/client.h>
+
+#include <stdexcept>
+#include <vector>
 
 namespace couchbase::sasl::mechanism::plain
 {

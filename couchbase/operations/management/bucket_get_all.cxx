@@ -18,9 +18,8 @@
 #include <couchbase/operations/management/bucket_get_all.hxx>
 
 #include <couchbase/errors.hxx>
-
-#include <couchbase/utils/json.hxx>
 #include <couchbase/operations/management/bucket_settings_json.hxx>
+#include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations::management
 {

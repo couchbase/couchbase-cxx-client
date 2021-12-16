@@ -21,14 +21,14 @@
  * @author Trond Norbye
  */
 
+#include <couchbase/platform/base64.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-#include <couchbase/platform/base64.h>
 
 /**
  * An array of the legal characters used for direct lookup

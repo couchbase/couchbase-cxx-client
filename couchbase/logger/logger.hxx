@@ -25,12 +25,10 @@
 
 #pragma once
 
-#include <spdlog/fwd.h>
 #include <fmt/core.h>
-
-#include <optional>
 #include <memory>
-
+#include <optional>
+#include <spdlog/fwd.h>
 #include <string>
 
 namespace couchbase::logger

@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <gsl/narrow>
-
 #include <couchbase/topology/error_map.hxx>
+
+#include <gsl/narrow>
 
 namespace tao::json
 {

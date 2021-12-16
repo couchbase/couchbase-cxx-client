@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <string>
-#include <optional>
 #include <map>
+#include <optional>
+#include <string>
 
 namespace couchbase::operations
 {

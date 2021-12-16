@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <couchbase/operations/management/bucket_get_all.hxx>
-#include <couchbase/operations/management/bucket_get.hxx>
+#include <couchbase/operations/management/bucket_create.hxx>
 #include <couchbase/operations/management/bucket_drop.hxx>
 #include <couchbase/operations/management/bucket_flush.hxx>
-#include <couchbase/operations/management/bucket_create.hxx>
+#include <couchbase/operations/management/bucket_get.hxx>
+#include <couchbase/operations/management/bucket_get_all.hxx>
 #include <couchbase/operations/management/bucket_update.hxx>

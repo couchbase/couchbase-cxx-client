@@ -15,11 +15,11 @@
  *   limitations under the License.
  */
 
-#include <cstring>
-
 #include <couchbase/io/mcbp_message.hxx>
 
 #include <couchbase/utils/byteswap.hxx>
+
+#include <cstring>
 
 namespace couchbase::io
 {

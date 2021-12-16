@@ -8,18 +8,19 @@
  *   software will be governed by the Apache License, Version 2.0, included in
  *   the file licenses/APL2.txt.
  */
-#include <couchbase/logger/logger.hxx>
-#include <couchbase/logger/configuration.hxx>
 
+#include <couchbase/logger/logger.hxx>
+
+#include <couchbase/logger/configuration.hxx>
 #include <couchbase/logger/custom_rotating_file_sink.hxx>
 
+#include <chrono>
 #include <spdlog/async.h>
 #include <spdlog/async_logger.h>
 #include <spdlog/sinks/dist_sink.h>
 #include <spdlog/sinks/null_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
-#include <chrono>
 
 static const std::string logger_name{ "couchbase_cxx_client_file_logger" };
 

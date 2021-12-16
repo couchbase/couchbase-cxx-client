@@ -17,13 +17,12 @@
 
 #include <couchbase/platform/terminate_handler.h>
 
-#include <cstdlib>
-#include <exception>
-
 #include <couchbase/logger/logger.hxx>
+#include <couchbase/meta/version.hxx>
 #include <couchbase/platform/backtrace.h>
 
-#include <couchbase/meta/version.hxx>
+#include <cstdlib>
+#include <exception>
 
 namespace couchbase::platform
 {

@@ -15,11 +15,10 @@
  *   limitations under the License.
  */
 
-#include <tao/json.hpp>
-
-#include <tao/json/contrib/traits.hpp>
-
 #include <couchbase/utils/json.hxx>
+
+#include <tao/json.hpp>
+#include <tao/json/contrib/traits.hpp>
 
 namespace couchbase::utils::json
 {

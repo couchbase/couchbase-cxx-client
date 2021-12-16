@@ -17,56 +17,46 @@
 
 #pragma once
 
-#include <utility>
-#include <cstring>
-
-#include <cxx_function.hpp>
-
-#include <asio.hpp>
-
-#include <couchbase/platform/uuid.h>
-
-#include <couchbase/sasl/error.h>
-#include <couchbase/sasl/error_fmt.h>
-
-#include <couchbase/topology/configuration_fmt.hxx>
-#include <couchbase/topology/capabilities_fmt.hxx>
-
+#include <couchbase/diagnostics.hxx>
+#include <couchbase/errors.hxx>
+#include <couchbase/io/mcbp_context.hxx>
 #include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/io/mcbp_parser.hxx>
-#include <couchbase/io/streams.hxx>
 #include <couchbase/io/retry_orchestrator.hxx>
-#include <couchbase/io/mcbp_context.hxx>
 #include <couchbase/io/retry_reason_fmt.hxx>
-
-#include <couchbase/timeout_defaults.hxx>
-
-#include <couchbase/protocol/hello_feature.hxx>
-#include <couchbase/protocol/hello_feature_fmt.hxx>
+#include <couchbase/io/streams.hxx>
+#include <couchbase/logger/logger.hxx>
+#include <couchbase/meta/version.hxx>
+#include <couchbase/origin.hxx>
+#include <couchbase/platform/uuid.h>
 #include <couchbase/protocol/client_request.hxx>
 #include <couchbase/protocol/client_response.hxx>
-#include <couchbase/protocol/server_request.hxx>
-#include <couchbase/protocol/cmd_noop.hxx>
-#include <couchbase/protocol/cmd_hello.hxx>
-#include <couchbase/protocol/cmd_sasl_list_mechs.hxx>
-#include <couchbase/protocol/cmd_sasl_auth.hxx>
-#include <couchbase/protocol/cmd_sasl_step.hxx>
-#include <couchbase/protocol/cmd_select_bucket.hxx>
+#include <couchbase/protocol/cmd_cluster_map_change_notification.hxx>
+#include <couchbase/protocol/cmd_get.hxx>
 #include <couchbase/protocol/cmd_get_cluster_config.hxx>
 #include <couchbase/protocol/cmd_get_error_map.hxx>
-#include <couchbase/protocol/cmd_get.hxx>
-#include <couchbase/protocol/cmd_cluster_map_change_notification.hxx>
-
+#include <couchbase/protocol/cmd_hello.hxx>
+#include <couchbase/protocol/cmd_noop.hxx>
+#include <couchbase/protocol/cmd_sasl_auth.hxx>
+#include <couchbase/protocol/cmd_sasl_list_mechs.hxx>
+#include <couchbase/protocol/cmd_sasl_step.hxx>
+#include <couchbase/protocol/cmd_select_bucket.hxx>
+#include <couchbase/protocol/hello_feature.hxx>
+#include <couchbase/protocol/hello_feature_fmt.hxx>
+#include <couchbase/protocol/server_request.hxx>
 #include <couchbase/sasl/client.h>
-
-#include <couchbase/logger/logger.hxx>
-#include <spdlog/fmt/bin_to_hex.h>
+#include <couchbase/sasl/error.h>
+#include <couchbase/sasl/error_fmt.h>
+#include <couchbase/timeout_defaults.hxx>
+#include <couchbase/topology/capabilities_fmt.hxx>
+#include <couchbase/topology/configuration_fmt.hxx>
 #include <couchbase/utils/join_strings.hxx>
 
-#include <couchbase/origin.hxx>
-#include <couchbase/errors.hxx>
-#include <couchbase/meta/version.hxx>
-#include <couchbase/diagnostics.hxx>
+#include <asio.hpp>
+#include <cstring>
+#include <cxx_function.hpp>
+#include <spdlog/fmt/bin_to_hex.h>
+#include <utility>
 
 namespace couchbase::io
 {

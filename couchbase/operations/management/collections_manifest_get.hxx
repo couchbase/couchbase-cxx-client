@@ -17,15 +17,14 @@
 
 #pragma once
 
-#include <couchbase/protocol/client_request.hxx>
-#include <couchbase/protocol/cmd_get_collections_manifest.hxx>
-
-#include <couchbase/topology/collections_manifest.hxx>
 #include <couchbase/document_id.hxx>
 #include <couchbase/error_context/key_value.hxx>
 #include <couchbase/io/mcbp_context.hxx>
 #include <couchbase/io/retry_context.hxx>
+#include <couchbase/protocol/client_request.hxx>
+#include <couchbase/protocol/cmd_get_collections_manifest.hxx>
 #include <couchbase/timeout_defaults.hxx>
+#include <couchbase/topology/collections_manifest.hxx>
 
 namespace couchbase::operations::management
 {

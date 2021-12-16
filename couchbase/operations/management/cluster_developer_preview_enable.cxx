@@ -16,9 +16,9 @@
  */
 
 #include <couchbase/operations/management/cluster_developer_preview_enable.hxx>
-#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 namespace couchbase::operations::management
 {

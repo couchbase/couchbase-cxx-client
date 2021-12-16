@@ -18,9 +18,7 @@
 #include <couchbase/operations/document_search.hxx>
 
 #include <couchbase/errors.hxx>
-
 #include <couchbase/logger/logger.hxx>
-
 #include <couchbase/utils/json.hxx>
 
 #include <tao/json/contrib/traits.hpp>

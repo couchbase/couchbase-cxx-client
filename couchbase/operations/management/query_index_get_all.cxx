@@ -18,7 +18,6 @@
 #include <couchbase/operations/management/query_index_get_all.hxx>
 
 #include <couchbase/errors.hxx>
-
 #include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations::management

@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/sasl/context.h>
+
 #include <couchbase/platform/uuid.h>
 
 namespace couchbase::sasl

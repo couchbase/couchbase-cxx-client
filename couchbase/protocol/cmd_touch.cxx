@@ -15,13 +15,13 @@
  *   limitations under the License.
  */
 
-#include <gsl/assert>
-#include <cstring>
-
 #include <couchbase/protocol/cmd_touch.hxx>
 
 #include <couchbase/utils/byteswap.hxx>
 #include <couchbase/utils/unsigned_leb128.hxx>
+
+#include <cstring>
+#include <gsl/assert>
 
 namespace couchbase::protocol
 {

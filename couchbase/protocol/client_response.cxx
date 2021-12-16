@@ -15,11 +15,12 @@
  *   limitations under the License.
  */
 
-#include <gsl/assert>
-#include <cstring>
-
 #include <couchbase/protocol/client_response.hxx>
+
 #include <couchbase/utils/json.hxx>
+
+#include <cstring>
+#include <gsl/assert>
 
 namespace couchbase::protocol
 {

@@ -17,16 +17,16 @@
 
 #pragma once
 
-#include <optional>
-#include <set>
-#include <string>
-#include <system_error>
-
 #include <couchbase/document_id.hxx>
 #include <couchbase/io/retry_reason.hxx>
 #include <couchbase/protocol/enhanced_error_info.hxx>
 #include <couchbase/protocol/status.hxx>
 #include <couchbase/topology/error_map.hxx>
+
+#include <optional>
+#include <set>
+#include <string>
+#include <system_error>
 
 namespace couchbase::error_context
 {

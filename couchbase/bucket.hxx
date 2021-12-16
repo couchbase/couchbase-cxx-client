@@ -17,13 +17,13 @@
 
 #pragma once
 
-#include <queue>
-#include <utility>
-
+#include <couchbase/metrics/meter.hxx>
 #include <couchbase/operations.hxx>
 #include <couchbase/origin.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
-#include <couchbase/metrics/meter.hxx>
+
+#include <queue>
+#include <utility>
 
 namespace couchbase
 {

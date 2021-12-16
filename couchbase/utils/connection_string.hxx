@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include <string>
-#include <map>
-
 #include <couchbase/cluster_options.hxx>
+
+#include <map>
+#include <string>
 
 namespace couchbase::utils
 {

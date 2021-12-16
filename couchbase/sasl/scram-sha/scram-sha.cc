@@ -15,15 +15,13 @@
  *   limitations under the License.
  */
 
-#include <couchbase/logger/logger.hxx>
+#include <couchbase/sasl/scram-sha/scram-sha.h>
 
+#include <couchbase/crypto/cbcrypto.h>
+#include <couchbase/logger/logger.hxx>
 #include <couchbase/platform/base64.h>
 #include <couchbase/platform/random.h>
 #include <couchbase/platform/string_hex.h>
-
-#include <couchbase/crypto/cbcrypto.h>
-
-#include <couchbase/sasl/scram-sha/scram-sha.h>
 #include <couchbase/sasl/scram-sha/stringutils.h>
 
 #include <cstring>

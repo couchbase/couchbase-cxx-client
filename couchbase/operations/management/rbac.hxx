@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <string>
 #include <optional>
 #include <set>
+#include <string>
 
 namespace couchbase::operations::management::rbac
 {

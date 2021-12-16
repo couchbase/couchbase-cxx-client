@@ -15,10 +15,9 @@
  *   limitations under the License.
  */
 
-#include <couchbase/logger/logger.hxx>
-
 #include <couchbase/topology/configuration.hxx>
 
+#include <couchbase/logger/logger.hxx>
 #include <couchbase/service_type_fmt.hxx>
 
 namespace couchbase::topology

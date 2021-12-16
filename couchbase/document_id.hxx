@@ -18,8 +18,8 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
 #include <optional>
+#include <string>
 
 namespace couchbase
 {

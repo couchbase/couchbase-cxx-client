@@ -17,7 +17,8 @@
 
 #pragma once
 
-#include <couchbase/topology/configuration_fmt.hxx>
+#include <couchbase/topology/configuration.hxx>
+
 #include <couchbase/service_type_fmt.hxx>
 #include <couchbase/utils/join_strings.hxx>
 

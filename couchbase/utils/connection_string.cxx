@@ -15,13 +15,13 @@
  *   limitations under the License.
  */
 
-#include <tao/pegtl.hpp>
-#include <tao/pegtl/contrib/uri.hpp>
+#include <couchbase/utils/connection_string.hxx>
 
 #include <couchbase/logger/logger.hxx>
-
-#include <couchbase/utils/connection_string.hxx>
 #include <couchbase/utils/duration_parser.hxx>
+
+#include <tao/pegtl.hpp>
+#include <tao/pegtl/contrib/uri.hpp>
 
 namespace couchbase::utils
 {
