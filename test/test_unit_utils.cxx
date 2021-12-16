@@ -66,3 +66,14 @@ TEST_CASE("unit: join strings", "[unit]")
     field_specs.emplace_back("id:integer");
     REQUIRE(couchbase::utils::join_strings(field_specs, ",") == "testkey:string,volume:double,id:integer");
 }
+
+TEST_CASE("unit: join strings (fmt version)", "[unit]")
+{
+    std::vector<std::string> field_specs{ "testkey:string" };
+
+    REQUIRE(couchbase::utils::join_strings_fmt("{}", field_specs, ",") == "testkey:string");
+
+    field_specs.emplace_back("volume:double");
+    field_specs.emplace_back("id:integer");
+    REQUIRE(couchbase::utils::join_strings_fmt("{}", field_specs, ",") == "testkey:string,volume:double,id:integer");
+}
