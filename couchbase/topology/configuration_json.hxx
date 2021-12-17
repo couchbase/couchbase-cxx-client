@@ -19,6 +19,8 @@
 
 #include <couchbase/topology/configuration.hxx>
 
+#include <tao/json/forward.hpp>
+
 namespace tao::json
 {
 template<>

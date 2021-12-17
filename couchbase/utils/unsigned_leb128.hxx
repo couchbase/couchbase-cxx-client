@@ -19,8 +19,8 @@
 #include <array>
 #include <gsl/util>
 #include <optional>
-#include <type_traits>
 #include <stdexcept>
+#include <type_traits>
 
 namespace couchbase::utils
 {

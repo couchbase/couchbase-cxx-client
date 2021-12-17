@@ -17,13 +17,6 @@
 
 #pragma once
 
-#include <cmath>
-#include <optional>
-#include <cstring>
-
-#include <gsl/assert>
-#include <fmt/core.h>
-
 #include <couchbase/io/mcbp_message.hxx>
 #include <couchbase/protocol/cas.hxx>
 #include <couchbase/protocol/client_opcode.hxx>
@@ -38,6 +31,12 @@
 #include <couchbase/protocol/status.hxx>
 #include <couchbase/protocol/status_fmt.hxx>
 #include <couchbase/utils/byteswap.hxx>
+
+#include <cmath>
+#include <cstring>
+#include <fmt/core.h>
+#include <gsl/assert>
+#include <optional>
 
 namespace couchbase::protocol
 {

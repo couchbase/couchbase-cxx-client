@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include <asio/steady_timer.hpp>
-
 #include <couchbase/metrics/logging_meter_options.hxx>
 #include <couchbase/metrics/meter.hxx>
+
+#include <asio/steady_timer.hpp>
 
 namespace couchbase::metrics
 {

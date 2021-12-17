@@ -15,13 +15,13 @@
  *   limitations under the License.
  */
 
-#include <cstring>
-
 #include <couchbase/protocol/cmd_prepend.hxx>
 
 #include <couchbase/protocol/frame_info_id.hxx>
 #include <couchbase/utils/byteswap.hxx>
 #include <couchbase/utils/unsigned_leb128.hxx>
+
+#include <cstring>
 
 namespace couchbase::protocol
 {

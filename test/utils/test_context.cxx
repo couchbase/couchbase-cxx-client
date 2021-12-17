@@ -15,9 +15,9 @@
  *   limitations under the License.
  */
 
-#include <cstring>
-
 #include "test_context.hxx"
+
+#include <cstring>
 
 namespace test::utils
 {

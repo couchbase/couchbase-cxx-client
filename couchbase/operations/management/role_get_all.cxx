@@ -16,12 +16,11 @@
  */
 
 #include <couchbase/operations/management/role_get_all.hxx>
-#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
-
-#include <couchbase/utils/json.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 #include <couchbase/operations/management/rbac_json.hxx>
+#include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations::management
 {

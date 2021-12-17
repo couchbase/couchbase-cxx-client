@@ -15,17 +15,14 @@
  *   limitations under the License.
  */
 
-#include <couchbase/protocol/durability_level.hxx>
-
 #include <couchbase/operations/management/bucket_create.hxx>
-#include <couchbase/operations/management/error_utils.hxx>
-
-#include <couchbase/utils/url_codec.hxx>
 
 #include <couchbase/errors.hxx>
-
-#include <couchbase/utils/json.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
+#include <couchbase/protocol/durability_level.hxx>
 #include <couchbase/utils/join_strings.hxx>
+#include <couchbase/utils/json.hxx>
+#include <couchbase/utils/url_codec.hxx>
 
 namespace couchbase::operations::management
 {

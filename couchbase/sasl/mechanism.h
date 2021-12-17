@@ -17,11 +17,11 @@
 
 #pragma once
 
+#include <couchbase/sasl/error.h>
+
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-#include <couchbase/sasl/error.h>
 
 namespace couchbase::sasl
 {

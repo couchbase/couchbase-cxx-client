@@ -15,21 +15,17 @@
  *   limitations under the License.
  */
 
-#include <gsl/assert>
-#include <cstring>
-
-#include <snappy.h>
-
-#include <spdlog/fmt/bin_to_hex.h>
-
 #include <couchbase/io/mcbp_parser.hxx>
 
-#include <couchbase/protocol/magic.hxx>
+#include <couchbase/logger/logger.hxx>
 #include <couchbase/protocol/datatype.hxx>
-
+#include <couchbase/protocol/magic.hxx>
 #include <couchbase/utils/byteswap.hxx>
 
-#include <couchbase/logger/logger.hxx>
+#include <cstring>
+#include <gsl/assert>
+#include <snappy.h>
+#include <spdlog/fmt/bin_to_hex.h>
 
 namespace couchbase::io
 {

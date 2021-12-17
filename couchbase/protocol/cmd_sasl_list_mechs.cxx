@@ -15,11 +15,10 @@
  *   limitations under the License.
  */
 
-#include <algorithm>
-
-#include <gsl/assert>
-
 #include <couchbase/protocol/cmd_sasl_list_mechs.hxx>
+
+#include <algorithm>
+#include <gsl/assert>
 
 namespace couchbase::protocol
 {

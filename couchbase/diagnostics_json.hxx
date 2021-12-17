@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/diagnostics.hxx>
+
 #include <couchbase/diagnostics_fmt.hxx>
 #include <couchbase/service_type_fmt.hxx>
 

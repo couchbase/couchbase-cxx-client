@@ -17,11 +17,12 @@
 
 #pragma once
 
+#include <couchbase/io/retry_reason.hxx>
+
 #include <optional>
 #include <set>
 #include <string>
-
-#include <couchbase/io/retry_reason.hxx>
+#include <system_error>
 
 namespace couchbase::error_context
 {

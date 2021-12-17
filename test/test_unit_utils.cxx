@@ -17,13 +17,12 @@
 
 #include "test_helper.hxx"
 
-#include <tao/json.hpp>
-
+#include <couchbase/errors.hxx>
+#include <couchbase/utils/join_strings.hxx>
 #include <couchbase/utils/json.hxx>
 #include <couchbase/utils/url_codec.hxx>
-#include <couchbase/utils/join_strings.hxx>
 
-#include <couchbase/errors.hxx>
+#include <tao/json.hpp>
 
 TEST_CASE("unit: transformer to deduplicate JSON keys", "[unit]")
 {

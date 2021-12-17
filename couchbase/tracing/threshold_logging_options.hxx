@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <chrono>
-
 #include <couchbase/service_type.hxx>
+
+#include <chrono>
 
 namespace couchbase::tracing
 {

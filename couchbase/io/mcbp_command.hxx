@@ -17,22 +17,17 @@
 
 #pragma once
 
-#include <functional>
-#include <utility>
-
-#include <cxx_function.hpp>
-
-#include <couchbase/platform/uuid.h>
-
+#include <couchbase/document_id_fmt.hxx>
 #include <couchbase/io/mcbp_session.hxx>
 #include <couchbase/io/retry_orchestrator.hxx>
-
-#include <couchbase/protocol/cmd_get_collection_id.hxx>
-
-#include <couchbase/tracing/request_tracer.hxx>
 #include <couchbase/metrics/meter.hxx>
+#include <couchbase/platform/uuid.h>
+#include <couchbase/protocol/cmd_get_collection_id.hxx>
+#include <couchbase/tracing/request_tracer.hxx>
 
-#include <couchbase/document_id_fmt.hxx>
+#include <cxx_function.hpp>
+#include <functional>
+#include <utility>
 
 namespace couchbase::operations
 {

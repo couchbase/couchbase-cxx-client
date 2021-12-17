@@ -17,14 +17,12 @@
 
 #pragma once
 
-#include <unistd.h>
-
-#include <fstream>
-#include <string>
+#include <couchbase/timeout_defaults.hxx>
 
 #include <asio/ip/address.hpp>
-
-#include <couchbase/timeout_defaults.hxx>
+#include <fstream>
+#include <string>
+#include <unistd.h>
 
 namespace couchbase::io::dns
 {

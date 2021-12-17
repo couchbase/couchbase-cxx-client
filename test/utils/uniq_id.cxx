@@ -15,10 +15,9 @@
  *   limitations under the License.
  */
 
-#include <string>
 #include <chrono>
-
 #include <fmt/core.h>
+#include <string>
 
 namespace test::utils
 {

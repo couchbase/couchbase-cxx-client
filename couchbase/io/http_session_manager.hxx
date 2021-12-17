@@ -17,14 +17,13 @@
 
 #pragma once
 
-#include <couchbase/io/http_session.hxx>
-#include <couchbase/service_type.hxx>
-#include <couchbase/io/http_context.hxx>
-#include <couchbase/operations/http_noop.hxx>
 #include <couchbase/io/http_command.hxx>
-
-#include <couchbase/tracing/noop_tracer.hxx>
+#include <couchbase/io/http_context.hxx>
+#include <couchbase/io/http_session.hxx>
 #include <couchbase/metrics/meter.hxx>
+#include <couchbase/operations/http_noop.hxx>
+#include <couchbase/service_type.hxx>
+#include <couchbase/tracing/noop_tracer.hxx>
 
 #include <random>
 

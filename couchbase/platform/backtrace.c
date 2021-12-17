@@ -15,20 +15,21 @@
  *   limitations under the License.
  */
 
-#include <inttypes.h>
 #include <couchbase/platform/backtrace.h>
+
+#include <inttypes.h>
 #include <strings.h>
 
 #if defined(WIN32) && defined(HAVE_BACKTRACE_SUPPORT)
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #include <Dbghelp.h>
+#include <windows.h>
 #endif
 
 #if defined(HAVE_BACKTRACE) && defined(HAVE_DLADDR)
 #define HAVE_BACKTRACE_SUPPORT 1
-#include <execinfo.h> // for backtrace()
 #include <dlfcn.h>    // for dladdr()
+#include <execinfo.h> // for backtrace()
 #include <stddef.h>   // for ptrdiff_t
 #endif
 

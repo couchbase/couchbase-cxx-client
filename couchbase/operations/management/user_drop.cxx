@@ -16,10 +16,9 @@
  */
 
 #include <couchbase/operations/management/user_drop.hxx>
-#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
-
+#include <couchbase/operations/management/error_utils.hxx>
 #include <couchbase/operations/management/rbac_fmt.hxx>
 
 namespace couchbase::operations::management

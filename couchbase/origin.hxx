@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include <string>
-
-#include <utility>
 #include <couchbase/utils/connection_string.hxx>
+
+#include <string>
+#include <utility>
 
 namespace couchbase
 {

@@ -17,10 +17,11 @@
 
 #pragma once
 
+#include <couchbase/platform/uuid.h>
+
 #include <map>
 #include <set>
 
-#include <couchbase/platform/uuid.h>
 
 namespace couchbase
 {

@@ -15,12 +15,12 @@
  *   limitations under the License.
  */
 
-#include <gsl/assert>
-
 #include <couchbase/protocol/cmd_get_collections_manifest.hxx>
 
-#include <couchbase/utils/json.hxx>
 #include <couchbase/topology/collections_manifest_json.hxx>
+#include <couchbase/utils/json.hxx>
+
+#include <gsl/assert>
 
 namespace couchbase::protocol
 {

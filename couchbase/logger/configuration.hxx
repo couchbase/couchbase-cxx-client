@@ -11,7 +11,6 @@
 #pragma once
 
 #include <spdlog/common.h>
-
 #include <string>
 
 namespace couchbase::logger

@@ -17,11 +17,12 @@
 
 #pragma once
 
+#include "integration_shortcuts.hxx"
 #include "server_version.hxx"
+
 #include <couchbase/cluster.hxx>
 #include <couchbase/operations/management/bucket.hxx>
 #include <couchbase/operations/management/collections.hxx>
-#include "integration_shortcuts.hxx"
 
 namespace test::utils
 {

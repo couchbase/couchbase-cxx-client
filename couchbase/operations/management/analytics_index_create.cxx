@@ -16,13 +16,12 @@
  */
 
 #include <couchbase/operations/management/analytics_index_create.hxx>
-#include <couchbase/operations/management/error_utils.hxx>
 
-#include <couchbase/utils/name_codec.hxx>
 #include <couchbase/errors.hxx>
-
-#include <couchbase/utils/json.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 #include <couchbase/utils/join_strings.hxx>
+#include <couchbase/utils/json.hxx>
+#include <couchbase/utils/name_codec.hxx>
 
 namespace couchbase::operations::management
 {

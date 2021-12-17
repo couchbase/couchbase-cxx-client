@@ -18,13 +18,13 @@
 #pragma once
 
 #include <couchbase/operations/management/search_get_stats.hxx>
-#include <couchbase/operations/management/search_index_get_all.hxx>
-#include <couchbase/operations/management/search_index_get.hxx>
-#include <couchbase/operations/management/search_index_get_stats.hxx>
-#include <couchbase/operations/management/search_index_get_documents_count.hxx>
-#include <couchbase/operations/management/search_index_upsert.hxx>
-#include <couchbase/operations/management/search_index_drop.hxx>
-#include <couchbase/operations/management/search_index_control_ingest.hxx>
-#include <couchbase/operations/management/search_index_control_query.hxx>
-#include <couchbase/operations/management/search_index_control_plan_freeze.hxx>
 #include <couchbase/operations/management/search_index_analyze_document.hxx>
+#include <couchbase/operations/management/search_index_control_ingest.hxx>
+#include <couchbase/operations/management/search_index_control_plan_freeze.hxx>
+#include <couchbase/operations/management/search_index_control_query.hxx>
+#include <couchbase/operations/management/search_index_drop.hxx>
+#include <couchbase/operations/management/search_index_get.hxx>
+#include <couchbase/operations/management/search_index_get_all.hxx>
+#include <couchbase/operations/management/search_index_get_documents_count.hxx>
+#include <couchbase/operations/management/search_index_get_stats.hxx>
+#include <couchbase/operations/management/search_index_upsert.hxx>

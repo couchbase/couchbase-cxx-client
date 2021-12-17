@@ -20,6 +20,10 @@
 #include <couchbase/tracing/request_tracer.hxx>
 #include <couchbase/tracing/threshold_logging_options.hxx>
 
+#include <asio/io_context.hpp>
+#include <memory>
+#include <string>
+
 namespace couchbase::tracing
 {
 class threshold_logging_span;

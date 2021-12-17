@@ -15,13 +15,12 @@
  *   limitations under the License.
  */
 
-#include <cstring>
-
-#include <gsl/assert>
-
 #include <couchbase/protocol/cmd_hello.hxx>
 
 #include <couchbase/utils/byteswap.hxx>
+
+#include <cstring>
+#include <gsl/assert>
 
 namespace couchbase::protocol
 {

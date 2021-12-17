@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/operations/management/query_index_get_all.hxx>
-#include <couchbase/operations/management/query_index_drop.hxx>
-#include <couchbase/operations/management/query_index_create.hxx>
 #include <couchbase/operations/management/query_index_build_deferred.hxx>
+#include <couchbase/operations/management/query_index_create.hxx>
+#include <couchbase/operations/management/query_index_drop.hxx>
+#include <couchbase/operations/management/query_index_get_all.hxx>

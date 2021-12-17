@@ -21,7 +21,6 @@
 #include <couchbase/protocol/client_opcode.hxx>
 #include <couchbase/protocol/cmd_info.hxx>
 #include <couchbase/protocol/status.hxx>
-
 #include <couchbase/topology/configuration.hxx>
 
 namespace couchbase::protocol

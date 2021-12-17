@@ -23,6 +23,8 @@
 #include <couchbase/protocol/cmd_info.hxx>
 #include <couchbase/protocol/status.hxx>
 
+#include <gsl/assert>
+
 namespace couchbase::protocol
 {
 

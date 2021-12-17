@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include <couchbase/operations/management/role_get_all.hxx>
-#include <couchbase/operations/management/user_get_all.hxx>
-#include <couchbase/operations/management/user_get.hxx>
-#include <couchbase/operations/management/user_drop.hxx>
-#include <couchbase/operations/management/user_upsert.hxx>
-#include <couchbase/operations/management/group_get_all.hxx>
-#include <couchbase/operations/management/group_get.hxx>
 #include <couchbase/operations/management/group_drop.hxx>
+#include <couchbase/operations/management/group_get.hxx>
+#include <couchbase/operations/management/group_get_all.hxx>
 #include <couchbase/operations/management/group_upsert.hxx>
+#include <couchbase/operations/management/role_get_all.hxx>
+#include <couchbase/operations/management/user_drop.hxx>
+#include <couchbase/operations/management/user_get.hxx>
+#include <couchbase/operations/management/user_get_all.hxx>
+#include <couchbase/operations/management/user_upsert.hxx>

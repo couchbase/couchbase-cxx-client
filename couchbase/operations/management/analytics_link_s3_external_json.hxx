@@ -19,6 +19,8 @@
 
 #include <couchbase/operations/management/analytics_link_s3_external.hxx>
 
+#include <tao/json/forward.hpp>
+
 namespace tao::json
 {
 template<>

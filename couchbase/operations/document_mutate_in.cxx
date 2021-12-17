@@ -15,11 +15,11 @@
  *   limitations under the License.
  */
 
-#include <algorithm>
+#include <couchbase/operations/document_mutate_in.hxx>
 
 #include <couchbase/errors.hxx>
 
-#include <couchbase/operations/document_mutate_in.hxx>
+#include <algorithm>
 
 namespace couchbase::operations
 {

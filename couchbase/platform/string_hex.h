@@ -16,8 +16,8 @@
  */
 #pragma once
 
-#include <string_view>
 #include <cstdint>
+#include <string_view>
 
 namespace couchbase
 {

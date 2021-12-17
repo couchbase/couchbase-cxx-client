@@ -17,9 +17,9 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <vector>
-#include <array>
 
 namespace couchbase
 {

@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/operations/management/view_index_get_all.hxx>
-#include <couchbase/operations/management/view_index_get.hxx>
 #include <couchbase/operations/management/view_index_drop.hxx>
+#include <couchbase/operations/management/view_index_get.hxx>
+#include <couchbase/operations/management/view_index_get_all.hxx>
 #include <couchbase/operations/management/view_index_upsert.hxx>

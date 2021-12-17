@@ -15,14 +15,13 @@
  *   limitations under the License.
  */
 
-#include <regex>
-
 #include <couchbase/operations/management/collection_drop.hxx>
-#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
-
+#include <couchbase/operations/management/error_utils.hxx>
 #include <couchbase/utils/json.hxx>
+
+#include <regex>
 
 namespace couchbase::operations::management
 {

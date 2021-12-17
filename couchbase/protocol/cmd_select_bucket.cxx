@@ -15,9 +15,9 @@
  *   limitations under the License.
  */
 
-#include <gsl/assert>
-
 #include <couchbase/protocol/cmd_select_bucket.hxx>
+
+#include <gsl/assert>
 
 namespace couchbase::protocol
 {

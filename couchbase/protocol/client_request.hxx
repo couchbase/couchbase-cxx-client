@@ -17,13 +17,13 @@
 
 #pragma once
 
-#include <gsl/util>
-#include <cstring>
-
 #include <couchbase/protocol/client_opcode.hxx>
-#include <couchbase/protocol/magic.hxx>
 #include <couchbase/protocol/client_response.hxx>
+#include <couchbase/protocol/magic.hxx>
 #include <couchbase/utils/byteswap.hxx>
+
+#include <cstring>
+#include <gsl/util>
 
 namespace couchbase::protocol
 {

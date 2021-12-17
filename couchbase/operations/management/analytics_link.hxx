@@ -17,16 +17,14 @@
 
 #pragma once
 
-#include <string>
-#include <algorithm>
-
-#include <fmt/core.h>
-
-#include <couchbase/utils/url_codec.hxx>
-
 #include <couchbase/operations/management/analytics_link_azure_blob_external.hxx>
 #include <couchbase/operations/management/analytics_link_couchbase_remote.hxx>
 #include <couchbase/operations/management/analytics_link_s3_external.hxx>
+#include <couchbase/utils/url_codec.hxx>
+
+#include <algorithm>
+#include <fmt/core.h>
+#include <string>
 
 namespace couchbase::operations::management::analytics_link
 {

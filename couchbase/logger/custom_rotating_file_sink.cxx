@@ -21,13 +21,12 @@
  */
 
 #include <couchbase/logger/custom_rotating_file_sink.hxx>
+
 #include <couchbase/platform/dirutils.h>
 
 #include <gsl/assert>
-
-#include <spdlog/details/file_helper.h>
-
 #include <memory>
+#include <spdlog/details/file_helper.h>
 
 static unsigned long
 find_first_logfile_id(const std::string& basename)

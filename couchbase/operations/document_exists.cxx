@@ -18,9 +18,7 @@
 #include <couchbase/operations/document_exists.hxx>
 
 #include <couchbase/errors.hxx>
-
 #include <couchbase/logger/logger.hxx>
-
 #include <couchbase/document_id_fmt.hxx>
 
 namespace couchbase::operations

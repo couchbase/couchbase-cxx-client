@@ -17,18 +17,18 @@
 
 #pragma once
 
-#include <couchbase/operations/management/analytics_get_pending_mutations.hxx>
-#include <couchbase/operations/management/analytics_dataverse_create.hxx>
-#include <couchbase/operations/management/analytics_dataverse_drop.hxx>
 #include <couchbase/operations/management/analytics_dataset_create.hxx>
 #include <couchbase/operations/management/analytics_dataset_drop.hxx>
 #include <couchbase/operations/management/analytics_dataset_get_all.hxx>
-#include <couchbase/operations/management/analytics_index_get_all.hxx>
+#include <couchbase/operations/management/analytics_dataverse_create.hxx>
+#include <couchbase/operations/management/analytics_dataverse_drop.hxx>
+#include <couchbase/operations/management/analytics_get_pending_mutations.hxx>
 #include <couchbase/operations/management/analytics_index_create.hxx>
 #include <couchbase/operations/management/analytics_index_drop.hxx>
+#include <couchbase/operations/management/analytics_index_get_all.hxx>
 #include <couchbase/operations/management/analytics_link_connect.hxx>
-#include <couchbase/operations/management/analytics_link_disconnect.hxx>
 #include <couchbase/operations/management/analytics_link_create.hxx>
-#include <couchbase/operations/management/analytics_link_replace.hxx>
+#include <couchbase/operations/management/analytics_link_disconnect.hxx>
 #include <couchbase/operations/management/analytics_link_drop.hxx>
 #include <couchbase/operations/management/analytics_link_get_all.hxx>
+#include <couchbase/operations/management/analytics_link_replace.hxx>

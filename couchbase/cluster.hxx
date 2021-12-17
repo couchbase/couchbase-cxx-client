@@ -17,31 +17,26 @@
 
 #pragma once
 
-#include <fstream>
-#include <thread>
-#include <utility>
-
-#include <asio/ssl.hpp>
-
+#include <couchbase/bucket.hxx>
+#include <couchbase/diagnostics.hxx>
 #include <couchbase/io/dns_client.hxx>
 #include <couchbase/io/http_command.hxx>
 #include <couchbase/io/http_session_manager.hxx>
 #include <couchbase/io/mcbp_command.hxx>
 #include <couchbase/io/mcbp_session.hxx>
-
-#include <couchbase/origin.hxx>
-#include <couchbase/bucket.hxx>
+#include <couchbase/metrics/logging_meter.hxx>
+#include <couchbase/metrics/noop_meter.hxx>
 #include <couchbase/operations.hxx>
 #include <couchbase/operations/management/bucket_create.hxx>
-
+#include <couchbase/origin.hxx>
 #include <couchbase/tracing/noop_tracer.hxx>
 #include <couchbase/tracing/threshold_logging_tracer.hxx>
-#include <couchbase/metrics/noop_meter.hxx>
-#include <couchbase/metrics/logging_meter.hxx>
-
-#include <couchbase/diagnostics.hxx>
-
 #include <couchbase/utils/join_strings.hxx>
+
+#include <asio/ssl.hpp>
+#include <fstream>
+#include <thread>
+#include <utility>
 
 namespace couchbase
 {

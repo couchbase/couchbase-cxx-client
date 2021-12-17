@@ -15,11 +15,11 @@
  *   limitations under the License.
  */
 
-#include <gsl/assert>
-
 #include <couchbase/protocol/cmd_unlock.hxx>
 
 #include <couchbase/utils/unsigned_leb128.hxx>
+
+#include <gsl/assert>
 
 namespace couchbase::protocol
 {

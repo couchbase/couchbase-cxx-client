@@ -16,8 +16,10 @@
  */
 
 #include <couchbase/sasl/client.h>
+
 #include <couchbase/sasl/plain/plain.h>
 #include <couchbase/sasl/scram-sha/scram-sha.h>
+
 #include <memory>
 
 namespace couchbase::sasl

@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/logger/logger.hxx>
+
 #include <spdlog/details/os.h>
 
 namespace test::utils

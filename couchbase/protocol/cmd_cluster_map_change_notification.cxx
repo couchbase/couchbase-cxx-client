@@ -15,15 +15,14 @@
  *   limitations under the License.
  */
 
-#include <gsl/assert>
-#include <cstring>
-
 #include <couchbase/protocol/cmd_cluster_map_change_notification.hxx>
 
-#include <couchbase/utils/byteswap.hxx>
-
-#include <couchbase/utils/json.hxx>
 #include <couchbase/topology/configuration_json.hxx>
+#include <couchbase/utils/byteswap.hxx>
+#include <couchbase/utils/json.hxx>
+
+#include <cstring>
+#include <gsl/assert>
 
 namespace couchbase::protocol
 {

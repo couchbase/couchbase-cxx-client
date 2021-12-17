@@ -17,11 +17,11 @@
 
 #pragma once
 
-#include <chrono>
-#include <set>
-
 #include <couchbase/io/retry_reason.hxx>
 #include <couchbase/io/retry_strategy.hxx>
+
+#include <chrono>
+#include <set>
 
 namespace couchbase::io
 {

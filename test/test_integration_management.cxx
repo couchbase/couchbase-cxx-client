@@ -17,13 +17,13 @@
 
 #include "test_helper_integration.hxx"
 
-#include <couchbase/operations/management/bucket.hxx>
-#include <couchbase/operations/management/user.hxx>
-#include <couchbase/operations/management/collections.hxx>
-#include <couchbase/operations/management/query.hxx>
 #include <couchbase/operations/management/analytics.hxx>
 #include <couchbase/operations/management/analytics_link.hxx>
+#include <couchbase/operations/management/bucket.hxx>
+#include <couchbase/operations/management/collections.hxx>
+#include <couchbase/operations/management/query.hxx>
 #include <couchbase/operations/management/search.hxx>
+#include <couchbase/operations/management/user.hxx>
 
 static couchbase::operations::management::bucket_get_response
 wait_for_bucket_created(test::utils::integration_test_guard& integration, const std::string& bucket_name)

@@ -14,10 +14,11 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
-#include "stringutils.h"
 
-#include <stdexcept>
+#include <couchbase/sasl/scram-sha/stringutils.h>
+
 #include <cctype>
+#include <stdexcept>
 
 namespace couchbase::sasl::mechanism::scram
 {

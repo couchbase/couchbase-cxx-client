@@ -15,10 +15,11 @@
  *   limitations under the License.
  */
 
-#include <fmt/core.h>
-
 #include <couchbase/protocol/status.hxx>
+
 #include <couchbase/protocol/status_fmt.hxx>
+
+#include <fmt/core.h>
 
 namespace couchbase::protocol
 {

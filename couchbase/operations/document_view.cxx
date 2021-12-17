@@ -17,11 +17,10 @@
 
 #include <couchbase/operations/document_view.hxx>
 
-#include <couchbase/utils/url_codec.hxx>
 #include <couchbase/errors.hxx>
-
-#include <couchbase/utils/json.hxx>
 #include <couchbase/utils/join_strings.hxx>
+#include <couchbase/utils/json.hxx>
+#include <couchbase/utils/url_codec.hxx>
 
 namespace couchbase::operations
 {

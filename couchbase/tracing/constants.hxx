@@ -17,12 +17,11 @@
 
 #pragma once
 
-#include <string_view>
-
-#include <gsl/assert>
-
 #include <couchbase/protocol/client_opcode.hxx>
 #include <couchbase/service_type.hxx>
+
+#include <gsl/assert>
+#include <string_view>
 
 namespace couchbase::tracing
 {

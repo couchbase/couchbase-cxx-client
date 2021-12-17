@@ -17,11 +17,11 @@
 
 #pragma once
 
-#include <tao/json/forward.hpp>
+#include <couchbase/operations/management/rbac.hxx>
 
 #include <couchbase/logger/logger.hxx>
 
-#include <couchbase/operations/management/rbac.hxx>
+#include <tao/json/forward.hpp>
 
 namespace tao::json
 {

@@ -15,13 +15,12 @@
  *   limitations under the License.
  */
 
-#include <algorithm>
-
 #include <couchbase/operations/management/analytics_link_s3_external.hxx>
 
+#include <couchbase/errors.hxx>
 #include <couchbase/utils/url_codec.hxx>
 
-#include <couchbase/errors.hxx>
+#include <algorithm>
 
 namespace couchbase::operations::management
 {

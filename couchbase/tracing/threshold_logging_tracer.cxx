@@ -15,24 +15,18 @@
  *   limitations under the License.
  */
 
-#include <chrono>
-#include <queue>
-
-#include <tao/json/value.hpp>
-
-#include <asio/steady_timer.hpp>
-
-#include <couchbase/platform/uuid.h>
-
-#include <couchbase/meta/version.hxx>
-
-#include <couchbase/logger/logger.hxx>
-
 #include <couchbase/tracing/threshold_logging_tracer.hxx>
 
+#include <couchbase/logger/logger.hxx>
+#include <couchbase/meta/version.hxx>
+#include <couchbase/platform/uuid.h>
+#include <couchbase/service_type_fmt.hxx>
 #include <couchbase/utils/json.hxx>
 
-#include <couchbase/service_type_fmt.hxx>
+#include <asio/steady_timer.hpp>
+#include <chrono>
+#include <queue>
+#include <tao/json/value.hpp>
 
 namespace couchbase::tracing
 {

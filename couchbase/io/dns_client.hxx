@@ -17,18 +17,15 @@
 
 #pragma once
 
-#include <memory>
-#include <sstream>
+#include <couchbase/errors.hxx>
+#include <couchbase/io/dns_codec.hxx>
+#include <couchbase/io/dns_config.hxx>
+#include <couchbase/utils/join_strings.hxx>
 
 #include <asio/ip/tcp.hpp>
 #include <asio/read.hpp>
-
-#include <couchbase/errors.hxx>
-
-#include <couchbase/io/dns_codec.hxx>
-#include <couchbase/io/dns_config.hxx>
-
-#include <couchbase/utils/join_strings.hxx>
+#include <memory>
+#include <sstream>
 
 namespace couchbase::io::dns
 {

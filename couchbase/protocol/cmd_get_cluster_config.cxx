@@ -15,15 +15,13 @@
  *   limitations under the License.
  */
 
-#include <gsl/assert>
-
-#include <couchbase/logger/logger.hxx>
-
 #include <couchbase/protocol/cmd_get_cluster_config.hxx>
 
+#include <couchbase/logger/logger.hxx>
+#include <couchbase/topology/configuration_json.hxx>
 #include <couchbase/utils/json.hxx>
 
-#include <couchbase/topology/configuration_json.hxx>
+#include <gsl/assert>
 
 namespace couchbase::protocol
 {

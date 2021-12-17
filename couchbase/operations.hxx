@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <couchbase/operations/document_analytics.hxx>
 #include <couchbase/operations/document_append.hxx>
 #include <couchbase/operations/document_decrement.hxx>
 #include <couchbase/operations/document_exists.hxx>
@@ -29,16 +30,13 @@
 #include <couchbase/operations/document_lookup_in.hxx>
 #include <couchbase/operations/document_mutate_in.hxx>
 #include <couchbase/operations/document_prepend.hxx>
+#include <couchbase/operations/document_query.hxx>
 #include <couchbase/operations/document_remove.hxx>
 #include <couchbase/operations/document_replace.hxx>
+#include <couchbase/operations/document_search.hxx>
 #include <couchbase/operations/document_touch.hxx>
 #include <couchbase/operations/document_unlock.hxx>
 #include <couchbase/operations/document_upsert.hxx>
-
-#include <couchbase/operations/mcbp_noop.hxx>
-#include <couchbase/operations/http_noop.hxx>
-
-#include <couchbase/operations/document_analytics.hxx>
-#include <couchbase/operations/document_query.hxx>
-#include <couchbase/operations/document_search.hxx>
 #include <couchbase/operations/document_view.hxx>
+#include <couchbase/operations/http_noop.hxx>
+#include <couchbase/operations/mcbp_noop.hxx>

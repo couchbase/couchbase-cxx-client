@@ -16,9 +16,9 @@
  */
 
 #include <couchbase/operations/management/view_index_drop.hxx>
-#include <couchbase/operations/management/error_utils.hxx>
 
 #include <couchbase/errors.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 
 namespace couchbase::operations::management
 {

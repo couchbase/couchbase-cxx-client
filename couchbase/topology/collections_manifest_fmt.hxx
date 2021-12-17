@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include <vector>
-
 #include <couchbase/topology/collections_manifest.hxx>
 
-#include <fmt/core.h>
 #include <couchbase/utils/join_strings.hxx>
+
+#include <fmt/core.h>
+#include <vector>
 
 template<>
 struct fmt::formatter<couchbase::topology::collections_manifest> {

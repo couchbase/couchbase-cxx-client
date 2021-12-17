@@ -14,7 +14,9 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
+
 #include <couchbase/platform/uuid.h>
+
 #include <couchbase/platform/string_hex.h>
 
 #include <iomanip>

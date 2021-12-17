@@ -18,7 +18,6 @@
 #include <couchbase/operations/document_get_projected.hxx>
 
 #include <couchbase/errors.hxx>
-
 #include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations

@@ -10,8 +10,8 @@
 
 #include <couchbase/platform/dirutils.h>
 
-#include <dirent.h>
 #include <cstring>
+#include <dirent.h>
 #include <system_error>
 
 namespace couchbase::platform
