@@ -25,7 +25,7 @@ namespace couchbase
 {
 namespace protocol
 {
-static const size_t header_size = 24;
+static const std::size_t header_size = 24;
 using header_buffer = std::array<std::uint8_t, header_size>;
 } // namespace protocol
 
