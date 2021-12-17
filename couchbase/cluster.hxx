@@ -252,10 +252,10 @@ class cluster
             }
             if (!origin_.options().trust_certificate.empty()) {
                 std::error_code ec{};
-                LOG_DEBUG(R"([{}]: use TLS certificate chain: "{}")", id_, origin_.options().trust_certificate);
-                tls_.use_certificate_chain_file(origin_.options().trust_certificate, ec);
+                LOG_DEBUG(R"([{}]: use TLS verify file: "{}")", id_, origin_.options().trust_certificate);
+                tls_.load_verify_file(origin_.options().trust_certificate, ec);
                 if (ec) {
-                    LOG_ERROR("[{}]: unable to load certificate chain \"{}\": {}", id_, origin_.options().trust_certificate, ec.message());
+                    LOG_ERROR("[{}]: unable to load verify file \"{}\": {}", id_, origin_.options().trust_certificate, ec.message());
                     return handler(ec);
                 }
             }
@@ -271,10 +271,10 @@ class cluster
 #endif
             if (origin_.credentials().uses_certificate()) {
                 std::error_code ec{};
-                LOG_DEBUG(R"([{}]: use TLS certificate: "{}")", id_, origin_.certificate_path());
-                tls_.use_certificate_file(origin_.certificate_path(), asio::ssl::context::file_format::pem, ec);
+                LOG_DEBUG(R"([{}]: use TLS certificate chain: "{}")", id_, origin_.certificate_path());
+                tls_.use_certificate_chain_file(origin_.certificate_path(), ec);
                 if (ec) {
-                    LOG_ERROR("[{}]: unable to load certificate \"{}\": {}", id_, origin_.certificate_path(), ec.message());
+                    LOG_ERROR("[{}]: unable to load certificate chain \"{}\": {}", id_, origin_.certificate_path(), ec.message());
                     return handler(ec);
                 }
                 LOG_DEBUG(R"([{}]: use TLS private key: "{}")", id_, origin_.key_path());

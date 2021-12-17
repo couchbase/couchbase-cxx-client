@@ -334,6 +334,9 @@ class http_session : public std::enable_shared_from_this<http_session>
   private:
     void on_resolve(std::error_code ec, const asio::ip::tcp::resolver::results_type& endpoints)
     {
+        if (stopped_) {
+            return;
+        }
         if (ec) {
             LOG_ERROR("{} error on resolve: {}", info_.log_prefix(), ec.message());
             return;
@@ -346,6 +349,9 @@ class http_session : public std::enable_shared_from_this<http_session>
 
     void do_connect(asio::ip::tcp::resolver::results_type::iterator it)
     {
+        if (stopped_) {
+            return;
+        }
         if (it != endpoints_.end()) {
             LOG_DEBUG("{} connecting to {}:{}", info_.log_prefix(), it->endpoint().address().to_string(), it->endpoint().port());
             deadline_timer_.expires_after(timeout_defaults::connect_timeout);

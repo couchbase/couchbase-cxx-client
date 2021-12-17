@@ -1222,12 +1222,14 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         }
         last_active_ = std::chrono::steady_clock::now();
         if (!stream_->is_open() || ec) {
+
             LOG_WARNING("{} unable to connect to {}:{}: {} ({}){}. is_open={}",
                         log_prefix_,
                         it->endpoint().address().to_string(),
                         it->endpoint().port(),
                         ec.value(),
-                        ec.message(),
+                        (ec.category() == asio::error::ssl_category) ? ERR_error_string(static_cast<unsigned long>(ec.value()), nullptr)
+                                                                     : ec.message(),
                         (ec == asio::error::connection_refused) ? ", check server ports and cluster encryption setting" : "",
                         stream_->is_open());
             do_connect(++it);
