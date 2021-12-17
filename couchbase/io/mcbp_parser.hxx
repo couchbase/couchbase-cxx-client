@@ -27,7 +27,7 @@ struct mcbp_parser {
     template<typename Iterator>
     void feed(Iterator begin, Iterator end)
     {
-        buf.reserve(buf.size() + static_cast<size_t>(std::distance(begin, end)));
+        buf.reserve(buf.size() + static_cast<std::size_t>(std::distance(begin, end)));
         std::copy(begin, end, std::back_inserter(buf));
     }
 
