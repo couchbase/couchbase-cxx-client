@@ -54,6 +54,11 @@ class cluster
     template<typename Handler>
     void open(const couchbase::origin& origin, Handler&& handler)
     {
+        if (origin.get_nodes().empty()) {
+            work_.reset();
+            return handler(error::common_errc::invalid_argument);
+        }
+
         origin_ = origin;
         if (origin_.options().enable_tracing) {
             tracer_ = new tracing::threshold_logging_tracer(ctx_, origin.options().tracing_options);
@@ -76,6 +81,9 @@ class cluster
     template<typename Handler>
     void close(Handler&& handler)
     {
+        if (!work_.owns_work()) {
+            return handler();
+        }
         asio::post(asio::bind_executor(ctx_, [this, handler = std::forward<Handler>(handler)]() {
             if (session_) {
                 session_->stop(io::retry_reason::do_not_retry);
