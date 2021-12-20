@@ -129,7 +129,9 @@ struct action<node> {
     template<typename ActionInput>
     static void apply(const ActionInput& /* in */, connection_string& cs, connection_string::node& cur_node)
     {
-        cs.bootstrap_nodes.push_back(cur_node);
+        if (!cur_node.address.empty()) {
+            cs.bootstrap_nodes.push_back(cur_node);
+        }
         cur_node = {};
     }
 };
@@ -362,7 +364,7 @@ extract_options(connection_string& connstr)
 connection_string
 parse_connection_string(const std::string& input)
 {
-    connection_string res;
+    connection_string res{};
 
     if (input.empty()) {
         res.error = "failed to parse connection string: empty input";
