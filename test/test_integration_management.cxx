@@ -21,6 +21,7 @@
 #include <couchbase/operations/management/analytics_link.hxx>
 #include <couchbase/operations/management/bucket.hxx>
 #include <couchbase/operations/management/collections.hxx>
+#include <couchbase/operations/management/freeform.hxx>
 #include <couchbase/operations/management/query.hxx>
 #include <couchbase/operations/management/search.hxx>
 #include <couchbase/operations/management/user.hxx>
@@ -2013,4 +2014,99 @@ TEST_CASE("integration: search index management analyze document", "[integration
     REQUIRE(operation_completed);
     REQUIRE_FALSE(resp.ctx.ec);
     REQUIRE_FALSE(resp.analysis.empty());
+}
+
+TEST_CASE("integration: freeform HTTP request", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_gcccp()) {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    }
+
+    SECTION("key_value")
+    {
+        couchbase::operations::management::freeform_request req{};
+        req.type = couchbase::service_type::key_value;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec == couchbase::error::common_errc::invalid_argument);
+    }
+
+    SECTION("analytics")
+    {
+        couchbase::operations::management::freeform_request req{};
+        req.type = couchbase::service_type::analytics;
+        req.method = "GET";
+        req.path = "/admin/ping";
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.ctx.http_status == 200);
+        REQUIRE_FALSE(resp.body.empty());
+        INFO(resp.body)
+        auto result = couchbase::utils::json::parse(resp.body);
+        REQUIRE(result.is_object());
+    }
+
+    SECTION("search")
+    {
+        couchbase::operations::management::freeform_request req{};
+        req.type = couchbase::service_type::search;
+        req.method = "GET";
+        req.path = "/api/ping";
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.ctx.http_status == 200);
+        REQUIRE(resp.body.empty());
+        REQUIRE_FALSE(resp.headers.empty());
+        REQUIRE(resp.headers["content-type"].find("application/json") != std::string::npos);
+    }
+
+    SECTION("query")
+    {
+        couchbase::operations::management::freeform_request req{};
+        req.type = couchbase::service_type::query;
+        req.method = "GET";
+        req.path = "/admin/ping";
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.ctx.http_status == 200);
+        REQUIRE_FALSE(resp.body.empty());
+        INFO(resp.body)
+        auto result = couchbase::utils::json::parse(resp.body);
+        REQUIRE(result.is_object());
+    }
+
+    SECTION("view")
+    {
+        auto document_name = test::utils::uniq_id("design_document");
+        auto view_name = test::utils::uniq_id("view");
+
+        couchbase::operations::management::freeform_request req{};
+        req.type = couchbase::service_type::view;
+        req.method = "POST";
+        req.path = fmt::format("/{}/_design/{}/_view/{}", integration.ctx.bucket, document_name, view_name);
+        req.body = R"({"keys":["foo","bar"]})";
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec == couchbase::error::common_errc::internal_server_failure);
+        REQUIRE(resp.ctx.http_status == 404);
+        REQUIRE_FALSE(resp.body.empty());
+        auto result = couchbase::utils::json::parse(resp.body);
+        INFO(resp.body)
+        REQUIRE(result["error"].get_string() == "not_found");
+    }
+
+    SECTION("management")
+    {
+        couchbase::operations::management::freeform_request req{};
+        req.type = couchbase::service_type::management;
+        req.method = "GET";
+        req.path = "/pools";
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.ctx.http_status == 200);
+        REQUIRE_FALSE(resp.body.empty());
+        auto result = couchbase::utils::json::parse(resp.body);
+        INFO(resp.body)
+        REQUIRE(result.find("uuid") != nullptr);
+    }
 }

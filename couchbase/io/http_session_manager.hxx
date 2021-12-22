@@ -240,7 +240,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
     template<typename Request, typename Handler>
     void execute(Request request, Handler&& handler, const couchbase::cluster_credentials& credentials)
     {
-        auto session = check_out(Request::type, credentials);
+        auto session = check_out(request.type, credentials);
         if (!session) {
             typename Request::error_context_type ctx{};
             ctx.ec = error::common_errc::service_not_available;
@@ -265,7 +265,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
               ctx.http_status = resp.status_code;
               ctx.http_body = resp.body;
               handler(cmd->request.make_response(std::move(ctx), std::move(resp)));
-              self->check_in(Request::type, std::move(cmd->session_));
+              self->check_in(cmd->request.type, std::move(cmd->session_));
           });
         cmd->send_to(session);
     }
