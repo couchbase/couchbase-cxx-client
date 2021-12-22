@@ -23,6 +23,23 @@ static const tao::json::value basic_doc = {
 };
 static const std::string basic_doc_json = couchbase::utils::json::generate(basic_doc);
 
+TEST_CASE("integration: connecting with empty bootstrap nodes list", "[integration]")
+{
+    asio::io_context io{};
+    auto io_thread = std::thread([&io]() { io.run(); });
+    auto connstr = couchbase::utils::parse_connection_string("couchbase://");
+    REQUIRE(connstr.bootstrap_nodes.empty());
+    auto origin = couchbase::origin({}, connstr);
+    couchbase::cluster cluster{ io };
+    auto barrier = std::make_shared<std::promise<std::error_code>>();
+    auto f = barrier->get_future();
+    cluster.open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
+    auto rc = f.get();
+    REQUIRE(rc == couchbase::error::common_errc::invalid_argument);
+    test::utils::close_cluster(cluster);
+    io_thread.join();
+}
+
 TEST_CASE("integration: crud on default collection", "[integration]")
 {
     test::utils::integration_test_guard integration;

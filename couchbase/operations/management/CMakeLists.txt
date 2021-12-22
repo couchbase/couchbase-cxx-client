@@ -25,12 +25,13 @@ add_library(
   bucket_get.cxx
   bucket_get_all.cxx
   bucket_update.cxx
-  cluster_developer_preview_enable.cxx
   cluster_describe.cxx
+  cluster_developer_preview_enable.cxx
   collection_create.cxx
   collection_drop.cxx
   collections_manifest_get.cxx
   error_utils.cxx
+  freeform.cxx
   group_drop.cxx
   group_get.cxx
   group_get_all.cxx
@@ -52,8 +53,8 @@ add_library(
   search_index_get.cxx
   search_index_get_all.cxx
   search_index_get_documents_count.cxx
-  search_index_upsert.cxx
   search_index_get_stats.cxx
+  search_index_upsert.cxx
   user_drop.cxx
   user_get.cxx
   user_get_all.cxx
