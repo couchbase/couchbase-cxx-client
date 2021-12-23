@@ -198,6 +198,31 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                 case protocol::magic::client_response:
                 case protocol::magic::alt_client_response:
                     Expects(protocol::is_valid_client_opcode(msg.header.opcode));
+                    switch (auto status = protocol::status(msg.header.status())) {
+                        case protocol::status::rate_limited_max_commands:
+                        case protocol::status::rate_limited_max_connections:
+                        case protocol::status::rate_limited_network_egress:
+                        case protocol::status::rate_limited_network_ingress:
+                            LOG_DEBUG(
+                              "{} unable to bootstrap MCBP session (bucket={}, opcode={}, status={}), the user has reached rate limit",
+                              session_->log_prefix_,
+                              session_->bucket_name_.value_or(""),
+                              protocol::client_opcode(msg.header.opcode),
+                              status);
+                            return complete(error::common_errc::rate_limited);
+
+                        case protocol::status::scope_size_limit_exceeded:
+                            LOG_DEBUG(
+                              "{} unable to bootstrap MCBP session (bucket={}, opcode={}, status={}), the user has reached quota limit",
+                              session_->log_prefix_,
+                              session_->bucket_name_.value_or(""),
+                              protocol::client_opcode(msg.header.opcode),
+                              status);
+                            return complete(error::common_errc::quota_limited);
+
+                        default:
+                            break;
+                    }
                     switch (auto opcode = protocol::client_opcode(msg.header.opcode)) {
                         case protocol::client_opcode::hello: {
                             protocol::client_response<protocol::hello_response_body> resp(std::move(msg));
