@@ -133,6 +133,11 @@ struct server_version {
     {
         return is_mad_hatter() || is_cheshire_cat() || is_neo();
     }
+
+    [[nodiscard]] bool supports_analytics_links_cert_auth() const
+    {
+        return is_neo();
+    }
 };
 
 } // namespace test::utils

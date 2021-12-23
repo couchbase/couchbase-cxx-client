@@ -1152,6 +1152,11 @@ TEST_CASE("integration: analytics index management", "[integration]")
         return;
     }
 
+    // MB-47718
+    if (integration.storage_backend() == couchbase::operations::management::bucket_settings::storage_backend_type::magma) {
+        return;
+    }
+
     SECTION("crud")
     {
         auto dataverse_name = test::utils::uniq_id("dataverse");
@@ -1676,6 +1681,16 @@ TEST_CASE("integration: analytics external link management", "[integration]")
     test::utils::integration_test_guard integration;
 
     if (!integration.cluster_version().supports_analytics_links()) {
+        return;
+    }
+
+    // MB-47718
+    if (integration.storage_backend() == couchbase::operations::management::bucket_settings::storage_backend_type::magma) {
+        return;
+    }
+
+    // MB-40198
+    if (!integration.cluster_version().supports_analytics_links_cert_auth() && integration.origin.credentials().uses_certificate()) {
         return;
     }
 

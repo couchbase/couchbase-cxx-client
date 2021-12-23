@@ -54,6 +54,13 @@ bucket_describe_request::make_response(error_context::http&& ctx, const encoded_
             response.info.number_of_replicas = num_replicas->get_unsigned();
         }
     }
+    if (const auto* storage_backend = payload.find("storageBackend"); storage_backend != nullptr && storage_backend->is_string()) {
+        if (const auto& str = storage_backend->get_string(); str == "couchstore") {
+            response.info.storage_backend = bucket_settings::storage_backend_type::couchstore;
+        } else if (str == "magma") {
+            response.info.storage_backend = bucket_settings::storage_backend_type::magma;
+        }
+    }
 
     return response;
 }
