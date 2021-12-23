@@ -19,10 +19,15 @@
 
 #include <couchbase/errors.hxx>
 
+#include <optional>
+
 namespace couchbase::operations::management
 {
 
 std::error_code
 extract_common_error_code(std::uint32_t status_code, const std::string& response_body);
+
+std::optional<std::error_code>
+extract_common_query_error_code(std::uint64_t code, const std::string& message);
 
 } // namespace couchbase::operations::management

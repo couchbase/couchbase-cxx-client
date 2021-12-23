@@ -54,13 +54,20 @@ query_index_build_deferred_request::make_response(error_context::http&& ctx, con
         }
         response.status = payload.at("status").get_string();
         if (response.status != "success") {
+            std::optional<std::error_code> common_ec{};
             for (const auto& entry : payload.at("errors").get_array()) {
                 query_index_build_deferred_response::query_problem error;
                 error.code = entry.at("code").get_unsigned();
                 error.message = entry.at("msg").get_string();
                 response.errors.emplace_back(error);
+                common_ec = management::extract_common_query_error_code(error.code, error.message);
             }
-            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+
+            if (common_ec) {
+                response.ctx.ec = common_ec.value();
+            } else {
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+            }
         }
     }
     return response;
