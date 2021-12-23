@@ -20,6 +20,7 @@
 #include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
+#include <couchbase/operations/management/bucket_settings.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
 
@@ -30,6 +31,7 @@ struct bucket_info {
     std::string uuid{};
     std::size_t number_of_nodes{ 0 };
     std::size_t number_of_replicas{ 0 };
+    bucket_settings::storage_backend_type storage_backend{ bucket_settings::storage_backend_type::unknown };
 };
 
 struct bucket_describe_response {

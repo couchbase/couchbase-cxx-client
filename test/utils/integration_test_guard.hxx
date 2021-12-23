@@ -21,6 +21,7 @@
 #include "test_context.hxx"
 
 #include <couchbase/operations/management/bucket_describe.hxx>
+#include <couchbase/operations/management/bucket_settings.hxx>
 #include <couchbase/operations/management/cluster_describe.hxx>
 
 #include <optional>
@@ -58,6 +59,11 @@ class integration_test_guard
     std::size_t number_of_replicas(const std::string& bucket_name)
     {
         return load_bucket_info(bucket_name).number_of_replicas;
+    }
+
+    inline couchbase::operations::management::bucket_settings::storage_backend_type storage_backend()
+    {
+        return load_bucket_info(ctx.bucket).storage_backend;
     }
 
     const couchbase::operations::management::cluster_info& load_cluster_info(bool refresh = false);
