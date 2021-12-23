@@ -29,14 +29,9 @@
 static couchbase::operations::management::bucket_get_response
 wait_for_bucket_created(test::utils::integration_test_guard& integration, const std::string& bucket_name)
 {
-    couchbase::operations::management::bucket_get_response resp;
-    test::utils::wait_until(
-      [&integration, &bucket_name, &resp]() {
-          couchbase::operations::management::bucket_get_request req{ bucket_name };
-          resp = test::utils::execute(integration.cluster, req);
-          return !resp.ctx.ec;
-      },
-      std::chrono::minutes(3));
+    test::utils::wait_until_bucket_healthy(integration.cluster, bucket_name);
+    couchbase::operations::management::bucket_get_request req{ bucket_name };
+    auto resp = test::utils::execute(integration.cluster, req);
     return resp;
 }
 
@@ -73,13 +68,8 @@ TEST_CASE("integration: bucket management", "[integration]")
         }
 
         {
-            couchbase::operations::management::bucket_get_response resp;
-            auto created = test::utils::wait_until([&integration, bucket_name, &resp]() {
-                couchbase::operations::management::bucket_get_request req{ bucket_name };
-                resp = test::utils::execute(integration.cluster, req);
-                return !resp.ctx.ec;
-            });
-            REQUIRE(created);
+            auto resp = wait_for_bucket_created(integration, bucket_name);
+            REQUIRE_FALSE(resp.ctx.ec);
             REQUIRE(bucket_settings.bucket_type == resp.bucket.bucket_type);
             REQUIRE(bucket_settings.name == resp.bucket.name);
             REQUIRE(Approx(bucket_settings.ram_quota_mb).margin(5) == resp.bucket.ram_quota_mb);
@@ -169,7 +159,7 @@ TEST_CASE("integration: bucket management", "[integration]")
                 REQUIRE_FALSE(resp.ctx.ec);
             }
 
-            test::utils::wait_until_bucket_healthy(integration.cluster, bucket_name);
+            REQUIRE(test::utils::wait_until_bucket_healthy(integration.cluster, bucket_name));
 
             test::utils::open_bucket(integration.cluster, bucket_name);
 
@@ -219,16 +209,11 @@ TEST_CASE("integration: bucket management", "[integration]")
                 REQUIRE_FALSE(resp.ctx.ec);
             }
 
-            REQUIRE(!wait_for_bucket_created(integration, bucket_name).ctx.ec);
+            REQUIRE(test::utils::wait_until_bucket_healthy(integration.cluster, bucket_name));
 
             {
-                couchbase::operations::management::bucket_flush_response resp;
-                bool operation_completed = test::utils::wait_until([&integration, &bucket_name, &resp]() {
-                    couchbase::operations::management::bucket_flush_request req{ bucket_name };
-                    resp = test::utils::execute(integration.cluster, req);
-                    return resp.ctx.ec != couchbase::error::common_errc::bucket_not_found;
-                });
-                REQUIRE(operation_completed);
+                couchbase::operations::management::bucket_flush_request req{ bucket_name };
+                auto resp = test::utils::execute(integration.cluster, req);
                 REQUIRE(resp.ctx.ec == couchbase::error::management_errc::bucket_not_flushable);
             }
         }
