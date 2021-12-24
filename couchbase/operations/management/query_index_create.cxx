@@ -85,6 +85,7 @@ query_index_create_request::make_response(error_context::http&& ctx, const encod
         if (response.status != "success") {
             bool index_already_exists = false;
             bool bucket_not_found = false;
+            std::optional<std::error_code> common_ec{};
             for (const auto& entry : payload.at("errors").get_array()) {
                 query_index_create_response::query_problem error;
                 error.code = entry.at("code").get_unsigned();
@@ -98,11 +99,17 @@ query_index_create_request::make_response(error_context::http&& ctx, const encod
                             bucket_not_found = true;
                         }
                         break;
+
                     case 12003: /* IKey: "datastore.couchbase.keyspace_not_found" */
                         bucket_not_found = true;
                         break;
+
                     case 4300: /* IKey: "plan.new_index_already_exists" */
                         index_already_exists = true;
+                        break;
+
+                    default:
+                        common_ec = management::extract_common_query_error_code(error.code, error.message);
                         break;
                 }
                 response.errors.emplace_back(error);
@@ -113,6 +120,8 @@ query_index_create_request::make_response(error_context::http&& ctx, const encod
                 }
             } else if (bucket_not_found) {
                 response.ctx.ec = error::common_errc::bucket_not_found;
+            } else if (common_ec) {
+                response.ctx.ec = common_ec.value();
             } else if (!response.errors.empty()) {
                 response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
             }

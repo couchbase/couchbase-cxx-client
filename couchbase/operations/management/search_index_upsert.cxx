@@ -96,6 +96,10 @@ search_index_upsert_request::make_response(error_context::http&& ctx, const enco
                 response.ctx.ec = error::common_errc::index_exists;
                 return response;
             }
+            if (response.error.find("num_fts_indexes (active + pending)") != std::string::npos) {
+                response.ctx.ec = error::common_errc::quota_limited;
+                return response;
+            }
         }
         response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
     }

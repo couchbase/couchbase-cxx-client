@@ -18,6 +18,7 @@
 #include <couchbase/operations/management/query_index_get_all.hxx>
 
 #include <couchbase/errors.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
 #include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations::management
@@ -44,7 +45,11 @@ query_index_get_all_response
 query_index_get_all_request::make_response(couchbase::error_context::http&& ctx, const encoded_response_type& encoded) const
 {
     query_index_get_all_response response{ std::move(ctx) };
-    if (!response.ctx.ec && encoded.status_code == 200) {
+    if (!response.ctx.ec) {
+        if (encoded.status_code != 200) {
+            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+            return response;
+        }
         tao::json::value payload{};
         try {
             payload = utils::json::parse(encoded.body);

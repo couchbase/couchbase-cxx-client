@@ -34,4 +34,27 @@ extract_common_error_code(std::uint32_t status_code, const std::string& response
     return error::common_errc::internal_server_failure;
 }
 
+std::optional<std::error_code>
+extract_common_query_error_code(std::uint64_t code, const std::string& message)
+{
+    switch (code) {
+        case 1191: /* ICode: E_SERVICE_USER_REQUEST_EXCEEDED, IKey: "service.requests.exceeded" */
+        case 1192: /* ICode: E_SERVICE_USER_REQUEST_RATE_EXCEEDED, IKey: "service.request.rate.exceeded" */
+        case 1193: /* ICode: E_SERVICE_USER_REQUEST_SIZE_EXCEEDED, IKey: "service.request.size.exceeded" */
+        case 1194: /* ICode: E_SERVICE_USER_RESULT_SIZE_EXCEEDED, IKey: "service.result.size.exceeded" */
+            return error::common_errc::rate_limited;
+
+        case 5000:
+            if (message.find("Limit for number of indexes that can be created per scope has been reached") != std::string::npos) {
+                return error::common_errc::quota_limited;
+            }
+            break;
+
+        default:
+            break;
+    }
+
+    return {};
+}
+
 } // namespace couchbase::operations::management
