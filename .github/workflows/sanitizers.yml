@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-20.04
     services:
       couchbase:
-        image: couchbase:enterprise-7.0.2
+        image: couchbase:enterprise-7.0.3
         ports:
           - 8091-8095:8091-8095
           - 11210:11210
@@ -41,7 +41,7 @@ jobs:
         timeout-minutes: 15
         env:
           CB_SANITIZER: asan
-          TEST_SERVER_VERSION: 7.0.2
+          TEST_SERVER_VERSION: 7.0.3
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
           COUCHBASE_CXX_CLIENT_LOG_LEVEL: trace
         run: ./bin/run-tests
@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-20.04
     services:
       couchbase:
-        image: couchbase:enterprise-7.0.2
+        image: couchbase:enterprise-7.0.3
         ports:
           - 8091-8095:8091-8095
           - 11210:11210
@@ -80,7 +80,7 @@ jobs:
         timeout-minutes: 15
         env:
           CB_SANITIZER: lsan
-          TEST_SERVER_VERSION: 7.0.2
+          TEST_SERVER_VERSION: 7.0.3
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
           COUCHBASE_CXX_CLIENT_LOG_LEVEL: trace
         run: ./bin/run-tests
@@ -89,7 +89,7 @@ jobs:
     runs-on: ubuntu-20.04
     services:
       couchbase:
-        image: couchbase:enterprise-7.0.2
+        image: couchbase:enterprise-7.0.3
         ports:
           - 8091-8095:8091-8095
           - 11210:11210
@@ -119,7 +119,7 @@ jobs:
         timeout-minutes: 15
         env:
           CB_SANITIZER: ubsan
-          TEST_SERVER_VERSION: 7.0.2
+          TEST_SERVER_VERSION: 7.0.3
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
           COUCHBASE_CXX_CLIENT_LOG_LEVEL: trace
         run: ./bin/run-tests
@@ -128,7 +128,7 @@ jobs:
     runs-on: ubuntu-20.04
     services:
       couchbase:
-        image: couchbase:enterprise-7.0.2
+        image: couchbase:enterprise-7.0.3
         ports:
           - 8091-8095:8091-8095
           - 11210:11210
@@ -158,7 +158,7 @@ jobs:
         timeout-minutes: 15
         env:
           CB_SANITIZER: tsan
-          TEST_SERVER_VERSION: 7.0.2
+          TEST_SERVER_VERSION: 7.0.3
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
           COUCHBASE_CXX_CLIENT_LOG_LEVEL: trace
         run: ./bin/run-tests
