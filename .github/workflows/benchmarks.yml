@@ -5,7 +5,7 @@ on:
     branches: [ master ]
 
 jobs:
-  neo:
+  cheshire_cat:
     runs-on: ubuntu-20.04
     services:
       couchbase:
@@ -39,7 +39,7 @@ jobs:
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          name: Neo
+          name: Cheshire Cat
           tool: "catch2"
           output-file-path: cmake-build-tests/Testing/Temporary/LastTest.log
           github-token: ${{ secrets.GITHUB_TOKEN }}
