@@ -121,6 +121,10 @@ struct search_request {
     std::optional<std::uint32_t> skip{};
     bool explain{ false };
     bool disable_scoring{ false };
+    /**
+     * UNCOMMITTED: If set to true, will include the vector of search_location in rows.
+     */
+    bool include_locations{ false };
 
     enum class highlight_style_type { html, ansi };
     std::optional<highlight_style_type> highlight_style{};
