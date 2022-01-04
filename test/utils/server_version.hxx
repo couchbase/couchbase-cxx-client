@@ -94,6 +94,11 @@ struct server_version {
         return is_cheshire_cat() || is_neo();
     }
 
+    [[nodiscard]] bool supports_preserve_expiry_for_query() const
+    {
+        return is_neo();
+    }
+
     [[nodiscard]] bool supports_user_groups() const
     {
         return is_mad_hatter() || is_cheshire_cat() || is_neo();
