@@ -18,6 +18,9 @@
 #pragma once
 
 #include <couchbase/errors.hxx>
+#include <couchbase/operations/management/eventing_problem.hxx>
+
+#include <tao/json/forward.hpp>
 
 #include <optional>
 
@@ -29,5 +32,8 @@ extract_common_error_code(std::uint32_t status_code, const std::string& response
 
 std::optional<std::error_code>
 extract_common_query_error_code(std::uint64_t code, const std::string& message);
+
+std::pair<std::error_code, eventing::problem>
+extract_eventing_error_code(const tao::json::value& response);
 
 } // namespace couchbase::operations::management

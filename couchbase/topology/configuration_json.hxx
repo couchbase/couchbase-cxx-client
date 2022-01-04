@@ -61,12 +61,14 @@ struct traits<couchbase::topology::configuration> {
                 n.services_plain.analytics = s.template optional<std::uint16_t>("cbas");
                 n.services_plain.query = s.template optional<std::uint16_t>("n1ql");
                 n.services_plain.views = s.template optional<std::uint16_t>("capi");
+                n.services_plain.eventing = s.template optional<std::uint16_t>("eventingAdminPort");
                 n.services_tls.key_value = s.template optional<std::uint16_t>("kvSSL");
                 n.services_tls.management = s.template optional<std::uint16_t>("mgmtSSL");
                 n.services_tls.search = s.template optional<std::uint16_t>("ftsSSL");
                 n.services_tls.analytics = s.template optional<std::uint16_t>("cbasSSL");
                 n.services_tls.query = s.template optional<std::uint16_t>("n1qlSSL");
                 n.services_tls.views = s.template optional<std::uint16_t>("capiSSL");
+                n.services_tls.eventing = s.template optional<std::uint16_t>("eventingSSL");
                 {
                     const auto& alt = o.find("alternateAddresses");
                     if (alt != o.end()) {
@@ -81,12 +83,14 @@ struct traits<couchbase::topology::configuration> {
                             addr.services_plain.analytics = ports->template optional<std::uint16_t>("cbas");
                             addr.services_plain.query = ports->template optional<std::uint16_t>("n1ql");
                             addr.services_plain.views = ports->template optional<std::uint16_t>("capi");
+                            addr.services_plain.eventing = ports->template optional<std::uint16_t>("eventingAdminPort");
                             addr.services_tls.key_value = ports->template optional<std::uint16_t>("kvSSL");
                             addr.services_tls.management = ports->template optional<std::uint16_t>("mgmtSSL");
                             addr.services_tls.search = ports->template optional<std::uint16_t>("ftsSSL");
                             addr.services_tls.analytics = ports->template optional<std::uint16_t>("cbasSSL");
                             addr.services_tls.query = ports->template optional<std::uint16_t>("n1qlSSL");
                             addr.services_tls.views = ports->template optional<std::uint16_t>("capiSSL");
+                            addr.services_tls.eventing = ports->template optional<std::uint16_t>("eventingSSL");
                             n.alt.emplace(entry.first, addr);
                         }
                     }

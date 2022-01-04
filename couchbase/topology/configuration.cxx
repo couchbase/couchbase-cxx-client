@@ -44,6 +44,9 @@ configuration::node::port_or(service_type type, bool is_tls, std::uint16_t defau
 
             case service_type::key_value:
                 return services_tls.key_value.value_or(default_value);
+
+            case service_type::eventing:
+                return services_tls.eventing.value_or(default_value);
         }
     }
     switch (type) {
@@ -64,6 +67,9 @@ configuration::node::port_or(service_type type, bool is_tls, std::uint16_t defau
 
         case service_type::key_value:
             return services_plain.key_value.value_or(default_value);
+
+        case service_type::eventing:
+            return services_plain.eventing.value_or(default_value);
     }
     return default_value;
 }
@@ -112,6 +118,9 @@ configuration::node::port_or(const std::string& network, service_type type, bool
 
             case service_type::key_value:
                 return address->second.services_tls.key_value.value_or(default_value);
+
+            case service_type::eventing:
+                return address->second.services_tls.eventing.value_or(default_value);
         }
     }
     switch (type) {
@@ -132,6 +141,9 @@ configuration::node::port_or(const std::string& network, service_type type, bool
 
         case service_type::key_value:
             return address->second.services_plain.key_value.value_or(default_value);
+
+        case service_type::eventing:
+            return address->second.services_plain.eventing.value_or(default_value);
     }
     return default_value;
 }

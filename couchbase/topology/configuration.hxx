@@ -45,6 +45,7 @@ struct configuration {
         std::optional<std::uint16_t> search{};
         std::optional<std::uint16_t> views{};
         std::optional<std::uint16_t> query{};
+        std::optional<std::uint16_t> eventing{};
     };
 
     struct alternate_address {

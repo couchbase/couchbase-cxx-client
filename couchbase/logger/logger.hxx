@@ -213,18 +213,23 @@ is_initialized();
 /**
  * Convenience macros which log with the given level, and message, if the given
  * level is currently enabled.
- * @param msg Fixed string (implicitly convertible to `const char*`), or type
- *            which supports operator<<.
+ * @param msg Fixed string (implicitly convertible to `std::string_view`)
  *
  * For example:
  *
- *   LOG_INFO("Starting flusher");
- *   LOG_INFO(std:string{...});
+ *   LOG_INFO_RAW("Starting flusher");
+ *   LOG_INFO_RAW(std:string{...});
  */
+#define COUCHBASE_LOG_RAW(severity, msg)                                                                                                   \
+    do {                                                                                                                                   \
+        if (couchbase::logger::should_log(severity)) {                                                                                     \
+            couchbase::logger::detail::log(severity, msg);                                                                                 \
+        }                                                                                                                                  \
+    } while (false)
 
-#define LOG_TRACE_RAW(msg) COUCHBASE_LOG(couchbase::logger::level::trace, msg)
-#define LOG_DEBUG_RAW(msg) COUCHBASE_LOG(couchbase::logger::level::debug, msg)
-#define LOG_INFO_RAW(msg) COUCHBASE_LOG(couchbase::logger::level::info, msg)
-#define LOG_WARNING_RAW(msg) COUCHBASE_LOG(couchbase::logger::level::warn, msg)
-#define LOG_ERROR_RAW(msg) COUCHBASE_LOG(couchbase::logger::level::err, msg)
-#define LOG_CRITICAL_RAW(msg) COUCHBASE_LOG(couchbase::logger::level::critical, msg)
+#define LOG_TRACE_RAW(msg) COUCHBASE_LOG_RAW(couchbase::logger::level::trace, msg)
+#define LOG_DEBUG_RAW(msg) COUCHBASE_LOG_RAW(couchbase::logger::level::debug, msg)
+#define LOG_INFO_RAW(msg) COUCHBASE_LOG_RAW(couchbase::logger::level::info, msg)
+#define LOG_WARNING_RAW(msg) COUCHBASE_LOG_RAW(couchbase::logger::level::warn, msg)
+#define LOG_ERROR_RAW(msg) COUCHBASE_LOG_RAW(couchbase::logger::level::err, msg)
+#define LOG_CRITICAL_RAW(msg) COUCHBASE_LOG_RAW(couchbase::logger::level::critical, msg)

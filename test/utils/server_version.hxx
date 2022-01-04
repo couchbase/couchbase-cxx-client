@@ -138,6 +138,11 @@ struct server_version {
     {
         return is_neo();
     }
+
+    [[nodiscard]] bool supports_eventing_functions() const
+    {
+        return is_cheshire_cat() || is_neo();
+    }
 };
 
 } // namespace test::utils

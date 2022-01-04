@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,15 +17,12 @@
 
 #pragma once
 
-namespace couchbase
-{
-enum class service_type {
-    key_value = 0,
-    query,
-    analytics,
-    search,
-    view,
-    management,
-    eventing,
-};
-} // namespace couchbase
+#include <couchbase/operations/management/eventing_deploy_function.hxx>
+#include <couchbase/operations/management/eventing_drop_function.hxx>
+#include <couchbase/operations/management/eventing_get_all_functions.hxx>
+#include <couchbase/operations/management/eventing_get_function.hxx>
+#include <couchbase/operations/management/eventing_get_status.hxx>
+#include <couchbase/operations/management/eventing_pause_function.hxx>
+#include <couchbase/operations/management/eventing_resume_function.hxx>
+#include <couchbase/operations/management/eventing_undeploy_function.hxx>
+#include <couchbase/operations/management/eventing_upsert_function.hxx>

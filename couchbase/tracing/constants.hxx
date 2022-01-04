@@ -34,6 +34,7 @@ constexpr auto http_analytics = "cb.analytics";
 constexpr auto http_search = "cb.search";
 constexpr auto http_views = "cb.views";
 constexpr auto http_manager = "cb.manager";
+constexpr auto http_eventing = "cb.eventing";
 constexpr auto http_manager_analytics = "cb.manager_analytics";
 constexpr auto http_manager_query = "cb.manager_query";
 constexpr auto http_manager_buckets = "cb.manager_buckets";
@@ -96,6 +97,7 @@ constexpr auto search = "search";
 constexpr auto view = "views";
 constexpr auto analytics = "analytics";
 constexpr auto management = "management";
+constexpr auto eventing = "eventing";
 } // namespace service
 
 constexpr auto
@@ -116,6 +118,9 @@ span_name_for_http_service(service_type type)
 
         case service_type::management:
             return operation::http_manager;
+
+        case service_type::eventing:
+            return operation::http_eventing;
 
         case service_type::key_value:
             return "unexpected_http_service";
@@ -141,6 +146,9 @@ service_name_for_http_service(service_type type)
 
         case service_type::management:
             return service::management;
+
+        case service_type::eventing:
+            return service::eventing;
 
         case service_type::key_value:
             return "unexpected_http_service";

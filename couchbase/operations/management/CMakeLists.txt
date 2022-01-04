@@ -31,6 +31,15 @@ add_library(
   collection_drop.cxx
   collections_manifest_get.cxx
   error_utils.cxx
+  eventing_deploy_function.cxx
+  eventing_drop_function.cxx
+  eventing_get_all_functions.cxx
+  eventing_get_function.cxx
+  eventing_get_status.cxx
+  eventing_pause_function.cxx
+  eventing_resume_function.cxx
+  eventing_undeploy_function.cxx
+  eventing_upsert_function.cxx
   freeform.cxx
   group_drop.cxx
   group_get.cxx
