@@ -60,7 +60,34 @@ struct bucket_settings {
          */
         not_recently_used,
     };
-    enum class conflict_resolution_type { unknown, timestamp, sequence_number };
+    enum class conflict_resolution_type {
+        unknown,
+        /**
+         * Use timestamp conflict resolution.
+         *
+         * Timestamp-based conflict resolution (often referred to as Last Write Wins, or LWW) uses the document
+         * timestamp (stored in the CAS) to resolve conflicts. The timestamps associated with the most recent
+         * updates of source and target documents are compared. The document whose update has the more recent
+         * timestamp prevails.
+         */
+        timestamp,
+
+        /**
+         * Use sequence number conflict resolution
+         *
+         * Conflicts can be resolved by referring to documents' sequence numbers. Sequence numbers are maintained
+         * per document, and are incremented on every document-update. The sequence numbers of source and
+         * target documents are compared; and the document with the higher sequence number prevails.
+         */
+        sequence_number,
+
+        /**
+         * VOLATILE: This API is subject to change at any time.
+         *
+         * In Couchbase Server 7.1, this feature is only available in "developer-preview" mode. See the UI XDCR settings.
+         */
+        custom,
+    };
     enum class storage_backend_type { unknown, couchstore, magma };
     struct node {
         std::string hostname;

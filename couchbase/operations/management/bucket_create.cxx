@@ -95,6 +95,9 @@ bucket_create_request::encode_to(encoded_request_type& encoded, http_context& /*
         case bucket_settings::conflict_resolution_type::sequence_number:
             encoded.body.append("&conflictResolutionType=seqno");
             break;
+        case bucket_settings::conflict_resolution_type::custom:
+            encoded.body.append("&conflictResolutionType=custom");
+            break;
         case bucket_settings::conflict_resolution_type::unknown:
             break;
     }
