@@ -1981,6 +1981,30 @@ TEST_CASE("integration: search index management", "[integration]")
     }
 }
 
+bool
+wait_for_search_pindexes_ready(test::utils::integration_test_guard& integration, const std::string& index_name)
+{
+    return test::utils::wait_until(
+      [&integration, &index_name]() {
+          couchbase::operations::management::search_index_stats_request req{};
+          auto resp = test::utils::execute(integration.cluster, req);
+          if (resp.ctx.ec || resp.stats.empty()) {
+              return false;
+          }
+          auto stats = couchbase::utils::json::parse(resp.stats);
+          const auto* num_pindexes_actual = stats.find(fmt::format("{}:{}:num_pindexes_actual", integration.ctx.bucket, index_name));
+          if (num_pindexes_actual == nullptr || !num_pindexes_actual->is_number()) {
+              return false;
+          }
+          const auto* num_pindexes_target = stats.find(fmt::format("{}:{}:num_pindexes_target", integration.ctx.bucket, index_name));
+          if (num_pindexes_target == nullptr || !num_pindexes_target->is_number()) {
+              return false;
+          }
+          return num_pindexes_actual->get_unsigned() == num_pindexes_target->get_unsigned();
+      },
+      std::chrono::minutes(3));
+}
+
 TEST_CASE("integration: search index management analyze document", "[integration]")
 {
     test::utils::integration_test_guard integration;
@@ -2002,6 +2026,8 @@ TEST_CASE("integration: search index management analyze document", "[integration
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
     }
+
+    REQUIRE(wait_for_search_pindexes_ready(integration, index_name));
 
     couchbase::operations::management::search_index_analyze_document_response resp;
     bool operation_completed = test::utils::wait_until([&integration, &index_name, &resp]() {
