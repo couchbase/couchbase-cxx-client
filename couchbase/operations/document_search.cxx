@@ -42,6 +42,9 @@ search_request::encode_to(search_request::encoded_request_type& encoded, http_co
     if (disable_scoring) {
         body["score"] = "none";
     }
+    if (include_locations) {
+        body["includeLocations"] = true;
+    }
     if (highlight_style || !highlight_fields.empty()) {
         tao::json::value highlight;
         if (highlight_style) {

@@ -71,8 +71,7 @@ struct traits<couchbase::operations::management::bucket_settings> {
         }
 
         if (auto* min_level = v.find("durabilityMinLevel"); min_level != nullptr) {
-            auto& str = min_level->get_string();
-            if (str == "none") {
+            if (auto& str = min_level->get_string(); str == "none") {
                 result.minimum_durability_level = couchbase::protocol::durability_level::none;
             } else if (str == "majority") {
                 result.minimum_durability_level = couchbase::protocol::durability_level::majority;
@@ -87,14 +86,15 @@ struct traits<couchbase::operations::management::bucket_settings> {
             result.conflict_resolution_type = couchbase::operations::management::bucket_settings::conflict_resolution_type::timestamp;
         } else if (str == "seqno") {
             result.conflict_resolution_type = couchbase::operations::management::bucket_settings::conflict_resolution_type::sequence_number;
+        } else if (str == "custom") {
+            result.conflict_resolution_type = couchbase::operations::management::bucket_settings::conflict_resolution_type::custom;
         }
 
         result.flush_enabled = v.at("controllers").find("flush") != nullptr;
         if (const auto replica_index = v.find("replicaIndex")) {
             result.replica_indexes = replica_index->get_boolean();
         }
-        const auto caps = v.find("bucketCapabilities");
-        if (caps != nullptr) {
+        if (const auto caps = v.find("bucketCapabilities"); caps != nullptr) {
             for (auto& cap : caps->get_array()) {
                 result.capabilities.emplace_back(cap.get_string());
             }
