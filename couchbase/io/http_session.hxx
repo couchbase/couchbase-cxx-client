@@ -227,9 +227,7 @@ class http_session : public std::enable_shared_from_this<http_session>
         }
         stopped_ = true;
         state_ = diag::endpoint_state::disconnecting;
-        if (stream_->is_open()) {
-            stream_->close();
-        }
+        stream_->close([](std::error_code) {});
         deadline_timer_.cancel();
         idle_timer_.cancel();
 
@@ -399,7 +397,7 @@ class http_session : public std::enable_shared_from_this<http_session>
             return;
         }
         if (deadline_timer_.expiry() <= asio::steady_timer::clock_type::now()) {
-            stream_->close();
+            stream_->close([](std::error_code) {});
             deadline_timer_.expires_at(asio::steady_timer::time_point::max());
         }
         deadline_timer_.async_wait(std::bind(&http_session::check_deadline, shared_from_this(), std::placeholders::_1));
