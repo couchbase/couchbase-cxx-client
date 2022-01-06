@@ -30,7 +30,7 @@ options = {
   username: ENV.fetch("CB_USERNAME", "Administrator"),
   password: ENV.fetch("CB_PASSWORD", "password"),
   bucket: ENV.fetch("CB_BUCKET", "default"),
-  server_quota: ENV.fetch("CB_SERVER_QUOTA", 512).to_i,
+  server_quota: ENV.fetch("CB_SERVER_QUOTA", 1024).to_i,
   index_quota: ENV.fetch("CB_INDEX_QUOTA", 256).to_i,
   bucket_quota: ENV.fetch("CB_BUCKET_QUOTA", 256).to_i,
   enable_developer_preview: ENV.fetch("CB_DEVELOPER_PREVIEW", false).to_b,
