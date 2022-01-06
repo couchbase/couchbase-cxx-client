@@ -68,6 +68,16 @@ class integration_test_guard
 
     const couchbase::operations::management::cluster_info& load_cluster_info(bool refresh = false);
 
+    inline bool has_service(couchbase::service_type service)
+    {
+        return load_cluster_info().services.count(service) > 0;
+    }
+
+    inline bool has_eventing_service()
+    {
+        return has_service(couchbase::service_type::eventing);
+    }
+
     server_version cluster_version();
 
     std::thread io_thread{};

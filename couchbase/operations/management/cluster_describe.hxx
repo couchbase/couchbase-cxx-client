@@ -21,7 +21,10 @@
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
 #include <couchbase/platform/uuid.h>
+#include <couchbase/service_type.hxx>
 #include <couchbase/timeout_defaults.hxx>
+
+#include <set>
 
 namespace couchbase::operations::management
 {
@@ -33,6 +36,7 @@ struct cluster_info {
         std::string hostname{};
         std::string os{};
         std::string version{};
+        std::vector<std::string> services{};
     };
 
     struct bucket {
@@ -42,6 +46,7 @@ struct cluster_info {
 
     std::vector<node> nodes{};
     std::vector<bucket> buckets{};
+    std::set<service_type> services{};
 };
 
 struct cluster_describe_response {
