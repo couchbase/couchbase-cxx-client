@@ -2134,7 +2134,7 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         REQUIRE(result.find("uuid") != nullptr);
     }
 
-    if (integration.cluster_version().supports_eventing_functions()) {
+    if (integration.cluster_version().supports_eventing_functions() && integration.has_eventing_service()) {
         SECTION("eventing")
         {
 
@@ -2192,7 +2192,7 @@ TEST_CASE("integration: eventing functions management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_eventing_functions()) {
+    if (!integration.cluster_version().supports_eventing_functions() || !integration.has_eventing_service()) {
         return;
     }
 

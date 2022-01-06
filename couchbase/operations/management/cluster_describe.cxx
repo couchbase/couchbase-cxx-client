@@ -55,6 +55,24 @@ cluster_describe_request::make_response(error_context::http&& ctx, const encoded
             entry.version = node.at("version").get_string();
             entry.os = node.at("os").get_string();
             entry.status = node.at("status").get_string();
+            if (auto* services = node.find("services"); services != nullptr && services->is_array()) {
+                for (auto& service : services->get_array()) {
+                    auto& service_string = service.get_string();
+                    entry.services.emplace_back(service_string);
+
+                    if (service_string == "cbas") {
+                        response.info.services.insert(service_type::analytics);
+                    } else if (service_string == "fts") {
+                        response.info.services.insert(service_type::search);
+                    } else if (service_string == "n1ql") {
+                        response.info.services.insert(service_type::query);
+                    } else if (service_string == "kv") {
+                        response.info.services.insert(service_type::key_value);
+                    } else if (service_string == "eventing") {
+                        response.info.services.insert(service_type::eventing);
+                    }
+                }
+            }
             response.info.nodes.emplace_back(entry);
         }
     }
