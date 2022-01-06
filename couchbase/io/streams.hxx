@@ -57,6 +57,11 @@ class stream_impl
         return open_;
     }
 
+    auto get_executor() const noexcept
+    {
+        return strand_;
+    }
+
     [[nodiscard]] virtual asio::ip::tcp::endpoint local_endpoint() const = 0;
 
     virtual void close(std::function<void(std::error_code)>&& handler) = 0;
