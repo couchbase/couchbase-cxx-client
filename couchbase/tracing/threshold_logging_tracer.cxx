@@ -25,6 +25,7 @@
 
 #include <asio/steady_timer.hpp>
 #include <chrono>
+#include <mutex>
 #include <queue>
 #include <tao/json/value.hpp>
 
@@ -145,33 +146,74 @@ class threshold_logging_span : public request_span
 };
 
 template<typename T>
-class fixed_queue : private std::priority_queue<T>
+class concurrent_fixed_queue
 {
   private:
+    std::mutex mutex_;
+    std::priority_queue<T> data_;
     std::size_t capacity_{};
 
   public:
-    explicit fixed_queue(std::size_t capacity)
-      : std::priority_queue<T>()
-      , capacity_(capacity)
+    using size_type = typename std::priority_queue<T>::size_type;
+
+    explicit concurrent_fixed_queue(std::size_t capacity)
+      : capacity_(capacity)
     {
     }
 
-    using std::priority_queue<T>::pop;
-    using std::priority_queue<T>::size;
-    using std::priority_queue<T>::empty;
-    using std::priority_queue<T>::top;
+    concurrent_fixed_queue(concurrent_fixed_queue& other)
+    {
+        std::unique_lock<std::mutex> lock(other.mutex_);
+        data_ = other.data_;
+        capacity_ = other.capacity_;
+    }
+
+    concurrent_fixed_queue(const concurrent_fixed_queue& other) = delete;
+
+    concurrent_fixed_queue(concurrent_fixed_queue&& other)
+    {
+        std::unique_lock<std::mutex> lock(other.mutex_);
+        std::swap(data_, other.data_);
+        std::swap(capacity_, other.capacity_);
+    }
+
+    void pop()
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        data_.pop();
+    }
+
+    size_type size()
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        return data_.size();
+    }
+
+    bool empty()
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        return data_.empty();
+    }
 
     void emplace(const T&& item)
     {
-        std::priority_queue<T>::emplace(item);
-        if (size() > capacity_) {
-            pop();
+        std::unique_lock<std::mutex> lock(mutex_);
+        data_.emplace(std::forward<const T>(item));
+        if (data_.size() > capacity_) {
+            data_.pop();
         }
+    }
+
+    std::priority_queue<T> steal_data()
+    {
+        std::priority_queue<T> data;
+        std::unique_lock<std::mutex> lock(mutex_);
+        std::swap(data, data_);
+        return data;
     }
 };
 
-using fixed_span_queue = fixed_queue<reported_span>;
+using fixed_span_queue = concurrent_fixed_queue<reported_span>;
 
 reported_span
 convert(threshold_logging_span* span)
@@ -288,8 +330,7 @@ class threshold_logging_tracer_impl
         if (orphan_queue_.empty()) {
             return;
         }
-        auto queue = fixed_span_queue(options_.orphaned_sample_size);
-        std::swap(orphan_queue_, queue);
+        auto queue = orphan_queue_.steal_data();
         tao::json::value report
         {
             { "count", queue.size() },
@@ -312,8 +353,7 @@ class threshold_logging_tracer_impl
             if (threshold_queue.empty()) {
                 continue;
             }
-            auto queue = fixed_span_queue(options_.threshold_sample_size);
-            std::swap(threshold_queue, queue);
+            auto queue = threshold_queue.steal_data();
             tao::json::value report
             {
                 { "count", queue.size() }, { "service", fmt::format("{}", service) },
