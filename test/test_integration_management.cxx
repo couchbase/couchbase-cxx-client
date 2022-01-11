@@ -1146,7 +1146,7 @@ TEST_CASE("integration: analytics index management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_analytics_indexes()) {
+    if (!integration.cluster_version().supports_analytics()) {
         return;
     }
 
@@ -2056,19 +2056,21 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::invalid_argument);
     }
 
-    SECTION("analytics")
-    {
-        couchbase::operations::management::freeform_request req{};
-        req.type = couchbase::service_type::analytics;
-        req.method = "GET";
-        req.path = "/admin/ping";
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.ctx.http_status == 200);
-        REQUIRE_FALSE(resp.body.empty());
-        INFO(resp.body)
-        auto result = couchbase::utils::json::parse(resp.body);
-        REQUIRE(result.is_object());
+    if (integration.cluster_version().supports_analytics()) {
+        SECTION("analytics")
+        {
+            couchbase::operations::management::freeform_request req{};
+            req.type = couchbase::service_type::analytics;
+            req.method = "GET";
+            req.path = "/admin/ping";
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE(resp.ctx.http_status == 200);
+            REQUIRE_FALSE(resp.body.empty());
+            INFO(resp.body)
+            auto result = couchbase::utils::json::parse(resp.body);
+            REQUIRE(result.is_object());
+        }
     }
 
     SECTION("search")

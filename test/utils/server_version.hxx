@@ -109,7 +109,7 @@ struct server_version {
         return is_mad_hatter() || is_cheshire_cat() || is_neo();
     }
 
-    [[nodiscard]] bool supports_analytics_indexes() const
+    [[nodiscard]] bool supports_analytics() const
     {
         return is_alice() || is_mad_hatter() || is_cheshire_cat() || is_neo();
     }
