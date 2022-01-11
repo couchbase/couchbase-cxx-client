@@ -168,6 +168,9 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
     if (flex_index) {
         body["use_fts"] = true;
     }
+    if (preserve_expiry) {
+        body["preserve_expiry"] = true;
+    }
     bool check_scan_wait = false;
     if (scan_consistency) {
         switch (scan_consistency.value()) {

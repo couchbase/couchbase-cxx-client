@@ -85,6 +85,7 @@ struct query_request {
     bool metrics{ false };
     bool readonly{ false };
     bool flex_index{ false };
+    bool preserve_expiry{ false };
 
     std::optional<std::uint64_t> max_parallelism{};
     std::optional<std::uint64_t> scan_cap{};

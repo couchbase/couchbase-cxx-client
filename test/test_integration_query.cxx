@@ -222,3 +222,57 @@ TEST_CASE("integration: invalid query", "[integration]")
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::parsing_failure);
     }
 }
+
+TEST_CASE("integration: preserve expiry for mutatation query", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_preserve_expiry_for_query()) {
+        return;
+    }
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    couchbase::document_id id{
+        integration.ctx.bucket,
+        "_default",
+        "_default",
+        test::utils::uniq_id("preserve_expiry_for_query"),
+    };
+
+    uint32_t expiry = std::numeric_limits<uint32_t>::max();
+    const char* expiry_path = "$document.exptime";
+
+    {
+        couchbase::operations::upsert_request req{ id, R"({"foo":42})" };
+        req.expiry = expiry;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+
+    {
+        couchbase::operations::lookup_in_request req{ id };
+        req.specs.add_spec(couchbase::protocol::subdoc_opcode::get, true, expiry_path);
+        req.specs.add_spec(couchbase::protocol::subdoc_opcode::get, false, "foo");
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(expiry == std::stoul(resp.fields[0].value));
+        REQUIRE("42" == resp.fields[1].value);
+    }
+
+    {
+        std::string statement = fmt::format("UPDATE {} AS b USE KEYS '{}' SET b.foo = 43", integration.ctx.bucket, id.key());
+        couchbase::operations::query_request req{ statement };
+        req.preserve_expiry = true;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+
+    {
+        couchbase::operations::lookup_in_request req{ id };
+        req.specs.add_spec(couchbase::protocol::subdoc_opcode::get, true, expiry_path);
+        req.specs.add_spec(couchbase::protocol::subdoc_opcode::get, false, "foo");
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(expiry == std::stoul(resp.fields[0].value));
+        REQUIRE("43" == resp.fields[1].value);
+    }
+}
