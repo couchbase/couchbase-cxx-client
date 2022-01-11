@@ -105,7 +105,7 @@ class logging_value_recorder : public value_recorder
         if (histogram_ == nullptr) {
             return;
         }
-        hdr_record_value(histogram_, value);
+        hdr_record_value_atomic(histogram_, value);
     }
 
     [[nodiscard]] tao::json::value emit() const
@@ -171,13 +171,15 @@ logging_meter::get_value_recorder(const std::string& name, const std::map<std::s
     if (service == tags.end()) {
         return &noop_recorder;
     }
-    auto& service_recorders = recorders_[service->second];
 
     static std::string operation_tag = "db.operation";
     auto operation = tags.find(operation_tag);
     if (operation == tags.end()) {
         return &noop_recorder;
     }
+
+    std::scoped_lock lock(recorders_mutex_);
+    auto& service_recorders = recorders_[service->second];
 
     auto recorder = service_recorders.find(operation->second);
     if (recorder != service_recorders.end()) {
