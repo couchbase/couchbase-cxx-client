@@ -767,9 +767,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         connection_deadline_.cancel();
         retry_backoff_.cancel();
         resolver_.cancel();
-        if (stream_->is_open()) {
-            stream_->close();
-        }
+        stream_->close([](std::error_code) {});
         std::error_code ec = error::common_errc::request_canceled;
         if (!bootstrapped_ && bootstrap_handler_) {
             bootstrap_handler_(ec, {});
@@ -844,7 +842,11 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         } else {
             LOG_DEBUG("{} the stream is not ready yet, put the message into pending buffer, opaque={}", log_prefix_, opaque);
             std::scoped_lock lock(pending_buffer_mutex_);
-            pending_buffer_.push_back(data);
+            if (bootstrapped_ && stream_->is_open()) {
+                write_and_flush(data);
+            } else {
+                pending_buffer_.push_back(data);
+            }
         }
     }
 
@@ -1196,9 +1198,9 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             return stop(retry_reason::node_not_available);
         }
         state_ = diag::endpoint_state::connected;
-        bootstrapped_ = true;
         handler_ = std::make_unique<normal_handler>(shared_from_this());
         std::scoped_lock lock(pending_buffer_mutex_);
+        bootstrapped_ = true;
         if (!pending_buffer_.empty()) {
             for (const auto& buf : pending_buffer_) {
                 write(buf);
@@ -1285,7 +1287,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             return;
         }
         if (connection_deadline_.expiry() <= asio::steady_timer::clock_type::now()) {
-            stream_->close();
+            stream_->close([](std::error_code) {});
             connection_deadline_.expires_at(asio::steady_timer::time_point::max());
         }
         connection_deadline_.async_wait(std::bind(&mcbp_session::check_deadline, shared_from_this(), std::placeholders::_1));

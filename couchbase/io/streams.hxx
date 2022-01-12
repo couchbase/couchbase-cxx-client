@@ -30,6 +30,7 @@ class stream_impl
     asio::strand<asio::io_context::executor_type> strand_;
     bool tls_;
     std::string id_{};
+    std::atomic_bool open_{ false };
 
   public:
     stream_impl(asio::io_context& ctx, bool is_tls)
@@ -51,11 +52,19 @@ class stream_impl
         return id_;
     }
 
-    [[nodiscard]] virtual bool is_open() const = 0;
+    [[nodiscard]] bool is_open() const
+    {
+        return open_;
+    }
+
+    auto get_executor() const noexcept
+    {
+        return strand_;
+    }
 
     [[nodiscard]] virtual asio::ip::tcp::endpoint local_endpoint() const = 0;
 
-    virtual void close() = 0;
+    virtual void close(std::function<void(std::error_code)>&& handler) = 0;
 
     virtual void reopen() = 0;
 
@@ -72,71 +81,77 @@ class stream_impl
 class plain_stream_impl : public stream_impl
 {
   private:
-    asio::ip::tcp::socket stream_;
+    std::shared_ptr<asio::ip::tcp::socket> stream_;
 
   public:
     explicit plain_stream_impl(asio::io_context& ctx)
       : stream_impl(ctx, false)
-      , stream_(strand_)
+      , stream_(std::make_unique<asio::ip::tcp::socket>(strand_))
     {
-    }
-
-    [[nodiscard]] bool is_open() const override
-    {
-        return stream_.is_open();
     }
 
     [[nodiscard]] asio::ip::tcp::endpoint local_endpoint() const override
     {
         std::error_code ec;
-        auto res = stream_.local_endpoint(ec);
+        auto res = stream_->local_endpoint(ec);
         if (ec) {
             return {};
         }
         return res;
     }
 
-    void close() override
+    void close(std::function<void(std::error_code)>&& handler) override
     {
-        stream_.close();
+        open_ = false;
+        return asio::post(strand_, [stream = stream_, h = std::move(handler)]() {
+            asio::error_code ec{};
+            stream->shutdown(asio::socket_base::shutdown_both, ec);
+            stream->close(ec);
+            h(ec);
+        });
     }
 
     void reopen() override
     {
-        id_ = uuid::to_string(uuid::random());
-        asio::error_code ec{};
-        stream_.shutdown(asio::socket_base::shutdown_both, ec);
-        stream_.close(ec);
-        stream_ = asio::ip::tcp::socket(strand_);
+        return close([this](std::error_code) {
+            id_ = uuid::to_string(uuid::random());
+            stream_ = std::make_shared<asio::ip::tcp::socket>(strand_);
+        });
     }
 
     void set_options() override
     {
-        stream_.set_option(asio::ip::tcp::no_delay{ true });
-        stream_.set_option(asio::socket_base::keep_alive{ true });
+        if (!open_ || !stream_) {
+            return;
+        }
+        stream_->set_option(asio::ip::tcp::no_delay{ true });
+        stream_->set_option(asio::socket_base::keep_alive{ true });
     }
 
     void async_connect(const asio::ip::tcp::resolver::results_type::endpoint_type& endpoint,
                        std::function<void(std::error_code)>&& handler) override
     {
-        return stream_.async_connect(endpoint, std::move(handler));
+        return stream_->async_connect(endpoint, [this, h = std::move(handler)](std::error_code ec) {
+            open_ = stream_->is_open();
+            h(ec);
+        });
     }
 
     void async_write(std::vector<asio::const_buffer>& buffers, std::function<void(std::error_code, std::size_t)>&& handler) override
     {
-        return asio::async_write(stream_, buffers, std::move(handler));
+        return asio::async_write(*stream_, buffers, std::move(handler));
     }
 
     void async_read_some(asio::mutable_buffer buffer, std::function<void(std::error_code, std::size_t)>&& handler) override
     {
-        return stream_.async_read_some(buffer, std::move(handler));
+        return stream_->async_read_some(buffer, std::move(handler));
     }
 };
 
 class tls_stream_impl : public stream_impl
 {
   private:
-    std::unique_ptr<asio::ssl::stream<asio::ip::tcp::socket>> stream_;
+    std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> stream_;
     asio::ssl::context& tls_;
 
   public:
@@ -145,11 +160,6 @@ class tls_stream_impl : public stream_impl
       , stream_(std::make_unique<asio::ssl::stream<asio::ip::tcp::socket>>(asio::ip::tcp::socket(strand_), tls))
       , tls_(tls)
     {
-    }
-
-    [[nodiscard]] bool is_open() const override
-    {
-        return stream_->lowest_layer().is_open();
     }
 
     [[nodiscard]] asio::ip::tcp::endpoint local_endpoint() const override
@@ -162,18 +172,23 @@ class tls_stream_impl : public stream_impl
         return res;
     }
 
-    void close() override
+    void close(std::function<void(std::error_code)>&& handler) override
     {
-        stream_->lowest_layer().close();
+        open_ = false;
+        return asio::post(strand_, [stream = stream_, h = std::move(handler)]() {
+            asio::error_code ec{};
+            stream->lowest_layer().shutdown(asio::socket_base::shutdown_both, ec);
+            stream->lowest_layer().close(ec);
+            h(ec);
+        });
     }
 
     void reopen() override
     {
-        id_ = uuid::to_string(uuid::random());
-        asio::error_code ec{};
-        stream_->lowest_layer().shutdown(asio::socket_base::shutdown_both, ec);
-        stream_->lowest_layer().close(ec);
-        stream_ = std::make_unique<asio::ssl::stream<asio::ip::tcp::socket>>(asio::ip::tcp::socket(strand_), tls_);
+        return close([this](std::error_code) {
+            id_ = uuid::to_string(uuid::random());
+            stream_ = std::make_unique<asio::ssl::stream<asio::ip::tcp::socket>>(asio::ip::tcp::socket(strand_), tls_);
+        });
     }
 
     void set_options() override
@@ -192,6 +207,7 @@ class tls_stream_impl : public stream_impl
             if (ec_connect) {
                 return handler(ec_connect);
             }
+            open_ = stream_->lowest_layer().is_open();
             stream_->async_handshake(asio::ssl::stream_base::client, [handler](std::error_code ec_handshake) mutable {
                 if (ec_handshake == asio::error::operation_aborted) {
                     return;

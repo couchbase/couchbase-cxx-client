@@ -22,6 +22,8 @@
 
 #include <asio/steady_timer.hpp>
 
+#include <mutex>
+
 namespace couchbase::metrics
 {
 class logging_value_recorder;
@@ -31,6 +33,7 @@ class logging_meter : public meter
   private:
     asio::steady_timer emit_report_;
     logging_meter_options options_;
+    std::mutex recorders_mutex_{};
     std::map<std::string, std::map<std::string, std::shared_ptr<logging_value_recorder>>> recorders_{};
 
     void log_report() const;
