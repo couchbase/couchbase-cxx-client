@@ -845,8 +845,13 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         } else {
             LOG_DEBUG("{} the stream is not ready yet, put the message into pending buffer, opaque={}", log_prefix_, opaque);
             std::scoped_lock lock(pending_buffer_mutex_);
-            LOG_INFO("add to pending buffer");
-            pending_buffer_.push_back(data);
+            if (bootstrapped_ && stream_->is_open()) {
+                LOG_INFO("bootstrapped. flush immediately");
+                write_and_flush(data);
+            } else {
+                LOG_INFO("add to pending buffer");
+                pending_buffer_.push_back(data);
+            }
         }
     }
 
@@ -1198,12 +1203,12 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             return stop(retry_reason::node_not_available);
         }
         state_ = diag::endpoint_state::connected;
-        LOG_INFO("bootstrap set to true");
-        bootstrapped_ = true;
         handler_ = std::make_unique<normal_handler>(shared_from_this());
         std::scoped_lock lock(pending_buffer_mutex_);
-        LOG_INFO("flush pending buffer");
+        LOG_INFO("bootstrap set to true");
+        bootstrapped_ = true;
         if (!pending_buffer_.empty()) {
+            LOG_INFO("flush pending buffer");
             for (const auto& buf : pending_buffer_) {
                 write(buf);
             }
