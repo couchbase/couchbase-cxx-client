@@ -17,20 +17,24 @@
 
 #pragma once
 
+#include <couchbase/errors.hxx>
+#include <couchbase/utils/json_stream_control.hxx>
+
+#include <functional>
 #include <memory>
 #include <string>
 
 namespace couchbase::utils::json
 {
-namespace priv
+namespace detail
 {
 struct streaming_lexer_impl;
-} // namespace priv
+} // namespace detail
 
 /**
- * The streaming JSON lexer consumes chunks of data, and invokes given handler for each "row", and "meta".
+ * The streaming JSON lexer consumes chunks of data, and invokes given handler for each "row", and "complete".
  *
- * It is guaranteed that on_meta callback will be invoked exactly once.
+ * It is guaranteed that on_complete callback will be invoked exactly once.
  */
 class streaming_lexer
 {
@@ -45,7 +49,10 @@ class streaming_lexer
 
     void feed(std::string_view data);
 
+    void on_complete(std::function<void(std::error_code ec, std::size_t number_of_rows, std::string&& meta)> handler);
+    void on_row(std::function<stream_control(std::string&& row)> handler);
+
   private:
-    std::shared_ptr<priv::streaming_lexer_impl> impl_{};
+    std::shared_ptr<detail::streaming_lexer_impl> impl_{};
 };
 } // namespace couchbase::utils::json
