@@ -30,4 +30,4 @@ fi
 
 cd "${BUILD_DIR}"
 
-${CB_CTEST} --output-on-failure --label-regex 'integration|unit'
+for i in {0..1000}; do ${CB_CTEST} --output-on-failure -R "integration: bucket management"; done

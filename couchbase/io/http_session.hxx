@@ -33,6 +33,7 @@
 
 #include <asio.hpp>
 #include <cxx_function.hpp>
+#include <iostream>
 #include <list>
 #include <memory>
 #include <utility>
@@ -438,6 +439,9 @@ class http_session : public std::enable_shared_from_this<http_session>
                   LOG_ERROR("{} IO error while reading from the socket: {}", self->info_.log_prefix(), ec.message());
                   return self->stop();
               }
+
+              LOG_INFO(fmt::format("{} received {} bytes", self->info_.log_prefix(), bytes_transferred));
+              std::cout << utils::join_strings(self->input_buffer_, "") << std::endl;
 
               http_parser::feeding_result res{};
               {
