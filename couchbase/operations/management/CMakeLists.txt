@@ -73,5 +73,10 @@ add_library(
   view_index_get_all.cxx
   view_index_upsert.cxx)
 set_target_properties(couchbase_operations_management PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(couchbase_operations_management PRIVATE project_options project_warnings fmt::fmt spdlog::spdlog)
+target_link_libraries(
+  couchbase_operations_management
+  PRIVATE project_options
+          project_warnings
+          fmt::fmt
+          spdlog::spdlog)
 target_include_directories(couchbase_operations_management PRIVATE ${PROJECT_SOURCE_DIR})

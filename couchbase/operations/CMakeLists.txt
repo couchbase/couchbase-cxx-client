@@ -26,5 +26,10 @@ add_library(
   http_noop.cxx
   mcbp_noop.cxx)
 set_target_properties(couchbase_operations PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(couchbase_operations PRIVATE project_options project_warnings fmt::fmt spdlog::spdlog)
+target_link_libraries(
+  couchbase_operations
+  PRIVATE project_options
+          project_warnings
+          fmt::fmt
+          spdlog::spdlog)
 target_include_directories(couchbase_operations PRIVATE ${PROJECT_SOURCE_DIR})
