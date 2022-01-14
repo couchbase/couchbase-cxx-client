@@ -8,4 +8,9 @@ add_library(
   scram-sha/stringutils.cc)
 set_target_properties(couchbase_sasl PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(couchbase_sasl PRIVATE ${PROJECT_SOURCE_DIR})
-target_link_libraries(couchbase_sasl PRIVATE project_options project_warnings fmt::fmt spdlog::spdlog)
+target_link_libraries(
+  couchbase_sasl
+  PRIVATE project_options
+          project_warnings
+          fmt::fmt
+          spdlog::spdlog)
