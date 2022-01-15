@@ -28,6 +28,7 @@ namespace couchbase::operations::management
 {
 struct freeform_response {
     error_context::http ctx;
+    std::uint32_t status{};
     std::map<std::string, std::string> headers{};
     std::string body{};
 };

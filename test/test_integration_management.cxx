@@ -2065,7 +2065,7 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
             req.path = "/admin/ping";
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
-            REQUIRE(resp.ctx.http_status == 200);
+            REQUIRE(resp.status == 200);
             REQUIRE_FALSE(resp.body.empty());
             INFO(resp.body)
             auto result = couchbase::utils::json::parse(resp.body);
@@ -2081,7 +2081,7 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         req.path = "/api/ping";
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.ctx.http_status == 200);
+        REQUIRE(resp.status == 200);
         REQUIRE(resp.body.empty());
         REQUIRE_FALSE(resp.headers.empty());
         REQUIRE(resp.headers["content-type"].find("application/json") != std::string::npos);
@@ -2095,7 +2095,7 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         req.path = "/admin/ping";
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.ctx.http_status == 200);
+        REQUIRE(resp.status == 200);
         REQUIRE_FALSE(resp.body.empty());
         INFO(resp.body)
         auto result = couchbase::utils::json::parse(resp.body);
@@ -2114,7 +2114,7 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         req.body = R"({"keys":["foo","bar"]})";
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::internal_server_failure);
-        REQUIRE(resp.ctx.http_status == 404);
+        REQUIRE(resp.status == 404);
         REQUIRE_FALSE(resp.body.empty());
         auto result = couchbase::utils::json::parse(resp.body);
         INFO(resp.body)
@@ -2129,7 +2129,7 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         req.path = "/pools";
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.ctx.http_status == 200);
+        REQUIRE(resp.status == 200);
         REQUIRE_FALSE(resp.body.empty());
         auto result = couchbase::utils::json::parse(resp.body);
         INFO(resp.body)
@@ -2146,7 +2146,7 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
             req.path = "/api/v1/functions";
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
-            REQUIRE(resp.ctx.http_status == 200);
+            REQUIRE(resp.status == 200);
             REQUIRE_FALSE(resp.body.empty());
             auto result = couchbase::utils::json::parse(resp.body);
             INFO(resp.body)
