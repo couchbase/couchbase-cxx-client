@@ -50,6 +50,7 @@ freeform_request::make_response(error_context::http&& ctx, const encoded_respons
     if (!response.ctx.ec && encoded.status_code != 200) {
         response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
     }
+    response.status = encoded.status_code;
     response.headers = encoded.headers;
     response.body = encoded.body;
     return response;
