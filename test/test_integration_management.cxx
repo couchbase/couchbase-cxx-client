@@ -2113,7 +2113,7 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         req.path = fmt::format("/{}/_design/{}/_view/{}", integration.ctx.bucket, document_name, view_name);
         req.body = R"({"keys":["foo","bar"]})";
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::error::common_errc::internal_server_failure);
+        REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.status == 404);
         REQUIRE_FALSE(resp.body.empty());
         auto result = couchbase::utils::json::parse(resp.body);
