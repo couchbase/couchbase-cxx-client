@@ -53,7 +53,7 @@ static inline int
 static_on_body(::http_parser* parser, const char* at, std::size_t length)
 {
     auto* wrapper = static_cast<couchbase::io::http_parser*>(parser->data);
-    wrapper->response.body.append(at, length);
+    wrapper->response.body.append(std::string_view{ at, length });
     return 0;
 }
 

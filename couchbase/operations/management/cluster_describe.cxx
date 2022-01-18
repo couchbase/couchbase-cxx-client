@@ -36,13 +36,13 @@ cluster_describe_request::make_response(error_context::http&& ctx, const encoded
 {
     cluster_describe_response response{ std::move(ctx) };
     if (!response.ctx.ec && encoded.status_code != 200) {
-        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
     }
     if (response.ctx.ec) {
         return response;
     }
 
-    auto payload = utils::json::parse(encoded.body);
+    auto payload = utils::json::parse(encoded.body.data());
 
     if (auto* nodes = payload.find("nodes"); nodes != nullptr && nodes->is_array()) {
         for (auto& node : nodes->get_array()) {

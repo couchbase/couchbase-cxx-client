@@ -49,7 +49,7 @@ freeform_request::make_response(error_context::http&& ctx, const encoded_respons
     freeform_response response{ std::move(ctx) };
     response.status = encoded.status_code;
     response.headers = encoded.headers;
-    response.body = encoded.body;
+    response.body = encoded.body.data();
     return response;
 }
 } // namespace couchbase::operations::management

@@ -43,7 +43,7 @@ bucket_drop_request::make_response(error_context::http&& ctx, const encoded_resp
                 response.ctx.ec = {};
                 break;
             default:
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
                 break;
         }
     }

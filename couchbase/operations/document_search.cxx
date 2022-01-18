@@ -107,6 +107,13 @@ search_request::encode_to(search_request::encoded_request_type& encoded, http_co
     } else {
         LOG_DEBUG("SEARCH: {}", utils::json::generate(body["query"]));
     }
+    if (row_callback) {
+        encoded.streaming.emplace(couchbase::io::streaming_settings{
+          "/hits/^",
+          4,
+          std::move(row_callback.value()),
+        });
+    }
     return {};
 }
 
@@ -122,7 +129,7 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
         if (encoded.status_code == 200) {
             tao::json::value payload{};
             try {
-                payload = utils::json::parse(encoded.body);
+                payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
                 response.ctx.ec = error::common_errc::parsing_failure;
                 return response;
@@ -254,7 +261,7 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
         } else if (encoded.status_code == 400) {
             tao::json::value payload{};
             try {
-                payload = utils::json::parse(encoded.body);
+                payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
                 response.ctx.ec = error::common_errc::parsing_failure;
                 return response;
@@ -280,7 +287,7 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
         } else if (encoded.status_code == 429) {
             tao::json::value payload{};
             try {
-                payload = utils::json::parse(encoded.body);
+                payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
                 response.ctx.ec = error::common_errc::parsing_failure;
                 return response;

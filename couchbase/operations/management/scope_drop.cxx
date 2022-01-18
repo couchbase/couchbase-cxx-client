@@ -44,7 +44,7 @@ scope_drop_request::make_response(error_context::http&& ctx, const encoded_respo
                 break;
             case 404: {
                 std::regex scope_not_found("Scope with name .+ is not found");
-                if (std::regex_search(encoded.body, scope_not_found)) {
+                if (std::regex_search(encoded.body.data(), scope_not_found)) {
                     response.ctx.ec = error::common_errc::scope_not_found;
                 } else {
                     response.ctx.ec = error::common_errc::bucket_not_found;
@@ -53,7 +53,7 @@ scope_drop_request::make_response(error_context::http&& ctx, const encoded_respo
             case 200: {
                 tao::json::value payload{};
                 try {
-                    payload = utils::json::parse(encoded.body);
+                    payload = utils::json::parse(encoded.body.data());
                 } catch (const tao::pegtl::parse_error&) {
                     response.ctx.ec = error::common_errc::parsing_failure;
                     return response;
@@ -61,7 +61,7 @@ scope_drop_request::make_response(error_context::http&& ctx, const encoded_respo
                 response.uid = std::stoull(payload.at("uid").get_string(), nullptr, 16);
             } break;
             default:
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
                 break;
         }
     }

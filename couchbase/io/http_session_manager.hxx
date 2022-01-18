@@ -263,7 +263,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
               ctx.last_dispatched_from = cmd->session_->local_address();
               ctx.last_dispatched_to = cmd->session_->remote_address();
               ctx.http_status = resp.status_code;
-              ctx.http_body = resp.body;
+              ctx.http_body = resp.body.data();
               handler(cmd->request.make_response(std::move(ctx), std::move(resp)));
               self->check_in(cmd->request.type, std::move(cmd->session_));
           });

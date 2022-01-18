@@ -31,20 +31,20 @@ make_analytics_link_replace_response(error_context::http&& ctx, const io::http_r
 {
     management::analytics_link_replace_response response{ std::move(ctx) };
     if (!response.ctx.ec) {
-        if (encoded.body.empty() && response.ctx.http_status == 200) {
+        if (encoded.body.data().empty() && response.ctx.http_status == 200) {
             return response;
         }
         tao::json::value payload{};
         try {
-            payload = utils::json::parse(encoded.body);
+            payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
-            auto colon = encoded.body.find(':');
+            auto colon = encoded.body.data().find(':');
             if (colon == std::string::npos) {
                 response.ctx.ec = error::common_errc::parsing_failure;
                 return response;
             }
-            auto code = static_cast<std::uint32_t>(std::stoul(encoded.body));
-            auto msg = encoded.body.substr(colon + 1);
+            auto code = static_cast<std::uint32_t>(std::stoul(encoded.body.data()));
+            auto msg = encoded.body.data().substr(colon + 1);
             response.errors.emplace_back(management::analytics_link_replace_response::problem{ code, msg });
         }
         if (payload) {
@@ -78,7 +78,7 @@ make_analytics_link_replace_response(error_context::http&& ctx, const io::http_r
         } else if (link_not_found) {
             response.ctx.ec = error::analytics_errc::link_not_found;
         } else {
-            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
         }
     }
     return response;

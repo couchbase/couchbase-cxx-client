@@ -37,7 +37,7 @@ cluster_developer_preview_enable_request::make_response(error_context::http&& ct
 {
     cluster_developer_preview_enable_response response{ std::move(ctx) };
     if (!response.ctx.ec && encoded.status_code != 200) {
-        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
     }
     return response;
 }

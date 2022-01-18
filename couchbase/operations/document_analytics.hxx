@@ -73,8 +73,8 @@ struct analytics_request {
 
     static const inline service_type type = service_type::analytics;
 
-    std::chrono::milliseconds timeout{ timeout_defaults::analytics_timeout };
     std::string statement;
+    std::chrono::milliseconds timeout{ timeout_defaults::analytics_timeout };
     std::string client_context_id{ uuid::to_string(uuid::random()) };
 
     bool readonly{ false };
@@ -88,11 +88,12 @@ struct analytics_request {
     std::map<std::string, couchbase::json_string> raw{};
     std::vector<couchbase::json_string> positional_parameters{};
     std::map<std::string, couchbase::json_string> named_parameters{};
-
-    std::string body_str{};
+    std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
     [[nodiscard]] analytics_response make_response(error_context::analytics&& ctx, const encoded_response_type& encoded) const;
+
+    std::string body_str{};
 };
 
 } // namespace couchbase::operations

@@ -44,9 +44,9 @@ scope_create_request::make_response(error_context::http&& ctx, const encoded_res
         switch (encoded.status_code) {
             case 400: {
                 std::regex scope_exists("Scope with name .+ already exists");
-                if (std::regex_search(encoded.body, scope_exists)) {
+                if (std::regex_search(encoded.body.data(), scope_exists)) {
                     response.ctx.ec = error::management_errc::scope_exists;
-                } else if (encoded.body.find("Not allowed on this version of cluster") != std::string::npos) {
+                } else if (encoded.body.data().find("Not allowed on this version of cluster") != std::string::npos) {
                     response.ctx.ec = error::common_errc::feature_not_available;
                 } else {
                     response.ctx.ec = error::common_errc::invalid_argument;
@@ -58,7 +58,7 @@ scope_create_request::make_response(error_context::http&& ctx, const encoded_res
             case 200: {
                 tao::json::value payload{};
                 try {
-                    payload = utils::json::parse(encoded.body);
+                    payload = utils::json::parse(encoded.body.data());
                 } catch (const tao::pegtl::parse_error&) {
                     response.ctx.ec = error::common_errc::parsing_failure;
                     return response;
@@ -66,7 +66,7 @@ scope_create_request::make_response(error_context::http&& ctx, const encoded_res
                 response.uid = std::stoull(payload.at("uid").get_string(), nullptr, 16);
             } break;
             default:
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
                 break;
         }
     }

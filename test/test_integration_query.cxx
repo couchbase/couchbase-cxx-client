@@ -276,3 +276,85 @@ TEST_CASE("integration: preserve expiry for mutatation query", "[integration]")
         REQUIRE("43" == resp.fields[1].value);
     }
 }
+
+TEST_CASE("integration: streaming query results", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_gcccp()) {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    }
+
+    {
+        couchbase::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
+        std::vector<std::string> rows{};
+        req.row_callback = [&rows](std::string&& row) {
+            rows.emplace_back(std::move(row));
+            return couchbase::utils::json::stream_control::next_row;
+        };
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec.message())
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(rows.size() == 1);
+        REQUIRE(rows[0] == R"({"greeting":"ruby rules"})");
+    }
+}
+
+TEST_CASE("integration: streaming query results with stop in the middle", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_gcccp()) {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    }
+
+    {
+        couchbase::operations::query_request req{ R"(SELECT * FROM  [{"tech": "C++"}, {"tech": "Ruby"}, {"tech": "Couchbase"}] AS data)" };
+        std::vector<std::string> rows{};
+        req.row_callback = [&rows](std::string&& row) {
+            bool should_stop = row.find("Ruby") != std::string::npos;
+            rows.emplace_back(std::move(row));
+            if (should_stop) {
+                return couchbase::utils::json::stream_control::stop;
+            }
+            return couchbase::utils::json::stream_control::next_row;
+        };
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec.message())
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(rows.size() == 2);
+        REQUIRE(rows[0] == R"({"data":{"tech":"C++"}})");
+        REQUIRE(rows[1] == R"({"data":{"tech":"Ruby"}})");
+    }
+}
+
+TEST_CASE("integration: streaming analytics results", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.has_analytics_service()) {
+        return;
+    }
+
+    if (!integration.cluster_version().supports_gcccp()) {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    }
+
+    {
+        couchbase::operations::analytics_request req{
+            R"(SELECT * FROM  [{"tech": "C++"}, {"tech": "Ruby"}, {"tech": "Couchbase"}] AS data)"
+        };
+        std::vector<std::string> rows{};
+        req.row_callback = [&rows](std::string&& row) {
+            rows.emplace_back(std::move(row));
+            return couchbase::utils::json::stream_control::next_row;
+        };
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec.message())
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(rows.size() == 3);
+        REQUIRE(rows[0] == R"({ "data": { "tech": "C++" } })");
+        REQUIRE(rows[1] == R"({ "data": { "tech": "Ruby" } })");
+        REQUIRE(rows[2] == R"({ "data": { "tech": "Couchbase" } })");
+    }
+}

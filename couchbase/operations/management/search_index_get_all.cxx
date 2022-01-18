@@ -38,12 +38,12 @@ search_index_get_all_request::make_response(error_context::http&& ctx, const enc
     search_index_get_all_response response{ std::move(ctx) };
     if (!response.ctx.ec) {
         if (encoded.status_code != 200) {
-            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
             return response;
         }
         tao::json::value payload{};
         try {
-            payload = utils::json::parse(encoded.body);
+            payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
             response.ctx.ec = error::common_errc::parsing_failure;
             return response;

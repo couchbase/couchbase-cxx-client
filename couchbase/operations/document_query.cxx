@@ -234,6 +234,13 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
         LOG_DEBUG(
           "QUERY: client_context_id=\"{}\", prep={}, {}", client_context_id, utils::json::generate(prep), utils::json::generate(stmt));
     }
+    if (row_callback) {
+        encoded.streaming.emplace(couchbase::io::streaming_settings{
+          "/results/^",
+          4,
+          std::move(row_callback.value()),
+        });
+    }
     return {};
 }
 
@@ -245,7 +252,7 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
     response.ctx.parameters = body_str;
     if (!response.ctx.ec) {
         try {
-            response.payload = utils::json::parse(encoded.body).as<query_response_payload>();
+            response.payload = utils::json::parse(encoded.body.data()).as<query_response_payload>();
         } catch (const tao::pegtl::parse_error&) {
             response.ctx.ec = error::common_errc::parsing_failure;
             return response;
@@ -361,7 +368,7 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
             } else {
                 LOG_TRACE("Unexpected error returned by query engine: client_context_id=\"{}\", body={}",
                           response.ctx.client_context_id,
-                          encoded.body);
+                          encoded.body.data());
                 response.ctx.ec = error::common_errc::internal_server_failure;
             }
         }

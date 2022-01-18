@@ -44,7 +44,7 @@ analytics_link_disconnect_request::make_response(error_context::http&& ctx, cons
     if (!response.ctx.ec) {
         tao::json::value payload{};
         try {
-            payload = utils::json::parse(encoded.body);
+            payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
             response.ctx.ec = error::common_errc::parsing_failure;
             return response;
@@ -71,7 +71,7 @@ analytics_link_disconnect_request::make_response(error_context::http&& ctx, cons
             if (link_not_found) {
                 response.ctx.ec = error::analytics_errc::link_not_found;
             } else {
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
             }
         }
     }

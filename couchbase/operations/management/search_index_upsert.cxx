@@ -69,7 +69,7 @@ search_index_upsert_request::make_response(error_context::http&& ctx, const enco
         if (encoded.status_code == 200) {
             tao::json::value payload{};
             try {
-                payload = utils::json::parse(encoded.body);
+                payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
                 response.ctx.ec = error::common_errc::parsing_failure;
                 return response;
@@ -81,7 +81,7 @@ search_index_upsert_request::make_response(error_context::http&& ctx, const enco
         } else if (encoded.status_code == 400) {
             tao::json::value payload{};
             try {
-                payload = utils::json::parse(encoded.body);
+                payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
                 response.ctx.ec = error::common_errc::parsing_failure;
                 return response;
@@ -101,7 +101,7 @@ search_index_upsert_request::make_response(error_context::http&& ctx, const enco
                 return response;
             }
         }
-        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
     }
     return response;
 }

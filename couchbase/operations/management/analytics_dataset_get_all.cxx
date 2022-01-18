@@ -44,7 +44,7 @@ analytics_dataset_get_all_request::make_response(error_context::http&& ctx, cons
     if (!response.ctx.ec) {
         tao::json::value payload{};
         try {
-            payload = utils::json::parse(encoded.body);
+            payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
             response.ctx.ec = error::common_errc::parsing_failure;
             return response;
@@ -60,7 +60,7 @@ analytics_dataset_get_all_request::make_response(error_context::http&& ctx, cons
                     response.errors.emplace_back(err);
                 }
             }
-            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
             return response;
         }
         auto* results = payload.find("results");

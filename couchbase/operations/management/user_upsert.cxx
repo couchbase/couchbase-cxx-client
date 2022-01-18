@@ -78,7 +78,7 @@ user_upsert_request::make_response(error_context::http&& ctx, const encoded_resp
             case 400: {
                 tao::json::value payload{};
                 try {
-                    payload = utils::json::parse(encoded.body);
+                    payload = utils::json::parse(encoded.body.data());
                 } catch (const tao::pegtl::parse_error&) {
                     response.ctx.ec = error::common_errc::parsing_failure;
                     return response;
@@ -92,7 +92,7 @@ user_upsert_request::make_response(error_context::http&& ctx, const encoded_resp
                 }
             } break;
             default:
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
                 break;
         }
     }

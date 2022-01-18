@@ -39,7 +39,7 @@ view_index_drop_request::make_response(error_context::http&& ctx, const encoded_
         if (encoded.status_code == 404) {
             response.ctx.ec = error::view_errc::design_document_not_found;
         } else if (encoded.status_code != 200) {
-            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
         }
     }
     return response;

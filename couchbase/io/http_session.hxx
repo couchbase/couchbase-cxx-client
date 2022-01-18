@@ -310,6 +310,9 @@ class http_session : public std::enable_shared_from_this<http_session>
             std::scoped_lock lock(command_handlers_mutex_);
             command_handlers_.emplace_back(std::forward<Handler>(handler));
         }
+        if (request.streaming) {
+            parser_.response.body.use_json_streaming(std::move(request.streaming.value()));
+        }
         flush();
     }
 

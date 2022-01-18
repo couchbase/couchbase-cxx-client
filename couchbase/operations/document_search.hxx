@@ -142,11 +142,13 @@ struct search_request {
     std::map<std::string, std::string> facets{};
 
     std::map<std::string, couchbase::json_string> raw{};
-    std::string body_str{};
+    std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
 
     [[nodiscard]] search_response make_response(error_context::search&& ctx, const encoded_response_type& encoded) const;
+
+    std::string body_str{};
 };
 
 } // namespace couchbase::operations
