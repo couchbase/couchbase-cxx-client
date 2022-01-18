@@ -2136,6 +2136,28 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         REQUIRE(result.find("uuid") != nullptr);
     }
 
+    if (integration.cluster_version().supports_collections()) {
+        SECTION("create scope")
+        {
+            auto scope_name = test::utils::uniq_id("freeform_scope");
+
+            couchbase::operations::management::freeform_request req{};
+            req.type = couchbase::service_type::management;
+            req.method = "POST";
+            req.path = fmt::format("/pools/default/buckets/{}/scopes", integration.ctx.bucket);
+            req.headers["content-type"] = "application/x-www-form-urlencoded";
+            req.body = fmt::format("name={}", couchbase::utils::string_codec::form_encode(scope_name));
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE(resp.status == 200);
+            REQUIRE_FALSE(resp.headers.empty());
+            REQUIRE(resp.headers["content-type"].find("application/json") != std::string::npos);
+            auto result = couchbase::utils::json::parse(resp.body);
+            REQUIRE(result.is_object());
+            REQUIRE(result.find("uid") != nullptr);
+        }
+    }
+
     if (integration.cluster_version().supports_eventing_functions() && integration.has_eventing_service()) {
         SECTION("eventing")
         {
