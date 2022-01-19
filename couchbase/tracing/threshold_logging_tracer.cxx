@@ -41,7 +41,9 @@ struct reported_span {
     }
 };
 
-class threshold_logging_span : public request_span
+class threshold_logging_span
+  : public request_span
+  , public std::enable_shared_from_this<threshold_logging_span>
 {
   private:
     std::chrono::system_clock::time_point start_{ std::chrono::system_clock::now() };
@@ -56,13 +58,14 @@ class threshold_logging_span : public request_span
     std::uint64_t last_server_duration_us_{ 0 };
     std::uint64_t total_server_duration_us_{ 0 };
 
-    std::string name_;
-    threshold_logging_tracer* tracer_;
+    std::shared_ptr<threshold_logging_tracer> tracer_{};
 
   public:
-    threshold_logging_span(const std::string& name, threshold_logging_tracer* tracer)
-      : request_span(name)
-      , tracer_{ tracer }
+    threshold_logging_span(std::string name,
+                           std::shared_ptr<threshold_logging_tracer> tracer,
+                           std::shared_ptr<request_span> parent = nullptr)
+      : request_span(std::move(name), parent)
+      , tracer_{ std::move(tracer) }
     {
     }
 
@@ -216,7 +219,7 @@ class concurrent_fixed_queue
 using fixed_span_queue = concurrent_fixed_queue<reported_span>;
 
 reported_span
-convert(threshold_logging_span* span)
+convert(std::shared_ptr<threshold_logging_span> span)
 {
     tao::json::value entry{ { "operation_name", span->name() },
                             { "total_duration_us", std::chrono::duration_cast<std::chrono::microseconds>(span->duration()).count() } };
@@ -281,12 +284,12 @@ class threshold_logging_tracer_impl
         rearm_threshold_reporter();
     }
 
-    void add_orphan(threshold_logging_span* span)
+    void add_orphan(std::shared_ptr<threshold_logging_span> span)
     {
-        orphan_queue_.emplace(convert(span));
+        orphan_queue_.emplace(convert(std::move(span)));
     }
 
-    void check_threshold(threshold_logging_span* span)
+    void check_threshold(std::shared_ptr<threshold_logging_span> span)
     {
         auto service = span->service();
         if (!service.has_value()) {
@@ -381,19 +384,19 @@ class threshold_logging_tracer_impl
     std::map<service_type, fixed_span_queue> threshold_queues_{};
 };
 
-request_span*
-threshold_logging_tracer::start_span(std::string name, request_span*)
+std::shared_ptr<request_span>
+threshold_logging_tracer::start_span(std::string name, std::shared_ptr<request_span> parent)
 {
-    return new threshold_logging_span(name, this);
+    return std::make_shared<threshold_logging_span>(std::move(name), shared_from_this(), parent);
 }
 
 void
-threshold_logging_tracer::report(threshold_logging_span* span)
+threshold_logging_tracer::report(std::shared_ptr<threshold_logging_span> span)
 {
     if (span->orphan()) {
-        impl_->add_orphan(span);
+        impl_->add_orphan(std::move(span));
     } else {
-        impl_->check_threshold(span);
+        impl_->check_threshold(std::move(span));
     }
 }
 
@@ -413,8 +416,7 @@ void
 threshold_logging_span::end()
 {
     duration_ = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start_);
-    tracer_->report(this);
-    delete this;
+    tracer_->report(shared_from_this());
 }
 
 } // namespace couchbase::tracing

@@ -37,7 +37,7 @@ class bucket : public std::enable_shared_from_this<bucket>
     explicit bucket(const std::string& client_id,
                     asio::io_context& ctx,
                     asio::ssl::context& tls,
-                    tracing::request_tracer* tracer,
+                    std::shared_ptr<tracing::request_tracer> tracer,
                     metrics::meter* meter,
                     std::string name,
                     couchbase::origin origin,
@@ -46,7 +46,7 @@ class bucket : public std::enable_shared_from_this<bucket>
       : client_id_(client_id)
       , ctx_(ctx)
       , tls_(tls)
-      , tracer_(tracer)
+      , tracer_(std::move(tracer))
       , meter_(meter)
       , name_(std::move(name))
       , origin_(std::move(origin))
@@ -429,7 +429,7 @@ class bucket : public std::enable_shared_from_this<bucket>
     std::string client_id_;
     asio::io_context& ctx_;
     asio::ssl::context& tls_;
-    tracing::request_tracer* tracer_;
+    std::shared_ptr<tracing::request_tracer> tracer_;
     metrics::meter* meter_;
     std::string name_;
     origin origin_;

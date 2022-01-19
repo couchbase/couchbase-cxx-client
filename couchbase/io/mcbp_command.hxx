@@ -47,7 +47,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     mcbp_command_handler handler_{};
     std::shared_ptr<Manager> manager_{};
     std::string id_{ uuid::to_string(uuid::random()) };
-    tracing::request_span* span_{ nullptr };
+    std::shared_ptr<tracing::request_span> span_{ nullptr };
 
     mcbp_command(asio::io_context& ctx, std::shared_ptr<Manager> manager, Request req)
       : deadline(ctx)
