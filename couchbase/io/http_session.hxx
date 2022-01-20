@@ -162,6 +162,11 @@ class http_session : public std::enable_shared_from_this<http_session>
         stop();
     }
 
+    auto get_executor() const
+    {
+        return stream_->get_executor();
+    }
+
     [[nodiscard]] couchbase::http_context& http_context()
     {
         return http_ctx_;

@@ -193,7 +193,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
     void check_in(service_type type, std::shared_ptr<http_session> session)
     {
         if (!session->keep_alive()) {
-            return session->stop();
+            return asio::post(session->get_executor(), [session]() { session->stop(); });
         }
         if (!session->is_stopped()) {
             session->set_idle(options_.idle_http_connection_timeout);
