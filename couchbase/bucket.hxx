@@ -259,10 +259,10 @@ class bucket : public std::enable_shared_from_this<bucket>
         }
         new_session->bootstrap([self = shared_from_this(), new_session, h = std::forward<Handler>(handler)](
                                  std::error_code ec, const topology::configuration& cfg) mutable {
-            size_t this_index = new_session->index();
             if (ec) {
-                LOG_WARNING(R"({} failed to bootstrap session idx={}, ec={})", new_session->log_prefix(), this_index, ec.message());
+                LOG_WARNING(R"({} failed to bootstrap session ec={}, bucket="{}")", new_session->log_prefix(), ec.message(), self->name_);
             } else {
+                size_t this_index = new_session->index();
                 new_session->on_configuration_update([self](const topology::configuration& config) { self->update_config(config); });
                 new_session->on_stop([this_index, hostname = new_session->bootstrap_hostname(), port = new_session->bootstrap_port(), self](
                                        io::retry_reason reason) {
@@ -271,7 +271,7 @@ class bucket : public std::enable_shared_from_this<bucket>
                     }
                 });
 
-                self->sessions_.emplace(this_index, std::move(new_session));
+                self->sessions_.try_emplace(this_index, std::move(new_session));
                 self->update_config(cfg);
                 self->drain_deferred_queue();
             }
