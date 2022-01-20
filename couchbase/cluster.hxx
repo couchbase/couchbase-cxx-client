@@ -111,19 +111,23 @@ class cluster
                     known_features = session_->supported_features();
                 }
                 b = std::make_shared<bucket>(id_, ctx_, tls_, tracer_, meter_, bucket_name, origin_, known_features);
-                buckets_.emplace(bucket_name, b);
+                buckets_.try_emplace(bucket_name, b);
             }
         }
         if (b == nullptr) {
             return handler({});
         }
 
-        b->bootstrap([this, handler = std::forward<Handler>(handler)](std::error_code ec, const topology::configuration& config) mutable {
-            if (!ec && !session_->supports_gcccp()) {
-                session_manager_->set_configuration(config, origin_.options());
-            }
-            handler(ec);
-        });
+        b->bootstrap(
+          [this, bucket_name, handler = std::forward<Handler>(handler)](std::error_code ec, const topology::configuration& config) mutable {
+              if (ec) {
+                  std::scoped_lock lock(buckets_mutex_);
+                  buckets_.erase(bucket_name);
+              } else if (!session_->supports_gcccp()) {
+                  session_manager_->set_configuration(config, origin_.options());
+              }
+              handler(ec);
+          });
     }
 
     template<typename Handler>

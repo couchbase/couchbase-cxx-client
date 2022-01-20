@@ -690,8 +690,8 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                 return;
             }
             LOG_WARNING("{} unable to bootstrap in time", self->log_prefix_);
-            self->bootstrap_handler_(error::common_errc::unambiguous_timeout, {});
-            self->bootstrap_handler_ = nullptr;
+            auto h = std::move(self->bootstrap_handler_);
+            h(error::common_errc::unambiguous_timeout, {});
             self->stop(retry_reason::do_not_retry);
         });
         initiate_bootstrap();
@@ -770,8 +770,8 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         stream_->close([](std::error_code) {});
         std::error_code ec = error::common_errc::request_canceled;
         if (!bootstrapped_ && bootstrap_handler_) {
-            bootstrap_handler_(ec, {});
-            bootstrap_handler_ = nullptr;
+            auto h = std::move(bootstrap_handler_);
+            h(ec, {});
         }
         if (handler_) {
             handler_->stop();
@@ -1037,10 +1037,11 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
 
         if (!bootstrapped_ && bootstrap_handler_) {
             bootstrap_deadline_.cancel();
-            bootstrap_handler_(ec, config_.value_or(topology::configuration{}));
-            bootstrap_handler_ = nullptr;
+            auto h = std::move(bootstrap_handler_);
+            h(ec, config_.value_or(topology::configuration{}));
         }
         if (ec) {
+            handler_ = nullptr;
             return stop(retry_reason::node_not_available);
         }
         state_ = diag::endpoint_state::connected;

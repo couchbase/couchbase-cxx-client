@@ -162,6 +162,11 @@ class http_session : public std::enable_shared_from_this<http_session>
         stop();
     }
 
+    auto get_executor() const
+    {
+        return stream_->get_executor();
+    }
+
     [[nodiscard]] couchbase::http_context& http_context()
     {
         return http_ctx_;
@@ -405,9 +410,10 @@ class http_session : public std::enable_shared_from_this<http_session>
 
     void do_read()
     {
-        if (stopped_) {
+        if (stopped_ || reading_ || !stream_->is_open()) {
             return;
         }
+        reading_ = true;
         stream_->async_read_some(
           asio::buffer(input_buffer_), [self = shared_from_this()](std::error_code ec, std::size_t bytes_transferred) {
               if (ec == asio::error::operation_aborted || self->stopped_) {
@@ -437,6 +443,7 @@ class http_session : public std::enable_shared_from_this<http_session>
                           self->parser_.reset();
                           return;
                       }
+                      self->reading_ = false;
                       return self->do_read();
                   case http_parser::status::failure:
                       LOG_ERROR("{} failed to parse HTTP response: {}", self->info_.log_prefix(), self->parser_.error_message());
@@ -502,6 +509,7 @@ class http_session : public std::enable_shared_from_this<http_session>
     std::atomic_bool stopped_{ false };
     std::atomic_bool connected_{ false };
     std::atomic_bool keep_alive_{ false };
+    std::atomic_bool reading_{ false };
 
     std::function<void()> on_stop_handler_{ nullptr };
 
