@@ -15,9 +15,8 @@
  *   limitations under the License.
  */
 
-#include <couchbase/operations/document_mutate_in.hxx>
-
 #include <couchbase/errors.hxx>
+#include <couchbase/operations/document_mutate_in.hxx>
 
 #include <algorithm>
 
@@ -87,6 +86,8 @@ mutate_in_request::make_response(error_context::key_value&& ctx, const encoded_r
                 response.fields[entry.index].value = entry.value;
             } else {
                 response.fields[entry.index].status = entry.status;
+                response.fields[entry.index].ec =
+                  protocol::map_status_code(protocol::client_opcode::subdoc_multi_mutation, std::uint16_t(entry.status));
                 response.first_error_index = entry.index;
                 break;
             }

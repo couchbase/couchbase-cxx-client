@@ -35,6 +35,7 @@ struct lookup_in_response {
         std::string path;
         std::string value;
         std::size_t original_index;
+        std::error_code ec{};
     };
     error_context::key_value ctx;
     protocol::cas cas{};
