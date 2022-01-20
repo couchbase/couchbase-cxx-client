@@ -15,9 +15,8 @@
  *   limitations under the License.
  */
 
-#include <couchbase/operations/document_lookup_in.hxx>
-
 #include <couchbase/errors.hxx>
+#include <couchbase/operations/document_lookup_in.hxx>
 #include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations
@@ -62,6 +61,8 @@ lookup_in_request::make_response(error_context::key_value&& ctx, const encoded_r
         for (size_t i = 0; i < encoded.body().fields().size(); ++i) {
             const auto& res_entry = encoded.body().fields()[i];
             response.fields[i].status = res_entry.status;
+            response.fields[i].ec =
+              protocol::map_status_code(protocol::client_opcode::subdoc_multi_mutation, std::uint16_t(res_entry.status));
             response.fields[i].exists =
               res_entry.status == protocol::status::success || res_entry.status == protocol::status::subdoc_success_deleted;
             response.fields[i].value = res_entry.value;

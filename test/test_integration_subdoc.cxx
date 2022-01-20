@@ -33,6 +33,7 @@ assert_single_lookup_success(test::utils::integration_test_guard& integration,
     REQUIRE(resp.fields[0].exists);
     REQUIRE(resp.fields[0].path == path);
     REQUIRE(resp.fields[0].status == couchbase::protocol::status::success);
+    REQUIRE_FALSE(resp.fields[0].ec);
     if (expected_value.has_value()) {
         REQUIRE(expected_value == resp.fields[0].value);
     }
@@ -43,7 +44,8 @@ assert_single_lookup_error(test::utils::integration_test_guard& integration,
                            couchbase::protocol::subdoc_opcode opcode,
                            const couchbase::document_id& id,
                            const std::string& path,
-                           couchbase::protocol::status expected_status)
+                           couchbase::protocol::status expected_status,
+                           std::error_code expected_ec)
 {
     couchbase::operations::lookup_in_request req{ id };
     req.specs.add_spec(opcode, false, path);
@@ -55,24 +57,26 @@ assert_single_lookup_error(test::utils::integration_test_guard& integration,
     REQUIRE(resp.fields[0].path == path);
     REQUIRE(resp.fields[0].value.empty());
     REQUIRE(resp.fields[0].status == expected_status);
+    REQUIRE(resp.fields[0].ec == expected_ec);
 }
 
 void
-assert_single_mutate_success(couchbase::operations::mutate_in_response resp, const std::string& path, std::string)
+assert_single_mutate_success(couchbase::operations::mutate_in_response resp, const std::string& path, const std::string& value = "")
 {
     REQUIRE_FALSE(resp.ctx.ec);
     REQUIRE_FALSE(resp.cas.empty());
     REQUIRE(resp.fields.size() == 1);
     REQUIRE(resp.fields[0].path == path);
     REQUIRE(resp.fields[0].status == couchbase::protocol::status::success);
-    // TODO: When is value not empty?
-    // REQUIRE(value == resp.fields[0].value);
+    REQUIRE_FALSE(resp.fields[0].ec);
+    REQUIRE(resp.fields[0].value == value);
 }
 
 void
 assert_single_mutate_error(couchbase::operations::mutate_in_response resp,
                            const std::string& path,
-                           couchbase::protocol::status expected_status)
+                           couchbase::protocol::status expected_status,
+                           std::error_code expected_ec)
 {
     REQUIRE_FALSE(resp.ctx.ec);
     REQUIRE(resp.cas.empty());
@@ -80,6 +84,7 @@ assert_single_mutate_error(couchbase::operations::mutate_in_response resp,
     REQUIRE(resp.fields[0].path == path);
     REQUIRE(resp.fields[0].value.empty());
     REQUIRE(resp.fields[0].status == expected_status);
+    REQUIRE(resp.fields[0].ec == expected_ec);
 }
 
 TEST_CASE("integration: subdoc get & exists", "[integration]")
@@ -129,14 +134,22 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
 
     SECTION("non existent path get")
     {
-        assert_single_lookup_error(
-          integration, couchbase::protocol::subdoc_opcode::get, id, "non-exist", couchbase::protocol::status::subdoc_path_not_found);
+        assert_single_lookup_error(integration,
+                                   couchbase::protocol::subdoc_opcode::get,
+                                   id,
+                                   "non-exist",
+                                   couchbase::protocol::status::subdoc_path_not_found,
+                                   couchbase::error::key_value_errc::path_not_found);
     }
 
     SECTION("non existent path exists")
     {
-        assert_single_lookup_error(
-          integration, couchbase::protocol::subdoc_opcode::exists, id, "non-exist", couchbase::protocol::status::subdoc_path_not_found);
+        assert_single_lookup_error(integration,
+                                   couchbase::protocol::subdoc_opcode::exists,
+                                   id,
+                                   "non-exist",
+                                   couchbase::protocol::status::subdoc_path_not_found,
+                                   couchbase::error::key_value_errc::path_not_found);
     }
 
     SECTION("non existent doc")
@@ -179,7 +192,8 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
                                        couchbase::protocol::subdoc_opcode::get,
                                        non_json_id,
                                        "non-exist",
-                                       couchbase::protocol::status::subdoc_doc_not_json);
+                                       couchbase::protocol::status::subdoc_doc_not_json,
+                                       couchbase::error::key_value_errc::document_not_json);
         }
 
         SECTION("non json exists")
@@ -188,7 +202,8 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
                                        couchbase::protocol::subdoc_opcode::exists,
                                        non_json_id,
                                        "non-exist",
-                                       couchbase::protocol::status::subdoc_doc_not_json);
+                                       couchbase::protocol::status::subdoc_doc_not_json,
+                                       couchbase::error::key_value_errc::document_not_json);
         }
     }
 
@@ -196,8 +211,12 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
     {
         std::vector<std::string> invalid_paths = { "invalid..path", "invalid[-2]" };
         for (const auto& path : invalid_paths) {
-            assert_single_lookup_error(
-              integration, couchbase::protocol::subdoc_opcode::get, id, path, couchbase::protocol::status::subdoc_path_invalid);
+            assert_single_lookup_error(integration,
+                                       couchbase::protocol::subdoc_opcode::get,
+                                       id,
+                                       path,
+                                       couchbase::protocol::status::subdoc_path_invalid,
+                                       couchbase::error::key_value_errc::path_invalid);
         }
     }
 
@@ -213,8 +232,12 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
 
     SECTION("path mismatch")
     {
-        assert_single_lookup_error(
-          integration, couchbase::protocol::subdoc_opcode::get, id, "array.key", couchbase::protocol::status::subdoc_path_mismatch);
+        assert_single_lookup_error(integration,
+                                   couchbase::protocol::subdoc_opcode::get,
+                                   id,
+                                   "array.key",
+                                   couchbase::protocol::status::subdoc_path_mismatch,
+                                   couchbase::error::key_value_errc::path_mismatch);
     }
 }
 
@@ -244,21 +267,22 @@ TEST_CASE("integration: subdoc store", "[integration]")
             couchbase::operations::mutate_in_request req{ id };
             req.specs.add_spec(couchbase::protocol::subdoc_opcode::dict_add, false, false, false, path, value);
             auto resp = test::utils::execute(integration.cluster, req);
-            assert_single_mutate_success(resp, path, value);
+            assert_single_mutate_success(resp, path);
         }
 
         {
             couchbase::operations::mutate_in_request req{ id };
             req.specs.add_spec(couchbase::protocol::subdoc_opcode::dict_add, false, false, false, path, value);
             auto resp = test::utils::execute(integration.cluster, req);
-            assert_single_mutate_error(resp, path, couchbase::protocol::status::subdoc_path_exists);
+            assert_single_mutate_error(
+              resp, path, couchbase::protocol::status::subdoc_path_exists, couchbase::error::key_value_errc::path_exists);
         }
 
         {
             couchbase::operations::mutate_in_request req{ id };
             req.specs.add_spec(couchbase::protocol::subdoc_opcode::dict_upsert, false, false, false, path, value);
             auto resp = test::utils::execute(integration.cluster, req);
-            assert_single_mutate_success(resp, path, value);
+            assert_single_mutate_success(resp, path);
         }
 
         assert_single_lookup_success(integration, couchbase::protocol::subdoc_opcode::get, id, path, value);
@@ -281,7 +305,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
         couchbase::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::dict_upsert, false, false, false, path, value);
         auto resp = test::utils::execute(integration.cluster, req);
-        assert_single_mutate_success(resp, path, value);
+        assert_single_mutate_success(resp, path);
         assert_single_lookup_success(integration, couchbase::protocol::subdoc_opcode::get, id, "dict.key", R"("value")");
     }
 
@@ -292,7 +316,8 @@ TEST_CASE("integration: subdoc store", "[integration]")
         couchbase::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::dict_upsert, false, false, false, path, value);
         auto resp = test::utils::execute(integration.cluster, req);
-        assert_single_mutate_error(resp, path, couchbase::protocol::status::subdoc_value_cannot_insert);
+        assert_single_mutate_error(
+          resp, path, couchbase::protocol::status::subdoc_value_cannot_insert, couchbase::error::key_value_errc::value_invalid);
     }
 
     SECTION("unknown parent")
@@ -302,7 +327,8 @@ TEST_CASE("integration: subdoc store", "[integration]")
         couchbase::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::dict_upsert, false, false, false, path, value);
         auto resp = test::utils::execute(integration.cluster, req);
-        assert_single_mutate_error(resp, path, couchbase::protocol::status::subdoc_path_not_found);
+        assert_single_mutate_error(
+          resp, path, couchbase::protocol::status::subdoc_path_not_found, couchbase::error::key_value_errc::path_not_found);
     }
 
     SECTION("create parents")
@@ -312,7 +338,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
         couchbase::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::dict_upsert, false, true, false, path, value);
         auto resp = test::utils::execute(integration.cluster, req);
-        assert_single_mutate_success(resp, path, value);
+        assert_single_mutate_success(resp, path);
         assert_single_lookup_success(integration, couchbase::protocol::subdoc_opcode::get, id, path, value);
     }
 
@@ -325,7 +351,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
             couchbase::operations::mutate_in_request req{ id };
             req.specs.add_spec(couchbase::protocol::subdoc_opcode::replace, false, false, false, path, value);
             auto resp = test::utils::execute(integration.cluster, req);
-            assert_single_mutate_success(resp, path, value);
+            assert_single_mutate_success(resp, path);
             assert_single_lookup_success(integration, couchbase::protocol::subdoc_opcode::get, id, path, value);
         }
 
@@ -336,7 +362,8 @@ TEST_CASE("integration: subdoc store", "[integration]")
             couchbase::operations::mutate_in_request req{ id };
             req.specs.add_spec(couchbase::protocol::subdoc_opcode::replace, false, false, false, path, value);
             auto resp = test::utils::execute(integration.cluster, req);
-            assert_single_mutate_error(resp, path, couchbase::protocol::status::subdoc_path_not_found);
+            assert_single_mutate_error(
+              resp, path, couchbase::protocol::status::subdoc_path_not_found, couchbase::error::key_value_errc::path_not_found);
         }
 
         SECTION("array element")
@@ -346,7 +373,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
             couchbase::operations::mutate_in_request req{ id };
             req.specs.add_spec(couchbase::protocol::subdoc_opcode::replace, false, false, false, path, value);
             auto resp = test::utils::execute(integration.cluster, req);
-            assert_single_mutate_success(resp, path, value);
+            assert_single_mutate_success(resp, path);
             assert_single_lookup_success(integration, couchbase::protocol::subdoc_opcode::get, id, path, value);
         }
 
@@ -372,7 +399,7 @@ TEST_CASE("integration: subdoc mutate in store semantics", "[integration]")
     req.store_semantics = couchbase::protocol::mutate_in_request_body::store_semantics_type::upsert;
     req.specs.add_spec(couchbase::protocol::subdoc_opcode::dict_upsert, false, false, false, "pth", "123");
     auto resp = test::utils::execute(integration.cluster, req);
-    assert_single_mutate_success(resp, "pth", "123");
+    assert_single_mutate_success(resp, "pth");
     assert_single_lookup_success(integration, couchbase::protocol::subdoc_opcode::get, id, "pth", "123");
 }
 
@@ -395,7 +422,7 @@ TEST_CASE("integration: subdoc unique", "[integration]")
         couchbase::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::array_add_unique, false, true, false, "a", "1");
         auto resp = test::utils::execute(integration.cluster, req);
-        assert_single_mutate_success(resp, "a", "1");
+        assert_single_mutate_success(resp, "a");
         assert_single_lookup_success(integration, couchbase::protocol::subdoc_opcode::get, id, "a[0]", "1");
     }
 
@@ -403,7 +430,8 @@ TEST_CASE("integration: subdoc unique", "[integration]")
         couchbase::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::array_add_unique, false, true, false, "a", "1");
         auto resp = test::utils::execute(integration.cluster, req);
-        assert_single_mutate_error(resp, "a", couchbase::protocol::status::subdoc_path_exists);
+        assert_single_mutate_error(
+          resp, "a", couchbase::protocol::status::subdoc_path_exists, couchbase::error::key_value_errc::path_exists);
     }
 
     // try adding object, can't be unique compared
@@ -411,14 +439,15 @@ TEST_CASE("integration: subdoc unique", "[integration]")
         couchbase::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::array_add_unique, false, true, false, "a", "{}");
         auto resp = test::utils::execute(integration.cluster, req);
-        assert_single_mutate_error(resp, "a", couchbase::protocol::status::subdoc_value_cannot_insert);
+        assert_single_mutate_error(
+          resp, "a", couchbase::protocol::status::subdoc_value_cannot_insert, couchbase::error::key_value_errc::value_invalid);
     }
 
     {
         couchbase::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::array_push_last, false, true, false, "a", "{}");
         auto resp = test::utils::execute(integration.cluster, req);
-        assert_single_mutate_success(resp, "a", "{}");
+        assert_single_mutate_success(resp, "a");
         assert_single_lookup_success(integration, couchbase::protocol::subdoc_opcode::get, id, "a[-1]", "{}");
     }
 
@@ -426,7 +455,8 @@ TEST_CASE("integration: subdoc unique", "[integration]")
         couchbase::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::array_add_unique, false, true, false, "a", "null");
         auto resp = test::utils::execute(integration.cluster, req);
-        assert_single_mutate_error(resp, "a", couchbase::protocol::status::subdoc_path_mismatch);
+        assert_single_mutate_error(
+          resp, "a", couchbase::protocol::status::subdoc_path_mismatch, couchbase::error::key_value_errc::path_mismatch);
     }
 }
 
@@ -475,7 +505,8 @@ TEST_CASE("integration: subdoc counter", "[integration]")
             couchbase::operations::mutate_in_request req{ id };
             req.specs.add_spec(couchbase::protocol::subdoc_opcode::counter, false, false, false, "counter", "1");
             auto resp = test::utils::execute(integration.cluster, req);
-            assert_single_mutate_error(resp, "counter", couchbase::protocol::status::subdoc_value_cannot_insert);
+            assert_single_mutate_error(
+              resp, "counter", couchbase::protocol::status::subdoc_value_cannot_insert, couchbase::error::key_value_errc::value_invalid);
         }
     }
 
@@ -484,7 +515,8 @@ TEST_CASE("integration: subdoc counter", "[integration]")
         couchbase::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::counter, false, false, false, "counter", "0");
         auto resp = test::utils::execute(integration.cluster, req);
-        assert_single_mutate_error(resp, "counter", couchbase::protocol::status::subdoc_delta_invalid);
+        assert_single_mutate_error(
+          resp, "counter", couchbase::protocol::status::subdoc_delta_invalid, couchbase::error::key_value_errc::delta_invalid);
     }
 
     SECTION("increase number already too big")
@@ -494,14 +526,15 @@ TEST_CASE("integration: subdoc counter", "[integration]")
             couchbase::operations::mutate_in_request req{ id };
             req.specs.add_spec(couchbase::protocol::subdoc_opcode::dict_add, false, false, false, "counter", big_value);
             auto resp = test::utils::execute(integration.cluster, req);
-            assert_single_mutate_success(resp, "counter", big_value);
+            assert_single_mutate_success(resp, "counter");
         }
 
         {
             couchbase::operations::mutate_in_request req{ id };
             req.specs.add_spec(couchbase::protocol::subdoc_opcode::counter, false, false, false, "counter", "1");
             auto resp = test::utils::execute(integration.cluster, req);
-            assert_single_mutate_error(resp, "counter", couchbase::protocol::status::subdoc_num_range_error);
+            assert_single_mutate_error(
+              resp, "counter", couchbase::protocol::status::subdoc_num_range_error, couchbase::error::key_value_errc::number_too_big);
         }
     }
 
@@ -510,7 +543,8 @@ TEST_CASE("integration: subdoc counter", "[integration]")
         couchbase::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::counter, false, false, false, "dictkey", "1");
         auto resp = test::utils::execute(integration.cluster, req);
-        assert_single_mutate_error(resp, "dictkey", couchbase::protocol::status::subdoc_path_mismatch);
+        assert_single_mutate_error(
+          resp, "dictkey", couchbase::protocol::status::subdoc_path_mismatch, couchbase::error::key_value_errc::path_mismatch);
     }
 
     SECTION("simple decrement")
@@ -653,7 +687,7 @@ TEST_CASE("integration: subdoc expiry")
         req.expiry = 10;
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::dict_add, false, false, false, "tmppath", "null");
         auto resp = test::utils::execute(integration.cluster, req);
-        assert_single_mutate_success(resp, "tmppath", "null");
+        assert_single_mutate_success(resp, "tmppath");
     }
 }
 
