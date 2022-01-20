@@ -17,8 +17,11 @@
 
 #pragma once
 
+#include <couchbase/protocol/client_opcode.hxx>
+
 #include <cstdint>
 #include <string>
+#include <system_error>
 
 namespace couchbase::protocol
 {
@@ -170,5 +173,8 @@ is_valid_status(uint16_t code)
 
 [[nodiscard]] std::string
 status_to_string(uint16_t code);
+
+[[nodiscard]] std::error_code
+map_status_code(protocol::client_opcode opcode, uint16_t status);
 
 } // namespace couchbase::protocol

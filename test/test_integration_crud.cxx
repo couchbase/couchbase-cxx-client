@@ -660,3 +660,16 @@ TEST_CASE("integration: multi-threaded open/close bucket", "[integration]")
     }
     std::for_each(threads.begin(), threads.end(), [](auto& thread) { thread.join(); });
 }
+
+TEST_CASE("integration: open bucket that does not exist", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    auto bucket_name = test::utils::uniq_id("missing_bucket");
+
+    auto barrier = std::make_shared<std::promise<std::error_code>>();
+    auto f = barrier->get_future();
+    integration.cluster.open_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
+    auto rc = f.get();
+    REQUIRE(rc == couchbase::error::common_errc::bucket_not_found);
+}
