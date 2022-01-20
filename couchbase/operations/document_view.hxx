@@ -92,6 +92,7 @@ struct document_view_request {
     enum class sort_order { ascending, descending };
     std::optional<sort_order> order;
     std::vector<std::string> query_string{};
+    std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
 

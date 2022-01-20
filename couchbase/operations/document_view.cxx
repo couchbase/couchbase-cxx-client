@@ -106,6 +106,13 @@ document_view_request::encode_to(document_view_request::encoded_request_type& en
                                view_name,
                                utils::join_strings(query_string, "&"));
     encoded.body = utils::json::generate(body);
+    if (row_callback) {
+        encoded.streaming.emplace(couchbase::io::streaming_settings{
+          "/rows/^",
+          4,
+          std::move(row_callback.value()),
+        });
+    }
     return {};
 }
 
@@ -121,7 +128,7 @@ document_view_request::make_response(error_context::view&& ctx, const encoded_re
         if (encoded.status_code == 200) {
             tao::json::value payload{};
             try {
-                payload = utils::json::parse(encoded.body);
+                payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
                 response.ctx.ec = error::common_errc::parsing_failure;
                 return response;
@@ -150,7 +157,7 @@ document_view_request::make_response(error_context::view&& ctx, const encoded_re
         } else if (encoded.status_code == 400) {
             tao::json::value payload{};
             try {
-                payload = utils::json::parse(encoded.body);
+                payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
                 response.ctx.ec = error::common_errc::parsing_failure;
                 return response;

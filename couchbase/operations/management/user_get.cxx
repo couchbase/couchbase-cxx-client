@@ -42,7 +42,7 @@ user_get_request::make_response(error_context::http&& ctx, const encoded_respons
         switch (encoded.status_code) {
             case 200: {
                 try {
-                    response.user = utils::json::parse(encoded.body).as<rbac::user_and_metadata>();
+                    response.user = utils::json::parse(encoded.body.data()).as<rbac::user_and_metadata>();
                 } catch (const tao::pegtl::parse_error&) {
                     response.ctx.ec = error::common_errc::parsing_failure;
                     return response;
@@ -52,7 +52,7 @@ user_get_request::make_response(error_context::http&& ctx, const encoded_respons
                 response.ctx.ec = error::management_errc::user_not_found;
                 break;
             default:
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
                 break;
         }
     }

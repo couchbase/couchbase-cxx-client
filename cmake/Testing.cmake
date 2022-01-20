@@ -13,8 +13,8 @@ macro(integration_test name)
     Catch2::Catch2
     Threads::Threads
     snappy
-    test_utils
-    couchbase_cxx_client)
+    couchbase_cxx_client
+    test_utils)
   catch_discover_tests(
     test_integration_${name}
     PROPERTIES
@@ -32,8 +32,8 @@ macro(unit_test name)
     Catch2::Catch2
     Threads::Threads
     snappy
-    test_utils
-    couchbase_cxx_client)
+    couchbase_cxx_client
+    test_utils)
   catch_discover_tests(
     test_unit_${name}
     PROPERTIES
@@ -51,8 +51,8 @@ macro(integration_benchmark name)
     Catch2::Catch2
     Threads::Threads
     snappy
-    test_utils
-    couchbase_cxx_client)
+    couchbase_cxx_client
+    test_utils)
   catch_discover_tests(
     benchmark_integration_${name}
     PROPERTIES

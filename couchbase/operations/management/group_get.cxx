@@ -41,7 +41,7 @@ group_get_request::make_response(error_context::http&& ctx, const encoded_respon
         switch (encoded.status_code) {
             case 200: {
                 try {
-                    response.group = utils::json::parse(encoded.body).as<rbac::group>();
+                    response.group = utils::json::parse(encoded.body.data()).as<rbac::group>();
                 } catch (const tao::pegtl::parse_error&) {
                     response.ctx.ec = error::common_errc::parsing_failure;
                     return response;
@@ -51,7 +51,7 @@ group_get_request::make_response(error_context::http&& ctx, const encoded_respon
                 response.ctx.ec = error::management_errc::group_not_found;
                 break;
             default:
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
                 break;
         }
     }

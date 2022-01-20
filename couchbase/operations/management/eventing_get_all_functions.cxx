@@ -38,7 +38,7 @@ eventing_get_all_functions_request::make_response(error_context::http&& ctx, con
     if (!response.ctx.ec) {
         tao::json::value payload{};
         try {
-            payload = utils::json::parse(encoded.body);
+            payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
             response.ctx.ec = error::common_errc::parsing_failure;
             return response;

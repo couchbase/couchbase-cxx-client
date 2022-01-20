@@ -136,7 +136,10 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
                         self->request.type,
                         self->request.client_context_id,
                         msg.status_code,
-                        msg.status_code == 200 ? "[hidden]" : msg.body);
+                        msg.status_code == 200 ? "[hidden]" : msg.body.data());
+              if (auto parser_ec = msg.body.ec(); !ec && parser_ec) {
+                  ec = parser_ec;
+              }
               try {
                   self->invoke_handler(ec, std::move(msg));
               } catch (const priv::retry_http_request&) {

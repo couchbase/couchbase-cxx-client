@@ -8,11 +8,11 @@ if(DEFINED ENV{BUILD_NUMBER})
 endif()
 
 if(NOT DEFINED COUCHBASE_CXX_CLIENT_MASTER_PROJECT)
-    if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
-        set(COUCHBASE_CXX_CLIENT_MASTER_PROJECT ON)
-    else()
-        set(COUCHBASE_CXX_CLIENT_MASTER_PROJECT OFF)
-    endif()
+  if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+    set(COUCHBASE_CXX_CLIENT_MASTER_PROJECT ON)
+  else()
+    set(COUCHBASE_CXX_CLIENT_MASTER_PROJECT OFF)
+  endif()
 endif()
 
 project(
@@ -47,7 +47,7 @@ include(cmake/StaticAnalyzers.cmake)
 
 include(cmake/Backtrace.cmake)
 
-if (COUCHBASE_CXX_CLIENT_MASTER_PROJECT)
+if(COUCHBASE_CXX_CLIENT_MASTER_PROJECT)
   set_project_warnings(project_warnings)
   enable_sanitizers(project_options)
 endif()
@@ -97,28 +97,25 @@ target_include_directories(
          ${PROJECT_SOURCE_DIR}/third_party/cxx_function
          ${PROJECT_SOURCE_DIR}/third_party/fmt/include
          ${PROJECT_SOURCE_DIR}/third_party/spdlog/include)
-target_link_libraries(
-  couchbase_cxx_client
-  PRIVATE project_options
-          project_warnings
-          couchbase_backtrace
-          couchbase_logger
-          couchbase_platform
-          couchbase_io
-          couchbase_meta
-          couchbase_crypto
-          couchbase_sasl
-          couchbase_topology
-          couchbase_utils
-          couchbase_protocol
-          couchbase_operations
-          couchbase_operations_management
-          couchbase_tracing
-          couchbase_metrics)
+target_link_libraries(couchbase_cxx_client PRIVATE project_options project_warnings)
 target_link_libraries(
   couchbase_cxx_client
   PUBLIC fmt::fmt
-         spdlog::spdlog)
+         spdlog::spdlog
+         couchbase_backtrace
+         couchbase_logger
+         couchbase_platform
+         couchbase_io
+         couchbase_meta
+         couchbase_crypto
+         couchbase_sasl
+         couchbase_topology
+         couchbase_utils
+         couchbase_protocol
+         couchbase_operations
+         couchbase_operations_management
+         couchbase_tracing
+         couchbase_metrics)
 if(NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
   target_link_libraries(couchbase_cxx_client PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 endif()

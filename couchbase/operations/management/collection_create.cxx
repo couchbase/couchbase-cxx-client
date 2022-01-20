@@ -47,9 +47,9 @@ collection_create_request::make_response(error_context::http&& ctx, const encode
         switch (encoded.status_code) {
             case 400: {
                 std::regex collection_exists("Collection with name .+ already exists");
-                if (std::regex_search(encoded.body, collection_exists)) {
+                if (std::regex_search(encoded.body.data(), collection_exists)) {
                     response.ctx.ec = error::management_errc::collection_exists;
-                } else if (encoded.body.find("Not allowed on this version of cluster") != std::string::npos) {
+                } else if (encoded.body.data().find("Not allowed on this version of cluster") != std::string::npos) {
                     response.ctx.ec = error::common_errc::feature_not_available;
                 } else {
                     response.ctx.ec = error::common_errc::invalid_argument;
@@ -57,7 +57,7 @@ collection_create_request::make_response(error_context::http&& ctx, const encode
             } break;
             case 404: {
                 std::regex scope_not_found("Scope with name .+ is not found");
-                if (std::regex_search(encoded.body, scope_not_found)) {
+                if (std::regex_search(encoded.body.data(), scope_not_found)) {
                     response.ctx.ec = error::common_errc::scope_not_found;
                 } else {
                     response.ctx.ec = error::common_errc::bucket_not_found;
@@ -66,7 +66,7 @@ collection_create_request::make_response(error_context::http&& ctx, const encode
             case 200: {
                 tao::json::value payload{};
                 try {
-                    payload = utils::json::parse(encoded.body);
+                    payload = utils::json::parse(encoded.body.data());
                 } catch (const tao::pegtl::parse_error&) {
                     response.ctx.ec = error::common_errc::parsing_failure;
                     return response;
@@ -74,7 +74,7 @@ collection_create_request::make_response(error_context::http&& ctx, const encode
                 response.uid = std::stoull(payload.at("uid").get_string(), nullptr, 16);
             } break;
             default:
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
                 break;
         }
     }

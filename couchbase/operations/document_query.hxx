@@ -109,6 +109,7 @@ struct query_request {
     std::map<std::string, couchbase::json_string> raw{};
     std::vector<couchbase::json_string> positional_parameters{};
     std::map<std::string, couchbase::json_string> named_parameters{};
+    std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
 

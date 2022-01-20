@@ -35,12 +35,12 @@ eventing_deploy_function_request::make_response(error_context::http&& ctx, const
 {
     eventing_deploy_function_response response{ std::move(ctx) };
     if (!response.ctx.ec) {
-        if (encoded.body.empty()) {
+        if (encoded.body.data().empty()) {
             return response;
         }
         tao::json::value payload{};
         try {
-            payload = utils::json::parse(encoded.body);
+            payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
             response.ctx.ec = error::common_errc::parsing_failure;
             return response;

@@ -41,13 +41,13 @@ search_index_get_stats_request::make_response(error_context::http&& ctx, const e
     if (!response.ctx.ec) {
         switch (encoded.status_code) {
             case 200:
-                response.stats = encoded.body;
+                response.stats = encoded.body.data();
                 return response;
             case 400:
             case 500: {
                 tao::json::value payload{};
                 try {
-                    payload = utils::json::parse(encoded.body);
+                    payload = utils::json::parse(encoded.body.data());
                 } catch (const tao::pegtl::parse_error&) {
                     response.ctx.ec = error::common_errc::parsing_failure;
                     return response;
@@ -64,7 +64,7 @@ search_index_get_stats_request::make_response(error_context::http&& ctx, const e
                 }
             } break;
         }
-        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
     }
     return response;
 }

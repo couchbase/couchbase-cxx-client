@@ -78,6 +78,11 @@ class integration_test_guard
         return has_service(couchbase::service_type::eventing);
     }
 
+    inline bool has_analytics_service()
+    {
+        return has_service(couchbase::service_type::analytics);
+    }
+
     server_version cluster_version();
 
     std::thread io_thread{};

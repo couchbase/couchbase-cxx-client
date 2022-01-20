@@ -439,6 +439,37 @@ enum class network_errc {
     configuration_not_available = 1005,
 };
 
+enum class streaming_json_lexer_errc {
+    garbage_trailing = 1101,
+    special_expected = 1102,
+    special_incomplete = 1103,
+    stray_token = 1104,
+    missing_token = 1105,
+    cannot_insert = 1106,
+    escape_outside_string = 1107,
+    key_outside_object = 1108,
+    string_outside_container = 1109,
+    found_null_byte = 1110,
+    levels_exceeded = 1111,
+    bracket_mismatch = 1112,
+    object_key_expected = 1113,
+    weird_whitespace = 1114,
+    unicode_escape_is_too_short = 1115,
+    escape_invalid = 1116,
+    trailing_comma = 1117,
+    invalid_number = 1118,
+    value_expected = 1119,
+    percent_bad_hex = 1120,
+    json_pointer_bad_path = 1121,
+    json_pointer_duplicated_slash = 1122,
+    json_pointer_missing_root = 1123,
+    not_enough_memory = 1124,
+    invalid_codepoint = 1125,
+    generic = 1126,
+    root_is_not_an_object = 1127,
+    root_does_not_match_json_pointer = 1128,
+};
+
 namespace detail
 {
 struct common_error_category : std::error_category {
@@ -811,6 +842,83 @@ get_field_level_encryption_category()
     return instance;
 }
 
+struct streaming_json_lexer_error_category : std::error_category {
+    [[nodiscard]] const char* name() const noexcept override
+    {
+        return "couchbase.streaming_json_lexer";
+    }
+
+    [[nodiscard]] std::string message(int ev) const noexcept override
+    {
+        switch (streaming_json_lexer_errc(ev)) {
+            case streaming_json_lexer_errc::garbage_trailing:
+                return "garbage_trailing";
+            case streaming_json_lexer_errc::special_expected:
+                return "special_expected";
+            case streaming_json_lexer_errc::special_incomplete:
+                return "special_incomplete";
+            case streaming_json_lexer_errc::stray_token:
+                return "stray_token";
+            case streaming_json_lexer_errc::missing_token:
+                return "missing_token";
+            case streaming_json_lexer_errc::cannot_insert:
+                return "cannot_insert";
+            case streaming_json_lexer_errc::escape_outside_string:
+                return "escape_outside_string";
+            case streaming_json_lexer_errc::key_outside_object:
+                return "key_outside_object";
+            case streaming_json_lexer_errc::string_outside_container:
+                return "string_outside_container";
+            case streaming_json_lexer_errc::found_null_byte:
+                return "found_null_byte";
+            case streaming_json_lexer_errc::levels_exceeded:
+                return "levels_exceeded";
+            case streaming_json_lexer_errc::bracket_mismatch:
+                return "bracket_mismatch";
+            case streaming_json_lexer_errc::object_key_expected:
+                return "object_key_expected";
+            case streaming_json_lexer_errc::weird_whitespace:
+                return "weird_whitespace";
+            case streaming_json_lexer_errc::unicode_escape_is_too_short:
+                return "unicode_escape_is_too_short";
+            case streaming_json_lexer_errc::escape_invalid:
+                return "escape_invalid";
+            case streaming_json_lexer_errc::trailing_comma:
+                return "trailing_comma";
+            case streaming_json_lexer_errc::invalid_number:
+                return "invalid_number";
+            case streaming_json_lexer_errc::value_expected:
+                return "value_expected";
+            case streaming_json_lexer_errc::percent_bad_hex:
+                return "percent_bad_hex";
+            case streaming_json_lexer_errc::json_pointer_bad_path:
+                return "json_pointer_bad_path";
+            case streaming_json_lexer_errc::json_pointer_duplicated_slash:
+                return "json_pointer_duplicated_slash";
+            case streaming_json_lexer_errc::json_pointer_missing_root:
+                return "json_pointer_missing_root";
+            case streaming_json_lexer_errc::not_enough_memory:
+                return "not_enough_memory";
+            case streaming_json_lexer_errc::invalid_codepoint:
+                return "invalid_codepoint";
+            case streaming_json_lexer_errc::generic:
+                return "streaming json lexer generic error";
+            case streaming_json_lexer_errc::root_is_not_an_object:
+                return "root_is_not_an_object";
+            case streaming_json_lexer_errc::root_does_not_match_json_pointer:
+                return "root_does_not_match_json_pointer";
+        }
+        return "FIXME: unknown error code in streaming json lexer category (recompile with newer library)";
+    }
+};
+
+inline const std::error_category&
+get_streaming_json_lexer_category()
+{
+    static detail::streaming_json_lexer_error_category instance;
+    return instance;
+}
+
 } // namespace detail
 
 } // namespace couchbase::error
@@ -851,6 +959,10 @@ struct is_error_code_enum<couchbase::error::network_errc> : true_type {
 
 template<>
 struct is_error_code_enum<couchbase::error::field_level_encryption_errc> : true_type {
+};
+
+template<>
+struct is_error_code_enum<couchbase::error::streaming_json_lexer_errc> : true_type {
 };
 } // namespace std
 
@@ -908,6 +1020,12 @@ inline std::error_code
 make_error_code(couchbase::error::field_level_encryption_errc e)
 {
     return { static_cast<int>(e), couchbase::error::detail::get_field_level_encryption_category() };
+}
+
+inline std::error_code
+make_error_code(couchbase::error::streaming_json_lexer_errc e)
+{
+    return { static_cast<int>(e), couchbase::error::detail::get_streaming_json_lexer_category() };
 }
 
 } // namespace couchbase::error

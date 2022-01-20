@@ -147,6 +147,13 @@ analytics_request::encode_to(analytics_request::encoded_request_type& encoded, h
     } else {
         LOG_DEBUG("ANALYTICS: {}", utils::json::generate(body["statement"]));
     }
+    if (row_callback) {
+        encoded.streaming.emplace(couchbase::io::streaming_settings{
+          "/results/^",
+          4,
+          std::move(row_callback.value()),
+        });
+    }
     return {};
 }
 
@@ -158,7 +165,7 @@ analytics_request::make_response(error_context::analytics&& ctx, const encoded_r
     response.ctx.parameters = body_str;
     if (!response.ctx.ec) {
         try {
-            response.payload = utils::json::parse(encoded.body).as<analytics_response_payload>();
+            response.payload = utils::json::parse(encoded.body.data()).as<analytics_response_payload>();
         } catch (const tao::pegtl::parse_error&) {
             response.ctx.ec = error::common_errc::parsing_failure;
             return response;

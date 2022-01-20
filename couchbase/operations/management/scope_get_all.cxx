@@ -46,14 +46,14 @@ scope_get_all_request::make_response(error_context::http&& ctx, const encoded_re
                 break;
             case 200:
                 try {
-                    response.manifest = utils::json::parse(encoded.body).as<topology::collections_manifest>();
+                    response.manifest = utils::json::parse(encoded.body.data()).as<topology::collections_manifest>();
                 } catch (const tao::pegtl::parse_error&) {
                     response.ctx.ec = error::common_errc::parsing_failure;
                     return response;
                 }
                 break;
             default:
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
                 break;
         }
     }

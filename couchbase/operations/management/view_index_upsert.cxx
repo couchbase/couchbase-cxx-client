@@ -63,7 +63,7 @@ view_index_upsert_request::make_response(error_context::http&& ctx, const encode
                 response.ctx.ec = error::view_errc::design_document_not_found;
                 break;
             default:
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body);
+                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
         }
     }
     return response;
