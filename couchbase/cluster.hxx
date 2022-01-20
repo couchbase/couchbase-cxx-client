@@ -61,9 +61,9 @@ class cluster
 
         origin_ = origin;
         if (origin_.options().enable_tracing) {
-            tracer_ = new tracing::threshold_logging_tracer(ctx_, origin.options().tracing_options);
+            tracer_ = std::make_shared<tracing::threshold_logging_tracer>(ctx_, origin.options().tracing_options);
         } else {
-            tracer_ = new tracing::noop_tracer();
+            tracer_ = std::make_shared<tracing::noop_tracer>();
         }
         if (origin_.options().enable_metrics) {
             meter_ = new metrics::logging_meter(ctx_, origin.options().metrics_options);
@@ -92,8 +92,7 @@ class cluster
             session_manager_->close();
             handler();
             work_.reset();
-            delete tracer_;
-            tracer_ = nullptr;
+            tracer_.reset();
             delete meter_;
             meter_ = nullptr;
         }));
@@ -342,7 +341,7 @@ class cluster
     std::mutex buckets_mutex_{};
     std::map<std::string, std::shared_ptr<bucket>> buckets_{};
     couchbase::origin origin_{};
-    tracing::request_tracer* tracer_{ nullptr };
+    std::shared_ptr<tracing::request_tracer> tracer_{ nullptr };
     metrics::meter* meter_{ nullptr };
 };
 } // namespace couchbase

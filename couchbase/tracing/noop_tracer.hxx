@@ -42,11 +42,13 @@ class noop_span : public request_span
 
 class noop_tracer : public request_tracer
 {
+  private:
+    std::shared_ptr<noop_span> instance_{ std::make_shared<noop_span>() };
+
   public:
-    request_span* start_span(std::string /* name */, request_span* /* parent */) override
+    std::shared_ptr<request_span> start_span(std::string /* name */, std::shared_ptr<request_span> /* parent */) override
     {
-        static noop_span instance{};
-        return &instance;
+        return instance_;
     }
 };
 

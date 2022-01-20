@@ -19,6 +19,8 @@
 
 #include <couchbase/tracing/constants.hxx>
 
+#include <memory>
+
 namespace couchbase::tracing
 {
 
@@ -32,14 +34,14 @@ class request_span
     request_span& operator=(request_span&& other) = default;
     virtual ~request_span() = default;
 
-    explicit request_span(const std::string& name)
-      : name_(name)
+    explicit request_span(std::string name)
+      : name_(std::move(name))
       , parent_(nullptr)
     {
     }
-    request_span(std::string name, request_span* parent)
+    request_span(std::string name, std::shared_ptr<request_span> parent)
       : name_(std::move(name))
-      , parent_(parent)
+      , parent_(std::move(parent))
     {
     }
     virtual void add_tag(const std::string& name, std::uint64_t value) = 0;
@@ -51,14 +53,14 @@ class request_span
         return name_;
     }
 
-    [[nodiscard]] const request_span* parent() const
+    [[nodiscard]] std::shared_ptr<request_span> parent() const
     {
         return parent_;
     }
 
   private:
     std::string name_{};
-    request_span* parent_{ nullptr };
+    std::shared_ptr<request_span> parent_{ nullptr };
 };
 
 class request_tracer
@@ -71,7 +73,7 @@ class request_tracer
     request_tracer& operator=(request_tracer&& other) = default;
     virtual ~request_tracer() = default;
 
-    virtual request_span* start_span(std::string name, request_span* parent) = 0;
+    virtual std::shared_ptr<request_span> start_span(std::string name, std::shared_ptr<request_span> parent = {}) = 0;
 };
 
 } // namespace couchbase::tracing

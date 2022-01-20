@@ -36,17 +36,17 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     asio::steady_timer retry_backoff;
     Request request;
     encoded_request_type encoded;
-    tracing::request_tracer* tracer_;
-    tracing::request_span* span_{ nullptr };
+    std::shared_ptr<tracing::request_tracer> tracer_;
+    std::shared_ptr<tracing::request_span> span_{ nullptr };
     metrics::meter* meter_;
     std::shared_ptr<io::http_session> session_{};
     http_command_handler handler_{};
 
-    http_command(asio::io_context& ctx, Request req, tracing::request_tracer* tracer, metrics::meter* meter)
+    http_command(asio::io_context& ctx, Request req, std::shared_ptr<tracing::request_tracer> tracer, metrics::meter* meter)
       : deadline(ctx)
       , retry_backoff(ctx)
       , request(req)
-      , tracer_(tracer)
+      , tracer_(std::move(tracer))
       , meter_(meter)
     {
     }
@@ -64,7 +64,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
 
     void start(http_command_handler&& handler)
     {
-        span_ = tracer_->start_span(tracing::span_name_for_http_service(request.type), nullptr);
+        span_ = tracer_->start_span(tracing::span_name_for_http_service(request.type));
         span_->add_tag(tracing::attributes::service, tracing::service_name_for_http_service(request.type));
         span_->add_tag(tracing::attributes::operation_id, request.client_context_id);
         handler_ = std::move(handler);
