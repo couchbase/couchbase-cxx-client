@@ -113,16 +113,8 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
                                                                                    http_context{ config_, options_, query_cache_ });
                     session->start();
                     session->on_stop([type, id = session->id(), self = this->shared_from_this()]() {
-                        for (auto& s : self->busy_sessions_[type]) {
-                            if (s && s->id() == id) {
-                                s.reset();
-                            }
-                        }
-                        for (auto& s : self->idle_sessions_[type]) {
-                            if (s && s->id() == id) {
-                                s.reset();
-                            }
-                        }
+                        self->busy_sessions_[type].remove_if([&id](const auto& s) { return !s || s->id() == id; });
+                        self->idle_sessions_[type].remove_if([&id](const auto& s) { return !s || s->id() == id; });
                     });
                     busy_sessions_[type].push_back(session);
                     operations::http_noop_request request{};
@@ -159,8 +151,8 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
     std::shared_ptr<http_session> check_out(service_type type, const couchbase::cluster_credentials& credentials)
     {
         std::scoped_lock lock(sessions_mutex_);
-        idle_sessions_[type].remove_if([](const auto& s) -> bool { return !s; });
-        busy_sessions_[type].remove_if([](const auto& s) -> bool { return !s; });
+        idle_sessions_[type].remove_if([](const auto& s) { return !s; });
+        busy_sessions_[type].remove_if([](const auto& s) { return !s; });
         if (idle_sessions_[type].empty()) {
             auto [hostname, port] = next_node(type);
             if (port == 0) {
@@ -185,16 +177,8 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
 
             session->on_stop([type, id = session->id(), self = this->shared_from_this()]() {
                 std::scoped_lock inner_lock(self->sessions_mutex_);
-                for (auto& s : self->busy_sessions_[type]) {
-                    if (s && s->id() == id) {
-                        s.reset();
-                    }
-                }
-                for (auto& s : self->idle_sessions_[type]) {
-                    if (s && s->id() == id) {
-                        s.reset();
-                    }
-                }
+                self->busy_sessions_[type].remove_if([&id](const auto& s) { return !s || s->id() == id; });
+                self->idle_sessions_[type].remove_if([&id](const auto& s) { return !s || s->id() == id; });
             });
             busy_sessions_[type].push_back(session);
             return session;
@@ -230,11 +214,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
                 }
             }
         }
-        for (auto& [type, sessions] : busy_sessions_) {
-            for (auto& s : sessions) {
-                s.reset();
-            }
-        }
+        busy_sessions_.clear();
     }
 
     template<typename Request, typename Handler>
