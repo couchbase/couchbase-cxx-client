@@ -20,6 +20,7 @@
 #include <couchbase/error_context/query.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
+#include <couchbase/io/http_traits.hxx>
 #include <couchbase/json_string.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/protocol/mutation_token.hxx>
@@ -66,6 +67,7 @@ namespace couchbase::operations
 struct query_response {
     error_context::query ctx;
     query_response_payload payload{};
+    std::string served_by_node{};
 };
 
 struct query_request {
@@ -110,6 +112,7 @@ struct query_request {
     std::vector<couchbase::json_string> positional_parameters{};
     std::map<std::string, couchbase::json_string> named_parameters{};
     std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
+    std::optional<std::string> send_to_node{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
 
@@ -121,3 +124,10 @@ struct query_request {
 };
 
 } // namespace couchbase::operations
+
+namespace couchbase::io::http_traits
+{
+template<>
+struct supports_sticky_node<couchbase::operations::query_request> : public std::true_type {
+};
+} // namespace couchbase::io::http_traits

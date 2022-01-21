@@ -83,6 +83,14 @@ class integration_test_guard
         return has_service(couchbase::service_type::analytics);
     }
 
+    auto number_of_query_nodes()
+    {
+        const auto& ci = load_cluster_info();
+        return std::count_if(ci.nodes.begin(), ci.nodes.end(), [](const auto& node) {
+            return std::find(node.services.begin(), node.services.end(), "n1ql") != node.services.end();
+        });
+    }
+
     server_version cluster_version();
 
     std::thread io_thread{};
