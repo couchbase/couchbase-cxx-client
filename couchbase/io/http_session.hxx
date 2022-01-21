@@ -444,6 +444,7 @@ class http_session : public std::enable_shared_from_this<http_session>
                               handler({}, std::move(self->parser_.response));
                           }
                           self->parser_.reset();
+                          self->reading_ = false;
                           return;
                       }
                       self->reading_ = false;

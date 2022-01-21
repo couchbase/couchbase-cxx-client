@@ -358,3 +358,70 @@ TEST_CASE("integration: streaming analytics results", "[integration]")
         REQUIRE(rows[2] == R"({ "data": { "tech": "Couchbase" } })");
     }
 }
+
+TEST_CASE("integration: sticking query to the service node", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_gcccp()) {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    }
+
+    std::string node_to_stick_queries;
+    {
+        couchbase::operations::query_request req{ R"(SELECT 42 AS answer)" };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.payload.rows.size() == 1);
+        REQUIRE(resp.payload.rows[0] == R"({"answer":42})");
+        REQUIRE_FALSE(resp.served_by_node.empty());
+        node_to_stick_queries = resp.served_by_node;
+    }
+
+    if (integration.number_of_query_nodes() > 1) {
+        std::vector<std::string> used_nodes{};
+        std::mutex used_nodes_mutex{};
+
+        std::vector<std::thread> threads;
+        threads.reserve(10);
+        for (int i = 0; i < 10; ++i) {
+            threads.emplace_back([i, &cluster = integration.cluster, node_to_stick_queries, &used_nodes, &used_nodes_mutex]() {
+                couchbase::operations::query_request req{ fmt::format(R"(SELECT {} AS answer)", i) };
+                auto resp = test::utils::execute(cluster, req);
+                if (resp.ctx.ec || resp.served_by_node.empty() || resp.payload.rows.size() != 1 ||
+                    resp.payload.rows[0] != fmt::format(R"({{"answer":{}}})", i)) {
+                    return;
+                }
+                std::scoped_lock lock(used_nodes_mutex);
+                used_nodes.push_back(resp.served_by_node);
+            });
+        }
+        for (auto& thread : threads) {
+            thread.join();
+        }
+        REQUIRE(used_nodes.size() == 10);
+        REQUIRE(std::set(used_nodes.begin(), used_nodes.end()).size() > 1);
+
+        threads.clear();
+        used_nodes.clear();
+
+        for (int i = 0; i < 10; ++i) {
+            threads.emplace_back([i, &cluster = integration.cluster, node_to_stick_queries, &used_nodes, &used_nodes_mutex]() {
+                couchbase::operations::query_request req{ fmt::format(R"(SELECT {} AS answer)", i) };
+                req.send_to_node = node_to_stick_queries;
+                auto resp = test::utils::execute(cluster, req);
+                if (resp.ctx.ec || resp.served_by_node.empty() || resp.payload.rows.size() != 1 ||
+                    resp.payload.rows[0] != fmt::format(R"({{"answer":{}}})", i)) {
+                    return;
+                }
+                std::scoped_lock lock(used_nodes_mutex);
+                used_nodes.push_back(resp.served_by_node);
+            });
+        }
+        for (auto& thread : threads) {
+            thread.join();
+        }
+        REQUIRE(used_nodes.size() == 10);
+        REQUIRE(std::set(used_nodes.begin(), used_nodes.end()).size() == 1);
+    }
+}

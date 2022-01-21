@@ -20,6 +20,7 @@
 #include <couchbase/io/http_command.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_session.hxx>
+#include <couchbase/io/http_traits.hxx>
 #include <couchbase/metrics/meter.hxx>
 #include <couchbase/operations/http_noop.hxx>
 #include <couchbase/service_type.hxx>
@@ -148,46 +149,42 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
         }
     }
 
-    std::shared_ptr<http_session> check_out(service_type type, const couchbase::cluster_credentials& credentials)
+    std::pair<std::error_code, std::shared_ptr<http_session>> check_out(service_type type,
+                                                                        const couchbase::cluster_credentials& credentials,
+                                                                        const std::string& preferred_node)
     {
         std::scoped_lock lock(sessions_mutex_);
         idle_sessions_[type].remove_if([](const auto& s) { return !s; });
         busy_sessions_[type].remove_if([](const auto& s) { return !s; });
         if (idle_sessions_[type].empty()) {
-            auto [hostname, port] = next_node(type);
+            auto [hostname, port] = preferred_node.empty() ? next_node(type) : lookup_node(type, preferred_node);
             if (port == 0) {
-                return nullptr;
+                return { error::common_errc::service_not_available, nullptr };
             }
-            config_.nodes.size();
-            std::shared_ptr<http_session> session;
-            if (options_.enable_tls) {
-                session = std::make_shared<http_session>(type,
-                                                         client_id_,
-                                                         ctx_,
-                                                         tls_,
-                                                         credentials,
-                                                         hostname,
-                                                         std::to_string(port),
-                                                         http_context{ config_, options_, query_cache_ });
-            } else {
-                session = std::make_shared<http_session>(
-                  type, client_id_, ctx_, credentials, hostname, std::to_string(port), http_context{ config_, options_, query_cache_ });
-            }
-            session->start();
-
-            session->on_stop([type, id = session->id(), self = this->shared_from_this()]() {
-                std::scoped_lock inner_lock(self->sessions_mutex_);
-                self->busy_sessions_[type].remove_if([&id](const auto& s) { return !s || s->id() == id; });
-                self->idle_sessions_[type].remove_if([&id](const auto& s) { return !s || s->id() == id; });
-            });
+            auto session = bootstrap_session(type, credentials, hostname, port);
             busy_sessions_[type].push_back(session);
-            return session;
+            return { {}, session };
         }
-        auto session = idle_sessions_[type].front();
-        idle_sessions_[type].pop_front();
-        session->reset_idle();
+        std::shared_ptr<http_session> session{};
+        if (preferred_node.empty()) {
+            session = idle_sessions_[type].front();
+            idle_sessions_[type].pop_front();
+            session->reset_idle();
+        } else {
+            auto ptr = std::find_if(idle_sessions_[type].begin(), idle_sessions_[type].end(), [preferred_node](const auto& s) {
+                return s->remote_address() == preferred_node;
+            });
+            if (ptr != idle_sessions_[type].end()) {
+                session = *ptr;
+                idle_sessions_[type].erase(ptr);
+                session->reset_idle();
+            } else {
+                auto [hostname, port] = split_host_port(preferred_node);
+                session = bootstrap_session(type, credentials, hostname, port);
+            }
+        }
         busy_sessions_[type].push_back(session);
-        return session;
+        return { {}, session };
     }
 
     void check_in(service_type type, std::shared_ptr<http_session> session)
@@ -220,10 +217,16 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
     template<typename Request, typename Handler>
     void execute(Request request, Handler&& handler, const couchbase::cluster_credentials& credentials)
     {
-        auto session = check_out(request.type, credentials);
-        if (!session) {
+        std::string preferred_node;
+        if constexpr (http_traits::supports_sticky_node_v<Request>) {
+            if (request.send_to_node) {
+                preferred_node = *request.send_to_node;
+            }
+        }
+        auto [error, session] = check_out(request.type, credentials, preferred_node);
+        if (error) {
             typename Request::error_context_type ctx{};
-            ctx.ec = error::common_errc::service_not_available;
+            ctx.ec = error;
             using response_type = typename Request::encoded_response_type;
             return handler(request.make_response(std::move(ctx), response_type{}));
         }
@@ -251,6 +254,29 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
     }
 
   private:
+    std::shared_ptr<http_session> bootstrap_session(service_type type,
+                                                    const couchbase::cluster_credentials& credentials,
+                                                    const std::string& hostname,
+                                                    std::uint16_t port)
+    {
+        std::shared_ptr<http_session> session;
+        if (options_.enable_tls) {
+            session = std::make_shared<http_session>(
+              type, client_id_, ctx_, tls_, credentials, hostname, std::to_string(port), http_context{ config_, options_, query_cache_ });
+        } else {
+            session = std::make_shared<http_session>(
+              type, client_id_, ctx_, credentials, hostname, std::to_string(port), http_context{ config_, options_, query_cache_ });
+        }
+        session->start();
+
+        session->on_stop([type, id = session->id(), self = this->shared_from_this()]() {
+            std::scoped_lock inner_lock(self->sessions_mutex_);
+            self->busy_sessions_[type].remove_if([&id](const auto& s) { return !s || s->id() == id; });
+            self->idle_sessions_[type].remove_if([&id](const auto& s) { return !s || s->id() == id; });
+        });
+        return session;
+    }
+
     std::pair<std::string, std::uint16_t> next_node(service_type type)
     {
         auto candidates = config_.nodes.size();
@@ -264,6 +290,28 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
             }
         }
         return { "", 0 };
+    }
+
+    std::pair<std::string, std::uint16_t> split_host_port(const std::string& address)
+    {
+        auto last_colon = address.find_last_of(':');
+        if (last_colon == std::string::npos || address.size() - 1 == last_colon) {
+            return { "", 0 };
+        }
+        auto hostname = address.substr(0, last_colon);
+        auto port = gsl::narrow_cast<uint16_t>(std::stoul(address.substr(last_colon + 1)));
+        return { hostname, port };
+    }
+
+    std::pair<std::string, std::uint16_t> lookup_node(service_type type, const std::string& preferred_node)
+    {
+        auto [hostname, port] = split_host_port(preferred_node);
+        if (std::none_of(config_.nodes.begin(), config_.nodes.end(), [this, type, &h = hostname, &p = port](const auto& node) {
+                return node.hostname == h && node.port_or(options_.network, type, options_.enable_tls, 0) == p;
+            })) {
+            return { "", 0 };
+        }
+        return { hostname, port };
     }
 
     std::string client_id_;
