@@ -190,6 +190,15 @@ class bucket : public std::enable_shared_from_this<bucket>
                       port);
             return;
         }
+        if (!config_->has_node_with_hostname(hostname)) {
+            LOG_TRACE(
+              R"({} requested to restart session, but the node has been ejected from current configuration already. idx={}, address="{}:{}")",
+              log_prefix_,
+              index,
+              hostname,
+              port);
+            return;
+        }
         couchbase::origin origin(origin_.credentials(), hostname, port, origin_.options());
 
         std::shared_ptr<io::mcbp_session> session{};
