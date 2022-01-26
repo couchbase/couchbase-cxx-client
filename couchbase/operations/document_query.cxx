@@ -15,11 +15,11 @@
  *   limitations under the License.
  */
 
-#include <couchbase/operations/document_query.hxx>
-#include <couchbase/operations/management/error_utils.hxx>
-
 #include <couchbase/errors.hxx>
 #include <couchbase/logger/logger.hxx>
+#include <couchbase/operations/document_query.hxx>
+#include <couchbase/operations/management/error_utils.hxx>
+#include <couchbase/utils/duration_parser.hxx>
 #include <couchbase/utils/json.hxx>
 
 #include <gsl/assert>
@@ -130,7 +130,7 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
         body["scan_vectors"] = scan_vectors;
     }
     if (check_scan_wait && scan_wait) {
-        body["scan_wait"] = fmt::format("{}ms", scan_wait.value());
+        body["scan_wait"] = fmt::format("{}ms", scan_wait.value().count());
     }
     if (scope_qualifier) {
         body["query_context"] = scope_qualifier;
@@ -209,8 +209,8 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
         if (const auto* m = payload.find("metrics"); m != nullptr) {
             response.meta.metrics.result_count = m->at("resultCount").get_unsigned();
             response.meta.metrics.result_size = m->at("resultSize").get_unsigned();
-            response.meta.metrics.elapsed_time = m->at("elapsedTime").get_string();
-            response.meta.metrics.execution_time = m->at("executionTime").get_string();
+            response.meta.metrics.elapsed_time = utils::parse_duration(m->at("elapsedTime").get_string());
+            response.meta.metrics.execution_time = utils::parse_duration(m->at("executionTime").get_string());
             response.meta.metrics.sort_count = m->template optional<std::uint64_t>("sortCount");
             response.meta.metrics.mutation_count = m->template optional<std::uint64_t>("mutationCount");
             response.meta.metrics.error_count = m->template optional<std::uint64_t>("errorCount");

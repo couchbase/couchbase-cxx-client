@@ -28,8 +28,8 @@ namespace couchbase::operations
 {
 struct analytics_response {
     struct analytics_metrics {
-        std::string elapsed_time;
-        std::string execution_time;
+        std::chrono::nanoseconds elapsed_time;
+        std::chrono::nanoseconds execution_time;
         std::uint64_t result_count;
         std::uint64_t result_size;
         std::optional<std::uint64_t> sort_count;
