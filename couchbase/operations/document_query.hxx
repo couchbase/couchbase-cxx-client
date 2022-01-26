@@ -30,8 +30,8 @@ namespace couchbase::operations
 {
 struct query_response {
     struct query_metrics {
-        std::string elapsed_time;
-        std::string execution_time;
+        std::chrono::nanoseconds elapsed_time{};
+        std::chrono::nanoseconds execution_time{};
         std::uint64_t result_count;
         std::uint64_t result_size;
         std::optional<std::uint64_t> sort_count;
@@ -84,7 +84,7 @@ struct query_request {
 
     std::optional<std::uint64_t> max_parallelism{};
     std::optional<std::uint64_t> scan_cap{};
-    std::optional<std::uint64_t> scan_wait{};
+    std::optional<std::chrono::milliseconds> scan_wait{};
     std::optional<std::uint64_t> pipeline_batch{};
     std::optional<std::uint64_t> pipeline_cap{};
     std::optional<scan_consistency_type> scan_consistency{};
