@@ -28,7 +28,7 @@
 
 namespace couchbase::operations
 {
-struct query_response_payload {
+struct query_response {
     struct query_metrics {
         std::string elapsed_time;
         std::string execution_time;
@@ -56,17 +56,10 @@ struct query_response_payload {
         std::optional<std::vector<query_problem>> errors;
     };
 
-    query_meta_data meta_data{};
+    error_context::query ctx;
+    query_meta_data meta{};
     std::optional<std::string> prepared{};
     std::vector<std::string> rows{};
-};
-} // namespace couchbase::operations
-
-namespace couchbase::operations
-{
-struct query_response {
-    error_context::query ctx;
-    query_response_payload payload{};
     std::string served_by_node{};
 };
 

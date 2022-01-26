@@ -44,7 +44,7 @@ struct document_view_response {
     };
 
     error_context::view ctx;
-    document_view_response::meta_data meta_data{};
+    meta_data meta{};
     std::vector<document_view_response::row> rows{};
     std::optional<problem> error{};
 };
