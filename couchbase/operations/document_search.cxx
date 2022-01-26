@@ -121,7 +121,7 @@ search_response
 search_request::make_response(error_context::search&& ctx, const encoded_response_type& encoded) const
 {
     search_response response{ std::move(ctx) };
-    response.meta_data.client_context_id = client_context_id;
+    response.meta.client_context_id = client_context_id;
     response.ctx.index_name = index_name;
     response.ctx.query = query.str();
     response.ctx.parameters = body_str;
@@ -134,9 +134,9 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
                 response.ctx.ec = error::common_errc::parsing_failure;
                 return response;
             }
-            response.meta_data.metrics.took = std::chrono::nanoseconds(payload.at("took").get_unsigned());
-            response.meta_data.metrics.max_score = payload.at("max_score").as<double>();
-            response.meta_data.metrics.total_rows = payload.at("total_hits").get_unsigned();
+            response.meta.metrics.took = std::chrono::nanoseconds(payload.at("took").get_unsigned());
+            response.meta.metrics.max_score = payload.at("max_score").as<double>();
+            response.meta.metrics.total_rows = payload.at("total_hits").get_unsigned();
 
             if (auto& status_prop = payload.at("status"); status_prop.is_string()) {
                 response.status = status_prop.get_string();
@@ -144,11 +144,11 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
                     return response;
                 }
             } else if (status_prop.is_object()) {
-                response.meta_data.metrics.error_partition_count = status_prop.at("failed").get_unsigned();
-                response.meta_data.metrics.success_partition_count = status_prop.at("successful").get_unsigned();
+                response.meta.metrics.error_partition_count = status_prop.at("failed").get_unsigned();
+                response.meta.metrics.success_partition_count = status_prop.at("successful").get_unsigned();
                 if (const auto* errors = status_prop.find("errors"); errors != nullptr && errors->is_object()) {
                     for (const auto& [location, message] : errors->get_object()) {
-                        response.meta_data.errors.try_emplace(location, message.get_string());
+                        response.meta.errors.try_emplace(location, message.get_string());
                     }
                 }
             } else {
@@ -258,7 +258,8 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
                 }
             }
             return response;
-        } else if (encoded.status_code == 400) {
+        }
+        if (encoded.status_code == 400) {
             tao::json::value payload{};
             try {
                 payload = utils::json::parse(encoded.body.data());

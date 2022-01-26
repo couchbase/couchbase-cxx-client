@@ -97,7 +97,7 @@ struct search_response {
 
     error_context::search ctx;
     std::string status{};
-    search_meta_data meta_data{};
+    search_meta_data meta{};
     std::string error{};
     std::vector<search_row> rows{};
     std::vector<search_facet> facets{};

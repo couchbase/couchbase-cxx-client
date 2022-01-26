@@ -135,11 +135,11 @@ document_view_request::make_response(error_context::view&& ctx, const encoded_re
             }
 
             if (const auto* total_rows = payload.find("total_rows"); total_rows != nullptr && total_rows->is_unsigned()) {
-                response.meta_data.total_rows = total_rows->get_unsigned();
+                response.meta.total_rows = total_rows->get_unsigned();
             }
 
             if (const auto* debug_info = payload.find("debug_info"); debug_info != nullptr && debug_info->is_object()) {
-                response.meta_data.debug_info.emplace(utils::json::generate(*debug_info));
+                response.meta.debug_info.emplace(utils::json::generate(*debug_info));
             }
 
             if (const auto* rows = payload.find("rows"); rows != nullptr && rows->is_array()) {

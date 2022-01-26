@@ -327,10 +327,10 @@ TEST_CASE("integration: fetch diagnostics after N1QL query", "[integration]")
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec.message())
         REQUIRE_FALSE(resp.ctx.ec);
-        INFO("rows.size() =" << resp.payload.rows.size())
-        REQUIRE(resp.payload.rows.size() == 1);
-        INFO("row=" << resp.payload.rows[0])
-        REQUIRE(resp.payload.rows[0] == R"({"greetings":"hello, couchbase"})");
+        INFO("rows.size() =" << resp.rows.size())
+        REQUIRE(resp.rows.size() == 1);
+        INFO("row=" << resp.rows[0])
+        REQUIRE(resp.rows[0] == R"({"greetings":"hello, couchbase"})");
     }
     {
         auto barrier = std::make_shared<std::promise<couchbase::diag::diagnostics_result>>();

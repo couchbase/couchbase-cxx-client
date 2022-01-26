@@ -153,8 +153,8 @@ TEST_CASE("integration: query on a collection", "[integration]")
         req.mutation_state = { mutation_token };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.payload.rows.size() == 1);
-        REQUIRE(value == couchbase::utils::json::parse(resp.payload.rows[0]));
+        REQUIRE(resp.rows.size() == 1);
+        REQUIRE(value == couchbase::utils::json::parse(resp.rows[0]));
     }
 
     SECTION("missing scope")
@@ -186,8 +186,8 @@ TEST_CASE("integration: query on a collection", "[integration]")
         req.adhoc = false;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.payload.rows.size() == 1);
-        REQUIRE(value == couchbase::utils::json::parse(resp.payload.rows[0]));
+        REQUIRE(resp.rows.size() == 1);
+        REQUIRE(value == couchbase::utils::json::parse(resp.rows[0]));
     }
 }
 
@@ -203,7 +203,7 @@ TEST_CASE("integration: read only with no results", "[integration]")
         couchbase::operations::query_request req{ fmt::format("SELECT * FROM {} LIMIT 0", integration.ctx.bucket) };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.payload.rows.empty());
+        REQUIRE(resp.rows.empty());
     }
 }
 
@@ -372,8 +372,8 @@ TEST_CASE("integration: sticking query to the service node", "[integration]")
         couchbase::operations::query_request req{ R"(SELECT 42 AS answer)" };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.payload.rows.size() == 1);
-        REQUIRE(resp.payload.rows[0] == R"({"answer":42})");
+        REQUIRE(resp.rows.size() == 1);
+        REQUIRE(resp.rows[0] == R"({"answer":42})");
         REQUIRE_FALSE(resp.served_by_node.empty());
         node_to_stick_queries = resp.served_by_node;
     }
@@ -388,8 +388,8 @@ TEST_CASE("integration: sticking query to the service node", "[integration]")
             threads.emplace_back([i, &cluster = integration.cluster, node_to_stick_queries, &used_nodes, &used_nodes_mutex]() {
                 couchbase::operations::query_request req{ fmt::format(R"(SELECT {} AS answer)", i) };
                 auto resp = test::utils::execute(cluster, req);
-                if (resp.ctx.ec || resp.served_by_node.empty() || resp.payload.rows.size() != 1 ||
-                    resp.payload.rows[0] != fmt::format(R"({{"answer":{}}})", i)) {
+                if (resp.ctx.ec || resp.served_by_node.empty() || resp.rows.size() != 1 ||
+                    resp.rows[0] != fmt::format(R"({{"answer":{}}})", i)) {
                     return;
                 }
                 std::scoped_lock lock(used_nodes_mutex);
@@ -410,8 +410,8 @@ TEST_CASE("integration: sticking query to the service node", "[integration]")
                 couchbase::operations::query_request req{ fmt::format(R"(SELECT {} AS answer)", i) };
                 req.send_to_node = node_to_stick_queries;
                 auto resp = test::utils::execute(cluster, req);
-                if (resp.ctx.ec || resp.served_by_node.empty() || resp.payload.rows.size() != 1 ||
-                    resp.payload.rows[0] != fmt::format(R"({{"answer":{}}})", i)) {
+                if (resp.ctx.ec || resp.served_by_node.empty() || resp.rows.size() != 1 ||
+                    resp.rows[0] != fmt::format(R"({{"answer":{}}})", i)) {
                     return;
                 }
                 std::scoped_lock lock(used_nodes_mutex);
