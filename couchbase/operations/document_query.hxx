@@ -49,11 +49,11 @@ struct query_response {
         std::string request_id;
         std::string client_context_id;
         std::string status;
-        query_metrics metrics;
-        std::optional<std::string> signature;
-        std::optional<std::string> profile;
-        std::optional<std::vector<query_problem>> warnings;
-        std::optional<std::vector<query_problem>> errors;
+        std::optional<query_metrics> metrics{};
+        std::optional<std::string> signature{};
+        std::optional<std::string> profile{};
+        std::optional<std::vector<query_problem>> warnings{};
+        std::optional<std::vector<query_problem>> errors{};
     };
 
     error_context::query ctx;

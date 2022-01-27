@@ -207,14 +207,16 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
         }
 
         if (const auto* m = payload.find("metrics"); m != nullptr) {
-            response.meta.metrics.result_count = m->at("resultCount").get_unsigned();
-            response.meta.metrics.result_size = m->at("resultSize").get_unsigned();
-            response.meta.metrics.elapsed_time = utils::parse_duration(m->at("elapsedTime").get_string());
-            response.meta.metrics.execution_time = utils::parse_duration(m->at("executionTime").get_string());
-            response.meta.metrics.sort_count = m->template optional<std::uint64_t>("sortCount");
-            response.meta.metrics.mutation_count = m->template optional<std::uint64_t>("mutationCount");
-            response.meta.metrics.error_count = m->template optional<std::uint64_t>("errorCount");
-            response.meta.metrics.warning_count = m->template optional<std::uint64_t>("warningCount");
+            query_response::query_metrics meta_metrics{};
+            meta_metrics.result_count = m->at("resultCount").get_unsigned();
+            meta_metrics.result_size = m->at("resultSize").get_unsigned();
+            meta_metrics.elapsed_time = utils::parse_duration(m->at("elapsedTime").get_string());
+            meta_metrics.execution_time = utils::parse_duration(m->at("executionTime").get_string());
+            meta_metrics.sort_count = m->template optional<std::uint64_t>("sortCount");
+            meta_metrics.mutation_count = m->template optional<std::uint64_t>("mutationCount");
+            meta_metrics.error_count = m->template optional<std::uint64_t>("errorCount");
+            meta_metrics.warning_count = m->template optional<std::uint64_t>("warningCount");
+            response.meta.metrics.emplace(meta_metrics);
         }
 
         if (const auto* e = payload.find("errors"); e != nullptr) {
@@ -240,7 +242,7 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
         }
 
         if (const auto* r = payload.find("results"); r != nullptr) {
-            response.rows.reserve(response.meta.metrics.result_count);
+            response.rows.reserve(r->get_array().size());
             for (const auto& row : r->get_array()) {
                 response.rows.emplace_back(couchbase::utils::json::generate(row));
             }
