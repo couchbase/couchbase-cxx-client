@@ -332,7 +332,7 @@ TEST_CASE("integration: streaming analytics results", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.has_analytics_service()) {
+    if (!integration.cluster_version().supports_analytics() || !integration.has_analytics_service()) {
         return;
     }
 
