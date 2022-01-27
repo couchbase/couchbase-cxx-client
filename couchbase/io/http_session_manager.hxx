@@ -120,7 +120,8 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
                     busy_sessions_[type].push_back(session);
                     operations::http_noop_request request{};
                     request.type = type;
-                    auto cmd = std::make_shared<operations::http_command<operations::http_noop_request>>(ctx_, request, tracer_, meter_);
+                    auto cmd = std::make_shared<operations::http_command<operations::http_noop_request>>(
+                      ctx_, request, tracer_, meter_, options_.default_timeout_for(request.type));
                     cmd->start([start = std::chrono::steady_clock::now(),
                                 self = shared_from_this(),
                                 type,
@@ -231,7 +232,8 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
             return handler(request.make_response(std::move(ctx), response_type{}));
         }
 
-        auto cmd = std::make_shared<operations::http_command<Request>>(ctx_, request, tracer_, meter_);
+        auto cmd =
+          std::make_shared<operations::http_command<Request>>(ctx_, request, tracer_, meter_, options_.default_timeout_for(request.type));
         cmd->start(
           [self = shared_from_this(), cmd, handler = std::forward<Handler>(handler)](std::error_code ec, io::http_response&& msg) mutable {
               using command_type = typename decltype(cmd)::element_type;

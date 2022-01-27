@@ -30,7 +30,7 @@ analytics_request::encode_to(analytics_request::encoded_request_type& encoded, h
 {
     tao::json::value body{ { "statement", statement },
                            { "client_context_id", encoded.client_context_id },
-                           { "timeout", fmt::format("{}ms", timeout.count()) } };
+                           { "timeout", fmt::format("{}ms", encoded.timeout.count()) } };
     if (positional_parameters.empty()) {
         for (const auto& [name, value] : named_parameters) {
             Expects(name.empty() == false);

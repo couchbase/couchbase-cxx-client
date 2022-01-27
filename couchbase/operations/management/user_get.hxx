@@ -41,8 +41,9 @@ struct user_get_request {
 
     std::string username{};
     rbac::auth_domain domain{ rbac::auth_domain::local };
-    std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
+
     std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 
