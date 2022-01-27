@@ -29,6 +29,8 @@ namespace couchbase::error_context
 
 struct query {
     std::error_code ec{};
+    std::uint64_t first_error_code{};
+    std::string first_error_message{};
     std::string client_context_id{};
     std::string statement{};
     std::optional<std::string> parameters{};
