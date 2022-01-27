@@ -24,9 +24,7 @@
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
 
-namespace couchbase::operations
-{
-namespace management
+namespace couchbase::operations::management
 {
 struct search_index_get_response {
     error_context::http ctx;
@@ -43,15 +41,14 @@ struct search_index_get_request {
 
     static const inline service_type type = service_type::search;
 
-    std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
-
     std::string index_name;
+
     std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 
     [[nodiscard]] search_index_get_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
 };
-} // namespace management
 
-} // namespace couchbase::operations
+} // namespace couchbase::operations::management

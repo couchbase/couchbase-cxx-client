@@ -53,7 +53,7 @@ struct lookup_in_request {
     uint32_t opaque{};
     bool access_deleted{ false };
     protocol::lookup_in_request_body::lookup_in_specs specs{};
-    std::chrono::milliseconds timeout{ timeout_defaults::key_value_timeout };
+    std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context);

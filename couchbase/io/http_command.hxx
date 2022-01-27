@@ -39,16 +39,22 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     std::shared_ptr<tracing::request_tracer> tracer_;
     std::shared_ptr<tracing::request_span> span_{ nullptr };
     metrics::meter* meter_;
-    std::string client_context_id_;
     std::shared_ptr<io::http_session> session_{};
     http_command_handler handler_{};
+    std::chrono::milliseconds timeout_{};
+    std::string client_context_id_;
 
-    http_command(asio::io_context& ctx, Request req, std::shared_ptr<tracing::request_tracer> tracer, metrics::meter* meter)
+    http_command(asio::io_context& ctx,
+                 Request req,
+                 std::shared_ptr<tracing::request_tracer> tracer,
+                 metrics::meter* meter,
+                 std::chrono::milliseconds timeout)
       : deadline(ctx)
       , retry_backoff(ctx)
       , request(req)
       , tracer_(std::move(tracer))
       , meter_(meter)
+      , timeout_(timeout)
       , client_context_id_(request.client_context_id.value_or(uuid::to_string(uuid::random())))
     {
     }
@@ -70,8 +76,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
         span_->add_tag(tracing::attributes::service, tracing::service_name_for_http_service(request.type));
         span_->add_tag(tracing::attributes::operation_id, client_context_id_);
         handler_ = std::move(handler);
-
-        deadline.expires_after(request.timeout);
+        deadline.expires_after(timeout_);
         deadline.async_wait([self = this->shared_from_this()](std::error_code ec) {
             if (ec == asio::error::operation_aborted) {
                 return;
@@ -106,6 +111,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     {
         encoded.type = request.type;
         encoded.client_context_id = client_context_id_;
+        encoded.timeout = timeout_;
         if (auto ec = request.encode_to(encoded, session_->http_context()); ec) {
             return invoke_handler(ec, {});
         }
@@ -116,7 +122,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
                   encoded.method,
                   encoded.path,
                   client_context_id_,
-                  request.timeout.count());
+                  timeout_.count());
         session_->write_and_subscribe(
           encoded,
           [self = this->shared_from_this(), start = std::chrono::steady_clock::now()](std::error_code ec, io::http_response&& msg) {
