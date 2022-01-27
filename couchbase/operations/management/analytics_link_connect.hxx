@@ -44,12 +44,12 @@ struct analytics_link_connect_request {
 
     static const inline service_type type = service_type::analytics;
 
-    std::string client_context_id{ uuid::to_string(uuid::random()) };
     std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
 
     std::string dataverse_name{ "Default" };
     std::string link_name{ "Local" };
     bool force{ false };
+    std::optional<std::string> client_context_id{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 

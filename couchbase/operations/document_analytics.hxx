@@ -71,7 +71,6 @@ struct analytics_request {
 
     std::string statement;
     std::chrono::milliseconds timeout{ timeout_defaults::analytics_timeout };
-    std::string client_context_id{ uuid::to_string(uuid::random()) };
 
     bool readonly{ false };
     bool priority{ false };
@@ -85,6 +84,7 @@ struct analytics_request {
     std::vector<couchbase::json_string> positional_parameters{};
     std::map<std::string, couchbase::json_string> named_parameters{};
     std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
+    std::optional<std::string> client_context_id{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
     [[nodiscard]] analytics_response make_response(error_context::analytics&& ctx, const encoded_response_type& encoded) const;

@@ -29,7 +29,7 @@ std::error_code
 analytics_request::encode_to(analytics_request::encoded_request_type& encoded, http_context& context)
 {
     tao::json::value body{ { "statement", statement },
-                           { "client_context_id", client_context_id },
+                           { "client_context_id", encoded.client_context_id },
                            { "timeout", fmt::format("{}ms", timeout.count()) } };
     if (positional_parameters.empty()) {
         for (const auto& [name, value] : named_parameters) {
@@ -78,9 +78,9 @@ analytics_request::encode_to(analytics_request::encoded_request_type& encoded, h
     body_str = utils::json::generate(body);
     encoded.body = body_str;
     if (context.options.show_queries) {
-        LOG_INFO("ANALYTICS: {}", utils::json::generate(body["statement"]));
+        LOG_INFO("ANALYTICS: client_context_id=\"{}\", {}", encoded.client_context_id, utils::json::generate(body["statement"]));
     } else {
-        LOG_DEBUG("ANALYTICS: {}", utils::json::generate(body["statement"]));
+        LOG_DEBUG("ANALYTICS: client_context_id=\"{}\", {}", encoded.client_context_id, utils::json::generate(body["statement"]));
     }
     if (row_callback) {
         encoded.streaming.emplace(couchbase::io::streaming_settings{
@@ -108,6 +108,11 @@ analytics_request::make_response(error_context::analytics&& ctx, const encoded_r
         }
         response.meta.request_id = payload.at("requestID").get_string();
         response.meta.client_context_id = payload.at("clientContextID").get_string();
+        if (response.ctx.client_context_id != response.meta.client_context_id) {
+            LOG_WARNING(R"(unexpected clientContextID returned by service: "{}", expected "{}")",
+                        response.meta.client_context_id,
+                        response.ctx.client_context_id);
+        }
         response.meta.status = payload.at("status").get_string();
 
         if (const auto* s = payload.find("signature"); s != nullptr) {
@@ -158,7 +163,6 @@ analytics_request::make_response(error_context::analytics&& ctx, const encoded_r
             }
         }
 
-        Expects(response.meta.client_context_id == client_context_id);
         if (response.meta.status != "success") {
             bool server_timeout = false;
             bool job_queue_is_full = false;
