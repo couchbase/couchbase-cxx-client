@@ -40,8 +40,9 @@ struct scope_create_request {
 
     std::string bucket_name;
     std::string scope_name;
-    std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
+
     std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 

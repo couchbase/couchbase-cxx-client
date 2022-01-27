@@ -20,6 +20,7 @@
 #include <couchbase/service_type.hxx>
 #include <couchbase/utils/json_streaming_lexer.hxx>
 
+#include <chrono>
 #include <map>
 #include <optional>
 #include <string>
@@ -40,7 +41,8 @@ struct http_request {
     std::map<std::string, std::string> headers{};
     std::string body{};
     std::optional<streaming_settings> streaming{};
-    std::string client_context_id{};
+    std::string client_context_id{};     /* effective client context ID, random-generated or provided in user's request */
+    std::chrono::milliseconds timeout{}; /* effective timeout, service default or provided in user's request */
 };
 
 class http_response_body

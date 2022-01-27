@@ -39,12 +39,12 @@ struct view_index_get_request {
 
     static const inline service_type type = service_type::view;
 
-    std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
-
     std::string bucket_name;
     std::string document_name;
     design_document::name_space name_space;
+
     std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 

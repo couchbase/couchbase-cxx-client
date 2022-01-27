@@ -46,14 +46,16 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     std::shared_ptr<io::mcbp_session> session_{};
     mcbp_command_handler handler_{};
     std::shared_ptr<Manager> manager_{};
+    std::chrono::milliseconds timeout_{};
     std::string id_{ uuid::to_string(uuid::random()) };
     std::shared_ptr<tracing::request_span> span_{ nullptr };
 
-    mcbp_command(asio::io_context& ctx, std::shared_ptr<Manager> manager, Request req)
+    mcbp_command(asio::io_context& ctx, std::shared_ptr<Manager> manager, Request req, std::chrono::milliseconds timeout)
       : deadline(ctx)
       , retry_backoff(ctx)
       , request(req)
       , manager_(manager)
+      , timeout_(timeout)
     {
     }
 
@@ -64,7 +66,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         span_->add_tag(tracing::attributes::instance, request.id.bucket());
 
         handler_ = std::move(handler);
-        deadline.expires_after(request.timeout);
+        deadline.expires_after(timeout_);
         deadline.async_wait([self = this->shared_from_this()](std::error_code ec) {
             if (ec == asio::error::operation_aborted) {
                 return;
@@ -169,7 +171,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                     LOG_DEBUG(R"({} no cache entry for collection, resolve collection id for "{}", timeout={}ms, id="{}")",
                               session_->log_prefix(),
                               request.id,
-                              request.timeout.count(),
+                              timeout_.count(),
                               id_);
                     return request_collection_id();
                 }

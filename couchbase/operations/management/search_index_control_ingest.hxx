@@ -39,11 +39,11 @@ struct search_index_control_ingest_request {
 
     static const inline service_type type = service_type::search;
 
-    std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
-
     std::string index_name;
     bool pause;
+
     std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 

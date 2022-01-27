@@ -44,11 +44,10 @@ struct analytics_link_disconnect_request {
 
     static const inline service_type type = service_type::analytics;
 
-    std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
-
     std::string dataverse_name{ "Default" };
     std::string link_name{ "Local" };
     std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 
