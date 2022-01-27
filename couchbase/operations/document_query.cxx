@@ -300,51 +300,53 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
             bool authentication_failure = false;
             std::optional<std::error_code> common_ec{};
 
-            if (response.meta.errors) {
-                for (const auto& error : *response.meta.errors) {
-                    switch (error.code) {
-                        case 1065: /* IKey: "service.io.request.unrecognized_parameter" */
-                            invalid_argument = true;
-                            break;
-                        case 1080: /* IKey: "timeout" */
-                            server_timeout = true;
-                            break;
-                        case 3000: /* IKey: "parse.syntax_error" */
-                            syntax_error = true;
-                            break;
-                        case 4040: /* IKey: "plan.build_prepared.no_such_name" */
-                        case 4050: /* IKey: "plan.build_prepared.unrecognized_prepared" */
-                        case 4060: /* IKey: "plan.build_prepared.no_such_name" */
-                        case 4070: /* IKey: "plan.build_prepared.decoding" */
-                        case 4080: /* IKey: "plan.build_prepared.name_encoded_plan_mismatch" */
-                        case 4090: /* IKey: "plan.build_prepared.name_not_in_encoded_plan" */
-                            prepared_statement_failure = true;
-                            break;
-                        case 12009: /* IKey: "datastore.couchbase.DML_error" */
-                            if (error.message.find("CAS mismatch") != std::string::npos) {
-                                cas_mismatch = true;
-                            } else {
-                                dml_failure = true;
-                            }
-                            break;
+            if (response.meta.errors && !response.meta.errors->empty()) {
+                response.ctx.first_error_code = response.meta.errors->front().code;
+                response.ctx.first_error_message = response.meta.errors->front().message;
+                switch (response.ctx.first_error_code) {
+                    case 1065: /* IKey: "service.io.request.unrecognized_parameter" */
+                        invalid_argument = true;
+                        break;
+                    case 1080: /* IKey: "timeout" */
+                        server_timeout = true;
+                        break;
+                    case 3000: /* IKey: "parse.syntax_error" */
+                        syntax_error = true;
+                        break;
+                    case 4040: /* IKey: "plan.build_prepared.no_such_name" */
+                    case 4050: /* IKey: "plan.build_prepared.unrecognized_prepared" */
+                    case 4060: /* IKey: "plan.build_prepared.no_such_name" */
+                    case 4070: /* IKey: "plan.build_prepared.decoding" */
+                    case 4080: /* IKey: "plan.build_prepared.name_encoded_plan_mismatch" */
+                    case 4090: /* IKey: "plan.build_prepared.name_not_in_encoded_plan" */
+                        prepared_statement_failure = true;
+                        break;
+                    case 12009: /* IKey: "datastore.couchbase.DML_error" */
+                        if (response.ctx.first_error_message.find("CAS mismatch") != std::string::npos) {
+                            cas_mismatch = true;
+                        } else {
+                            dml_failure = true;
+                        }
+                        break;
 
-                        case 12004: /* IKey: "datastore.couchbase.primary_idx_not_found" */
-                        case 12016: /* IKey: "datastore.couchbase.index_not_found" */
-                            index_not_found = true;
-                            break;
-                        case 13014: /* IKey: "datastore.couchbase.insufficient_credentials" */
-                            authentication_failure = true;
-                            break;
-                        default:
-                            if ((error.code >= 12000 && error.code < 13000) || (error.code >= 14000 && error.code < 15000)) {
-                                index_failure = true;
-                            } else if (error.code >= 4000 && error.code < 5000) {
-                                planning_failure = true;
-                            } else {
-                                common_ec = management::extract_common_query_error_code(error.code, error.message);
-                            }
-                            break;
-                    }
+                    case 12004: /* IKey: "datastore.couchbase.primary_idx_not_found" */
+                    case 12016: /* IKey: "datastore.couchbase.index_not_found" */
+                        index_not_found = true;
+                        break;
+                    case 13014: /* IKey: "datastore.couchbase.insufficient_credentials" */
+                        authentication_failure = true;
+                        break;
+                    default:
+                        if ((response.ctx.first_error_code >= 12000 && response.ctx.first_error_code < 13000) ||
+                            (response.ctx.first_error_code >= 14000 && response.ctx.first_error_code < 15000)) {
+                            index_failure = true;
+                        } else if (response.ctx.first_error_code >= 4000 && response.ctx.first_error_code < 5000) {
+                            planning_failure = true;
+                        } else {
+                            common_ec =
+                              management::extract_common_query_error_code(response.ctx.first_error_code, response.ctx.first_error_message);
+                        }
+                        break;
                 }
             }
             if (syntax_error) {
