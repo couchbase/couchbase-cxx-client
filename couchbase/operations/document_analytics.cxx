@@ -163,37 +163,37 @@ analytics_request::make_response(error_context::analytics&& ctx, const encoded_r
             bool link_not_found = false;
             bool compilation_failure = false;
 
-            for (const auto& error : response.meta.errors) {
-                switch (error.code) {
-                    case 21002: /* Request timed out and will be cancelled */
-                        server_timeout = true;
-                        break;
-                    case 23007: /* Job queue is full with [string] jobs */
-                        job_queue_is_full = true;
-                        break;
-                    case 24044: /* Cannot find dataset [string] because there is no dataverse declared, nor an alias with name [string]!
-                                 */
-                    case 24045: /* Cannot find dataset [string] in dataverse [string] nor an alias with name [string]! */
-                    case 24025: /* Cannot find dataset with name [string] in dataverse [string] */
-                        dataset_not_found = true;
-                        break;
-                    case 24034: /* Cannot find dataverse with name [string] */
-                        dataverse_not_found = true;
-                        break;
-                    case 24040: /* A dataset with name [string] already exists in dataverse [string] */
-                        dataset_exists = true;
-                        break;
-                    case 24039: /* A dataverse with this name [string] already exists. */
-                        dataverse_exists = true;
-                        break;
-                    case 24006: /* Link [string] does not exist | Link [string] does not exist */
-                        link_not_found = true;
-                        break;
-                    default:
-                        if (error.code >= 24000 && error.code < 25000) {
-                            compilation_failure = true;
-                        }
-                }
+            response.ctx.first_error_code = response.meta.errors.front().code;
+            response.ctx.first_error_message = response.meta.errors.front().message;
+            switch (response.ctx.first_error_code) {
+                case 21002: /* Request timed out and will be cancelled */
+                    server_timeout = true;
+                    break;
+                case 23007: /* Job queue is full with [string] jobs */
+                    job_queue_is_full = true;
+                    break;
+                case 24044: /* Cannot find dataset [string] because there is no dataverse declared, nor an alias with name [string]!
+                             */
+                case 24045: /* Cannot find dataset [string] in dataverse [string] nor an alias with name [string]! */
+                case 24025: /* Cannot find dataset with name [string] in dataverse [string] */
+                    dataset_not_found = true;
+                    break;
+                case 24034: /* Cannot find dataverse with name [string] */
+                    dataverse_not_found = true;
+                    break;
+                case 24040: /* A dataset with name [string] already exists in dataverse [string] */
+                    dataset_exists = true;
+                    break;
+                case 24039: /* A dataverse with this name [string] already exists. */
+                    dataverse_exists = true;
+                    break;
+                case 24006: /* Link [string] does not exist | Link [string] does not exist */
+                    link_not_found = true;
+                    break;
+                default:
+                    if (response.ctx.first_error_code >= 24000 && response.ctx.first_error_code < 25000) {
+                        compilation_failure = true;
+                    }
             }
             if (compilation_failure) {
                 response.ctx.ec = error::analytics_errc::compilation_failure;
