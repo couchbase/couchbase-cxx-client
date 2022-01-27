@@ -84,7 +84,7 @@ class cluster
         if (!work_.owns_work()) {
             return handler();
         }
-        asio::post(asio::bind_executor(ctx_, [this, handler = std::forward<Handler>(handler)]() {
+        asio::post(asio::bind_executor(ctx_, [this, handler = std::forward<Handler>(handler)]() mutable {
             if (session_) {
                 session_->stop(io::retry_reason::do_not_retry);
             }
