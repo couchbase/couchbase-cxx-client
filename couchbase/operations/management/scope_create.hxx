@@ -41,7 +41,7 @@ struct scope_create_request {
     std::string bucket_name;
     std::string scope_name;
     std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
-    std::string client_context_id{ uuid::to_string(uuid::random()) };
+    std::optional<std::string> client_context_id{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 

@@ -240,7 +240,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
               encoded_response_type resp{ std::move(msg) };
               error_context_type ctx{};
               ctx.ec = ec;
-              ctx.client_context_id = cmd->request.client_context_id;
+              ctx.client_context_id = cmd->client_context_id_;
               ctx.method = cmd->encoded.method;
               ctx.path = cmd->encoded.path;
               ctx.last_dispatched_from = cmd->session_->local_address();

@@ -33,7 +33,7 @@ query_index_get_all_request::encode_to(encoded_request_type& encoded, couchbase:
             R"(SELECT idx.* FROM system:indexes AS idx WHERE ((keyspace_id = "{}" AND bucket_id IS MISSING) OR (bucket_id = "{}")) AND `using`="gsi" ORDER BY is_primary DESC, name ASC)",
             bucket_name,
             bucket_name) },
-        { "client_context_id", client_context_id }
+        { "client_context_id", encoded.client_context_id }
     };
     encoded.method = "POST";
     encoded.path = "/query/service";

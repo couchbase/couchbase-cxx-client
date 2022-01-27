@@ -37,9 +37,10 @@ struct http_request {
     service_type type;
     std::string method;
     std::string path;
-    std::map<std::string, std::string> headers;
-    std::string body;
+    std::map<std::string, std::string> headers{};
+    std::string body{};
     std::optional<streaming_settings> streaming{};
+    std::string client_context_id{};
 };
 
 class http_response_body

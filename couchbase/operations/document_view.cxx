@@ -120,7 +120,6 @@ document_view_response
 document_view_request::make_response(error_context::view&& ctx, const encoded_response_type& encoded) const
 {
     document_view_response response{ std::move(ctx) };
-    response.ctx.client_context_id = client_context_id;
     response.ctx.design_document_name = document_name;
     response.ctx.view_name = view_name;
     response.ctx.query_string = query_string;

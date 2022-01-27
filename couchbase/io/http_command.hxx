@@ -39,6 +39,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     std::shared_ptr<tracing::request_tracer> tracer_;
     std::shared_ptr<tracing::request_span> span_{ nullptr };
     metrics::meter* meter_;
+    std::string client_context_id_;
     std::shared_ptr<io::http_session> session_{};
     http_command_handler handler_{};
 
@@ -48,6 +49,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
       , request(req)
       , tracer_(std::move(tracer))
       , meter_(meter)
+      , client_context_id_(request.client_context_id.value_or(uuid::to_string(uuid::random())))
     {
     }
 
@@ -66,7 +68,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     {
         span_ = tracer_->start_span(tracing::span_name_for_http_service(request.type));
         span_->add_tag(tracing::attributes::service, tracing::service_name_for_http_service(request.type));
-        span_->add_tag(tracing::attributes::operation_id, request.client_context_id);
+        span_->add_tag(tracing::attributes::operation_id, client_context_id_);
         handler_ = std::move(handler);
 
         deadline.expires_after(request.timeout);
@@ -103,16 +105,17 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     void send()
     {
         encoded.type = request.type;
+        encoded.client_context_id = client_context_id_;
         if (auto ec = request.encode_to(encoded, session_->http_context()); ec) {
             return invoke_handler(ec, {});
         }
-        encoded.headers["client-context-id"] = request.client_context_id;
+        encoded.headers["client-context-id"] = client_context_id_;
         LOG_TRACE(R"({} HTTP request: {}, method={}, path="{}", client_context_id="{}", timeout={}ms)",
                   session_->log_prefix(),
                   encoded.type,
                   encoded.method,
                   encoded.path,
-                  request.client_context_id,
+                  client_context_id_,
                   request.timeout.count());
         session_->write_and_subscribe(
           encoded,
@@ -134,7 +137,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
               LOG_TRACE(R"({} HTTP response: {}, client_context_id="{}", status={}, body={})",
                         self->session_->log_prefix(),
                         self->request.type,
-                        self->request.client_context_id,
+                        self->client_context_id_,
                         msg.status_code,
                         msg.status_code == 200 ? "[hidden]" : msg.body.data());
               if (auto parser_ec = msg.body.ec(); !ec && parser_ec) {
