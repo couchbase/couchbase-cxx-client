@@ -33,16 +33,16 @@ namespace couchbase::operations
 {
 struct search_response {
     struct search_metrics {
-        std::chrono::nanoseconds took;
-        std::uint64_t total_rows;
-        double max_score;
-        std::uint64_t success_partition_count;
-        std::uint64_t error_partition_count;
+        std::chrono::nanoseconds took{};
+        std::uint64_t total_rows{};
+        double max_score{};
+        std::uint64_t success_partition_count{};
+        std::uint64_t error_partition_count{};
     };
 
     struct search_meta_data {
         std::string client_context_id;
-        search_metrics metrics;
+        search_metrics metrics{};
         std::map<std::string, std::string> errors;
     };
 
@@ -97,7 +97,7 @@ struct search_response {
 
     error_context::search ctx;
     std::string status{};
-    search_meta_data meta_data{};
+    search_meta_data meta{};
     std::string error{};
     std::vector<search_row> rows{};
     std::vector<search_facet> facets{};

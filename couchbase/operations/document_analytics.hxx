@@ -26,10 +26,10 @@
 
 namespace couchbase::operations
 {
-struct analytics_response_payload {
+struct analytics_response {
     struct analytics_metrics {
-        std::string elapsed_time;
-        std::string execution_time;
+        std::chrono::nanoseconds elapsed_time;
+        std::chrono::nanoseconds execution_time;
         std::uint64_t result_count;
         std::uint64_t result_size;
         std::optional<std::uint64_t> sort_count;
@@ -54,13 +54,9 @@ struct analytics_response_payload {
         std::optional<std::vector<analytics_problem>> errors;
     };
 
-    analytics_meta_data meta_data{};
-    std::vector<std::string> rows{};
-};
-
-struct analytics_response {
     error_context::analytics ctx;
-    analytics_response_payload payload{};
+    analytics_meta_data meta{};
+    std::vector<std::string> rows{};
 };
 
 struct analytics_request {

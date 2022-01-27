@@ -28,10 +28,10 @@
 
 namespace couchbase::operations
 {
-struct query_response_payload {
+struct query_response {
     struct query_metrics {
-        std::string elapsed_time;
-        std::string execution_time;
+        std::chrono::nanoseconds elapsed_time{};
+        std::chrono::nanoseconds execution_time{};
         std::uint64_t result_count;
         std::uint64_t result_size;
         std::optional<std::uint64_t> sort_count;
@@ -56,17 +56,10 @@ struct query_response_payload {
         std::optional<std::vector<query_problem>> errors;
     };
 
-    query_meta_data meta_data{};
+    error_context::query ctx;
+    query_meta_data meta{};
     std::optional<std::string> prepared{};
     std::vector<std::string> rows{};
-};
-} // namespace couchbase::operations
-
-namespace couchbase::operations
-{
-struct query_response {
-    error_context::query ctx;
-    query_response_payload payload{};
     std::string served_by_node{};
 };
 
@@ -91,7 +84,7 @@ struct query_request {
 
     std::optional<std::uint64_t> max_parallelism{};
     std::optional<std::uint64_t> scan_cap{};
-    std::optional<std::uint64_t> scan_wait{};
+    std::optional<std::chrono::milliseconds> scan_wait{};
     std::optional<std::uint64_t> pipeline_batch{};
     std::optional<std::uint64_t> pipeline_cap{};
     std::optional<scan_consistency_type> scan_consistency{};

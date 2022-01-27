@@ -15,78 +15,13 @@
  *   limitations under the License.
  */
 
-#include <couchbase/operations/document_analytics.hxx>
-
 #include <couchbase/errors.hxx>
 #include <couchbase/logger/logger.hxx>
+#include <couchbase/operations/document_analytics.hxx>
+#include <couchbase/utils/duration_parser.hxx>
 #include <couchbase/utils/json.hxx>
 
 #include <gsl/assert>
-
-namespace tao::json
-{
-template<>
-struct traits<couchbase::operations::analytics_response_payload> {
-    template<template<typename...> class Traits>
-    static couchbase::operations::analytics_response_payload as(const tao::json::basic_value<Traits>& v)
-    {
-        couchbase::operations::analytics_response_payload result;
-        result.meta_data.request_id = v.at("requestID").get_string();
-        result.meta_data.client_context_id = v.at("clientContextID").get_string();
-        result.meta_data.status = v.at("status").get_string();
-
-        if (const auto* s = v.find("signature"); s != nullptr) {
-            result.meta_data.signature = couchbase::utils::json::generate(*s);
-        }
-
-        if (const auto* p = v.find("profile"); p != nullptr) {
-            result.meta_data.profile = couchbase::utils::json::generate(*p);
-        }
-
-        if (const auto* m = v.find("metrics"); m != nullptr) {
-            result.meta_data.metrics.result_count = m->at("resultCount").get_unsigned();
-            result.meta_data.metrics.result_size = m->at("resultSize").get_unsigned();
-            result.meta_data.metrics.elapsed_time = m->at("elapsedTime").get_string();
-            result.meta_data.metrics.execution_time = m->at("executionTime").get_string();
-            result.meta_data.metrics.sort_count = m->template optional<std::uint64_t>("sortCount");
-            result.meta_data.metrics.mutation_count = m->template optional<std::uint64_t>("mutationCount");
-            result.meta_data.metrics.error_count = m->template optional<std::uint64_t>("errorCount");
-            result.meta_data.metrics.warning_count = m->template optional<std::uint64_t>("warningCount");
-        }
-
-        if (const auto* e = v.find("errors"); e != nullptr) {
-            std::vector<couchbase::operations::analytics_response_payload::analytics_problem> problems{};
-            for (auto& err : e->get_array()) {
-                couchbase::operations::analytics_response_payload::analytics_problem problem;
-                problem.code = err.at("code").get_unsigned();
-                problem.message = err.at("msg").get_string();
-                problems.emplace_back(problem);
-            }
-            result.meta_data.errors.emplace(problems);
-        }
-
-        if (const auto* w = v.find("warnings"); w != nullptr) {
-            std::vector<couchbase::operations::analytics_response_payload::analytics_problem> problems{};
-            for (auto& warn : w->get_array()) {
-                couchbase::operations::analytics_response_payload::analytics_problem problem;
-                problem.code = warn.at("code").get_unsigned();
-                problem.message = warn.at("msg").get_string();
-                problems.emplace_back(problem);
-            }
-            result.meta_data.warnings.emplace(problems);
-        }
-
-        if (const auto* r = v.find("results"); r != nullptr) {
-            result.rows.reserve(result.meta_data.metrics.result_count);
-            for (auto& row : r->get_array()) {
-                result.rows.emplace_back(couchbase::utils::json::generate(row));
-            }
-        }
-
-        return result;
-    }
-};
-} // namespace tao::json
 
 namespace couchbase::operations
 {
@@ -164,14 +99,67 @@ analytics_request::make_response(error_context::analytics&& ctx, const encoded_r
     response.ctx.statement = statement;
     response.ctx.parameters = body_str;
     if (!response.ctx.ec) {
+        tao::json::value payload;
         try {
-            response.payload = utils::json::parse(encoded.body.data()).as<analytics_response_payload>();
+            payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
             response.ctx.ec = error::common_errc::parsing_failure;
             return response;
         }
-        Expects(response.payload.meta_data.client_context_id == client_context_id);
-        if (response.payload.meta_data.status != "success") {
+        response.meta.request_id = payload.at("requestID").get_string();
+        response.meta.client_context_id = payload.at("clientContextID").get_string();
+        response.meta.status = payload.at("status").get_string();
+
+        if (const auto* s = payload.find("signature"); s != nullptr) {
+            response.meta.signature = couchbase::utils::json::generate(*s);
+        }
+
+        if (const auto* p = payload.find("profile"); p != nullptr) {
+            response.meta.profile = couchbase::utils::json::generate(*p);
+        }
+
+        if (const auto* m = payload.find("metrics"); m != nullptr) {
+            response.meta.metrics.result_count = m->at("resultCount").get_unsigned();
+            response.meta.metrics.result_size = m->at("resultSize").get_unsigned();
+            response.meta.metrics.elapsed_time = utils::parse_duration(m->at("elapsedTime").get_string());
+            response.meta.metrics.execution_time = utils::parse_duration(m->at("executionTime").get_string());
+            response.meta.metrics.sort_count = m->template optional<std::uint64_t>("sortCount");
+            response.meta.metrics.mutation_count = m->template optional<std::uint64_t>("mutationCount");
+            response.meta.metrics.error_count = m->template optional<std::uint64_t>("errorCount");
+            response.meta.metrics.warning_count = m->template optional<std::uint64_t>("warningCount");
+        }
+
+        if (const auto* e = payload.find("errors"); e != nullptr) {
+            std::vector<couchbase::operations::analytics_response::analytics_problem> problems{};
+            for (const auto& err : e->get_array()) {
+                couchbase::operations::analytics_response::analytics_problem problem;
+                problem.code = err.at("code").get_unsigned();
+                problem.message = err.at("msg").get_string();
+                problems.emplace_back(problem);
+            }
+            response.meta.errors.emplace(problems);
+        }
+
+        if (const auto* w = payload.find("warnings"); w != nullptr) {
+            std::vector<couchbase::operations::analytics_response::analytics_problem> problems{};
+            for (const auto& warn : w->get_array()) {
+                couchbase::operations::analytics_response::analytics_problem problem;
+                problem.code = warn.at("code").get_unsigned();
+                problem.message = warn.at("msg").get_string();
+                problems.emplace_back(problem);
+            }
+            response.meta.warnings.emplace(problems);
+        }
+
+        if (const auto* r = payload.find("results"); r != nullptr) {
+            response.rows.reserve(response.meta.metrics.result_count);
+            for (const auto& row : r->get_array()) {
+                response.rows.emplace_back(couchbase::utils::json::generate(row));
+            }
+        }
+
+        Expects(response.meta.client_context_id == client_context_id);
+        if (response.meta.status != "success") {
             bool server_timeout = false;
             bool job_queue_is_full = false;
             bool dataset_not_found = false;
@@ -181,8 +169,8 @@ analytics_request::make_response(error_context::analytics&& ctx, const encoded_r
             bool link_not_found = false;
             bool compilation_failure = false;
 
-            if (response.payload.meta_data.errors) {
-                for (const auto& error : *response.payload.meta_data.errors) {
+            if (response.meta.errors) {
+                for (const auto& error : *response.meta.errors) {
                     switch (error.code) {
                         case 21002: /* Request timed out and will be cancelled */
                             server_timeout = true;
