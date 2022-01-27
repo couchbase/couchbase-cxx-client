@@ -43,7 +43,7 @@ struct get_and_touch_request {
     uint16_t partition{};
     uint32_t opaque{};
     uint32_t expiry{};
-    std::chrono::milliseconds timeout{ timeout_defaults::key_value_timeout };
+    std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;

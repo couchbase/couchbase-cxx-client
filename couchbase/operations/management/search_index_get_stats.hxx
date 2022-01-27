@@ -40,10 +40,10 @@ struct search_index_get_stats_request {
 
     static const inline service_type type = service_type::search;
 
-    std::string client_context_id{ uuid::to_string(uuid::random()) };
-    std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
-
     std::string index_name;
+
+    std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 

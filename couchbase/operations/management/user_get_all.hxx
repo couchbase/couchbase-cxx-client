@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include <couchbase/platform/uuid.h>
+#include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
-#include <couchbase/timeout_defaults.hxx>
-#include <couchbase/error_context/http.hxx>
 #include <couchbase/operations/management/rbac.hxx>
+#include <couchbase/platform/uuid.h>
+#include <couchbase/timeout_defaults.hxx>
 
 namespace couchbase::operations::management
 {
@@ -40,8 +40,9 @@ struct user_get_all_request {
     static const inline service_type type = service_type::management;
 
     rbac::auth_domain domain{ rbac::auth_domain::local };
-    std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
-    std::string client_context_id{ uuid::to_string(uuid::random()) };
+
+    std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 

@@ -29,8 +29,8 @@ std::error_code
 analytics_request::encode_to(analytics_request::encoded_request_type& encoded, http_context& context)
 {
     tao::json::value body{ { "statement", statement },
-                           { "client_context_id", client_context_id },
-                           { "timeout", fmt::format("{}ms", timeout.count()) } };
+                           { "client_context_id", encoded.client_context_id },
+                           { "timeout", fmt::format("{}ms", encoded.timeout.count()) } };
     if (positional_parameters.empty()) {
         for (const auto& [name, value] : named_parameters) {
             Expects(name.empty() == false);
@@ -78,9 +78,9 @@ analytics_request::encode_to(analytics_request::encoded_request_type& encoded, h
     body_str = utils::json::generate(body);
     encoded.body = body_str;
     if (context.options.show_queries) {
-        LOG_INFO("ANALYTICS: {}", utils::json::generate(body["statement"]));
+        LOG_INFO("ANALYTICS: client_context_id=\"{}\", {}", encoded.client_context_id, utils::json::generate(body["statement"]));
     } else {
-        LOG_DEBUG("ANALYTICS: {}", utils::json::generate(body["statement"]));
+        LOG_DEBUG("ANALYTICS: client_context_id=\"{}\", {}", encoded.client_context_id, utils::json::generate(body["statement"]));
     }
     if (row_callback) {
         encoded.streaming.emplace(couchbase::io::streaming_settings{
@@ -108,57 +108,51 @@ analytics_request::make_response(error_context::analytics&& ctx, const encoded_r
         }
         response.meta.request_id = payload.at("requestID").get_string();
         response.meta.client_context_id = payload.at("clientContextID").get_string();
+        if (response.ctx.client_context_id != response.meta.client_context_id) {
+            LOG_WARNING(R"(unexpected clientContextID returned by service: "{}", expected "{}")",
+                        response.meta.client_context_id,
+                        response.ctx.client_context_id);
+        }
         response.meta.status = payload.at("status").get_string();
 
         if (const auto* s = payload.find("signature"); s != nullptr) {
             response.meta.signature = couchbase::utils::json::generate(*s);
         }
 
-        if (const auto* p = payload.find("profile"); p != nullptr) {
-            response.meta.profile = couchbase::utils::json::generate(*p);
-        }
-
-        if (const auto* m = payload.find("metrics"); m != nullptr) {
-            response.meta.metrics.result_count = m->at("resultCount").get_unsigned();
-            response.meta.metrics.result_size = m->at("resultSize").get_unsigned();
-            response.meta.metrics.elapsed_time = utils::parse_duration(m->at("elapsedTime").get_string());
-            response.meta.metrics.execution_time = utils::parse_duration(m->at("executionTime").get_string());
-            response.meta.metrics.sort_count = m->template optional<std::uint64_t>("sortCount");
-            response.meta.metrics.mutation_count = m->template optional<std::uint64_t>("mutationCount");
-            response.meta.metrics.error_count = m->template optional<std::uint64_t>("errorCount");
-            response.meta.metrics.warning_count = m->template optional<std::uint64_t>("warningCount");
-        }
+        const tao::json::value& metrics = payload.at("metrics");
+        response.meta.metrics.result_count = metrics.at("resultCount").get_unsigned();
+        response.meta.metrics.result_size = metrics.at("resultSize").get_unsigned();
+        response.meta.metrics.elapsed_time = utils::parse_duration(metrics.at("elapsedTime").get_string());
+        response.meta.metrics.execution_time = utils::parse_duration(metrics.at("executionTime").get_string());
+        response.meta.metrics.processed_objects = metrics.at("processedObjects").get_unsigned();
+        response.meta.metrics.error_count = metrics.optional<std::uint64_t>("errorCount").value_or(0);
+        response.meta.metrics.warning_count = metrics.optional<std::uint64_t>("warningCount").value_or(0);
 
         if (const auto* e = payload.find("errors"); e != nullptr) {
-            std::vector<couchbase::operations::analytics_response::analytics_problem> problems{};
             for (const auto& err : e->get_array()) {
                 couchbase::operations::analytics_response::analytics_problem problem;
                 problem.code = err.at("code").get_unsigned();
                 problem.message = err.at("msg").get_string();
-                problems.emplace_back(problem);
+                response.meta.errors.emplace_back(problem);
             }
-            response.meta.errors.emplace(problems);
         }
 
         if (const auto* w = payload.find("warnings"); w != nullptr) {
-            std::vector<couchbase::operations::analytics_response::analytics_problem> problems{};
             for (const auto& warn : w->get_array()) {
                 couchbase::operations::analytics_response::analytics_problem problem;
                 problem.code = warn.at("code").get_unsigned();
                 problem.message = warn.at("msg").get_string();
-                problems.emplace_back(problem);
+                response.meta.warnings.emplace_back(problem);
             }
-            response.meta.warnings.emplace(problems);
         }
 
         if (const auto* r = payload.find("results"); r != nullptr) {
-            response.rows.reserve(response.meta.metrics.result_count);
+            response.rows.reserve(r->get_array().size());
             for (const auto& row : r->get_array()) {
                 response.rows.emplace_back(couchbase::utils::json::generate(row));
             }
         }
 
-        Expects(response.meta.client_context_id == client_context_id);
         if (response.meta.status != "success") {
             bool server_timeout = false;
             bool job_queue_is_full = false;
@@ -169,39 +163,37 @@ analytics_request::make_response(error_context::analytics&& ctx, const encoded_r
             bool link_not_found = false;
             bool compilation_failure = false;
 
-            if (response.meta.errors) {
-                for (const auto& error : *response.meta.errors) {
-                    switch (error.code) {
-                        case 21002: /* Request timed out and will be cancelled */
-                            server_timeout = true;
-                            break;
-                        case 23007: /* Job queue is full with [string] jobs */
-                            job_queue_is_full = true;
-                            break;
-                        case 24044: /* Cannot find dataset [string] because there is no dataverse declared, nor an alias with name [string]!
-                                     */
-                        case 24045: /* Cannot find dataset [string] in dataverse [string] nor an alias with name [string]! */
-                        case 24025: /* Cannot find dataset with name [string] in dataverse [string] */
-                            dataset_not_found = true;
-                            break;
-                        case 24034: /* Cannot find dataverse with name [string] */
-                            dataverse_not_found = true;
-                            break;
-                        case 24040: /* A dataset with name [string] already exists in dataverse [string] */
-                            dataset_exists = true;
-                            break;
-                        case 24039: /* A dataverse with this name [string] already exists. */
-                            dataverse_exists = true;
-                            break;
-                        case 24006: /* Link [string] does not exist | Link [string] does not exist */
-                            link_not_found = true;
-                            break;
-                        default:
-                            if (error.code >= 24000 && error.code < 25000) {
-                                compilation_failure = true;
-                            }
+            response.ctx.first_error_code = response.meta.errors.front().code;
+            response.ctx.first_error_message = response.meta.errors.front().message;
+            switch (response.ctx.first_error_code) {
+                case 21002: /* Request timed out and will be cancelled */
+                    server_timeout = true;
+                    break;
+                case 23007: /* Job queue is full with [string] jobs */
+                    job_queue_is_full = true;
+                    break;
+                case 24044: /* Cannot find dataset [string] because there is no dataverse declared, nor an alias with name [string]!
+                             */
+                case 24045: /* Cannot find dataset [string] in dataverse [string] nor an alias with name [string]! */
+                case 24025: /* Cannot find dataset with name [string] in dataverse [string] */
+                    dataset_not_found = true;
+                    break;
+                case 24034: /* Cannot find dataverse with name [string] */
+                    dataverse_not_found = true;
+                    break;
+                case 24040: /* A dataset with name [string] already exists in dataverse [string] */
+                    dataset_exists = true;
+                    break;
+                case 24039: /* A dataverse with this name [string] already exists. */
+                    dataverse_exists = true;
+                    break;
+                case 24006: /* Link [string] does not exist | Link [string] does not exist */
+                    link_not_found = true;
+                    break;
+                default:
+                    if (response.ctx.first_error_code >= 24000 && response.ctx.first_error_code < 25000) {
+                        compilation_failure = true;
                     }
-                }
             }
             if (compilation_failure) {
                 response.ctx.ec = error::analytics_errc::compilation_failure;

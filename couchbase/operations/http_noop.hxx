@@ -36,9 +36,9 @@ struct http_noop_request {
     using error_context_type = error_context::http;
 
     service_type type;
-    std::chrono::milliseconds timeout;
 
-    std::string client_context_id{ uuid::to_string(uuid::random()) };
+    std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
 

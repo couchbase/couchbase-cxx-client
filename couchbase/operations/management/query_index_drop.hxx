@@ -43,7 +43,6 @@ struct query_index_drop_request {
 
     static const inline service_type type = service_type::query;
 
-    std::string client_context_id{ uuid::to_string(uuid::random()) };
     static constexpr auto namespace_id = "default";
     std::string bucket_name;
     std::string scope_name;
@@ -51,7 +50,9 @@ struct query_index_drop_request {
     std::string index_name;
     bool is_primary{ false };
     bool ignore_if_does_not_exist{ false };
-    std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
+
+    std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 

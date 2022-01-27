@@ -37,7 +37,7 @@ query_index_drop_request::encode_to(encoded_request_type& encoded, http_context&
     tao::json::value body{ { "statement",
                              is_primary ? fmt::format(R"(DROP PRIMARY INDEX ON {} USING GSI)", keyspace)
                                         : fmt::format(R"(DROP INDEX {}.`{}` USING GSI)", keyspace, index_name) },
-                           { "client_context_id", client_context_id } };
+                           { "client_context_id", encoded.client_context_id } };
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);

@@ -31,7 +31,7 @@ search_request::encode_to(search_request::encoded_request_type& encoded, http_co
     auto body = tao::json::value{
         { "query", utils::json::parse(query) },
         { "explain", explain },
-        { "ctl", { { "timeout", timeout.count() } } },
+        { "ctl", { { "timeout", encoded.timeout.count() } } },
     };
     if (limit) {
         body["size"] = *limit;
@@ -121,7 +121,7 @@ search_response
 search_request::make_response(error_context::search&& ctx, const encoded_response_type& encoded) const
 {
     search_response response{ std::move(ctx) };
-    response.meta.client_context_id = client_context_id;
+    response.meta.client_context_id = response.ctx.client_context_id;
     response.ctx.index_name = index_name;
     response.ctx.query = query.str();
     response.ctx.parameters = body_str;
