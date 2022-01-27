@@ -19,6 +19,7 @@
 
 #include <couchbase/document_id.hxx>
 #include <couchbase/io/retry_reason.hxx>
+#include <couchbase/protocol/cas.hxx>
 #include <couchbase/protocol/enhanced_error_info.hxx>
 #include <couchbase/protocol/status.hxx>
 #include <couchbase/topology/error_map.hxx>
@@ -35,6 +36,7 @@ struct key_value {
     document_id id;
     std::error_code ec{};
     std::uint32_t opaque{};
+    protocol::cas cas{};
     std::optional<protocol::status> status_code{};
     std::optional<error_map::error_info> error_map_info{};
     std::optional<protocol::enhanced_error_info> enhanced_error_info{};
