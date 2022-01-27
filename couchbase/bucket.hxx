@@ -298,12 +298,14 @@ class bucket : public std::enable_shared_from_this<bucket>
         if (closed_) {
             return;
         }
-        auto cmd = std::make_shared<operations::mcbp_command<bucket, Request>>(ctx_, shared_from_this(), request);
+        auto cmd = std::make_shared<operations::mcbp_command<bucket, Request>>(
+          ctx_, shared_from_this(), request, origin_.options().default_timeout_for(service_type::key_value));
         cmd->start([cmd, handler = std::forward<Handler>(handler)](std::error_code ec, std::optional<io::mcbp_message> msg) mutable {
             using encoded_response_type = typename Request::encoded_response_type;
             auto resp = msg ? encoded_response_type(std::move(*msg)) : encoded_response_type{};
             error_context::key_value ctx{ cmd->request.id };
             ctx.opaque = resp.opaque();
+            ctx.cas = resp.cas();
             ctx.ec = ec;
             if (ctx.ec && ctx.opaque == 0) {
                 ctx.opaque = cmd->request.opaque;

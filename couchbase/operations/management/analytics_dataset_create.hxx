@@ -44,14 +44,13 @@ struct analytics_dataset_create_request {
 
     static const inline service_type type = service_type::analytics;
 
-    std::string client_context_id{ uuid::to_string(uuid::random()) };
-    std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
-
     std::string dataverse_name{ "Default" };
     std::string dataset_name;
     std::string bucket_name;
 
     std::optional<std::string> condition{};
+    std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     bool ignore_if_exists{ false };
 

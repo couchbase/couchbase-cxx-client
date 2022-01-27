@@ -30,7 +30,9 @@ std::error_code
 query_request::encode_to(query_request::encoded_request_type& encoded, http_context& context)
 {
     ctx_.emplace(context);
-    tao::json::value body{};
+    tao::json::value body{
+        { "client_context_id", encoded.client_context_id },
+    };
     if (adhoc) {
         body["statement"] = statement;
     } else {
@@ -49,9 +51,12 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
             }
         }
     }
-    body["client_context_id"] = client_context_id;
-    body["timeout"] =
-      fmt::format("{}ms", ((timeout > std::chrono::milliseconds(5'000)) ? (timeout - std::chrono::milliseconds(500)) : timeout).count());
+    auto timeout_for_service = encoded.timeout;
+    if (timeout_for_service > std::chrono::milliseconds(5'000)) {
+        /* if allocated timeout is large enough, tell query engine, that it is 500ms smaller, to make sure we will always get response */
+        timeout_for_service -= std::chrono::milliseconds(500);
+    }
+    body["timeout"] = fmt::format("{}ms", timeout_for_service.count());
     if (positional_parameters.empty()) {
         for (const auto& [name, value] : named_parameters) {
             Expects(name.empty() == false);
@@ -159,11 +164,15 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
         prep = false;
     }
     if (ctx_->options.show_queries) {
-        LOG_INFO(
-          "QUERY: client_context_id=\"{}\", prep={}, {}", client_context_id, utils::json::generate(prep), utils::json::generate(stmt));
+        LOG_INFO("QUERY: client_context_id=\"{}\", prep={}, {}",
+                 encoded.client_context_id,
+                 utils::json::generate(prep),
+                 utils::json::generate(stmt));
     } else {
-        LOG_DEBUG(
-          "QUERY: client_context_id=\"{}\", prep={}, {}", client_context_id, utils::json::generate(prep), utils::json::generate(stmt));
+        LOG_DEBUG("QUERY: client_context_id=\"{}\", prep={}, {}",
+                  encoded.client_context_id,
+                  utils::json::generate(prep),
+                  utils::json::generate(stmt));
     }
     if (row_callback) {
         encoded.streaming.emplace(couchbase::io::streaming_settings{
@@ -194,6 +203,11 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
 
         if (const auto* i = payload.find("clientContextID"); i != nullptr) {
             response.meta.client_context_id = i->get_string();
+            if (response.ctx.client_context_id != response.meta.client_context_id) {
+                LOG_WARNING(R"(unexpected clientContextID returned by service: "{}", expected "{}")",
+                            response.meta.client_context_id,
+                            response.ctx.client_context_id);
+            }
         }
         response.meta.status = payload.at("status").get_string();
         if (const auto* s = payload.find("signature"); s != nullptr) {
@@ -207,14 +221,16 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
         }
 
         if (const auto* m = payload.find("metrics"); m != nullptr) {
-            response.meta.metrics.result_count = m->at("resultCount").get_unsigned();
-            response.meta.metrics.result_size = m->at("resultSize").get_unsigned();
-            response.meta.metrics.elapsed_time = utils::parse_duration(m->at("elapsedTime").get_string());
-            response.meta.metrics.execution_time = utils::parse_duration(m->at("executionTime").get_string());
-            response.meta.metrics.sort_count = m->template optional<std::uint64_t>("sortCount");
-            response.meta.metrics.mutation_count = m->template optional<std::uint64_t>("mutationCount");
-            response.meta.metrics.error_count = m->template optional<std::uint64_t>("errorCount");
-            response.meta.metrics.warning_count = m->template optional<std::uint64_t>("warningCount");
+            query_response::query_metrics meta_metrics{};
+            meta_metrics.result_count = m->at("resultCount").get_unsigned();
+            meta_metrics.result_size = m->at("resultSize").get_unsigned();
+            meta_metrics.elapsed_time = utils::parse_duration(m->at("elapsedTime").get_string());
+            meta_metrics.execution_time = utils::parse_duration(m->at("executionTime").get_string());
+            meta_metrics.sort_count = m->template optional<std::uint64_t>("sortCount").value_or(0);
+            meta_metrics.mutation_count = m->template optional<std::uint64_t>("mutationCount").value_or(0);
+            meta_metrics.error_count = m->template optional<std::uint64_t>("errorCount").value_or(0);
+            meta_metrics.warning_count = m->template optional<std::uint64_t>("warningCount").value_or(0);
+            response.meta.metrics.emplace(meta_metrics);
         }
 
         if (const auto* e = payload.find("errors"); e != nullptr) {
@@ -240,13 +256,12 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
         }
 
         if (const auto* r = payload.find("results"); r != nullptr) {
-            response.rows.reserve(response.meta.metrics.result_count);
+            response.rows.reserve(r->get_array().size());
             for (const auto& row : r->get_array()) {
                 response.rows.emplace_back(couchbase::utils::json::generate(row));
             }
         }
 
-        Expects(response.meta.client_context_id.empty() || response.meta.client_context_id == client_context_id);
         if (response.meta.status == "success") {
             if (response.prepared) {
                 ctx_->cache.put(statement, response.prepared.value());
@@ -285,51 +300,53 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
             bool authentication_failure = false;
             std::optional<std::error_code> common_ec{};
 
-            if (response.meta.errors) {
-                for (const auto& error : *response.meta.errors) {
-                    switch (error.code) {
-                        case 1065: /* IKey: "service.io.request.unrecognized_parameter" */
-                            invalid_argument = true;
-                            break;
-                        case 1080: /* IKey: "timeout" */
-                            server_timeout = true;
-                            break;
-                        case 3000: /* IKey: "parse.syntax_error" */
-                            syntax_error = true;
-                            break;
-                        case 4040: /* IKey: "plan.build_prepared.no_such_name" */
-                        case 4050: /* IKey: "plan.build_prepared.unrecognized_prepared" */
-                        case 4060: /* IKey: "plan.build_prepared.no_such_name" */
-                        case 4070: /* IKey: "plan.build_prepared.decoding" */
-                        case 4080: /* IKey: "plan.build_prepared.name_encoded_plan_mismatch" */
-                        case 4090: /* IKey: "plan.build_prepared.name_not_in_encoded_plan" */
-                            prepared_statement_failure = true;
-                            break;
-                        case 12009: /* IKey: "datastore.couchbase.DML_error" */
-                            if (error.message.find("CAS mismatch") != std::string::npos) {
-                                cas_mismatch = true;
-                            } else {
-                                dml_failure = true;
-                            }
-                            break;
+            if (response.meta.errors && !response.meta.errors->empty()) {
+                response.ctx.first_error_code = response.meta.errors->front().code;
+                response.ctx.first_error_message = response.meta.errors->front().message;
+                switch (response.ctx.first_error_code) {
+                    case 1065: /* IKey: "service.io.request.unrecognized_parameter" */
+                        invalid_argument = true;
+                        break;
+                    case 1080: /* IKey: "timeout" */
+                        server_timeout = true;
+                        break;
+                    case 3000: /* IKey: "parse.syntax_error" */
+                        syntax_error = true;
+                        break;
+                    case 4040: /* IKey: "plan.build_prepared.no_such_name" */
+                    case 4050: /* IKey: "plan.build_prepared.unrecognized_prepared" */
+                    case 4060: /* IKey: "plan.build_prepared.no_such_name" */
+                    case 4070: /* IKey: "plan.build_prepared.decoding" */
+                    case 4080: /* IKey: "plan.build_prepared.name_encoded_plan_mismatch" */
+                    case 4090: /* IKey: "plan.build_prepared.name_not_in_encoded_plan" */
+                        prepared_statement_failure = true;
+                        break;
+                    case 12009: /* IKey: "datastore.couchbase.DML_error" */
+                        if (response.ctx.first_error_message.find("CAS mismatch") != std::string::npos) {
+                            cas_mismatch = true;
+                        } else {
+                            dml_failure = true;
+                        }
+                        break;
 
-                        case 12004: /* IKey: "datastore.couchbase.primary_idx_not_found" */
-                        case 12016: /* IKey: "datastore.couchbase.index_not_found" */
-                            index_not_found = true;
-                            break;
-                        case 13014: /* IKey: "datastore.couchbase.insufficient_credentials" */
-                            authentication_failure = true;
-                            break;
-                        default:
-                            if ((error.code >= 12000 && error.code < 13000) || (error.code >= 14000 && error.code < 15000)) {
-                                index_failure = true;
-                            } else if (error.code >= 4000 && error.code < 5000) {
-                                planning_failure = true;
-                            } else {
-                                common_ec = management::extract_common_query_error_code(error.code, error.message);
-                            }
-                            break;
-                    }
+                    case 12004: /* IKey: "datastore.couchbase.primary_idx_not_found" */
+                    case 12016: /* IKey: "datastore.couchbase.index_not_found" */
+                        index_not_found = true;
+                        break;
+                    case 13014: /* IKey: "datastore.couchbase.insufficient_credentials" */
+                        authentication_failure = true;
+                        break;
+                    default:
+                        if ((response.ctx.first_error_code >= 12000 && response.ctx.first_error_code < 13000) ||
+                            (response.ctx.first_error_code >= 14000 && response.ctx.first_error_code < 15000)) {
+                            index_failure = true;
+                        } else if (response.ctx.first_error_code >= 4000 && response.ctx.first_error_code < 5000) {
+                            planning_failure = true;
+                        } else {
+                            common_ec =
+                              management::extract_common_query_error_code(response.ctx.first_error_code, response.ctx.first_error_message);
+                        }
+                        break;
                 }
             }
             if (syntax_error) {

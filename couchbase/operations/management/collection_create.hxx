@@ -42,8 +42,9 @@ struct collection_create_request {
     std::string scope_name;
     std::string collection_name;
     std::uint32_t max_expiry{ 0 };
-    std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
-    std::string client_context_id{ uuid::to_string(uuid::random()) };
+
+    std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 

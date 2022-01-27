@@ -28,14 +28,13 @@ namespace couchbase::operations
 {
 struct analytics_response {
     struct analytics_metrics {
-        std::chrono::nanoseconds elapsed_time;
-        std::chrono::nanoseconds execution_time;
-        std::uint64_t result_count;
-        std::uint64_t result_size;
-        std::optional<std::uint64_t> sort_count;
-        std::optional<std::uint64_t> mutation_count;
-        std::optional<std::uint64_t> error_count;
-        std::optional<std::uint64_t> warning_count;
+        std::chrono::nanoseconds elapsed_time{};
+        std::chrono::nanoseconds execution_time{};
+        std::uint64_t result_count{};
+        std::uint64_t result_size{};
+        std::uint64_t error_count{};
+        std::uint64_t processed_objects{};
+        std::uint64_t warning_count{};
     };
 
     struct analytics_problem {
@@ -47,11 +46,10 @@ struct analytics_response {
         std::string request_id;
         std::string client_context_id;
         std::string status;
-        analytics_metrics metrics;
-        std::optional<std::string> signature;
-        std::optional<std::string> profile;
-        std::optional<std::vector<analytics_problem>> warnings;
-        std::optional<std::vector<analytics_problem>> errors;
+        analytics_metrics metrics{};
+        std::optional<std::string> signature{};
+        std::vector<analytics_problem> errors{};
+        std::vector<analytics_problem> warnings{};
     };
 
     error_context::analytics ctx;
@@ -70,8 +68,6 @@ struct analytics_request {
     static const inline service_type type = service_type::analytics;
 
     std::string statement;
-    std::chrono::milliseconds timeout{ timeout_defaults::analytics_timeout };
-    std::string client_context_id{ uuid::to_string(uuid::random()) };
 
     bool readonly{ false };
     bool priority{ false };
@@ -85,6 +81,8 @@ struct analytics_request {
     std::vector<couchbase::json_string> positional_parameters{};
     std::map<std::string, couchbase::json_string> named_parameters{};
     std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
+    std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
     [[nodiscard]] analytics_response make_response(error_context::analytics&& ctx, const encoded_response_type& encoded) const;

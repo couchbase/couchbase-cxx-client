@@ -32,12 +32,12 @@ struct query_response {
     struct query_metrics {
         std::chrono::nanoseconds elapsed_time{};
         std::chrono::nanoseconds execution_time{};
-        std::uint64_t result_count;
-        std::uint64_t result_size;
-        std::optional<std::uint64_t> sort_count;
-        std::optional<std::uint64_t> mutation_count;
-        std::optional<std::uint64_t> error_count;
-        std::optional<std::uint64_t> warning_count;
+        std::uint64_t result_count{};
+        std::uint64_t result_size{};
+        std::uint64_t sort_count{};
+        std::uint64_t mutation_count{};
+        std::uint64_t error_count{};
+        std::uint64_t warning_count{};
     };
 
     struct query_problem {
@@ -49,11 +49,11 @@ struct query_response {
         std::string request_id;
         std::string client_context_id;
         std::string status;
-        query_metrics metrics;
-        std::optional<std::string> signature;
-        std::optional<std::string> profile;
-        std::optional<std::vector<query_problem>> warnings;
-        std::optional<std::vector<query_problem>> errors;
+        std::optional<query_metrics> metrics{};
+        std::optional<std::string> signature{};
+        std::optional<std::string> profile{};
+        std::optional<std::vector<query_problem>> warnings{};
+        std::optional<std::vector<query_problem>> errors{};
     };
 
     error_context::query ctx;
@@ -74,7 +74,6 @@ struct query_request {
     static const inline service_type type = service_type::query;
 
     std::string statement;
-    std::string client_context_id{ uuid::to_string(uuid::random()) };
 
     bool adhoc{ true };
     bool metrics{ false };
@@ -89,10 +88,11 @@ struct query_request {
     std::optional<std::uint64_t> pipeline_cap{};
     std::optional<scan_consistency_type> scan_consistency{};
     std::vector<mutation_token> mutation_state{};
-    std::chrono::milliseconds timeout{ timeout_defaults::query_timeout };
     std::optional<std::string> bucket_name{};
     std::optional<std::string> scope_name{};
     std::optional<std::string> scope_qualifier{};
+    std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     enum class profile_mode {
         off,

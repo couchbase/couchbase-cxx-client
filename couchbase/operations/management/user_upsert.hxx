@@ -41,8 +41,9 @@ struct user_upsert_request {
 
     rbac::auth_domain domain{ rbac::auth_domain::local };
     rbac::user user{};
-    std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
-    std::string client_context_id{ uuid::to_string(uuid::random()) };
+
+    std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 

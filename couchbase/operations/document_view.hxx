@@ -57,9 +57,6 @@ struct document_view_request {
 
     static const inline service_type type = service_type::view;
 
-    std::string client_context_id{ uuid::to_string(uuid::random()) };
-    std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
-
     std::string bucket_name;
     std::string document_name;
     std::string view_name;
@@ -93,6 +90,8 @@ struct document_view_request {
     std::optional<sort_order> order;
     std::vector<std::string> query_string{};
     std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
+    std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
 
