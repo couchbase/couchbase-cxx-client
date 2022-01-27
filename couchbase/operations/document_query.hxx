@@ -32,12 +32,12 @@ struct query_response {
     struct query_metrics {
         std::chrono::nanoseconds elapsed_time{};
         std::chrono::nanoseconds execution_time{};
-        std::uint64_t result_count;
-        std::uint64_t result_size;
-        std::optional<std::uint64_t> sort_count;
-        std::optional<std::uint64_t> mutation_count;
-        std::optional<std::uint64_t> error_count;
-        std::optional<std::uint64_t> warning_count;
+        std::uint64_t result_count{};
+        std::uint64_t result_size{};
+        std::uint64_t sort_count{};
+        std::uint64_t mutation_count{};
+        std::uint64_t error_count{};
+        std::uint64_t warning_count{};
     };
 
     struct query_problem {

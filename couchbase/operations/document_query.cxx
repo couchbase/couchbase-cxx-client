@@ -226,10 +226,10 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
             meta_metrics.result_size = m->at("resultSize").get_unsigned();
             meta_metrics.elapsed_time = utils::parse_duration(m->at("elapsedTime").get_string());
             meta_metrics.execution_time = utils::parse_duration(m->at("executionTime").get_string());
-            meta_metrics.sort_count = m->template optional<std::uint64_t>("sortCount");
-            meta_metrics.mutation_count = m->template optional<std::uint64_t>("mutationCount");
-            meta_metrics.error_count = m->template optional<std::uint64_t>("errorCount");
-            meta_metrics.warning_count = m->template optional<std::uint64_t>("warningCount");
+            meta_metrics.sort_count = m->template optional<std::uint64_t>("sortCount").value_or(0);
+            meta_metrics.mutation_count = m->template optional<std::uint64_t>("mutationCount").value_or(0);
+            meta_metrics.error_count = m->template optional<std::uint64_t>("errorCount").value_or(0);
+            meta_metrics.warning_count = m->template optional<std::uint64_t>("warningCount").value_or(0);
             response.meta.metrics.emplace(meta_metrics);
         }
 
