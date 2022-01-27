@@ -74,7 +74,6 @@ struct query_request {
     static const inline service_type type = service_type::query;
 
     std::string statement;
-    std::string client_context_id{ uuid::to_string(uuid::random()) };
 
     bool adhoc{ true };
     bool metrics{ false };
@@ -93,6 +92,7 @@ struct query_request {
     std::optional<std::string> bucket_name{};
     std::optional<std::string> scope_name{};
     std::optional<std::string> scope_qualifier{};
+    std::optional<std::string> client_context_id{};
 
     enum class profile_mode {
         off,

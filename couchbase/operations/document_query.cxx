@@ -30,7 +30,9 @@ std::error_code
 query_request::encode_to(query_request::encoded_request_type& encoded, http_context& context)
 {
     ctx_.emplace(context);
-    tao::json::value body{};
+    tao::json::value body{
+        { "client_context_id", encoded.client_context_id },
+    };
     if (adhoc) {
         body["statement"] = statement;
     } else {
@@ -49,7 +51,6 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
             }
         }
     }
-    body["client_context_id"] = client_context_id;
     body["timeout"] =
       fmt::format("{}ms", ((timeout > std::chrono::milliseconds(5'000)) ? (timeout - std::chrono::milliseconds(500)) : timeout).count());
     if (positional_parameters.empty()) {
@@ -159,11 +160,15 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
         prep = false;
     }
     if (ctx_->options.show_queries) {
-        LOG_INFO(
-          "QUERY: client_context_id=\"{}\", prep={}, {}", client_context_id, utils::json::generate(prep), utils::json::generate(stmt));
+        LOG_INFO("QUERY: client_context_id=\"{}\", prep={}, {}",
+                 encoded.client_context_id,
+                 utils::json::generate(prep),
+                 utils::json::generate(stmt));
     } else {
-        LOG_DEBUG(
-          "QUERY: client_context_id=\"{}\", prep={}, {}", client_context_id, utils::json::generate(prep), utils::json::generate(stmt));
+        LOG_DEBUG("QUERY: client_context_id=\"{}\", prep={}, {}",
+                  encoded.client_context_id,
+                  utils::json::generate(prep),
+                  utils::json::generate(stmt));
     }
     if (row_callback) {
         encoded.streaming.emplace(couchbase::io::streaming_settings{
@@ -194,6 +199,11 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
 
         if (const auto* i = payload.find("clientContextID"); i != nullptr) {
             response.meta.client_context_id = i->get_string();
+            if (response.ctx.client_context_id != response.meta.client_context_id) {
+                LOG_WARNING(R"(unexpected clientContextID returned by service: "{}", expected "{}")",
+                            response.meta.client_context_id,
+                            response.ctx.client_context_id);
+            }
         }
         response.meta.status = payload.at("status").get_string();
         if (const auto* s = payload.find("signature"); s != nullptr) {
@@ -246,7 +256,6 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
             }
         }
 
-        Expects(response.meta.client_context_id.empty() || response.meta.client_context_id == client_context_id);
         if (response.meta.status == "success") {
             if (response.prepared) {
                 ctx_->cache.put(statement, response.prepared.value());

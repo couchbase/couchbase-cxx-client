@@ -111,7 +111,6 @@ struct search_request {
 
     static const inline service_type type = service_type::search;
 
-    std::string client_context_id{ uuid::to_string(uuid::random()) };
     std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
 
     std::string index_name;
@@ -143,6 +142,7 @@ struct search_request {
 
     std::map<std::string, couchbase::json_string> raw{};
     std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
+    std::optional<std::string> client_context_id{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
 

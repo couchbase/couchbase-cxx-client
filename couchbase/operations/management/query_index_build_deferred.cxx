@@ -32,7 +32,7 @@ query_index_build_deferred_request::encode_to(encoded_request_type& encoded, htt
           fmt::format(R"(BUILD INDEX ON `{}` ((SELECT RAW name FROM system:indexes WHERE keyspace_id = "{}" AND state = "deferred")))",
                       bucket_name,
                       bucket_name) },
-        { "client_context_id", client_context_id }
+        { "client_context_id", encoded.client_context_id }
     };
     encoded.method = "POST";
     encoded.path = "/query/service";
