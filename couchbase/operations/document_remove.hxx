@@ -45,7 +45,7 @@ struct remove_request {
     protocol::cas cas{ 0 };
     protocol::durability_level durability_level{ protocol::durability_level::none };
     std::optional<std::uint16_t> durability_timeout{};
-    std::chrono::milliseconds timeout{ timeout_defaults::key_value_timeout };
+    std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;

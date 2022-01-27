@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/metrics/logging_meter_options.hxx>
+#include <couchbase/service_type.hxx>
 #include <couchbase/timeout_defaults.hxx>
 #include <couchbase/tracing/threshold_logging_options.hxx>
 
@@ -67,6 +68,8 @@ struct cluster_options {
 
     std::size_t max_http_connections{ 0 };
     std::chrono::milliseconds idle_http_connection_timeout = timeout_defaults::idle_http_connection_timeout;
+
+    [[nodiscard]] std::chrono::milliseconds default_timeout_for(service_type type) const;
 };
 
 } // namespace couchbase

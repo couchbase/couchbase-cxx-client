@@ -42,8 +42,9 @@ struct eventing_get_status_request {
     using error_context_type = error_context::http;
 
     static const inline service_type type = service_type::eventing;
-    std::chrono::milliseconds timeout{ timeout_defaults::management_timeout };
+
     std::optional<std::string> client_context_id{};
+    std::optional<std::chrono::milliseconds> timeout{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 

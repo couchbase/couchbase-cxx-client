@@ -51,8 +51,12 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
             }
         }
     }
-    body["timeout"] =
-      fmt::format("{}ms", ((timeout > std::chrono::milliseconds(5'000)) ? (timeout - std::chrono::milliseconds(500)) : timeout).count());
+    auto timeout_for_service = encoded.timeout;
+    if (timeout_for_service > std::chrono::milliseconds(5'000)) {
+        /* if allocated timeout is large enough, tell query engine, that it is 500ms smaller, to make sure we will always get response */
+        timeout_for_service -= std::chrono::milliseconds(500);
+    }
+    body["timeout"] = fmt::format("{}ms", timeout_for_service.count());
     if (positional_parameters.empty()) {
         for (const auto& [name, value] : named_parameters) {
             Expects(name.empty() == false);
