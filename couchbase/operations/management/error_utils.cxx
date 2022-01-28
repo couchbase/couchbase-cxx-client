@@ -184,4 +184,52 @@ translate_query_error_code(std::uint64_t error, const std::string& message, std:
     return extract_common_query_error_code(error, message);
 }
 
+std::optional<std::error_code>
+translate_analytics_error_code(std::uint64_t error, const std::string& /* message */)
+{
+    switch (error) {
+        case 0:
+            return {};
+
+        case 21002: /* Request timed out and will be cancelled */
+            return error::common_errc::unambiguous_timeout;
+
+        case 24006: /* Link [string] does not exist | Link [string] does not exist */
+            return error::analytics_errc::link_not_found;
+
+        case 23007: /* Job queue is full with [string] jobs */
+            return error::analytics_errc::job_queue_full;
+
+        case 24044: /* Cannot find dataset [string] because there is no dataverse declared, nor an alias with name [string]! */
+        case 24045: /* Cannot find dataset [string] in dataverse [string] nor an alias with name [string]! */
+        case 24025: /* Cannot find dataset with name [string] in dataverse [string] */
+            return error::analytics_errc::dataset_not_found;
+
+        case 24034: /* Cannot find dataverse with name [string] */
+            return error::analytics_errc::dataverse_not_found;
+
+        case 24039: /* A dataverse with this name [string] already exists. */
+            return error::analytics_errc::dataverse_exists;
+
+        case 24040: /* A dataset with name [string] already exists in dataverse [string] */
+            return error::analytics_errc::dataset_exists;
+
+        case 24047: /* Cannot find index with name [string] */
+            return error::common_errc::index_not_found;
+
+        case 24048: /* An index with this name [string] already exists */
+            return error::common_errc::index_exists;
+
+        case 24055: /* Link [string] already exists */
+            return error::analytics_errc::link_exists;
+
+        default:
+            if (error >= 24000 && error < 25000) {
+                return error::analytics_errc::compilation_failure;
+            }
+            break;
+    }
+    return error::common_errc::internal_server_failure;
+}
+
 } // namespace couchbase::operations::management

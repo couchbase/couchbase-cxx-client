@@ -39,4 +39,7 @@ extract_eventing_error_code(const tao::json::value& response);
 std::optional<std::error_code>
 translate_query_error_code(std::uint64_t error, const std::string& message, std::uint64_t reason = 0);
 
+std::optional<std::error_code>
+translate_analytics_error_code(std::uint64_t error, const std::string& message);
+
 } // namespace couchbase::operations::management

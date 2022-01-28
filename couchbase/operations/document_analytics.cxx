@@ -154,64 +154,38 @@ analytics_request::make_response(error_context::analytics&& ctx, const encoded_r
         }
 
         if (response.meta.status != "success") {
-            bool server_timeout = false;
-            bool job_queue_is_full = false;
-            bool dataset_not_found = false;
-            bool dataverse_not_found = false;
-            bool dataset_exists = false;
-            bool dataverse_exists = false;
-            bool link_not_found = false;
-            bool compilation_failure = false;
-
             response.ctx.first_error_code = response.meta.errors.front().code;
             response.ctx.first_error_message = response.meta.errors.front().message;
             switch (response.ctx.first_error_code) {
                 case 21002: /* Request timed out and will be cancelled */
-                    server_timeout = true;
+                    response.ctx.ec = error::common_errc::unambiguous_timeout;
                     break;
                 case 23007: /* Job queue is full with [string] jobs */
-                    job_queue_is_full = true;
+                    response.ctx.ec = error::analytics_errc::job_queue_full;
                     break;
-                case 24044: /* Cannot find dataset [string] because there is no dataverse declared, nor an alias with name [string]!
-                             */
+                case 24044: /* Cannot find dataset [string] because there is no dataverse declared, nor an alias with name [string]! */
                 case 24045: /* Cannot find dataset [string] in dataverse [string] nor an alias with name [string]! */
                 case 24025: /* Cannot find dataset with name [string] in dataverse [string] */
-                    dataset_not_found = true;
+                    response.ctx.ec = error::analytics_errc::dataset_not_found;
                     break;
                 case 24034: /* Cannot find dataverse with name [string] */
-                    dataverse_not_found = true;
+                    response.ctx.ec = error::analytics_errc::dataverse_not_found;
                     break;
                 case 24040: /* A dataset with name [string] already exists in dataverse [string] */
-                    dataset_exists = true;
+                    response.ctx.ec = error::analytics_errc::dataset_exists;
                     break;
                 case 24039: /* A dataverse with this name [string] already exists. */
-                    dataverse_exists = true;
+                    response.ctx.ec = error::analytics_errc::dataverse_exists;
                     break;
                 case 24006: /* Link [string] does not exist | Link [string] does not exist */
-                    link_not_found = true;
+                    response.ctx.ec = error::analytics_errc::link_not_found;
                     break;
                 default:
                     if (response.ctx.first_error_code >= 24000 && response.ctx.first_error_code < 25000) {
-                        compilation_failure = true;
+                        response.ctx.ec = error::analytics_errc::compilation_failure;
                     }
             }
-            if (compilation_failure) {
-                response.ctx.ec = error::analytics_errc::compilation_failure;
-            } else if (link_not_found) {
-                response.ctx.ec = error::analytics_errc::link_not_found;
-            } else if (dataset_not_found) {
-                response.ctx.ec = error::analytics_errc::dataset_not_found;
-            } else if (dataverse_not_found) {
-                response.ctx.ec = error::analytics_errc::dataverse_not_found;
-            } else if (server_timeout) {
-                response.ctx.ec = error::common_errc::unambiguous_timeout;
-            } else if (dataset_exists) {
-                response.ctx.ec = error::analytics_errc::dataset_exists;
-            } else if (dataverse_exists) {
-                response.ctx.ec = error::analytics_errc::dataverse_exists;
-            } else if (job_queue_is_full) {
-                response.ctx.ec = error::analytics_errc::job_queue_full;
-            } else {
+            if (!response.ctx.ec) {
                 response.ctx.ec = error::common_errc::internal_server_failure;
             }
         }
