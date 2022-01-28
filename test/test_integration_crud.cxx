@@ -221,6 +221,15 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
         REQUIRE(resp.ctx.retry_reasons.count(couchbase::io::retry_reason::kv_locked) == 1);
     }
 
+    // but unlock operation is not retried in this case, because it would never have succeeded
+    {
+        couchbase::operations::unlock_request req{ id };
+        req.cas = couchbase::protocol::cas{ cas.value - 1 };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec == couchbase::error::key_value_errc::document_locked);
+        REQUIRE(resp.ctx.retry_reasons.count(couchbase::io::retry_reason::kv_locked) == 0);
+    }
+
     // but mutating the locked key is allowed with known cas
     {
         couchbase::operations::replace_request req{ id, basic_doc_json };
