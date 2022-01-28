@@ -239,6 +239,10 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                 couchbase::operations::query_response::query_problem problem;
                 problem.code = err.at("code").get_unsigned();
                 problem.message = err.at("msg").get_string();
+                if (const auto* reason = err.find("reason"); reason != nullptr && reason->is_object()) {
+                    problem.reason = reason->optional<std::uint64_t>("code");
+                    problem.retry = reason->optional<bool>("retry");
+                }
                 problems.emplace_back(problem);
             }
             response.meta.errors.emplace(problems);
@@ -288,30 +292,18 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                 }
             }
         } else {
-            bool prepared_statement_failure = false;
-            bool index_not_found = false;
-            bool index_failure = false;
-            bool planning_failure = false;
-            bool syntax_error = false;
-            bool server_timeout = false;
-            bool invalid_argument = false;
-            bool cas_mismatch = false;
-            bool dml_failure = false;
-            bool authentication_failure = false;
-            std::optional<std::error_code> common_ec{};
-
             if (response.meta.errors && !response.meta.errors->empty()) {
                 response.ctx.first_error_code = response.meta.errors->front().code;
                 response.ctx.first_error_message = response.meta.errors->front().message;
                 switch (response.ctx.first_error_code) {
                     case 1065: /* IKey: "service.io.request.unrecognized_parameter" */
-                        invalid_argument = true;
+                        response.ctx.ec = error::common_errc::invalid_argument;
                         break;
                     case 1080: /* IKey: "timeout" */
-                        server_timeout = true;
+                        response.ctx.ec = error::common_errc::unambiguous_timeout;
                         break;
                     case 3000: /* IKey: "parse.syntax_error" */
-                        syntax_error = true;
+                        response.ctx.ec = error::common_errc::parsing_failure;
                         break;
                     case 4040: /* IKey: "plan.build_prepared.no_such_name" */
                     case 4050: /* IKey: "plan.build_prepared.unrecognized_prepared" */
@@ -319,59 +311,53 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                     case 4070: /* IKey: "plan.build_prepared.decoding" */
                     case 4080: /* IKey: "plan.build_prepared.name_encoded_plan_mismatch" */
                     case 4090: /* IKey: "plan.build_prepared.name_not_in_encoded_plan" */
-                        prepared_statement_failure = true;
+                        response.ctx.ec = error::query_errc::prepared_statement_failure;
                         break;
                     case 12009: /* IKey: "datastore.couchbase.DML_error" */
                         if (response.ctx.first_error_message.find("CAS mismatch") != std::string::npos) {
-                            cas_mismatch = true;
+                            response.ctx.ec = error::common_errc::cas_mismatch;
                         } else {
-                            dml_failure = true;
+                            switch (response.meta.errors->front().reason.value_or(0)) {
+                                case 12033:
+                                    response.ctx.ec = error::common_errc::cas_mismatch;
+                                    break;
+                                case 17014:
+                                    response.ctx.ec = error::key_value_errc::document_not_found;
+                                    break;
+                                case 17012:
+                                    response.ctx.ec = error::key_value_errc::document_exists;
+                                    break;
+                                default:
+                                    response.ctx.ec = error::query_errc::dml_failure;
+                                    break;
+                            }
                         }
                         break;
 
                     case 12004: /* IKey: "datastore.couchbase.primary_idx_not_found" */
                     case 12016: /* IKey: "datastore.couchbase.index_not_found" */
-                        index_not_found = true;
+                        response.ctx.ec = error::common_errc::index_not_found;
                         break;
                     case 13014: /* IKey: "datastore.couchbase.insufficient_credentials" */
-                        authentication_failure = true;
+                        response.ctx.ec = error::common_errc::authentication_failure;
                         break;
                     default:
                         if ((response.ctx.first_error_code >= 12000 && response.ctx.first_error_code < 13000) ||
                             (response.ctx.first_error_code >= 14000 && response.ctx.first_error_code < 15000)) {
-                            index_failure = true;
+                            response.ctx.ec = error::query_errc::index_failure;
                         } else if (response.ctx.first_error_code >= 4000 && response.ctx.first_error_code < 5000) {
-                            planning_failure = true;
+                            response.ctx.ec = error::query_errc::planning_failure;
                         } else {
-                            common_ec =
+                            auto common_ec =
                               management::extract_common_query_error_code(response.ctx.first_error_code, response.ctx.first_error_message);
+                            if (common_ec) {
+                                response.ctx.ec = common_ec.value();
+                            }
                         }
                         break;
                 }
             }
-            if (syntax_error) {
-                response.ctx.ec = error::common_errc::parsing_failure;
-            } else if (invalid_argument) {
-                response.ctx.ec = error::common_errc::invalid_argument;
-            } else if (server_timeout) {
-                response.ctx.ec = error::common_errc::unambiguous_timeout;
-            } else if (prepared_statement_failure) {
-                response.ctx.ec = error::query_errc::prepared_statement_failure;
-            } else if (index_failure) {
-                response.ctx.ec = error::query_errc::index_failure;
-            } else if (planning_failure) {
-                response.ctx.ec = error::query_errc::planning_failure;
-            } else if (index_not_found) {
-                response.ctx.ec = error::common_errc::index_not_found;
-            } else if (cas_mismatch) {
-                response.ctx.ec = error::common_errc::cas_mismatch;
-            } else if (dml_failure) {
-                response.ctx.ec = error::query_errc::dml_failure;
-            } else if (authentication_failure) {
-                response.ctx.ec = error::common_errc::authentication_failure;
-            } else if (common_ec) {
-                response.ctx.ec = common_ec.value();
-            } else {
+            if (!response.ctx.ec) {
                 LOG_TRACE("Unexpected error returned by query engine: client_context_id=\"{}\", body={}",
                           response.ctx.client_context_id,
                           encoded.body.data());

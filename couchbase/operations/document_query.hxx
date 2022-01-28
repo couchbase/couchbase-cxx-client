@@ -43,6 +43,8 @@ struct query_response {
     struct query_problem {
         std::uint64_t code{};
         std::string message{};
+        std::optional<std::uint64_t> reason{};
+        std::optional<bool> retry{};
     };
 
     struct query_meta_data {
