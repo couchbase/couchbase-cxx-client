@@ -329,6 +329,8 @@ class cluster
                                utils::join_strings(origin_.get_nodes(), ","));
                   }
                   session_manager_->set_configuration(config, origin_.options());
+                  session_->on_configuration_update(
+                    [manager = session_manager_](const topology::configuration& new_config) { manager->update_configuration(new_config); });
               }
               handler(ec);
           });

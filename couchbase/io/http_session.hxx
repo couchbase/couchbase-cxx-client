@@ -214,6 +214,11 @@ class http_session : public std::enable_shared_from_this<http_session>
         return id_;
     }
 
+    [[nodiscard]] const std::string& hostname() const
+    {
+        return hostname_;
+    }
+
     [[nodiscard]] const asio::ip::tcp::endpoint& endpoint()
     {
         std::scoped_lock lock(info_mutex_);

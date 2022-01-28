@@ -51,17 +51,28 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
         meter_ = meter;
     }
 
+    void update_configuration(const topology::configuration& config)
+    {
+        std::scoped_lock config_lock(config_mutex_, sessions_mutex_);
+        config_ = config;
+        for (auto& [type, sessions] : idle_sessions_) {
+            sessions.remove_if(
+              [&cfg = config_](const auto& session) { return session && !cfg.has_node_with_hostname(session->hostname()); });
+        }
+    }
+
     void set_configuration(const topology::configuration& config, const cluster_options& options)
     {
         options_ = options;
-        config_ = config;
         next_index_ = 0;
-        if (config_.nodes.size() > 1) {
+        if (config.nodes.size() > 1) {
             std::random_device rd;
             std::mt19937 gen(rd());
-            std::uniform_int_distribution<std::size_t> dis(0, config_.nodes.size() - 1);
+            std::uniform_int_distribution<std::size_t> dis(0, config.nodes.size() - 1);
             next_index_ = dis(gen);
         }
+        std::scoped_lock lock(config_mutex_);
+        config_ = config;
     }
 
     void export_diag_info(diag::diagnostics_result& res)
@@ -324,6 +335,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
     cluster_options options_{};
 
     topology::configuration config_{};
+    std::mutex config_mutex_{};
     std::map<service_type, std::list<std::shared_ptr<http_session>>> busy_sessions_{};
     std::map<service_type, std::list<std::shared_ptr<http_session>>> idle_sessions_{};
     std::size_t next_index_{ 0 };

@@ -20,6 +20,8 @@
 #include <couchbase/logger/logger.hxx>
 #include <couchbase/service_type_fmt.hxx>
 
+#include <algorithm>
+
 namespace couchbase::topology
 {
 std::uint16_t
@@ -146,6 +148,12 @@ configuration::node::port_or(const std::string& network, service_type type, bool
             return address->second.services_plain.eventing.value_or(default_value);
     }
     return default_value;
+}
+
+bool
+configuration::has_node_with_hostname(const std::string& hostname) const
+{
+    return std::any_of(nodes.begin(), nodes.end(), [&hostname](const auto& n) { return n.hostname == hostname; });
 }
 
 std::string
