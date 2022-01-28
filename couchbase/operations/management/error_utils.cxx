@@ -232,4 +232,34 @@ translate_analytics_error_code(std::uint64_t error, const std::string& /* messag
     return error::common_errc::internal_server_failure;
 }
 
+std::optional<std::error_code>
+translate_search_error_code(std::uint32_t status_code, const std::string& response_body)
+{
+    if (status_code == 400 || status_code == 500) {
+        if (response_body.find("no indexName:") != std::string::npos) {
+            return error::common_errc::index_not_found;
+        }
+        tao::json::value payload{};
+        try {
+            payload = utils::json::parse(response_body);
+        } catch (const tao::pegtl::parse_error&) {
+            return error::common_errc::parsing_failure;
+        }
+
+        const auto& error = payload.at("error").get_string();
+        if (error.find("index not found") != std::string::npos) {
+            return error::common_errc::index_not_found;
+        }
+        if (error.find("index with the same name already exists") != std::string::npos) {
+            return error::common_errc::index_exists;
+        }
+        if (error.find("no planPIndexes for indexName") != std::string::npos) {
+            return error::search_errc::index_not_ready;
+        }
+        if (error.find("num_fts_indexes (active + pending)") != std::string::npos) {
+            return error::common_errc::quota_limited;
+        }
+    }
+    return {};
+}
 } // namespace couchbase::operations::management

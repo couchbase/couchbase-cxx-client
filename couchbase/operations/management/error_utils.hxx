@@ -42,4 +42,7 @@ translate_query_error_code(std::uint64_t error, const std::string& message, std:
 std::optional<std::error_code>
 translate_analytics_error_code(std::uint64_t error, const std::string& message);
 
+std::optional<std::error_code>
+translate_search_error_code(std::uint32_t status_code, const std::string& response_body);
+
 } // namespace couchbase::operations::management
