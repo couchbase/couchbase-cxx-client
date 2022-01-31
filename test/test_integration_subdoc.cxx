@@ -885,3 +885,55 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
         REQUIRE(resp.fields[0].value == "2");
     }
 }
+
+TEST_CASE("integration: subdoc add_unique with non-trivial value", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("MB-25813") };
+
+    static const std::string basic_doc_json = R"(
+{
+    "primitives": [1,2,false,null],
+    "objects": [{"foo":42}]
+}
+)";
+
+    {
+        couchbase::operations::upsert_request req{ id, basic_doc_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+
+    // Add object to list with primitives
+    {
+        couchbase::operations::mutate_in_request req{ id };
+        req.specs.add_spec(couchbase::protocol::subdoc_opcode::array_add_unique, false, false, false, "primitives", R"({"val":"a"})");
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+    {
+        couchbase::operations::lookup_in_request req{ id };
+        req.specs.add_spec(couchbase::protocol::subdoc_opcode::get, false, "primitives");
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.fields.size() == 1);
+        REQUIRE(resp.fields[0].value == R"([1,2,false,null])");
+    }
+
+    // Add primitive list with objects
+    {
+        couchbase::operations::mutate_in_request req{ id };
+        req.specs.add_spec(couchbase::protocol::subdoc_opcode::array_add_unique, false, false, false, "objects", "42");
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+    {
+        couchbase::operations::lookup_in_request req{ id };
+        req.specs.add_spec(couchbase::protocol::subdoc_opcode::get, false, "objects");
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.fields.size() == 1);
+        REQUIRE(resp.fields[0].value == R"([{"foo":42}])");
+    }
+}
