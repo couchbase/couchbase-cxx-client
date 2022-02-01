@@ -806,12 +806,15 @@ TEST_CASE("integration: user groups management", "[integration]")
         }
 
         {
-            couchbase::operations::management::user_get_request req{ user_name };
-            auto resp = test::utils::execute(integration.cluster, req);
+            couchbase::operations::management::user_get_response resp;
+            test::utils::wait_until([&]() {
+                couchbase::operations::management::user_get_request req{ user.username };
+                resp = test::utils::execute(integration.cluster, req);
+                return resp.ctx.ec != couchbase::error::management_errc::user_not_found;
+            });
             REQUIRE_FALSE(resp.ctx.ec);
-
             assert_user_and_metadata(resp.user, expected);
-        };
+        }
 
         {
             couchbase::operations::management::user_get_all_request req{};
