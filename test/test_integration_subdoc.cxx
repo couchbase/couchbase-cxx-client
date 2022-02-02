@@ -78,7 +78,7 @@ assert_single_mutate_error(couchbase::operations::mutate_in_response resp,
                            couchbase::protocol::status expected_status,
                            std::error_code expected_ec)
 {
-    REQUIRE_FALSE(resp.ctx.ec);
+    REQUIRE(resp.ctx.ec == expected_ec);
     REQUIRE(resp.cas.empty());
     REQUIRE(resp.fields.size() == 1);
     REQUIRE(resp.fields[0].path == path);
@@ -662,7 +662,7 @@ TEST_CASE("integration: subdoc multi mutation", "[integration]")
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::replace, false, false, false, "nested.nonexist", "null");
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::replace, false, false, false, "bad..bad", "null");
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.ctx.ec == couchbase::error::key_value_errc::path_not_found);
         REQUIRE(resp.fields.size() == 3);
         REQUIRE(resp.fields[1].status == couchbase::protocol::status::subdoc_path_not_found);
     }
@@ -823,7 +823,7 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
 {
     test::utils::integration_test_guard integration;
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
-    couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("sd_err") };
+    couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("sd_tl_ary") };
     std::string empty_path;
 
     // add number 1 to top-level array (and initialize the document)
@@ -835,7 +835,6 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
     }
-
     {
         couchbase::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
@@ -849,6 +848,13 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
         couchbase::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::array_add_unique, false, false, false, empty_path, value);
         auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec == couchbase::error::key_value_errc::path_exists);
+    }
+    {
+        std::string value{ "42" };
+        couchbase::operations::mutate_in_request req{ id };
+        req.specs.add_spec(couchbase::protocol::subdoc_opcode::array_add_unique, false, false, false, empty_path, value);
+        auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
@@ -856,7 +862,7 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
         couchbase::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.value == "[1]");
+        REQUIRE(resp.value == "[1,42]");
     }
 
     // add number 2 to the end of the array
@@ -872,7 +878,7 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
         couchbase::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.value == "[1,2]");
+        REQUIRE(resp.value == "[1,42,2]");
     }
 
     // check size of the top-level array
@@ -882,6 +888,6 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.fields.size() == 1);
-        REQUIRE(resp.fields[0].value == "2");
+        REQUIRE(resp.fields[0].value == "3");
     }
 }

@@ -49,7 +49,6 @@ lookup_in_request::make_response(error_context::key_value&& ctx, const encoded_r
         response.deleted = true;
     }
     if (!response.ctx.ec) {
-        response.cas = encoded.cas();
         response.fields.resize(specs.entries.size());
         for (size_t i = 0; i < specs.entries.size(); ++i) {
             const auto& req_entry = specs.entries[i];
@@ -66,6 +65,12 @@ lookup_in_request::make_response(error_context::key_value&& ctx, const encoded_r
             response.fields[i].exists =
               res_entry.status == protocol::status::success || res_entry.status == protocol::status::subdoc_success_deleted;
             response.fields[i].value = res_entry.value;
+            if (!response.fields[i].ec && !response.ctx.ec) {
+                response.ctx.ec = response.fields[i].ec;
+            }
+        }
+        if (!response.ctx.ec) {
+            response.cas = encoded.cas();
         }
         std::sort(response.fields.begin(), response.fields.end(), [](const auto& lhs, const auto& rhs) {
             return lhs.original_index < rhs.original_index;
