@@ -69,10 +69,6 @@ mutate_in_request::make_response(error_context::key_value&& ctx, const encoded_r
         response.deleted = true;
     }
     if (!response.ctx.ec) {
-        response.cas = encoded.cas();
-        response.token = encoded.body().token();
-        response.token.partition_id = partition;
-        response.token.bucket_name = response.ctx.id.bucket();
         response.fields.resize(specs.entries.size());
         for (size_t i = 0; i < specs.entries.size(); ++i) {
             const auto& req_entry = specs.entries[i];
@@ -89,8 +85,15 @@ mutate_in_request::make_response(error_context::key_value&& ctx, const encoded_r
                 response.fields[entry.index].ec =
                   protocol::map_status_code(protocol::client_opcode::subdoc_multi_mutation, std::uint16_t(entry.status));
                 response.first_error_index = entry.index;
+                response.ctx.ec = response.fields[entry.index].ec;
                 break;
             }
+        }
+        if (!response.ctx.ec) {
+            response.cas = encoded.cas();
+            response.token = encoded.body().token();
+            response.token.partition_id = partition;
+            response.token.bucket_name = response.ctx.id.bucket();
         }
         std::sort(response.fields.begin(), response.fields.end(), [](const auto& lhs, const auto& rhs) {
             return lhs.original_index < rhs.original_index;
