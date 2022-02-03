@@ -23,6 +23,7 @@
 #include <couchbase/tracing/threshold_logging_options.hxx>
 
 #include <chrono>
+#include <optional>
 #include <string>
 
 namespace couchbase
@@ -68,6 +69,7 @@ struct cluster_options {
 
     std::size_t max_http_connections{ 0 };
     std::chrono::milliseconds idle_http_connection_timeout = timeout_defaults::idle_http_connection_timeout;
+    std::string user_agent_extra{};
 
     [[nodiscard]] std::chrono::milliseconds default_timeout_for(service_type type) const;
 };

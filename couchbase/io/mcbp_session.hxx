@@ -139,7 +139,8 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                 hello_req.body().enable_compression();
             }
             hello_req.opaque(session_->next_opaque());
-            hello_req.body().user_agent(meta::user_agent(session_->client_id_, session_->id_));
+            hello_req.body().user_agent(
+              meta::user_agent_for_mcbp(session_->client_id_, session_->id_, session_->origin_.options().user_agent_extra, 250));
             LOG_DEBUG("{} user_agent={}, requested_features=[{}]",
                       session_->log_prefix_,
                       hello_req.body().user_agent(),
