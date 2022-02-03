@@ -123,7 +123,8 @@ sdk_id()
 {
     static const std::string identifier{ std::string("cxx/") + std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MAJOR) + "." +
                                          std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MINOR) + "." +
-                                         std::to_string(COUCHBASE_CXX_CLIENT_VERSION_PATCH) + "/" + COUCHBASE_CXX_CLIENT_GIT_REVISION };
+                                         std::to_string(COUCHBASE_CXX_CLIENT_VERSION_PATCH) + "/" +
+                                         COUCHBASE_CXX_CLIENT_GIT_REVISION_SHORT };
     return identifier;
 }
 
@@ -135,12 +136,46 @@ os()
 }
 
 std::string
-user_agent(const std::string& client_id, const std::string& session_id)
+user_agent_for_http(const std::string& client_id, const std::string& session_id, const std::string& extra)
+{
+    auto user_agent = fmt::format("{}; client/{}; session/{}; {}", couchbase::meta::sdk_id(), client_id, session_id, couchbase::meta::os());
+    if (!extra.empty()) {
+        user_agent.append("; ").append(extra);
+    }
+    for (auto& ch : user_agent) {
+        if (ch == '\n' || ch == '\r') {
+            ch = ' ';
+        }
+    }
+    return user_agent;
+}
+
+std::string
+user_agent_for_mcbp(const std::string& client_id, const std::string& session_id, const std::string& extra, std::size_t max_length)
 {
     tao::json::value user_agent{
-        { "a", couchbase::meta::sdk_id() },
         { "i", fmt::format("{}/{}", client_id, session_id) },
     };
+    std::string sdk_id = couchbase::meta::sdk_id();
+    if (!extra.empty()) {
+        sdk_id.append(";").append(extra);
+    }
+    if (max_length > 0) {
+        auto current_length = utils::json::generate(user_agent).size();
+        auto allowed_length = max_length - current_length;
+        auto sdk_id_length = utils::json::generate(tao::json::value{ { "a", sdk_id } }).size() -
+                             1 /* object adds "{}" (braces), but eventually we only need "," (comma) */;
+        if (sdk_id_length > allowed_length) {
+            auto escaped_characters = sdk_id_length - sdk_id.size();
+            if (escaped_characters >= allowed_length) {
+                /* user-provided string is too weird, lets just fall back to just core */
+                sdk_id = couchbase::meta::sdk_id();
+            } else {
+                sdk_id.erase(allowed_length - escaped_characters);
+            }
+        }
+    }
+    user_agent["a"] = sdk_id;
     return utils::json::generate(user_agent);
 }
 } // namespace couchbase::meta

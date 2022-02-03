@@ -126,7 +126,7 @@ class http_session : public std::enable_shared_from_this<http_session>
       , credentials_(credentials)
       , hostname_(hostname)
       , service_(service)
-      , user_agent_(fmt::format("{}; client/{}; session/{}; {}", couchbase::meta::sdk_id(), client_id_, id_, couchbase::meta::os()))
+      , user_agent_(meta::user_agent_for_http(client_id_, id_, http_ctx.options.user_agent_extra))
       , info_(client_id_, id_)
       , http_ctx_(std::move(http_ctx))
     {
@@ -151,7 +151,7 @@ class http_session : public std::enable_shared_from_this<http_session>
       , credentials_(credentials)
       , hostname_(hostname)
       , service_(service)
-      , user_agent_(fmt::format("{}; client/{}; session/{}; {}", couchbase::meta::sdk_id(), client_id_, id_, couchbase::meta::os()))
+      , user_agent_(meta::user_agent_for_http(client_id_, id_, http_ctx.options.user_agent_extra))
       , info_(client_id_, id_)
       , http_ctx_(std::move(http_ctx))
     {

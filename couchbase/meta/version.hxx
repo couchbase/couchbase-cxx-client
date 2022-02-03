@@ -38,5 +38,8 @@ const std::string&
 os();
 
 std::string
-user_agent(const std::string& client_id, const std::string& session_id);
+user_agent_for_http(const std::string& client_id, const std::string& session_id, const std::string& extra = "");
+
+std::string
+user_agent_for_mcbp(const std::string& client_id, const std::string& session_id, const std::string& extra = "", std::size_t max_length = 0);
 } // namespace couchbase::meta
