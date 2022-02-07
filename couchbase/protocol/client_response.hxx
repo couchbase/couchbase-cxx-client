@@ -70,8 +70,14 @@ class client_response
   public:
     client_response() = default;
     explicit client_response(io::mcbp_message&& msg)
+      : client_response(std::move(msg), {})
+    {
+    }
+
+    client_response(io::mcbp_message&& msg, const cmd_info& info)
       : header_(msg.header_data())
       , data_(std::move(msg.body))
+      , info_(info)
     {
         verify_header();
         parse_body();
@@ -110,11 +116,6 @@ class client_response
     [[nodiscard]] const Body& body() const
     {
         return body_;
-    }
-
-    cmd_info& info()
-    {
-        return info_;
     }
 
     [[nodiscard]] header_buffer& header()

@@ -17,9 +17,12 @@
 
 #pragma once
 
+#include <string_view>
+
 namespace couchbase::protocol
 {
 struct cmd_info {
+    std::string_view endpoint_address{};
     double server_duration_us{ 0 };
 };
 } // namespace couchbase::protocol

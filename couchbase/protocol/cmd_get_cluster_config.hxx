@@ -23,11 +23,13 @@
 #include <couchbase/protocol/status.hxx>
 #include <couchbase/topology/configuration.hxx>
 
+#include <string_view>
+
 namespace couchbase::protocol
 {
 
 topology::configuration
-parse_config(const std::string& input);
+parse_config(const std::string& input, std::string_view endpoint_address);
 
 class get_cluster_config_response_body
 {
