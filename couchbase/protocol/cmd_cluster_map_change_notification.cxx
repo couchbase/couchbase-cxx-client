@@ -16,7 +16,7 @@
  */
 
 #include <couchbase/protocol/cmd_cluster_map_change_notification.hxx>
-
+#include <couchbase/protocol/cmd_get_cluster_config.hxx>
 #include <couchbase/topology/configuration_json.hxx>
 #include <couchbase/utils/byteswap.hxx>
 #include <couchbase/utils/json.hxx>
@@ -27,9 +27,7 @@
 namespace couchbase::protocol
 {
 bool
-cluster_map_change_notification_request_body::parse(const header_buffer& header,
-                                                    const std::vector<uint8_t>& body,
-                                                    const cmd_info& /* info */)
+cluster_map_change_notification_request_body::parse(const header_buffer& header, const std::vector<uint8_t>& body, const cmd_info& info)
 {
     Expects(header[1] == static_cast<uint8_t>(opcode));
     using offset_type = std::vector<uint8_t>::difference_type;
@@ -46,7 +44,7 @@ cluster_map_change_notification_request_body::parse(const header_buffer& header,
     bucket_.assign(body.begin() + offset, body.begin() + offset + key_size);
     offset += key_size;
     if (body.size() > static_cast<std::size_t>(offset)) {
-        config_ = utils::json::parse(std::string(body.begin() + offset, body.end())).as<topology::configuration>();
+        config_ = parse_config(std::string(body.begin() + offset, body.end()), info.endpoint_address);
     }
     return true;
 }

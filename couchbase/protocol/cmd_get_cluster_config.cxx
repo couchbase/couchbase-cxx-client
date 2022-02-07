@@ -26,9 +26,15 @@
 namespace couchbase::protocol
 {
 topology::configuration
-parse_config(const std::string& input)
+parse_config(const std::string& input, std::string_view endpoint_address)
 {
-    return utils::json::parse(input).as<topology::configuration>();
+    auto config = utils::json::parse(input).as<topology::configuration>();
+    for (auto& node : config.nodes) {
+        if (node.hostname == "$HOST") {
+            node.hostname = endpoint_address;
+        }
+    }
+    return config;
 }
 
 bool
@@ -38,13 +44,13 @@ get_cluster_config_response_body::parse(protocol::status status,
                                         std::uint16_t key_size,
                                         std::uint8_t extras_size,
                                         const std::vector<uint8_t>& body,
-                                        const cmd_info& /* info */)
+                                        const cmd_info& info)
 {
     Expects(header[1] == static_cast<uint8_t>(opcode));
     if (status == protocol::status::success) {
         std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
         try {
-            config_ = parse_config(std::string(body.begin() + offset, body.end()));
+            config_ = parse_config(std::string(body.begin() + offset, body.end()), info.endpoint_address);
         } catch (const tao::pegtl::parse_error& e) {
             LOG_DEBUG("unable to parse cluster configuration as JSON: {}, {}", e.message(), std::string(body.begin(), body.end()));
         }

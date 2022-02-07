@@ -164,9 +164,9 @@ configuration::select_network(const std::string& bootstrap_hostname) const
             if (n.hostname == bootstrap_hostname) {
                 return "default";
             }
-            for (const auto& entry : n.alt) {
-                if (entry.second.hostname == bootstrap_hostname) {
-                    return entry.first;
+            for (const auto& [network, address] : n.alt) {
+                if (address.hostname == bootstrap_hostname) {
+                    return network;
                 }
             }
         }

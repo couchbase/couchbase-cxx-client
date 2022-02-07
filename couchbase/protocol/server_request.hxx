@@ -47,11 +47,17 @@ class server_request
 
   public:
     server_request() = default;
-    explicit server_request(io::mcbp_message& msg)
+    explicit server_request(io::mcbp_message&& msg)
+      : server_request(std::move(msg), {})
     {
-        std::memcpy(header_.data(), &msg.header, sizeof(msg.header));
+    }
+
+    server_request(io::mcbp_message&& msg, const cmd_info& info)
+      : header_(msg.header_data())
+      , data_(std::move(msg.body))
+      , info_(info)
+    {
         verify_header();
-        data_ = std::move(msg.body);
         parse_body();
     }
 
@@ -78,11 +84,6 @@ class server_request
     Body& body()
     {
         return body_;
-    }
-
-    cmd_info& info()
-    {
-        return info_;
     }
 
     [[nodiscard]] header_buffer& header()
