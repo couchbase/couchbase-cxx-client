@@ -36,6 +36,19 @@ wait_for_bucket_created(test::utils::integration_test_guard& integration, const 
     return resp;
 }
 
+template<typename Request>
+auto
+retry_on_error(test::utils::integration_test_guard& integration, Request req, std::error_code error)
+{
+    using response_type = typename Request::response_type;
+    response_type resp;
+    test::utils::wait_until([&]() {
+        resp = test::utils::execute(integration.cluster, req);
+        return resp.ctx.ec != error;
+    });
+    return resp;
+}
+
 TEST_CASE("integration: bucket management", "[integration]")
 {
     test::utils::integration_test_guard integration;
@@ -131,7 +144,7 @@ TEST_CASE("integration: bucket management", "[integration]")
 
         {
             couchbase::operations::management::bucket_get_request req{ bucket_name };
-            auto resp = test::utils::execute(integration.cluster, req);
+            auto resp = retry_on_error(integration, req, {});
             REQUIRE(resp.ctx.ec == couchbase::error::common_errc::bucket_not_found);
         }
 
@@ -418,24 +431,22 @@ TEST_CASE("integration: bucket management", "[integration]")
                 }
             }
 
-            SECTION("majority")
-            {
-                if (integration.number_of_nodes() < 2) {
-                    return;
-                }
-
+            if (integration.number_of_nodes() >= 2) {
+                SECTION("majority")
                 {
-                    bucket_settings.minimum_durability_level = couchbase::protocol::durability_level::majority;
-                    couchbase::operations::management::bucket_create_request req{ bucket_settings };
-                    auto resp = test::utils::execute(integration.cluster, req);
-                    INFO(resp.error_message);
-                    REQUIRE_FALSE(resp.ctx.ec);
-                }
+                    {
+                        bucket_settings.minimum_durability_level = couchbase::protocol::durability_level::majority;
+                        couchbase::operations::management::bucket_create_request req{ bucket_settings };
+                        auto resp = test::utils::execute(integration.cluster, req);
+                        INFO(resp.error_message);
+                        REQUIRE_FALSE(resp.ctx.ec);
+                    }
 
-                {
-                    auto resp = wait_for_bucket_created(integration, bucket_name);
-                    REQUIRE_FALSE(resp.ctx.ec);
-                    REQUIRE(resp.bucket.minimum_durability_level == couchbase::protocol::durability_level::majority);
+                    {
+                        auto resp = wait_for_bucket_created(integration, bucket_name);
+                        REQUIRE_FALSE(resp.ctx.ec);
+                        REQUIRE(resp.bucket.minimum_durability_level == couchbase::protocol::durability_level::majority);
+                    }
                 }
             }
         }
@@ -647,16 +658,9 @@ TEST_CASE("integration: user groups management", "[integration]")
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
-        REQUIRE(wait_for_group_created(integration, group_name_1));
-
         {
-            couchbase::operations::management::group_get_response resp;
-            bool operation_completed = test::utils::wait_until([&integration, &group_name_1, &resp]() {
-                couchbase::operations::management::group_get_request req{ group_name_1 };
-                resp = test::utils::execute(integration.cluster, req);
-                return resp.ctx.ec != couchbase::error::management_errc::group_not_found;
-            });
-            REQUIRE(operation_completed);
+            couchbase::operations::management::group_get_request req{ group_name_1 };
+            auto resp = retry_on_error(integration, req, couchbase::error::management_errc::group_not_found);
             REQUIRE_FALSE(resp.ctx.ec);
             REQUIRE(resp.group.name == group.name);
             REQUIRE(resp.group.description == group.description);
@@ -671,7 +675,14 @@ TEST_CASE("integration: user groups management", "[integration]")
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
-        REQUIRE(wait_for_group_created(integration, group_name_1));
+        {
+            auto updated = test::utils::wait_until([&]() {
+                couchbase::operations::management::group_get_request req{ group_name_1 };
+                auto resp = test::utils::execute(integration.cluster, req);
+                return !resp.ctx.ec && resp.group.description == group.description;
+            });
+            REQUIRE(updated);
+        }
 
         {
             group.name = group_name_2;
@@ -741,8 +752,6 @@ TEST_CASE("integration: user groups management", "[integration]")
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
-        REQUIRE(wait_for_group_created(integration, group_name));
-
         couchbase::operations::management::rbac::user user{ user_name };
         user.display_name = "display_name";
         user.password = "password";
@@ -752,15 +761,9 @@ TEST_CASE("integration: user groups management", "[integration]")
         user.groups = { group_name };
 
         {
-            couchbase::operations::management::user_upsert_response resp;
-            test::utils::wait_until([&integration, &user, &resp]() {
-                couchbase::operations::management::user_upsert_request req{};
-                req.user = user;
-                resp = test::utils::execute(integration.cluster, req);
-                return std::all_of(resp.errors.begin(), resp.errors.end(), [](const auto& message) {
-                    return message.find("Groups do not exist") == std::string::npos;
-                });
-            });
+            couchbase::operations::management::user_upsert_request req{};
+            req.user = user;
+            auto resp = retry_on_error(integration, req, couchbase::error::common_errc::invalid_argument);
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
@@ -789,9 +792,8 @@ TEST_CASE("integration: user groups management", "[integration]")
 
         {
             couchbase::operations::management::user_get_request req{ user_name };
-            auto resp = test::utils::execute(integration.cluster, req);
+            auto resp = retry_on_error(integration, req, couchbase::error::management_errc::user_not_found);
             REQUIRE_FALSE(resp.ctx.ec);
-
             assert_user_and_metadata(resp.user, expected);
         }
 
@@ -810,7 +812,7 @@ TEST_CASE("integration: user groups management", "[integration]")
             test::utils::wait_until([&]() {
                 couchbase::operations::management::user_get_request req{ user.username };
                 resp = test::utils::execute(integration.cluster, req);
-                return resp.ctx.ec != couchbase::error::management_errc::user_not_found;
+                return !resp.ctx.ec && resp.user.display_name == user.display_name;
             });
             REQUIRE_FALSE(resp.ctx.ec);
             assert_user_and_metadata(resp.user, expected);
@@ -916,12 +918,8 @@ TEST_CASE("integration: user management collections roles", "[integration]")
     }
 
     {
-        couchbase::operations::management::user_get_response resp;
-        test::utils::wait_until([&integration, &user_name, &resp]() {
-            couchbase::operations::management::user_get_request req{ user_name };
-            resp = test::utils::execute(integration.cluster, req);
-            return resp.ctx.ec != couchbase::error::management_errc::user_not_found;
-        });
+        couchbase::operations::management::user_get_request req{ user_name };
+        auto resp = retry_on_error(integration, req, couchbase::error::management_errc::user_not_found);
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.user.roles.size() == 1);
         REQUIRE(resp.user.roles[0].name == "data_reader");
