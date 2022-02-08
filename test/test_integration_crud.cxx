@@ -747,3 +747,25 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
         REQUIRE(resp.fields[0].status == couchbase::protocol::status::subdoc_path_exists);
     }
 }
+
+TEST_CASE("integration: upsert is cancelled immediately if the cluster was closed", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
+
+    {
+        couchbase::operations::upsert_request req{ id, basic_doc_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+
+    test::utils::close_cluster(integration.cluster);
+
+    {
+        couchbase::operations::upsert_request req{ id, basic_doc_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec == couchbase::error::network_errc::cluster_closed);
+    }
+}
