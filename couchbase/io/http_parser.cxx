@@ -84,6 +84,29 @@ http_parser::http_parser()
     ::http_parser_init(&state_->parser_, HTTP_RESPONSE);
 }
 
+http_parser::http_parser(http_parser&& other) noexcept
+  : response(std::move(other.response))
+  , header_field(std::move(other.header_field))
+  , complete(other.complete)
+  , state_(std::move(other.state_))
+{
+    if (state_) {
+        state_->parser_.data = this;
+    }
+}
+
+http_parser&
+http_parser::operator=(http_parser&& other) noexcept
+{
+    response = std::move(other.response);
+    header_field = std::move(other.header_field);
+    complete = other.complete;
+    state_ = std::move(other.state_);
+    if (state_) {
+        state_->parser_.data = this;
+    }
+    return *this;
+}
 void
 http_parser::reset()
 {
@@ -107,12 +130,12 @@ http_parser::error_message() const
     return "unknown error: " + std::to_string(state_->parser_.http_errno);
 }
 
-http_parser::status
+http_parser::feeding_result
 http_parser::feed(const char* data, size_t data_len)
 {
     if (std::size_t bytes_parsed = ::http_parser_execute(&state_->parser_, &state_->settings_, data, data_len); bytes_parsed != data_len) {
-        return status::failure;
+        return { true, complete, error_message() };
     }
-    return status::ok;
+    return { false, complete };
 }
 } // namespace couchbase::io

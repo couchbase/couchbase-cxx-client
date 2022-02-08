@@ -47,15 +47,26 @@ struct http_request {
 
 class http_response_body
 {
+    struct storage {
+        std::string data_{};
+        std::error_code ec_{};
+        std::size_t number_of_rows_{};
+    };
+
   public:
+    http_response_body()
+      : storage_(std::make_shared<storage>())
+    {
+    }
+
     void use_json_streaming(streaming_settings&& settings)
     {
         lexer_ = std::make_unique<utils::json::streaming_lexer>(settings.pointer_expression, settings.depth);
         lexer_->on_row(std::move(settings.row_handler));
-        lexer_->on_complete([this](std::error_code ec, std::size_t number_of_rows, std::string&& meta) {
-            ec_ = ec;
-            number_of_rows_ = number_of_rows;
-            data_ = std::move(meta);
+        lexer_->on_complete([storage = storage_](std::error_code ec, std::size_t number_of_rows, std::string&& meta) {
+            storage->ec_ = ec;
+            storage->number_of_rows_ = number_of_rows;
+            storage->data_ = std::move(meta);
         });
     }
 
@@ -64,29 +75,27 @@ class http_response_body
         if (lexer_) {
             lexer_->feed(chunk);
         } else {
-            data_.append(chunk);
+            storage_->data_.append(chunk);
         }
     }
 
     [[nodiscard]] const std::string& data() const
     {
-        return data_;
+        return storage_->data_;
     }
 
     [[nodiscard]] const std::size_t& number_of_rows() const
     {
-        return number_of_rows_;
+        return storage_->number_of_rows_;
     }
 
     [[nodiscard]] const std::error_code& ec() const
     {
-        return ec_;
+        return storage_->ec_;
     }
 
   private:
-    std::string data_{};
-    std::error_code ec_{};
-    std::size_t number_of_rows_{};
+    std::shared_ptr<storage> storage_{};
     std::unique_ptr<utils::json::streaming_lexer> lexer_{};
 };
 

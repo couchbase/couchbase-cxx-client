@@ -27,19 +27,27 @@ namespace couchbase::io
 struct http_parser_state;
 
 struct http_parser {
-    enum class status { ok, failure };
+    struct feeding_result {
+        bool failure{ false };
+        bool complete{ false };
+        std::string error{};
+    };
 
     http_response response;
     std::string header_field;
     bool complete{ false };
 
     http_parser();
+    http_parser(http_parser&& other) noexcept;
+    http_parser& operator=(http_parser&& other) noexcept;
+    http_parser(const http_parser& other) = delete;
+    http_parser& operator=(const http_parser& other) = delete;
 
     void reset();
 
     std::string error_message() const;
 
-    status feed(const char* data, size_t data_len);
+    feeding_result feed(const char* data, size_t data_len);
 
   private:
     std::shared_ptr<http_parser_state> state_{};
