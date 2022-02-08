@@ -54,7 +54,11 @@ class cluster
     template<typename Handler>
     void open(const couchbase::origin& origin, Handler&& handler)
     {
+        if (stopped_) {
+            return handler(error::network_errc::cluster_closed);
+        }
         if (origin.get_nodes().empty()) {
+            stopped_ = true;
             work_.reset();
             return handler(error::common_errc::invalid_argument);
         }
@@ -81,9 +85,10 @@ class cluster
     template<typename Handler>
     void close(Handler&& handler)
     {
-        if (!work_.owns_work()) {
+        if (stopped_) {
             return handler();
         }
+        stopped_ = true;
         asio::post(asio::bind_executor(ctx_, [this, handler = std::forward<Handler>(handler)]() mutable {
             if (session_) {
                 session_->stop(io::retry_reason::do_not_retry);
@@ -101,6 +106,9 @@ class cluster
     template<typename Handler>
     void open_bucket(const std::string& bucket_name, Handler&& handler)
     {
+        if (stopped_) {
+            return handler(error::network_errc::cluster_closed);
+        }
         std::shared_ptr<bucket> b{};
         {
             std::scoped_lock lock(buckets_mutex_);
@@ -133,6 +141,9 @@ class cluster
     template<typename Handler>
     void close_bucket(const std::string& bucket_name, Handler&& handler)
     {
+        if (stopped_) {
+            return handler(error::network_errc::cluster_closed);
+        }
         std::shared_ptr<bucket> b{};
         {
             std::scoped_lock lock(buckets_mutex_);
@@ -153,14 +164,14 @@ class cluster
              typename std::enable_if_t<!std::is_same_v<typename Request::encoded_request_type, io::http_request>, int> = 0>
     void execute(Request request, Handler&& handler)
     {
+        using response_type = typename Request::encoded_response_type;
+        if (stopped_) {
+            return handler(request.make_response({ request.id, error::network_errc::cluster_closed }, response_type{}));
+        }
         if (auto bucket = find_bucket_by_name(request.id.bucket()); bucket != nullptr) {
             return bucket->execute(request, std::forward<Handler>(handler));
         }
-
-        error_context::key_value ctx{ request.id };
-        ctx.ec = error::common_errc::bucket_not_found;
-        using response_type = typename Request::encoded_response_type;
-        return handler(request.make_response(std::move(ctx), response_type{}));
+        return handler(request.make_response({ request.id, error::common_errc::bucket_not_found }, response_type{}));
     }
 
     template<class Request,
@@ -168,6 +179,10 @@ class cluster
              typename std::enable_if_t<std::is_same_v<typename Request::encoded_request_type, io::http_request>, int> = 0>
     void execute(Request request, Handler&& handler)
     {
+        using response_type = typename Request::encoded_response_type;
+        if (stopped_) {
+            return handler(request.make_response({ error::network_errc::cluster_closed }, response_type{}));
+        }
         return session_manager_->execute(request, std::forward<Handler>(handler), origin_.credentials());
     }
 
@@ -176,6 +191,9 @@ class cluster
     {
         if (!report_id) {
             report_id = std::make_optional(uuid::to_string(uuid::random()));
+        }
+        if (stopped_) {
+            return handler({ report_id.value(), couchbase::meta::sdk_id() });
         }
         asio::post(asio::bind_executor(ctx_, [this, report_id, handler = std::forward<Handler>(handler)]() mutable {
             diag::diagnostics_result res{ report_id.value(), couchbase::meta::sdk_id() };
@@ -349,5 +367,6 @@ class cluster
     couchbase::origin origin_{};
     std::shared_ptr<tracing::request_tracer> tracer_{ nullptr };
     metrics::meter* meter_{ nullptr };
+    std::atomic_bool stopped_{ false };
 };
 } // namespace couchbase

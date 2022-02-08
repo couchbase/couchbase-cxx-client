@@ -73,6 +73,9 @@ cluster::ping(std::optional<std::string> report_id,
     if (!report_id) {
         report_id = std::make_optional(uuid::to_string(uuid::random()));
     }
+    if (stopped_) {
+        return handler({ report_id.value(), couchbase::meta::sdk_id() });
+    }
     if (services.empty()) {
         services = { service_type::key_value, service_type::view, service_type::query, service_type::search, service_type::analytics };
     }
