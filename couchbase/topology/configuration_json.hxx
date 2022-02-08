@@ -115,18 +115,18 @@ struct traits<couchbase::topology::configuration> {
                             }
                             if (const auto& np = nodes[n.index]; np.is_object()) {
                                 const auto& o = np.get_object();
-                                const auto& this_node = o.find("thisNode");
-                                if (this_node != o.end() && this_node->second.get_boolean()) {
+
+                                if (const auto& this_node = o.find("thisNode"); this_node != o.end() && this_node->second.get_boolean()) {
                                     n.this_node = true;
                                 }
                                 const auto& p = o.at("ports");
-                                std::optional<std::int64_t> https_views = p.template optional<std::int64_t>("httpsCAPI");
-                                if (https_views && https_views.value() > 0 &&
+                                if (auto https_views = p.template optional<std::int64_t>("httpsCAPI");
+                                    https_views && https_views.value() > 0 &&
                                     https_views.value() < std::numeric_limits<std::uint16_t>::max()) {
                                     n.services_tls.views = static_cast<std::uint16_t>(https_views.value());
                                 }
-                                auto https_mgmt = p.template optional<std::int64_t>("httpsMgmt");
-                                if (https_mgmt && https_mgmt.value() > 0 &&
+                                if (auto https_mgmt = p.template optional<std::int64_t>("httpsMgmt");
+                                    https_mgmt && https_mgmt.value() > 0 &&
                                     https_mgmt.value() < std::numeric_limits<std::uint16_t>::max()) {
                                     n.services_tls.management = static_cast<std::uint16_t>(https_mgmt.value());
                                 }
@@ -152,16 +152,17 @@ struct traits<couchbase::topology::configuration> {
                         n.this_node = true;
                     }
                     const auto& p = o.at("ports");
-                    std::optional<std::int64_t> direct = p.template optional<std::int64_t>("direct");
-                    if (direct && direct.value() > 0 && direct.value() < std::numeric_limits<std::uint16_t>::max()) {
+                    if (auto direct = p.template optional<std::int64_t>("direct");
+                        direct && direct.value() > 0 && direct.value() < std::numeric_limits<std::uint16_t>::max()) {
                         n.services_plain.key_value = static_cast<std::uint16_t>(direct.value());
                     }
-                    std::optional<std::int64_t> https_views = p.template optional<std::int64_t>("httpsCAPI");
-                    if (https_views && https_views.value() > 0 && https_views.value() < std::numeric_limits<std::uint16_t>::max()) {
+                    if (auto https_views = p.template optional<std::int64_t>("httpsCAPI");
+                        https_views && https_views.value() > 0 && https_views.value() < std::numeric_limits<std::uint16_t>::max()) {
                         n.services_tls.views = static_cast<std::uint16_t>(https_views.value());
                     }
-                    auto https_mgmt = p.template optional<std::int64_t>("httpsMgmt");
-                    if (https_mgmt && https_mgmt.value() > 0 && https_mgmt.value() < std::numeric_limits<std::uint16_t>::max()) {
+
+                    if (auto https_mgmt = p.template optional<std::int64_t>("httpsMgmt");
+                        https_mgmt && https_mgmt.value() > 0 && https_mgmt.value() < std::numeric_limits<std::uint16_t>::max()) {
                         n.services_tls.management = static_cast<std::uint16_t>(https_mgmt.value());
                     }
                     const auto& h = o.at("hostname").get_string();
@@ -178,101 +179,76 @@ struct traits<couchbase::topology::configuration> {
                 }
             }
         }
-        {
-            const auto m = v.find("uuid");
-            if (m != nullptr) {
-                result.uuid = m->get_string();
-            }
+        if (const auto m = v.find("uuid"); m != nullptr) {
+            result.uuid = m->get_string();
         }
-        {
-            const auto m = v.find("collectionsManifestUid");
-            if (m != nullptr) {
-                result.collections_manifest_uid = std::stoull(m->get_string(), nullptr, 16);
-            }
+        if (const auto m = v.find("collectionsManifestUid"); m != nullptr) {
+            result.collections_manifest_uid = std::stoull(m->get_string(), nullptr, 16);
         }
-        {
-            const auto m = v.find("name");
-            if (m != nullptr) {
-                result.bucket = m->get_string();
-            }
+        if (const auto m = v.find("name"); m != nullptr) {
+            result.bucket = m->get_string();
         }
-        {
-            const auto m = v.find("vBucketServerMap");
-            if (m != nullptr) {
-                const auto& o = m->get_object();
-                {
-                    const auto f = o.find("numReplicas");
-                    if (f != o.end()) {
-                        result.num_replicas = f->second.template as<std::uint32_t>();
+
+        if (const auto m = v.find("vBucketServerMap"); m != nullptr) {
+            const auto& o = m->get_object();
+            if (const auto f = o.find("numReplicas"); f != o.end()) {
+                result.num_replicas = f->second.template as<std::uint32_t>();
+            }
+            if (const auto f = o.find("vBucketMap"); f != o.end()) {
+                const auto& vb = f->second.get_array();
+                couchbase::topology::configuration::vbucket_map vbmap;
+                vbmap.resize(vb.size());
+                for (size_t i = 0; i < vb.size(); i++) {
+                    const auto& p = vb[i].get_array();
+                    vbmap[i].resize(p.size());
+                    for (size_t n = 0; n < p.size(); n++) {
+                        vbmap[i][n] = p[n].template as<std::int16_t>();
                     }
                 }
-                {
-                    const auto f = o.find("vBucketMap");
-                    if (f != o.end()) {
-                        const auto& vb = f->second.get_array();
-                        couchbase::topology::configuration::vbucket_map vbmap;
-                        vbmap.resize(vb.size());
-                        for (size_t i = 0; i < vb.size(); i++) {
-                            const auto& p = vb[i].get_array();
-                            vbmap[i].resize(p.size());
-                            for (size_t n = 0; n < p.size(); n++) {
-                                vbmap[i][n] = p[n].template as<std::int16_t>();
-                            }
-                        }
-                        result.vbmap = vbmap;
-                    }
-                }
+                result.vbmap = vbmap;
             }
         }
-        {
-            const auto m = v.find("bucketCapabilities");
-            if (m != nullptr && m->is_array()) {
-                for (const auto& entry : m->get_array()) {
-                    const auto& name = entry.get_string();
-                    if (name == "couchapi") {
-                        result.bucket_capabilities.insert(couchbase::bucket_capability::couchapi);
-                    } else if (name == "collections") {
-                        result.bucket_capabilities.insert(couchbase::bucket_capability::collections);
-                    } else if (name == "durableWrite") {
-                        result.bucket_capabilities.insert(couchbase::bucket_capability::durable_write);
-                    } else if (name == "tombstonedUserXAttrs") {
-                        result.bucket_capabilities.insert(couchbase::bucket_capability::tombstoned_user_xattrs);
-                    } else if (name == "dcp") {
-                        result.bucket_capabilities.insert(couchbase::bucket_capability::dcp);
-                    } else if (name == "cbhello") {
-                        result.bucket_capabilities.insert(couchbase::bucket_capability::cbhello);
-                    } else if (name == "touch") {
-                        result.bucket_capabilities.insert(couchbase::bucket_capability::touch);
-                    } else if (name == "cccp") {
-                        result.bucket_capabilities.insert(couchbase::bucket_capability::cccp);
-                    } else if (name == "xdcrCheckpointing") {
-                        result.bucket_capabilities.insert(couchbase::bucket_capability::xdcr_checkpointing);
-                    } else if (name == "nodesExt") {
-                        result.bucket_capabilities.insert(couchbase::bucket_capability::nodes_ext);
-                    } else if (name == "xattr") {
-                        result.bucket_capabilities.insert(couchbase::bucket_capability::xattr);
-                    }
+        if (const auto m = v.find("bucketCapabilities"); m != nullptr && m->is_array()) {
+            for (const auto& entry : m->get_array()) {
+                const auto& name = entry.get_string();
+                if (name == "couchapi") {
+                    result.bucket_capabilities.insert(couchbase::bucket_capability::couchapi);
+                } else if (name == "collections") {
+                    result.bucket_capabilities.insert(couchbase::bucket_capability::collections);
+                } else if (name == "durableWrite") {
+                    result.bucket_capabilities.insert(couchbase::bucket_capability::durable_write);
+                } else if (name == "tombstonedUserXAttrs") {
+                    result.bucket_capabilities.insert(couchbase::bucket_capability::tombstoned_user_xattrs);
+                } else if (name == "dcp") {
+                    result.bucket_capabilities.insert(couchbase::bucket_capability::dcp);
+                } else if (name == "cbhello") {
+                    result.bucket_capabilities.insert(couchbase::bucket_capability::cbhello);
+                } else if (name == "touch") {
+                    result.bucket_capabilities.insert(couchbase::bucket_capability::touch);
+                } else if (name == "cccp") {
+                    result.bucket_capabilities.insert(couchbase::bucket_capability::cccp);
+                } else if (name == "xdcrCheckpointing") {
+                    result.bucket_capabilities.insert(couchbase::bucket_capability::xdcr_checkpointing);
+                } else if (name == "nodesExt") {
+                    result.bucket_capabilities.insert(couchbase::bucket_capability::nodes_ext);
+                } else if (name == "xattr") {
+                    result.bucket_capabilities.insert(couchbase::bucket_capability::xattr);
                 }
             }
         }
-        {
-            const auto m = v.find("clusterCapabilities");
-            if (m != nullptr && m->is_object()) {
-                const auto nc = m->find("n1ql");
-                if (nc != nullptr && nc->is_array()) {
-                    for (const auto& entry : nc->get_array()) {
-                        const auto& name = entry.get_string();
-                        if (name == "costBasedOptimizer") {
-                            result.cluster_capabilities.insert(couchbase::cluster_capability::n1ql_cost_based_optimizer);
-                        } else if (name == "indexAdvisor") {
-                            result.cluster_capabilities.insert(couchbase::cluster_capability::n1ql_index_advisor);
-                        } else if (name == "javaScriptFunctions") {
-                            result.cluster_capabilities.insert(couchbase::cluster_capability::n1ql_javascript_functions);
-                        } else if (name == "inlineFunctions") {
-                            result.cluster_capabilities.insert(couchbase::cluster_capability::n1ql_inline_functions);
-                        } else if (name == "enhancedPreparedStatements") {
-                            result.cluster_capabilities.insert(couchbase::cluster_capability::n1ql_enhanced_prepared_statements);
-                        }
+        if (const auto m = v.find("clusterCapabilities"); m != nullptr && m->is_object()) {
+            if (const auto nc = m->find("n1ql"); nc != nullptr && nc->is_array()) {
+                for (const auto& entry : nc->get_array()) {
+                    if (const auto& name = entry.get_string(); name == "costBasedOptimizer") {
+                        result.cluster_capabilities.insert(couchbase::cluster_capability::n1ql_cost_based_optimizer);
+                    } else if (name == "indexAdvisor") {
+                        result.cluster_capabilities.insert(couchbase::cluster_capability::n1ql_index_advisor);
+                    } else if (name == "javaScriptFunctions") {
+                        result.cluster_capabilities.insert(couchbase::cluster_capability::n1ql_javascript_functions);
+                    } else if (name == "inlineFunctions") {
+                        result.cluster_capabilities.insert(couchbase::cluster_capability::n1ql_inline_functions);
+                    } else if (name == "enhancedPreparedStatements") {
+                        result.cluster_capabilities.insert(couchbase::cluster_capability::n1ql_enhanced_prepared_statements);
                     }
                 }
             }
