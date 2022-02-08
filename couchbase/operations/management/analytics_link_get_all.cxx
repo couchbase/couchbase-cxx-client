@@ -80,30 +80,28 @@ analytics_link_get_all_request::make_response(error_context::http&& ctx, const e
             auto msg = encoded.body.data().substr(colon + 1);
             response.errors.emplace_back(analytics_link_get_all_response::problem{ code, msg });
         }
-        if (payload) {
-            if (payload.is_object()) {
-                response.status = payload.at("status").get_string();
-                if (response.status != "success") {
-                    if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
-                        for (const auto& error : errors->get_array()) {
-                            analytics_link_get_all_response::problem err{
-                                error.at("code").as<std::uint32_t>(),
-                                error.at("msg").get_string(),
-                            };
-                            response.errors.emplace_back(err);
-                        }
+        if (payload.is_object()) {
+            response.status = payload.optional<std::string>("status").value_or("unknown");
+            if (response.status != "success") {
+                if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
+                    for (const auto& error : errors->get_array()) {
+                        analytics_link_get_all_response::problem err{
+                            error.at("code").as<std::uint32_t>(),
+                            error.at("msg").get_string(),
+                        };
+                        response.errors.emplace_back(err);
                     }
                 }
-            } else if (payload.is_array()) {
-                for (const auto& link : payload.get_array()) {
-                    const std::string& type_ = link.at("type").get_string();
-                    if (type_ == "couchbase") {
-                        response.couchbase.emplace_back(link.as<analytics_link::couchbase_remote>());
-                    } else if (type_ == "s3") {
-                        response.s3.emplace_back(link.as<analytics_link::s3_external>());
-                    } else if (type_ == "azureblob") {
-                        response.azure_blob.emplace_back(link.as<analytics_link::azure_blob_external>());
-                    }
+            }
+        } else if (payload.is_array()) {
+            for (const auto& link : payload.get_array()) {
+                const std::string& type_ = link.at("type").get_string();
+                if (type_ == "couchbase") {
+                    response.couchbase.emplace_back(link.as<analytics_link::couchbase_remote>());
+                } else if (type_ == "s3") {
+                    response.s3.emplace_back(link.as<analytics_link::s3_external>());
+                } else if (type_ == "azureblob") {
+                    response.azure_blob.emplace_back(link.as<analytics_link::azure_blob_external>());
                 }
             }
         }

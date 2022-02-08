@@ -49,7 +49,7 @@ analytics_link_disconnect_request::make_response(error_context::http&& ctx, cons
             response.ctx.ec = error::common_errc::parsing_failure;
             return response;
         }
-        response.status = payload.at("status").get_string();
+        response.status = payload.optional<std::string>("status").value_or("unknown");
 
         if (response.status != "success") {
             bool link_not_found = false;

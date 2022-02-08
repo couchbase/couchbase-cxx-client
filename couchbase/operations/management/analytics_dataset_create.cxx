@@ -58,13 +58,12 @@ analytics_dataset_create_request::make_response(error_context::http&& ctx, const
             response.ctx.ec = error::common_errc::parsing_failure;
             return response;
         }
-        response.status = payload.at("status").get_string();
-
+        response.status = payload.optional<std::string>("status").value_or("unknown");
         if (response.status != "success") {
             bool dataset_exists = false;
             bool link_not_found = false;
 
-            if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
+            if (const auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
                 for (const auto& error : errors->get_array()) {
                     analytics_dataset_create_response::problem err{
                         error.at("code").as<std::uint32_t>(),
