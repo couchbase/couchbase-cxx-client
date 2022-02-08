@@ -242,11 +242,11 @@ class http_session : public std::enable_shared_from_this<http_session>
         idle_timer_.cancel();
 
         {
-            std::scoped_lock lock(command_handlers_mutex_);
-            for (const auto& handler : command_handlers_) {
-                handler(error::common_errc::ambiguous_timeout, {});
+            std::scoped_lock lock(current_response_mutex_);
+            auto ctx = std::move(current_response_);
+            if (ctx.handler) {
+                ctx.handler(error::common_errc::ambiguous_timeout, {});
             }
-            command_handlers_.clear();
         }
 
         if (on_stop_handler_) {
@@ -301,6 +301,14 @@ class http_session : public std::enable_shared_from_this<http_session>
         if (stopped_) {
             return;
         }
+        {
+            response_context ctx{ std::forward<Handler>(handler) };
+            if (request.streaming) {
+                ctx.parser.response.body.use_json_streaming(std::move(request.streaming.value()));
+            }
+            std::scoped_lock lock(current_response_mutex_);
+            std::swap(current_response_, ctx);
+        }
         if (request.headers["connection"] == "keep-alive") {
             keep_alive_ = true;
         }
@@ -316,13 +324,6 @@ class http_session : public std::enable_shared_from_this<http_session>
         }
         write("\r\n");
         write(request.body);
-        {
-            std::scoped_lock lock(command_handlers_mutex_);
-            command_handlers_.emplace_back(std::forward<Handler>(handler));
-        }
-        if (request.streaming) {
-            parser_.response.body.use_json_streaming(std::move(request.streaming.value()));
-        }
         flush();
     }
 
@@ -343,6 +344,11 @@ class http_session : public std::enable_shared_from_this<http_session>
     }
 
   private:
+    struct response_context {
+        cxx_function::unique_function<void(std::error_code, io::http_response&&) const> handler{};
+        http_parser parser{};
+    };
+
     void on_resolve(std::error_code ec, const asio::ip::tcp::resolver::results_type& endpoints)
     {
         if (stopped_) {
@@ -433,31 +439,26 @@ class http_session : public std::enable_shared_from_this<http_session>
                   return self->stop();
               }
 
-              switch (self->parser_.feed(reinterpret_cast<const char*>(self->input_buffer_.data()), bytes_transferred)) {
-                  case http_parser::status::ok:
-                      if (self->parser_.complete) {
-                          if (!self->command_handlers_.empty()) {
-                              decltype(self->command_handlers_)::value_type handler{};
-                              {
-                                  std::scoped_lock lock(self->command_handlers_mutex_);
-                                  handler = std::move(self->command_handlers_.front());
-                                  self->command_handlers_.pop_front();
-                              }
-                              if (self->parser_.response.must_close_connection()) {
-                                  self->keep_alive_ = false;
-                              }
-                              handler({}, std::move(self->parser_.response));
-                          }
-                          self->parser_.reset();
-                          self->reading_ = false;
-                          return;
-                      }
-                      self->reading_ = false;
-                      return self->do_read();
-                  case http_parser::status::failure:
-                      LOG_ERROR("{} failed to parse HTTP response: {}", self->info_.log_prefix(), self->parser_.error_message());
-                      return self->stop();
+              http_parser::feeding_result res{};
+              {
+                  std::scoped_lock lock(self->current_response_mutex_);
+                  res = self->current_response_.parser.feed(reinterpret_cast<const char*>(self->input_buffer_.data()), bytes_transferred);
               }
+              if (res.failure) {
+                  return self->stop();
+              }
+              if (res.complete) {
+                  std::scoped_lock lock(self->current_response_mutex_);
+                  auto ctx = std::move(self->current_response_);
+                  if (ctx.parser.response.must_close_connection()) {
+                      self->keep_alive_ = false;
+                  }
+                  ctx.handler({}, std::move(ctx.parser.response));
+                  self->reading_ = false;
+                  return;
+              }
+              self->reading_ = false;
+              return self->do_read();
           });
     }
 
@@ -522,10 +523,9 @@ class http_session : public std::enable_shared_from_this<http_session>
 
     std::function<void()> on_stop_handler_{ nullptr };
 
-    std::list<cxx_function::unique_function<void(std::error_code, io::http_response&&) const>> command_handlers_{};
-    std::mutex command_handlers_mutex_{};
+    response_context current_response_{};
+    std::mutex current_response_mutex_{};
 
-    http_parser parser_{};
     std::array<std::uint8_t, 16384> input_buffer_{};
     std::vector<std::vector<std::uint8_t>> output_buffer_{};
     std::vector<std::vector<std::uint8_t>> writing_buffer_{};
