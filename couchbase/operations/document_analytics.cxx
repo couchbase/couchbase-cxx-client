@@ -113,7 +113,7 @@ analytics_request::make_response(error_context::analytics&& ctx, const encoded_r
                         response.meta.client_context_id,
                         response.ctx.client_context_id);
         }
-        response.meta.status = payload.at("status").get_string();
+        response.meta.status = payload.optional<std::string>("status").value_or("unknown");
 
         if (const auto* s = payload.find("signature"); s != nullptr) {
             response.meta.signature = couchbase::utils::json::generate(*s);

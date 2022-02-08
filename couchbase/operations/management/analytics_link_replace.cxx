@@ -47,8 +47,8 @@ make_analytics_link_replace_response(error_context::http&& ctx, const io::http_r
             auto msg = encoded.body.data().substr(colon + 1);
             response.errors.emplace_back(management::analytics_link_replace_response::problem{ code, msg });
         }
-        if (payload) {
-            response.status = payload.at("status").get_string();
+        if (payload.is_object()) {
+            response.status = payload.optional<std::string>("status").value_or("unknown");
             if (response.status != "success") {
                 if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
                     for (const auto& error : errors->get_array()) {
