@@ -437,6 +437,11 @@ enum class network_errc {
 
     /// Configuration is not available for some reason
     configuration_not_available = 1005,
+
+    /**
+     * The cluster object has been explicitly closed, no requests allowed
+     */
+    cluster_closed = 1006,
 };
 
 enum class streaming_json_lexer_errc {
@@ -793,6 +798,8 @@ struct network_error_category : std::error_category {
                 return "protocol_error";
             case network_errc::configuration_not_available:
                 return "configuration_not_available";
+            case network_errc::cluster_closed:
+                return "cluster_closed";
         }
         return "FIXME: unknown error code in network category (recompile with newer library)";
     }
