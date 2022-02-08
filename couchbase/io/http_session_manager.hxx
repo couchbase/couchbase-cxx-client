@@ -106,7 +106,6 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
                 }
                 std::uint16_t port = node.port_or(options_.network, type, options_.enable_tls, 0);
                 if (port != 0) {
-                    std::scoped_lock lock(sessions_mutex_);
                     std::shared_ptr<http_session> session;
                     session = options_.enable_tls ? std::make_shared<http_session>(type,
                                                                                    client_id_,
@@ -125,10 +124,14 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
                                                                                    http_context{ config_, options_, query_cache_ });
                     session->start();
                     session->on_stop([type, id = session->id(), self = this->shared_from_this()]() {
+                        std::scoped_lock lock(self->sessions_mutex_);
                         self->busy_sessions_[type].remove_if([&id](const auto& s) { return !s || s->id() == id; });
                         self->idle_sessions_[type].remove_if([&id](const auto& s) { return !s || s->id() == id; });
                     });
-                    busy_sessions_[type].push_back(session);
+                    {
+                        std::scoped_lock lock(sessions_mutex_);
+                        busy_sessions_[type].push_back(session);
+                    }
                     operations::http_noop_request request{};
                     request.type = type;
                     auto cmd = std::make_shared<operations::http_command<operations::http_noop_request>>(
@@ -206,8 +209,8 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
         }
         if (!session->is_stopped()) {
             session->set_idle(options_.idle_http_connection_timeout);
-            std::scoped_lock lock(sessions_mutex_);
             LOG_DEBUG("{} put HTTP session back to idle connections", session->log_prefix());
+            std::scoped_lock lock(sessions_mutex_);
             idle_sessions_[type].push_back(session);
             busy_sessions_[type].remove_if([id = session->id()](const auto& s) -> bool { return !s || s->id() == id; });
         }
