@@ -158,6 +158,7 @@ jobs:
         timeout-minutes: 15
         env:
           CB_SANITIZER: tsan
+          TSAN_OPTIONS: second_deadlock_stack=1
           TEST_SERVER_VERSION: 7.0.3
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
           COUCHBASE_CXX_CLIENT_LOG_LEVEL: trace
