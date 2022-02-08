@@ -29,7 +29,7 @@ namespace couchbase::protocol
 {
 
 topology::configuration
-parse_config(const std::string& input, std::string_view endpoint_address);
+parse_config(const std::string& input, std::string_view endpoint_address, uint16_t endpoint_port);
 
 class get_cluster_config_response_body
 {

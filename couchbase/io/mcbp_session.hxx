@@ -333,7 +333,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                             }
                         } break;
                         case protocol::client_opcode::get_cluster_config: {
-                            protocol::cmd_info info{ session_->endpoint_address_ };
+                            protocol::cmd_info info{ session_->endpoint_address_, session_->endpoint_.port() };
                             protocol::client_response<protocol::get_cluster_config_response_body> resp(std::move(msg), info);
                             if (resp.status() == protocol::status::success) {
                                 session_->update_configuration(resp.body().config());
@@ -371,7 +371,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                     Expects(protocol::is_valid_server_request_opcode(msg.header.opcode));
                     switch (static_cast<protocol::server_opcode>(msg.header.opcode)) {
                         case protocol::server_opcode::cluster_map_change_notification: {
-                            protocol::cmd_info info{ session_->endpoint_address_ };
+                            protocol::cmd_info info{ session_->endpoint_address_, session_->endpoint_.port() };
                             protocol::server_request<protocol::cluster_map_change_notification_request_body> req(std::move(msg), info);
                             std::optional<topology::configuration> config = req.body().config();
                             if (session_ && config.has_value()) {
@@ -447,7 +447,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                     Expects(protocol::is_valid_client_opcode(msg.header.opcode));
                     switch (auto opcode = protocol::client_opcode(msg.header.opcode)) {
                         case protocol::client_opcode::get_cluster_config: {
-                            protocol::cmd_info info{ session_->endpoint_address_ };
+                            protocol::cmd_info info{ session_->endpoint_address_, session_->endpoint_.port() };
                             protocol::client_response<protocol::get_cluster_config_response_body> resp(std::move(msg), info);
                             if (resp.status() == protocol::status::success) {
                                 if (session_) {
@@ -1004,7 +1004,8 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
 
             std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
             if (ntohl(msg.header.bodylen) - offset > 0) {
-                auto config = protocol::parse_config(std::string(msg.body.begin() + offset, msg.body.end()), endpoint_address_);
+                auto config =
+                  protocol::parse_config(std::string(msg.body.begin() + offset, msg.body.end()), endpoint_address_, endpoint_.port());
                 LOG_DEBUG("{} received not_my_vbucket status for {}, opaque={} with config rev={} in the payload",
                           log_prefix_,
                           protocol::client_opcode(msg.header.opcode),

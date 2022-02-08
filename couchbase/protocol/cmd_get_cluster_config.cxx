@@ -26,7 +26,7 @@
 namespace couchbase::protocol
 {
 topology::configuration
-parse_config(const std::string& input, std::string_view endpoint_address)
+parse_config(const std::string& input, std::string_view endpoint_address, uint16_t endpoint_port)
 {
     auto config = utils::json::parse(input).as<topology::configuration>();
     for (auto& node : config.nodes) {
@@ -34,6 +34,29 @@ parse_config(const std::string& input, std::string_view endpoint_address)
             node.hostname = endpoint_address;
         }
     }
+
+    // workaround for servers which don't specify this_node
+    {
+        bool has_this_node = false;
+        for (auto& node : config.nodes) {
+            if (node.this_node) {
+                has_this_node = true;
+                break;
+            }
+        }
+
+        if (!has_this_node) {
+            for (auto& node : config.nodes) {
+                auto kv_port = node.port_or(couchbase::service_type::key_value, false, 0);
+                auto kv_tls_port = node.port_or(couchbase::service_type::key_value, true, 0);
+                if (node.hostname == endpoint_address && (kv_port == endpoint_port || kv_tls_port == endpoint_port)) {
+                    node.this_node = true;
+                    break;
+                }
+            }
+        }
+    }
+
     return config;
 }
 
@@ -50,7 +73,7 @@ get_cluster_config_response_body::parse(protocol::status status,
     if (status == protocol::status::success) {
         std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
         try {
-            config_ = parse_config(std::string(body.begin() + offset, body.end()), info.endpoint_address);
+            config_ = parse_config(std::string(body.begin() + offset, body.end()), info.endpoint_address, info.endpoint_port);
         } catch (const tao::pegtl::parse_error& e) {
             LOG_DEBUG("unable to parse cluster configuration as JSON: {}, {}", e.message(), std::string(body.begin(), body.end()));
         }
