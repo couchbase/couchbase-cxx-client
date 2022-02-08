@@ -23,6 +23,7 @@ namespace couchbase::protocol
 {
 struct cmd_info {
     std::string_view endpoint_address{};
+    uint16_t endpoint_port{};
     double server_duration_us{ 0 };
 };
 } // namespace couchbase::protocol
