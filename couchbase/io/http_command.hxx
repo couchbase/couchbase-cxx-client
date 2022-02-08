@@ -48,13 +48,13 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
                  Request req,
                  std::shared_ptr<tracing::request_tracer> tracer,
                  metrics::meter* meter,
-                 std::chrono::milliseconds timeout)
+                 std::chrono::milliseconds default_timeout)
       : deadline(ctx)
       , retry_backoff(ctx)
       , request(req)
       , tracer_(std::move(tracer))
       , meter_(meter)
-      , timeout_(timeout)
+      , timeout_(request.timeout.value_or(default_timeout))
       , client_context_id_(request.client_context_id.value_or(uuid::to_string(uuid::random())))
     {
     }
