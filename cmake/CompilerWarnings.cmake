@@ -8,6 +8,7 @@ function(set_project_warnings project_name)
   set(MSVC_WARNINGS
       /W4 # Baseline reasonable warnings
       /wd4242 # 'identifier': conversion from 'type1' to 'type1', possible loss of data
+      /wd4244 # 'identifier': conversion from 'type1' to 'type1', possible loss of data
       /w14254 # 'operator': conversion from 'type1:field_bits' to 'type2:field_bits', possible loss of data
       /w14263 # 'function': member function does not override any base class virtual member function
       /w14265 # 'classname': class has virtual functions, but destructor is not virtual instances of this class may not
