@@ -133,7 +133,6 @@ PBKDF2(const std::string& pass, std::string_view salt, unsigned int iterationCou
     }
 
     DWORD pcbResult = 0;
-    DWORD cbHashObject = 0;
 
     // calculate the length of the hash
     DWORD cbHash = 0;
