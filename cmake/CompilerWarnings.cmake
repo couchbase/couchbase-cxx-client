@@ -22,7 +22,7 @@ function(set_project_warnings project_name)
       /w14547 # 'operator': operator before comma has no effect; expected operator with side-effect
       /w14549 # 'operator': operator before comma has no effect; did you intend 'operator'?
       /w14555 # expression has no effect; expected expression with side- effect
-      /w14619 # pragma warning: there is no warning number 'number'
+      /wd4619 # pragma warning: there is no warning number 'number'
       /w14640 # Enable warning on thread un-safe static member initialization
       /w14826 # Conversion from 'type1' to 'type_2' is sign-extended. This may cause unexpected runtime behavior.
       /w14905 # wide string literal cast to 'LPSTR'
