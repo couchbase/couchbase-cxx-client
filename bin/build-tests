@@ -73,7 +73,11 @@ when /msan|memory/
   CB_CMAKE_EXTRAS << "-DENABLE_SANITIZER_MEMORY=ON"
 end
 
-BUILD_DIR = File.join(PROJECT_ROOT, "cmake-build-tests-#{CB_SANITIZER}")
+BUILD_DIR = if CB_SANITIZER.empty?
+              File.join(PROJECT_ROOT, "cmake-build-tests")
+            else
+              File.join(PROJECT_ROOT, "cmake-build-tests-#{CB_SANITIZER}")
+            end
 
 FileUtils.rm_rf(BUILD_DIR, verbose: true)
 FileUtils.mkdir_p(BUILD_DIR, verbose: true)
