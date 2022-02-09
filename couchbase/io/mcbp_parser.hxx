@@ -19,6 +19,8 @@
 
 #include <couchbase/io/mcbp_message.hxx>
 
+#include <iterator>
+
 namespace couchbase::io
 {
 struct mcbp_parser {

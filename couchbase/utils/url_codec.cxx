@@ -218,10 +218,7 @@ form_encode(Ti first, Ti last, To& out)
                    (c >= 0x60 && c <= 0x7A)) {
             out.insert(out.end(), static_cast<char>(c));
         } else {
-            char buf[3] = { 0 };
-            out.insert(out.end(), '%');
-            sprintf(buf, "%02X", c);
-            out.insert(out.end(), &buf[0], &buf[0] + 2);
+            out.append(fmt::format("%{:x}", static_cast<std::uint8_t>(*first)));
         }
     }
 }
