@@ -305,14 +305,14 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
                 return { node.hostname_for(options_.network), port };
             }
         }
-        return { "", 0 };
+        return { "", std::uint16_t(0U) };
     }
 
     std::pair<std::string, std::uint16_t> split_host_port(const std::string& address)
     {
         auto last_colon = address.find_last_of(':');
         if (last_colon == std::string::npos || address.size() - 1 == last_colon) {
-            return { "", 0 };
+            return { "", std::uint16_t(0U) };
         }
         auto hostname = address.substr(0, last_colon);
         auto port = gsl::narrow_cast<uint16_t>(std::stoul(address.substr(last_colon + 1)));
@@ -325,7 +325,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
         if (std::none_of(config_.nodes.begin(), config_.nodes.end(), [this, type, &h = hostname, &p = port](const auto& node) {
                 return node.hostname == h && node.port_or(options_.network, type, options_.enable_tls, 0) == p;
             })) {
-            return { "", 0 };
+            return { "", std::uint16_t(0U) };
         }
         return { hostname, port };
     }
