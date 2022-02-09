@@ -32,7 +32,6 @@
 #include <couchbase/timeout_defaults.hxx>
 
 #include <asio.hpp>
-#include <cxx_function.hpp>
 #include <list>
 #include <memory>
 #include <utility>
@@ -345,7 +344,7 @@ class http_session : public std::enable_shared_from_this<http_session>
 
   private:
     struct response_context {
-        cxx_function::unique_function<void(std::error_code, io::http_response&&) const> handler{};
+        std::function<void(std::error_code, io::http_response&&) const> handler{};
         http_parser parser{};
     };
 

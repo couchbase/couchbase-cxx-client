@@ -25,7 +25,7 @@
 namespace couchbase::operations
 {
 
-using http_command_handler = cxx_function::unique_function<void(std::error_code, io::http_response&&)>;
+using http_command_handler = std::function<void(std::error_code, io::http_response&&)>;
 
 template<typename Request>
 struct http_command : public std::enable_shared_from_this<http_command<Request>> {

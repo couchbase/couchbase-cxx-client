@@ -54,7 +54,6 @@
 
 #include <asio.hpp>
 #include <cstring>
-#include <cxx_function.hpp>
 #include <spdlog/fmt/bin_to_hex.h>
 #include <utility>
 
@@ -1252,7 +1251,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     std::unique_ptr<message_handler> handler_;
     std::function<void(std::error_code, const topology::configuration&)> bootstrap_handler_{};
     std::mutex command_handlers_mutex_{};
-    std::map<uint32_t, cxx_function::unique_function<void(std::error_code, retry_reason, io::mcbp_message&&) const>> command_handlers_{};
+    std::map<uint32_t, std::function<void(std::error_code, retry_reason, io::mcbp_message&&) const>> command_handlers_{};
     std::vector<std::function<void(const topology::configuration&)>> config_listeners_{};
     std::function<void(io::retry_reason)> on_stop_handler_{};
 
