@@ -133,7 +133,7 @@ ScramShaBackend::addAttribute(std::ostream& out, char key, const std::string& va
         case 'i': // iterator count
             // validate that it is an integer value
             try {
-                std::stoi(value);
+                (void)std::stoi(value);
             } catch (...) {
                 throw std::invalid_argument("ScramShaBackend::addAttribute: Iteration count must be a numeric value");
             }

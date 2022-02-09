@@ -37,13 +37,13 @@ mcbp_parser::next(mcbp_message& msg)
         return result::need_data;
     }
     std::memcpy(&msg.header, buf.data(), header_size);
-    std::uint32_t body_size = ntohl(msg.header.bodylen);
+    std::uint32_t body_size = utils::byte_swap(msg.header.bodylen);
     if (body_size > 0 && buf.size() - header_size < body_size) {
         return result::need_data;
     }
     msg.body.clear();
     msg.body.reserve(body_size);
-    std::uint32_t key_size = ntohs(msg.header.keylen);
+    std::uint32_t key_size = utils::byte_swap(msg.header.keylen);
     std::uint32_t prefix_size = std::uint32_t(msg.header.extlen) + key_size;
     if (msg.header.magic == static_cast<uint8_t>(protocol::magic::alt_client_response)) {
         std::uint8_t framing_extras_size = msg.header.keylen & 0xfU;
@@ -62,7 +62,7 @@ mcbp_parser::next(mcbp_message& msg)
             std::copy(uncompressed.begin(), uncompressed.end(), std::back_inserter(msg.body));
             use_raw_value = false;
             // patch header with new body size
-            msg.header.bodylen = htonl(static_cast<std::uint32_t>(prefix_size + uncompressed.size()));
+            msg.header.bodylen = utils::byte_swap(static_cast<std::uint32_t>(prefix_size + uncompressed.size()));
         }
     }
     if (use_raw_value) {

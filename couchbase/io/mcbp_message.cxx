@@ -26,7 +26,7 @@ namespace couchbase::io
 std::uint16_t
 binary_header::status() const
 {
-    return htons(specific);
+    return utils::byte_swap(specific);
 }
 
 protocol::header_buffer

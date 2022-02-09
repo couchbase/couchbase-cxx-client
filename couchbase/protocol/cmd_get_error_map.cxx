@@ -52,7 +52,7 @@ get_error_map_response_body::parse(protocol::status status,
 void
 get_error_map_request_body::fill_body()
 {
-    std::uint16_t version = htons(version_);
+    std::uint16_t version = utils::byte_swap(version_);
     value_.resize(sizeof(version));
     std::memcpy(value_.data(), &version, sizeof(version));
 }

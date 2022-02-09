@@ -100,7 +100,7 @@ class server_request
 
         uint32_t field = 0;
         memcpy(&field, header_.data() + 8, sizeof(field));
-        body_size_ = ntohl(field);
+        body_size_ = utils::byte_swap(field);
         data_.resize(body_size_);
 
         memcpy(&opaque_, header_.data() + 12, sizeof(opaque_));

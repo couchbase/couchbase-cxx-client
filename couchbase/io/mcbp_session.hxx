@@ -481,7 +481,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                         case protocol::client_opcode::subdoc_multi_lookup:
                         case protocol::client_opcode::subdoc_multi_mutation: {
                             std::uint32_t opaque = msg.header.opaque;
-                            std::uint16_t status = ntohs(msg.header.specific);
+                            std::uint16_t status = utils::byte_swap(msg.header.specific);
                             session_->command_handlers_mutex_.lock();
                             auto handler = session_->command_handlers_.find(opaque);
                             if (handler != session_->command_handlers_.end() && handler->second) {
@@ -996,14 +996,14 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             auto magic = protocol::magic(msg.header.magic);
             uint8_t extras_size = msg.header.extlen;
             uint8_t framing_extras_size = 0;
-            uint16_t key_size = htons(msg.header.keylen);
+            uint16_t key_size = utils::byte_swap(msg.header.keylen);
             if (magic == protocol::magic::alt_client_response) {
                 framing_extras_size = static_cast<std::uint8_t>(msg.header.keylen >> 8U);
                 key_size = msg.header.keylen & 0xffU;
             }
 
             std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
-            if (ntohl(msg.header.bodylen) - offset > 0) {
+            if (utils::byte_swap(msg.header.bodylen) - offset > 0) {
                 auto config =
                   protocol::parse_config(std::string(msg.body.begin() + offset, msg.body.end()), endpoint_address_, endpoint_.port());
                 LOG_DEBUG("{} received not_my_vbucket status for {}, opaque={} with config rev={} in the payload",
@@ -1175,7 +1175,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                             ec.message());
                   return self->stop(retry_reason::socket_closed_while_in_flight);
               }
-              self->parser_.feed(self->input_buffer_.data(), self->input_buffer_.data() + ssize_t(bytes_transferred));
+              self->parser_.feed(self->input_buffer_.data(), self->input_buffer_.data() + std::ptrdiff_t(bytes_transferred));
 
               for (;;) {
                   mcbp_message msg{};

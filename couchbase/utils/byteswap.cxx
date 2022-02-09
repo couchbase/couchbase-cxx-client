@@ -15,35 +15,31 @@
  *   limitations under the License.
  */
 
-#pragma once
-
-#include <cstdint>
+#include <couchbase/utils/byteswap.hxx>
 
 namespace couchbase::utils
 {
-static constexpr std::uint16_t
-byte_swap(std::uint16_t value)
+constexpr std::uint64_t
+byte_swap(std::uint64_t val)
 {
-    auto hi = std::uint16_t(value << 8U);
-    auto lo = std::uint16_t(value >> 8U);
-    return hi | lo;
+    std::uint64_t ret = 0U;
+    for (std::size_t i = 0; i < sizeof(std::uint64_t); ++i) {
+        ret <<= 8U;
+        ret |= val & 0xffU;
+        val >>= 8U;
+    }
+    return ret;
 }
 
-static constexpr std::uint32_t
-byte_swap(std::uint32_t value)
+constexpr std::uint32_t
+byte_swap_32(std::uint32_t val)
 {
-    std::uint32_t byte0 = value & 0x000000ffU;
-    std::uint32_t byte1 = value & 0x0000ff00U;
-    std::uint32_t byte2 = value & 0x00ff0000U;
-    std::uint32_t byte3 = value & 0xff000000U;
-    return (byte0 << 24) | (byte1 << 8) | (byte2 >> 8) | (byte3 >> 24);
-}
-
-static constexpr std::uint64_t
-byte_swap(std::uint64_t value)
-{
-    std::uint64_t hi = byte_swap(std::uint32_t(value));
-    std::uint32_t lo = byte_swap(std::uint32_t(value >> 32));
-    return (hi << 32) | lo;
+    std::uint64_t ret = 0U;
+    for (std::size_t i = 0; i < sizeof(std::uint64_t); ++i) {
+        ret <<= 8U;
+        ret |= val & 0xffU;
+        val >>= 8U;
+    }
+    return ret;
 }
 } // namespace couchbase::utils

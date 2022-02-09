@@ -39,7 +39,7 @@ get_response_body::parse(protocol::status status,
         std::vector<uint8_t>::difference_type offset = framing_extras_size;
         if (extras_size == 4) {
             memcpy(&flags_, body.data() + offset, sizeof(flags_));
-            flags_ = ntohl(flags_);
+            flags_ = utils::byte_swap(flags_);
             offset += 4;
         } else {
             offset += extras_size;

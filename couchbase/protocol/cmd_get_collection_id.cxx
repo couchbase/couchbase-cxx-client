@@ -38,11 +38,11 @@ get_collection_id_response_body::parse(protocol::status status,
         std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size;
 
         std::memcpy(&manifest_uid_, body.data() + offset, sizeof(manifest_uid_));
-        manifest_uid_ = utils::byte_swap_64(manifest_uid_);
+        manifest_uid_ = utils::byte_swap(manifest_uid_);
         offset += 8;
 
         std::memcpy(&collection_uid_, body.data() + offset, sizeof(collection_uid_));
-        collection_uid_ = ntohl(collection_uid_);
+        collection_uid_ = utils::byte_swap(collection_uid_);
         return true;
     }
     return false;

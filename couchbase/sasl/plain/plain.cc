@@ -25,10 +25,14 @@ ClientBackend::start()
     auto usernm = usernameCallback();
     auto passwd = passwordCallback();
 
-    buffer.push_back(0);
-    std::copy(usernm.begin(), usernm.end(), std::back_inserter(buffer));
-    buffer.push_back(0);
-    std::copy(passwd.begin(), passwd.end(), std::back_inserter(buffer));
+    buffer.resize(usernm.size() + passwd.size() + 2);
+    auto ptr = buffer.begin();
+    *ptr = '\0';
+    ++ptr;
+    std::copy(usernm.begin(), usernm.end(), ptr);
+    *ptr = '\0';
+    ++ptr;
+    std::copy(passwd.begin(), passwd.end(), ptr);
 
     return { error::OK, { buffer.data(), buffer.size() } };
 }

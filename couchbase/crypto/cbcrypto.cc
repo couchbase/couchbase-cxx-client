@@ -245,8 +245,7 @@ AES_256_cbc(bool encrypt, std::string_view key, std::string_view iv, std::string
 
     // For some reason the API will modify the input vector.. just create a
     // copy.. it's small anyway
-    std::string civ;
-    std::copy(iv.begin(), iv.end(), std::back_inserter(civ));
+    std::string civ(iv.begin(), iv.end());
 
     std::string ret;
     ret.resize(data.size() + iv.size());
@@ -287,13 +286,13 @@ AES_256_cbc(bool encrypt, std::string_view key, std::string_view iv, std::string
 }
 
 std::string
-encrypt(const couchbase::crypto::Cipher cipher, std::string_view key, std::string_view iv, std::string_view data)
+encrypt(const couchbase::crypto::Cipher /* cipher */, std::string_view key, std::string_view iv, std::string_view data)
 {
     return AES_256_cbc(true, key, iv, data);
 }
 
 std::string
-decrypt(const couchbase::crypto::Cipher cipher, std::string_view key, std::string_view iv, std::string_view data)
+decrypt(const couchbase::crypto::Cipher /* cipher */, std::string_view key, std::string_view iv, std::string_view data)
 {
     return AES_256_cbc(false, key, iv, data);
 }

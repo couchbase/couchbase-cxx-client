@@ -40,12 +40,12 @@ exists_response_body::parse(protocol::status status,
         offset_type offset = framing_extras_size + extras_size + key_size;
 
         memcpy(&partition_id_, body.data() + offset, sizeof(partition_id_));
-        partition_id_ = ntohs(partition_id_);
+        partition_id_ = utils::byte_swap(partition_id_);
         offset += static_cast<offset_type>(sizeof(partition_id_));
 
         std::uint16_t key_len{};
         memcpy(&key_len, body.data() + offset, sizeof(key_len));
-        key_len = ntohs(key_len);
+        key_len = utils::byte_swap(key_len);
         offset += static_cast<offset_type>(sizeof(key_len));
 
         key_.resize(key_len);
@@ -56,7 +56,7 @@ exists_response_body::parse(protocol::status status,
         offset++;
 
         memcpy(&cas_, body.data() + offset, sizeof(cas_));
-        cas_ = utils::byte_swap_64(cas_);
+        cas_ = utils::byte_swap(cas_);
     }
     return false;
 }
@@ -79,11 +79,11 @@ exists_request_body::fill_body()
 
     value_.resize(2 * sizeof(std::uint16_t) + key_.size());
 
-    uint16_t field = htons(partition_id_);
+    uint16_t field = utils::byte_swap(partition_id_);
     memcpy(value_.data() + offset, &field, sizeof(field));
     offset += sizeof(field);
 
-    field = htons(static_cast<uint16_t>(key_.size()));
+    field = utils::byte_swap(static_cast<uint16_t>(key_.size()));
     memcpy(value_.data() + offset, &field, sizeof(field));
     offset += sizeof(field);
 

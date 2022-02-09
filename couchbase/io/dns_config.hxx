@@ -20,9 +20,11 @@
 #include <couchbase/timeout_defaults.hxx>
 
 #include <asio/ip/address.hpp>
+
+#include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <string>
-#include <unistd.h>
 
 namespace couchbase::io::dns
 {
@@ -74,7 +76,7 @@ class dns_config
 
     void load_resolv_conf(const char* conf_path)
     {
-        if (access(conf_path, R_OK) == 0) {
+        if (std::error_code ec{}; std::filesystem::exists(conf_path, ec) && !ec) {
             std::ifstream conf(conf_path);
             while (conf.good()) {
                 std::string line;

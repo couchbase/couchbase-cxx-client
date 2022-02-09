@@ -17,8 +17,10 @@
 
 #include <couchbase/document_id.hxx>
 
-#include <algorithm>
 #include <fmt/core.h>
+
+#include <algorithm>
+#include <stdexcept>
 
 namespace couchbase
 {

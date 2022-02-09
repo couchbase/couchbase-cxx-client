@@ -161,7 +161,7 @@ class dns_client
                                                  self->deadline_.cancel();
                                                  return handler({ ec3 });
                                              }
-                                             self->recv_buf_size_ = ntohs(self->recv_buf_size_);
+                                             self->recv_buf_size_ = utils::byte_swap(self->recv_buf_size_);
                                              self->recv_buf_.resize(self->recv_buf_size_);
                                              asio::async_read(self->tcp_,
                                                               asio::buffer(self->recv_buf_),
