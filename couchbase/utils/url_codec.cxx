@@ -20,6 +20,7 @@
 #include <fmt/core.h>
 
 #include <cctype>
+#include <climits>
 
 namespace couchbase::utils::string_codec
 {
@@ -159,8 +160,9 @@ url_decode(Ti first, Ti last, To out, std::size_t& nout)
                 return false;
             }
 
-            unsigned octet = 0;
-            if (sscanf(nextbuf, "%2X", &octet) != 1) {
+            char* end = nullptr;
+            unsigned long octet = std::strtoul(nextbuf, &end, 16);
+            if (octet == ULONG_MAX || (octet == 0 && end == nextbuf)) {
                 return false;
             }
 
