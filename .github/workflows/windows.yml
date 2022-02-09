@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Install build environment
         run: |
-          choco install openssl
+          choco install --no-progress openssl
       - uses: actions/checkout@v2
         with:
           submodules: recursive
@@ -24,7 +24,7 @@ jobs:
     steps:
       - name: Install build environment
         run: |
-          choco install openssl
+          choco install --no-progress openssl
       - uses: actions/checkout@v2
         with:
           submodules: recursive
