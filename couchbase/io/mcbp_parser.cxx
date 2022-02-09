@@ -50,7 +50,7 @@ mcbp_parser::next(mcbp_message& msg)
         key_size = (msg.header.keylen & 0xf0U) >> 8U;
         prefix_size = std::uint32_t(framing_extras_size) + std::uint32_t(msg.header.extlen) + key_size;
     }
-    std::copy(buf.begin() + header_size, buf.begin() + header_size + prefix_size, std::back_inserter(msg.body));
+    std::copy(buf.begin() + header_size, buf.begin() + header_size + prefix_size, std::back_insert_iterator(msg.body));
 
     bool is_compressed = (msg.header.datatype & static_cast<uint8_t>(protocol::datatype::snappy)) != 0;
     bool use_raw_value = true;
@@ -59,14 +59,14 @@ mcbp_parser::next(mcbp_message& msg)
         size_t offset = header_size + prefix_size;
         bool success = snappy::Uncompress(reinterpret_cast<const char*>(buf.data() + offset), body_size - prefix_size, &uncompressed);
         if (success) {
-            std::copy(uncompressed.begin(), uncompressed.end(), std::back_inserter(msg.body));
+            std::copy(uncompressed.begin(), uncompressed.end(), std::back_insert_iterator(msg.body));
             use_raw_value = false;
             // patch header with new body size
             msg.header.bodylen = utils::byte_swap(static_cast<std::uint32_t>(prefix_size + uncompressed.size()));
         }
     }
     if (use_raw_value) {
-        std::copy(buf.begin() + header_size + prefix_size, buf.begin() + header_size + body_size, std::back_inserter(msg.body));
+        std::copy(buf.begin() + header_size + prefix_size, buf.begin() + header_size + body_size, std::back_insert_iterator(msg.body));
     }
     buf.erase(buf.begin(), buf.begin() + header_size + body_size);
     if (!protocol::is_valid_magic(buf[0])) {
