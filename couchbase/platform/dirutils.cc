@@ -11,8 +11,13 @@
 #include <couchbase/platform/dirutils.h>
 
 #include <cstring>
+#ifdef _MSC_VER
+#include <filesystem>
+
+#include <windows.h>
+#else
 #include <dirent.h>
-#include <system_error>
+#endif
 
 namespace couchbase::platform
 {
@@ -57,6 +62,33 @@ basename(const std::string& name)
     return split(name, false);
 }
 
+#ifdef _MSC_VER
+std::vector<std::string>
+find_files_with_prefix(const std::string& dir, const std::string& name)
+{
+    std::vector<std::string> files;
+    auto match = std::filesystem::path(dir) / (name + "*");
+    WIN32_FIND_DATAW FindFileData;
+
+    HANDLE hFind = FindFirstFileExW(match.c_str(), FindExInfoStandard, &FindFileData, FindExSearchNameMatch, NULL, 0);
+
+    if (hFind != INVALID_HANDLE_VALUE) {
+        do {
+            std::wstring fn = FindFileData.cFileName;
+            std::string fnm(fn.begin(), fn.end());
+            if (fnm != "." && fnm != "..") {
+                std::string entry = dir;
+                entry.append("\\");
+                entry.append(fnm);
+                files.push_back(entry);
+            }
+        } while (FindNextFileW(hFind, &FindFileData));
+
+        FindClose(hFind);
+    }
+    return files;
+}
+#else
 std::vector<std::string>
 find_files_with_prefix(const std::string& dir, const std::string& name)
 {
@@ -79,6 +111,7 @@ find_files_with_prefix(const std::string& dir, const std::string& name)
     }
     return files;
 }
+#endif
 
 std::vector<std::string>
 find_files_with_prefix(const std::string& name)
