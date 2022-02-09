@@ -109,7 +109,7 @@ struct traits<couchbase::topology::configuration> {
                             n.index = index++;
                             const auto& address = j.get_string();
                             n.hostname = address.substr(0, address.rfind(':'));
-                            n.services_plain.key_value = std::stoul(address.substr(address.rfind(':') + 1));
+                            n.services_plain.key_value = static_cast<std::uint16_t>(std::stoul(address.substr(address.rfind(':') + 1)));
                             if (n.index >= nodes.size()) {
                                 continue;
                             }
@@ -131,11 +131,11 @@ struct traits<couchbase::topology::configuration> {
                                     n.services_tls.management = static_cast<std::uint16_t>(https_mgmt.value());
                                 }
                                 const auto& h = o.at("hostname").get_string();
-                                n.services_plain.management = std::stoul(h.substr(h.rfind(':') + 1));
+                                n.services_plain.management = static_cast<std::uint16_t>(std::stoul(h.substr(h.rfind(':') + 1)));
                                 std::string capi = o.at("couchApiBase").get_string();
                                 auto slash = capi.rfind('/');
                                 auto colon = capi.rfind(':', slash);
-                                n.services_plain.views = std::stoul(capi.substr(colon + 1, slash));
+                                n.services_plain.views = static_cast<std::uint16_t>(std::stoul(capi.substr(colon + 1, slash)));
                             }
                             result.nodes.emplace_back(n);
                         }
@@ -168,12 +168,12 @@ struct traits<couchbase::topology::configuration> {
                     const auto& h = o.at("hostname").get_string();
                     auto colon = h.rfind(':');
                     n.hostname = h.substr(0, colon);
-                    n.services_plain.management = std::stoul(h.substr(colon + 1));
+                    n.services_plain.management = static_cast<std::uint16_t>(std::stoul(h.substr(colon + 1)));
 
                     std::string capi = o.at("couchApiBase").get_string();
                     auto slash = capi.rfind('/');
                     colon = capi.rfind(':', slash);
-                    n.services_plain.views = std::stoul(capi.substr(colon + 1, slash));
+                    n.services_plain.views = static_cast<std::uint16_t>(std::stoul(capi.substr(colon + 1, slash)));
 
                     result.nodes.emplace_back(n);
                 }
