@@ -18,7 +18,6 @@
 #include "test_context.hxx"
 
 #include <cstring>
-
 namespace test::utils
 {
 test_context

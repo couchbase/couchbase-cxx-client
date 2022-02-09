@@ -232,7 +232,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
               } else {
                   switch (status) {
                       case protocol::status::locked:
-                          if (encoded_request_type::body_type::opcode != protocol::client_opcode::unlock) {
+                          if constexpr (encoded_request_type::body_type::opcode != protocol::client_opcode::unlock) {
                               /**
                                * special case for unlock command, when it should not be retried, because it does not make sense
                                * (someone else unlocked the document)
