@@ -24,6 +24,7 @@
 #include <couchbase/platform/uuid.h>
 #include <couchbase/protocol/cmd_get_collection_id.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
+#include <couchbase/utils/movable_function.hxx>
 
 #include <functional>
 #include <utility>
@@ -31,7 +32,7 @@
 namespace couchbase::operations
 {
 
-using mcbp_command_handler = std::function<void(std::error_code, std::optional<io::mcbp_message>)>;
+using mcbp_command_handler = utils::movable_function<void(std::error_code, std::optional<io::mcbp_message>)>;
 
 template<typename Manager, typename Request>
 struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, Request>> {

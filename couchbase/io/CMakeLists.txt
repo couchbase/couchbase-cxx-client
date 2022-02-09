@@ -1,4 +1,4 @@
-add_library(couchbase_io STATIC mcbp_message.cxx mcbp_parser.cxx http_parser.cxx)
+add_library(couchbase_io STATIC mcbp_message.cxx mcbp_parser.cxx http_parser.cxx ../utils/movable_function.hxx)
 set_target_properties(couchbase_io PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_dependencies(couchbase_io http_parser)
 target_link_libraries(

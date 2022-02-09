@@ -17,19 +17,19 @@
 
 #pragma once
 
+#include <couchbase/diagnostics.hxx>
+#include <couchbase/errors.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
 #include <couchbase/io/http_parser.hxx>
 #include <couchbase/io/streams.hxx>
-
-#include <couchbase/diagnostics.hxx>
-#include <couchbase/errors.hxx>
 #include <couchbase/logger/logger.hxx>
 #include <couchbase/meta/version.hxx>
 #include <couchbase/origin.hxx>
 #include <couchbase/platform/base64.h>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
+#include <couchbase/utils/movable_function.hxx>
 
 #include <asio.hpp>
 #include <list>
@@ -344,7 +344,7 @@ class http_session : public std::enable_shared_from_this<http_session>
 
   private:
     struct response_context {
-        std::function<void(std::error_code, io::http_response&&) const> handler{};
+        utils::movable_function<void(std::error_code, io::http_response&&)> handler{};
         http_parser parser{};
     };
 

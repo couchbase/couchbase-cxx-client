@@ -21,11 +21,12 @@
 #include <couchbase/metrics/meter.hxx>
 #include <couchbase/service_type_fmt.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
+#include <couchbase/utils/movable_function.hxx>
 
 namespace couchbase::operations
 {
 
-using http_command_handler = std::function<void(std::error_code, io::http_response&&)>;
+using http_command_handler = utils::movable_function<void(std::error_code, io::http_response&&)>;
 
 template<typename Request>
 struct http_command : public std::enable_shared_from_this<http_command<Request>> {
