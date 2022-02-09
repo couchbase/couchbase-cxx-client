@@ -39,7 +39,7 @@ class logging_value_recorder : public value_recorder
     {
         histogram_ = nullptr;
         hdr_init(/* minimum - 1 ns*/ 1,
-                 /* maximum - 30 s*/ 30e9,
+                 /* maximum - 30 s*/ 30'000'000'000LL,
                  /* significant figures */ 3,
                  /* pointer */ &histogram_);
         Expects(histogram_ != nullptr);
