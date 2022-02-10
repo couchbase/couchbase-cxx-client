@@ -1,4 +1,4 @@
-#!/usr/bin/env ruby
+#!/usr/bin/env bash
 
 #  Copyright 2020-2021 Couchbase, Inc.
 #
@@ -14,90 +14,73 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require "fileutils"
-require "rbconfig"
+PROJECT_ROOT="$( cd "$(dirname "$0"/..)" >/dev/null 2>&1 ; pwd -P )"
 
-def which(name)
-  ENV.fetch("PATH", "")
-     .split(File::PATH_SEPARATOR)
-     .map { |path| [path, name].join(File::SEPARATOR) + RbConfig::CONFIG["EXEEXT"] }
-     .find { |file| File.executable?(file) }
-end
+CB_DEFAULT_CC=cc
+CB_DEFAULT_CXX=c++
+CB_CLANG=${CB_CLANG:-clang}
+CB_CLANGXX=${CB_CLANGXX:-clang++}
 
-def run(*args)
-  args = args.compact.map(&:to_s)
-  puts args.join(" ")
-  system(*args) || abort("command returned non-zero status: #{args.join(" ")}")
-end
+CB_SANITIZER=${CB_SANITIZER:-""}
+if [ "x${CB_SANITIZER}" != "x" ] ; then
+    CB_DEFAULT_CC=${CB_CLANG}
+    CB_DEFAULT_CXX=${CB_CLANGXX}
+fi
 
-PROJECT_ROOT = Dir.pwd
+CB_CMAKE=${CB_CMAKE:-$(which cmake)}
+CB_CC=${CB_CC:-$(which ${CB_DEFAULT_CC})}
+CB_CXX=${CB_CXX:-$(which ${CB_DEFAULT_CXX})}
+CB_NUMBER_OF_JOBS=${CB_NUMBER_OF_JOBS:-1}
+CB_CMAKE_BUILD_TYPE=${CB_CMAKE_BUILD_TYPE:-Debug}
 
-CB_DEFAULT_CC = "cc"
-CB_DEFAULT_CXX = "c++"
-CB_CLANG = ENV.fetch("CB_CLANG", "clang")
-CB_CLANGXX = ENV.fetch("CB_CLANGXX", "clang++")
+echo "CB_CMAKE=${CB_CMAKE}"
+echo "CB_CC=${CB_CC}"
+echo "CB_CXX=${CB_CXX}"
+echo "CB_NUMBER_OF_JOBS=${CB_NUMBER_OF_JOBS}"
+echo "CB_CMAKE_BUILD_TYPE=${CB_CMAKE_BUILD_TYPE}"
 
-CB_SANITIZER = ENV.fetch("CB_SANITIZER", "")
-unless CB_SANITIZER.empty?
-  CB_DEFAULT_CC = CB_CLANG
-  CB_DEFAULT_CXX = CB_CLANGXX
-end
+CB_CMAKE_EXTRAS=
+case "${CB_SANITIZER}" in
+    asan | address)
+        CB_CMAKE_EXTRAS="-DENABLE_SANITIZER_ADDRESS=ON"
+        ;;
 
-CB_CMAKE = ENV.fetch("CB_CMAKE", which("cmake"))
-CB_CC = ENV.fetch("CB_CC", which(CB_DEFAULT_CC))
-CB_CXX = ENV.fetch("CB_CXX", which(CB_DEFAULT_CXX))
-CB_NUMBER_OF_JOBS = ENV.fetch("CB_NUMBER_OF_JOBS", "1").to_i
-CB_CMAKE_BUILD_TYPE = ENV.fetch("CB_CMAKE_BUILD_TYPE", "Debug")
+    lsan | leak)
+        CB_CMAKE_EXTRAS="-DENABLE_SANITIZER_LEAK=ON"
+        ;;
 
-puts "RUBY_PLATFORM=#{RUBY_PLATFORM}"
-puts "CB_CMAKE=#{CB_CMAKE}"
-puts "CB_CMAKE_BUILD_TYPE=#{CB_CMAKE_BUILD_TYPE}"
-puts "CB_NUMBER_OF_JOBS=#{CB_NUMBER_OF_JOBS}"
-puts "CB_SANITIZER=#{CB_SANITIZER}"
-if RUBY_PLATFORM !~ /mswin|mingw/
-  puts "CB_CC=#{CB_CC}"
-  puts "CB_CXX=#{CB_CXX}"
-end
+    ubsan | undefined_behaviour)
+        CB_CMAKE_EXTRAS="-DENABLE_SANITIZER_UNDEFINED_BEHAVIOUR=ON"
+        ;;
 
-CB_CMAKE_EXTRAS = []
-case CB_SANITIZER
-when /asan|address/
-  CB_CMAKE_EXTRAS << "-DENABLE_SANITIZER_ADDRESS=ON"
-when /lsan|leak/
-  CB_CMAKE_EXTRAS << "-DENABLE_SANITIZER_LEAK=ON"
-when /ubsan|undefined_behaviour/
-  CB_CMAKE_EXTRAS << "-DENABLE_SANITIZER_UNDEFINED_BEHAVIOUR=ON"
-when /tsan|thread/
-  CB_CMAKE_EXTRAS << "-DENABLE_SANITIZER_THREAD=ON"
-when /msan|memory/
-  CB_CMAKE_EXTRAS << "-DENABLE_SANITIZER_MEMORY=ON"
-end
+    tsan | thread)
+        CB_CMAKE_EXTRAS="-DENABLE_SANITIZER_THREAD=ON"
+        ;;
 
-BUILD_DIR = if CB_SANITIZER.empty?
-              File.join(PROJECT_ROOT, "cmake-build-tests")
-            else
-              File.join(PROJECT_ROOT, "cmake-build-tests-#{CB_SANITIZER}")
-            end
+    msan | memory)
+        CB_CMAKE_EXTRAS="-DENABLE_SANITIZER_MEMORY=ON"
+        ;;
+esac
 
-FileUtils.rm_rf(BUILD_DIR, verbose: true)
-FileUtils.mkdir_p(BUILD_DIR, verbose: true)
+set -exuo pipefail
 
-Dir.chdir(BUILD_DIR) do
-  if RUBY_PLATFORM =~ /mswin|mingw/
-    CB_CMAKE_EXTRAS << "-DOPENSSL_ROOT_DIR=C:/Program Files/OpenSSL-Win64"
-  else
-    CB_CMAKE_EXTRAS << "-DCMAKE_C_COMPILER=#{CB_CC}" << "-DCMAKE_CXX_COMPILER=#{CB_CXX}"
-  end
-  run(CB_CMAKE,
-      "-DCMAKE_BUILD_TYPE=#{CB_CMAKE_BUILD_TYPE}",
-      "-DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=ON",
-      "-DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON",
-      *CB_CMAKE_EXTRAS,
-      "-B", BUILD_DIR,
-      "-S", PROJECT_ROOT)
+BUILD_DIR="${PROJECT_ROOT}/cmake-build-tests"
+if [ "x${CB_SANITIZER}" != "x" ]; then
+    BUILD_DIR="${BUILD_DIR}-${CB_SANITIZER}"
+fi
 
-  run(CB_CMAKE,
-      "--build", BUILD_DIR,
-      "--parallel", CB_NUMBER_OF_JOBS,
-      "--verbose")
-end
+rm -rf "${BUILD_DIR}"
+mkdir -p "${BUILD_DIR}"
+cd "${BUILD_DIR}"
+
+${CB_CMAKE}  \
+    -DCMAKE_BUILD_TYPE=${CB_CMAKE_BUILD_TYPE} \
+    -DCMAKE_C_COMPILER="${CB_CC}" \
+    -DCMAKE_CXX_COMPILER="${CB_CXX}" \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=ON \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON \
+    ${CB_CMAKE_EXTRAS} \
+    -B "${BUILD_DIR}" \
+    -S "${PROJECT_ROOT}"
+
+${CB_CMAKE} --build "${BUILD_DIR}" --parallel ${CB_NUMBER_OF_JOBS} --verbose
