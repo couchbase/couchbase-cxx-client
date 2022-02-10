@@ -98,6 +98,15 @@ target_include_directories(
          ${PROJECT_SOURCE_DIR}/third_party/fmt/include
          ${PROJECT_SOURCE_DIR}/third_party/spdlog/include)
 target_link_libraries(couchbase_cxx_client PRIVATE project_options project_warnings)
+
+include(cmake/DetectStandardFilesystem.cmake)
+couchbase_cxx_check_filesystem(couchbase_cxx_client "filesystem" "std::filesystem" "stdc++fs;c++fs" STD_FILESYSTEM)
+if(STD_FILESYSTEM)
+  message(STATUS "Using std::filesystem")
+else()
+  message(FATAL_ERROR "Couchbase C++ Client requires C++17, including an implementation of std::filesystem.")
+endif()
+
 target_link_libraries(
   couchbase_cxx_client
   PUBLIC fmt::fmt
