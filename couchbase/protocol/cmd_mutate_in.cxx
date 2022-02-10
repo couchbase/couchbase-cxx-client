@@ -41,11 +41,11 @@ mutate_in_response_body::parse(protocol::status status,
         offset_type offset = framing_extras_size;
         if (extras_size == 16) {
             memcpy(&token_.partition_uuid, body.data() + offset, sizeof(token_.partition_uuid));
-            token_.partition_uuid = utils::byte_swap_64(token_.partition_uuid);
+            token_.partition_uuid = utils::byte_swap(token_.partition_uuid);
             offset += 8;
 
             memcpy(&token_.sequence_number, body.data() + offset, sizeof(token_.sequence_number));
-            token_.sequence_number = utils::byte_swap_64(token_.sequence_number);
+            token_.sequence_number = utils::byte_swap(token_.sequence_number);
             offset += 8;
         } else {
             offset += extras_size;
@@ -60,7 +60,7 @@ mutate_in_response_body::parse(protocol::status status,
 
             std::uint16_t entry_status = 0;
             memcpy(&entry_status, body.data() + offset, sizeof(entry_status));
-            entry_status = ntohs(entry_status);
+            entry_status = utils::byte_swap(entry_status);
             Expects(is_valid_status(entry_status));
             field.status = protocol::status(entry_status);
             offset += static_cast<offset_type>(sizeof(entry_status));
@@ -68,7 +68,7 @@ mutate_in_response_body::parse(protocol::status status,
             if (field.status == protocol::status::success) {
                 std::uint32_t entry_size = 0;
                 memcpy(&entry_size, body.data() + offset, sizeof(entry_size));
-                entry_size = ntohl(entry_size);
+                entry_size = utils::byte_swap(entry_size);
                 Expects(entry_size < 20 * 1024 * 1024);
                 offset += static_cast<offset_type>(sizeof(entry_size));
 
@@ -106,7 +106,7 @@ mutate_in_request_body::durability(protocol::durability_level level, std::option
         framing_extras_.resize(extras_size + 4);
         framing_extras_[extras_size + 0] = static_cast<std::uint8_t>((static_cast<std::uint32_t>(frame_id) << 4U) | 3U);
         framing_extras_[extras_size + 1] = static_cast<std::uint8_t>(level);
-        uint16_t val = htons(*timeout);
+        uint16_t val = utils::byte_swap(*timeout);
         memcpy(framing_extras_.data() + extras_size + 2, &val, sizeof(val));
     } else {
         framing_extras_.resize(extras_size + 2);
@@ -129,7 +129,7 @@ mutate_in_request_body::fill_extras()
 {
     if (expiry_ != 0) {
         extras_.resize(sizeof(expiry_));
-        std::uint32_t field = htonl(expiry_);
+        std::uint32_t field = utils::byte_swap(expiry_);
         memcpy(extras_.data(), &field, sizeof(field));
     }
     if (flags_ != 0) {
@@ -154,11 +154,11 @@ mutate_in_request_body::fill_value()
         value_[offset++] = spec.opcode;
         value_[offset++] = spec.flags;
 
-        std::uint16_t path_size = ntohs(gsl::narrow_cast<std::uint16_t>(spec.path.size()));
+        std::uint16_t path_size = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(spec.path.size()));
         std::memcpy(value_.data() + offset, &path_size, sizeof(path_size));
         offset += sizeof(path_size);
 
-        std::uint32_t param_size = ntohl(gsl::narrow_cast<std::uint32_t>(spec.param.size()));
+        std::uint32_t param_size = utils::byte_swap(gsl::narrow_cast<std::uint32_t>(spec.param.size()));
         std::memcpy(value_.data() + offset, &param_size, sizeof(param_size));
         offset += sizeof(param_size);
 

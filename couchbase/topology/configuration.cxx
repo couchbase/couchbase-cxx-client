@@ -21,6 +21,7 @@
 #include <couchbase/service_type_fmt.hxx>
 
 #include <algorithm>
+#include <stdexcept>
 
 namespace couchbase::topology
 {

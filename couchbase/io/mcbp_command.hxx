@@ -24,15 +24,15 @@
 #include <couchbase/platform/uuid.h>
 #include <couchbase/protocol/cmd_get_collection_id.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
+#include <couchbase/utils/movable_function.hxx>
 
-#include <cxx_function.hpp>
 #include <functional>
 #include <utility>
 
 namespace couchbase::operations
 {
 
-using mcbp_command_handler = cxx_function::unique_function<void(std::error_code, std::optional<io::mcbp_message>)>;
+using mcbp_command_handler = utils::movable_function<void(std::error_code, std::optional<io::mcbp_message>)>;
 
 template<typename Manager, typename Request>
 struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, Request>> {
@@ -232,7 +232,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
               } else {
                   switch (status) {
                       case protocol::status::locked:
-                          if (encoded_request_type::body_type::opcode != protocol::client_opcode::unlock) {
+                          if constexpr (encoded_request_type::body_type::opcode != protocol::client_opcode::unlock) {
                               /**
                                * special case for unlock command, when it should not be retried, because it does not make sense
                                * (someone else unlocked the document)

@@ -40,11 +40,11 @@ remove_response_body::parse(protocol::status status,
         offset_type offset = framing_extras_size;
         if (extras_size == 16) {
             memcpy(&token_.partition_uuid, body.data() + offset, sizeof(token_.partition_uuid));
-            token_.partition_uuid = utils::byte_swap_64(token_.partition_uuid);
+            token_.partition_uuid = utils::byte_swap(token_.partition_uuid);
             offset += 8;
 
             memcpy(&token_.sequence_number, body.data() + offset, sizeof(token_.sequence_number));
-            token_.sequence_number = utils::byte_swap_64(token_.sequence_number);
+            token_.sequence_number = utils::byte_swap(token_.sequence_number);
         }
         return true;
     }
@@ -72,7 +72,7 @@ remove_request_body::durability(protocol::durability_level level, std::optional<
         framing_extras_.resize(4);
         framing_extras_[0] = static_cast<std::uint8_t>((static_cast<std::uint32_t>(frame_id) << 4U) | 3U);
         framing_extras_[1] = static_cast<std::uint8_t>(level);
-        uint16_t val = htons(*timeout);
+        uint16_t val = utils::byte_swap(*timeout);
         memcpy(framing_extras_.data() + 2, &val, sizeof(val));
     } else {
         framing_extras_.resize(2);

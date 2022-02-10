@@ -1,6 +1,26 @@
+/* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
+/*
+ *   Copyright 2020-2021 Couchbase, Inc.
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ */
+
 #include <couchbase/utils/url_codec.hxx>
 
+#include <fmt/core.h>
+
 #include <cctype>
+#include <climits>
 
 namespace couchbase::utils::string_codec
 {
@@ -98,9 +118,7 @@ url_encode(Ti first, Ti last, To& o, bool check_encoded = true)
             }
 
             do {
-                char buf[4];
-                sprintf(buf, "%%%02X", static_cast<unsigned char>(*first));
-                o.insert(o.end(), &buf[0], &buf[0] + 3);
+                o.append(fmt::format("%{:x}", static_cast<std::uint8_t>(*first)));
             } while (--numbytes && ++first != last);
         }
     }
@@ -142,8 +160,9 @@ url_decode(Ti first, Ti last, To out, std::size_t& nout)
                 return false;
             }
 
-            unsigned octet = 0;
-            if (sscanf(nextbuf, "%2X", &octet) != 1) {
+            char* end = nullptr;
+            unsigned long octet = std::strtoul(nextbuf, &end, 16);
+            if (octet == ULONG_MAX || (octet == 0 && end == nextbuf)) {
                 return false;
             }
 
@@ -199,10 +218,7 @@ form_encode(Ti first, Ti last, To& out)
                    (c >= 0x60 && c <= 0x7A)) {
             out.insert(out.end(), static_cast<char>(c));
         } else {
-            char buf[3] = { 0 };
-            out.insert(out.end(), '%');
-            sprintf(buf, "%02X", c);
-            out.insert(out.end(), &buf[0], &buf[0] + 2);
+            out.append(fmt::format("%{:x}", static_cast<std::uint8_t>(*first)));
         }
     }
 }

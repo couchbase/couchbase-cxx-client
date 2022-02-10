@@ -134,7 +134,7 @@ class client_response
 
         uint16_t status = 0;
         memcpy(&status, header_.data() + 6, sizeof(status));
-        status = ntohs(status);
+        status = utils::byte_swap(status);
         Expects(protocol::is_valid_status(status));
         status_ = protocol::status(status);
 
@@ -144,18 +144,18 @@ class client_response
             key_size_ = header_[3];
         } else {
             memcpy(&key_size_, header_.data() + 2, sizeof(key_size_));
-            key_size_ = ntohs(key_size_);
+            key_size_ = utils::byte_swap(key_size_);
         }
 
         uint32_t field = 0;
         memcpy(&field, header_.data() + 8, sizeof(field));
-        body_size_ = ntohl(field);
+        body_size_ = utils::byte_swap(field);
         data_.resize(body_size_);
 
         memcpy(&opaque_, header_.data() + 12, sizeof(opaque_));
 
         memcpy(&cas_, header_.data() + 16, sizeof(cas_));
-        cas_ = utils::byte_swap_64(cas_);
+        cas_ = utils::byte_swap(cas_);
     }
 
     [[nodiscard]] std::optional<enhanced_error_info> error_info()
@@ -197,7 +197,7 @@ class client_response
                 framing_extras_size_ - offset >= frame_size) {
                 std::uint16_t encoded_duration{};
                 std::memcpy(&encoded_duration, data_.data() + offset, sizeof(encoded_duration));
-                encoded_duration = ntohs(encoded_duration);
+                encoded_duration = utils::byte_swap(encoded_duration);
                 info_.server_duration_us = std::pow(encoded_duration, 1.74) / 2;
             }
             offset += frame_size;

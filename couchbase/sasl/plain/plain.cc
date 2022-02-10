@@ -16,6 +16,8 @@
 
 #include <couchbase/sasl/plain/plain.h>
 
+#include <iterator>
+
 namespace couchbase::sasl::mechanism::plain
 {
 
@@ -25,10 +27,11 @@ ClientBackend::start()
     auto usernm = usernameCallback();
     auto passwd = passwordCallback();
 
+    buffer.reserve(usernm.size() + passwd.size() + 2);
     buffer.push_back(0);
-    std::copy(usernm.begin(), usernm.end(), std::back_inserter(buffer));
+    std::copy(usernm.begin(), usernm.end(), std::back_insert_iterator(buffer));
     buffer.push_back(0);
-    std::copy(passwd.begin(), passwd.end(), std::back_inserter(buffer));
+    std::copy(passwd.begin(), passwd.end(), std::back_insert_iterator(buffer));
 
     return { error::OK, { buffer.data(), buffer.size() } };
 }

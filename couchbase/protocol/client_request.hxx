@@ -61,7 +61,7 @@ class client_request
 
     void cas(protocol::cas val)
     {
-        cas_ = utils::byte_swap_64(val.value);
+        cas_ = utils::byte_swap(val.value);
     }
 
     [[nodiscard]] std::uint32_t opaque() const
@@ -110,7 +110,7 @@ class client_request
 
         uint16_t key_size = gsl::narrow_cast<uint16_t>(body_.key().size());
         if (framing_extras.size() == 0) {
-            key_size = htons(key_size);
+            key_size = utils::byte_swap(key_size);
             memcpy(payload_.data() + 2, &key_size, sizeof(key_size));
         } else {
             magic_ = protocol::magic::alt_client_request;
@@ -122,10 +122,10 @@ class client_request
         uint8_t ext_size = gsl::narrow_cast<uint8_t>(body_.extras().size());
         memcpy(payload_.data() + 4, &ext_size, sizeof(ext_size));
 
-        uint16_t vbucket = ntohs(gsl::narrow_cast<uint16_t>(partition_));
+        uint16_t vbucket = utils::byte_swap(gsl::narrow_cast<uint16_t>(partition_));
         memcpy(payload_.data() + 6, &vbucket, sizeof(vbucket));
 
-        uint32_t body_size = htonl(gsl::narrow_cast<uint32_t>(body_.size()));
+        uint32_t body_size = utils::byte_swap(gsl::narrow_cast<uint32_t>(body_.size()));
         memcpy(payload_.data() + 8, &body_size, sizeof(body_size));
 
         memcpy(payload_.data() + 12, &opaque_, sizeof(opaque_));
@@ -143,9 +143,10 @@ class client_request
             if (auto [compressed, new_value_size] = compress_value(body_.value(), body_itr); compressed) {
                 /* the compressed value meets requirements and was copied to the payload */
                 payload_[5] |= static_cast<std::uint8_t>(protocol::datatype::snappy);
-                std::uint32_t new_body_size = ntohl(body_size) - gsl::narrow_cast<std::uint32_t>(body_.value().size()) + new_value_size;
+                std::uint32_t new_body_size =
+                  utils::byte_swap(body_size) - gsl::narrow_cast<std::uint32_t>(body_.value().size()) + new_value_size;
                 payload_.resize(header_size + new_body_size);
-                new_body_size = htonl(new_body_size);
+                new_body_size = utils::byte_swap(new_body_size);
                 memcpy(payload_.data() + 8, &new_body_size, sizeof(new_body_size));
                 return;
             }

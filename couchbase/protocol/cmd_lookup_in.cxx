@@ -45,14 +45,14 @@ lookup_in_response_body::parse(protocol::status status,
 
             std::uint16_t entry_status = 0;
             memcpy(&entry_status, body.data() + offset, sizeof(entry_status));
-            entry_status = ntohs(entry_status);
+            entry_status = utils::byte_swap(entry_status);
             Expects(is_valid_status(entry_status));
             field.status = protocol::status(entry_status);
             offset += static_cast<offset_type>(sizeof(entry_status));
 
             std::uint32_t entry_size = 0;
             memcpy(&entry_size, body.data() + offset, sizeof(entry_size));
-            entry_size = ntohl(entry_size);
+            entry_size = utils::byte_swap(entry_size);
             Expects(entry_size < 20 * 1024 * 1024);
             offset += static_cast<offset_type>(sizeof(entry_size));
 
@@ -99,7 +99,7 @@ lookup_in_request_body::fill_value()
     for (auto& spec : specs_.entries) {
         value_[offset++] = spec.opcode;
         value_[offset++] = spec.flags;
-        std::uint16_t path_size = ntohs(gsl::narrow_cast<std::uint16_t>(spec.path.size()));
+        std::uint16_t path_size = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(spec.path.size()));
         std::memcpy(value_.data() + offset, &path_size, sizeof(path_size));
         offset += sizeof(path_size);
         std::memcpy(value_.data() + offset, spec.path.data(), spec.path.size());

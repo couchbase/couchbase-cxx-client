@@ -36,11 +36,11 @@ cluster_map_change_notification_request_body::parse(const header_buffer& header,
     offset_type offset = ext_size;
     if (ext_size == 4) {
         memcpy(&protocol_revision_, body.data(), sizeof(protocol_revision_));
-        protocol_revision_ = ntohl(protocol_revision_);
+        protocol_revision_ = utils::byte_swap(protocol_revision_);
     }
     uint16_t key_size = 0;
     memcpy(&key_size, header.data() + 2, sizeof(key_size));
-    key_size = ntohs(key_size);
+    key_size = utils::byte_swap(key_size);
     bucket_.assign(body.begin() + offset, body.begin() + offset + key_size);
     offset += key_size;
     if (body.size() > static_cast<std::size_t>(offset)) {

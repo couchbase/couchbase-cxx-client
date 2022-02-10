@@ -44,7 +44,7 @@ hello_response_body::parse(protocol::status status,
         for (size_t i = 0; i < num_features; i++) {
             std::uint16_t field = 0;
             std::memcpy(&field, value + i * 2, sizeof(std::uint16_t));
-            field = ntohs(field);
+            field = utils::byte_swap(field);
             if (is_valid_hello_feature(field)) {
                 supported_features_.push_back(static_cast<hello_feature>(field));
             }

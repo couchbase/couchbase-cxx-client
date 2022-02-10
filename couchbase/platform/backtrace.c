@@ -18,7 +18,6 @@
 #include <couchbase/platform/backtrace.h>
 
 #include <inttypes.h>
-#include <strings.h>
 
 #if defined(WIN32) && defined(HAVE_BACKTRACE_SUPPORT)
 #define WIN32_LEAN_AND_MEAN

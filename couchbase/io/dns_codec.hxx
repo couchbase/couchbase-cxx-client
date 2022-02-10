@@ -35,28 +35,28 @@ class dns_codec
 
         std::memcpy(&message.header.id, payload.data() + offset, sizeof(std::uint16_t));
         offset += sizeof(std::uint16_t);
-        message.header.id = ntohs(message.header.id);
+        message.header.id = utils::byte_swap(message.header.id);
 
         uint16_t flags = 0;
         std::memcpy(&flags, payload.data() + offset, sizeof(std::uint16_t));
         offset += sizeof(std::uint16_t);
-        message.header.flags.decode(ntohs(flags));
+        message.header.flags.decode(utils::byte_swap(flags));
 
         std::memcpy(&message.header.question_records, payload.data() + offset, sizeof(std::uint16_t));
         offset += sizeof(std::uint16_t);
-        message.header.question_records = ntohs(message.header.question_records);
+        message.header.question_records = utils::byte_swap(message.header.question_records);
 
         std::memcpy(&message.header.answer_records, payload.data() + offset, sizeof(std::uint16_t));
         offset += sizeof(std::uint16_t);
-        message.header.answer_records = ntohs(message.header.answer_records);
+        message.header.answer_records = utils::byte_swap(message.header.answer_records);
 
         std::memcpy(&message.header.authority_records, payload.data() + offset, sizeof(std::uint16_t));
         offset += sizeof(std::uint16_t);
-        message.header.authority_records = ntohs(message.header.authority_records);
+        message.header.authority_records = utils::byte_swap(message.header.authority_records);
 
         std::memcpy(&message.header.additional_records, payload.data() + offset, sizeof(std::uint16_t));
         offset += sizeof(std::uint16_t);
-        message.header.additional_records = ntohs(message.header.additional_records);
+        message.header.additional_records = utils::byte_swap(message.header.additional_records);
 
         for (std::uint16_t idx = 0; idx < message.header.question_records; ++idx) {
             question_record qr;
@@ -65,12 +65,12 @@ class dns_codec
             std::uint16_t val = 0;
             std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t);
-            val = ntohs(val);
+            val = utils::byte_swap(val);
             qr.type = resource_type(val);
 
             std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t);
-            val = ntohs(val);
+            val = utils::byte_swap(val);
             qr.klass = static_cast<resource_class>(val);
 
             message.questions.emplace_back(qr);
@@ -84,22 +84,22 @@ class dns_codec
             std::uint16_t val = 0;
             std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t);
-            val = ntohs(val);
+            val = utils::byte_swap(val);
             ar.type = resource_type(val);
 
             std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t);
-            val = ntohs(val);
+            val = utils::byte_swap(val);
             ar.klass = resource_class(val);
 
             std::memcpy(&ar.ttl, payload.data() + offset, sizeof(std::uint32_t));
             offset += static_cast<std::uint16_t>(4U);
-            ar.ttl = ntohl(ar.ttl);
+            ar.ttl = utils::byte_swap(ar.ttl);
 
             std::uint16_t size = 0;
             std::memcpy(&size, payload.data() + offset, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t);
-            size = ntohs(size);
+            size = utils::byte_swap(size);
 
             if (ar.klass != resource_class::in || ar.type != resource_type::srv) {
                 // ignore everything except SRV answers
@@ -109,15 +109,15 @@ class dns_codec
 
             std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t);
-            ar.priority = ntohs(val);
+            ar.priority = utils::byte_swap(val);
 
             std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t);
-            ar.weight = ntohs(val);
+            ar.weight = utils::byte_swap(val);
 
             std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t);
-            ar.port = ntohs(val);
+            ar.port = utils::byte_swap(val);
 
             ar.target = get_name(payload, offset);
 
@@ -136,15 +136,15 @@ class dns_codec
         {
             uint16_t val;
 
-            val = htons(message.header.id);
+            val = utils::byte_swap(message.header.id);
             std::memcpy(payload.data() + offset, &val, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t);
 
-            val = htons(message.header.flags.encode());
+            val = utils::byte_swap(message.header.flags.encode());
             std::memcpy(payload.data() + offset, &val, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t);
 
-            val = htons(static_cast<std::uint16_t>(message.questions.size()));
+            val = utils::byte_swap(static_cast<std::uint16_t>(message.questions.size()));
             std::memcpy(payload.data() + offset, &val, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t) + 3 * sizeof(std::uint16_t); // answer, authority, additional are all zeros
         }
@@ -162,11 +162,11 @@ class dns_codec
 
             uint16_t val;
 
-            val = htons(static_cast<std::uint16_t>(question.type));
+            val = utils::byte_swap(static_cast<std::uint16_t>(question.type));
             std::memcpy(payload.data() + offset, &val, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t);
 
-            val = htons(static_cast<std::uint16_t>(question.klass));
+            val = utils::byte_swap(static_cast<std::uint16_t>(question.klass));
             std::memcpy(payload.data() + offset, &val, sizeof(std::uint16_t));
             offset += sizeof(std::uint16_t);
         }
@@ -191,7 +191,7 @@ class dns_codec
             if ((len & 0b1100'0000U) != 0) {
                 std::uint16_t ptr = 0;
                 std::memcpy(&ptr, payload.data() + offset, sizeof(std::uint16_t));
-                ptr = ntohs(ptr);
+                ptr = utils::byte_swap(ptr);
                 ptr &= 0b0011'1111'1111'1111U;
                 // store old offset and jump to pointer
                 save_offset = offset + sizeof(std::uint16_t);

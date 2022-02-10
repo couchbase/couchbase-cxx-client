@@ -30,20 +30,20 @@ parse_server_duration_us(const io::mcbp_message& msg)
     if (msg.header.magic != static_cast<std::uint8_t>(magic::alt_client_response)) {
         return 0;
     }
-    std::uint8_t framing_extras_size = static_cast<std::uint8_t>(msg.header.keylen & 0xfU);
+    auto framing_extras_size = static_cast<std::uint8_t>(msg.header.keylen & 0xfU);
     if (framing_extras_size == 0) {
         return 0;
     }
     std::size_t offset = 0;
     while (offset < framing_extras_size) {
-        std::uint8_t frame_size = static_cast<std::uint8_t>(msg.body[offset] & 0xfU);
-        std::uint8_t frame_id = static_cast<std::uint8_t>((static_cast<std::uint32_t>(msg.body[offset]) >> 4U) & 0xfU);
+        auto frame_size = static_cast<std::uint8_t>(msg.body[offset] & 0xfU);
+        auto frame_id = static_cast<std::uint8_t>((static_cast<std::uint32_t>(msg.body[offset]) >> 4U) & 0xfU);
         offset++;
         if (frame_id == static_cast<std::uint8_t>(response_frame_info_id::server_duration)) {
             if (frame_size == 2 && framing_extras_size - offset >= frame_size) {
                 std::uint16_t encoded_duration{};
                 std::memcpy(&encoded_duration, msg.body.data() + offset, sizeof(encoded_duration));
-                encoded_duration = ntohs(encoded_duration);
+                encoded_duration = utils::byte_swap(encoded_duration);
                 return std::pow(encoded_duration, 1.74) / 2;
             }
         }
@@ -55,16 +55,14 @@ parse_server_duration_us(const io::mcbp_message& msg)
 bool
 parse_enhanced_error(const std::string& str, enhanced_error_info& info)
 {
-    auto error = utils::json::parse(str);
-    if (error.is_object()) {
-        auto& err_obj = error["error"];
-        if (err_obj.is_object()) {
+    if (auto error = utils::json::parse(str); error.is_object()) {
+        if (const auto* err_obj = error.find("error"); err_obj != nullptr && err_obj->is_object()) {
             enhanced_error_info err{};
-            if (const auto& ref = err_obj["ref"]; ref.is_string()) {
-                err.reference = ref.get_string();
+            if (const auto* ref = err_obj->find("ref"); ref != nullptr && ref->is_string()) {
+                err.reference = ref->get_string();
             }
-            if (const auto& ctx = err_obj["context"]; ctx.is_string()) {
-                err.context = ctx.get_string();
+            if (const auto* ctx = err_obj->find("context"); ctx != nullptr && ctx->is_string()) {
+                err.context = ctx->get_string();
             }
 
             info = std::move(err);

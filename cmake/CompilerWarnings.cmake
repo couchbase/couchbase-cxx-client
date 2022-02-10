@@ -7,7 +7,8 @@ function(set_project_warnings project_name)
 
   set(MSVC_WARNINGS
       /W4 # Baseline reasonable warnings
-      /w14242 # 'identifier': conversion from 'type1' to 'type1', possible loss of data
+      /wd4242 # 'identifier': conversion from 'type1' to 'type1', possible loss of data
+      /wd4244 # 'identifier': conversion from 'type1' to 'type1', possible loss of data
       /w14254 # 'operator': conversion from 'type1:field_bits' to 'type2:field_bits', possible loss of data
       /w14263 # 'function': member function does not override any base class virtual member function
       /w14265 # 'classname': class has virtual functions, but destructor is not virtual instances of this class may not
@@ -22,7 +23,7 @@ function(set_project_warnings project_name)
       /w14547 # 'operator': operator before comma has no effect; expected operator with side-effect
       /w14549 # 'operator': operator before comma has no effect; did you intend 'operator'?
       /w14555 # expression has no effect; expected expression with side- effect
-      /w14619 # pragma warning: there is no warning number 'number'
+      /wd4619 # pragma warning: there is no warning number 'number'
       /w14640 # Enable warning on thread un-safe static member initialization
       /w14826 # Conversion from 'type1' to 'type_2' is sign-extended. This may cause unexpected runtime behavior.
       /w14905 # wide string literal cast to 'LPSTR'

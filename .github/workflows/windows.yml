@@ -1,0 +1,32 @@
+name: windows
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  vs22:
+    runs-on: windows-2022
+    steps:
+      - name: Install build environment
+        run: |
+          choco install --no-progress openssl
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Build tests
+        run: ruby ./bin/build-tests.rb
+
+  vs19:
+    runs-on: windows-2019
+    steps:
+      - name: Install build environment
+        run: |
+          choco install --no-progress openssl
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Build tests
+        run: ruby ./bin/build-tests.rb
