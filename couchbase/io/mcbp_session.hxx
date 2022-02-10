@@ -51,7 +51,7 @@
 #include <couchbase/topology/capabilities_fmt.hxx>
 #include <couchbase/topology/configuration_fmt.hxx>
 #include <couchbase/utils/join_strings.hxx>
-#include <couchbase/utils/movable_function.hxx>
+#include <couchbase/utils/move_only_function.hxx>
 
 #include <asio.hpp>
 #include <cstring>
@@ -1252,7 +1252,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     std::unique_ptr<message_handler> handler_;
     std::function<void(std::error_code, const topology::configuration&)> bootstrap_handler_{};
     std::mutex command_handlers_mutex_{};
-    std::map<uint32_t, utils::movable_function<void(std::error_code, retry_reason, io::mcbp_message&&)>> command_handlers_{};
+    std::map<uint32_t, utils::move_only_function<void(std::error_code, retry_reason, io::mcbp_message&&)>> command_handlers_{};
     std::vector<std::function<void(const topology::configuration&)>> config_listeners_{};
     std::function<void(io::retry_reason)> on_stop_handler_{};
 

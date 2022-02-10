@@ -29,7 +29,7 @@
 #include <couchbase/platform/base64.h>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
-#include <couchbase/utils/movable_function.hxx>
+#include <couchbase/utils/move_only_function.hxx>
 
 #include <asio.hpp>
 #include <list>
@@ -344,7 +344,7 @@ class http_session : public std::enable_shared_from_this<http_session>
 
   private:
     struct response_context {
-        utils::movable_function<void(std::error_code, io::http_response&&)> handler{};
+        utils::move_only_function<void(std::error_code, io::http_response&&)> handler{};
         http_parser parser{};
     };
 
