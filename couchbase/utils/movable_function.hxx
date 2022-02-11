@@ -19,6 +19,7 @@
 
 #include <functional>
 #include <gsl/assert>
+#include <memory>
 
 /* replace with standard version once http://wg21.link/P0288 will be accepted and implemented */
 namespace couchbase::utils
@@ -41,32 +42,34 @@ class movable_function : public std::function<Signature>
     };
 
     template<typename Functor>
-    struct wrapper<Functor, std::enable_if_t<!std::is_copy_constructible_v<Functor> && std::is_move_constructible_v<Functor>>> {
+    struct copy_wrapper {
         Functor fn;
 
-        explicit wrapper(Functor&& f)
+        explicit copy_wrapper(Functor&& f)
           : fn(std::move(f))
+        {
+        }
+    };
+
+    template<typename Functor>
+    struct wrapper<Functor, std::enable_if_t<!std::is_copy_constructible_v<Functor> && std::is_move_constructible_v<Functor>>> {
+        std::shared_ptr<copy_wrapper<Functor>> fnPtr;
+
+        explicit wrapper(Functor&& f)
+          : fnPtr(new copy_wrapper<Functor>(std::move(f)))
         {
         }
 
         wrapper(wrapper&& /* other */) noexcept = default;
         wrapper& operator=(wrapper&& /* other */) noexcept = default;
 
-        wrapper(const wrapper& other)
-          : fn(const_cast<Functor&&>(other.fn))
-        {
-            throw std::runtime_error("unexpected invocation of movable_function::wrapper() copy constructor");
-        }
-
-        wrapper& operator=(const wrapper& /* other */)
-        {
-            throw std::runtime_error("unexpected invocation of movable_function::wrapper() copy assignment");
-        }
+        wrapper(const wrapper& other) = default;
+        wrapper& operator=(const wrapper& /* other */) = default;
 
         template<typename... Args>
         auto operator()(Args&&... args)
         {
-            return fn(std::forward<Args>(args)...);
+            return std::move(fnPtr->fn)(std::forward<Args>(args)...);
         }
     };
 
