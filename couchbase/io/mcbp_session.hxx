@@ -689,7 +689,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     {
         retry_bootstrap_on_bucket_not_found_ = retry_on_bucket_not_found;
         bootstrap_handler_ = std::move(handler);
-        bootstrap_deadline_.expires_after(timeout_defaults::bootstrap_timeout);
+        bootstrap_deadline_.expires_after(origin_.options().bootstrap_timeout);
         bootstrap_deadline_.async_wait([self = shared_from_this()](std::error_code ec) {
             if (ec == asio::error::operation_aborted || self->stopped_) {
                 return;

@@ -18,3 +18,5 @@ unit_test(jsonsl)
 target_link_libraries(test_unit_jsonsl jsonsl)
 
 integration_benchmark(get)
+
+add_subdirectory(tools)
