@@ -47,7 +47,7 @@ class bucket : public std::enable_shared_from_this<bucket>
       , ctx_(ctx)
       , tls_(tls)
       , tracer_(std::move(tracer))
-      , meter_(meter)
+      , meter_(std::move(meter))
       , name_(std::move(name))
       , origin_(std::move(origin))
       , known_features_(known_features)
@@ -90,6 +90,12 @@ class bucket : public std::enable_shared_from_this<bucket>
     {
         if (!config_) {
             LOG_DEBUG("{} initialize configuration rev={}", log_prefix_, config.rev_str());
+        } else if (!config.vbmap) {
+            LOG_DEBUG("{} will not update the configuration old={} -> new={}, because new config does not have partition map",
+                      log_prefix_,
+                      config_->rev_str(),
+                      config.rev_str());
+            return;
         } else if (config_ < config) {
             LOG_DEBUG("{} will update the configuration old={} -> new={}", log_prefix_, config_->rev_str(), config.rev_str());
         } else {
@@ -106,6 +112,7 @@ class bucket : public std::enable_shared_from_this<bucket>
         }
         config_ = config;
         if (!added.empty() || removed.empty()) {
+            std::scoped_lock lock(sessions_mutex_);
             std::map<size_t, std::shared_ptr<io::mcbp_session>> new_sessions{};
 
             for (auto& [index, session] : sessions_) {
@@ -126,7 +133,7 @@ class bucket : public std::enable_shared_from_this<bucket>
                               session->id(),
                               session->bootstrap_hostname(),
                               session->bootstrap_port());
-                    new_sessions.emplace(new_index, std::move(session));
+                    new_sessions[new_index] = std::move(session);
                 } else {
                     LOG_DEBUG(R"({} rev={}, drop session="{}", address="{}:{}")",
                               log_prefix_,
@@ -174,7 +181,7 @@ class bucket : public std::enable_shared_from_this<bucket>
                       }
                   },
                   true);
-                new_sessions.emplace(node.index, std::move(session));
+                new_sessions[node.index] = std::move(session);
             }
             sessions_ = new_sessions;
         }
@@ -208,8 +215,8 @@ class bucket : public std::enable_shared_from_this<bucket>
             session = std::make_shared<io::mcbp_session>(client_id_, ctx_, origin, name_, known_features_);
         }
 
-        auto ptr = sessions_.find(index);
-        if (ptr == sessions_.end() || ptr->second == nullptr) {
+        std::scoped_lock lock(sessions_mutex_);
+        if (auto ptr = sessions_.find(index); ptr == sessions_.end() || ptr->second == nullptr) {
             LOG_DEBUG(R"({} requested to restart session idx={}, which does not exist yet, initiate new one id="{}", address="{}:{}")",
                       log_prefix_,
                       index,
@@ -254,7 +261,7 @@ class bucket : public std::enable_shared_from_this<bucket>
               self->drain_deferred_queue();
           },
           true);
-        sessions_.emplace(index, std::move(session));
+        sessions_[index] = std::move(session);
     }
 
     template<typename Handler>
@@ -280,7 +287,10 @@ class bucket : public std::enable_shared_from_this<bucket>
                     }
                 });
 
-                self->sessions_.try_emplace(this_index, std::move(new_session));
+                {
+                    std::scoped_lock lock(self->sessions_mutex_);
+                    self->sessions_[this_index] = std::move(new_session);
+                }
                 self->update_config(cfg);
                 self->drain_deferred_queue();
             }
@@ -350,7 +360,13 @@ class bucket : public std::enable_shared_from_this<bucket>
         closed_ = true;
 
         drain_deferred_queue();
-        for (auto& [index, session] : sessions_) {
+
+        std::map<size_t, std::shared_ptr<io::mcbp_session>> old_sessions;
+        {
+            std::scoped_lock lock(sessions_mutex_);
+            std::swap(old_sessions, sessions_);
+        }
+        for (auto& [index, session] : old_sessions) {
             if (session) {
                 LOG_DEBUG(R"({} shutdown session session="{}", idx={})", log_prefix_, session->id(), index);
                 session->stop(io::retry_reason::do_not_retry);
@@ -366,9 +382,13 @@ class bucket : public std::enable_shared_from_this<bucket>
         }
         std::int16_t index = 0;
         if (cmd->request.id.use_any_session()) {
-            index = round_robin_next_;
-            ++round_robin_next_;
-            if (static_cast<std::size_t>(round_robin_next_) >= sessions_.size()) {
+            index = round_robin_next_.fetch_add(1);
+            std::size_t number_of_sessions{ 0 };
+            {
+                std::scoped_lock lock(sessions_mutex_);
+                number_of_sessions = sessions_.size();
+            }
+            if (static_cast<std::size_t>(round_robin_next_) >= number_of_sessions) {
                 round_robin_next_ = 0;
             }
         } else {
@@ -378,9 +398,18 @@ class bucket : public std::enable_shared_from_this<bucket>
                   cmd->manager_, cmd, io::retry_reason::node_not_available, error::common_errc::request_canceled);
             }
         }
-        auto session = sessions_.at(static_cast<std::size_t>(index));
-        if (session == nullptr || !session->has_config()) {
-            std::scoped_lock lock(deferred_commands_mutex_);
+        std::shared_ptr<io::mcbp_session> session{};
+        bool found{ false };
+        {
+            std::scoped_lock lock(sessions_mutex_);
+            auto ptr = sessions_.find(static_cast<std::size_t>(index));
+            found = ptr != sessions_.end();
+            if (found) {
+                session = ptr->second;
+            }
+        }
+        if (!found || session == nullptr || !session->has_config()) {
+            std::scoped_lock lock_for_deferred_commands(deferred_commands_mutex_);
             deferred_commands_.emplace([self = shared_from_this(), cmd]() { self->map_and_send(cmd); });
             return;
         }
@@ -413,7 +442,12 @@ class bucket : public std::enable_shared_from_this<bucket>
 
     void export_diag_info(diag::diagnostics_result& res) const
     {
-        for (const auto& [index, session] : sessions_) {
+        std::map<size_t, std::shared_ptr<io::mcbp_session>> sessions;
+        {
+            std::scoped_lock lock(sessions_mutex_);
+            sessions = sessions_;
+        }
+        for (const auto& [index, session] : sessions) {
             res.services[service_type::key_value].emplace_back(session->diag_info());
         }
     }
@@ -421,7 +455,12 @@ class bucket : public std::enable_shared_from_this<bucket>
     template<typename Collector>
     void ping(std::shared_ptr<Collector> collector)
     {
-        for (const auto& [index, session] : sessions_) {
+        std::map<size_t, std::shared_ptr<io::mcbp_session>> sessions;
+        {
+            std::scoped_lock lock(sessions_mutex_);
+            sessions = sessions_;
+        }
+        for (const auto& [index, session] : sessions) {
             session->ping(collector->build_reporter());
         }
     }
@@ -453,7 +492,8 @@ class bucket : public std::enable_shared_from_this<bucket>
 
     bool closed_{ false };
     std::map<size_t, std::shared_ptr<io::mcbp_session>> sessions_{};
-    std::int16_t round_robin_next_{ 0 };
+    mutable std::mutex sessions_mutex_{};
+    std::atomic_int16_t round_robin_next_{ 0 };
 
     std::string log_prefix_{};
 };
