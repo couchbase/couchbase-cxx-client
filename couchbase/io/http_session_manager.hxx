@@ -156,7 +156,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
                           state,
                           {},
                           error });
-                        self->check_in(type, std::move(cmd->session_));
+                        self->check_in(type, cmd->session_);
                     });
                     cmd->send_to(session);
                 }
@@ -264,7 +264,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
               ctx.http_status = resp.status_code;
               ctx.http_body = resp.body.data();
               handler(cmd->request.make_response(std::move(ctx), std::move(resp)));
-              self->check_in(cmd->request.type, std::move(cmd->session_));
+              self->check_in(cmd->request.type, cmd->session_);
           });
         cmd->send_to(session);
     }
