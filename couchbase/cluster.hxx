@@ -70,9 +70,9 @@ class cluster
             tracer_ = std::make_shared<tracing::noop_tracer>();
         }
         if (origin_.options().enable_metrics) {
-            meter_ = new metrics::logging_meter(ctx_, origin.options().metrics_options);
+            meter_ = std::make_shared<metrics::logging_meter>(ctx_, origin.options().metrics_options);
         } else {
-            meter_ = new metrics::noop_meter();
+            meter_ = std::make_shared<metrics::noop_meter>();
         }
         session_manager_->set_tracer(tracer_);
         if (origin_.options().enable_dns_srv) {
@@ -98,8 +98,7 @@ class cluster
             handler();
             work_.reset();
             tracer_.reset();
-            delete meter_;
-            meter_ = nullptr;
+            meter_.reset();
         }));
     }
 
@@ -366,7 +365,7 @@ class cluster
     std::map<std::string, std::shared_ptr<bucket>> buckets_{};
     couchbase::origin origin_{};
     std::shared_ptr<tracing::request_tracer> tracer_{ nullptr };
-    metrics::meter* meter_{ nullptr };
+    std::shared_ptr<metrics::meter> meter_{ nullptr };
     std::atomic_bool stopped_{ false };
 };
 } // namespace couchbase

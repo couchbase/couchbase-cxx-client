@@ -158,24 +158,25 @@ logging_meter::log_report() const
     }
 }
 
-value_recorder*
+std::shared_ptr<value_recorder>
 logging_meter::get_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags)
 {
-    static noop_value_recorder noop_recorder{};
+    static std::shared_ptr<noop_value_recorder> noop_recorder{ std::make_shared<noop_value_recorder>() };
+
     if (static std::string meter_name = "db.couchbase.operations"; name != meter_name) {
-        return &noop_recorder;
+        return noop_recorder;
     }
 
     static std::string service_tag = "db.couchbase.service";
     auto service = tags.find(service_tag);
     if (service == tags.end()) {
-        return &noop_recorder;
+        return noop_recorder;
     }
 
     static std::string operation_tag = "db.operation";
     auto operation = tags.find(operation_tag);
     if (operation == tags.end()) {
-        return &noop_recorder;
+        return noop_recorder;
     }
 
     std::scoped_lock lock(recorders_mutex_);
@@ -183,11 +184,11 @@ logging_meter::get_value_recorder(const std::string& name, const std::map<std::s
 
     auto recorder = service_recorders.find(operation->second);
     if (recorder != service_recorders.end()) {
-        return recorder->second.get();
+        return recorder->second;
     }
 
     service_recorders.try_emplace(operation->second, std::make_shared<logging_value_recorder>(operation->second, tags));
     recorder = service_recorders.find(operation->second);
-    return recorder->second.get();
+    return recorder->second;
 }
 } // namespace couchbase::metrics

@@ -38,7 +38,7 @@ class bucket : public std::enable_shared_from_this<bucket>
                     asio::io_context& ctx,
                     asio::ssl::context& tls,
                     std::shared_ptr<tracing::request_tracer> tracer,
-                    metrics::meter* meter,
+                    std::shared_ptr<metrics::meter> meter,
                     std::string name,
                     couchbase::origin origin,
                     const std::vector<protocol::hello_feature>& known_features)
@@ -441,7 +441,7 @@ class bucket : public std::enable_shared_from_this<bucket>
     asio::io_context& ctx_;
     asio::ssl::context& tls_;
     std::shared_ptr<tracing::request_tracer> tracer_;
-    metrics::meter* meter_;
+    std::shared_ptr<metrics::meter> meter_;
     std::string name_;
     origin origin_;
 
