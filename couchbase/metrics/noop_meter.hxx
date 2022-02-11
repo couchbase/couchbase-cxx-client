@@ -33,11 +33,14 @@ class noop_value_recorder : public value_recorder
 
 class noop_meter : public meter
 {
+  private:
+    std::shared_ptr<noop_value_recorder> instance_{ std::make_shared<noop_value_recorder>() };
+
   public:
-    value_recorder* get_value_recorder(const std::string& /* name */, const std::map<std::string, std::string>& /* tags */) override
+    std::shared_ptr<value_recorder> get_value_recorder(const std::string& /* name */,
+                                                       const std::map<std::string, std::string>& /* tags */) override
     {
-        static noop_value_recorder instance{};
-        return &instance;
+        return instance_;
     }
 };
 

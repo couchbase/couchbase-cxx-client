@@ -68,7 +68,7 @@ class logging_meter : public meter
         rearm_reporter();
     }
 
-    value_recorder* get_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags) override;
+    std::shared_ptr<value_recorder> get_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags) override;
 };
 
 } // namespace couchbase::metrics

@@ -22,6 +22,7 @@
 #include <couchbase/service_type_fmt.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
 #include <couchbase/utils/movable_function.hxx>
+#include <utility>
 
 namespace couchbase::operations
 {
@@ -39,7 +40,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     encoded_request_type encoded;
     std::shared_ptr<tracing::request_tracer> tracer_;
     std::shared_ptr<tracing::request_span> span_{ nullptr };
-    metrics::meter* meter_;
+    std::shared_ptr<metrics::meter> meter_{};
     std::shared_ptr<io::http_session> session_{};
     http_command_handler handler_{};
     std::chrono::milliseconds timeout_{};
@@ -48,13 +49,13 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     http_command(asio::io_context& ctx,
                  Request req,
                  std::shared_ptr<tracing::request_tracer> tracer,
-                 metrics::meter* meter,
+                 std::shared_ptr<metrics::meter> meter,
                  std::chrono::milliseconds default_timeout)
       : deadline(ctx)
       , retry_backoff(ctx)
       , request(req)
       , tracer_(std::move(tracer))
-      , meter_(meter)
+      , meter_(std::move(meter))
       , timeout_(request.timeout.value_or(default_timeout))
       , client_context_id_(request.client_context_id.value_or(uuid::to_string(uuid::random())))
     {

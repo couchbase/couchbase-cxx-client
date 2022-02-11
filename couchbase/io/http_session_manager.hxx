@@ -46,9 +46,9 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
         tracer_ = std::move(tracer);
     }
 
-    void set_meter(metrics::meter* meter)
+    void set_meter(std::shared_ptr<metrics::meter> meter)
     {
-        meter_ = meter;
+        meter_ = std::move(meter);
     }
 
     void update_configuration(const topology::configuration& config)
@@ -334,7 +334,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
     asio::io_context& ctx_;
     asio::ssl::context& tls_;
     std::shared_ptr<tracing::request_tracer> tracer_{ nullptr };
-    metrics::meter* meter_{ nullptr };
+    std::shared_ptr<metrics::meter> meter_{ nullptr };
     cluster_options options_{};
 
     topology::configuration config_{};
