@@ -109,6 +109,17 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
         deadline.cancel();
     }
 
+    void send_to(std::shared_ptr<io::http_session> session)
+    {
+        if (!handler_) {
+            return;
+        }
+        session_ = std::move(session);
+        span_->add_tag(tracing::attributes::local_id, session_->id());
+        send();
+    }
+
+  private:
     void send()
     {
         encoded.type = request.type;
@@ -157,16 +168,6 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
                   self->send();
               }
           });
-    }
-
-    void send_to(std::shared_ptr<io::http_session> session)
-    {
-        if (!handler_) {
-            return;
-        }
-        session_ = std::move(session);
-        span_->add_tag(tracing::attributes::local_id, session_->id());
-        send();
     }
 };
 
