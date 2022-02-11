@@ -335,7 +335,7 @@ TEST_CASE("integration: fetch diagnostics after N1QL query", "[integration]")
     {
         auto barrier = std::make_shared<std::promise<couchbase::diag::diagnostics_result>>();
         auto f = barrier->get_future();
-        integration.cluster.diagnostics(
+        integration.cluster->diagnostics(
           "my_report_id", [barrier](couchbase::diag::diagnostics_result&& resp) mutable { barrier->set_value(std::move(resp)); });
         auto res = f.get();
         REQUIRE(res.id == "my_report_id");
@@ -355,7 +355,7 @@ TEST_CASE("integration: ping", "[integration]")
     {
         auto barrier = std::make_shared<std::promise<couchbase::diag::ping_result>>();
         auto f = barrier->get_future();
-        integration.cluster.ping(
+        integration.cluster->ping(
           "my_report_id", {}, {}, [barrier](couchbase::diag::ping_result&& resp) mutable { barrier->set_value(std::move(resp)); });
         auto res = f.get();
         REQUIRE(res.id == "my_report_id");

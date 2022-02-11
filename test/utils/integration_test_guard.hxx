@@ -95,7 +95,7 @@ class integration_test_guard
 
     std::thread io_thread{};
     asio::io_context io{};
-    couchbase::cluster cluster;
+    std::shared_ptr<couchbase::cluster> cluster;
     test_context ctx;
     couchbase::origin origin;
 

@@ -23,25 +23,25 @@ namespace test::utils
 {
 template<class Request>
 auto
-execute(couchbase::cluster& cluster, Request request)
+execute(std::shared_ptr<couchbase::cluster> cluster, Request request)
 {
     using response_type = typename Request::response_type;
     auto barrier = std::make_shared<std::promise<response_type>>();
     auto f = barrier->get_future();
-    cluster.execute(request, [barrier](response_type resp) { barrier->set_value(std::move(resp)); });
+    cluster->execute(request, [barrier](response_type resp) { barrier->set_value(std::move(resp)); });
     auto resp = f.get();
     return resp;
 }
 
 void
-open_cluster(couchbase::cluster& cluster, const couchbase::origin& origin);
+open_cluster(std::shared_ptr<couchbase::cluster> cluster, const couchbase::origin& origin);
 
 void
-close_cluster(couchbase::cluster& cluster);
+close_cluster(std::shared_ptr<couchbase::cluster> cluster);
 
 void
-open_bucket(couchbase::cluster& cluster, const std::string& bucket_name);
+open_bucket(std::shared_ptr<couchbase::cluster> cluster, const std::string& bucket_name);
 
 void
-close_bucket(couchbase::cluster& cluster, const std::string& bucket_name);
+close_bucket(std::shared_ptr<couchbase::cluster> cluster, const std::string& bucket_name);
 } // namespace test::utils

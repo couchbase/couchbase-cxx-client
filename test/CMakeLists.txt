@@ -1,5 +1,6 @@
 add_subdirectory(utils)
 
+integration_test(connect)
 integration_test(management)
 integration_test(crud)
 integration_test(query)

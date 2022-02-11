@@ -17,37 +17,35 @@
 
 #pragma once
 
-#include "server_version.hxx"
-
-#include <couchbase/origin.hxx>
-
 #include <string>
 
 namespace test::utils
 {
-struct test_context {
-    std::string connection_string{ "couchbase://127.0.0.1" };
-    std::string username{ "Administrator" };
-    std::string password{ "password" };
-    std::string certificate_path{};
-    std::string key_path{};
-    std::string bucket{ "default" };
-    server_version version{ 6, 6, 0 };
 
-    [[nodiscard]] couchbase::cluster_credentials build_auth() const
+struct move_only_context {
+  public:
+    explicit move_only_context(std::string input)
+      : payload_(std::move(input))
     {
-        couchbase::cluster_credentials auth{};
-        if (certificate_path.empty()) {
-            auth.username = username;
-            auth.password = password;
-        } else {
-            auth.certificate_path = certificate_path;
-            auth.key_path = key_path;
-        }
-        return auth;
     }
 
-    static test_context load_from_environment();
+    move_only_context(move_only_context&& other) = default;
+
+    move_only_context& operator=(move_only_context&& other) = default;
+
+    ~move_only_context() = default;
+
+    move_only_context(const move_only_context& other) = delete;
+
+    move_only_context& operator=(const move_only_context& other) = delete;
+
+    [[nodiscard]] const std::string& payload() const
+    {
+        return payload_;
+    }
+
+  private:
+    std::string payload_;
 };
 
 } // namespace test::utils

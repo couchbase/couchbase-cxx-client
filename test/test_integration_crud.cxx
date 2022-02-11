@@ -17,28 +17,13 @@
 
 #include "test_helper_integration.hxx"
 
+#include "utils/move_only_context.hxx"
+
 static const tao::json::value basic_doc = {
     { "a", 1.0 },
     { "b", 2.0 },
 };
 static const std::string basic_doc_json = couchbase::utils::json::generate(basic_doc);
-
-TEST_CASE("integration: connecting with empty bootstrap nodes list", "[integration]")
-{
-    asio::io_context io{};
-    auto io_thread = std::thread([&io]() { io.run(); });
-    auto connstr = couchbase::utils::parse_connection_string("couchbase://");
-    REQUIRE(connstr.bootstrap_nodes.empty());
-    auto origin = couchbase::origin({}, connstr);
-    couchbase::cluster cluster{ io };
-    auto barrier = std::make_shared<std::promise<std::error_code>>();
-    auto f = barrier->get_future();
-    cluster.open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
-    auto rc = f.get();
-    REQUIRE(rc == couchbase::error::common_errc::invalid_argument);
-    test::utils::close_cluster(cluster);
-    io_thread.join();
-}
 
 TEST_CASE("integration: crud on default collection", "[integration]")
 {
@@ -531,47 +516,17 @@ TEST_CASE("integration: upsert with handler capturing non-copyable object", "[in
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    if (!integration.cluster_version().supports_gcccp()) {
-        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
-    }
-
     {
-        struct move_only_context {
-          public:
-            explicit move_only_context(std::string input)
-              : payload_(std::move(input))
-            {
-            }
-
-            move_only_context(move_only_context&& other) = default;
-
-            move_only_context& operator=(move_only_context&& other) = default;
-
-            ~move_only_context() = default;
-
-            move_only_context(const move_only_context& other) = delete;
-
-            move_only_context& operator=(const move_only_context& other) = delete;
-
-            [[nodiscard]] const std::string& payload() const
-            {
-                return payload_;
-            }
-
-          private:
-            std::string payload_;
-        };
-
         couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
         couchbase::operations::upsert_request req{ id, R"({"foo":"bar"})" };
         auto barrier = std::make_shared<std::promise<couchbase::operations::upsert_response>>();
         auto f = barrier->get_future();
-        move_only_context ctx("foobar");
+        test::utils::move_only_context ctx("foobar");
         auto handler = [barrier, ctx = std::move(ctx)](couchbase::operations::upsert_response&& resp) {
             CHECK(ctx.payload() == "foobar");
             barrier->set_value(std::move(resp));
         };
-        integration.cluster.execute(req, std::move(handler));
+        integration.cluster->execute(req, std::move(handler));
         auto resp = f.get();
         INFO(resp.ctx.ec.message())
         REQUIRE_FALSE(resp.ctx.ec);
@@ -678,7 +633,7 @@ TEST_CASE("integration: open bucket that does not exist", "[integration]")
 
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();
-    integration.cluster.open_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
+    integration.cluster->open_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
     REQUIRE(rc == couchbase::error::common_errc::bucket_not_found);
 }

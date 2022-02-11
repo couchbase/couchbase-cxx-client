@@ -22,12 +22,12 @@ namespace couchbase
 class ping_collector : public std::enable_shared_from_this<ping_collector>
 {
     diag::ping_result res_;
-    std::function<void(diag::ping_result)> handler_;
+    utils::movable_function<void(diag::ping_result)> handler_;
     std::atomic_int expected_{ 0 };
     std::mutex mutex_{};
 
   public:
-    ping_collector(std::string report_id, std::function<void(diag::ping_result)> handler)
+    ping_collector(std::string report_id, utils::movable_function<void(diag::ping_result)>&& handler)
       : res_{ std::move(report_id), couchbase::meta::sdk_id() }
       , handler_(std::move(handler))
     {
@@ -65,10 +65,10 @@ class ping_collector : public std::enable_shared_from_this<ping_collector>
 };
 
 void
-cluster::ping(std::optional<std::string> report_id,
-              std::optional<std::string> bucket_name,
-              std::set<service_type> services,
-              std::function<void(diag::ping_result)> handler)
+cluster::do_ping(std::optional<std::string> report_id,
+                 std::optional<std::string> bucket_name,
+                 std::set<service_type> services,
+                 utils::movable_function<void(diag::ping_result)> handler)
 {
     if (!report_id) {
         report_id = std::make_optional(uuid::to_string(uuid::random()));

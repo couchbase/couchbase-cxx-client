@@ -98,7 +98,7 @@ TEST_CASE("integration: bucket management", "[integration]")
         {
             couchbase::operations::management::bucket_get_all_request req{};
             auto resp = test::utils::execute(integration.cluster, req);
-            INFO(resp.ctx.http_body);
+            INFO(resp.ctx.http_body)
             REQUIRE_FALSE(resp.ctx.ec);
             bool found = false;
             for (const auto& bucket : resp.buckets) {
@@ -263,7 +263,7 @@ TEST_CASE("integration: bucket management", "[integration]")
             {
                 couchbase::operations::management::bucket_create_request req{ bucket_settings };
                 auto resp = test::utils::execute(integration.cluster, req);
-                INFO(resp.error_message);
+                INFO(resp.error_message)
                 REQUIRE_FALSE(resp.ctx.ec);
             }
 
@@ -326,7 +326,7 @@ TEST_CASE("integration: bucket management", "[integration]")
 
                 couchbase::operations::management::bucket_create_request req{ bucket_settings };
                 auto resp = test::utils::execute(integration.cluster, req);
-                INFO(resp.error_message);
+                INFO(resp.error_message)
                 REQUIRE_FALSE(resp.ctx.ec);
             }
 
@@ -438,7 +438,7 @@ TEST_CASE("integration: bucket management", "[integration]")
                         bucket_settings.minimum_durability_level = couchbase::protocol::durability_level::majority;
                         couchbase::operations::management::bucket_create_request req{ bucket_settings };
                         auto resp = test::utils::execute(integration.cluster, req);
-                        INFO(resp.error_message);
+                        INFO(resp.error_message)
                         REQUIRE_FALSE(resp.ctx.ec);
                     }
 
@@ -462,7 +462,7 @@ TEST_CASE("integration: bucket management", "[integration]")
 }
 
 bool
-collection_exists(couchbase::cluster& cluster,
+collection_exists(std::shared_ptr<couchbase::cluster> cluster,
                   const std::string& bucket_name,
                   const std::string& scope_name,
                   const std::string& collection_name)
@@ -484,7 +484,7 @@ collection_exists(couchbase::cluster& cluster,
 }
 
 bool
-scope_exists(couchbase::cluster& cluster, const std::string& bucket_name, const std::string& scope_name)
+scope_exists(std::shared_ptr<couchbase::cluster> cluster, const std::string& bucket_name, const std::string& scope_name)
 {
     couchbase::operations::management::scope_get_all_request req{ bucket_name };
     auto resp = test::utils::execute(cluster, req);
@@ -696,7 +696,7 @@ TEST_CASE("integration: user groups management", "[integration]")
         {
             couchbase::operations::management::group_get_all_request req{};
             auto resp = test::utils::execute(integration.cluster, req);
-            INFO(resp.ctx.ec.message());
+            INFO(resp.ctx.ec.message())
             REQUIRE_FALSE(resp.ctx.ec);
             REQUIRE(resp.groups.size() >= 2);
         }

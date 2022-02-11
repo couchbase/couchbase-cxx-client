@@ -684,7 +684,8 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         return { config_, supported_features_ };
     }
 
-    void bootstrap(std::function<void(std::error_code, topology::configuration)>&& handler, bool retry_on_bucket_not_found = false)
+    void bootstrap(utils::movable_function<void(std::error_code, topology::configuration)>&& handler,
+                   bool retry_on_bucket_not_found = false)
     {
         retry_bootstrap_on_bucket_not_found_ = retry_on_bucket_not_found;
         bootstrap_handler_ = std::move(handler);
@@ -1250,7 +1251,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     std::optional<std::string> bucket_name_;
     mcbp_parser parser_;
     std::unique_ptr<message_handler> handler_;
-    std::function<void(std::error_code, const topology::configuration&)> bootstrap_handler_{};
+    utils::movable_function<void(std::error_code, const topology::configuration&)> bootstrap_handler_{};
     std::mutex command_handlers_mutex_{};
     std::map<uint32_t, utils::movable_function<void(std::error_code, retry_reason, io::mcbp_message&&)>> command_handlers_{};
     std::vector<std::function<void(const topology::configuration&)>> config_listeners_{};
