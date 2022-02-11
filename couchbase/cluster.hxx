@@ -205,13 +205,22 @@ class cluster
         }));
     }
 
+    template<typename Handler>
     void ping(std::optional<std::string> report_id,
               std::optional<std::string> bucket_name,
               std::set<service_type> services,
-              std::function<void(diag::ping_result)> handler);
+              Handler&& handler)
+    {
+        do_ping(report_id, bucket_name, services, std::forward<Handler>(handler));
+    }
 
   private:
     std::shared_ptr<bucket> find_bucket_by_name(const std::string& name);
+
+    void do_ping(std::optional<std::string> report_id,
+                 std::optional<std::string> bucket_name,
+                 std::set<service_type> services,
+                 utils::movable_function<void(diag::ping_result)> handler);
 
     template<typename Handler>
     void for_each_bucket(Handler handler)
