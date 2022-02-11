@@ -75,7 +75,8 @@ find_files_with_prefix(const std::string& dir, const std::string& name)
     if (hFind != INVALID_HANDLE_VALUE) {
         do {
             std::wstring fn = FindFileData.cFileName;
-            std::string fnm(fn.begin(), fn.end());
+            std::string fnm(fn.length(), 0);
+            std::transform(fn.begin(), fn.end(), fnm.begin(), [](wchar_t c) { return static_cast<char>(c); });
             if (fnm != "." && fnm != "..") {
                 std::string entry = dir;
                 entry.append("\\");
