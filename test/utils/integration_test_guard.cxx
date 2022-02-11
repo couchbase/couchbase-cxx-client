@@ -21,7 +21,7 @@
 namespace test::utils
 {
 integration_test_guard::integration_test_guard()
-  : cluster(couchbase::cluster(io))
+  : cluster(couchbase::cluster::create(io))
   , ctx(test_context::load_from_environment())
 {
     init_logger();

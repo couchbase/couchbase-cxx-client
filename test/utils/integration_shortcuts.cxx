@@ -22,11 +22,11 @@
 namespace test::utils
 {
 void
-open_cluster(couchbase::cluster& cluster, const couchbase::origin& origin)
+open_cluster(std::shared_ptr<couchbase::cluster> cluster, const couchbase::origin& origin)
 {
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();
-    cluster.open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
+    cluster->open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
     if (rc) {
         LOG_CRITICAL(
@@ -35,20 +35,20 @@ open_cluster(couchbase::cluster& cluster, const couchbase::origin& origin)
     }
 }
 void
-close_cluster(couchbase::cluster& cluster)
+close_cluster(std::shared_ptr<couchbase::cluster> cluster)
 {
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
-    cluster.close([barrier]() { barrier->set_value(); });
+    cluster->close([barrier]() { barrier->set_value(); });
     f.get();
 }
 
 void
-open_bucket(couchbase::cluster& cluster, const std::string& bucket_name)
+open_bucket(std::shared_ptr<couchbase::cluster> cluster, const std::string& bucket_name)
 {
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();
-    cluster.open_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
+    cluster->open_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
     if (rc) {
         LOG_CRITICAL("unable to open bucket: {}, name={}", rc.message(), bucket_name);
@@ -57,11 +57,11 @@ open_bucket(couchbase::cluster& cluster, const std::string& bucket_name)
 }
 
 void
-close_bucket(couchbase::cluster& cluster, const std::string& bucket_name)
+close_bucket(std::shared_ptr<couchbase::cluster> cluster, const std::string& bucket_name)
 {
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();
-    cluster.close_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
+    cluster->close_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
     if (rc) {
         LOG_CRITICAL("unable to close bucket: {}, name={}", rc.message(), bucket_name);

@@ -19,6 +19,8 @@
 
 #include <couchbase/utils/connection_string.hxx>
 
+#include <fmt/core.h>
+
 #include <string>
 #include <utility>
 

@@ -19,6 +19,8 @@
 
 #include "server_version.hxx"
 
+#include <couchbase/origin.hxx>
+
 #include <string>
 
 namespace test::utils
@@ -31,6 +33,19 @@ struct test_context {
     std::string key_path{};
     std::string bucket{ "default" };
     server_version version{ 6, 6, 0 };
+
+    [[nodiscard]] couchbase::cluster_credentials build_auth() const
+    {
+        couchbase::cluster_credentials auth{};
+        if (certificate_path.empty()) {
+            auth.username = username;
+            auth.password = password;
+        } else {
+            auth.certificate_path = certificate_path;
+            auth.key_path = key_path;
+        }
+        return auth;
+    }
 
     static test_context load_from_environment();
 };

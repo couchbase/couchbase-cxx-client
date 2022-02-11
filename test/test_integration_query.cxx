@@ -57,7 +57,7 @@ TEST_CASE("integration: query with handler capturing non-copyable object", "[int
             CHECK(ctx.payload() == "foobar");
             barrier->set_value(std::move(resp));
         };
-        integration.cluster.execute(req, std::move(handler));
+        integration.cluster->execute(req, std::move(handler));
         auto resp = f.get();
         INFO(resp.ctx.ec.message())
         REQUIRE_FALSE(resp.ctx.ec);

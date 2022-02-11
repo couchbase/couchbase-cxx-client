@@ -55,10 +55,10 @@ wait_until(ConditionChecker&& condition_checker)
 }
 
 bool
-wait_until_bucket_healthy(couchbase::cluster& cluster, const std::string& bucket_name);
+wait_until_bucket_healthy(std::shared_ptr<couchbase::cluster> cluster, const std::string& bucket_name);
 
 bool
-wait_until_collection_manifest_propagated(couchbase::cluster& cluster,
+wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::cluster> cluster,
                                           const std::string& bucket_name,
                                           const std::uint64_t current_manifest_uid);
 } // namespace test::utils
