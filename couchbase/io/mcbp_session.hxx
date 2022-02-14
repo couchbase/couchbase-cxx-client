@@ -1112,7 +1112,11 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                                                                      : ec.message(),
                         (ec == asio::error::connection_refused) ? ", check server ports and cluster encryption setting" : "",
                         stream_->is_open());
-            do_connect(++it);
+            if (stream_->is_open()) {
+                stream_->close(std::bind(&mcbp_session::do_connect, shared_from_this(), ++it));
+            } else {
+                do_connect(++it);
+            }
         } else {
             stream_->set_options();
             local_endpoint_ = stream_->local_endpoint();
