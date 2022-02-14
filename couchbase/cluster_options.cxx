@@ -17,7 +17,7 @@
 
 #include <couchbase/cluster_options.hxx>
 
-#include <gsl/assert>
+#include <stdexcept>
 
 namespace couchbase
 {
@@ -40,6 +40,6 @@ cluster_options::default_timeout_for(service_type type) const
         case service_type::eventing:
             return management_timeout;
     }
-    Ensures(false && "unexpected service type");
+    throw std::runtime_error("unexpected service type");
 }
 } // namespace couchbase
