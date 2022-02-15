@@ -97,10 +97,11 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
             span_->end();
             span_ = nullptr;
         }
-        if (handler_) {
-            handler_(ec, std::move(msg));
+        mcbp_command_handler handler{};
+        std::swap(handler, handler_);
+        if (handler) {
+            handler(ec, std::move(msg));
         }
-        handler_ = nullptr;
     }
 
     void request_collection_id()
