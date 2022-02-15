@@ -605,7 +605,7 @@ assert_user_and_metadata(const couchbase::operations::management::rbac::user_and
         auto expected_role = std::find_if(expected.effective_roles.begin(), expected.effective_roles.end(), [&role](const auto& exp_role) {
             return role.name == exp_role.name;
         });
-        REQUIRE(expected_role != user.effective_roles.end());
+        REQUIRE(expected_role != expected.effective_roles.end());
         REQUIRE(role.name == expected_role->name);
         REQUIRE(role.bucket == expected_role->bucket);
         REQUIRE(role.scope == expected_role->scope);
