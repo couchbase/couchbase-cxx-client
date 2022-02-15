@@ -99,7 +99,12 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
     void ping(std::set<service_type> services, std::shared_ptr<Collector> collector, const couchbase::cluster_credentials& credentials)
     {
         std::array<service_type, 4> known_types{ service_type::query, service_type::analytics, service_type::search, service_type::view };
-        for (const auto& node : config_.nodes) {
+        std::vector<topology::configuration::node> nodes{};
+        {
+            std::scoped_lock lock(config_mutex_);
+            nodes = config_.nodes;
+        }
+        for (const auto& node : nodes) {
             for (auto type : known_types) {
                 if (services.find(type) == services.end()) {
                     continue;
@@ -295,6 +300,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
 
     std::pair<std::string, std::uint16_t> next_node(service_type type)
     {
+        std::scoped_lock lock(config_mutex_);
         auto candidates = config_.nodes.size();
         while (candidates > 0) {
             --candidates;
@@ -321,6 +327,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
 
     std::pair<std::string, std::uint16_t> lookup_node(service_type type, const std::string& preferred_node)
     {
+        std::scoped_lock lock(config_mutex_);
         auto [hostname, port] = split_host_port(preferred_node);
         if (std::none_of(config_.nodes.begin(), config_.nodes.end(), [this, type, &h = hostname, &p = port](const auto& node) {
                 return node.hostname == h && node.port_or(options_.network, type, options_.enable_tls, 0) == p;
