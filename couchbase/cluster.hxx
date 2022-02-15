@@ -363,8 +363,8 @@ class cluster : public std::enable_shared_from_this<cluster>
                              utils::join_strings(self->origin_.get_nodes(), ","));
                 }
                 self->session_manager_->set_configuration(config, self->origin_.options());
-                self->session_->on_configuration_update([manager = self->session_manager_](const topology::configuration& new_config) {
-                    manager->update_configuration(new_config);
+                self->session_->on_configuration_update([manager = self->session_manager_](topology::configuration new_config) {
+                    manager->update_configuration(std::move(new_config));
                 });
             }
             handler(ec);

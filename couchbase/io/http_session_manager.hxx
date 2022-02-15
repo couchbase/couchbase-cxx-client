@@ -51,10 +51,10 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
         meter_ = std::move(meter);
     }
 
-    void update_configuration(const topology::configuration& config)
+    void update_configuration(topology::configuration config)
     {
         std::scoped_lock config_lock(config_mutex_, sessions_mutex_);
-        config_ = config;
+        config_ = std::move(config);
         for (auto& [type, sessions] : idle_sessions_) {
             sessions.remove_if(
               [&cfg = config_](const auto& session) { return session && !cfg.has_node_with_hostname(session->hostname()); });

@@ -890,10 +890,9 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         return supports_gcccp_;
     }
 
-    [[nodiscard]] bool has_config()
+    [[nodiscard]] bool has_config() const
     {
-        std::scoped_lock lock(config_mutex_);
-        return config_.has_value();
+        return configured_;
     }
 
     [[nodiscard]] topology::configuration config()
@@ -935,7 +934,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         return {};
     }
 
-    void on_configuration_update(std::function<void(const topology::configuration&)> handler)
+    void on_configuration_update(std::function<void(topology::configuration)> handler)
     {
         config_listeners_.emplace_back(std::move(handler));
     }
@@ -980,6 +979,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             }
         }
         config_.emplace(config);
+        configured_ = true;
         LOG_DEBUG("{} received new configuration: {}", log_prefix_, config_.value());
         for (const auto& listener : config_listeners_) {
             listener(*config_);
@@ -1287,6 +1287,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     std::vector<protocol::hello_feature> supported_features_;
     std::optional<topology::configuration> config_;
     std::mutex config_mutex_{};
+    std::atomic_bool configured_{ false };
     std::optional<error_map> error_map_;
     collection_cache collection_cache_;
 
