@@ -87,6 +87,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
     void invoke_handler(std::error_code ec, std::optional<io::mcbp_message> msg = {})
     {
+        retry_backoff.cancel();
+        deadline.cancel();
         if (span_ != nullptr) {
             if (msg) {
                 auto server_duration_us = static_cast<std::uint64_t>(protocol::parse_server_duration_us(msg.value()));
@@ -99,8 +101,6 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
             handler_(ec, std::move(msg));
         }
         handler_ = nullptr;
-        retry_backoff.cancel();
-        deadline.cancel();
     }
 
     void request_collection_id()
@@ -254,7 +254,6 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                   }
               }
               if (reason == io::retry_reason::do_not_retry) {
-                  self->deadline.cancel();
                   self->invoke_handler(ec, msg);
               } else {
                   io::retry_orchestrator::maybe_retry(self->manager_, self, reason, ec);
