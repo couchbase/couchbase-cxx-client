@@ -69,7 +69,7 @@ mcbp_parser::next(mcbp_message& msg)
         std::copy(buf.begin() + header_size + prefix_size, buf.begin() + header_size + body_size, std::back_insert_iterator(msg.body));
     }
     buf.erase(buf.begin(), buf.begin() + header_size + body_size);
-    if (!protocol::is_valid_magic(buf[0])) {
+    if (!buf.empty() && !protocol::is_valid_magic(buf[0])) {
         LOG_WARNING("parsed frame for magic={:x}, opcode={:x}, opaque={}, body_len={}. Invalid magic of the next frame: {:x}, {} "
                     "bytes to parse{}",
                     msg.header.magic,
