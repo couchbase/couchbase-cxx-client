@@ -23,7 +23,6 @@
 #include <couchbase/tracing/threshold_logging_options.hxx>
 
 #include <chrono>
-#include <optional>
 #include <string>
 
 namespace couchbase

@@ -94,7 +94,7 @@ struct configuration {
 
     bool operator<(const configuration& other) const
     {
-        return epoch < other.epoch && rev < other.rev;
+        return epoch < other.epoch || (epoch == other.epoch && rev < other.rev);
     }
 
     bool operator>(const configuration& other) const
