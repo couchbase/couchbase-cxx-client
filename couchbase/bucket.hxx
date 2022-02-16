@@ -122,7 +122,7 @@ class bucket : public std::enable_shared_from_this<bucket>
                 }
             }
         }
-        if (!added.empty() || removed.empty()) {
+        if (!added.empty() || !removed.empty()) {
             std::scoped_lock lock(sessions_mutex_);
             std::map<size_t, std::shared_ptr<io::mcbp_session>> new_sessions{};
 

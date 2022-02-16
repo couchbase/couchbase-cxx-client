@@ -369,6 +369,7 @@ class cluster : public std::enable_shared_from_this<cluster>
                 self->session_->on_configuration_update([manager = self->session_manager_](topology::configuration new_config) {
                     manager->update_configuration(std::move(new_config));
                 });
+                self->session_->on_stop([self](io::retry_reason) { self->session_.reset(); });
             }
             handler(ec);
         });
