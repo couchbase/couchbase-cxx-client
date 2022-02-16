@@ -133,6 +133,9 @@ class cluster : public std::enable_shared_from_this<cluster>
             }
             handler(ec);
         });
+        b->on_configuration_update([self = shared_from_this()](topology::configuration new_config) {
+            self->session_manager_->update_configuration(std::move(new_config));
+        });
     }
 
     template<typename Handler>
