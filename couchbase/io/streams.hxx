@@ -86,7 +86,7 @@ class plain_stream_impl : public stream_impl
   public:
     explicit plain_stream_impl(asio::io_context& ctx)
       : stream_impl(ctx, false)
-      , stream_(std::make_unique<asio::ip::tcp::socket>(strand_))
+      , stream_(std::make_shared<asio::ip::tcp::socket>(strand_))
     {
     }
 
@@ -157,7 +157,7 @@ class tls_stream_impl : public stream_impl
   public:
     tls_stream_impl(asio::io_context& ctx, asio::ssl::context& tls)
       : stream_impl(ctx, true)
-      , stream_(std::make_unique<asio::ssl::stream<asio::ip::tcp::socket>>(asio::ip::tcp::socket(strand_), tls))
+      , stream_(std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(asio::ip::tcp::socket(strand_), tls))
       , tls_(tls)
     {
     }
@@ -187,7 +187,7 @@ class tls_stream_impl : public stream_impl
     {
         return close([this](std::error_code) {
             id_ = uuid::to_string(uuid::random());
-            stream_ = std::make_unique<asio::ssl::stream<asio::ip::tcp::socket>>(asio::ip::tcp::socket(strand_), tls_);
+            stream_ = std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(asio::ip::tcp::socket(strand_), tls_);
         });
     }
 
