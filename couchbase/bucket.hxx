@@ -114,6 +114,13 @@ class bucket : public std::enable_shared_from_this<bucket>
             }
             config_ = config;
             configured_ = true;
+
+            {
+                std::scoped_lock listeners_lock(config_listeners_mutex_);
+                for (const auto& listener : config_listeners_) {
+                    listener(*config_);
+                }
+            }
         }
         if (!added.empty() || removed.empty()) {
             std::scoped_lock lock(sessions_mutex_);
@@ -305,6 +312,12 @@ class bucket : public std::enable_shared_from_this<bucket>
         });
     }
 
+    void on_configuration_update(std::function<void(topology::configuration)> handler)
+    {
+        std::scoped_lock lock(config_listeners_mutex_);
+        config_listeners_.emplace_back(std::move(handler));
+    }
+
     void drain_deferred_queue()
     {
         std::queue<std::function<void()>> commands{};
@@ -367,6 +380,11 @@ class bucket : public std::enable_shared_from_this<bucket>
         closed_ = true;
 
         drain_deferred_queue();
+
+        {
+            std::scoped_lock lock(config_listeners_mutex_);
+            config_listeners_.clear();
+        }
 
         std::map<size_t, std::shared_ptr<io::mcbp_session>> old_sessions;
         {
@@ -509,6 +527,9 @@ class bucket : public std::enable_shared_from_this<bucket>
     std::map<size_t, std::shared_ptr<io::mcbp_session>> sessions_{};
     mutable std::mutex sessions_mutex_{};
     std::atomic_int16_t round_robin_next_{ 0 };
+
+    std::vector<std::function<void(topology::configuration)>> config_listeners_{};
+    std::mutex config_listeners_mutex_{};
 
     std::string log_prefix_{};
 };
