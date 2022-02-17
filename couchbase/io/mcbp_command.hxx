@@ -89,6 +89,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     {
         retry_backoff.cancel();
         deadline.cancel();
+        mcbp_command_handler handler{};
+        std::swap(handler, handler_);
         if (span_ != nullptr) {
             if (msg) {
                 auto server_duration_us = static_cast<std::uint64_t>(protocol::parse_server_duration_us(msg.value()));
@@ -97,8 +99,6 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
             span_->end();
             span_ = nullptr;
         }
-        mcbp_command_handler handler{};
-        std::swap(handler, handler_);
         if (handler) {
             handler(ec, std::move(msg));
         }
@@ -264,7 +264,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
     void send_to(std::shared_ptr<io::mcbp_session> session)
     {
-        if (!handler_) {
+        if (!handler_ || !span_) {
             return;
         }
         session_ = std::move(session);
