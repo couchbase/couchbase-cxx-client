@@ -63,15 +63,16 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
 
     void set_configuration(const topology::configuration& config, const cluster_options& options)
     {
-        options_ = options;
-        next_index_ = 0;
+        std::size_t next_index = 0;
         if (config.nodes.size() > 1) {
             std::random_device rd;
             std::mt19937 gen(rd());
             std::uniform_int_distribution<std::size_t> dis(0, config.nodes.size() - 1);
-            next_index_ = dis(gen);
+            next_index = dis(gen);
         }
-        std::scoped_lock lock(config_mutex_);
+        std::scoped_lock lock(config_mutex_, next_index_mutex_);
+        options_ = options;
+        next_index_ = next_index;
         config_ = config;
     }
 
@@ -307,6 +308,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
         auto candidates = config_.nodes.size();
         while (candidates > 0) {
             --candidates;
+            std::scoped_lock index_lock(next_index_mutex_);
             const auto& node = config_.nodes[next_index_];
             next_index_ = (next_index_ + 1) % config_.nodes.size();
             std::uint16_t port = node.port_or(options_.network, type, options_.enable_tls, 0);
@@ -352,6 +354,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
     std::map<service_type, std::list<std::shared_ptr<http_session>>> busy_sessions_{};
     std::map<service_type, std::list<std::shared_ptr<http_session>>> idle_sessions_{};
     std::size_t next_index_{ 0 };
+    std::mutex next_index_mutex_{};
     std::mutex sessions_mutex_{};
     query_cache query_cache_{};
 };
