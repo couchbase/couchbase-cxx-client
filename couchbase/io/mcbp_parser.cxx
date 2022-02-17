@@ -33,6 +33,8 @@ mcbp_parser::result
 mcbp_parser::next(mcbp_message& msg)
 {
     static const size_t header_size = 24;
+
+    std::scoped_lock lock(buf_mutex_);
     if (buf.size() < header_size) {
         return result::need_data;
     }

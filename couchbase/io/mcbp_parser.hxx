@@ -20,6 +20,7 @@
 #include <couchbase/io/mcbp_message.hxx>
 
 #include <iterator>
+#include <mutex>
 
 namespace couchbase::io
 {
@@ -29,17 +30,20 @@ struct mcbp_parser {
     template<typename Iterator>
     void feed(Iterator begin, Iterator end)
     {
+        std::scoped_lock lock(buf_mutex_);
         buf.reserve(buf.size() + static_cast<std::size_t>(std::distance(begin, end)));
         std::copy(begin, end, std::back_insert_iterator(buf));
     }
 
     void reset()
     {
+        std::scoped_lock lock(buf_mutex_);
         buf.clear();
     }
 
     result next(mcbp_message& msg);
 
     std::vector<std::uint8_t> buf;
+    std::mutex buf_mutex_;
 };
 } // namespace couchbase::io
