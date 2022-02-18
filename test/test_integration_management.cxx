@@ -622,16 +622,6 @@ assert_user_and_metadata(const couchbase::operations::management::rbac::user_and
     }
 }
 
-static bool
-wait_for_group_created(test::utils::integration_test_guard& integration, const std::string& group_name)
-{
-    return test::utils::wait_until([&integration, &group_name]() {
-        couchbase::operations::management::group_get_request req{ group_name };
-        auto resp = test::utils::execute(integration.cluster, req);
-        return !resp.ctx.ec;
-    });
-}
-
 TEST_CASE("integration: user groups management", "[integration]")
 {
     test::utils::integration_test_guard integration;
@@ -691,14 +681,14 @@ TEST_CASE("integration: user groups management", "[integration]")
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
-        REQUIRE(wait_for_group_created(integration, group_name_2));
-
         {
-            couchbase::operations::management::group_get_all_request req{};
-            auto resp = test::utils::execute(integration.cluster, req);
-            INFO(resp.ctx.ec.message())
-            REQUIRE_FALSE(resp.ctx.ec);
-            REQUIRE(resp.groups.size() >= 2);
+            auto created = test::utils::wait_until([&]() {
+                couchbase::operations::management::group_get_all_request req{ group_name_2 };
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+                return resp.groups.size() == 2;
+            });
+            REQUIRE(created);
         }
 
         {
