@@ -128,7 +128,7 @@ class cluster : public std::enable_shared_from_this<cluster>
             if (ec) {
                 std::scoped_lock lock(self->buckets_mutex_);
                 self->buckets_.erase(bucket_name);
-            } else if (!self->session_->supports_gcccp()) {
+            } else if (self->session_ && !self->session_->supports_gcccp()) {
                 self->session_manager_->set_configuration(config, self->origin_.options());
             }
             handler(ec);
