@@ -22,19 +22,15 @@
 
 TEST_CASE("integration: connecting with empty bootstrap nodes list", "[integration]")
 {
-    asio::io_context io{};
-    auto connstr = couchbase::utils::parse_connection_string("couchbase://");
-    REQUIRE(connstr.bootstrap_nodes.empty());
-    auto origin = couchbase::origin({}, connstr);
-    auto cluster = couchbase::cluster::create(io);
-    auto io_thread = std::thread([&io]() { io.run(); });
+    test::utils::test_context ctx{};
+    ctx.connection_string = "couchbase://";
+    auto connstr = couchbase::utils::parse_connection_string(ctx.connection_string);
+    test::utils::integration_test_guard integration{ ctx, false };
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();
-    cluster->open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
+    integration.cluster->open(integration.origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
     REQUIRE(rc == couchbase::error::common_errc::invalid_argument);
-    test::utils::close_cluster(cluster);
-    io_thread.join();
 }
 
 TEST_CASE("integration: can connect with handler capturing non-copyable object", "[integration]")
@@ -119,4 +115,22 @@ TEST_CASE("integration: destroy cluster without waiting for close completion", "
     cluster.reset();
     io_thread.join();
     REQUIRE(closed);
+}
+
+TEST_CASE("integration: bootstrap succeeds if first node unreachable", "[integration]")
+{
+    auto ctx = test::utils::test_context::load_from_environment();
+    auto connstr = couchbase::utils::parse_connection_string(ctx.connection_string);
+    auto node = connstr.bootstrap_nodes[0];
+    // Reserved address, see RFC 5737
+    node.address = "192.0.2.0";
+    connstr.bootstrap_nodes.insert(connstr.bootstrap_nodes.begin(), node);
+    auto auth = ctx.build_auth();
+    auto origin = couchbase::origin(auth, connstr);
+    test::utils::integration_test_guard integration{ origin, ctx, false };
+    auto barrier = std::make_shared<std::promise<std::error_code>>();
+    auto f = barrier->get_future();
+    integration.cluster->open(integration.origin, [barrier](std::error_code ec) { barrier->set_value(ec); });
+    auto ec = f.get();
+    REQUIRE_FALSE(ec);
 }

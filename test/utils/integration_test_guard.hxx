@@ -31,7 +31,9 @@ namespace test::utils
 class integration_test_guard
 {
   public:
-    integration_test_guard();
+    integration_test_guard(bool connect = true);
+    integration_test_guard(test_context ctx, bool connect = true);
+    integration_test_guard(couchbase::origin origin, test_context ctx, bool connect = true);
     ~integration_test_guard();
 
     inline const couchbase::operations::management::bucket_info& load_bucket_info(bool refresh = false)

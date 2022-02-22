@@ -20,23 +20,35 @@
 
 namespace test::utils
 {
-integration_test_guard::integration_test_guard()
+
+integration_test_guard::integration_test_guard(couchbase::origin origin_, test_context ctx_, bool connect)
   : cluster(couchbase::cluster::create(io))
-  , ctx(test_context::load_from_environment())
+  , ctx(ctx_)
+  , origin(origin_)
 {
     init_logger();
-    auto connstr = couchbase::utils::parse_connection_string(ctx.connection_string);
-    couchbase::cluster_credentials auth{};
-    if (!ctx.certificate_path.empty()) {
-        auth.certificate_path = ctx.certificate_path;
-        auth.key_path = ctx.key_path;
-    } else {
-        auth.username = ctx.username;
-        auth.password = ctx.password;
-    }
     io_thread = std::thread([this]() { io.run(); });
-    origin = couchbase::origin(auth, connstr);
-    open_cluster(cluster, origin);
+    if (connect) {
+        open_cluster(cluster, origin_);
+    }
+}
+
+couchbase::origin
+origin_from_test_context(test_context ctx_)
+{
+    auto connstr = couchbase::utils::parse_connection_string(ctx_.connection_string);
+    auto auth = ctx_.build_auth();
+    return couchbase::origin(auth, connstr);
+}
+
+integration_test_guard::integration_test_guard(test_context ctx_, bool connect)
+  : integration_test_guard(origin_from_test_context(ctx_), ctx_, connect)
+{
+}
+
+integration_test_guard::integration_test_guard(bool connect)
+  : integration_test_guard(test_context::load_from_environment(), connect)
+{
 }
 
 integration_test_guard::~integration_test_guard()
