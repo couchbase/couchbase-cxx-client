@@ -37,6 +37,32 @@ TEST_CASE("integration: connecting with empty bootstrap nodes list", "[integrati
     io_thread.join();
 }
 
+TEST_CASE("integration: connecting with unresponsive first node in bootstrap nodes list", "[integration]")
+{
+    test::utils::init_logger();
+    asio::io_context io{};
+    auto ctx = test::utils::test_context::load_from_environment();
+    auto connstr = couchbase::utils::parse_connection_string(ctx.connection_string);
+    REQUIRE_FALSE(connstr.bootstrap_nodes.empty());
+    connstr.bootstrap_nodes.insert(connstr.bootstrap_nodes.begin(),
+                                   couchbase::utils::connection_string::node{
+                                     "example.com",
+                                     11210,
+                                     couchbase::utils::connection_string::address_type::dns,
+                                     couchbase::utils::connection_string::bootstrap_mode::gcccp,
+                                   });
+    auto origin = couchbase::origin(ctx.build_auth(), connstr);
+    auto cluster = couchbase::cluster::create(io);
+    auto io_thread = std::thread([&io]() { io.run(); });
+    auto barrier = std::make_shared<std::promise<std::error_code>>();
+    auto f = barrier->get_future();
+    cluster->open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
+    auto rc = f.get();
+    REQUIRE_FALSE(rc);
+    test::utils::close_cluster(cluster);
+    io_thread.join();
+}
+
 TEST_CASE("integration: can connect with handler capturing non-copyable object", "[integration]")
 {
     test::utils::integration_test_guard integration;
