@@ -34,6 +34,7 @@ enum class tls_verify_mode {
 
 struct cluster_options {
     std::chrono::milliseconds bootstrap_timeout = timeout_defaults::bootstrap_timeout;
+    std::chrono::milliseconds resolve_timeout = timeout_defaults::resolve_timeout;
     std::chrono::milliseconds connect_timeout = timeout_defaults::connect_timeout;
     std::chrono::milliseconds key_value_timeout = timeout_defaults::key_value_timeout;
     std::chrono::milliseconds key_value_durable_timeout = timeout_defaults::key_value_durable_timeout;
