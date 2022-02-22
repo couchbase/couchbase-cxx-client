@@ -28,7 +28,6 @@
 #include <couchbase/origin.hxx>
 #include <couchbase/platform/base64.h>
 #include <couchbase/platform/uuid.h>
-#include <couchbase/timeout_defaults.hxx>
 #include <couchbase/utils/movable_function.hxx>
 
 #include <asio.hpp>
@@ -350,7 +349,7 @@ class http_session : public std::enable_shared_from_this<http_session>
 
     void on_resolve(std::error_code ec, const asio::ip::tcp::resolver::results_type& endpoints)
     {
-        if (stopped_) {
+        if (ec == asio::error::operation_aborted || stopped_) {
             return;
         }
         if (ec) {
@@ -369,8 +368,12 @@ class http_session : public std::enable_shared_from_this<http_session>
             return;
         }
         if (it != endpoints_.end()) {
-            LOG_DEBUG("{} connecting to {}:{}", info_.log_prefix(), it->endpoint().address().to_string(), it->endpoint().port());
-            deadline_timer_.expires_after(timeout_defaults::connect_timeout);
+            LOG_DEBUG("{} connecting to {}:{}, timeout={}ms",
+                      info_.log_prefix(),
+                      it->endpoint().address().to_string(),
+                      it->endpoint().port(),
+                      http_ctx_.options.connect_timeout.count());
+            deadline_timer_.expires_after(http_ctx_.options.connect_timeout);
             stream_->async_connect(it->endpoint(), std::bind(&http_session::on_connect, shared_from_this(), std::placeholders::_1, it));
         } else {
             LOG_ERROR("{} no more endpoints left to connect", info_.log_prefix());
@@ -380,7 +383,7 @@ class http_session : public std::enable_shared_from_this<http_session>
 
     void on_connect(const std::error_code& ec, asio::ip::tcp::resolver::results_type::iterator it)
     {
-        if (stopped_) {
+        if (ec == asio::error::operation_aborted || stopped_) {
             return;
         }
         last_active_ = std::chrono::steady_clock::now();
@@ -408,10 +411,7 @@ class http_session : public std::enable_shared_from_this<http_session>
 
     void check_deadline(std::error_code ec)
     {
-        if (ec == asio::error::operation_aborted) {
-            return;
-        }
-        if (stopped_) {
+        if (ec == asio::error::operation_aborted || stopped_) {
             return;
         }
         if (deadline_timer_.expiry() <= asio::steady_timer::clock_type::now()) {

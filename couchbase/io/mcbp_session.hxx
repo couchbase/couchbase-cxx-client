@@ -47,7 +47,6 @@
 #include <couchbase/sasl/client.h>
 #include <couchbase/sasl/error.h>
 #include <couchbase/sasl/error_fmt.h>
-#include <couchbase/timeout_defaults.hxx>
 #include <couchbase/topology/capabilities_fmt.hxx>
 #include <couchbase/topology/configuration_fmt.hxx>
 #include <couchbase/utils/join_strings.hxx>
@@ -1065,7 +1064,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
 
     void on_resolve(std::error_code ec, const asio::ip::tcp::resolver::results_type& endpoints)
     {
-        if (stopped_) {
+        if (ec == asio::error::operation_aborted || stopped_) {
             return;
         }
         last_active_ = std::chrono::steady_clock::now();
@@ -1075,8 +1074,13 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         }
         endpoints_ = endpoints;
         do_connect(endpoints_.begin());
-        connection_deadline_.expires_after(timeout_defaults::connect_timeout);
-        connection_deadline_.async_wait(std::bind(&mcbp_session::check_deadline, shared_from_this(), std::placeholders::_1));
+        connection_deadline_.expires_after(origin_.options().resolve_timeout);
+        connection_deadline_.async_wait([self = shared_from_this()](const auto timer_ec) {
+            if (timer_ec == asio::error::operation_aborted || self->stopped_) {
+                return;
+            }
+            return self->stream_->close([self](std::error_code) { self->initiate_bootstrap(); });
+        });
     }
 
     void do_connect(asio::ip::tcp::resolver::results_type::iterator it)
@@ -1086,8 +1090,18 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         }
         last_active_ = std::chrono::steady_clock::now();
         if (it != endpoints_.end()) {
-            LOG_DEBUG("{} connecting to {}:{}", log_prefix_, it->endpoint().address().to_string(), it->endpoint().port());
-            connection_deadline_.expires_after(timeout_defaults::connect_timeout);
+            LOG_DEBUG("{} connecting to {}:{}, timeout={}ms",
+                      log_prefix_,
+                      it->endpoint().address().to_string(),
+                      it->endpoint().port(),
+                      origin_.options().connect_timeout.count());
+            connection_deadline_.expires_after(origin_.options().connect_timeout);
+            connection_deadline_.async_wait([self = shared_from_this()](const auto timer_ec) {
+                if (timer_ec == asio::error::operation_aborted || self->stopped_) {
+                    return;
+                }
+                return self->stream_->close([self](std::error_code) { self->initiate_bootstrap(); });
+            });
             stream_->async_connect(it->endpoint(), std::bind(&mcbp_session::on_connect, shared_from_this(), std::placeholders::_1, it));
         } else {
             LOG_ERROR("{} no more endpoints left to connect, will try another address", log_prefix_);
@@ -1097,7 +1111,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
 
     void on_connect(const std::error_code& ec, asio::ip::tcp::resolver::results_type::iterator it)
     {
-        if (stopped_) {
+        if (ec == asio::error::operation_aborted || stopped_) {
             return;
         }
         last_active_ = std::chrono::steady_clock::now();
