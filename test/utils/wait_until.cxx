@@ -56,4 +56,13 @@ wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::cluster> cl
     }
     return propagated;
 }
+
+couchbase::operations::management::bucket_get_response
+wait_for_bucket_created(std::shared_ptr<couchbase::cluster> cluster, const std::string& bucket_name)
+{
+    wait_until_bucket_healthy(cluster, bucket_name);
+    couchbase::operations::management::bucket_get_request req{ bucket_name };
+    auto resp = test::utils::execute(cluster, req);
+    return resp;
+}
 } // namespace test::utils

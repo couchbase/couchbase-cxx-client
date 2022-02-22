@@ -61,4 +61,20 @@ bool
 wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::cluster> cluster,
                                           const std::string& bucket_name,
                                           const std::uint64_t current_manifest_uid);
+
+couchbase::operations::management::bucket_get_response
+wait_for_bucket_created(std::shared_ptr<couchbase::cluster> cluster, const std::string& bucket_name);
+
+template<typename Request>
+auto
+retry_on_error(std::shared_ptr<couchbase::cluster> cluster, Request req, std::error_code error)
+{
+    using response_type = typename Request::response_type;
+    response_type resp;
+    test::utils::wait_until([&]() {
+        resp = test::utils::execute(cluster, req);
+        return resp.ctx.ec != error;
+    });
+    return resp;
+};
 } // namespace test::utils

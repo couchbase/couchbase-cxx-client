@@ -1,0 +1,263 @@
+
+/* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
+/*
+ *   Copyright 2020-2021 Couchbase, Inc.
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ */
+
+#include "test_helper_integration.hxx"
+#include <couchbase/operations/management/eventing.hxx>
+
+static couchbase::operations::management::eventing_get_function_response
+wait_for_function_created(test::utils::integration_test_guard& integration, const std::string& function_name)
+{
+    couchbase::operations::management::eventing_get_function_response resp{};
+    test::utils::wait_until([&integration, &resp, function_name]() {
+        couchbase::operations::management::eventing_get_function_request req{ function_name };
+        resp = test::utils::execute(integration.cluster, req);
+        return !resp.ctx.ec;
+    });
+    return resp;
+}
+
+static bool
+wait_for_function_reach_status(test::utils::integration_test_guard& integration,
+                               const std::string& function_name,
+                               couchbase::operations::management::eventing::function_status status)
+{
+    return test::utils::wait_until(
+      [&integration, function_name, status]() {
+          couchbase::operations::management::eventing_get_status_request req{};
+          auto resp = test::utils::execute(integration.cluster, req);
+          if (resp.ctx.ec) {
+              return false;
+          }
+          auto function = std::find_if(resp.status.functions.begin(), resp.status.functions.end(), [function_name](const auto& fun) {
+              return function_name == fun.name;
+          });
+          if (function == resp.status.functions.end()) {
+              return false;
+          }
+          return function->status == status;
+      },
+      std::chrono::minutes(3));
+}
+
+TEST_CASE("integration: eventing functions management", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_eventing_functions() || !integration.has_eventing_service()) {
+        return;
+    }
+
+    if (!integration.cluster_version().supports_gcccp()) {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    }
+
+    SECTION("lifecycle")
+    {
+        auto function_name = test::utils::uniq_id("name");
+
+        {
+            couchbase::operations::management::eventing_drop_function_request req{ function_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            if (integration.cluster_version().is_cheshire_cat()) {
+                REQUIRE(resp.ctx.ec == couchbase::error::management_errc::eventing_function_not_deployed);
+            } else {
+                REQUIRE(resp.ctx.ec == couchbase::error::management_errc::eventing_function_not_found);
+            }
+        }
+
+        {
+            couchbase::operations::management::eventing_get_function_request req{ function_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec == couchbase::error::management_errc::eventing_function_not_found);
+        }
+
+        auto meta_bucket_name = test::utils::uniq_id("meta");
+        {
+
+            couchbase::operations::management::bucket_settings bucket_settings;
+            bucket_settings.name = meta_bucket_name;
+            bucket_settings.ram_quota_mb = 256;
+
+            {
+                couchbase::operations::management::bucket_create_request req;
+                req.bucket = bucket_settings;
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+            }
+        }
+
+        {
+            auto resp = test::utils::wait_for_bucket_created(integration.cluster, meta_bucket_name);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        std::string source_code = R"(
+function OnUpdate(doc, meta) {
+    log("Doc created/updated", meta.id);
+}
+
+function OnDelete(meta, options) {
+    log("Doc deleted/expired", meta.id);
+}
+)";
+
+        {
+            couchbase::operations::management::eventing_upsert_function_request req{};
+            req.function.source_keyspace.bucket = integration.ctx.bucket;
+            req.function.metadata_keyspace.bucket = meta_bucket_name;
+            req.function.name = function_name;
+            req.function.code = source_code;
+            req.function.settings.handler_headers = { "// generated by Couchbase C++ SDK" };
+            req.function.constant_bindings.emplace_back(
+              couchbase::operations::management::eventing::function_constant_binding{ "PI", "3.14" });
+            req.function.bucket_bindings.emplace_back(couchbase::operations::management::eventing::function_bucket_binding{
+              "data", { integration.ctx.bucket }, couchbase::operations::management::eventing::function_bucket_access::read_write });
+            req.function.url_bindings.emplace_back(
+              couchbase::operations::management::eventing::function_url_binding{ "home", "https://couchbase.com" });
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        {
+            auto resp = wait_for_function_created(integration, function_name);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        {
+            couchbase::operations::management::eventing_get_all_functions_request req{};
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+            auto function = std::find_if(
+              resp.functions.begin(), resp.functions.end(), [function_name](const auto& fun) { return function_name == fun.name; });
+            REQUIRE(function != resp.functions.end());
+            REQUIRE(function->code == source_code);
+            REQUIRE(function->source_keyspace.bucket == integration.ctx.bucket);
+            REQUIRE(function->metadata_keyspace.bucket == meta_bucket_name);
+            REQUIRE(function->settings.deployment_status ==
+                    couchbase::operations::management::eventing::function_deployment_status::undeployed);
+            REQUIRE(function->settings.processing_status ==
+                    couchbase::operations::management::eventing::function_processing_status::paused);
+            REQUIRE(!function->settings.handler_headers.empty());
+            REQUIRE(function->settings.handler_headers[0] == "// generated by Couchbase C++ SDK");
+            REQUIRE(!function->constant_bindings.empty());
+            REQUIRE(function->constant_bindings[0].alias == "PI");
+            REQUIRE(function->constant_bindings[0].literal == "3.14");
+            REQUIRE(!function->bucket_bindings.empty());
+            REQUIRE(function->bucket_bindings[0].alias == "data");
+            REQUIRE(function->bucket_bindings[0].name.bucket == "default");
+            REQUIRE(function->bucket_bindings[0].access == couchbase::operations::management::eventing::function_bucket_access::read_write);
+            REQUIRE(!function->url_bindings.empty());
+            REQUIRE(function->url_bindings[0].alias == "home");
+            REQUIRE(function->url_bindings[0].hostname == "https://couchbase.com");
+            REQUIRE(
+              std::holds_alternative<couchbase::operations::management::eventing::function_url_no_auth>(function->url_bindings[0].auth));
+        }
+
+        {
+            couchbase::operations::management::eventing_get_status_request req{};
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE(resp.status.num_eventing_nodes > 0);
+            auto function = std::find_if(resp.status.functions.begin(), resp.status.functions.end(), [function_name](const auto& fun) {
+                return function_name == fun.name;
+            });
+            REQUIRE(function != resp.status.functions.end());
+            REQUIRE(function->status == couchbase::operations::management::eventing::function_status::undeployed);
+            REQUIRE(function->deployment_status == couchbase::operations::management::eventing::function_deployment_status::undeployed);
+            REQUIRE(function->processing_status == couchbase::operations::management::eventing::function_processing_status::paused);
+        }
+
+        {
+            couchbase::operations::management::eventing_undeploy_function_request req{ function_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec == couchbase::error::management_errc::eventing_function_not_deployed);
+        }
+
+        {
+            couchbase::operations::management::eventing_deploy_function_request req{ function_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        REQUIRE(wait_for_function_reach_status(
+          integration, function_name, couchbase::operations::management::eventing::function_status::deployed));
+
+        {
+            couchbase::operations::management::eventing_drop_function_request req{ function_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec == couchbase::error::management_errc::eventing_function_deployed);
+        }
+
+        {
+            couchbase::operations::management::eventing_resume_function_request req{ function_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec == couchbase::error::management_errc::eventing_function_deployed);
+        }
+
+        {
+            couchbase::operations::management::eventing_pause_function_request req{ function_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        REQUIRE(
+          wait_for_function_reach_status(integration, function_name, couchbase::operations::management::eventing::function_status::paused));
+
+        {
+            couchbase::operations::management::eventing_pause_function_request req{ function_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec == couchbase::error::management_errc::eventing_function_paused);
+        }
+
+        {
+            couchbase::operations::management::eventing_resume_function_request req{ function_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        REQUIRE(wait_for_function_reach_status(
+          integration, function_name, couchbase::operations::management::eventing::function_status::deployed));
+
+        {
+            couchbase::operations::management::eventing_undeploy_function_request req{ function_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        REQUIRE(wait_for_function_reach_status(
+          integration, function_name, couchbase::operations::management::eventing::function_status::undeployed));
+
+        {
+            couchbase::operations::management::eventing_drop_function_request req{ function_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        {
+            couchbase::operations::management::eventing_get_function_request req{ function_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec == couchbase::error::management_errc::eventing_function_not_found);
+        }
+
+        {
+            couchbase::operations::management::bucket_drop_request req{ meta_bucket_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+    }
+}
