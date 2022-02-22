@@ -135,7 +135,6 @@ class client_response
         uint16_t status = 0;
         memcpy(&status, header_.data() + 6, sizeof(status));
         status = utils::byte_swap(status);
-        Expects(protocol::is_valid_status(status));
         status_ = protocol::status(status);
 
         extras_size_ = header_[4];
