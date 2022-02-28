@@ -17,7 +17,7 @@
 
 #include "../utils/integration_shortcuts.hxx"
 #include "../utils/test_context.hxx"
-#include "../utils/uniq_id.hxx"
+#include "../utils/test_data.hxx"
 
 #include "core/logger/logger.hxx"
 

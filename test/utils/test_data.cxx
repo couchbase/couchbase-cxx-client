@@ -15,12 +15,27 @@
  *   limitations under the License.
  */
 
-#pragma once
-
+#include <chrono>
+#include <fmt/core.h>
+#include <fstream>
+#include <iostream>
+#include <sstream>
 #include <string>
 
 namespace test::utils
 {
 std::string
-uniq_id(const std::string& prefix);
+uniq_id(const std::string& prefix)
+{
+    return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
 }
+
+std::string
+read_test_data(const std::string& file)
+{
+    auto ss = std::ostringstream{};
+    std::ifstream input_file(fmt::format("../../test/data/{}", file));
+    ss << input_file.rdbuf();
+    return ss.str();
+}
+} // namespace test::utils

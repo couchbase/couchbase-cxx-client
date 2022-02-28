@@ -6,7 +6,7 @@ add_library(
   logger.cxx
   server_version.cxx
   test_context.cxx
-  uniq_id.cxx
+  test_data.cxx
   wait_until.cxx)
 set_target_properties(test_utils PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(test_utils PRIVATE project_options project_warnings OpenSSL::SSL fmt::fmt spdlog::spdlog)

@@ -189,6 +189,11 @@ struct server_version {
     {
         return profile == server_config_profile::serverless;
     }
+
+    [[nodiscard]] bool supports_search_disable_scoring() const
+    {
+        return is_mad_hatter() || is_cheshire_cat() || is_neo();
+    }
 };
 
 } // namespace test::utils

@@ -2414,7 +2414,7 @@ TEST_CASE("integration: search index management analyze document", "[integration
         REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
-    REQUIRE(wait_for_search_pindexes_ready(integration, index_name));
+    REQUIRE(test::utils::wait_for_search_pindexes_ready(integration.cluster, integration.ctx.bucket, index_name));
 
     couchbase::core::operations::management::search_index_analyze_document_response resp;
     bool operation_completed = test::utils::wait_until([&integration, &index_name, &resp]() {
