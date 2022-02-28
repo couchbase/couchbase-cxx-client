@@ -130,7 +130,6 @@ struct search_request {
     std::optional<couchbase::core::search_highlight_style> highlight_style{};
     std::vector<std::string> highlight_fields{};
     std::vector<std::string> fields{};
-    std::optional<std::string> scope_name{};
     std::vector<std::string> collections{};
 
     std::optional<couchbase::core::search_scan_consistency> scan_consistency{};
