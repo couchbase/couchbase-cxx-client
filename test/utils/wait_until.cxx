@@ -17,6 +17,11 @@
 
 #include "wait_until.hxx"
 
+#include "core/operations/management/bucket_get.hxx"
+#include "core/operations/management/collections_manifest_get.hxx"
+#include "core/operations/management/search_get_stats.hxx"
+#include "core/utils/json.hxx"
+
 namespace test::utils
 {
 bool
@@ -71,6 +76,7 @@ wait_until_user_present(const std::shared_ptr<couchbase::core::cluster>& cluster
     }
     return present;
 }
+
 bool
 wait_until_cluster_connected(const std::string& username, const std::string& password, const std::string& connection_string)
 {
@@ -91,5 +97,29 @@ wait_until_cluster_connected(const std::string& username, const std::string& pas
     }
 
     return connected;
+}
+
+bool
+wait_for_search_pindexes_ready(std::shared_ptr<couchbase::core::cluster> cluster,
+                               const std::string& bucket_name,
+                               const std::string& index_name)
+{
+    return test::utils::wait_until([&]() {
+        couchbase::core::operations::management::search_index_stats_request req{};
+        auto resp = test::utils::execute(cluster, req);
+        if (resp.ctx.ec || resp.stats.empty()) {
+            return false;
+        }
+        auto stats = couchbase::core::utils::json::parse(resp.stats);
+        const auto* num_pindexes_actual = stats.find(fmt::format("{}:{}:num_pindexes_actual", bucket_name, index_name));
+        if (num_pindexes_actual == nullptr || !num_pindexes_actual->is_number()) {
+            return false;
+        }
+        const auto* num_pindexes_target = stats.find(fmt::format("{}:{}:num_pindexes_target", bucket_name, index_name));
+        if (num_pindexes_target == nullptr || !num_pindexes_target->is_number()) {
+            return false;
+        }
+        return num_pindexes_actual->get_unsigned() == num_pindexes_target->get_unsigned();
+    });
 }
 } // namespace test::utils

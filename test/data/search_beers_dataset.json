@@ -1,0 +1,70 @@
+{
+    "four_peaks_brewing-abbey_normal_ale": {
+        "name": "Abbey Normal Ale",
+        "abv": 0.0,
+        "ibu": 0.0,
+        "srm": 0.0,
+        "upc": 0,
+        "type": "beer",
+        "brewery_id": "four_peaks_brewing",
+        "updated": "2010-07-22 20:00:20",
+        "description": "A Belgian Double Abbey.",
+        "style": "Other Belgian-Style Ales",
+        "category": "Belgian and French Ale"
+    },
+    "avery_brewing_company-reverend_the": {
+        "name": "Reverend, The",
+        "abv": 10.0,
+        "ibu": 0.0,
+        "srm": 0.0,
+        "upc": 0,
+        "type": "beer",
+        "brewery_id": "avery_brewing_company",
+        "updated": "2010-07-22 20:00:20",
+        "description": "Belgian-Style Quadrupel Ale",
+        "style": "Belgian-Style Quadrupel",
+        "category": "Belgian and French Ale"
+    },
+    "dragonmead_microbrewery-dubbel_dragon": {
+        "name": "Dubbel Dragon",
+        "abv": 7.2,
+        "ibu": 0.0,
+        "srm": 0.0,
+        "upc": 0,
+        "type": "beer",
+        "brewery_id": "dragonmead_microbrewery",
+        "updated": "2010-07-22 20:00:20",
+        "description":
+          "This Dubbel style Belgian beer is created in the great Belgian tradition. Pale Malt, Caramel and Special B Malts impart a unique sweetness to this beer. The traditional Belgian yeast fully ferments the Belgian Candi Sugar to give a satisfying taste that is twice what a Belgian pale delivers.",
+        "style": "Other Belgian-Style Ales",
+        "category": "Belgian and French Ale"
+    },
+    "f_x_matt_brewing-saranac_belgian_ale": {
+        "name": "Saranac Belgian Ale",
+        "abv": 5.9,
+        "ibu": 0.0,
+        "srm": 0.0,
+        "upc": 0,
+        "type": "beer",
+        "brewery_id": "f_x_matt_brewing",
+        "updated": "2010-07-22 20:00:20",
+        "description":
+          "Saranac Belgian Ale is Deliciously Fruity. It is brewed with a generous amount of Belgian Aromatic Malt, Hand selected hops, and a traditional Belgian ale yeast. Brewed in the \"Trappist Style\".",
+        "style": "Other Belgian-Style Ales",
+        "category": "Belgian and French Ale"
+    },
+    "bear_republic_brewery-red_rocket_ale": {
+        "name": "Red Rocket Ale",
+        "abv": 6.8,
+        "ibu": 0.0,
+        "srm": 0.0,
+        "upc": 0,
+        "type": "beer",
+        "brewery_id": "bear_republic_brewery",
+        "updated": "2010-08-22 20:00:20",
+        "description":
+          "The brew of choice for mountain bikers, and adventurous types worldwide. (Are you excited now!) This fiery red ale is not for the weak at heart. It originally started out as a Scottish red ale but has taken on flavors of its own. This is a very complex recipe using five different grains to achieve its unique flavor. The caramel malt used is a mixture of Belgian Caravienne and Hugh Bairds Crystal malts. Red Rocket is a full bodied, hoppy brew which finishes on the pallet with caramel malts. Centennial and Cascade hops are used for bittering and aroma.2004 L.A. Commercial Brewing Competition, Gold Medal Winner; 2004 West Coast Commercial Brewers Competition, First Place; 2003 California State Fair, Gold MedalWinner; 2002 California State Fair, Silver Medal Winner; 2001 California State Fair Gold Medal Winner; 2001 Real Ale Festival, Chicago, Bronze Medal Winner; 2000 California State Fair, Bronze Medal Winner; 1999 Great American Beer Festival, Silver Medal Winner; 1998 Great American Beer Festival, Silver Medal Winner - og 1.067, ABV 6.8%, IBU 65+.",
+        "style": "American-Style Amber/Red Ale",
+        "category": "North American Ale"
+    }
+}

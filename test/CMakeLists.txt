@@ -16,6 +16,7 @@ integration_test(tracer)
 integration_test(meter)
 integration_test(transcoders)
 integration_test(range_scan)
+integration_test(search)
 
 unit_test(connection_string)
 unit_test(utils)

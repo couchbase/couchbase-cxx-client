@@ -15,15 +15,15 @@
  *   limitations under the License.
  */
 
-#include <chrono>
-#include <fmt/core.h>
+#pragma once
+
 #include <string>
 
 namespace test::utils
 {
 std::string
-uniq_id(const std::string& prefix)
-{
-    return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
-}
+uniq_id(const std::string& prefix);
+
+std::string
+read_test_data(const std::string& file);
 } // namespace test::utils

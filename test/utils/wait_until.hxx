@@ -68,4 +68,10 @@ wait_until_user_present(const std::shared_ptr<couchbase::core::cluster>& cluster
 
 bool
 wait_until_cluster_connected(const std::string& username, const std::string& password, const std::string& connection_string);
+
+bool
+wait_for_search_pindexes_ready(std::shared_ptr<couchbase::core::cluster> cluster,
+                               const std::string& bucket_name,
+                               const std::string& index_name);
+
 } // namespace test::utils
