@@ -92,8 +92,7 @@ search_request::encode_to(search_request::encoded_request_type& encoded, http_co
             { "vectors", { { index_name, scan_vectors } } },
         };
     }
-    if (scope_name) {
-        body["scope"] = scope_name.value();
+    if (!collections.empty()) {
         body["collections"] = collections;
     }
 
