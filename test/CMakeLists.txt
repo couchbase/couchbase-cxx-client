@@ -10,6 +10,7 @@ integration_test(durability)
 integration_test(arithmetic)
 integration_test(collections)
 integration_test(subdoc)
+integration_test(analytics)
 
 unit_test(connection_string)
 unit_test(utils)
