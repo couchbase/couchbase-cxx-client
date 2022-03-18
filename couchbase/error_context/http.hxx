@@ -35,6 +35,8 @@ struct http {
     std::string path{};
     std::uint32_t http_status{};
     std::string http_body{};
+    std::string hostname{};
+    std::uint16_t port{};
 
     std::optional<std::string> last_dispatched_to{};
     std::optional<std::string> last_dispatched_from{};

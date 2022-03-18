@@ -113,21 +113,23 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
                 std::uint16_t port = node.port_or(options_.network, type, options_.enable_tls, 0);
                 if (port != 0) {
                     std::shared_ptr<http_session> session;
-                    session = options_.enable_tls ? std::make_shared<http_session>(type,
-                                                                                   client_id_,
-                                                                                   ctx_,
-                                                                                   tls_,
-                                                                                   credentials,
-                                                                                   node.hostname_for(options_.network),
-                                                                                   std::to_string(port),
-                                                                                   http_context{ config_, options_, query_cache_ })
-                                                  : std::make_shared<http_session>(type,
-                                                                                   client_id_,
-                                                                                   ctx_,
-                                                                                   credentials,
-                                                                                   node.hostname_for(options_.network),
-                                                                                   std::to_string(port),
-                                                                                   http_context{ config_, options_, query_cache_ });
+                    const auto& hostname = node.hostname_for(options_.network);
+                    session = options_.enable_tls
+                                ? std::make_shared<http_session>(type,
+                                                                 client_id_,
+                                                                 ctx_,
+                                                                 tls_,
+                                                                 credentials,
+                                                                 hostname,
+                                                                 std::to_string(port),
+                                                                 http_context{ config_, options_, query_cache_, hostname, port })
+                                : std::make_shared<http_session>(type,
+                                                                 client_id_,
+                                                                 ctx_,
+                                                                 credentials,
+                                                                 hostname,
+                                                                 std::to_string(port),
+                                                                 http_context{ config_, options_, query_cache_, hostname, port });
                     session->start();
                     session->on_stop([type, id = session->id(), self = this->shared_from_this()]() {
                         std::scoped_lock lock(self->sessions_mutex_);
@@ -254,27 +256,30 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
             using response_type = typename Request::encoded_response_type;
             return handler(request.make_response(std::move(ctx), response_type{}));
         }
+        const auto& http_ctx = session->http_context();
 
         auto cmd =
           std::make_shared<operations::http_command<Request>>(ctx_, request, tracer_, meter_, options_.default_timeout_for(request.type));
-        cmd->start(
-          [self = shared_from_this(), cmd, handler = std::forward<Handler>(handler)](std::error_code ec, io::http_response&& msg) mutable {
-              using command_type = typename decltype(cmd)::element_type;
-              using encoded_response_type = typename command_type::encoded_response_type;
-              using error_context_type = typename command_type::error_context_type;
-              encoded_response_type resp{ std::move(msg) };
-              error_context_type ctx{};
-              ctx.ec = ec;
-              ctx.client_context_id = cmd->client_context_id_;
-              ctx.method = cmd->encoded.method;
-              ctx.path = cmd->encoded.path;
-              ctx.last_dispatched_from = cmd->session_->local_address();
-              ctx.last_dispatched_to = cmd->session_->remote_address();
-              ctx.http_status = resp.status_code;
-              ctx.http_body = resp.body.data();
-              handler(cmd->request.make_response(std::move(ctx), std::move(resp)));
-              self->check_in(cmd->request.type, cmd->session_);
-          });
+        cmd->start([self = shared_from_this(), cmd, http_ctx, handler = std::forward<Handler>(handler)](std::error_code ec,
+                                                                                                        io::http_response&& msg) mutable {
+            using command_type = typename decltype(cmd)::element_type;
+            using encoded_response_type = typename command_type::encoded_response_type;
+            using error_context_type = typename command_type::error_context_type;
+            encoded_response_type resp{ std::move(msg) };
+            error_context_type ctx{};
+            ctx.ec = ec;
+            ctx.client_context_id = cmd->client_context_id_;
+            ctx.method = cmd->encoded.method;
+            ctx.path = cmd->encoded.path;
+            ctx.last_dispatched_from = cmd->session_->local_address();
+            ctx.last_dispatched_to = cmd->session_->remote_address();
+            ctx.http_status = resp.status_code;
+            ctx.http_body = resp.body.data();
+            ctx.hostname = http_ctx.hostname;
+            ctx.port = http_ctx.port;
+            handler(cmd->request.make_response(std::move(ctx), std::move(resp)));
+            self->check_in(cmd->request.type, cmd->session_);
+        });
         cmd->send_to(session);
     }
 
@@ -286,11 +291,22 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
     {
         std::shared_ptr<http_session> session;
         if (options_.enable_tls) {
-            session = std::make_shared<http_session>(
-              type, client_id_, ctx_, tls_, credentials, hostname, std::to_string(port), http_context{ config_, options_, query_cache_ });
+            session = std::make_shared<http_session>(type,
+                                                     client_id_,
+                                                     ctx_,
+                                                     tls_,
+                                                     credentials,
+                                                     hostname,
+                                                     std::to_string(port),
+                                                     http_context{ config_, options_, query_cache_, hostname, port });
         } else {
-            session = std::make_shared<http_session>(
-              type, client_id_, ctx_, credentials, hostname, std::to_string(port), http_context{ config_, options_, query_cache_ });
+            session = std::make_shared<http_session>(type,
+                                                     client_id_,
+                                                     ctx_,
+                                                     credentials,
+                                                     hostname,
+                                                     std::to_string(port),
+                                                     http_context{ config_, options_, query_cache_, hostname, port });
         }
         session->start();
 
