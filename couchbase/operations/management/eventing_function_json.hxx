@@ -184,9 +184,9 @@ struct traits<couchbase::operations::management::eventing::function> {
             if (const auto* query_consistency = settings->find("n1ql_consistency");
                 query_consistency != nullptr && query_consistency->is_string()) {
                 if (const auto& query_consistency_string = query_consistency->get_string(); query_consistency_string == "request") {
-                    result.settings.query_consistency = couchbase::operations::management::eventing::query_scan_consistency::request_plus;
+                    result.settings.query_consistency = couchbase::query_scan_consistency::request_plus;
                 } else if (query_consistency_string == "none") {
-                    result.settings.query_consistency = couchbase::operations::management::eventing::query_scan_consistency::not_bounded;
+                    result.settings.query_consistency = couchbase::query_scan_consistency::not_bounded;
                 }
             }
 

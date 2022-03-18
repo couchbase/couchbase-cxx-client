@@ -23,6 +23,8 @@
 #include <couchbase/json_string.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/protocol/mutation_token.hxx>
+#include <couchbase/search_highlight_style.hxx>
+#include <couchbase/search_scan_consistency.hxx>
 #include <couchbase/timeout_defaults.hxx>
 
 #include <map>
@@ -123,15 +125,13 @@ struct search_request {
      */
     bool include_locations{ false };
 
-    enum class highlight_style_type { html, ansi };
-    std::optional<highlight_style_type> highlight_style{};
+    std::optional<couchbase::search_highlight_style> highlight_style{};
     std::vector<std::string> highlight_fields{};
     std::vector<std::string> fields{};
     std::optional<std::string> scope_name{};
     std::vector<std::string> collections{};
 
-    enum class scan_consistency_type { not_bounded };
-    std::optional<scan_consistency_type> scan_consistency{};
+    std::optional<couchbase::search_scan_consistency> scan_consistency{};
     std::vector<mutation_token> mutation_state{};
 
     std::vector<std::string> sort_specs{};

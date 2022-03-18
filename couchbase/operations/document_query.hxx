@@ -24,6 +24,8 @@
 #include <couchbase/json_string.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/protocol/mutation_token.hxx>
+#include <couchbase/query_profile_mode.hxx>
+#include <couchbase/query_scan_consistency.hxx>
 #include <couchbase/timeout_defaults.hxx>
 
 namespace couchbase::operations
@@ -71,8 +73,6 @@ struct query_request {
     using encoded_response_type = io::http_response;
     using error_context_type = error_context::query;
 
-    enum class scan_consistency_type { not_bounded, request_plus };
-
     static const inline service_type type = service_type::query;
 
     std::string statement;
@@ -88,7 +88,7 @@ struct query_request {
     std::optional<std::chrono::milliseconds> scan_wait{};
     std::optional<std::uint64_t> pipeline_batch{};
     std::optional<std::uint64_t> pipeline_cap{};
-    std::optional<scan_consistency_type> scan_consistency{};
+    std::optional<couchbase::query_scan_consistency> scan_consistency{};
     std::vector<mutation_token> mutation_state{};
     std::optional<std::string> bucket_name{};
     std::optional<std::string> scope_name{};
@@ -96,12 +96,7 @@ struct query_request {
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
 
-    enum class profile_mode {
-        off,
-        phases,
-        timings,
-    };
-    profile_mode profile{ profile_mode::off };
+    couchbase::query_profile_mode profile{ couchbase::query_profile_mode::off };
 
     std::map<std::string, couchbase::json_string> raw{};
     std::vector<couchbase::json_string> positional_parameters{};

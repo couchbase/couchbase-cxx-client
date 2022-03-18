@@ -295,10 +295,10 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded, http_
 
     if (function.settings.query_consistency) {
         switch (function.settings.query_consistency.value()) {
-            case eventing::query_scan_consistency::not_bounded:
+            case couchbase::query_scan_consistency::not_bounded:
                 settings["n1ql_consistency"] = "none";
                 break;
-            case eventing::query_scan_consistency::request_plus:
+            case couchbase::query_scan_consistency::request_plus:
                 settings["n1ql_consistency"] = "request";
                 break;
         }

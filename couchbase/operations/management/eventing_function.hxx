@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/operations/management/eventing_status.hxx>
+#include <couchbase/query_scan_consistency.hxx>
 
 #include <chrono>
 #include <optional>
@@ -53,11 +54,6 @@ enum class function_log_level {
     trace,
 };
 
-enum class query_scan_consistency {
-    not_bounded,
-    request_plus,
-};
-
 struct function_settings {
     /** number of threads each worker utilizes */
     std::optional<std::int64_t> cpp_worker_count{};
@@ -82,7 +78,7 @@ struct function_settings {
     /** maximum time the lcb command is waited until completion before we terminate the request */
     std::optional<std::chrono::seconds> lcb_timeout{};
     /** consistency level used by n1ql statements in the handler */
-    std::optional<query_scan_consistency> query_consistency{};
+    std::optional<couchbase::query_scan_consistency> query_consistency{};
     /** number of timer shards. defaults to number of vbuckets */
     std::optional<std::int64_t> num_timer_partitions{};
     /** batch size for messages from producer to consumer */

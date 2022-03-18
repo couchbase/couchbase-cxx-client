@@ -52,10 +52,10 @@ analytics_request::encode_to(analytics_request::encoded_request_type& encoded, h
     }
     if (scan_consistency) {
         switch (scan_consistency.value()) {
-            case scan_consistency_type::not_bounded:
+            case couchbase::analytics_scan_consistency::not_bounded:
                 body["scan_consistency"] = "not_bounded";
                 break;
-            case scan_consistency_type::request_plus:
+            case couchbase::analytics_scan_consistency::request_plus:
                 body["scan_consistency"] = "request_plus";
                 break;
         }

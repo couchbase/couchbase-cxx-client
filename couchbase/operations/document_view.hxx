@@ -23,6 +23,8 @@
 #include <couchbase/operations/management/design_document.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
+#include <couchbase/view_scan_consistency.hxx>
+#include <couchbase/view_sort_order.hxx>
 
 namespace couchbase::operations
 {
@@ -65,12 +67,7 @@ struct document_view_request {
     std::optional<std::uint64_t> limit;
     std::optional<std::uint64_t> skip;
 
-    enum class scan_consistency {
-        not_bounded,
-        update_after,
-        request_plus,
-    };
-    std::optional<scan_consistency> consistency;
+    std::optional<couchbase::view_scan_consistency> consistency;
 
     std::vector<std::string> keys;
 
@@ -86,8 +83,7 @@ struct document_view_request {
     std::optional<std::uint32_t> group_level;
     bool debug{ false };
 
-    enum class sort_order { ascending, descending };
-    std::optional<sort_order> order;
+    std::optional<couchbase::view_sort_order> order;
     std::vector<std::string> query_string{};
     std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
     std::optional<std::string> client_context_id{};
