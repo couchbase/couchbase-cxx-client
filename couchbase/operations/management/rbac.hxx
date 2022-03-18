@@ -20,6 +20,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace couchbase::operations::management::rbac
 {

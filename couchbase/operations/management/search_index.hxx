@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <string>
+
 namespace couchbase::operations::management
 {
 struct search_index {

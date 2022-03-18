@@ -19,6 +19,11 @@
 
 #include <couchbase/protocol/durability_level.hxx>
 
+#include <map>
+#include <optional>
+#include <string>
+#include <vector>
+
 namespace couchbase::operations::management
 {
 struct bucket_settings {
