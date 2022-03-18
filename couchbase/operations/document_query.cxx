@@ -190,7 +190,7 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
     query_response response{ std::move(ctx) };
     response.ctx.statement = statement;
     response.ctx.parameters = body_str;
-    response.served_by_node = response.ctx.last_dispatched_to.value_or("");
+    response.served_by_node = fmt::format("{}:{}", response.ctx.hostname, response.ctx.port);
     if (!response.ctx.ec) {
         tao::json::value payload;
         try {
