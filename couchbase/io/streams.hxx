@@ -17,12 +17,34 @@
 
 #pragma once
 
+#include <couchbase/io/ip_protocol.hxx>
+
 #include <asio.hpp>
 #include <asio/ssl.hpp>
+
 #include <functional>
 
 namespace couchbase::io
 {
+
+template<typename Resolver, typename Handler>
+static void
+async_resolve(ip_protocol protocol, Resolver& resolver, const std::string& hostname, const std::string& service, Handler&& handler)
+{
+
+    switch (protocol) {
+        case ip_protocol::force_ipv4:
+            return resolver.async_resolve(asio::ip::tcp::v4(), hostname, service, std::forward<Handler>(handler));
+        case ip_protocol::force_ipv6:
+            return resolver.async_resolve(asio::ip::tcp::v6(), hostname, service, std::forward<Handler>(handler));
+        case ip_protocol::any:
+            /* fall-through */
+        default:
+            /* use any protocol */
+            break;
+    }
+    return resolver.async_resolve(hostname, service, std::forward<Handler>(handler));
+}
 
 class stream_impl
 {
