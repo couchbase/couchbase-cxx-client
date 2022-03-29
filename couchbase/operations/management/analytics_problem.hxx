@@ -17,28 +17,14 @@
 
 #pragma once
 
-#include <map>
-#include <optional>
 #include <string>
 
-namespace couchbase::operations
+namespace couchbase::operations::management
 {
-struct design_document {
-    enum class name_space {
-        development,
-        production,
-    };
 
-    struct view {
-        std::string name;
-        std::optional<std::string> map{};
-        std::optional<std::string> reduce{};
-    };
-
-    std::string rev;
-    std::string name;
-    design_document::name_space ns;
-    std::map<std::string, view> views;
+struct analytics_problem {
+    std::uint32_t code;
+    std::string message;
 };
 
-} // namespace couchbase::operations
+} // namespace couchbase::operations::management

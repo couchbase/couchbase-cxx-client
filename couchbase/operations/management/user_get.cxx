@@ -18,9 +18,9 @@
 #include <couchbase/operations/management/user_get.hxx>
 
 #include <couchbase/errors.hxx>
+#include <couchbase/management/rbac_fmt.hxx>
+#include <couchbase/management/rbac_json.hxx>
 #include <couchbase/operations/management/error_utils.hxx>
-#include <couchbase/operations/management/rbac_fmt.hxx>
-#include <couchbase/operations/management/rbac_json.hxx>
 #include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations::management
@@ -42,7 +42,7 @@ user_get_request::make_response(error_context::http&& ctx, const encoded_respons
         switch (encoded.status_code) {
             case 200: {
                 try {
-                    response.user = utils::json::parse(encoded.body.data()).as<rbac::user_and_metadata>();
+                    response.user = utils::json::parse(encoded.body.data()).as<couchbase::management::rbac::user_and_metadata>();
                 } catch (const tao::pegtl::parse_error&) {
                     response.ctx.ec = error::common_errc::parsing_failure;
                     return response;

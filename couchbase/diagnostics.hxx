@@ -19,6 +19,7 @@
 
 #include <couchbase/service_type.hxx>
 
+#include <array>
 #include <chrono>
 #include <map>
 #include <optional>

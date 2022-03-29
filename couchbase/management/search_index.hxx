@@ -19,9 +19,9 @@
 
 #include <string>
 
-namespace couchbase::operations::management
+namespace couchbase::management::search
 {
-struct search_index {
+struct index {
     std::string uuid;
     std::string name;
     std::string type;
@@ -35,4 +35,4 @@ struct search_index {
     std::string plan_params_json;
 };
 
-} // namespace couchbase::operations::management
+} // namespace couchbase::management::search

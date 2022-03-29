@@ -21,12 +21,13 @@
 #include <string>
 #include <system_error>
 
-namespace couchbase::operations::management::analytics_link
+namespace couchbase::management::analytics
 {
 /**
- * An external analytics link which uses the AWS S3 service to access data.
+ * An external analytics link which uses the Microsoft Azure Blob Storage service.
+ * Only available as of 7.0 Developer Preview.
  */
-struct s3_external {
+struct azure_blob_external_link {
     /**
      * The name of this link.
      */
@@ -38,32 +39,38 @@ struct s3_external {
     std::string dataverse{};
 
     /**
-     * AWS S3 access key ID
+     * The connection string can be used as an authentication method, connectionString contains other authentication methods embedded inside
+     * the string. Only a single authentication method can be used. (e.g. "AccountName=myAccountName;AccountKey=myAccountKey").
      */
-    std::string access_key_id{};
+    std::optional<std::string> connection_string{};
 
     /**
-     * AWS S3 secret key
+     * Azure blob storage account name
      */
-    std::string secret_access_key{};
+    std::optional<std::string> account_name{};
 
     /**
-     * AWS S3 token if temporary credentials are provided. Only available in 7.0+
+     * Azure blob storage account key
      */
-    std::optional<std::string> session_token{};
+    std::optional<std::string> account_key{};
 
     /**
-     * AWS S3 region
+     * Token that can be used for authentication
      */
-    std::string region{};
+    std::optional<std::string> shared_access_signature{};
 
     /**
-     * AWS S3 service endpoint
+     * Azure blob storage endpoint
      */
-    std::optional<std::string> service_endpoint{};
+    std::optional<std::string> blob_endpoint{};
+
+    /**
+     * Azure blob endpoint suffix
+     */
+    std::optional<std::string> endpoint_suffix{};
 
     [[nodiscard]] std::error_code validate() const;
 
     [[nodiscard]] std::string encode() const;
 };
-} // namespace couchbase::operations::management::analytics_link
+} // namespace couchbase::management::analytics

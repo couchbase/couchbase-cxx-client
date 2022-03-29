@@ -20,7 +20,7 @@
 #include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
-#include <couchbase/operations/management/eventing_function.hxx>
+#include <couchbase/management/eventing_function.hxx>
 #include <couchbase/operations/management/eventing_problem.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
@@ -29,8 +29,8 @@ namespace couchbase::operations::management
 {
 struct eventing_get_all_functions_response {
     error_context::http ctx;
-    std::vector<eventing::function> functions{};
-    std::optional<eventing::problem> error{};
+    std::vector<couchbase::management::eventing::function> functions{};
+    std::optional<eventing_problem> error{};
 };
 
 struct eventing_get_all_functions_request {

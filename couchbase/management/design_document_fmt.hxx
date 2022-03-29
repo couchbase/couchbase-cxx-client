@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include <couchbase/operations/management/rbac.hxx>
+#include <couchbase/management/design_document.hxx>
 
 #include <fmt/core.h>
 
 template<>
-struct fmt::formatter<couchbase::operations::management::rbac::auth_domain> {
+struct fmt::formatter<couchbase::management::views::design_document::name_space> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext& ctx)
     {
@@ -30,18 +30,16 @@ struct fmt::formatter<couchbase::operations::management::rbac::auth_domain> {
     }
 
     template<typename FormatContext>
-    auto format(couchbase::operations::management::rbac::auth_domain domain, FormatContext& ctx) const
+    auto format(couchbase::management::views::design_document::name_space ns, FormatContext& ctx) const
     {
         string_view name = "unknown";
-        switch (domain) {
-            case couchbase::operations::management::rbac::auth_domain::unknown:
-                name = "unknown";
+        switch (ns) {
+            case couchbase::management::views::design_document::name_space::development:
+                name = "development";
                 break;
-            case couchbase::operations::management::rbac::auth_domain::local:
-                name = "local";
-                break;
-            case couchbase::operations::management::rbac::auth_domain::external:
-                name = "external";
+
+            case couchbase::management::views::design_document::name_space::production:
+                name = "production";
                 break;
         }
         return format_to(ctx.out(), "{}", name);

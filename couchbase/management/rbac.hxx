@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-namespace couchbase::operations::management::rbac
+namespace couchbase::management::rbac
 {
 struct role {
     std::string name;
@@ -74,4 +74,4 @@ struct group {
     std::optional<std::string> ldap_group_reference{};
 };
 
-} // namespace couchbase::operations::management::rbac
+} // namespace couchbase::management::rbac

@@ -15,24 +15,24 @@
  *   limitations under the License.
  */
 
-#include <couchbase/operations/management/analytics_link_couchbase_remote.hxx>
+#include <couchbase/management/analytics_link_couchbase_remote.hxx>
 
 #include <couchbase/errors.hxx>
 #include <couchbase/utils/url_codec.hxx>
 
 #include <algorithm>
 
-namespace couchbase::operations::management
+namespace couchbase::management::analytics
 {
 std::error_code
-analytics_link::couchbase_remote::validate() const
+couchbase_remote_link::validate() const
 {
     if (dataverse.empty() || link_name.empty() || hostname.empty()) {
         return error::common_errc::invalid_argument;
     }
     switch (encryption.level) {
-        case encryption_level::none:
-        case encryption_level::half:
+        case couchbase_link_encryption_level::none:
+        case couchbase_link_encryption_level::half:
             if (/* username and password must be provided */ username.has_value() && password.has_value() &&
                 /* and client certificate and key must be empty */
                 (!encryption.client_certificate.has_value() && !encryption.client_key.has_value())) {
@@ -41,7 +41,7 @@ analytics_link::couchbase_remote::validate() const
             }
             return error::common_errc::invalid_argument;
 
-        case encryption_level::full:
+        case couchbase_link_encryption_level::full:
             if (/* certificate must be provided and */ encryption.certificate.has_value() &&
                 (/* either username/password must be set */ (username.has_value() && password.has_value() &&
                                                              !encryption.client_certificate.has_value() &&
@@ -57,7 +57,7 @@ analytics_link::couchbase_remote::validate() const
 }
 
 std::string
-analytics_link::couchbase_remote::encode() const
+couchbase_remote_link::encode() const
 {
     std::map<std::string, std::string> values{
         { "type", "couchbase" },
@@ -87,18 +87,18 @@ analytics_link::couchbase_remote::encode() const
 }
 
 std::string
-analytics_link::to_string(analytics_link::encryption_level level)
+to_string(couchbase_link_encryption_level level)
 {
     switch (level) {
-        case encryption_level::none:
+        case couchbase_link_encryption_level::none:
             return "none";
 
-        case encryption_level::half:
+        case couchbase_link_encryption_level::half:
             return "half";
 
-        case encryption_level::full:
+        case couchbase_link_encryption_level::full:
             return "full";
     }
     return "none";
 }
-} // namespace couchbase::operations::management
+} // namespace couchbase::management::analytics

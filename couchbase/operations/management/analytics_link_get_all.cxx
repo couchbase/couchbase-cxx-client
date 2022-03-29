@@ -18,9 +18,9 @@
 #include <couchbase/operations/management/analytics_link_get_all.hxx>
 
 #include <couchbase/errors.hxx>
-#include <couchbase/operations/management/analytics_link_azure_blob_external_json.hxx>
-#include <couchbase/operations/management/analytics_link_couchbase_remote_json.hxx>
-#include <couchbase/operations/management/analytics_link_s3_external_json.hxx>
+#include <couchbase/management/analytics_link_azure_blob_external_json.hxx>
+#include <couchbase/management/analytics_link_couchbase_remote_json.hxx>
+#include <couchbase/management/analytics_link_s3_external_json.hxx>
 #include <couchbase/operations/management/error_utils.hxx>
 #include <couchbase/utils/json.hxx>
 #include <couchbase/utils/url_codec.hxx>
@@ -97,11 +97,11 @@ analytics_link_get_all_request::make_response(error_context::http&& ctx, const e
             for (const auto& link : payload.get_array()) {
                 const std::string& type_ = link.at("type").get_string();
                 if (type_ == "couchbase") {
-                    response.couchbase.emplace_back(link.as<analytics_link::couchbase_remote>());
+                    response.couchbase.emplace_back(link.as<couchbase::management::analytics::couchbase_remote_link>());
                 } else if (type_ == "s3") {
-                    response.s3.emplace_back(link.as<analytics_link::s3_external>());
+                    response.s3.emplace_back(link.as<couchbase::management::analytics::s3_external_link>());
                 } else if (type_ == "azureblob") {
-                    response.azure_blob.emplace_back(link.as<analytics_link::azure_blob_external>());
+                    response.azure_blob.emplace_back(link.as<couchbase::management::analytics::azure_blob_external_link>());
                 }
             }
         }

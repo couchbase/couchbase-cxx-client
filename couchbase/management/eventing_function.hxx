@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/operations/management/eventing_status.hxx>
+#include <couchbase/management/eventing_status.hxx>
 #include <couchbase/query_scan_consistency.hxx>
 
 #include <chrono>
@@ -26,7 +26,7 @@
 #include <variant>
 #include <vector>
 
-namespace couchbase::operations::management::eventing
+namespace couchbase::management::eventing
 {
 
 struct function_keyspace {
@@ -127,7 +127,7 @@ struct function_bucket_binding {
     /** name of the bucket with optional scope and collection */
     function_keyspace name;
     /** bucket access level (read or read+write) */
-    function_bucket_access access{ couchbase::operations::management::eventing::function_bucket_access::read_write };
+    function_bucket_access access{ function_bucket_access::read_write };
 };
 
 struct function_url_no_auth {
@@ -185,4 +185,4 @@ struct function {
     std::vector<function_constant_binding> constant_bindings{};
     function_settings settings{};
 };
-} // namespace couchbase::operations::management::eventing
+} // namespace couchbase::management::eventing

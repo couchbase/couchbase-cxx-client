@@ -17,15 +17,14 @@
 
 #pragma once
 
-#include <cstdint>
 #include <string>
 
-namespace couchbase
+namespace couchbase::management::analytics
 {
-struct mutation_token {
-    uint64_t partition_uuid{ 0 };
-    uint64_t sequence_number{ 0 };
-    uint16_t partition_id{ 0 };
-    std::string bucket_name{};
+struct index {
+    std::string name;
+    std::string dataverse_name;
+    std::string dataset_name;
+    bool is_primary;
 };
-} // namespace couchbase
+} // namespace couchbase::management::analytics

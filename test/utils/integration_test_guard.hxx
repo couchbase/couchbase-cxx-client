@@ -20,8 +20,8 @@
 #include "integration_shortcuts.hxx"
 #include "test_context.hxx"
 
+#include <couchbase/management/bucket_settings.hxx>
 #include <couchbase/operations/management/bucket_describe.hxx>
-#include <couchbase/operations/management/bucket_settings.hxx>
 #include <couchbase/operations/management/cluster_describe.hxx>
 
 #include <optional>
@@ -34,12 +34,13 @@ class integration_test_guard
     integration_test_guard();
     ~integration_test_guard();
 
-    inline const couchbase::operations::management::bucket_info& load_bucket_info(bool refresh = false)
+    inline const couchbase::operations::management::bucket_describe_response::bucket_info& load_bucket_info(bool refresh = false)
     {
         return load_bucket_info(ctx.bucket, refresh);
     }
 
-    const couchbase::operations::management::bucket_info& load_bucket_info(const std::string& bucket_name, bool refresh = false);
+    const couchbase::operations::management::bucket_describe_response::bucket_info& load_bucket_info(const std::string& bucket_name,
+                                                                                                     bool refresh = false);
 
     inline std::size_t number_of_nodes()
     {
@@ -61,12 +62,12 @@ class integration_test_guard
         return load_bucket_info(bucket_name).number_of_replicas;
     }
 
-    inline couchbase::operations::management::bucket_settings::storage_backend_type storage_backend()
+    inline couchbase::management::cluster::bucket_storage_backend storage_backend()
     {
         return load_bucket_info(ctx.bucket).storage_backend;
     }
 
-    const couchbase::operations::management::cluster_info& load_cluster_info(bool refresh = false);
+    const couchbase::operations::management::cluster_describe_response::cluster_info& load_cluster_info(bool refresh = false);
 
     inline bool has_service(couchbase::service_type service)
     {
@@ -99,7 +100,7 @@ class integration_test_guard
     test_context ctx;
     couchbase::origin origin;
 
-    std::map<std::string, couchbase::operations::management::bucket_info, std::less<>> info{};
-    std::optional<couchbase::operations::management::cluster_info> cluster_info{};
+    std::map<std::string, couchbase::operations::management::bucket_describe_response::bucket_info, std::less<>> info{};
+    std::optional<couchbase::operations::management::cluster_describe_response::cluster_info> cluster_info{};
 };
 } // namespace test::utils

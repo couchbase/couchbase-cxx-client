@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/operations/management/rbac.hxx>
+#include <couchbase/management/rbac.hxx>
 
 #include <couchbase/logger/logger.hxx>
 
@@ -26,15 +26,15 @@
 namespace tao::json
 {
 template<>
-struct traits<couchbase::operations::management::rbac::user_and_metadata> {
+struct traits<couchbase::management::rbac::user_and_metadata> {
     template<template<typename...> class Traits>
-    static couchbase::operations::management::rbac::user_and_metadata as(const tao::json::basic_value<Traits>& v)
+    static couchbase::management::rbac::user_and_metadata as(const tao::json::basic_value<Traits>& v)
     {
-        couchbase::operations::management::rbac::user_and_metadata result;
+        couchbase::management::rbac::user_and_metadata result;
         if (const std::string& domain = v.at("domain").get_string(); domain == "local") {
-            result.domain = couchbase::operations::management::rbac::auth_domain::local;
+            result.domain = couchbase::management::rbac::auth_domain::local;
         } else if (domain == "external") {
-            result.domain = couchbase::operations::management::rbac::auth_domain::external;
+            result.domain = couchbase::management::rbac::auth_domain::external;
         } else {
             LOG_ERROR(R"("unexpected domain for user with metadata: "{}")", domain);
         }
@@ -55,7 +55,7 @@ struct traits<couchbase::operations::management::rbac::user_and_metadata> {
         }
         if (const auto* roles = v.find("roles"); roles != nullptr) {
             for (const auto& entry : roles->get_array()) {
-                couchbase::operations::management::rbac::role_and_origins role{};
+                couchbase::management::rbac::role_and_origins role{};
                 role.name = entry.at("role").get_string();
                 if (const auto* bucket = entry.find("bucket_name"); bucket != nullptr && !bucket->get_string().empty()) {
                     role.bucket = bucket->get_string();
@@ -71,7 +71,7 @@ struct traits<couchbase::operations::management::rbac::user_and_metadata> {
                 if (const auto* origins = entry.find("origins"); origins != nullptr) {
                     bool has_user_origin = false;
                     for (const auto& ent : origins->get_array()) {
-                        couchbase::operations::management::rbac::origin origin{};
+                        couchbase::management::rbac::origin origin{};
                         origin.type = ent.at("type").get_string();
                         if (origin.type == "user") {
                             has_user_origin = true;
@@ -96,11 +96,11 @@ struct traits<couchbase::operations::management::rbac::user_and_metadata> {
 };
 
 template<>
-struct traits<couchbase::operations::management::rbac::role_and_description> {
+struct traits<couchbase::management::rbac::role_and_description> {
     template<template<typename...> class Traits>
-    static couchbase::operations::management::rbac::role_and_description as(const tao::json::basic_value<Traits>& v)
+    static couchbase::management::rbac::role_and_description as(const tao::json::basic_value<Traits>& v)
     {
-        couchbase::operations::management::rbac::role_and_description result;
+        couchbase::management::rbac::role_and_description result;
         result.name = v.at("role").get_string();
         result.display_name = v.at("name").get_string();
         result.description = v.at("desc").get_string();
@@ -127,11 +127,11 @@ struct traits<couchbase::operations::management::rbac::role_and_description> {
 };
 
 template<>
-struct traits<couchbase::operations::management::rbac::group> {
+struct traits<couchbase::management::rbac::group> {
     template<template<typename...> class Traits>
-    static couchbase::operations::management::rbac::group as(const tao::json::basic_value<Traits>& v)
+    static couchbase::management::rbac::group as(const tao::json::basic_value<Traits>& v)
     {
-        couchbase::operations::management::rbac::group result;
+        couchbase::management::rbac::group result;
         result.name = v.at("id").get_string();
         {
             const auto* desc = v.find("description");
@@ -149,7 +149,7 @@ struct traits<couchbase::operations::management::rbac::group> {
             const auto* roles = v.find("roles");
             if (roles != nullptr) {
                 for (const auto& entry : roles->get_array()) {
-                    couchbase::operations::management::rbac::role role{};
+                    couchbase::management::rbac::role role{};
                     role.name = entry.at("role").get_string();
                     {
                         const auto* bucket = entry.find("bucket_name");

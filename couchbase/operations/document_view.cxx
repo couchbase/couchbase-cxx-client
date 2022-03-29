@@ -101,7 +101,7 @@ document_view_request::encode_to(document_view_request::encoded_request_type& en
     encoded.headers["content-type"] = "application/json";
     encoded.path = fmt::format("/{}/_design/{}{}/_view/{}?{}",
                                bucket_name,
-                               name_space == design_document::name_space::development ? "dev_" : "",
+                               ns == design_document_namespace::development ? "dev_" : "",
                                document_name,
                                view_name,
                                utils::join_strings(query_string, "&"));

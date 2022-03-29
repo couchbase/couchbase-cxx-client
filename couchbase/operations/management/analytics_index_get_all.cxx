@@ -54,7 +54,7 @@ analytics_index_get_all_request::make_response(error_context::http&& ctx, const 
         if (response.status == "success") {
             if (auto* results = payload.find("results"); results != nullptr && results->is_array()) {
                 for (const auto& res : results->get_array()) {
-                    analytics_index_get_all_response::index idx;
+                    couchbase::management::analytics::index idx;
                     idx.name = res.at("IndexName").get_string();
                     idx.dataverse_name = res.at("DataverseName").get_string();
                     idx.dataset_name = res.at("DatasetName").get_string();
@@ -65,7 +65,7 @@ analytics_index_get_all_request::make_response(error_context::http&& ctx, const 
         } else {
             if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
                 for (const auto& error : errors->get_array()) {
-                    analytics_index_get_all_response::problem err{
+                    analytics_problem err{
                         error.at("code").as<std::uint32_t>(),
                         error.at("msg").get_string(),
                     };

@@ -17,15 +17,25 @@
 
 #pragma once
 
-#include <cstdint>
+#include <map>
+#include <optional>
 #include <string>
 
-namespace couchbase
+#include <couchbase/design_document_namespace.hxx>
+
+namespace couchbase::management::views
 {
-struct mutation_token {
-    uint64_t partition_uuid{ 0 };
-    uint64_t sequence_number{ 0 };
-    uint16_t partition_id{ 0 };
-    std::string bucket_name{};
+struct design_document {
+    struct view {
+        std::string name;
+        std::optional<std::string> map{};
+        std::optional<std::string> reduce{};
+    };
+
+    std::string rev;
+    std::string name;
+    design_document_namespace ns;
+    std::map<std::string, view> views;
 };
-} // namespace couchbase
+
+} // namespace couchbase::management::views

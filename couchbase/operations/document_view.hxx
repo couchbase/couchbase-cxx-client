@@ -17,10 +17,10 @@
 
 #pragma once
 
+#include <couchbase/design_document_namespace.hxx>
 #include <couchbase/error_context/view.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
-#include <couchbase/operations/management/design_document.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
 #include <couchbase/view_scan_consistency.hxx>
@@ -62,7 +62,7 @@ struct document_view_request {
     std::string bucket_name;
     std::string document_name;
     std::string view_name;
-    design_document::name_space name_space;
+    design_document_namespace ns;
 
     std::optional<std::uint64_t> limit;
     std::optional<std::uint64_t> skip;

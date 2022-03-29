@@ -21,13 +21,12 @@
 #include <string>
 #include <system_error>
 
-namespace couchbase::operations::management::analytics_link
+namespace couchbase::management::analytics
 {
 /**
- * An external analytics link which uses the Microsoft Azure Blob Storage service.
- * Only available as of 7.0 Developer Preview.
+ * An external analytics link which uses the AWS S3 service to access data.
  */
-struct azure_blob_external {
+struct s3_external_link {
     /**
      * The name of this link.
      */
@@ -39,38 +38,32 @@ struct azure_blob_external {
     std::string dataverse{};
 
     /**
-     * The connection string can be used as an authentication method, connectionString contains other authentication methods embedded inside
-     * the string. Only a single authentication method can be used. (e.g. "AccountName=myAccountName;AccountKey=myAccountKey").
+     * AWS S3 access key ID
      */
-    std::optional<std::string> connection_string{};
+    std::string access_key_id{};
 
     /**
-     * Azure blob storage account name
+     * AWS S3 secret key
      */
-    std::optional<std::string> account_name{};
+    std::string secret_access_key{};
 
     /**
-     * Azure blob storage account key
+     * AWS S3 token if temporary credentials are provided. Only available in 7.0+
      */
-    std::optional<std::string> account_key{};
+    std::optional<std::string> session_token{};
 
     /**
-     * Token that can be used for authentication
+     * AWS S3 region
      */
-    std::optional<std::string> shared_access_signature{};
+    std::string region{};
 
     /**
-     * Azure blob storage endpoint
+     * AWS S3 service endpoint
      */
-    std::optional<std::string> blob_endpoint{};
-
-    /**
-     * Azure blob endpoint suffix
-     */
-    std::optional<std::string> endpoint_suffix{};
+    std::optional<std::string> service_endpoint{};
 
     [[nodiscard]] std::error_code validate() const;
 
     [[nodiscard]] std::string encode() const;
 };
-} // namespace couchbase::operations::management::analytics_link
+} // namespace couchbase::management::analytics

@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/operations/management/search_index.hxx>
+#include <couchbase/management/search_index.hxx>
 
 #include <couchbase/utils/json.hxx>
 
@@ -26,11 +26,11 @@
 namespace tao::json
 {
 template<>
-struct traits<couchbase::operations::management::search_index> {
+struct traits<couchbase::management::search::index> {
     template<template<typename...> class Traits>
-    static couchbase::operations::management::search_index as(const tao::json::basic_value<Traits>& v)
+    static couchbase::management::search::index as(const tao::json::basic_value<Traits>& v)
     {
-        couchbase::operations::management::search_index result;
+        couchbase::management::search::index result;
         result.uuid = v.at("uuid").get_string();
         result.name = v.at("name").get_string();
         result.type = v.at("type").get_string();

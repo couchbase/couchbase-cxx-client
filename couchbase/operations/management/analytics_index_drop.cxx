@@ -61,7 +61,7 @@ analytics_index_drop_request::make_response(error_context::http&& ctx, const enc
 
             if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
                 for (const auto& error : errors->get_array()) {
-                    analytics_index_drop_response::problem err{
+                    analytics_problem err{
                         error.at("code").as<std::uint32_t>(),
                         error.at("msg").get_string(),
                     };

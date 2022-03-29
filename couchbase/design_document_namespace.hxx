@@ -17,15 +17,10 @@
 
 #pragma once
 
-#include <cstdint>
-#include <string>
-
 namespace couchbase
 {
-struct mutation_token {
-    uint64_t partition_uuid{ 0 };
-    uint64_t sequence_number{ 0 };
-    uint16_t partition_id{ 0 };
-    std::string bucket_name{};
+enum class design_document_namespace {
+    development = 0,
+    production,
 };
 } // namespace couchbase

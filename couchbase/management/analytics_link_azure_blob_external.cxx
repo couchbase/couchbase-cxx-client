@@ -15,43 +15,53 @@
  *   limitations under the License.
  */
 
-#include <couchbase/operations/management/analytics_link_s3_external.hxx>
+#include <couchbase/management/analytics_link_azure_blob_external.hxx>
 
 #include <couchbase/errors.hxx>
 #include <couchbase/utils/url_codec.hxx>
 
 #include <algorithm>
 
-namespace couchbase::operations::management
+namespace couchbase::management::analytics
 {
 std::error_code
-analytics_link::s3_external::validate() const
+azure_blob_external_link::validate() const
 {
-    if (dataverse.empty() || link_name.empty() || access_key_id.empty() || secret_access_key.empty() || region.empty()) {
+    if (dataverse.empty() || link_name.empty()) {
         return error::common_errc::invalid_argument;
     }
-    return {};
+    if (connection_string.has_value() || (account_name.has_value() && (account_key.has_value() || shared_access_signature.has_value()))) {
+        return {};
+    }
+    return error::common_errc::invalid_argument;
 }
 
 std::string
-analytics_link::s3_external::encode() const
+azure_blob_external_link::encode() const
 {
     std::map<std::string, std::string> values{
-        { "type", "s3" },
-        { "accessKeyId", access_key_id },
-        { "secretAccessKey", secret_access_key },
-        { "region", region },
+        { "type", "azureblob" },
     };
     if (std::count(dataverse.begin(), dataverse.end(), '/') == 0) {
         values["dataverse"] = dataverse;
         values["name"] = link_name;
     }
-    if (session_token) {
-        values["sessionToken"] = session_token.value();
+    if (connection_string) {
+        values["connectionString"] = connection_string.value();
+    } else if (account_name) {
+        values["accountName"] = account_name.value();
+        if (account_key) {
+            values["accountKey"] = account_key.value();
+        } else if (shared_access_signature) {
+            values["sharedAccessSignature"] = shared_access_signature.value();
+        }
     }
-    if (service_endpoint) {
-        values["serviceEndpoint"] = service_endpoint.value();
+    if (blob_endpoint) {
+        values["blobEndpoint"] = blob_endpoint.value();
+    }
+    if (endpoint_suffix) {
+        values["endpointSuffix"] = endpoint_suffix.value();
     }
     return utils::string_codec::v2::form_encode(values);
 }
-} // namespace couchbase::operations::management
+} // namespace couchbase::management::analytics

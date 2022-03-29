@@ -21,9 +21,9 @@
 #include <string>
 #include <system_error>
 
-namespace couchbase::operations::management::analytics_link
+namespace couchbase::management::analytics
 {
-enum class encryption_level {
+enum class couchbase_link_encryption_level {
     /**
      * Connect to the remote Couchbase cluster using an unsecured channel. Send the password in plaintext.
      */
@@ -43,13 +43,13 @@ enum class encryption_level {
 };
 
 std::string
-to_string(encryption_level level);
+to_string(couchbase_link_encryption_level level);
 
-struct encryption_settings {
+struct couchbase_link_encryption_settings {
     /**
      * Specifies what level of encryption should be used.
      */
-    encryption_level level{ encryption_level::none };
+    couchbase_link_encryption_level level{ couchbase_link_encryption_level::none };
 
     /**
      * Provides a certificate to use for connecting when encryption level is set to 'full'.  Required when 'encryption_level' is set to
@@ -72,7 +72,7 @@ struct encryption_settings {
 /**
  * A remote analytics link which uses a Couchbase data service that is not part of the same cluster as the Analytics Service.
  */
-struct couchbase_remote {
+struct couchbase_remote_link {
     /**
      * The name of this link.
      */
@@ -98,10 +98,10 @@ struct couchbase_remote {
      */
     std::optional<std::string> password{};
 
-    encryption_settings encryption{};
+    couchbase_link_encryption_settings encryption{};
 
     [[nodiscard]] std::error_code validate() const;
 
     [[nodiscard]] std::string encode() const;
 };
-} // namespace couchbase::operations::management::analytics_link
+} // namespace couchbase::management::analytics

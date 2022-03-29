@@ -17,18 +17,18 @@
 
 #pragma once
 
-#include <couchbase/operations/management/analytics_link_s3_external.hxx>
+#include <couchbase/management/analytics_link_azure_blob_external.hxx>
 
 #include <tao/json/forward.hpp>
 
 namespace tao::json
 {
 template<>
-struct traits<couchbase::operations::management::analytics_link::s3_external> {
+struct traits<couchbase::management::analytics::azure_blob_external_link> {
     template<template<typename...> class Traits>
-    static couchbase::operations::management::analytics_link::s3_external as(const tao::json::basic_value<Traits>& v)
+    static couchbase::management::analytics::azure_blob_external_link as(const tao::json::basic_value<Traits>& v)
     {
-        couchbase::operations::management::analytics_link::s3_external result{};
+        couchbase::management::analytics::azure_blob_external_link result{};
 
         result.link_name = v.at("name").get_string();
         if (const auto* dataverse = v.find("dataverse"); dataverse != nullptr) {
@@ -36,10 +36,15 @@ struct traits<couchbase::operations::management::analytics_link::s3_external> {
         } else {
             result.dataverse = v.at("scope").get_string();
         }
-        result.access_key_id = v.at("accessKeyId").get_string();
-        result.region = v.at("region").get_string();
-        if (const auto* service_endpoint = v.find("serviceEndpoint"); service_endpoint != nullptr && service_endpoint->is_string()) {
-            result.service_endpoint.emplace(service_endpoint->get_string());
+
+        if (const auto* account_name = v.find("accountName"); account_name != nullptr && account_name->is_string()) {
+            result.account_name.emplace(account_name->get_string());
+        }
+        if (const auto* blob_endpoint = v.find("blobEndpoint"); blob_endpoint != nullptr && blob_endpoint->is_string()) {
+            result.blob_endpoint.emplace(blob_endpoint->get_string());
+        }
+        if (const auto* endpoint_suffix = v.find("endpointSuffix"); endpoint_suffix != nullptr && endpoint_suffix->is_string()) {
+            result.endpoint_suffix.emplace(endpoint_suffix->get_string());
         }
         return result;
     }

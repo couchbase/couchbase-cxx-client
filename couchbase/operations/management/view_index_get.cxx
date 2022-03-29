@@ -27,8 +27,7 @@ std::error_code
 view_index_get_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
     encoded.method = "GET";
-    encoded.path =
-      fmt::format("/{}/_design/{}{}", bucket_name, name_space == design_document::name_space::development ? "dev_" : "", document_name);
+    encoded.path = fmt::format("/{}/_design/{}{}", bucket_name, ns == design_document_namespace::development ? "dev_" : "", document_name);
     return {};
 }
 
@@ -39,7 +38,7 @@ view_index_get_request::make_response(error_context::http&& ctx, const encoded_r
     if (!response.ctx.ec) {
         if (encoded.status_code == 200) {
             response.document.name = document_name;
-            response.document.ns = name_space;
+            response.document.ns = ns;
 
             tao::json::value payload{};
             try {
@@ -51,7 +50,7 @@ view_index_get_request::make_response(error_context::http&& ctx, const encoded_r
             const auto* views = payload.find("views");
             if (views != nullptr && views->is_object()) {
                 for (const auto& [name, view_entry] : views->get_object()) {
-                    couchbase::operations::design_document::view view;
+                    couchbase::management::views::design_document::view view;
                     view.name = name;
                     if (view_entry.is_object()) {
                         if (const auto* map = view_entry.find("map"); map != nullptr && map->is_string()) {

@@ -17,18 +17,18 @@
 
 #pragma once
 
-#include <couchbase/operations/management/bucket_settings.hxx>
+#include <couchbase/management/bucket_settings.hxx>
 
 #include <tao/json/forward.hpp>
 
 namespace tao::json
 {
 template<>
-struct traits<couchbase::operations::management::bucket_settings> {
+struct traits<couchbase::management::cluster::bucket_settings> {
     template<template<typename...> class Traits>
-    static couchbase::operations::management::bucket_settings as(const tao::json::basic_value<Traits>& v)
+    static couchbase::management::cluster::bucket_settings as(const tao::json::basic_value<Traits>& v)
     {
-        couchbase::operations::management::bucket_settings result;
+        couchbase::management::cluster::bucket_settings result;
         result.name = v.at("name").get_string();
         result.uuid = v.at("uuid").get_string();
         const static std::uint64_t megabyte = 1024LLU * 1024LLU;
@@ -37,36 +37,36 @@ struct traits<couchbase::operations::management::bucket_settings> {
         result.num_replicas = v.at("replicaNumber").template as<std::uint32_t>();
 
         if (auto& str = v.at("bucketType").get_string(); str == "couchbase" || str == "membase") {
-            result.bucket_type = couchbase::operations::management::bucket_settings::bucket_type::couchbase;
+            result.bucket_type = couchbase::management::cluster::bucket_type::couchbase;
         } else if (str == "ephemeral") {
-            result.bucket_type = couchbase::operations::management::bucket_settings::bucket_type::ephemeral;
+            result.bucket_type = couchbase::management::cluster::bucket_type::ephemeral;
         } else if (str == "memcached") {
-            result.bucket_type = couchbase::operations::management::bucket_settings::bucket_type::memcached;
+            result.bucket_type = couchbase::management::cluster::bucket_type::memcached;
         }
 
         if (auto& str = v.at("compressionMode").get_string(); str == "active") {
-            result.compression_mode = couchbase::operations::management::bucket_settings::compression_mode::active;
+            result.compression_mode = couchbase::management::cluster::bucket_compression::active;
         } else if (str == "passive") {
-            result.compression_mode = couchbase::operations::management::bucket_settings::compression_mode::passive;
+            result.compression_mode = couchbase::management::cluster::bucket_compression::passive;
         } else if (str == "off") {
-            result.compression_mode = couchbase::operations::management::bucket_settings::compression_mode::off;
+            result.compression_mode = couchbase::management::cluster::bucket_compression::off;
         }
 
         if (auto& str = v.at("evictionPolicy").get_string(); str == "valueOnly") {
-            result.eviction_policy = couchbase::operations::management::bucket_settings::eviction_policy::value_only;
+            result.eviction_policy = couchbase::management::cluster::bucket_eviction_policy::value_only;
         } else if (str == "fullEviction") {
-            result.eviction_policy = couchbase::operations::management::bucket_settings::eviction_policy::full;
+            result.eviction_policy = couchbase::management::cluster::bucket_eviction_policy::full;
         } else if (str == "noEviction") {
-            result.eviction_policy = couchbase::operations::management::bucket_settings::eviction_policy::no_eviction;
+            result.eviction_policy = couchbase::management::cluster::bucket_eviction_policy::no_eviction;
         } else if (str == "nruEviction") {
-            result.eviction_policy = couchbase::operations::management::bucket_settings::eviction_policy::not_recently_used;
+            result.eviction_policy = couchbase::management::cluster::bucket_eviction_policy::not_recently_used;
         }
 
         if (auto* storage_backend = v.find("storageBackend"); storage_backend != nullptr && storage_backend->is_string()) {
             if (const auto& str = storage_backend->get_string(); str == "couchstore") {
-                result.storage_backend = couchbase::operations::management::bucket_settings::storage_backend_type::couchstore;
+                result.storage_backend = couchbase::management::cluster::bucket_storage_backend::couchstore;
             } else if (str == "magma") {
-                result.storage_backend = couchbase::operations::management::bucket_settings::storage_backend_type::magma;
+                result.storage_backend = couchbase::management::cluster::bucket_storage_backend::magma;
             }
         }
 
@@ -83,11 +83,11 @@ struct traits<couchbase::operations::management::bucket_settings> {
         }
 
         if (auto& str = v.at("conflictResolutionType").get_string(); str == "lww") {
-            result.conflict_resolution_type = couchbase::operations::management::bucket_settings::conflict_resolution_type::timestamp;
+            result.conflict_resolution_type = couchbase::management::cluster::bucket_conflict_resolution::timestamp;
         } else if (str == "seqno") {
-            result.conflict_resolution_type = couchbase::operations::management::bucket_settings::conflict_resolution_type::sequence_number;
+            result.conflict_resolution_type = couchbase::management::cluster::bucket_conflict_resolution::sequence_number;
         } else if (str == "custom") {
-            result.conflict_resolution_type = couchbase::operations::management::bucket_settings::conflict_resolution_type::custom;
+            result.conflict_resolution_type = couchbase::management::cluster::bucket_conflict_resolution::custom;
         }
 
         result.flush_enabled = v.at("controllers").find("flush") != nullptr;
@@ -100,7 +100,7 @@ struct traits<couchbase::operations::management::bucket_settings> {
             }
         }
         for (auto& n : v.at("nodes").get_array()) {
-            couchbase::operations::management::bucket_settings::node node;
+            couchbase::management::cluster::bucket_settings::node node;
             node.status = n.at("status").get_string();
             node.hostname = n.at("hostname").get_string();
             node.version = n.at("version").get_string();

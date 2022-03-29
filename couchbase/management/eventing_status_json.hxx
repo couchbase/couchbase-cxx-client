@@ -17,36 +17,36 @@
 
 #pragma once
 
-#include <couchbase/operations/management/eventing_status.hxx>
+#include <couchbase/management/eventing_status.hxx>
 
 #include <tao/json/forward.hpp>
 
 namespace tao::json
 {
 template<>
-struct traits<couchbase::operations::management::eventing::status> {
+struct traits<couchbase::management::eventing::status> {
     template<template<typename...> class Traits>
-    static couchbase::operations::management::eventing::status as(const tao::json::basic_value<Traits>& v)
+    static couchbase::management::eventing::status as(const tao::json::basic_value<Traits>& v)
     {
-        couchbase::operations::management::eventing::status result;
+        couchbase::management::eventing::status result;
         result.num_eventing_nodes = v.at("num_eventing_nodes").get_unsigned();
         if (const auto* apps = v.find("apps"); apps != nullptr && apps->is_array()) {
             for (const auto& app : apps->get_array()) {
-                couchbase::operations::management::eventing::function_state function{};
+                couchbase::management::eventing::function_state function{};
                 function.name = app.at("name").get_string();
                 function.num_deployed_nodes = app.at("num_deployed_nodes").get_unsigned();
                 function.num_bootstrapping_nodes = app.at("num_bootstrapping_nodes").get_unsigned();
 
                 if (app.at("deployment_status").get_boolean()) {
-                    function.deployment_status = couchbase::operations::management::eventing::function_deployment_status::deployed;
+                    function.deployment_status = couchbase::management::eventing::function_deployment_status::deployed;
                 } else {
-                    function.deployment_status = couchbase::operations::management::eventing::function_deployment_status::undeployed;
+                    function.deployment_status = couchbase::management::eventing::function_deployment_status::undeployed;
                 }
 
                 if (app.at("processing_status").get_boolean()) {
-                    function.processing_status = couchbase::operations::management::eventing::function_processing_status::running;
+                    function.processing_status = couchbase::management::eventing::function_processing_status::running;
                 } else {
-                    function.processing_status = couchbase::operations::management::eventing::function_processing_status::paused;
+                    function.processing_status = couchbase::management::eventing::function_processing_status::paused;
                 }
 
                 if (const auto* redeploy = app.find("redeploy_required"); redeploy != nullptr && redeploy->is_boolean()) {
@@ -54,17 +54,17 @@ struct traits<couchbase::operations::management::eventing::status> {
                 }
 
                 if (auto composite_status = app.at("composite_status").get_string(); composite_status == "undeployed") {
-                    function.status = couchbase::operations::management::eventing::function_status::undeployed;
+                    function.status = couchbase::management::eventing::function_status::undeployed;
                 } else if (composite_status == "undeploying") {
-                    function.status = couchbase::operations::management::eventing::function_status::undeploying;
+                    function.status = couchbase::management::eventing::function_status::undeploying;
                 } else if (composite_status == "deploying") {
-                    function.status = couchbase::operations::management::eventing::function_status::deploying;
+                    function.status = couchbase::management::eventing::function_status::deploying;
                 } else if (composite_status == "deployed") {
-                    function.status = couchbase::operations::management::eventing::function_status::deployed;
+                    function.status = couchbase::management::eventing::function_status::deployed;
                 } else if (composite_status == "paused") {
-                    function.status = couchbase::operations::management::eventing::function_status::paused;
+                    function.status = couchbase::management::eventing::function_status::paused;
                 } else if (composite_status == "pausing") {
-                    function.status = couchbase::operations::management::eventing::function_status::pausing;
+                    function.status = couchbase::management::eventing::function_status::pausing;
                 }
 
                 result.functions.emplace_back(function);

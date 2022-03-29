@@ -20,20 +20,16 @@
 #include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
+#include <couchbase/operations/management/analytics_problem.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
 
 namespace couchbase::operations::management
 {
 struct analytics_get_pending_mutations_response {
-    struct problem {
-        std::uint32_t code;
-        std::string message;
-    };
-
     error_context::http ctx;
     std::string status{};
-    std::vector<problem> errors{};
+    std::vector<analytics_problem> errors{};
     std::map<std::string, std::uint64_t> stats{};
 };
 

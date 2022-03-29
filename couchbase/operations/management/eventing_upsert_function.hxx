@@ -20,7 +20,7 @@
 #include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
-#include <couchbase/operations/management/eventing_function.hxx>
+#include <couchbase/management/eventing_function.hxx>
 #include <couchbase/operations/management/eventing_problem.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
@@ -29,7 +29,7 @@ namespace couchbase::operations::management
 {
 struct eventing_upsert_function_response {
     error_context::http ctx;
-    std::optional<eventing::problem> error{};
+    std::optional<eventing_problem> error{};
 };
 
 struct eventing_upsert_function_request {
@@ -38,7 +38,7 @@ struct eventing_upsert_function_request {
     using encoded_response_type = io::http_response;
     using error_context_type = error_context::http;
 
-    eventing::function function{};
+    couchbase::management::eventing::function function{};
 
     static const inline service_type type = service_type::eventing;
 

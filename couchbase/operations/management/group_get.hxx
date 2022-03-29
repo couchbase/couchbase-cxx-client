@@ -17,18 +17,18 @@
 
 #pragma once
 
-#include <couchbase/platform/uuid.h>
+#include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
+#include <couchbase/management/rbac.hxx>
+#include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
-#include <couchbase/error_context/http.hxx>
-#include <couchbase/operations/management/rbac.hxx>
 
 namespace couchbase::operations::management
 {
 struct group_get_response {
     error_context::http ctx;
-    rbac::group group{};
+    couchbase::management::rbac::group group{};
 };
 
 struct group_get_request {

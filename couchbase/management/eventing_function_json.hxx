@@ -17,18 +17,18 @@
 
 #pragma once
 
-#include <couchbase/operations/management/eventing_function.hxx>
+#include <couchbase/management/eventing_function.hxx>
 
 #include <tao/json/forward.hpp>
 
 namespace tao::json
 {
 template<>
-struct traits<couchbase::operations::management::eventing::function> {
+struct traits<couchbase::management::eventing::function> {
     template<template<typename...> class Traits>
-    static couchbase::operations::management::eventing::function as(const tao::json::basic_value<Traits>& v)
+    static couchbase::management::eventing::function as(const tao::json::basic_value<Traits>& v)
     {
-        couchbase::operations::management::eventing::function result;
+        couchbase::management::eventing::function result;
         result.version = v.at("version").get_string();
         result.name = v.at("appname").get_string();
         result.code = v.at("appcode").get_string();
@@ -46,7 +46,7 @@ struct traits<couchbase::operations::management::eventing::function> {
 
             if (const auto* constants = depcfg->find("constants"); constants != nullptr && constants->is_array()) {
                 for (const auto& constant : constants->get_array()) {
-                    couchbase::operations::management::eventing::function_constant_binding binding;
+                    couchbase::management::eventing::function_constant_binding binding;
                     binding.alias = constant.at("value").get_string();
                     binding.literal = constant.at("literal").get_string();
                     result.constant_bindings.emplace_back(binding);
@@ -55,15 +55,15 @@ struct traits<couchbase::operations::management::eventing::function> {
 
             if (const auto* buckets = depcfg->find("buckets"); buckets != nullptr && buckets->is_array()) {
                 for (const auto& bucket : buckets->get_array()) {
-                    couchbase::operations::management::eventing::function_bucket_binding binding;
+                    couchbase::management::eventing::function_bucket_binding binding;
                     binding.alias = bucket.at("alias").get_string();
                     binding.name.bucket = bucket.at("bucket_name").get_string();
                     binding.name.scope = bucket.template optional<std::string>("scope_name");
                     binding.name.collection = bucket.template optional<std::string>("collection_name");
                     if (const auto& access = bucket.at("access").get_string(); access == "rw") {
-                        binding.access = couchbase::operations::management::eventing::function_bucket_access::read_write;
+                        binding.access = couchbase::management::eventing::function_bucket_access::read_write;
                     } else if (access == "r") {
-                        binding.access = couchbase::operations::management::eventing::function_bucket_access::read_only;
+                        binding.access = couchbase::management::eventing::function_bucket_access::read_only;
                     }
                     result.bucket_bindings.emplace_back(binding);
                 }
@@ -71,22 +71,19 @@ struct traits<couchbase::operations::management::eventing::function> {
 
             if (const auto* urls = depcfg->find("curl"); urls != nullptr && urls->is_array()) {
                 for (const auto& url : urls->get_array()) {
-                    couchbase::operations::management::eventing::function_url_binding binding;
+                    couchbase::management::eventing::function_url_binding binding;
                     binding.alias = url.at("value").get_string();
                     binding.hostname = url.at("hostname").get_string();
                     binding.allow_cookies = url.at("allow_cookies").get_boolean();
                     binding.validate_ssl_certificate = url.at("validate_ssl_certificate").get_boolean();
                     if (const auto& auth_type = url.at("auth_type").get_string(); auth_type == "no-auth") {
-                        binding.auth = couchbase::operations::management::eventing::function_url_no_auth{};
+                        binding.auth = couchbase::management::eventing::function_url_no_auth{};
                     } else if (auth_type == "basic") {
-                        binding.auth =
-                          couchbase::operations::management::eventing::function_url_auth_basic{ url.at("username").get_string() };
+                        binding.auth = couchbase::management::eventing::function_url_auth_basic{ url.at("username").get_string() };
                     } else if (auth_type == "digest") {
-                        binding.auth =
-                          couchbase::operations::management::eventing::function_url_auth_digest{ url.at("username").get_string() };
+                        binding.auth = couchbase::management::eventing::function_url_auth_digest{ url.at("username").get_string() };
                     } else if (auth_type == "bearer") {
-                        binding.auth =
-                          couchbase::operations::management::eventing::function_url_auth_bearer{ url.at("bearer_key").get_string() };
+                        binding.auth = couchbase::management::eventing::function_url_auth_bearer{ url.at("bearer_key").get_string() };
                     }
                     result.url_bindings.emplace_back(binding);
                 }
@@ -133,36 +130,36 @@ struct traits<couchbase::operations::management::eventing::function> {
 
             if (const auto* status = settings->find("deployment_status"); status != nullptr && status->is_boolean()) {
                 result.settings.deployment_status = status->get_boolean()
-                                                      ? couchbase::operations::management::eventing::function_deployment_status::deployed
-                                                      : couchbase::operations::management::eventing::function_deployment_status::undeployed;
+                                                      ? couchbase::management::eventing::function_deployment_status::deployed
+                                                      : couchbase::management::eventing::function_deployment_status::undeployed;
             }
 
             if (const auto* status = settings->find("processing_status"); status != nullptr && status->is_boolean()) {
                 result.settings.processing_status = status->get_boolean()
-                                                      ? couchbase::operations::management::eventing::function_processing_status::running
-                                                      : couchbase::operations::management::eventing::function_processing_status::paused;
+                                                      ? couchbase::management::eventing::function_processing_status::running
+                                                      : couchbase::management::eventing::function_processing_status::paused;
             }
 
             if (const auto* boundary = settings->find("dcp_stream_boundary"); boundary != nullptr && boundary->is_string()) {
                 const auto& boundary_string = boundary->get_string();
                 if (boundary_string == "everything") {
-                    result.settings.dcp_stream_boundary = couchbase::operations::management::eventing::function_dcp_boundary::everything;
+                    result.settings.dcp_stream_boundary = couchbase::management::eventing::function_dcp_boundary::everything;
                 } else if (boundary_string == "from_now") {
-                    result.settings.dcp_stream_boundary = couchbase::operations::management::eventing::function_dcp_boundary::from_now;
+                    result.settings.dcp_stream_boundary = couchbase::management::eventing::function_dcp_boundary::from_now;
                 }
             }
 
             if (const auto* log_level = settings->find("log_level"); log_level != nullptr && log_level->is_string()) {
                 if (const auto& log_level_string = log_level->get_string(); log_level_string == "DEBUG") {
-                    result.settings.log_level = couchbase::operations::management::eventing::function_log_level::debug;
+                    result.settings.log_level = couchbase::management::eventing::function_log_level::debug;
                 } else if (log_level_string == "TRACE") {
-                    result.settings.log_level = couchbase::operations::management::eventing::function_log_level::trace;
+                    result.settings.log_level = couchbase::management::eventing::function_log_level::trace;
                 } else if (log_level_string == "INFO") {
-                    result.settings.log_level = couchbase::operations::management::eventing::function_log_level::info;
+                    result.settings.log_level = couchbase::management::eventing::function_log_level::info;
                 } else if (log_level_string == "WARNING") {
-                    result.settings.log_level = couchbase::operations::management::eventing::function_log_level::warning;
+                    result.settings.log_level = couchbase::management::eventing::function_log_level::warning;
                 } else if (log_level_string == "ERROR") {
-                    result.settings.log_level = couchbase::operations::management::eventing::function_log_level::error;
+                    result.settings.log_level = couchbase::management::eventing::function_log_level::error;
                 }
             }
 
@@ -171,13 +168,13 @@ struct traits<couchbase::operations::management::eventing::function> {
                 if (const auto& language_compatibility_string = language_compatibility->get_string();
                     language_compatibility_string == "6.0.0") {
                     result.settings.language_compatibility =
-                      couchbase::operations::management::eventing::function_language_compatibility::version_6_0_0;
+                      couchbase::management::eventing::function_language_compatibility::version_6_0_0;
                 } else if (language_compatibility_string == "6.5.0") {
                     result.settings.language_compatibility =
-                      couchbase::operations::management::eventing::function_language_compatibility::version_6_5_0;
+                      couchbase::management::eventing::function_language_compatibility::version_6_5_0;
                 } else if (language_compatibility_string == "6.6.2") {
                     result.settings.language_compatibility =
-                      couchbase::operations::management::eventing::function_language_compatibility::version_6_6_2;
+                      couchbase::management::eventing::function_language_compatibility::version_6_6_2;
                 }
             }
 

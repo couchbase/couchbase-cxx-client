@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-namespace couchbase::operations::management::eventing
+namespace couchbase::management::eventing
 {
 
 enum class function_status {
@@ -81,4 +81,4 @@ struct status {
     std::vector<function_state> functions{};
 };
 
-} // namespace couchbase::operations::management::eventing
+} // namespace couchbase::management::eventing
