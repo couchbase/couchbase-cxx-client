@@ -33,8 +33,11 @@ struct traits<couchbase::management::cluster::bucket_settings> {
         result.uuid = v.at("uuid").get_string();
         const static std::uint64_t megabyte = 1024LLU * 1024LLU;
         result.ram_quota_mb = v.at("quota").at("rawRAM").get_unsigned() / megabyte;
-        result.max_expiry = v.at("maxTTL").template as<std::uint32_t>();
         result.num_replicas = v.at("replicaNumber").template as<std::uint32_t>();
+
+        if (auto* max_ttl = v.find("maxTTL"); max_ttl != nullptr) {
+            result.max_expiry = max_ttl->template as<std::uint32_t>();
+        }
 
         if (auto& str = v.at("bucketType").get_string(); str == "couchbase" || str == "membase") {
             result.bucket_type = couchbase::management::cluster::bucket_type::couchbase;
@@ -44,12 +47,14 @@ struct traits<couchbase::management::cluster::bucket_settings> {
             result.bucket_type = couchbase::management::cluster::bucket_type::memcached;
         }
 
-        if (auto& str = v.at("compressionMode").get_string(); str == "active") {
-            result.compression_mode = couchbase::management::cluster::bucket_compression::active;
-        } else if (str == "passive") {
-            result.compression_mode = couchbase::management::cluster::bucket_compression::passive;
-        } else if (str == "off") {
-            result.compression_mode = couchbase::management::cluster::bucket_compression::off;
+        if (auto* compression_mode = v.find("compressionMode"); compression_mode != nullptr && compression_mode->is_string()) {
+            if (auto& str = compression_mode->get_string(); str == "active") {
+                result.compression_mode = couchbase::management::cluster::bucket_compression::active;
+            } else if (str == "passive") {
+                result.compression_mode = couchbase::management::cluster::bucket_compression::passive;
+            } else if (str == "off") {
+                result.compression_mode = couchbase::management::cluster::bucket_compression::off;
+            }
         }
 
         if (auto& str = v.at("evictionPolicy").get_string(); str == "valueOnly") {
