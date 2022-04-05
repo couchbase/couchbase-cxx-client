@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/protocol/mutation_token.hxx>
+#include <couchbase/mutation_token.hxx>
 
 #include <fmt/core.h>
 

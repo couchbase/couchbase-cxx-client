@@ -25,8 +25,8 @@
 #include <couchbase/protocol/cmd_info.hxx>
 #include <couchbase/protocol/status.hxx>
 
+#include <couchbase/mutation_token.hxx>
 #include <couchbase/protocol/durability_level.hxx>
-#include <couchbase/protocol/mutation_token.hxx>
 
 namespace couchbase::protocol
 {

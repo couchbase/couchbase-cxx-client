@@ -19,10 +19,10 @@
 
 #include <couchbase/document_id.hxx>
 #include <couchbase/io/mcbp_message.hxx>
+#include <couchbase/mutation_token.hxx>
 #include <couchbase/protocol/client_opcode.hxx>
 #include <couchbase/protocol/cmd_info.hxx>
 #include <couchbase/protocol/durability_level.hxx>
-#include <couchbase/protocol/mutation_token.hxx>
 #include <couchbase/protocol/status.hxx>
 
 namespace couchbase::protocol

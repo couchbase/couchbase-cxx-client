@@ -21,8 +21,8 @@
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
 #include <couchbase/json_string.hxx>
+#include <couchbase/mutation_token.hxx>
 #include <couchbase/platform/uuid.h>
-#include <couchbase/protocol/mutation_token.hxx>
 #include <couchbase/search_highlight_style.hxx>
 #include <couchbase/search_scan_consistency.hxx>
 #include <couchbase/timeout_defaults.hxx>
