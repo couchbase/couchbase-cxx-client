@@ -21,8 +21,8 @@
 #include <couchbase/io/mcbp_context.hxx>
 #include <couchbase/io/retry_context.hxx>
 #include <couchbase/protocol/client_request.hxx>
-#include <couchbase/timeout_defaults.hxx>
 #include <couchbase/protocol/cmd_get_meta.hxx>
+#include <couchbase/timeout_defaults.hxx>
 
 namespace couchbase::operations
 {
@@ -30,7 +30,7 @@ namespace couchbase::operations
 struct exists_response {
     error_context::key_value ctx;
     bool deleted{};
-    protocol::cas cas{};
+    couchbase::cas cas{};
     std::uint32_t flags{};
     std::uint32_t expiry{};
     std::uint64_t sequence_number{};

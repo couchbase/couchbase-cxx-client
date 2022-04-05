@@ -31,7 +31,7 @@ namespace couchbase::operations
 struct increment_response {
     error_context::key_value ctx;
     std::uint64_t content{};
-    protocol::cas cas{};
+    couchbase::cas cas{};
     mutation_token token{};
 };
 

@@ -17,9 +17,9 @@
 
 #pragma once
 
+#include <couchbase/cas.hxx>
 #include <couchbase/document_id.hxx>
 #include <couchbase/io/mcbp_message.hxx>
-#include <couchbase/protocol/cas.hxx>
 #include <couchbase/protocol/client_opcode.hxx>
 #include <couchbase/protocol/cmd_info.hxx>
 #include <couchbase/protocol/status.hxx>

@@ -71,9 +71,9 @@ class server_request
         return body_size_;
     }
 
-    [[nodiscard]] protocol::cas cas() const
+    [[nodiscard]] couchbase::cas cas() const
     {
-        return protocol::cas{ cas_ };
+        return couchbase::cas{ cas_ };
     }
 
     [[nodiscard]] std::uint32_t opaque() const

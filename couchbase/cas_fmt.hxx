@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include <couchbase/protocol/cas.hxx>
+#include <couchbase/cas.hxx>
 
 #include <fmt/core.h>
 
 template<>
-struct fmt::formatter<couchbase::protocol::cas> {
+struct fmt::formatter<couchbase::cas> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext& ctx)
     {
@@ -30,7 +30,7 @@ struct fmt::formatter<couchbase::protocol::cas> {
     }
 
     template<typename FormatContext>
-    auto format(const couchbase::protocol::cas& cas, FormatContext& ctx) const
+    auto format(const couchbase::cas& cas, FormatContext& ctx) const
     {
         return format_to(ctx.out(), "{:x}", cas.value);
     }

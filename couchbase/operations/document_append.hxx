@@ -21,16 +21,16 @@
 #include <couchbase/io/mcbp_context.hxx>
 #include <couchbase/io/retry_context.hxx>
 #include <couchbase/protocol/client_request.hxx>
-#include <couchbase/timeout_defaults.hxx>
-#include <couchbase/protocol/durability_level.hxx>
 #include <couchbase/protocol/cmd_append.hxx>
+#include <couchbase/protocol/durability_level.hxx>
+#include <couchbase/timeout_defaults.hxx>
 
 namespace couchbase::operations
 {
 
 struct append_response {
     error_context::key_value ctx;
-    protocol::cas cas{};
+    couchbase::cas cas{};
     mutation_token token{};
 };
 

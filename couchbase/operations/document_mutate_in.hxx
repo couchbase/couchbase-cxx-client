@@ -21,9 +21,9 @@
 #include <couchbase/io/mcbp_context.hxx>
 #include <couchbase/io/retry_context.hxx>
 #include <couchbase/protocol/client_request.hxx>
-#include <couchbase/timeout_defaults.hxx>
-#include <couchbase/protocol/durability_level.hxx>
 #include <couchbase/protocol/cmd_mutate_in.hxx>
+#include <couchbase/protocol/durability_level.hxx>
+#include <couchbase/timeout_defaults.hxx>
 
 namespace couchbase::operations
 {
@@ -38,7 +38,7 @@ struct mutate_in_response {
         std::error_code ec{};
     };
     error_context::key_value ctx;
-    protocol::cas cas{};
+    couchbase::cas cas{};
     mutation_token token{};
     std::vector<field> fields{};
     std::optional<std::size_t> first_error_index{};
@@ -53,7 +53,7 @@ struct mutate_in_request {
     document_id id;
     uint16_t partition{};
     uint32_t opaque{};
-    protocol::cas cas{ 0 };
+    couchbase::cas cas{ 0 };
     bool access_deleted{ false };
     bool create_as_deleted{ false };
     std::optional<std::uint32_t> expiry{};

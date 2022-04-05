@@ -19,7 +19,7 @@
 
 #include <cstdint>
 
-namespace couchbase::protocol
+namespace couchbase
 {
 /**
  * CAS is a special type that represented in protocol using unsigned 64-bit integer, but only equality checks allowed.
@@ -44,4 +44,4 @@ struct cas {
         return value == 0;
     }
 };
-} // namespace couchbase::protocol
+} // namespace couchbase
