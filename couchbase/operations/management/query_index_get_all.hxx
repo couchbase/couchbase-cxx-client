@@ -56,6 +56,8 @@ struct query_index_get_all_request {
     static const inline service_type type = service_type::query;
 
     std::string bucket_name;
+    std::string scope_name;
+    std::string collection_name;
 
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
