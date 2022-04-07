@@ -26,14 +26,27 @@ namespace couchbase::operations::management
 std::error_code
 query_index_build_deferred_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
+    if ((scope_name.empty() && !collection_name.empty()) || (!scope_name.empty() && collection_name.empty())) {
+        return error::common_errc::invalid_argument;
+    }
+    std::string statement;
+    if (!scope_name.empty() && !collection_name.empty()) {
+        statement = fmt::format(
+          R"(BUILD INDEX ON `{}`.`{}`.`{}` ((SELECT RAW name FROM system:indexes WHERE bucket_id = "{}" AND scope_id = "{}" AND keyspace_id = "{}" AND state = "deferred")))",
+          bucket_name,
+          scope_name,
+          collection_name,
+          bucket_name,
+          scope_name,
+          collection_name);
+    } else {
+        statement = fmt::format(
+          R"(BUILD INDEX ON `{}` ((SELECT RAW name FROM system:indexes WHERE keyspace_id = "{}" AND bucket_id IS MISSING AND state = "deferred")))",
+          bucket_name,
+          bucket_name);
+    }
     encoded.headers["content-type"] = "application/json";
-    tao::json::value body{
-        { "statement",
-          fmt::format(R"(BUILD INDEX ON `{}` ((SELECT RAW name FROM system:indexes WHERE keyspace_id = "{}" AND state = "deferred")))",
-                      bucket_name,
-                      bucket_name) },
-        { "client_context_id", encoded.client_context_id }
-    };
+    tao::json::value body{ { "statement", statement }, { "client_context_id", encoded.client_context_id } };
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);

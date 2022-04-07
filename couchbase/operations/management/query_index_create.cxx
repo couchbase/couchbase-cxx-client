@@ -27,6 +27,9 @@ namespace couchbase::operations::management
 std::error_code
 query_index_create_request::encode_to(encoded_request_type& encoded, http_context&) const
 {
+    if ((scope_name.empty() && !collection_name.empty()) || (!scope_name.empty() && collection_name.empty())) {
+        return error::common_errc::invalid_argument;
+    }
     encoded.headers["content-type"] = "application/json";
     tao::json::value with{};
     if (deferred) {
@@ -85,6 +88,8 @@ query_index_create_request::make_response(error_context::http&& ctx, const encod
         if (response.status != "success") {
             bool index_already_exists = false;
             bool bucket_not_found = false;
+            bool collection_not_found = false;
+            bool scope_not_found = false;
             std::optional<std::error_code> common_ec{};
             for (const auto& entry : payload.at("errors").get_array()) {
                 query_index_create_response::query_problem error;
@@ -101,7 +106,15 @@ query_index_create_request::make_response(error_context::http&& ctx, const encod
                         break;
 
                     case 12003: /* IKey: "datastore.couchbase.keyspace_not_found" */
-                        bucket_not_found = true;
+                        if (error.message.find("missing_collection") != std::string::npos) {
+                            collection_not_found = true;
+                        } else {
+                            bucket_not_found = true;
+                        }
+                        break;
+
+                    case 12021:
+                        scope_not_found = true;
                         break;
 
                     case 4300: /* IKey: "plan.new_index_already_exists" */
@@ -120,6 +133,10 @@ query_index_create_request::make_response(error_context::http&& ctx, const encod
                 }
             } else if (bucket_not_found) {
                 response.ctx.ec = error::common_errc::bucket_not_found;
+            } else if (collection_not_found) {
+                response.ctx.ec = error::common_errc::collection_not_found;
+            } else if (scope_not_found) {
+                response.ctx.ec = error::common_errc::scope_not_found;
             } else if (common_ec) {
                 response.ctx.ec = common_ec.value();
             } else if (!response.errors.empty()) {

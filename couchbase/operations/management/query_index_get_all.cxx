@@ -26,15 +26,26 @@ namespace couchbase::operations::management
 std::error_code
 query_index_get_all_request::encode_to(encoded_request_type& encoded, couchbase::http_context& /* context */) const
 {
+    std::string statement;
+    if (!scope_name.empty() && !collection_name.empty()) {
+        statement = fmt::format(
+          R"(SELECT idx.* FROM system:indexes AS idx WHERE keyspace_id = "{}" AND bucket_id = "{}" AND scope_id = "{}" AND `using`="gsi" ORDER BY is_primary DESC, name ASC)",
+          collection_name,
+          bucket_name,
+          scope_name);
+    } else if (!scope_name.empty()) {
+        statement = fmt::format(
+          R"(SELECT idx.* FROM system:indexes AS idx WHERE bucket_id = "{}" AND scope_id = "{}" AND `using`="gsi" ORDER BY is_primary DESC, name ASC)",
+          bucket_name,
+          scope_name);
+    } else {
+        statement = fmt::format(
+          R"(SELECT idx.* FROM system:indexes AS idx WHERE ((keyspace_id = "{}" AND bucket_id IS MISSING) OR (bucket_id = "{}")) AND `using`="gsi" ORDER BY is_primary DESC, name ASC)",
+          bucket_name,
+          bucket_name);
+    }
     encoded.headers["content-type"] = "application/json";
-    tao::json::value body{
-        { "statement",
-          fmt::format(
-            R"(SELECT idx.* FROM system:indexes AS idx WHERE ((keyspace_id = "{}" AND bucket_id IS MISSING) OR (bucket_id = "{}")) AND `using`="gsi" ORDER BY is_primary DESC, name ASC)",
-            bucket_name,
-            bucket_name) },
-        { "client_context_id", encoded.client_context_id }
-    };
+    tao::json::value body{ { "statement", statement }, { "client_context_id", encoded.client_context_id } };
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);
