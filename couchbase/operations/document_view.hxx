@@ -85,6 +85,7 @@ struct document_view_request {
     std::optional<bool> group;
     std::optional<std::uint32_t> group_level;
     bool debug{ false };
+    std::map<std::string, std::string> raw{};
 
     enum class sort_order { ascending, descending };
     std::optional<sort_order> order;
