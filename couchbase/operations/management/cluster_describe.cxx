@@ -46,7 +46,7 @@ cluster_describe_request::make_response(error_context::http&& ctx, const encoded
 
     if (auto* nodes = payload.find("nodes"); nodes != nullptr && nodes->is_array()) {
         for (auto& node : nodes->get_array()) {
-            cluster_info::node entry{};
+            cluster_describe_response::cluster_info::node entry{};
             entry.hostname = node.at("hostname").get_string();
             entry.otp_node = node.at("otpNode").get_string();
             if (auto* uuid = node.find("nodeUUID"); uuid != nullptr && uuid->is_string()) {
@@ -78,7 +78,7 @@ cluster_describe_request::make_response(error_context::http&& ctx, const encoded
     }
     if (auto* buckets = payload.find("bucketNames"); buckets != nullptr && buckets->is_array()) {
         for (auto& node : buckets->get_array()) {
-            cluster_info::bucket entry{};
+            cluster_describe_response::cluster_info::bucket entry{};
             entry.name = node.at("bucketName").get_string();
             entry.uuid = node.at("uuid").get_string();
             response.info.buckets.emplace_back(entry);

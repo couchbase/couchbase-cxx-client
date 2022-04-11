@@ -38,13 +38,13 @@ document_view_request::encode_to(document_view_request::encoded_request_type& en
     }
     if (consistency) {
         switch (*consistency) {
-            case scan_consistency::not_bounded:
+            case couchbase::view_scan_consistency::not_bounded:
                 query_string.emplace_back("stale=ok");
                 break;
-            case scan_consistency::update_after:
+            case couchbase::view_scan_consistency::update_after:
                 query_string.emplace_back("stale=update_after");
                 break;
-            case scan_consistency::request_plus:
+            case couchbase::view_scan_consistency::request_plus:
                 query_string.emplace_back("stale=false");
                 break;
         }
@@ -78,10 +78,10 @@ document_view_request::encode_to(document_view_request::encoded_request_type& en
     }
     if (order) {
         switch (*order) {
-            case sort_order::descending:
+            case couchbase::view_sort_order::descending:
                 query_string.emplace_back("descending=true");
                 break;
-            case sort_order::ascending:
+            case couchbase::view_sort_order::ascending:
                 query_string.emplace_back("descending=false");
                 break;
         }
@@ -101,7 +101,7 @@ document_view_request::encode_to(document_view_request::encoded_request_type& en
     encoded.headers["content-type"] = "application/json";
     encoded.path = fmt::format("/{}/_design/{}{}/_view/{}?{}",
                                bucket_name,
-                               name_space == design_document::name_space::development ? "dev_" : "",
+                               ns == design_document_namespace::development ? "dev_" : "",
                                document_name,
                                view_name,
                                utils::join_strings(query_string, "&"));

@@ -59,7 +59,7 @@ class client_request
         opaque_ = val;
     }
 
-    void cas(protocol::cas val)
+    void cas(cas val)
     {
         cas_ = utils::byte_swap(val.value);
     }

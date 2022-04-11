@@ -18,9 +18,9 @@
 #include <couchbase/operations/management/user_get_all.hxx>
 
 #include <couchbase/errors.hxx>
+#include <couchbase/management/rbac_fmt.hxx>
+#include <couchbase/management/rbac_json.hxx>
 #include <couchbase/operations/management/error_utils.hxx>
-#include <couchbase/operations/management/rbac_fmt.hxx>
-#include <couchbase/operations/management/rbac_json.hxx>
 #include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations::management
@@ -48,7 +48,7 @@ user_get_all_request::make_response(error_context::http&& ctx, const encoded_res
                 return response;
             }
             for (const auto& entry : payload.get_array()) {
-                response.users.emplace_back(entry.as<rbac::user_and_metadata>());
+                response.users.emplace_back(entry.as<couchbase::management::rbac::user_and_metadata>());
             }
         } else {
             response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());

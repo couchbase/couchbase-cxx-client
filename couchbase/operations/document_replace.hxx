@@ -30,7 +30,7 @@ namespace couchbase::operations
 
 struct replace_response {
     error_context::key_value ctx;
-    protocol::cas cas{};
+    couchbase::cas cas{};
     mutation_token token{};
 };
 
@@ -45,7 +45,7 @@ struct replace_request {
     uint32_t opaque{};
     uint32_t flags{ 0 };
     uint32_t expiry{ 0 };
-    protocol::cas cas{ 0 };
+    couchbase::cas cas{ 0 };
     protocol::durability_level durability_level{ protocol::durability_level::none };
     std::optional<std::uint16_t> durability_timeout{};
     std::optional<std::chrono::milliseconds> timeout{};

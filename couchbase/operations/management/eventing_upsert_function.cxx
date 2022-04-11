@@ -80,20 +80,20 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded, http_
                 { "allow_cookies", url.allow_cookies },
                 { "validate_ssl_certificate", url.validate_ssl_certificate },
             };
-            if (std::holds_alternative<eventing::function_url_no_auth>(url.auth)) {
+            if (std::holds_alternative<couchbase::management::eventing::function_url_no_auth>(url.auth)) {
                 binding["auth_type"] = "no-auth";
-            } else if (std::holds_alternative<eventing::function_url_auth_basic>(url.auth)) {
-                const auto& auth = std::get<eventing::function_url_auth_basic>(url.auth);
+            } else if (std::holds_alternative<couchbase::management::eventing::function_url_auth_basic>(url.auth)) {
+                const auto& auth = std::get<couchbase::management::eventing::function_url_auth_basic>(url.auth);
                 binding["auth_type"] = "basic";
                 binding["username"] = auth.username;
                 binding["password"] = auth.password;
-            } else if (std::holds_alternative<eventing::function_url_auth_digest>(url.auth)) {
-                const auto& auth = std::get<eventing::function_url_auth_digest>(url.auth);
+            } else if (std::holds_alternative<couchbase::management::eventing::function_url_auth_digest>(url.auth)) {
+                const auto& auth = std::get<couchbase::management::eventing::function_url_auth_digest>(url.auth);
                 binding["auth_type"] = "digest";
                 binding["username"] = auth.username;
                 binding["password"] = auth.password;
-            } else if (std::holds_alternative<eventing::function_url_auth_bearer>(url.auth)) {
-                const auto& auth = std::get<eventing::function_url_auth_bearer>(url.auth);
+            } else if (std::holds_alternative<couchbase::management::eventing::function_url_auth_bearer>(url.auth)) {
+                const auto& auth = std::get<couchbase::management::eventing::function_url_auth_bearer>(url.auth);
                 binding["auth_type"] = "bearer";
                 binding["bearer_key"] = auth.key;
             }
@@ -116,10 +116,10 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded, http_
                 binding["collection_name"] = bucket.name.collection;
             }
             switch (bucket.access) {
-                case eventing::function_bucket_access::read_only:
+                case couchbase::management::eventing::function_bucket_access::read_only:
                     binding["access"] = "r";
                     break;
-                case eventing::function_bucket_access::read_write:
+                case couchbase::management::eventing::function_bucket_access::read_write:
                     binding["access"] = "rw";
                     break;
             }
@@ -132,10 +132,10 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded, http_
 
     if (function.settings.processing_status) {
         switch (function.settings.processing_status.value()) {
-            case eventing::function_processing_status::running:
+            case couchbase::management::eventing::function_processing_status::running:
                 settings["processing_status"] = true;
                 break;
-            case eventing::function_processing_status::paused:
+            case couchbase::management::eventing::function_processing_status::paused:
                 settings["processing_status"] = false;
                 break;
         }
@@ -145,10 +145,10 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded, http_
 
     if (function.settings.deployment_status) {
         switch (function.settings.deployment_status.value()) {
-            case eventing::function_deployment_status::deployed:
+            case couchbase::management::eventing::function_deployment_status::deployed:
                 settings["deployment_status"] = true;
                 break;
-            case eventing::function_deployment_status::undeployed:
+            case couchbase::management::eventing::function_deployment_status::undeployed:
                 settings["deployment_status"] = false;
                 break;
         }
@@ -162,10 +162,10 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded, http_
 
     if (function.settings.dcp_stream_boundary) {
         switch (function.settings.dcp_stream_boundary.value()) {
-            case eventing::function_dcp_boundary::everything:
+            case couchbase::management::eventing::function_dcp_boundary::everything:
                 settings["dcp_stream_boundary"] = "everything";
                 break;
-            case eventing::function_dcp_boundary::from_now:
+            case couchbase::management::eventing::function_dcp_boundary::from_now:
                 settings["dcp_stream_boundary"] = "from_now";
                 break;
         }
@@ -177,19 +177,19 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded, http_
 
     if (function.settings.log_level) {
         switch (function.settings.log_level.value()) {
-            case eventing::function_log_level::info:
+            case couchbase::management::eventing::function_log_level::info:
                 settings["log_level"] = "INFO";
                 break;
-            case eventing::function_log_level::error:
+            case couchbase::management::eventing::function_log_level::error:
                 settings["log_level"] = "ERROR";
                 break;
-            case eventing::function_log_level::warning:
+            case couchbase::management::eventing::function_log_level::warning:
                 settings["log_level"] = "WARNING";
                 break;
-            case eventing::function_log_level::debug:
+            case couchbase::management::eventing::function_log_level::debug:
                 settings["log_level"] = "DEBUG";
                 break;
-            case eventing::function_log_level::trace:
+            case couchbase::management::eventing::function_log_level::trace:
                 settings["log_level"] = "TRACE";
                 break;
         }
@@ -197,13 +197,13 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded, http_
 
     if (function.settings.language_compatibility) {
         switch (function.settings.language_compatibility.value()) {
-            case eventing::function_language_compatibility::version_6_0_0:
+            case couchbase::management::eventing::function_language_compatibility::version_6_0_0:
                 settings["language_compatibility"] = "6.0.0";
                 break;
-            case eventing::function_language_compatibility::version_6_5_0:
+            case couchbase::management::eventing::function_language_compatibility::version_6_5_0:
                 settings["language_compatibility"] = "6.5.0";
                 break;
-            case eventing::function_language_compatibility::version_6_6_2:
+            case couchbase::management::eventing::function_language_compatibility::version_6_6_2:
                 settings["language_compatibility"] = "6.6.2";
                 break;
         }
@@ -295,10 +295,10 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded, http_
 
     if (function.settings.query_consistency) {
         switch (function.settings.query_consistency.value()) {
-            case eventing::query_scan_consistency::not_bounded:
+            case couchbase::query_scan_consistency::not_bounded:
                 settings["n1ql_consistency"] = "none";
                 break;
-            case eventing::query_scan_consistency::request_plus:
+            case couchbase::query_scan_consistency::request_plus:
                 settings["n1ql_consistency"] = "request";
                 break;
         }

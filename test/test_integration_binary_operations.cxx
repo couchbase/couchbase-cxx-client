@@ -17,7 +17,7 @@
 
 #include "test_helper_integration.hxx"
 
-#include <couchbase/protocol/cas_fmt.hxx>
+#include <couchbase/cas_fmt.hxx>
 
 TEST_CASE("integration: append", "[integration]")
 {

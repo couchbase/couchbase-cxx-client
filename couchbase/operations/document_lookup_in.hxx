@@ -38,7 +38,7 @@ struct lookup_in_response {
         std::error_code ec{};
     };
     error_context::key_value ctx;
-    protocol::cas cas{};
+    couchbase::cas cas{};
     std::vector<field> fields{};
     bool deleted{ false };
 };

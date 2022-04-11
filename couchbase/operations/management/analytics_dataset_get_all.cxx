@@ -53,7 +53,7 @@ analytics_dataset_get_all_request::make_response(error_context::http&& ctx, cons
         if (response.status != "success") {
             if (const auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
                 for (const auto& error : errors->get_array()) {
-                    analytics_dataset_get_all_response::problem err{
+                    analytics_problem err{
                         error.at("code").as<std::uint32_t>(),
                         error.at("msg").get_string(),
                     };
@@ -66,7 +66,7 @@ analytics_dataset_get_all_request::make_response(error_context::http&& ctx, cons
         auto* results = payload.find("results");
         if (results != nullptr && results->is_array()) {
             for (const auto& res : results->get_array()) {
-                analytics_dataset_get_all_response::dataset ds;
+                couchbase::management::analytics::dataset ds;
                 ds.name = res.at("DatasetName").get_string();
                 ds.dataverse_name = res.at("DataverseName").get_string();
                 ds.link_name = res.at("LinkName").get_string();

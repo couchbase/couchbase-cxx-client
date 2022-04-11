@@ -30,7 +30,7 @@ namespace couchbase::operations
 
 struct insert_response {
     error_context::key_value ctx;
-    protocol::cas cas{};
+    couchbase::cas cas{};
     mutation_token token{};
 };
 

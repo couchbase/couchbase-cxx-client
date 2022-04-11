@@ -17,10 +17,10 @@
 
 #pragma once
 
+#include <couchbase/design_document_namespace.hxx>
 #include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
-#include <couchbase/operations/management/design_document.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
 
@@ -40,7 +40,7 @@ struct view_index_drop_request {
 
     std::string bucket_name;
     std::string document_name;
-    design_document::name_space name_space;
+    design_document_namespace ns;
 
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};

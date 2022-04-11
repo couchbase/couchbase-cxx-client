@@ -20,7 +20,7 @@
 #include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
-#include <couchbase/operations/management/rbac.hxx>
+#include <couchbase/management/rbac.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
 
@@ -28,7 +28,7 @@ namespace couchbase::operations::management
 {
 struct group_get_all_response {
     error_context::http ctx;
-    std::vector<rbac::group> groups{};
+    std::vector<couchbase::management::rbac::group> groups{};
 };
 
 struct group_get_all_request {

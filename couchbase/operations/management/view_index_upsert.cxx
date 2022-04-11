@@ -42,7 +42,7 @@ view_index_upsert_request::encode_to(encoded_request_type& encoded, http_context
     encoded.headers["content-type"] = "application/json";
     encoded.method = "PUT";
     encoded.path =
-      fmt::format("/{}/_design/{}{}", bucket_name, document.ns == design_document::name_space::development ? "dev_" : "", document.name);
+      fmt::format("/{}/_design/{}{}", bucket_name, document.ns == design_document_namespace::development ? "dev_" : "", document.name);
     encoded.body = utils::json::generate(body);
     return {};
 }

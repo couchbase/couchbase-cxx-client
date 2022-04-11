@@ -20,7 +20,7 @@
 #include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
-#include <couchbase/operations/management/search_index.hxx>
+#include <couchbase/management/search_index.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
 
@@ -29,7 +29,7 @@ namespace couchbase::operations::management
 struct search_index_get_response {
     error_context::http ctx;
     std::string status{};
-    search_index index{};
+    couchbase::management::search::index index{};
     std::string error{};
 };
 

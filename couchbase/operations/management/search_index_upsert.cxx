@@ -18,8 +18,8 @@
 #include <couchbase/operations/management/search_index_upsert.hxx>
 
 #include <couchbase/errors.hxx>
+#include <couchbase/management/search_index_json.hxx>
 #include <couchbase/operations/management/error_utils.hxx>
-#include <couchbase/operations/management/search_index_json.hxx>
 #include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations::management

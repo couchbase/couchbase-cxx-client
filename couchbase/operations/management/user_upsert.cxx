@@ -18,8 +18,8 @@
 #include <couchbase/operations/management/user_upsert.hxx>
 
 #include <couchbase/errors.hxx>
+#include <couchbase/management/rbac_fmt.hxx>
 #include <couchbase/operations/management/error_utils.hxx>
-#include <couchbase/operations/management/rbac_fmt.hxx>
 #include <couchbase/utils/join_strings.hxx>
 #include <couchbase/utils/json.hxx>
 #include <couchbase/utils/url_codec.hxx>

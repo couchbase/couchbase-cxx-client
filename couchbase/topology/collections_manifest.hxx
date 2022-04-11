@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include <couchbase/platform/uuid.h>
 
 namespace couchbase::topology

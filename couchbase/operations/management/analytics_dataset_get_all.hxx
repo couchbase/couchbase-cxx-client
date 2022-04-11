@@ -20,28 +20,18 @@
 #include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
+#include <couchbase/management/analytics_dataset.hxx>
+#include <couchbase/operations/management/analytics_problem.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
 
 namespace couchbase::operations::management
 {
 struct analytics_dataset_get_all_response {
-    struct dataset {
-        std::string name;
-        std::string dataverse_name;
-        std::string link_name;
-        std::string bucket_name;
-    };
-
-    struct problem {
-        std::uint32_t code;
-        std::string message;
-    };
-
     error_context::http ctx;
     std::string status{};
-    std::vector<dataset> datasets{};
-    std::vector<problem> errors{};
+    std::vector<couchbase::management::analytics::dataset> datasets{};
+    std::vector<analytics_problem> errors{};
 };
 
 struct analytics_dataset_get_all_request {

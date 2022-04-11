@@ -56,7 +56,7 @@ view_index_get_all_request::make_response(error_context::http&& ctx, const encod
                         continue;
                     }
 
-                    design_document document{};
+                    couchbase::management::views::design_document document{};
                     document.rev = meta->at("rev").get_string();
                     auto id = meta->at("id").get_string();
                     if (static const std::string prefix = "_design/"; id.find(prefix) == 0) {
@@ -64,13 +64,13 @@ view_index_get_all_request::make_response(error_context::http&& ctx, const encod
                     } else {
                         document.name = id; // fall back, should not happen
                     }
-                    if (static const std::string name_space_prefix = "dev_"; document.name.find(name_space_prefix) == 0) {
-                        document.name = document.name.substr(name_space_prefix.size());
-                        document.ns = couchbase::operations::design_document::name_space::development;
+                    if (static const std::string namespace_prefix = "dev_"; document.name.find(namespace_prefix) == 0) {
+                        document.name = document.name.substr(namespace_prefix.size());
+                        document.ns = couchbase::design_document_namespace::development;
                     } else {
-                        document.ns = couchbase::operations::design_document::name_space::production;
+                        document.ns = couchbase::design_document_namespace::production;
                     }
-                    if (document.ns != name_space) {
+                    if (document.ns != ns) {
                         continue;
                     }
 
@@ -80,7 +80,7 @@ view_index_get_all_request::make_response(error_context::http&& ctx, const encod
                     }
                     if (const auto* views = json->find("views"); views != nullptr && views->is_object()) {
                         for (const auto& [name, view_entry] : views->get_object()) {
-                            couchbase::operations::design_document::view view;
+                            couchbase::management::views::design_document::view view;
                             view.name = name;
                             if (view_entry.is_object()) {
                                 if (const auto* map = view_entry.find("map"); map != nullptr && map->is_string()) {

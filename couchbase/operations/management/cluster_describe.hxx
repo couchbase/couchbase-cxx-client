@@ -28,28 +28,28 @@
 
 namespace couchbase::operations::management
 {
-struct cluster_info {
-    struct node {
-        std::string uuid{};
-        std::string otp_node{};
-        std::string status{};
-        std::string hostname{};
-        std::string os{};
-        std::string version{};
-        std::vector<std::string> services{};
-    };
-
-    struct bucket {
-        std::string uuid{};
-        std::string name{};
-    };
-
-    std::vector<node> nodes{};
-    std::vector<bucket> buckets{};
-    std::set<service_type> services{};
-};
-
 struct cluster_describe_response {
+    struct cluster_info {
+        struct node {
+            std::string uuid{};
+            std::string otp_node{};
+            std::string status{};
+            std::string hostname{};
+            std::string os{};
+            std::string version{};
+            std::vector<std::string> services{};
+        };
+
+        struct bucket {
+            std::string uuid{};
+            std::string name{};
+        };
+
+        std::vector<node> nodes{};
+        std::vector<bucket> buckets{};
+        std::set<service_type> services{};
+    };
+
     error_context::http ctx;
     cluster_info info{};
 };

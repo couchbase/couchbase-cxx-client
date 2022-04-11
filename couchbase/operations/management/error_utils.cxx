@@ -58,14 +58,14 @@ extract_common_query_error_code(std::uint64_t code, const std::string& message)
     return {};
 }
 
-std::pair<std::error_code, eventing::problem>
+std::pair<std::error_code, eventing_problem>
 extract_eventing_error_code(const tao::json::value& response)
 {
     if (!response.is_object()) {
         return {};
     }
     if (const auto& name = response.find("name"); name != nullptr && name->is_string()) {
-        eventing::problem problem{
+        eventing_problem problem{
             response.at("code").get_unsigned(),
             name->get_string(),
             response.at("description").get_string(),

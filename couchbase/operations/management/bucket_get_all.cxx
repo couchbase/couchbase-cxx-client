@@ -18,7 +18,7 @@
 #include <couchbase/operations/management/bucket_get_all.hxx>
 
 #include <couchbase/errors.hxx>
-#include <couchbase/operations/management/bucket_settings_json.hxx>
+#include <couchbase/management/bucket_settings_json.hxx>
 #include <couchbase/operations/management/error_utils.hxx>
 #include <couchbase/utils/json.hxx>
 
@@ -51,7 +51,7 @@ bucket_get_all_request::make_response(error_context::http&& ctx, const encoded_r
         const auto& entries = payload.get_array();
         response.buckets.reserve(entries.size());
         for (const auto& entry : entries) {
-            response.buckets.emplace_back(entry.as<bucket_settings>());
+            response.buckets.emplace_back(entry.as<couchbase::management::cluster::bucket_settings>());
         }
     }
     return response;

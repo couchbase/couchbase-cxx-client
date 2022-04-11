@@ -30,7 +30,7 @@ namespace couchbase::operations
 
 struct remove_response {
     error_context::key_value ctx;
-    protocol::cas cas{};
+    couchbase::cas cas{};
     mutation_token token{};
 };
 
@@ -42,7 +42,7 @@ struct remove_request {
     document_id id;
     uint16_t partition{};
     uint32_t opaque{};
-    protocol::cas cas{ 0 };
+    couchbase::cas cas{ 0 };
     protocol::durability_level durability_level{ protocol::durability_level::none };
     std::optional<std::uint16_t> durability_timeout{};
     std::optional<std::chrono::milliseconds> timeout{};

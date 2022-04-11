@@ -65,7 +65,7 @@ analytics_dataset_create_request::make_response(error_context::http&& ctx, const
 
             if (const auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
                 for (const auto& error : errors->get_array()) {
-                    analytics_dataset_create_response::problem err{
+                    analytics_problem err{
                         error.at("code").as<std::uint32_t>(),
                         error.at("msg").get_string(),
                     };
