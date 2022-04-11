@@ -101,7 +101,7 @@ struct server_version {
 
     [[nodiscard]] bool supports_user_groups() const
     {
-        return is_mad_hatter() || is_cheshire_cat() || is_neo();
+        return (is_mad_hatter() || is_cheshire_cat() || is_neo()) && is_enterprise();
     }
 
     [[nodiscard]] bool supports_query_index_management() const
@@ -147,6 +147,16 @@ struct server_version {
     [[nodiscard]] bool supports_eventing_functions() const
     {
         return is_cheshire_cat() || is_neo();
+    }
+
+    [[nodiscard]] bool is_enterprise() const
+    {
+        return edition == server_edition::enterprise;
+    }
+
+    [[nodiscard]] bool is_community() const
+    {
+        return edition == server_edition::community;
     }
 };
 

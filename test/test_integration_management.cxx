@@ -68,8 +68,10 @@ TEST_CASE("integration: bucket management", "[integration]")
         bucket_settings.bucket_type = couchbase::management::cluster::bucket_type::couchbase;
         bucket_settings.eviction_policy = couchbase::management::cluster::bucket_eviction_policy::value_only;
         bucket_settings.flush_enabled = true;
-        bucket_settings.max_expiry = 10;
-        bucket_settings.compression_mode = couchbase::management::cluster::bucket_compression::active;
+        if (integration.cluster_version().is_enterprise()) {
+            bucket_settings.max_expiry = 10;
+            bucket_settings.compression_mode = couchbase::management::cluster::bucket_compression::active;
+        }
         bucket_settings.replica_indexes = true;
         bucket_settings.conflict_resolution_type = couchbase::management::cluster::bucket_conflict_resolution::sequence_number;
 
@@ -521,7 +523,10 @@ TEST_CASE("integration: collection management", "[integration]")
     }
 
     {
-        couchbase::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name, 5 };
+        couchbase::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
+        if (integration.cluster_version().is_enterprise()) {
+            req.max_expiry = 5;
+        }
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
     }
@@ -863,7 +868,7 @@ TEST_CASE("integration: user management collections roles", "[integration]")
     test::utils::integration_test_guard integration;
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    if (!integration.cluster_version().supports_collections()) {
+    if (!integration.cluster_version().supports_collections() || integration.cluster_version().is_community()) {
         return;
     }
 
@@ -1398,7 +1403,7 @@ TEST_CASE("integration: analytics index management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_analytics()) {
+    if (!integration.cluster_version().supports_analytics() || !integration.has_analytics_service()) {
         return;
     }
 
@@ -1921,7 +1926,7 @@ TEST_CASE("integration: analytics external link management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_analytics_links()) {
+    if (!integration.cluster_version().supports_analytics_links() || !integration.has_analytics_service()) {
         return;
     }
 
@@ -2297,7 +2302,7 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::invalid_argument);
     }
 
-    if (integration.cluster_version().supports_analytics()) {
+    if (integration.cluster_version().supports_analytics() && integration.has_analytics_service()) {
         SECTION("analytics")
         {
             couchbase::operations::management::freeform_request req{};
