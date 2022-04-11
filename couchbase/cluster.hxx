@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/bucket.hxx>
+#include <couchbase/capella_ca.hxx>
 #include <couchbase/diagnostics.hxx>
 #include <couchbase/io/dns_client.hxx>
 #include <couchbase/io/http_command.hxx>
@@ -286,6 +287,25 @@ class cluster : public std::enable_shared_from_this<cluster>
     template<typename Handler>
     void do_open(Handler&& handler)
     {
+        // Warn users if they attempt to use Capella without TLS being enabled.
+        {
+            bool is_capella = false;
+            static std::string suffix = "cloud.couchbase.com";
+            auto nodes_list = origin_.get_nodes();
+            for (auto& node : nodes_list) {
+                if (auto pos = node.find(suffix); pos != std::string::npos && pos + suffix.size() == node.size()) {
+                    is_capella = true;
+                    break;
+                }
+            }
+
+            if (is_capella && !origin_.options().enable_tls) {
+                LOG_WARNING("[{}]: TLS is required when connecting to Couchbase Capella. Please enable TLS by prefixing "
+                            "the connection string with \"couchbases://\" (note the final 's').",
+                            id_);
+            }
+        }
+
         if (origin_.options().enable_tls) {
             tls_.set_options(asio::ssl::context::default_workarounds | asio::ssl::context::no_sslv2 | asio::ssl::context::no_sslv3);
             switch (origin_.options().tls_verify) {
@@ -304,6 +324,16 @@ class cluster : public std::enable_shared_from_this<cluster>
                 if (ec) {
                     LOG_ERROR("[{}]: unable to load verify file \"{}\": {}", id_, origin_.options().trust_certificate, ec.message());
                     return handler(ec);
+                }
+            } else {
+                // add the cappela Root CA if no other CA was specified.
+                std::error_code ec{};
+                LOG_DEBUG(R"([{}]: use default CA for TLS verify)", id_);
+                tls_.add_certificate_authority(
+                  asio::const_buffer(couchbase::default_ca::capellaCaCert, strlen(couchbase::default_ca::capellaCaCert)), ec);
+                if (ec) {
+                    LOG_WARNING("[{}]: unable to load default CAs: {}", id_, ec.message());
+                    // we don't consider this fatal and try to continue without it
                 }
             }
 #ifdef COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE
