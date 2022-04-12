@@ -31,9 +31,6 @@ replace_request::encode_to(replace_request::encoded_request_type& encoded, mcbp_
     encoded.body().expiry(expiry);
     encoded.body().flags(flags);
     encoded.body().content(value);
-    if (durability_level != protocol::durability_level::none) {
-        encoded.body().durability(durability_level, durability_timeout);
-    }
     if (preserve_expiry) {
         encoded.body().preserve_expiry();
     }
