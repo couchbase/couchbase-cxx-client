@@ -73,7 +73,7 @@ query_index_get_all_request::make_response(couchbase::error_context::http&& ctx,
             return response;
         }
         for (const auto& entry : payload.at("results").get_array()) {
-            query_index_get_all_response::query_index index;
+            couchbase::management::query::index index;
             index.id = entry.at("id").get_string();
             index.datastore_id = entry.at("datastore_id").get_string();
             index.namespace_id = entry.at("namespace_id").get_string();
