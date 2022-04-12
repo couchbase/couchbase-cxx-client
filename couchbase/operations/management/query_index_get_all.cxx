@@ -74,19 +74,9 @@ query_index_get_all_request::make_response(couchbase::error_context::http&& ctx,
         }
         for (const auto& entry : payload.at("results").get_array()) {
             couchbase::management::query::index index;
-            index.id = entry.at("id").get_string();
-            index.datastore_id = entry.at("datastore_id").get_string();
-            index.namespace_id = entry.at("namespace_id").get_string();
-            index.keyspace_id = entry.at("keyspace_id").get_string();
             index.type = entry.at("using").get_string();
             index.name = entry.at("name").get_string();
             index.state = entry.at("state").get_string();
-            if (const auto* prop = entry.find("bucket_id")) {
-                index.bucket_id = prop->get_string();
-            }
-            if (const auto* prop = entry.find("scope_id")) {
-                index.scope_id = prop->get_string();
-            }
             if (const auto* prop = entry.find("is_primary")) {
                 index.is_primary = prop->get_boolean();
             }
@@ -99,6 +89,25 @@ query_index_get_all_request::make_response(couchbase::error_context::http&& ctx,
             for (const auto& key : entry.at("index_key").get_array()) {
                 index.index_key.emplace_back(key.get_string());
             }
+
+            std::string bucket_id, scope_id, keyspace_id;
+            if (const auto* prop = entry.find("bucket_id")) {
+                bucket_id = prop->get_string();
+            }
+            if (const auto* prop = entry.find("scope_id")) {
+                scope_id = prop->get_string();
+            }
+            if (const auto* prop = entry.find("keyspace_id")) {
+                keyspace_id = prop->get_string();
+            }
+            if (bucket_id.empty()) {
+                index.bucket_name = keyspace_id;
+            } else {
+                index.bucket_name = bucket_id;
+                index.scope_name = scope_id;
+                index.collection_name = keyspace_id;
+            }
+
             response.indexes.emplace_back(index);
         }
     }

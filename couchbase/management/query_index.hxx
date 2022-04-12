@@ -25,19 +25,15 @@ namespace couchbase::management::query
 {
 struct index {
     bool is_primary{ false };
-    std::string id;
     std::string name;
     std::string state;
-    std::string datastore_id;
-    std::string keyspace_id;
-    std::string namespace_id;
-    std::string collection_name;
     std::string type;
     std::vector<std::string> index_key{};
     std::optional<std::string> partition{};
     std::optional<std::string> condition{};
-    std::optional<std::string> bucket_id{};
-    std::optional<std::string> scope_id{};
+    std::string bucket_name;
+    std::optional<std::string> scope_name{};
+    std::optional<std::string> collection_name{};
 };
 
 } // namespace couchbase::management::query
