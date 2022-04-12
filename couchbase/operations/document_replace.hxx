@@ -19,6 +19,7 @@
 
 #include <couchbase/error_context/key_value.hxx>
 #include <couchbase/io/mcbp_context.hxx>
+#include <couchbase/io/mcbp_traits.hxx>
 #include <couchbase/io/retry_context.hxx>
 #include <couchbase/protocol/client_request.hxx>
 #include <couchbase/protocol/cmd_replace.hxx>
@@ -47,7 +48,6 @@ struct replace_request {
     uint32_t expiry{ 0 };
     couchbase::cas cas{ 0 };
     protocol::durability_level durability_level{ protocol::durability_level::none };
-    std::optional<std::uint16_t> durability_timeout{};
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
     bool preserve_expiry{ false };
@@ -58,3 +58,10 @@ struct replace_request {
 };
 
 } // namespace couchbase::operations
+
+namespace couchbase::io::mcbp_traits
+{
+template<>
+struct supports_durability<couchbase::operations::replace_request> : public std::true_type {
+};
+} // namespace couchbase::io::mcbp_traits

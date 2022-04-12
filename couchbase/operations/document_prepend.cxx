@@ -28,9 +28,6 @@ prepend_request::encode_to(prepend_request::encoded_request_type& encoded, mcbp_
     encoded.partition(partition);
     encoded.body().id(id);
     encoded.body().content(value);
-    if (durability_level != protocol::durability_level::none) {
-        encoded.body().durability(durability_level, durability_timeout);
-    }
     return {};
 }
 

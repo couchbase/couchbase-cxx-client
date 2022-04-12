@@ -35,9 +35,6 @@ increment_request::encode_to(increment_request::encoded_request_type& encoded, m
         encoded.body().initial_value(0);
         encoded.body().expiry(0xffff'ffff);
     }
-    if (durability_level != protocol::durability_level::none) {
-        encoded.body().durability(durability_level, durability_timeout);
-    }
     if (preserve_expiry) {
         encoded.body().preserve_expiry();
     }
