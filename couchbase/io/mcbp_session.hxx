@@ -739,9 +739,12 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                                   bootstrap_hostname_,
                                   bootstrap_port_);
         LOG_DEBUG("{} attempt to establish MCBP connection", log_prefix_);
-        resolver_.async_resolve(bootstrap_hostname_,
-                                bootstrap_port_,
-                                std::bind(&mcbp_session::on_resolve, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
+
+        async_resolve(origin_.options().use_ip_protocol,
+                      resolver_,
+                      bootstrap_hostname_,
+                      bootstrap_port_,
+                      std::bind(&mcbp_session::on_resolve, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
     }
 
     [[nodiscard]] const std::string& id() const

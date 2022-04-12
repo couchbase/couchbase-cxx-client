@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <couchbase/io/ip_protocol.hxx>
 #include <couchbase/metrics/logging_meter_options.hxx>
 #include <couchbase/service_type.hxx>
 #include <couchbase/timeout_defaults.hxx>
@@ -49,7 +50,7 @@ struct cluster_options {
     std::string trust_certificate{};
     bool enable_mutation_tokens{ true };
     bool enable_tcp_keep_alive{ true };
-    bool force_ipv4{ false };
+    io::ip_protocol use_ip_protocol{ io::ip_protocol::any };
     bool enable_dns_srv{ true };
     bool show_queries{ false };
     bool enable_unordered_execution{ true };

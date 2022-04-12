@@ -35,7 +35,9 @@ bucket_update_request::encode_to(encoded_request_type& encoded, http_context& /*
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";
     encoded.body.append(fmt::format("&ramQuotaMB={}", bucket.ram_quota_mb));
     encoded.body.append(fmt::format("&replicaNumber={}", bucket.num_replicas));
-    encoded.body.append(fmt::format("&maxTTL={}", bucket.max_expiry));
+    if (bucket.max_expiry > 0) {
+        encoded.body.append(fmt::format("&maxTTL={}", bucket.max_expiry));
+    }
     encoded.body.append(fmt::format("&replicaIndex={}", bucket.replica_indexes ? "1" : "0"));
     encoded.body.append(fmt::format("&flushEnabled={}", bucket.flush_enabled ? "1" : "0"));
     switch (bucket.eviction_policy) {

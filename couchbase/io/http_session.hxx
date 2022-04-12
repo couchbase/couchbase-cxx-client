@@ -197,8 +197,11 @@ class http_session : public std::enable_shared_from_this<http_session>
     void start()
     {
         state_ = diag::endpoint_state::connecting;
-        resolver_.async_resolve(
-          hostname_, service_, std::bind(&http_session::on_resolve, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
+        async_resolve(http_ctx_.options.use_ip_protocol,
+                      resolver_,
+                      hostname_,
+                      service_,
+                      std::bind(&http_session::on_resolve, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
     }
 
     [[nodiscard]] std::string log_prefix()

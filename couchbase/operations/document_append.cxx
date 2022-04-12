@@ -28,9 +28,6 @@ append_request::encode_to(protocol::client_request<protocol::append_request_body
     encoded.partition(partition);
     encoded.body().id(id);
     encoded.body().content(value);
-    if (durability_level != protocol::durability_level::none) {
-        encoded.body().durability(durability_level, durability_timeout);
-    }
     return {};
 }
 

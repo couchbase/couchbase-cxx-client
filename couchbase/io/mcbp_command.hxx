@@ -19,10 +19,12 @@
 
 #include <couchbase/document_id_fmt.hxx>
 #include <couchbase/io/mcbp_session.hxx>
+#include <couchbase/io/mcbp_traits.hxx>
 #include <couchbase/io/retry_orchestrator.hxx>
 #include <couchbase/metrics/meter.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/protocol/cmd_get_collection_id.hxx>
+#include <couchbase/protocol/durability_level.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
 #include <couchbase/utils/movable_function.hxx>
 
@@ -36,6 +38,8 @@ using mcbp_command_handler = utils::movable_function<void(std::error_code, std::
 
 template<typename Manager, typename Request>
 struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, Request>> {
+    static constexpr std::chrono::milliseconds durability_timeout_floor{ 1'500 };
+
     using encoded_request_type = typename Request::encoded_request_type;
     using encoded_response_type = typename Request::encoded_response_type;
     asio::steady_timer deadline;
@@ -57,6 +61,18 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
       , manager_(manager)
       , timeout_(request.timeout.value_or(default_timeout))
     {
+        if constexpr (io::mcbp_traits::supports_durability_v<Request>) {
+            if (request.durability_level != protocol::durability_level::none && timeout_ < durability_timeout_floor) {
+                LOG_DEBUG(
+                  R"({} Timeout is too low for operation with durability, increasing to sensible value. timeout={}ms, floor={}ms, id="{}")",
+                  session_->log_prefix(),
+                  request.id,
+                  timeout_.count(),
+                  durability_timeout_floor.count(),
+                  id_);
+                timeout_ = durability_timeout_floor;
+            }
+        }
     }
 
     void start(mcbp_command_handler&& handler)
@@ -185,6 +201,12 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
         if (auto ec = request.encode_to(encoded, session_->context()); ec) {
             return invoke_handler(ec);
+        }
+        if constexpr (io::mcbp_traits::supports_durability_v<Request>) {
+            if (request.durability_level != protocol::durability_level::none) {
+                encoded.body().durability(request.durability_level,
+                                          static_cast<std::uint16_t>(static_cast<double>(timeout_.count()) * 0.9));
+            }
         }
 
         session_->write_and_subscribe(

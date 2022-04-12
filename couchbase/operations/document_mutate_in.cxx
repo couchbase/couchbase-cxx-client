@@ -51,9 +51,6 @@ mutate_in_request::encode_to(mutate_in_request::encoded_request_type& encoded, m
     encoded.body().create_as_deleted(create_as_deleted);
     encoded.body().store_semantics(store_semantics);
     encoded.body().specs(specs);
-    if (durability_level != protocol::durability_level::none) {
-        encoded.body().durability(durability_level, durability_timeout);
-    }
     if (preserve_expiry) {
         encoded.body().preserve_expiry();
     }
