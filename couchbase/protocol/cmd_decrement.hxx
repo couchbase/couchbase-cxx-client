@@ -121,7 +121,7 @@ class decrement_request_body
         if (extras_.empty()) {
             fill_extras();
         }
-        return extras_.size() + key_.size();
+        return extras_.size() + framing_extras_.size() + key_.size();
     }
 
   private:
