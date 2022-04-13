@@ -1031,9 +1031,8 @@ TEST_CASE("integration: query index management", "[integration]")
             REQUIRE_FALSE(resp.indexes[0].is_primary);
             REQUIRE(resp.indexes[0].index_key.size() == 1);
             REQUIRE(resp.indexes[0].index_key[0] == "`field`");
-            REQUIRE(resp.indexes[0].keyspace_id == bucket_name);
+            REQUIRE(resp.indexes[0].bucket_name == bucket_name);
             REQUIRE(resp.indexes[0].state == "online");
-            REQUIRE(resp.indexes[0].namespace_id == "default");
         }
 
         {
@@ -1255,11 +1254,10 @@ TEST_CASE("integration: collections query index management", "[integration]")
             REQUIRE_FALSE(resp.indexes[0].is_primary);
             REQUIRE(resp.indexes[0].index_key.size() == 1);
             REQUIRE(resp.indexes[0].index_key[0] == "`field`");
-            REQUIRE(resp.indexes[0].keyspace_id == collection_name);
-            REQUIRE(resp.indexes[0].scope_id == scope_name);
-            REQUIRE(resp.indexes[0].bucket_id == bucket_name);
+            REQUIRE(resp.indexes[0].collection_name == collection_name);
+            REQUIRE(resp.indexes[0].scope_name == scope_name);
+            REQUIRE(resp.indexes[0].bucket_name == bucket_name);
             REQUIRE(resp.indexes[0].state == "online");
-            REQUIRE(resp.indexes[0].namespace_id == "default");
         }
 
         {
