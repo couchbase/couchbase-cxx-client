@@ -50,6 +50,18 @@ TEST_CASE("integration: increment", "[integration]")
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.content == 10);
     }
+
+    if (integration.cluster_version().supports_enhanced_durability()) {
+        SECTION("durability")
+        {
+            couchbase::operations::increment_request req{ id };
+            req.initial_value = 2;
+            req.durability_level = couchbase::protocol::durability_level::persist_to_majority;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE(resp.content == 2);
+        }
+    }
 }
 
 TEST_CASE("integration: decrement", "[integration]")
@@ -84,5 +96,17 @@ TEST_CASE("integration: decrement", "[integration]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.content == 10);
+    }
+
+    if (integration.cluster_version().supports_enhanced_durability()) {
+        SECTION("durability")
+        {
+            couchbase::operations::decrement_request req{ id };
+            req.initial_value = 2;
+            req.durability_level = couchbase::protocol::durability_level::persist_to_majority;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE(resp.content == 2);
+        }
     }
 }
