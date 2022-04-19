@@ -26,26 +26,36 @@ namespace couchbase::operations::management
 std::error_code
 query_index_get_all_request::encode_to(encoded_request_type& encoded, couchbase::http_context& /* context */) const
 {
-    std::string statement;
-    if (!scope_name.empty() && !collection_name.empty()) {
-        statement = fmt::format(
-          R"(SELECT idx.* FROM system:indexes AS idx WHERE keyspace_id = "{}" AND bucket_id = "{}" AND scope_id = "{}" AND `using`="gsi" ORDER BY is_primary DESC, name ASC)",
-          collection_name,
-          bucket_name,
-          scope_name);
+    std::string bucket_cond = "bucket_id = $bucket_name";
+    std::string scope_cond = "(" + bucket_cond + " AND scope_id = $scope_name)";
+    std::string collection_cond = "(" + scope_cond + " AND keyspace_id = $collection_name)";
+
+    std::string where;
+    if (!collection_name.empty()) {
+        where = collection_cond;
     } else if (!scope_name.empty()) {
-        statement = fmt::format(
-          R"(SELECT idx.* FROM system:indexes AS idx WHERE bucket_id = "{}" AND scope_id = "{}" AND `using`="gsi" ORDER BY is_primary DESC, name ASC)",
-          bucket_name,
-          scope_name);
+        where = scope_cond;
     } else {
-        statement = fmt::format(
-          R"(SELECT idx.* FROM system:indexes AS idx WHERE ((keyspace_id = "{}" AND bucket_id IS MISSING) OR (bucket_id = "{}")) AND `using`="gsi" ORDER BY is_primary DESC, name ASC)",
-          bucket_name,
-          bucket_name);
+        where = bucket_cond;
     }
+
+    if (collection_name == "_default" || collection_name.empty()) {
+        std::string default_collection_cond = "(bucket_id IS MISSING AND keyspace_id = $bucket_name)";
+        where = "(" + where + " OR " + default_collection_cond + ")";
+    }
+
+    std::string statement = "SELECT `idx`.* FROM system:indexes AS idx"
+                            " WHERE " +
+                            where +
+                            " AND `using` = \"gsi\""
+                            " ORDER BY is_primary DESC, name ASC";
+
     encoded.headers["content-type"] = "application/json";
-    tao::json::value body{ { "statement", statement }, { "client_context_id", encoded.client_context_id } };
+    tao::json::value body{ { "statement", statement },
+                           { "client_context_id", encoded.client_context_id },
+                           { "$bucket_name", bucket_name },
+                           { "$scope_name", scope_name },
+                           { "$collection_name", collection_name } };
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);
