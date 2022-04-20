@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include <couchbase/management/design_document.hxx>
+#include <couchbase/design_document_namespace.hxx>
 
 #include <fmt/core.h>
 
 template<>
-struct fmt::formatter<couchbase::management::views::design_document::name_space> {
+struct fmt::formatter<couchbase::design_document_namespace> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext& ctx)
     {
@@ -30,15 +30,15 @@ struct fmt::formatter<couchbase::management::views::design_document::name_space>
     }
 
     template<typename FormatContext>
-    auto format(couchbase::management::views::design_document::name_space ns, FormatContext& ctx) const
+    auto format(couchbase::design_document_namespace ns, FormatContext& ctx) const
     {
         string_view name = "unknown";
         switch (ns) {
-            case couchbase::management::views::design_document::name_space::development:
+            case couchbase::design_document_namespace::development:
                 name = "development";
                 break;
 
-            case couchbase::management::views::design_document::name_space::production:
+            case couchbase::design_document_namespace::production:
                 name = "production";
                 break;
         }
