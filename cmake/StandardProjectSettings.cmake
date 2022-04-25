@@ -39,7 +39,7 @@ else()
   message(STATUS "No colored compiler diagnostic set for '${CMAKE_CXX_COMPILER_ID}' compiler.")
 endif()
 
-if(WIN32)
+if(MSVC)
   add_definitions(/bigobj)
 endif()
 
