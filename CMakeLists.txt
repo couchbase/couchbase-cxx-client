@@ -101,7 +101,12 @@ target_include_directories(
 target_link_libraries(couchbase_cxx_client PRIVATE project_options project_warnings)
 
 include(cmake/DetectStandardFilesystem.cmake)
-couchbase_cxx_check_filesystem(couchbase_cxx_client "filesystem" "std::filesystem" "stdc++fs;c++fs" STD_FILESYSTEM)
+couchbase_cxx_check_filesystem(
+  couchbase_cxx_client
+  "filesystem"
+  "std::filesystem"
+  "stdc++fs;c++fs"
+  STD_FILESYSTEM)
 if(STD_FILESYSTEM)
   message(STATUS "Using std::filesystem")
 else()
