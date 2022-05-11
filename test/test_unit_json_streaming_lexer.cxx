@@ -113,3 +113,38 @@ TEST_CASE("unit: json_streaming_lexer parse query result", "[unit]")
     REQUIRE(result.rows.size() == 3);
     REQUIRE(result.meta == chunks[0] + chunks[4]);
 }
+
+TEST_CASE("unit: json_streaming_lexer parse query result in multiple chunks", "[unit]")
+{
+    test::utils::init_logger();
+
+    const std::vector<std::string> chunks{
+        /* 0 */
+        R"({"requestID": "34a4e4b2-3f69-4bf8-a6e2-ae06798de3d9","clientContextID": "dfea5193-ead9-4ac2-5558-8fd5c4631959","signature": {"greeting":"string"},"results": [{"greeting":"ruby rules"}],"status": "success","profile": {"phaseTimes": {"authorize":"10.473µs","instantiate":"10.29µs","parse":"183.413µs","plan":"19.155µs","project":"5.712µs","run":"43.258µs","stream":"7.078µs"},"phaseOperators": {"authorize":1,"project":1,"stream":1},"requestTime": "2022-05-11T11:01:14.943Z","servicingHost": "10.112.220.101:8091","executionTimings": {"#operator":"Authorize","#stats":{"#phaseSwitches":4,"execTime":"1.372µs","servTime":"9.101µs"},"privileges":{"List":[]},"~child":{"#operator":"Sequence","#stats":{"#phaseSwitches":2,"execTime":"838ns"},"~children":[{"#operator":"DummyScan","#stats":{"#itemsOut":1,"#phaseSwitches":3,"execTime":"794ns","kernTime":"514ns"},"optimizer_estimates":{"cardinality":1,"cost":1.0842021724855044e-19,"fr_cost":1.0842021724855044e-19,"size":1}},{"#operator":"InitialProject","#stats":{"#itemsIn":1,"#itemsOut":1,"#phaseSwitches":8,"execTime":"110.717µs","kernTime":"4.786µs","state":"running"},"optimizer_estimates":{"cardinality":1,"cost":0.001,"fr_cost":0.001,"size":1},"result_terms":[{"as":"greeting","expr":"\"ruby rules\""}]},{"#operator":"Stream","#stats":{"#itemsIn":)",
+        /* 1 */
+        R"(1,"#itemsOut":1,"#phaseSwitches":2,"execTime":"7.078µs"},"optimizer_estimates":{"cardinality":1,"cost":0.001,"fr_cost":0.001,"size":1}}]},"~versions":["7.1.0-N1QL","7.1.0-2534-enterprise"]},"optimizerEstimates": {"cardinality":1,"cost":0.001}}})"
+    };
+
+    couchbase::utils::json::streaming_lexer lexer("/results/^", 4);
+    query_result result{};
+    lexer.on_row([&result](std::string&& row) {
+        result.rows.emplace_back(std::move(row));
+        return couchbase::utils::json::stream_control::next_row;
+    });
+    lexer.on_complete([&result](std::error_code ec, std::size_t number_of_rows, std::string&& meta) {
+        result.ec = ec;
+        result.number_of_rows = number_of_rows;
+        result.meta = std::move(meta);
+    });
+    for (const auto& chunk : chunks) {
+        lexer.feed(chunk);
+    }
+    REQUIRE_FALSE(result.ec);
+    REQUIRE(result.number_of_rows == 1);
+    REQUIRE(result.rows.size() == 1);
+
+    auto expected_meta =
+      R"({"requestID": "34a4e4b2-3f69-4bf8-a6e2-ae06798de3d9","clientContextID": "dfea5193-ead9-4ac2-5558-8fd5c4631959","signature": {"greeting":"string"},"results": [],"status": "success","profile": {"phaseTimes": {"authorize":"10.473µs","instantiate":"10.29µs","parse":"183.413µs","plan":"19.155µs","project":"5.712µs","run":"43.258µs","stream":"7.078µs"},"phaseOperators": {"authorize":1,"project":1,"stream":1},"requestTime": "2022-05-11T11:01:14.943Z","servicingHost": "10.112.220.101:8091","executionTimings": {"#operator":"Authorize","#stats":{"#phaseSwitches":4,"execTime":"1.372µs","servTime":"9.101µs"},"privileges":{"List":[]},"~child":{"#operator":"Sequence","#stats":{"#phaseSwitches":2,"execTime":"838ns"},"~children":[{"#operator":"DummyScan","#stats":{"#itemsOut":1,"#phaseSwitches":3,"execTime":"794ns","kernTime":"514ns"},"optimizer_estimates":{"cardinality":1,"cost":1.0842021724855044e-19,"fr_cost":1.0842021724855044e-19,"size":1}},{"#operator":"InitialProject","#stats":{"#itemsIn":1,"#itemsOut":1,"#phaseSwitches":8,"execTime":"110.717µs","kernTime":"4.786µs","state":"running"},"optimizer_estimates":{"cardinality":1,"cost":0.001,"fr_cost":0.001,"size":1},"result_terms":[{"as":"greeting","expr":"\"ruby rules\""}]},{"#operator":"Stream","#stats":{"#itemsIn":1,"#itemsOut":1,"#phaseSwitches":2,"execTime":"7.078µs"},"optimizer_estimates":{"cardinality":1,"cost":0.001,"fr_cost":0.001,"size":1}}]},"~versions":["7.1.0-N1QL","7.1.0-2534-enterprise"]},"optimizerEstimates": {"cardinality":1,"cost":0.001}}})";
+
+    REQUIRE(result.meta == expected_meta);
+}
