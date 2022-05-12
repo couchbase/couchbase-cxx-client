@@ -39,7 +39,7 @@ noop_on_row(std::string&& /* row */)
 }
 
 #define STATE_MARKER_ROOT (reinterpret_cast<void*>(1))
-#define STATE_MARKER_ROWSET (reinterpret_cast<void*>(1))
+#define STATE_MARKER_ROWSET (reinterpret_cast<void*>(2))
 
 struct streaming_lexer_impl {
     streaming_lexer_impl(jsonsl_t lexer, jsonsl_jpr_t pointer)
