@@ -7,20 +7,11 @@ on:
     branches: [main]
 
 jobs:
-  vs22:
-    runs-on: windows-2022
-    steps:
-      - name: Install build environment
-        run: |
-          choco install --no-progress openssl
-      - uses: actions/checkout@v2
-        with:
-          submodules: recursive
-      - name: Build tests
-        run: ruby ./bin/build-tests.rb
-
-  vs19:
-    runs-on: windows-2019
+  build: 
+    strategy:
+      matrix:
+        os: [windows-2022, windows-2019]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Install build environment
         run: |

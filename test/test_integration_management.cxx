@@ -377,7 +377,7 @@ TEST_CASE("integration: bucket management", "[integration]")
                 SECTION("magma")
                 {
                     {
-                        bucket_settings.ram_quota_mb = 256;
+                        bucket_settings.ram_quota_mb = integration.cluster_version().is_neo() ? 1'024 : 256;
                         bucket_settings.storage_backend = couchbase::management::cluster::bucket_storage_backend::magma;
                         couchbase::operations::management::bucket_create_request req{ bucket_settings };
                         auto resp = test::utils::execute(integration.cluster, req);
