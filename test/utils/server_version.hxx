@@ -86,7 +86,7 @@ struct server_version {
 
     [[nodiscard]] bool supports_storage_backend() const
     {
-        return is_neo();
+        return is_neo() && is_enterprise();
     }
 
     [[nodiscard]] bool supports_preserve_expiry() const
