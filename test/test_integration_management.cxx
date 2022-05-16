@@ -497,6 +497,7 @@ scope_exists(std::shared_ptr<couchbase::cluster> cluster, const std::string& buc
 TEST_CASE("integration: collection management", "[integration]")
 {
     test::utils::integration_test_guard integration;
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     if (!integration.cluster_version().supports_collections()) {
         return;
@@ -509,6 +510,8 @@ TEST_CASE("integration: collection management", "[integration]")
         couchbase::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+        REQUIRE(created);
     }
 
     {
@@ -529,6 +532,8 @@ TEST_CASE("integration: collection management", "[integration]")
         }
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+        REQUIRE(created);
     }
 
     {
@@ -1157,17 +1162,23 @@ TEST_CASE("integration: collections query index management", "[integration]")
 
     REQUIRE(!wait_for_bucket_created(integration, bucket_name).ctx.ec);
 
+    test::utils::open_bucket(integration.cluster, bucket_name);
+
     // create the scope and collection that we'll do index management on.
     {
         couchbase::operations::management::scope_create_request req{ bucket_name, scope_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, bucket_name, resp.uid);
+        REQUIRE(created);
     }
 
     {
         couchbase::operations::management::collection_create_request req{ bucket_name, scope_name, collection_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, bucket_name, resp.uid);
+        REQUIRE(created);
     }
 
     SECTION("primary index")

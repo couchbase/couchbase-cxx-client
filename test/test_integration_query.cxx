@@ -82,27 +82,21 @@ TEST_CASE("integration: query on a collection", "[integration]")
     };
     auto json = couchbase::utils::json::generate(value);
 
-    uint64_t scope_uid;
-    uint64_t collection_uid;
-
     {
         couchbase::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        scope_uid = resp.uid;
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+        REQUIRE(created);
     }
 
     {
         couchbase::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        collection_uid = resp.uid;
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+        REQUIRE(created);
     }
-
-    auto current_manifest_uid = std::max(collection_uid, scope_uid);
-    auto created =
-      test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, current_manifest_uid);
-    REQUIRE(created);
 
     {
         couchbase::operations::management::query_index_create_request req{};
