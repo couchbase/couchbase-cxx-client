@@ -173,7 +173,7 @@ class concurrent_fixed_queue
 
     concurrent_fixed_queue(const concurrent_fixed_queue& other) = delete;
 
-    concurrent_fixed_queue(concurrent_fixed_queue&& other)
+    concurrent_fixed_queue(concurrent_fixed_queue&& other) noexcept
     {
         std::unique_lock<std::mutex> lock(other.mutex_);
         std::swap(data_, other.data_);

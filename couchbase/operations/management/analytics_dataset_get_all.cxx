@@ -63,8 +63,7 @@ analytics_dataset_get_all_request::make_response(error_context::http&& ctx, cons
             response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
             return response;
         }
-        auto* results = payload.find("results");
-        if (results != nullptr && results->is_array()) {
+        if (auto* results = payload.find("results"); results != nullptr && results->is_array()) {
             for (const auto& res : results->get_array()) {
                 couchbase::management::analytics::dataset ds;
                 ds.name = res.at("DatasetName").get_string();

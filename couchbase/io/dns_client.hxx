@@ -154,7 +154,7 @@ class dns_client
                             return handler({ ec2 });
                         }
                         asio::async_read(self->tcp_,
-                                         asio::buffer(&self->recv_buf_size_, sizeof(self->recv_buf_size_)),
+                                         asio::buffer(&self->recv_buf_size_, sizeof(std::uint16_t)),
                                          [self, handler = std::forward<Handler>(handler)](std::error_code ec3,
                                                                                           std::size_t /* bytes_transferred */) mutable {
                                              if (ec3) {
