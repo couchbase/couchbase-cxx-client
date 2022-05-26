@@ -190,8 +190,7 @@ get_projected_request::make_response(error_context::key_value&& ctx, const encod
                 }
                 tao::json::value new_doc;
                 for (const auto& projection : projections) {
-                    auto value_to_apply = subdoc_lookup(full_doc, projection);
-                    if (value_to_apply) {
+                    if (auto value_to_apply = subdoc_lookup(full_doc, projection)) {
                         subdoc_apply_projection(new_doc, projection, *value_to_apply, preserve_array_indexes);
                     } else {
                         response.ctx.ec = error::key_value_errc::path_not_found;

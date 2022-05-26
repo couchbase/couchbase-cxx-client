@@ -36,8 +36,7 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
     if (adhoc) {
         body["statement"] = statement;
     } else {
-        auto entry = ctx_->cache.get(statement);
-        if (entry) {
+        if (auto entry = ctx_->cache.get(statement)) {
             body["prepared"] = entry->name;
             if (entry->plan) {
                 body["encoded_plan"] = entry->plan.value();
