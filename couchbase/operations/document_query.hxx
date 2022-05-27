@@ -26,6 +26,7 @@
 #include <couchbase/platform/uuid.h>
 #include <couchbase/query_profile_mode.hxx>
 #include <couchbase/query_scan_consistency.hxx>
+#include <couchbase/single_query_transaction_config.hxx>
 #include <couchbase/timeout_defaults.hxx>
 
 namespace couchbase::operations
@@ -95,6 +96,7 @@ struct query_request {
     std::optional<std::string> scope_qualifier{};
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
+    std::optional<single_query_transaction_config> as_transaction{};
 
     couchbase::query_profile_mode profile{ couchbase::query_profile_mode::off };
 
