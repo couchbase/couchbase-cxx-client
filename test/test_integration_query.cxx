@@ -399,3 +399,25 @@ TEST_CASE("integration: sticking query to the service node", "[integration]")
         REQUIRE(std::set(used_nodes.begin(), used_nodes.end()).size() == 1);
     }
 }
+
+TEST_CASE("analytics create dataset")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_analytics() || !integration.has_analytics_service() ||
+        !integration.cluster_version().supports_collections()) {
+        return;
+    }
+    if (!integration.cluster_version().supports_gcccp()) {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    }
+    couchbase::operations::analytics_request req{ fmt::format("CREATE DATAVERSE `{}`.`test-scope` IF NOT EXISTS", integration.ctx.bucket) };
+    std::vector<std::string> rows{};
+    req.row_callback = [&rows](std::string&& row) {
+        rows.emplace_back(std::move(row));
+        return couchbase::utils::json::stream_control::next_row;
+    };
+
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_FALSE(resp.ctx.ec);
+}

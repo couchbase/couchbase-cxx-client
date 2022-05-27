@@ -999,7 +999,7 @@ TEST_CASE("integration: query index management", "[integration]")
                 couchbase::operations::management::query_index_create_request req{};
                 req.bucket_name = bucket_name;
                 req.index_name = index_name;
-                req.fields = { "field" };
+                req.fields = { "field", "field2 DESC", "`two words` DESC" };
                 resp = test::utils::execute(integration.cluster, req);
                 return resp.ctx.ec != couchbase::error::common_errc::bucket_not_found;
             });
@@ -1034,8 +1034,10 @@ TEST_CASE("integration: query index management", "[integration]")
             REQUIRE(resp.indexes.size() == 1);
             REQUIRE(resp.indexes[0].name == index_name);
             REQUIRE_FALSE(resp.indexes[0].is_primary);
-            REQUIRE(resp.indexes[0].index_key.size() == 1);
+            REQUIRE(resp.indexes[0].index_key.size() == 3);
             REQUIRE(resp.indexes[0].index_key[0] == "`field`");
+            REQUIRE(resp.indexes[0].index_key[1] == "`field2` DESC");
+            REQUIRE(resp.indexes[0].index_key[2] == "`two words` DESC");
             REQUIRE(resp.indexes[0].bucket_name == bucket_name);
             REQUIRE(resp.indexes[0].state == "online");
         }
