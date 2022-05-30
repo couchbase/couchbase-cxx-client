@@ -1048,7 +1048,7 @@ TEST_CASE("integration: query index management", "[integration]")
             REQUIRE(index != resp.indexes.end());
             REQUIRE(index->name == index_name);
             REQUIRE_FALSE(index->is_primary);
-            REQUIRE(index->index_key.size() == 1);
+            REQUIRE(index->index_key.size() == 3);
             REQUIRE(index->index_key[0] == "`field`");
             REQUIRE(index->index_key[1] == "`field2` DESC");
             REQUIRE(index->index_key[2] == "`two words` DESC");
