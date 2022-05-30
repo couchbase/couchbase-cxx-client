@@ -1051,7 +1051,7 @@ TEST_CASE("integration: query index management", "[integration]")
             REQUIRE(index->index_key.size() == 1);
             REQUIRE(index->index_key[0] == "`field`");
             REQUIRE(index->index_key[1] == "`field2` DESC");
-            REQUIRE(index->index_key[2] == "`two words` DESC");          
+            REQUIRE(index->index_key[2] == "`two words` DESC");
             REQUIRE(index->bucket_name == integration.ctx.bucket);
             REQUIRE(index->state == "online");
         }
