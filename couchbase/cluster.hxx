@@ -292,8 +292,7 @@ class cluster : public std::enable_shared_from_this<cluster>
             bool has_capella_host = false;
             bool has_non_capella_host = false;
             static std::string suffix = "cloud.couchbase.com";
-            auto nodes_list = origin_.get_nodes();
-            for (const auto& node : nodes_list) {
+            for (const auto& node : origin_.get_hostnames()) {
                 if (auto pos = node.find(suffix); pos != std::string::npos && pos + suffix.size() == node.size()) {
                     has_capella_host = true;
                 } else {
