@@ -185,3 +185,50 @@ TEST_CASE("unit: json_streaming_lexer parse chunked metadata trailer", "[unit]")
     REQUIRE(result.meta == expected_meta);
     REQUIRE(result.rows[0] == R"(42)");
 }
+
+TEST_CASE("unit: json_streaming_lexer parse payload with missing results", "[unit]")
+{
+    test::utils::init_logger();
+
+    std::string chunk = R"(
+{
+
+	"requestID": "d07c0cde-cd80-4620-bb6b-d0641f272420",
+	"clientContextID": "a7bbe750-20a2-4e46-eb67-315e3733b2a8",
+	"signature": {
+		"*": "*"
+	},
+	"plans":{},
+	"status": "success",
+	"metrics": {
+		"elapsedTime": "6.56579ms",
+		"executionTime": "5.552905ms",
+		"resultCount": 0,
+		"resultSize": 0,
+		"processedObjects": 0
+	}
+}
+)";
+    couchbase::utils::json::streaming_lexer lexer("/results/^", 4);
+    query_result result{};
+    bool on_row_handler_executed = false;
+    lexer.on_row([&result, &on_row_handler_executed](std::string&& row) {
+        on_row_handler_executed = true;
+        result.rows.emplace_back(std::move(row));
+        return couchbase::utils::json::stream_control::next_row;
+    });
+    bool on_complete_handler_excecuted = false;
+    lexer.on_complete([&result, &on_complete_handler_excecuted](std::error_code ec, std::size_t number_of_rows, std::string&& meta) {
+        on_complete_handler_excecuted = true;
+        result.ec = ec;
+        result.number_of_rows = number_of_rows;
+        result.meta = std::move(meta);
+    });
+    lexer.feed(chunk);
+    REQUIRE_FALSE(on_row_handler_executed);
+    REQUIRE(on_complete_handler_excecuted);
+    REQUIRE_FALSE(result.ec);
+    REQUIRE(result.number_of_rows == 0);
+    REQUIRE(result.rows.empty());
+    REQUIRE(result.meta == chunk);
+}

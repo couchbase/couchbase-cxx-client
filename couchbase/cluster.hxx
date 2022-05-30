@@ -289,20 +289,31 @@ class cluster : public std::enable_shared_from_this<cluster>
     {
         // Warn users if they attempt to use Capella without TLS being enabled.
         {
-            bool is_capella = false;
+            bool has_capella_host = false;
+            bool has_non_capella_host = false;
             static std::string suffix = "cloud.couchbase.com";
-            auto nodes_list = origin_.get_nodes();
-            for (auto& node : nodes_list) {
+            for (const auto& node : origin_.get_hostnames()) {
                 if (auto pos = node.find(suffix); pos != std::string::npos && pos + suffix.size() == node.size()) {
-                    is_capella = true;
-                    break;
+                    has_capella_host = true;
+                } else {
+                    has_non_capella_host = true;
                 }
             }
 
-            if (is_capella && !origin_.options().enable_tls) {
+            if (has_capella_host && !origin_.options().enable_tls) {
                 LOG_WARNING("[{}]: TLS is required when connecting to Couchbase Capella. Please enable TLS by prefixing "
                             "the connection string with \"couchbases://\" (note the final 's').",
                             id_);
+            }
+
+            if (origin_.options().enable_tls                   /* TLS is enabled */
+                && origin_.options().trust_certificate.empty() /* No CA certificate (or other SDK-specific trust source) is specified */
+                && origin_.options().tls_verify != tls_verify_mode::none /* The user did not disable all TLS verification */
+                && has_non_capella_host /* The connection string has a hostname that does NOT end in ".cloud.couchbase.com" */) {
+                LOG_ERROR("[{}] When TLS is enabled, the cluster options must specify certificate(s) to trust. (Unless connecting to "
+                          "cloud.couchbase.com.)",
+                          id_);
+                return handler(error::common_errc::invalid_argument);
             }
         }
 
