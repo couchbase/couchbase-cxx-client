@@ -118,6 +118,16 @@ struct origin {
         return credentials_.key_path;
     }
 
+    [[nodiscard]] std::vector<std::string> get_hostnames() const
+    {
+        std::vector<std::string> res;
+        res.reserve(nodes_.size());
+        for (const auto& [hostname, _] : nodes_) {
+            res.emplace_back(hostname);
+        }
+        return res;
+    }
+
     [[nodiscard]] std::vector<std::string> get_nodes() const
     {
         std::vector<std::string> res;
