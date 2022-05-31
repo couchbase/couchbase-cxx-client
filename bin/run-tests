@@ -30,4 +30,4 @@ fi
 
 cd "${BUILD_DIR}"
 
-${CB_CTEST} --output-on-failure --label-regex 'integration|unit'
+${CB_CTEST} --output-on-failure --label-regex 'integration|unit' --output-junit results.xml
