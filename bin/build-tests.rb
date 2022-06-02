@@ -48,6 +48,7 @@ CB_CC = ENV.fetch("CB_CC", which(CB_DEFAULT_CC))
 CB_CXX = ENV.fetch("CB_CXX", which(CB_DEFAULT_CXX))
 CB_NUMBER_OF_JOBS = ENV.fetch("CB_NUMBER_OF_JOBS", "1").to_i
 CB_CMAKE_BUILD_TYPE = ENV.fetch("CB_CMAKE_BUILD_TYPE", "Debug")
+CB_CACHE_OPTION = ENV.fetch("CB_CACHE_OPTION", "ccache")
 
 puts "RUBY_PLATFORM=#{RUBY_PLATFORM}"
 puts "CB_CMAKE=#{CB_CMAKE}"
@@ -58,6 +59,7 @@ if RUBY_PLATFORM !~ /mswin|mingw/
   puts "CB_CC=#{CB_CC}"
   puts "CB_CXX=#{CB_CXX}"
 end
+puts "CB_CACHE_OPTION=#{CB_CACHE_OPTION}"
 
 CB_CMAKE_EXTRAS = []
 case CB_SANITIZER
@@ -91,6 +93,7 @@ Dir.chdir(BUILD_DIR) do
   run(CB_CMAKE,
       "-DCMAKE_BUILD_TYPE=#{CB_CMAKE_BUILD_TYPE}",
       "-DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=ON",
+      "-DCACHE_OPTION=#{CB_CACHE_OPTION}",
       *CB_CMAKE_EXTRAS,
       "-B", BUILD_DIR,
       "-S", PROJECT_ROOT)

@@ -31,6 +31,10 @@ jobs:
           submodules: recursive
       - name: Initialize couchbase
         run: ./bin/init-cluster
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}
       - name: Build tests
         run: ./bin/build-tests
       - name: Check couchbase
