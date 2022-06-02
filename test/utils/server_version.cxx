@@ -22,11 +22,12 @@
 namespace test::utils
 {
 server_version
-server_version::parse(const std::string& str)
+server_version::parse(const std::string& str, const deployment_type deployment)
 {
     std::regex version_regex(R"((\d+).(\d+).(\d+)(-(\d+))?(-(.+))?)");
     std::smatch version_match{};
     server_version ver{};
+    ver.deployment = deployment;
     if (std::regex_match(str, version_match, version_regex) && version_match.ready()) {
         ver.major = std::stoul(version_match[1]);
         ver.minor = std::stoul(version_match[2]);

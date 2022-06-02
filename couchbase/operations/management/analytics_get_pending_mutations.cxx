@@ -47,7 +47,7 @@ analytics_get_pending_mutations_request::make_response(error_context::http&& ctx
             if (payload.is_object()) {
                 for (const auto& [dataverse, entry] : payload.get_object()) {
                     for (const auto& [dataset, counter] : entry.get_object()) {
-                        response.stats.try_emplace(fmt::format("{}.{}", dataverse, dataset), counter.get_unsigned());
+                        response.stats.try_emplace(fmt::format("{}.{}", dataverse, dataset), counter.as<std::int64_t>());
                     }
                 }
             }
