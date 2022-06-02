@@ -105,7 +105,7 @@ integration_test_guard::cluster_version()
     if (runtime_version.empty()) {
         return ctx.version;
     }
-    auto parsed_version = server_version::parse(runtime_version);
+    auto parsed_version = server_version::parse(runtime_version, ctx.deployment);
     if (parsed_version.major == 0) {
         /* the build does not specify version properly */
         return ctx.version;

@@ -25,6 +25,8 @@ namespace test::utils
 
 enum class server_edition { unknown, enterprise, community };
 
+enum class deployment_type { on_prem, capella, elixir };
+
 struct server_version {
     unsigned long major{ 0 };
     unsigned long minor{ 0 };
@@ -32,8 +34,9 @@ struct server_version {
     unsigned long build{ 0 };
     bool developer_preview{ false };
     server_edition edition{ server_edition::unknown };
+    deployment_type deployment{ deployment_type::on_prem };
 
-    static server_version parse(const std::string& str);
+    static server_version parse(const std::string& str, const deployment_type deployment);
 
     [[nodiscard]] bool is_alice() const
     {
@@ -101,7 +104,7 @@ struct server_version {
 
     [[nodiscard]] bool supports_user_groups() const
     {
-        return (is_mad_hatter() || is_cheshire_cat() || is_neo()) && is_enterprise();
+        return supports_user_management() && (is_mad_hatter() || is_cheshire_cat() || is_neo()) && is_enterprise();
     }
 
     [[nodiscard]] bool supports_query_index_management() const
@@ -157,6 +160,21 @@ struct server_version {
     [[nodiscard]] bool is_community() const
     {
         return edition == server_edition::community;
+    }
+
+    [[nodiscard]] bool supports_bucket_management() const
+    {
+        return deployment == deployment_type::on_prem;
+    }
+
+    [[nodiscard]] bool supports_user_management() const
+    {
+        return deployment == deployment_type::on_prem;
+    }
+
+    [[nodiscard]] bool supports_views() const
+    {
+        return deployment == deployment_type::on_prem;
     }
 };
 
