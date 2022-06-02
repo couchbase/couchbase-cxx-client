@@ -88,6 +88,13 @@ sdk_build_info()
 #elif defined(SSLEAY_VERSION)
     info["openssl_runtime"] = SSLeay_version(SSLEAY_VERSION);
 #endif
+    info["__cplusplus"] = fmt::format("{}", __cplusplus);
+#if defined(_MSC_VER)
+    info["_MSC_VER"] = fmt::format("{}", _MSC_VER);
+#endif
+#if defined(__GLIBC__)
+    info["libc"] = fmt::format("glibc {}.{}", __GLIBC__, __GLIBC_MINOR__);
+#endif
 
     return info;
 }
