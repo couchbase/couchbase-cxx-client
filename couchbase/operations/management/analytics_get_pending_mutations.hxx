@@ -30,7 +30,7 @@ struct analytics_get_pending_mutations_response {
     error_context::http ctx;
     std::string status{};
     std::vector<analytics_problem> errors{};
-    std::map<std::string, std::uint64_t> stats{};
+    std::map<std::string, std::int64_t> stats{};
 };
 
 struct analytics_get_pending_mutations_request {
