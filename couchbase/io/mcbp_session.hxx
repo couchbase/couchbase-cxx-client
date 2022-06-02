@@ -782,6 +782,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         }
         if (handler_) {
             handler_->stop();
+            handler_ = nullptr;
         }
         {
             std::scoped_lock lock(command_handlers_mutex_);
