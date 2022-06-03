@@ -39,13 +39,14 @@ query_index_drop_request::encode_to(encoded_request_type& encoded, http_context&
     }
 
     std::string drop_index_stmt;
-    if (!scope_name.empty() || !collection_name.empty()) {
+    if (is_primary && index_name.empty()) {
+        drop_index_stmt = fmt::format(R"(DROP PRIMARY INDEX ON {} USING GSI)", keyspace);
+    } else if (!scope_name.empty() || !collection_name.empty()) {
         drop_index_stmt = fmt::format(R"(DROP INDEX `{}` ON {} USING GSI)", index_name, keyspace);
     } else {
         drop_index_stmt = fmt::format(R"(DROP INDEX {}.`{}` USING GSI)", keyspace, index_name);
     }
-    tao::json::value body{ { "statement", is_primary ? fmt::format(R"(DROP PRIMARY INDEX ON {} USING GSI)", keyspace) : drop_index_stmt },
-                           { "client_context_id", encoded.client_context_id } };
+    tao::json::value body{ { "statement", drop_index_stmt }, { "client_context_id", encoded.client_context_id } };
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);
