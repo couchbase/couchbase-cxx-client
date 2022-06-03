@@ -91,8 +91,6 @@ class increment_request_body
 
     void durability(protocol::durability_level level, std::optional<std::uint16_t> timeout);
 
-    void preserve_expiry();
-
     [[nodiscard]] const std::string& key() const
     {
         return key_;

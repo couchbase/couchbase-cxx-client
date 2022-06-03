@@ -35,9 +35,6 @@ decrement_request::encode_to(decrement_request::encoded_request_type& encoded, m
         encoded.body().initial_value(0);
         encoded.body().expiry(0xffff'ffff);
     }
-    if (preserve_expiry) {
-        encoded.body().preserve_expiry();
-    }
     return {};
 }
 
