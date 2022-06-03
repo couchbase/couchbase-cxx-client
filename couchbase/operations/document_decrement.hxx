@@ -50,7 +50,6 @@ struct decrement_request {
     protocol::durability_level durability_level{ protocol::durability_level::none };
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
-    bool preserve_expiry{ false };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 
