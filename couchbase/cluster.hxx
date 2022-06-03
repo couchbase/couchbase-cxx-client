@@ -49,6 +49,14 @@ class cluster : public std::enable_shared_from_this<cluster>
         return std::shared_ptr<cluster>(new cluster(ctx));
     }
 
+    [[nodiscard]] std::pair<std::error_code, couchbase::origin> origin() const
+    {
+        if (stopped_) {
+            return { error::network_errc::cluster_closed, {} };
+        }
+        return { {}, origin_ };
+    }
+
     template<typename Handler>
     void open(const couchbase::origin& origin, Handler&& handler)
     {

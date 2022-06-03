@@ -88,15 +88,6 @@ increment_request_body::durability(protocol::durability_level level, std::option
 }
 
 void
-increment_request_body::preserve_expiry()
-{
-    auto frame_id = static_cast<uint8_t>(protocol::request_frame_info_id::preserve_ttl);
-    auto extras_size = framing_extras_.size();
-    framing_extras_.resize(extras_size + 1);
-    framing_extras_[extras_size + 0] = static_cast<std::uint8_t>(static_cast<std::uint32_t>(frame_id) << 4U | 0U);
-}
-
-void
 increment_request_body::fill_extras()
 {
     extras_.resize(sizeof(delta_) + sizeof(initial_value_) + sizeof(expiry_));
