@@ -1220,6 +1220,48 @@ TEST_CASE("integration: collections query index management", "[integration]")
         }
     }
 
+    SECTION("named primary index")
+    {
+        {
+            couchbase::operations::management::query_index_create_response resp;
+            bool operation_completed = test::utils::wait_until([&integration, &index_name, &scope_name, &collection_name, &resp]() {
+                couchbase::operations::management::query_index_create_request req{};
+                req.bucket_name = integration.ctx.bucket;
+                req.scope_name = scope_name;
+                req.collection_name = collection_name;
+                req.index_name = index_name;
+                req.is_primary = true;
+                resp = test::utils::execute(integration.cluster, req);
+                return resp.ctx.ec != couchbase::error::common_errc::bucket_not_found;
+            });
+            REQUIRE(operation_completed);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        {
+            couchbase::operations::management::query_index_get_all_request req{};
+            req.bucket_name = integration.ctx.bucket;
+            req.scope_name = scope_name;
+            req.collection_name = collection_name;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE(resp.indexes.size() == 1);
+            REQUIRE(resp.indexes[0].name == index_name);
+            REQUIRE(resp.indexes[0].is_primary);
+        }
+
+        {
+            couchbase::operations::management::query_index_drop_request req{};
+            req.bucket_name = integration.ctx.bucket;
+            req.index_name = index_name;
+            req.scope_name = scope_name;
+            req.is_primary = true;
+            req.collection_name = collection_name;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+    }
+
     SECTION("non primary index")
     {
         {
