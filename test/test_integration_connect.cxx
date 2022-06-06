@@ -42,6 +42,10 @@ TEST_CASE("integration: connecting with unresponsive first node in bootstrap nod
     test::utils::init_logger();
     asio::io_context io{};
     auto ctx = test::utils::test_context::load_from_environment();
+    if (ctx.deployment == test::utils::deployment_type::capella) {
+        // This breaks SRV assumptions (only one host in connection string)
+        return;
+    }
     auto connstr = couchbase::utils::parse_connection_string(ctx.connection_string);
     REQUIRE_FALSE(connstr.bootstrap_nodes.empty());
     connstr.bootstrap_nodes.insert(connstr.bootstrap_nodes.begin(),
