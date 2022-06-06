@@ -149,7 +149,7 @@ struct server_version {
 
     [[nodiscard]] bool supports_eventing_functions() const
     {
-        return is_cheshire_cat() || is_neo();
+        return (is_cheshire_cat() || is_neo()) && deployment == deployment_type::on_prem;
     }
 
     [[nodiscard]] bool is_enterprise() const
