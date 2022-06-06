@@ -405,7 +405,9 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         }
     };
 
-    class normal_handler : public message_handler
+    class normal_handler
+      : public message_handler
+      , public std::enable_shared_from_this<normal_handler>
     {
       private:
         std::shared_ptr<mcbp_session> session_;
@@ -413,11 +415,18 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         std::atomic_bool stopped_{ false };
 
       public:
-        ~normal_handler() override = default;
+        ~normal_handler() override
+        {
+            stop();
+        }
 
         explicit normal_handler(std::shared_ptr<mcbp_session> session)
           : session_(session)
           , heartbeat_timer_(session_->ctx_)
+        {
+        }
+
+        void start()
         {
             if (session_->supports_gcccp_) {
                 fetch_config({});
@@ -559,11 +568,11 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             req.opaque(session_->next_opaque());
             session_->write_and_flush(req.data());
             heartbeat_timer_.expires_after(std::chrono::milliseconds(2500));
-            heartbeat_timer_.async_wait([this](std::error_code e) {
+            heartbeat_timer_.async_wait([self = shared_from_this()](std::error_code e) {
                 if (e == asio::error::operation_aborted) {
                     return;
                 }
-                fetch_config(e);
+                self->fetch_config(e);
             });
         }
     };
@@ -1054,7 +1063,11 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             return stop(retry_reason::node_not_available);
         }
         state_ = diag::endpoint_state::connected;
-        handler_ = std::make_unique<normal_handler>(shared_from_this());
+        {
+            auto handler = std::make_shared<normal_handler>(shared_from_this());
+            handler->start();
+            handler_ = handler;
+        }
         std::scoped_lock lock(pending_buffer_mutex_);
         bootstrapped_ = true;
         if (!pending_buffer_.empty()) {
@@ -1150,7 +1163,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                                       bootstrap_hostname_,
                                       endpoint_address_,
                                       endpoint_.port());
-            handler_ = std::make_unique<bootstrap_handler>(shared_from_this());
+            handler_ = std::make_shared<bootstrap_handler>(shared_from_this());
             connection_deadline_.expires_at(asio::steady_timer::time_point::max());
             connection_deadline_.cancel();
         }
@@ -1272,7 +1285,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     couchbase::origin origin_;
     std::optional<std::string> bucket_name_;
     mcbp_parser parser_;
-    std::unique_ptr<message_handler> handler_;
+    std::shared_ptr<message_handler> handler_;
     utils::movable_function<void(std::error_code, const topology::configuration&)> bootstrap_handler_{};
     std::mutex command_handlers_mutex_{};
     std::map<uint32_t, utils::movable_function<void(std::error_code, retry_reason, io::mcbp_message&&)>> command_handlers_{};
