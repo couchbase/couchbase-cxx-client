@@ -47,6 +47,11 @@ struct configuration {
      * The default log level to initialize the logger to
      */
     level log_level{ level::info };
+
+    /**
+     * Custom sink to use, if desired
+     */
+    std::shared_ptr<spdlog::sinks::sink> sink{ nullptr };
 };
 
 } // namespace couchbase::logger
