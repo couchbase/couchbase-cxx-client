@@ -155,31 +155,33 @@ translate_query_error_code(std::uint64_t error, const std::string& message, std:
             return error::query_errc::prepared_statement_failure;
 
         case 12009: /* IKey: "datastore.couchbase.DML_error" */
+        {
             if (message.find("CAS mismatch") != std::string::npos) {
                 return error::common_errc::cas_mismatch;
-            } else {
-                switch (reason) {
-                    case 12033:
-                        return error::common_errc::cas_mismatch;
-                    case 17014:
-                        return error::key_value_errc::document_not_found;
-                    case 17012:
-                        return error::key_value_errc::document_exists;
-                    default:
-                        return error::query_errc::dml_failure;
-                }
             }
+            switch (reason) {
+                case 12033:
+                    return error::common_errc::cas_mismatch;
+                case 17014:
+                    return error::key_value_errc::document_not_found;
+                case 17012:
+                    return error::key_value_errc::document_exists;
+                default:
+                    return error::query_errc::dml_failure;
+            }
+        }
 
         case 13014: /* IKey: "datastore.couchbase.insufficient_credentials" */
             return error::common_errc::authentication_failure;
 
-        default:
+        default: {
             if ((error >= 12000 && error < 13000) || (error >= 14000 && error < 15000)) {
                 return error::query_errc::index_failure;
-            } else if (error >= 4000 && error < 5000) {
+            }
+            if (error >= 4000 && error < 5000) {
                 return error::query_errc::planning_failure;
             }
-            break;
+        } break;
     }
     return extract_common_query_error_code(error, message);
 }

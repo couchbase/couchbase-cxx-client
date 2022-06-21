@@ -68,8 +68,7 @@ translate_level(level level)
 level
 level_from_str(const std::string& str)
 {
-    auto level = spdlog::level::from_str(str);
-    switch (level) {
+    switch (spdlog::level::from_str(str)) {
         case spdlog::level::level_enum::trace:
             return level::trace;
         case spdlog::level::level_enum::debug:
@@ -210,6 +209,10 @@ create_file_logger(const configuration& logger_settings)
                 stderrsink->set_level(spdlog::level::err);
             }
             sink->add_sink(stderrsink);
+        }
+        if (nullptr != logger_settings.sink) {
+            logger_settings.sink->set_pattern(log_pattern);
+            sink->add_sink(logger_settings.sink);
         }
 
         spdlog::drop(logger_name);

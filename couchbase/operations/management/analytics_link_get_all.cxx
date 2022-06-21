@@ -95,8 +95,7 @@ analytics_link_get_all_request::make_response(error_context::http&& ctx, const e
             }
         } else if (payload.is_array()) {
             for (const auto& link : payload.get_array()) {
-                const std::string& type_ = link.at("type").get_string();
-                if (type_ == "couchbase") {
+                if (const std::string& type_ = link.at("type").get_string(); type_ == "couchbase") {
                     response.couchbase.emplace_back(link.as<couchbase::management::analytics::couchbase_remote_link>());
                 } else if (type_ == "s3") {
                     response.s3.emplace_back(link.as<couchbase::management::analytics::s3_external_link>());

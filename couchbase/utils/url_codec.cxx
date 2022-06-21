@@ -68,7 +68,7 @@ template<typename T>
 inline bool
 is_already_escape(T first, T last)
 {
-    first++; // ignore '%'
+    ++first; // ignore '%'
     std::size_t jj = 0;
     for (; first != last && jj < 2; ++jj, ++first) {
         if (!isxdigit(*first)) {
@@ -148,12 +148,12 @@ url_decode(Ti first, Ti last, To out, std::size_t& nout)
         if (*first == '%') {
             char nextbuf[3] = { 0 };
             std::size_t jj = 0;
-            first++;
+            ++first;
             nextbuf[0] = *first;
             for (; first != last && jj < 2; ++jj) {
                 nextbuf[jj] = *first;
                 if (jj != 1) {
-                    first++;
+                    ++first;
                 }
             }
             if (jj != 2) {
@@ -171,7 +171,7 @@ url_decode(Ti first, Ti last, To out, std::size_t& nout)
             *out = *first;
         }
 
-        out++;
+        ++out;
         nout++;
     }
     return true;

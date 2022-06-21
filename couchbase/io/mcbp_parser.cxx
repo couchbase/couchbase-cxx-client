@@ -57,8 +57,7 @@ mcbp_parser::next(mcbp_message& msg)
     if (is_compressed) {
         std::string uncompressed;
         size_t offset = header_size + prefix_size;
-        bool success = snappy::Uncompress(reinterpret_cast<const char*>(buf.data() + offset), body_size - prefix_size, &uncompressed);
-        if (success) {
+        if (snappy::Uncompress(reinterpret_cast<const char*>(buf.data() + offset), body_size - prefix_size, &uncompressed)) {
             std::copy(uncompressed.begin(), uncompressed.end(), std::back_insert_iterator(msg.body));
             use_raw_value = false;
             // patch header with new body size
