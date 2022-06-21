@@ -210,6 +210,10 @@ create_file_logger(const configuration& logger_settings)
             }
             sink->add_sink(stderrsink);
         }
+        if (nullptr != logger_settings.sink) {
+            logger_settings.sink->set_pattern(log_pattern);
+            sink->add_sink(logger_settings.sink);
+        }
 
         spdlog::drop(logger_name);
 
