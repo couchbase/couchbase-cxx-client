@@ -28,7 +28,7 @@ class ping_collector : public std::enable_shared_from_this<ping_collector>
 
   public:
     ping_collector(std::string report_id, utils::movable_function<void(diag::ping_result)>&& handler)
-      : res_{ std::move(report_id), couchbase::meta::sdk_id() }
+      : res_{ std::move(report_id), meta::sdk_id() }
       , handler_(std::move(handler))
     {
     }
@@ -45,7 +45,7 @@ class ping_collector : public std::enable_shared_from_this<ping_collector>
 
     auto build_reporter()
     {
-        expected_++;
+        ++expected_;
         return [self = this->shared_from_this()](diag::endpoint_ping_info&& info) {
             std::scoped_lock lock(self->mutex_);
             self->res_.services[info.type].emplace_back(std::move(info));
@@ -74,7 +74,7 @@ cluster::do_ping(std::optional<std::string> report_id,
         report_id = std::make_optional(uuid::to_string(uuid::random()));
     }
     if (stopped_) {
-        return handler({ report_id.value(), couchbase::meta::sdk_id() });
+        return handler({ report_id.value(), meta::sdk_id() });
     }
     if (services.empty()) {
         services = { service_type::key_value, service_type::view, service_type::query, service_type::search, service_type::analytics };

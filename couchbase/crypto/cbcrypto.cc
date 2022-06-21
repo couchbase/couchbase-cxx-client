@@ -50,7 +50,7 @@ hash(std::string_view key, std::string_view data, LPCWSTR algorithm, int flags)
     DWORD cbHashObject = 0;
 
     // calculate the size of the buffer to hold the hash object
-    status = BCryptGetProperty(hAlg, BCRYPT_OBJECT_LENGTH, (PBYTE)&cbHashObject, sizeof(DWORD), &pcbResult, 0);
+    status = BCryptGetProperty(hAlg, BCRYPT_OBJECT_LENGTH, reinterpret_cast<PBYTE>(&cbHashObject), sizeof(DWORD), &pcbResult, 0);
     if (status < 0) {
         BCryptCloseAlgorithmProvider(hAlg, 0);
         throw std::runtime_error("digest: BCryptGetProperty return: " + std::to_string(status));
@@ -58,14 +58,14 @@ hash(std::string_view key, std::string_view data, LPCWSTR algorithm, int flags)
 
     // calculate the length of the hash
     DWORD cbHash = 0;
-    status = BCryptGetProperty(hAlg, BCRYPT_HASH_LENGTH, (PBYTE)&cbHash, sizeof(DWORD), &pcbResult, 0);
+    status = BCryptGetProperty(hAlg, BCRYPT_HASH_LENGTH, reinterpret_cast<PBYTE>(&cbHash), sizeof(DWORD), &pcbResult, 0);
     if (status < 0) {
         BCryptCloseAlgorithmProvider(hAlg, 0);
         throw std::runtime_error("digest: BCryptGetProperty return: " + std::to_string(status));
     }
 
     // allocate the hash object on the heap
-    uniqueHeapPtr pbHashObject((PBYTE)HeapAlloc(GetProcessHeap(), 0, cbHashObject));
+    uniqueHeapPtr pbHashObject(static_cast<PBYTE>(HeapAlloc(GetProcessHeap(), 0, cbHashObject)));
     if (!pbHashObject) {
         BCryptCloseAlgorithmProvider(hAlg, 0);
         throw std::bad_alloc();
@@ -76,13 +76,13 @@ hash(std::string_view key, std::string_view data, LPCWSTR algorithm, int flags)
 
     // create the hash
     BCRYPT_HASH_HANDLE hHash;
-    status = BCryptCreateHash(hAlg, &hHash, pbHashObject.get(), cbHashObject, (PUCHAR)key.data(), ULONG(key.size()), 0);
+    status = BCryptCreateHash(hAlg, &hHash, pbHashObject.get(), cbHashObject, (PUCHAR)key.data(), static_cast<ULONG>(key.size()), 0);
     if (status < 0) {
         BCryptCloseAlgorithmProvider(hAlg, 0);
         throw std::runtime_error("digest: BCryptCreateHash return: " + std::to_string(status));
     }
 
-    status = BCryptHashData(hHash, (PBYTE)data.data(), ULONG(data.size()), 0);
+    status = BCryptHashData(hHash, (PBYTE)data.data(), static_cast<ULONG>(data.size()), 0);
     if (status < 0) {
         BCryptCloseAlgorithmProvider(hAlg, 0);
         BCryptDestroyHash(hHash);
