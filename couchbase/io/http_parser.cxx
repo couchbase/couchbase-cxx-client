@@ -125,7 +125,7 @@ http_parser::error_message() const
 
     switch (state_->parser_.http_errno) {
         HTTP_ERRNO_MAP(HTTP_ERRNO_GEN)
-    };
+    }
 #undef HTTP_ERRNO_GEN
     return "unknown error: " + std::to_string(state_->parser_.http_errno);
 }

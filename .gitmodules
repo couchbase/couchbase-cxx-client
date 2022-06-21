@@ -3,7 +3,8 @@
 	url = https://github.com/microsoft/gsl.git
 [submodule "third_party/json"]
 	path = third_party/json
-	url = https://github.com/taocpp/json.git
+	url = https://github.com/couchbasedeps/taocpp-json.git
+    branch = 1.0.0-couchbase
 [submodule "third_party/spdlog"]
 	path = third_party/spdlog
 	url = https://github.com/gabime/spdlog.git

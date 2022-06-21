@@ -28,9 +28,11 @@ from_hex_digit(char c)
 {
     if ('0' <= c && c <= '9') {
         return static_cast<uint8_t>(c - '0');
-    } else if ('A' <= c && c <= 'F') {
+    }
+    if ('A' <= c && c <= 'F') {
         return static_cast<uint8_t>(c + 10 - 'A');
-    } else if ('a' <= c && c <= 'f') {
+    }
+    if ('a' <= c && c <= 'f') {
         return static_cast<uint8_t>(c + 10 - 'a');
     }
     throw std::invalid_argument("couchbase::from_hex_digit: character was not in hexadecimal range");
