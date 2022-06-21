@@ -53,7 +53,7 @@ dump_stats(asio::steady_timer& timer, std::chrono::system_clock::time_point star
         }
         auto diff = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time).count();
         std::uint64_t ops = total;
-        fmt::print(stderr, "\rrate: {} ops/s\r", diff == 0 ? ops : ops / static_cast<std::uint64_t>(diff));
+        fmt::print(stderr, "\rrate: {} ops/s, total: {}\r", diff == 0 ? ops : ops / static_cast<std::uint64_t>(diff), ops);
         return dump_stats(timer, start_time, total);
     });
 }
@@ -70,11 +70,24 @@ main()
 
     auto ctx = test::utils::test_context::load_from_environment();
 
+    bool send_queries = false;
+    if (auto val = spdlog::details::os::getenv("TEST_SEND_QUERIES"); !val.empty()) {
+        std::vector<std::string> truth = {
+            "YES", "Y", "TRUE", "T", "ON", "1", "yes", "y", "true", "t", "on",
+        };
+        send_queries = std::any_of(truth.begin(), truth.end(), [&val](auto& t) { return t == val; });
+    }
+
     std::size_t number_of_io_threads = 4;
     if (auto val = spdlog::details::os::getenv("TEST_NUMBER_OF_IO_THREADS"); !val.empty()) {
         number_of_io_threads = std::stoul(val, nullptr, 10);
     }
-    LOG_INFO("number_of_threads: {}, username: {}, connection_string: {}", number_of_io_threads, ctx.username, ctx.connection_string);
+    LOG_INFO("send_queries: {}, number_of_threads: {}, username: \"{}\", connection_string: \"{}\", bucket: \"{}\"",
+             send_queries,
+             number_of_io_threads,
+             ctx.username,
+             ctx.connection_string,
+             ctx.bucket);
 
     auto connstr = couchbase::utils::parse_connection_string(ctx.connection_string);
     couchbase::cluster_credentials auth{};
@@ -123,6 +136,7 @@ main()
              hit_chance_for_get);
 
     const std::string json_doc = R"({
+  "type": "fake_profile",
   "random": 91,
   "random float": 16.439,
   "bool": false,
@@ -211,6 +225,16 @@ main()
                 });
             } break;
         }
+        if (send_queries) {
+            couchbase::operations::query_request req{ fmt::format("SELECT COUNT(*) FROM `{}` WHERE type = \"fake_profile\"", ctx.bucket) };
+            cluster->execute(req, [&total, &errors_mutex, &errors](const couchbase::operations::query_response&& resp) {
+                ++total;
+                if (resp.ctx.ec) {
+                    std::scoped_lock lock(errors_mutex);
+                    ++errors[resp.ctx.ec];
+                }
+            });
+        }
     }
     const auto finish_time = std::chrono::system_clock::now();
     stats_timer.cancel();
@@ -223,6 +247,7 @@ main()
                std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count());
     auto diff = std::chrono::duration_cast<std::chrono::seconds>(total_time).count();
     fmt::print("total rate: {} ops/s\n", total / static_cast<std::uint64_t>(diff));
+    std::scoped_lock lock(errors_mutex);
     if (!errors.empty()) {
         fmt::print("error stats:\n");
         for (auto [ec, count] : errors) {

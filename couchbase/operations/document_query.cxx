@@ -191,6 +191,19 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
     response.ctx.parameters = body_str;
     response.served_by_node = fmt::format("{}:{}", response.ctx.hostname, response.ctx.port);
     if (!response.ctx.ec) {
+        if (encoded.body.data().empty()) {
+            switch (encoded.status_code) {
+                case 503:
+                    response.ctx.ec = error::common_errc::service_not_available;
+                    break;
+
+                case 500:
+                default:
+                    response.ctx.ec = error::common_errc::internal_server_failure;
+                    break;
+            }
+            return response;
+        }
         tao::json::value payload;
         try {
             payload = utils::json::parse(encoded.body.data());

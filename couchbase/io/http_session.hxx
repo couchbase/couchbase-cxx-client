@@ -406,7 +406,6 @@ class http_session : public std::enable_shared_from_this<http_session>
                 std::scoped_lock lock(info_mutex_);
                 info_ = http_session_info(client_id_, id_, stream_->local_endpoint(), it->endpoint());
             }
-            deadline_timer_.expires_at(asio::steady_timer::time_point::max());
             deadline_timer_.cancel();
             flush();
         }
@@ -419,7 +418,8 @@ class http_session : public std::enable_shared_from_this<http_session>
         }
         if (deadline_timer_.expiry() <= asio::steady_timer::clock_type::now()) {
             stream_->close([](std::error_code) {});
-            deadline_timer_.expires_at(asio::steady_timer::time_point::max());
+            deadline_timer_.cancel();
+            return;
         }
         deadline_timer_.async_wait(std::bind(&http_session::check_deadline, shared_from_this(), std::placeholders::_1));
     }
