@@ -16,8 +16,7 @@
  */
 
 #include "test_helper_integration.hxx"
-#include <couchbase/operations/management/analytics_dataset_create.hxx>
-#include <couchbase/operations/management/analytics_dataset_drop.hxx>
+#include <couchbase/operations/management/analytics.hxx>
 #include <couchbase/operations/management/collection_create.hxx>
 #include <couchbase/operations/management/scope_create.hxx>
 
@@ -41,6 +40,12 @@ TEST_CASE("integration: analytics query")
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
+    {
+        couchbase::operations::management::analytics_link_connect_request req{};
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+
     auto key = test::utils::uniq_id("key");
     auto test_value = test::utils::uniq_id("value");
     auto value = couchbase::utils::json::generate({ { "testkey", test_value } });
@@ -53,91 +58,80 @@ TEST_CASE("integration: analytics query")
 
     SECTION("simple query")
     {
+        couchbase::operations::analytics_response resp{};
         REQUIRE(test::utils::wait_until([&]() {
             couchbase::operations::analytics_request req{};
-            req.statement = fmt::format(R"(select testkey from `Default`.`{}` where testkey = "{}")", dataset_name, test_value);
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-            if (resp.rows.size() != 1) {
-                return false;
-            }
-            REQUIRE(resp.rows[0] == value);
-            REQUIRE_FALSE(resp.meta.request_id.empty());
-            REQUIRE_FALSE(resp.meta.client_context_id.empty());
-            REQUIRE_FALSE(resp.meta.status.empty());
-
-            return true;
+            req.statement = fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = "{}")", dataset_name, test_value);
+            resp = test::utils::execute(integration.cluster, req);
+            return resp.rows.size() == 1;
         }));
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.rows[0] == value);
+        REQUIRE_FALSE(resp.meta.request_id.empty());
+        REQUIRE_FALSE(resp.meta.client_context_id.empty());
+        REQUIRE_FALSE(resp.meta.status.empty());
     }
 
     SECTION("positional params")
     {
+        couchbase::operations::analytics_response resp{};
         REQUIRE(test::utils::wait_until([&]() {
             couchbase::operations::analytics_request req{};
-            req.statement = fmt::format(R"(select testkey from `Default`.`{}` where testkey = ?)", dataset_name);
+            req.statement = fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = ?)", dataset_name);
             req.positional_parameters.emplace_back(couchbase::json_string(couchbase::utils::json::generate(test_value)));
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-            if (resp.rows.size() != 1) {
-                return false;
-            }
-            REQUIRE(resp.rows[0] == value);
-            return true;
+            resp = test::utils::execute(integration.cluster, req);
+            return resp.rows.size() == 1;
         }));
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.rows[0] == value);
     }
 
     SECTION("named params")
     {
+        couchbase::operations::analytics_response resp{};
         REQUIRE(test::utils::wait_until([&]() {
             couchbase::operations::analytics_request req{};
-            req.statement = fmt::format(R"(select testkey from `Default`.`{}` where testkey = $testkey)", dataset_name);
+            req.statement = fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = $testkey)", dataset_name);
             req.named_parameters["testkey"] = couchbase::json_string(couchbase::utils::json::generate(test_value));
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-            if (resp.rows.size() != 1) {
-                return false;
-            }
-            REQUIRE(resp.rows[0] == value);
-            return true;
+            resp = test::utils::execute(integration.cluster, req);
+            return resp.rows.size() == 1;
         }));
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.rows[0] == value);
     }
 
     SECTION("named params preformatted")
     {
+        couchbase::operations::analytics_response resp{};
         REQUIRE(test::utils::wait_until([&]() {
             couchbase::operations::analytics_request req{};
-            req.statement = fmt::format(R"(select testkey from `Default`.`{}` where testkey = $testkey)", dataset_name);
+            req.statement = fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = $testkey)", dataset_name);
             req.named_parameters["$testkey"] = couchbase::json_string(couchbase::utils::json::generate(test_value));
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-            if (resp.rows.size() != 1) {
-                return false;
-            }
-            REQUIRE(resp.rows[0] == value);
-            return true;
+            resp = test::utils::execute(integration.cluster, req);
+            return resp.rows.size() == 1;
         }));
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.rows[0] == value);
     }
 
     SECTION("raw")
     {
+        couchbase::operations::analytics_response resp{};
         REQUIRE(test::utils::wait_until([&]() {
             couchbase::operations::analytics_request req{};
-            req.statement = fmt::format(R"(select testkey from `Default`.`{}` where testkey = $testkey)", dataset_name);
+            req.statement = fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = $testkey)", dataset_name);
             req.raw["$testkey"] = couchbase::json_string(couchbase::utils::json::generate(test_value));
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-            if (resp.rows.size() != 1) {
-                return false;
-            }
-            REQUIRE(resp.rows[0] == value);
-            return true;
+            resp = test::utils::execute(integration.cluster, req);
+            return resp.rows.size() == 1;
         }));
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.rows[0] == value);
     }
 
     SECTION("consistency")
     {
         couchbase::operations::analytics_request req{};
-        req.statement = fmt::format(R"(select testkey from `Default`.`{}` where testkey = "{}")", dataset_name, test_value);
+        req.statement = fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = "{}")", dataset_name, test_value);
         req.scan_consistency = couchbase::analytics_scan_consistency::request_plus;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
@@ -208,19 +202,17 @@ TEST_CASE("integration: analytics scope query")
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
+    couchbase::operations::analytics_response resp{};
     REQUIRE(test::utils::wait_until([&]() {
         couchbase::operations::analytics_request req{};
-        req.statement = fmt::format(R"(select testkey from `{}` where testkey = "{}")", collection_name, test_value);
+        req.statement = fmt::format(R"(SELECT testkey FROM `{}` WHERE testkey = "{}")", collection_name, test_value);
         req.bucket_name = integration.ctx.bucket;
         req.scope_name = scope_name;
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
-        if (resp.rows.size() != 1) {
-            return false;
-        }
-        REQUIRE(resp.rows[0] == value);
-        return true;
+        resp = test::utils::execute(integration.cluster, req);
+        return resp.rows.size() == 1;
     }));
+    REQUIRE_FALSE(resp.ctx.ec);
+    REQUIRE(resp.rows[0] == value);
 
     {
         couchbase::operations::management::scope_drop_request req{ integration.ctx.bucket, scope_name };
