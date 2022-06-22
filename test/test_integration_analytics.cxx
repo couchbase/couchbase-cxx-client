@@ -17,7 +17,7 @@
 
 #include "core/operations/management/analytics.hxx"
 #include "core/operations/management/collection_create.hxx"
-#include "core/operations/management/scope_create.hxx"
+#include "core/operations/management/collections.hxx"
 #include "test_helper_integration.hxx"
 
 TEST_CASE("integration: analytics query")
