@@ -16,9 +16,9 @@
  */
 
 #include <couchbase/errors.hxx>
+#include <couchbase/management/eventing_status_json.hxx>
 #include <couchbase/operations/management/error_utils.hxx>
 #include <couchbase/operations/management/eventing_get_status.hxx>
-#include <couchbase/operations/management/eventing_status_json.hxx>
 #include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations::management
@@ -49,7 +49,7 @@ eventing_get_status_request::make_response(error_context::http&& ctx, const enco
             response.error.emplace(problem);
             return response;
         }
-        response.status = payload.as<eventing::status>();
+        response.status = payload.as<couchbase::management::eventing::status>();
     }
     return response;
 }

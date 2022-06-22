@@ -247,7 +247,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc") };
 
-    couchbase::protocol::cas cas{};
+    couchbase::cas cas{};
 
     {
         std::string value_json{ R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})" };
@@ -291,7 +291,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
     SECTION("bad cas")
     {
         couchbase::operations::mutate_in_request req{ id };
-        req.cas = couchbase::protocol::cas{ cas.value + 1 };
+        req.cas = couchbase::cas{ cas.value + 1 };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::dict_upsert, false, false, false, "newpath", "123");
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::cas_mismatch);
@@ -733,7 +733,7 @@ TEST_CASE("integration: subdoc insert error consistency", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("sd_err") };
 
-    couchbase::protocol::cas cas;
+    couchbase::cas cas;
     {
         couchbase::operations::insert_request req{ id, "{}" };
         auto resp = test::utils::execute(integration.cluster, req);
@@ -756,7 +756,7 @@ TEST_CASE("integration: subdoc insert error consistency", "[integration]")
     {
         couchbase::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::dict_upsert, false, false, false, "foo", "42");
-        req.cas = couchbase::protocol::cas{ cas.value + 1 };
+        req.cas = couchbase::cas{ cas.value + 1 };
         req.store_semantics = couchbase::protocol::mutate_in_request_body::store_semantics_type::upsert;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::invalid_argument);
@@ -767,7 +767,7 @@ TEST_CASE("integration: subdoc insert error consistency", "[integration]")
     {
         couchbase::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::protocol::subdoc_opcode::dict_upsert, false, false, false, "foo", "42");
-        req.cas = couchbase::protocol::cas{ cas.value + 1 };
+        req.cas = couchbase::cas{ cas.value + 1 };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::cas_mismatch);
     }

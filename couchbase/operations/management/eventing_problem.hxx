@@ -19,13 +19,13 @@
 
 #include <string>
 
-namespace couchbase::operations::management::eventing
+namespace couchbase::operations::management
 {
 
-struct problem {
+struct eventing_problem {
     std::uint64_t code{};
     std::string name{};
     std::string description{};
 };
 
-} // namespace couchbase::operations::management::eventing
+} // namespace couchbase::operations::management

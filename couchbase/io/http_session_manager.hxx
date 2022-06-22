@@ -229,6 +229,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
 
     void close()
     {
+        std::scoped_lock lock(sessions_mutex_);
         for (auto& [type, sessions] : idle_sessions_) {
             for (auto& s : sessions) {
                 if (s) {

@@ -36,69 +36,69 @@ bucket_create_request::encode_to(encoded_request_type& encoded, http_context& /*
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";
     encoded.body.append(fmt::format("name={}", utils::string_codec::form_encode(bucket.name)));
     switch (bucket.bucket_type) {
-        case bucket_settings::bucket_type::couchbase:
+        case couchbase::management::cluster::bucket_type::couchbase:
             encoded.body.append("&bucketType=couchbase");
             break;
-        case bucket_settings::bucket_type::memcached:
+        case couchbase::management::cluster::bucket_type::memcached:
             encoded.body.append("&bucketType=memcached");
             break;
-        case bucket_settings::bucket_type::ephemeral:
+        case couchbase::management::cluster::bucket_type::ephemeral:
             encoded.body.append("&bucketType=ephemeral");
             break;
-        case bucket_settings::bucket_type::unknown:
+        case couchbase::management::cluster::bucket_type::unknown:
             break;
     }
     encoded.body.append(fmt::format("&ramQuotaMB={}", bucket.ram_quota_mb));
-    if (bucket.bucket_type != bucket_settings::bucket_type::memcached) {
+    if (bucket.bucket_type != couchbase::management::cluster::bucket_type::memcached) {
         encoded.body.append(fmt::format("&replicaNumber={}", bucket.num_replicas));
     }
     if (bucket.max_expiry > 0) {
         encoded.body.append(fmt::format("&maxTTL={}", bucket.max_expiry));
     }
-    if (bucket.bucket_type != bucket_settings::bucket_type::ephemeral) {
+    if (bucket.bucket_type != couchbase::management::cluster::bucket_type::ephemeral) {
         encoded.body.append(fmt::format("&replicaIndex={}", bucket.replica_indexes ? "1" : "0"));
     }
     encoded.body.append(fmt::format("&flushEnabled={}", bucket.flush_enabled ? "1" : "0"));
     switch (bucket.eviction_policy) {
-        case bucket_settings::eviction_policy::full:
+        case couchbase::management::cluster::bucket_eviction_policy::full:
             encoded.body.append("&evictionPolicy=fullEviction");
             break;
-        case bucket_settings::eviction_policy::value_only:
+        case couchbase::management::cluster::bucket_eviction_policy::value_only:
             encoded.body.append("&evictionPolicy=valueOnly");
             break;
-        case bucket_settings::eviction_policy::no_eviction:
+        case couchbase::management::cluster::bucket_eviction_policy::no_eviction:
             encoded.body.append("&evictionPolicy=noEviction");
             break;
-        case bucket_settings::eviction_policy::not_recently_used:
+        case couchbase::management::cluster::bucket_eviction_policy::not_recently_used:
             encoded.body.append("&evictionPolicy=nruEviction");
             break;
-        case bucket_settings::eviction_policy::unknown:
+        case couchbase::management::cluster::bucket_eviction_policy::unknown:
             break;
     }
     switch (bucket.compression_mode) {
-        case bucket_settings::compression_mode::off:
+        case couchbase::management::cluster::bucket_compression::off:
             encoded.body.append("&compressionMode=off");
             break;
-        case bucket_settings::compression_mode::active:
+        case couchbase::management::cluster::bucket_compression::active:
             encoded.body.append("&compressionMode=active");
             break;
-        case bucket_settings::compression_mode::passive:
+        case couchbase::management::cluster::bucket_compression::passive:
             encoded.body.append("&compressionMode=passive");
             break;
-        case bucket_settings::compression_mode::unknown:
+        case couchbase::management::cluster::bucket_compression::unknown:
             break;
     }
     switch (bucket.conflict_resolution_type) {
-        case bucket_settings::conflict_resolution_type::timestamp:
+        case couchbase::management::cluster::bucket_conflict_resolution::timestamp:
             encoded.body.append("&conflictResolutionType=lww");
             break;
-        case bucket_settings::conflict_resolution_type::sequence_number:
+        case couchbase::management::cluster::bucket_conflict_resolution::sequence_number:
             encoded.body.append("&conflictResolutionType=seqno");
             break;
-        case bucket_settings::conflict_resolution_type::custom:
+        case couchbase::management::cluster::bucket_conflict_resolution::custom:
             encoded.body.append("&conflictResolutionType=custom");
             break;
-        case bucket_settings::conflict_resolution_type::unknown:
+        case couchbase::management::cluster::bucket_conflict_resolution::unknown:
             break;
     }
     if (bucket.minimum_durability_level) {
@@ -118,12 +118,12 @@ bucket_create_request::encode_to(encoded_request_type& encoded, http_context& /*
         }
     }
     switch (bucket.storage_backend) {
-        case bucket_settings::storage_backend_type::unknown:
+        case couchbase::management::cluster::bucket_storage_backend::unknown:
             break;
-        case bucket_settings::storage_backend_type::couchstore:
+        case couchbase::management::cluster::bucket_storage_backend::couchstore:
             encoded.body.append("&storageBackend=couchstore");
             break;
-        case bucket_settings::storage_backend_type::magma:
+        case couchbase::management::cluster::bucket_storage_backend::magma:
             encoded.body.append("&storageBackend=magma");
             break;
     }

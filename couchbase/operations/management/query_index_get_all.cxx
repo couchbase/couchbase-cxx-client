@@ -26,26 +26,36 @@ namespace couchbase::operations::management
 std::error_code
 query_index_get_all_request::encode_to(encoded_request_type& encoded, couchbase::http_context& /* context */) const
 {
-    std::string statement;
-    if (!scope_name.empty() && !collection_name.empty()) {
-        statement = fmt::format(
-          R"(SELECT idx.* FROM system:indexes AS idx WHERE keyspace_id = "{}" AND bucket_id = "{}" AND scope_id = "{}" AND `using`="gsi" ORDER BY is_primary DESC, name ASC)",
-          collection_name,
-          bucket_name,
-          scope_name);
+    std::string bucket_cond = "bucket_id = $bucket_name";
+    std::string scope_cond = "(" + bucket_cond + " AND scope_id = $scope_name)";
+    std::string collection_cond = "(" + scope_cond + " AND keyspace_id = $collection_name)";
+
+    std::string where;
+    if (!collection_name.empty()) {
+        where = collection_cond;
     } else if (!scope_name.empty()) {
-        statement = fmt::format(
-          R"(SELECT idx.* FROM system:indexes AS idx WHERE bucket_id = "{}" AND scope_id = "{}" AND `using`="gsi" ORDER BY is_primary DESC, name ASC)",
-          bucket_name,
-          scope_name);
+        where = scope_cond;
     } else {
-        statement = fmt::format(
-          R"(SELECT idx.* FROM system:indexes AS idx WHERE ((keyspace_id = "{}" AND bucket_id IS MISSING) OR (bucket_id = "{}")) AND `using`="gsi" ORDER BY is_primary DESC, name ASC)",
-          bucket_name,
-          bucket_name);
+        where = bucket_cond;
     }
+
+    if (collection_name == "_default" || collection_name.empty()) {
+        std::string default_collection_cond = "(bucket_id IS MISSING AND keyspace_id = $bucket_name)";
+        where = "(" + where + " OR " + default_collection_cond + ")";
+    }
+
+    std::string statement = "SELECT `idx`.* FROM system:indexes AS idx"
+                            " WHERE " +
+                            where +
+                            " AND `using` = \"gsi\""
+                            " ORDER BY is_primary DESC, name ASC";
+
     encoded.headers["content-type"] = "application/json";
-    tao::json::value body{ { "statement", statement }, { "client_context_id", encoded.client_context_id } };
+    tao::json::value body{ { "statement", statement },
+                           { "client_context_id", encoded.client_context_id },
+                           { "$bucket_name", bucket_name },
+                           { "$scope_name", scope_name },
+                           { "$collection_name", collection_name } };
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);
@@ -73,20 +83,10 @@ query_index_get_all_request::make_response(couchbase::error_context::http&& ctx,
             return response;
         }
         for (const auto& entry : payload.at("results").get_array()) {
-            query_index_get_all_response::query_index index;
-            index.id = entry.at("id").get_string();
-            index.datastore_id = entry.at("datastore_id").get_string();
-            index.namespace_id = entry.at("namespace_id").get_string();
-            index.keyspace_id = entry.at("keyspace_id").get_string();
+            couchbase::management::query::index index;
             index.type = entry.at("using").get_string();
             index.name = entry.at("name").get_string();
             index.state = entry.at("state").get_string();
-            if (const auto* prop = entry.find("bucket_id")) {
-                index.bucket_id = prop->get_string();
-            }
-            if (const auto* prop = entry.find("scope_id")) {
-                index.scope_id = prop->get_string();
-            }
             if (const auto* prop = entry.find("is_primary")) {
                 index.is_primary = prop->get_boolean();
             }
@@ -99,6 +99,25 @@ query_index_get_all_request::make_response(couchbase::error_context::http&& ctx,
             for (const auto& key : entry.at("index_key").get_array()) {
                 index.index_key.emplace_back(key.get_string());
             }
+
+            std::string bucket_id, scope_id, keyspace_id;
+            if (const auto* prop = entry.find("bucket_id")) {
+                bucket_id = prop->get_string();
+            }
+            if (const auto* prop = entry.find("scope_id")) {
+                scope_id = prop->get_string();
+            }
+            if (const auto* prop = entry.find("keyspace_id")) {
+                keyspace_id = prop->get_string();
+            }
+            if (bucket_id.empty()) {
+                index.bucket_name = keyspace_id;
+            } else {
+                index.bucket_name = bucket_id;
+                index.scope_name = scope_id;
+                index.collection_name = keyspace_id;
+            }
+
             response.indexes.emplace_back(index);
         }
     }

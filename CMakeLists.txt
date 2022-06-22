@@ -77,6 +77,7 @@ add_subdirectory(couchbase/topology)
 add_subdirectory(couchbase/utils)
 add_subdirectory(couchbase/protocol)
 add_subdirectory(couchbase/io)
+add_subdirectory(couchbase/management)
 add_subdirectory(couchbase/operations)
 add_subdirectory(couchbase/tracing)
 add_subdirectory(couchbase/metrics)
@@ -100,7 +101,12 @@ target_include_directories(
 target_link_libraries(couchbase_cxx_client PRIVATE project_options project_warnings)
 
 include(cmake/DetectStandardFilesystem.cmake)
-couchbase_cxx_check_filesystem(couchbase_cxx_client "filesystem" "std::filesystem" "stdc++fs;c++fs" STD_FILESYSTEM)
+couchbase_cxx_check_filesystem(
+  couchbase_cxx_client
+  "filesystem"
+  "std::filesystem"
+  "stdc++fs;c++fs"
+  STD_FILESYSTEM)
 if(STD_FILESYSTEM)
   message(STATUS "Using std::filesystem")
 else()
@@ -121,6 +127,7 @@ target_link_libraries(
          couchbase_topology
          couchbase_utils
          couchbase_protocol
+         couchbase_management
          couchbase_operations
          couchbase_operations_management
          couchbase_tracing

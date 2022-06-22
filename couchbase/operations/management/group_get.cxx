@@ -18,8 +18,8 @@
 #include <couchbase/operations/management/group_get.hxx>
 
 #include <couchbase/errors.hxx>
+#include <couchbase/management/rbac_json.hxx>
 #include <couchbase/operations/management/error_utils.hxx>
-#include <couchbase/operations/management/rbac_json.hxx>
 #include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations::management
@@ -41,7 +41,7 @@ group_get_request::make_response(error_context::http&& ctx, const encoded_respon
         switch (encoded.status_code) {
             case 200: {
                 try {
-                    response.group = utils::json::parse(encoded.body.data()).as<rbac::group>();
+                    response.group = utils::json::parse(encoded.body.data()).as<couchbase::management::rbac::group>();
                 } catch (const tao::pegtl::parse_error&) {
                     response.ctx.ec = error::common_errc::parsing_failure;
                     return response;

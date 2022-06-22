@@ -17,23 +17,19 @@
 
 #pragma once
 
-#include <couchbase/platform/uuid.h>
+#include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
+#include <couchbase/operations/management/analytics_problem.hxx>
+#include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
-#include <couchbase/error_context/http.hxx>
 
 namespace couchbase::operations::management
 {
 struct analytics_index_drop_response {
-    struct problem {
-        std::uint32_t code;
-        std::string message;
-    };
-
     error_context::http ctx;
     std::string status{};
-    std::vector<problem> errors{};
+    std::vector<analytics_problem> errors{};
 };
 
 struct analytics_index_drop_request {

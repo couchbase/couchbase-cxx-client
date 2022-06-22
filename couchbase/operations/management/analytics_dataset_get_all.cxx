@@ -27,7 +27,7 @@ std::error_code
 analytics_dataset_get_all_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
     tao::json::value body{
-        { "statement", "SELECT d.* FROM Metadata.`Dataset` d WHERE d.DataverseName <> \"Metadata\"" },
+        { "statement", R"(SELECT d.* FROM Metadata.`Dataset` d WHERE d.DataverseName <> "Metadata" AND d.DatasetType = "INTERNAL")" },
     };
     encoded.headers["content-type"] = "application/json";
     encoded.method = "POST";
@@ -53,7 +53,7 @@ analytics_dataset_get_all_request::make_response(error_context::http&& ctx, cons
         if (response.status != "success") {
             if (const auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
                 for (const auto& error : errors->get_array()) {
-                    analytics_dataset_get_all_response::problem err{
+                    analytics_problem err{
                         error.at("code").as<std::uint32_t>(),
                         error.at("msg").get_string(),
                     };
@@ -63,10 +63,9 @@ analytics_dataset_get_all_request::make_response(error_context::http&& ctx, cons
             response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
             return response;
         }
-        auto* results = payload.find("results");
-        if (results != nullptr && results->is_array()) {
+        if (auto* results = payload.find("results"); results != nullptr && results->is_array()) {
             for (const auto& res : results->get_array()) {
-                analytics_dataset_get_all_response::dataset ds;
+                couchbase::management::analytics::dataset ds;
                 ds.name = res.at("DatasetName").get_string();
                 ds.dataverse_name = res.at("DataverseName").get_string();
                 ds.link_name = res.at("LinkName").get_string();

@@ -51,11 +51,21 @@ test_context::load_from_environment()
     if (var != nullptr) {
         ctx.bucket = var;
     }
+    var = getenv("TEST_DEPLOYMENT_TYPE");
+    if (var != nullptr) {
+        if (strcmp(var, "on_prem") == 0) {
+            ctx.deployment = deployment_type::on_prem;
+        } else if (strcmp(var, "capella") == 0) {
+            ctx.deployment = deployment_type::capella;
+        } else if (strcmp(var, "elixir") == 0) {
+            ctx.deployment = deployment_type::elixir;
+        }
+    }
 
     // TODO: I believe this + TEST_DEVELOPER_PREVIEW will conflict
     var = getenv("TEST_SERVER_VERSION");
     if (var != nullptr) {
-        ctx.version = server_version::parse(var);
+        ctx.version = server_version::parse(var, ctx.deployment);
     }
     var = getenv("TEST_DEVELOPER_PREVIEW");
     if (var != nullptr) {

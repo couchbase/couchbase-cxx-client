@@ -18,8 +18,8 @@
 #include <couchbase/operations/management/group_get_all.hxx>
 
 #include <couchbase/errors.hxx>
+#include <couchbase/management/rbac_json.hxx>
 #include <couchbase/operations/management/error_utils.hxx>
-#include <couchbase/operations/management/rbac_json.hxx>
 #include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations::management
@@ -50,7 +50,7 @@ group_get_all_request::make_response(error_context::http&& ctx, const encoded_re
             return response;
         }
         for (const auto& entry : payload.get_array()) {
-            response.groups.emplace_back(entry.as<rbac::group>());
+            response.groups.emplace_back(entry.as<couchbase::management::rbac::group>());
         }
     }
     return response;

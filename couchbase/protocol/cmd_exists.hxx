@@ -17,9 +17,9 @@
 
 #pragma once
 
+#include <couchbase/cas.hxx>
 #include <couchbase/document_id.hxx>
 #include <couchbase/io/mcbp_message.hxx>
-#include <couchbase/protocol/cas.hxx>
 #include <couchbase/protocol/client_opcode.hxx>
 #include <couchbase/protocol/cmd_info.hxx>
 #include <couchbase/protocol/status.hxx>
@@ -44,9 +44,9 @@ class exists_response_body
         return partition_id_;
     }
 
-    [[nodiscard]] protocol::cas cas() const
+    [[nodiscard]] couchbase::cas cas() const
     {
-        return protocol::cas{ cas_ };
+        return couchbase::cas{ cas_ };
     }
 
     [[nodiscard]] const std::string& key() const

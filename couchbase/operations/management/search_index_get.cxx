@@ -18,8 +18,8 @@
 #include <couchbase/operations/management/search_index_get.hxx>
 
 #include <couchbase/errors.hxx>
+#include <couchbase/management/search_index_json.hxx>
 #include <couchbase/operations/management/error_utils.hxx>
-#include <couchbase/operations/management/search_index_json.hxx>
 #include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations::management
@@ -50,7 +50,7 @@ search_index_get_request::make_response(error_context::http&& ctx, const encoded
             }
             response.status = payload.at("status").get_string();
             if (response.status == "ok") {
-                response.index = payload.at("indexDef").as<search_index>();
+                response.index = payload.at("indexDef").as<couchbase::management::search::index>();
                 return response;
             }
         } else if (encoded.status_code == 400) {

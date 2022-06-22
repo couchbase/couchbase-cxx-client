@@ -20,7 +20,7 @@
 #include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
-#include <couchbase/operations/management/bucket_settings.hxx>
+#include <couchbase/management/bucket_settings.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
 
@@ -28,7 +28,7 @@ namespace couchbase::operations::management
 {
 struct bucket_update_response {
     error_context::http ctx;
-    bucket_settings bucket{};
+    couchbase::management::cluster::bucket_settings bucket{};
     std::string error_message{};
 };
 
@@ -40,7 +40,7 @@ struct bucket_update_request {
 
     static const inline service_type type = service_type::management;
 
-    bucket_settings bucket{};
+    couchbase::management::cluster::bucket_settings bucket{};
 
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};

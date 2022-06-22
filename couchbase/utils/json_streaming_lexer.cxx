@@ -39,7 +39,7 @@ noop_on_row(std::string&& /* row */)
 }
 
 #define STATE_MARKER_ROOT (reinterpret_cast<void*>(1))
-#define STATE_MARKER_ROWSET (reinterpret_cast<void*>(1))
+#define STATE_MARKER_ROWSET (reinterpret_cast<void*>(2))
 
 struct streaming_lexer_impl {
     streaming_lexer_impl(jsonsl_t lexer, jsonsl_jpr_t pointer)
@@ -310,7 +310,7 @@ row_pop_callback(jsonsl_t lexer, jsonsl_action_t /* action */, struct jsonsl_sta
 }
 
 static void
-initial_action_pop_callback(jsonsl_t lexer, jsonsl_action_t /* action */, struct jsonsl_state_st* state, const jsonsl_char_t* /* at */)
+initial_action_pop_callback(jsonsl_t lexer, jsonsl_action_t action, struct jsonsl_state_st* state, const jsonsl_char_t* at)
 {
     auto* impl = static_cast<detail::streaming_lexer_impl*>(lexer->data);
 
@@ -320,6 +320,10 @@ initial_action_pop_callback(jsonsl_t lexer, jsonsl_action_t /* action */, struct
 
     if (state->type == JSONSL_T_HKEY) {
         impl->last_key_ = impl->buffer_.substr(state->pos_begin + 1, state->pos_cur - state->pos_begin - 1);
+    }
+
+    if (state->data == STATE_MARKER_ROOT) {
+        trailer_pop_callback(lexer, action, state, at);
     }
 }
 

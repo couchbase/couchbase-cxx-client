@@ -56,9 +56,9 @@ bucket_describe_request::make_response(error_context::http&& ctx, const encoded_
     }
     if (const auto* storage_backend = payload.find("storageBackend"); storage_backend != nullptr && storage_backend->is_string()) {
         if (const auto& str = storage_backend->get_string(); str == "couchstore") {
-            response.info.storage_backend = bucket_settings::storage_backend_type::couchstore;
+            response.info.storage_backend = couchbase::management::cluster::bucket_storage_backend::couchstore;
         } else if (str == "magma") {
-            response.info.storage_backend = bucket_settings::storage_backend_type::magma;
+            response.info.storage_backend = couchbase::management::cluster::bucket_storage_backend::magma;
         }
     }
 

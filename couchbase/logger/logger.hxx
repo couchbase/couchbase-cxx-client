@@ -128,14 +128,14 @@ unregister_spdlog_logger(const std::string& n);
  * @return true if all registered loggers have the specified severity level
  */
 bool
-check_log_levels(level level);
+check_log_levels(level lvl);
 
 /**
  * Set the log level of all registered spdLoggers
  * @param log severity level
  */
 void
-set_log_levels(level level);
+set_log_levels(level lvl);
 
 /**
  * Checks whether a specific level should be logged based on the current

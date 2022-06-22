@@ -36,8 +36,7 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
     if (adhoc) {
         body["statement"] = statement;
     } else {
-        auto entry = ctx_->cache.get(statement);
-        if (entry) {
+        if (auto entry = ctx_->cache.get(statement)) {
             body["prepared"] = entry->name;
             if (entry->plan) {
                 body["encoded_plan"] = entry->plan.value();
@@ -74,13 +73,13 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
         body["args"] = std::move(parameters);
     }
     switch (profile) {
-        case profile_mode::phases:
+        case couchbase::query_profile_mode::phases:
             body["profile"] = "phases";
             break;
-        case profile_mode::timings:
+        case couchbase::query_profile_mode::timings:
             body["profile"] = "timings";
             break;
-        case profile_mode::off:
+        case couchbase::query_profile_mode::off:
             break;
     }
     if (max_parallelism) {
@@ -110,10 +109,10 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
     bool check_scan_wait = false;
     if (scan_consistency) {
         switch (scan_consistency.value()) {
-            case scan_consistency_type::not_bounded:
+            case couchbase::query_scan_consistency::not_bounded:
                 body["scan_consistency"] = "not_bounded";
                 break;
-            case scan_consistency_type::request_plus:
+            case couchbase::query_scan_consistency::request_plus:
                 check_scan_wait = true;
                 body["scan_consistency"] = "request_plus";
                 break;
@@ -192,6 +191,19 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
     response.ctx.parameters = body_str;
     response.served_by_node = fmt::format("{}:{}", response.ctx.hostname, response.ctx.port);
     if (!response.ctx.ec) {
+        if (encoded.body.data().empty()) {
+            switch (encoded.status_code) {
+                case 503:
+                    response.ctx.ec = error::common_errc::service_not_available;
+                    break;
+
+                case 500:
+                default:
+                    response.ctx.ec = error::common_errc::internal_server_failure;
+                    break;
+            }
+            return response;
+        }
         tao::json::value payload;
         try {
             payload = utils::json::parse(encoded.body.data());

@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include <couchbase/platform/uuid.h>
+#include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
+#include <couchbase/management/rbac.hxx>
+#include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
-#include <couchbase/error_context/http.hxx>
-#include <couchbase/operations/management/rbac.hxx>
 
 namespace couchbase::operations::management
 {
@@ -39,7 +39,7 @@ struct user_drop_request {
     static const inline service_type type = service_type::management;
 
     std::string username{};
-    rbac::auth_domain domain{ rbac::auth_domain::local };
+    couchbase::management::rbac::auth_domain domain{ couchbase::management::rbac::auth_domain::local };
 
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};

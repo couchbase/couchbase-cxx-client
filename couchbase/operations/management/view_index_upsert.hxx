@@ -20,7 +20,7 @@
 #include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
-#include <couchbase/operations/management/design_document.hxx>
+#include <couchbase/management/design_document.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
 
@@ -39,7 +39,7 @@ struct view_index_upsert_request {
     static const inline service_type type = service_type::view;
 
     std::string bucket_name;
-    design_document document;
+    couchbase::management::views::design_document document;
 
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};

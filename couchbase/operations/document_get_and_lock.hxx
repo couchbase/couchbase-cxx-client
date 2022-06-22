@@ -30,7 +30,7 @@ namespace couchbase::operations
 struct get_and_lock_response {
     error_context::key_value ctx;
     std::string value{};
-    protocol::cas cas{};
+    couchbase::cas cas{};
     std::uint32_t flags{};
 };
 

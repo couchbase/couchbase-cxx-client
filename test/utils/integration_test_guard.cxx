@@ -45,7 +45,7 @@ integration_test_guard::~integration_test_guard()
     io_thread.join();
 }
 
-const couchbase::operations::management::bucket_info&
+const couchbase::operations::management::bucket_describe_response::bucket_info&
 integration_test_guard::load_bucket_info(const std::string& bucket_name, bool refresh)
 {
     if (info.count(bucket_name) > 0 && !refresh) {
@@ -66,7 +66,7 @@ integration_test_guard::load_bucket_info(const std::string& bucket_name, bool re
     return info[bucket_name];
 }
 
-const couchbase::operations::management::cluster_info&
+const couchbase::operations::management::cluster_describe_response::cluster_info&
 integration_test_guard::load_cluster_info(bool refresh)
 {
     if (cluster_info && !refresh) {
@@ -105,7 +105,7 @@ integration_test_guard::cluster_version()
     if (runtime_version.empty()) {
         return ctx.version;
     }
-    auto parsed_version = server_version::parse(runtime_version);
+    auto parsed_version = server_version::parse(runtime_version, ctx.deployment);
     if (parsed_version.major == 0) {
         /* the build does not specify version properly */
         return ctx.version;

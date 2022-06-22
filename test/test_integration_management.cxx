@@ -17,8 +17,8 @@
 
 #include "test_helper_integration.hxx"
 
+#include <couchbase/management/analytics_link.hxx>
 #include <couchbase/operations/management/analytics.hxx>
-#include <couchbase/operations/management/analytics_link.hxx>
 #include <couchbase/operations/management/bucket.hxx>
 #include <couchbase/operations/management/collections.hxx>
 #include <couchbase/operations/management/eventing.hxx>
@@ -53,6 +53,10 @@ TEST_CASE("integration: bucket management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_bucket_management()) {
+        return;
+    }
+
     if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
@@ -61,18 +65,19 @@ TEST_CASE("integration: bucket management", "[integration]")
 
     SECTION("crud")
     {
-        couchbase::operations::management::bucket_settings bucket_settings;
+        couchbase::management::cluster::bucket_settings bucket_settings;
         bucket_settings.name = bucket_name;
         bucket_settings.ram_quota_mb = 100;
         bucket_settings.num_replicas = 1;
-        bucket_settings.bucket_type = couchbase::operations::management::bucket_settings::bucket_type::couchbase;
-        bucket_settings.eviction_policy = couchbase::operations::management::bucket_settings::eviction_policy::value_only;
+        bucket_settings.bucket_type = couchbase::management::cluster::bucket_type::couchbase;
+        bucket_settings.eviction_policy = couchbase::management::cluster::bucket_eviction_policy::value_only;
         bucket_settings.flush_enabled = true;
-        bucket_settings.max_expiry = 10;
-        bucket_settings.compression_mode = couchbase::operations::management::bucket_settings::compression_mode::active;
+        if (integration.cluster_version().is_enterprise()) {
+            bucket_settings.max_expiry = 10;
+            bucket_settings.compression_mode = couchbase::management::cluster::bucket_compression::active;
+        }
         bucket_settings.replica_indexes = true;
-        bucket_settings.conflict_resolution_type =
-          couchbase::operations::management::bucket_settings::conflict_resolution_type::sequence_number;
+        bucket_settings.conflict_resolution_type = couchbase::management::cluster::bucket_conflict_resolution::sequence_number;
 
         {
             couchbase::operations::management::bucket_create_request req;
@@ -236,9 +241,9 @@ TEST_CASE("integration: bucket management", "[integration]")
     SECTION("memcached")
     {
         {
-            couchbase::operations::management::bucket_settings bucket_settings;
+            couchbase::management::cluster::bucket_settings bucket_settings;
             bucket_settings.name = bucket_name;
-            bucket_settings.bucket_type = couchbase::operations::management::bucket_settings::bucket_type::memcached;
+            bucket_settings.bucket_type = couchbase::management::cluster::bucket_type::memcached;
             bucket_settings.num_replicas = 0;
             couchbase::operations::management::bucket_create_request req{ bucket_settings };
             auto resp = test::utils::execute(integration.cluster, req);
@@ -248,15 +253,15 @@ TEST_CASE("integration: bucket management", "[integration]")
         {
             auto resp = wait_for_bucket_created(integration, bucket_name);
             REQUIRE_FALSE(resp.ctx.ec);
-            REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::memcached);
+            REQUIRE(resp.bucket.bucket_type == couchbase::management::cluster::bucket_type::memcached);
         }
     }
 
     SECTION("ephemeral")
     {
-        couchbase::operations::management::bucket_settings bucket_settings;
+        couchbase::management::cluster::bucket_settings bucket_settings;
         bucket_settings.name = bucket_name;
-        bucket_settings.bucket_type = couchbase::operations::management::bucket_settings::bucket_type::ephemeral;
+        bucket_settings.bucket_type = couchbase::management::cluster::bucket_type::ephemeral;
 
         SECTION("default eviction")
         {
@@ -270,15 +275,15 @@ TEST_CASE("integration: bucket management", "[integration]")
             {
                 auto resp = wait_for_bucket_created(integration, bucket_name);
                 REQUIRE_FALSE(resp.ctx.ec);
-                REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::ephemeral);
-                REQUIRE(resp.bucket.eviction_policy == couchbase::operations::management::bucket_settings::eviction_policy::no_eviction);
+                REQUIRE(resp.bucket.bucket_type == couchbase::management::cluster::bucket_type::ephemeral);
+                REQUIRE(resp.bucket.eviction_policy == couchbase::management::cluster::bucket_eviction_policy::no_eviction);
             }
         }
 
         SECTION("nru eviction")
         {
             {
-                bucket_settings.eviction_policy = couchbase::operations::management::bucket_settings::eviction_policy::not_recently_used;
+                bucket_settings.eviction_policy = couchbase::management::cluster::bucket_eviction_policy::not_recently_used;
                 couchbase::operations::management::bucket_create_request req{ bucket_settings };
                 auto resp = test::utils::execute(integration.cluster, req);
                 REQUIRE_FALSE(resp.ctx.ec);
@@ -287,9 +292,8 @@ TEST_CASE("integration: bucket management", "[integration]")
             {
                 auto resp = wait_for_bucket_created(integration, bucket_name);
                 REQUIRE_FALSE(resp.ctx.ec);
-                REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::ephemeral);
-                REQUIRE(resp.bucket.eviction_policy ==
-                        couchbase::operations::management::bucket_settings::eviction_policy::not_recently_used);
+                REQUIRE(resp.bucket.bucket_type == couchbase::management::cluster::bucket_type::ephemeral);
+                REQUIRE(resp.bucket.eviction_policy == couchbase::management::cluster::bucket_eviction_policy::not_recently_used);
             }
         }
 
@@ -297,7 +301,7 @@ TEST_CASE("integration: bucket management", "[integration]")
             SECTION("storage backend")
             {
                 {
-                    bucket_settings.storage_backend = couchbase::operations::management::bucket_settings::storage_backend_type::couchstore;
+                    bucket_settings.storage_backend = couchbase::management::cluster::bucket_storage_backend::couchstore;
                     couchbase::operations::management::bucket_create_request req{ bucket_settings };
                     auto resp = test::utils::execute(integration.cluster, req);
                     REQUIRE_FALSE(resp.ctx.ec);
@@ -306,9 +310,8 @@ TEST_CASE("integration: bucket management", "[integration]")
                 {
                     auto resp = wait_for_bucket_created(integration, bucket_name);
                     REQUIRE_FALSE(resp.ctx.ec);
-                    REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::ephemeral);
-                    REQUIRE(resp.bucket.storage_backend ==
-                            couchbase::operations::management::bucket_settings::storage_backend_type::unknown);
+                    REQUIRE(resp.bucket.bucket_type == couchbase::management::cluster::bucket_type::ephemeral);
+                    REQUIRE(resp.bucket.storage_backend == couchbase::management::cluster::bucket_storage_backend::unknown);
                 }
             }
         }
@@ -316,9 +319,9 @@ TEST_CASE("integration: bucket management", "[integration]")
 
     SECTION("couchbase")
     {
-        couchbase::operations::management::bucket_settings bucket_settings;
+        couchbase::management::cluster::bucket_settings bucket_settings;
         bucket_settings.name = bucket_name;
-        bucket_settings.bucket_type = couchbase::operations::management::bucket_settings::bucket_type::couchbase;
+        bucket_settings.bucket_type = couchbase::management::cluster::bucket_type::couchbase;
 
         SECTION("default eviction")
         {
@@ -333,15 +336,15 @@ TEST_CASE("integration: bucket management", "[integration]")
             {
                 auto resp = wait_for_bucket_created(integration, bucket_name);
                 REQUIRE_FALSE(resp.ctx.ec);
-                REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::couchbase);
-                REQUIRE(resp.bucket.eviction_policy == couchbase::operations::management::bucket_settings::eviction_policy::value_only);
+                REQUIRE(resp.bucket.bucket_type == couchbase::management::cluster::bucket_type::couchbase);
+                REQUIRE(resp.bucket.eviction_policy == couchbase::management::cluster::bucket_eviction_policy::value_only);
             }
         }
 
         SECTION("full eviction")
         {
             {
-                bucket_settings.eviction_policy = couchbase::operations::management::bucket_settings::eviction_policy::full;
+                bucket_settings.eviction_policy = couchbase::management::cluster::bucket_eviction_policy::full;
                 couchbase::operations::management::bucket_create_request req{ bucket_settings };
                 auto resp = test::utils::execute(integration.cluster, req);
                 REQUIRE_FALSE(resp.ctx.ec);
@@ -350,8 +353,8 @@ TEST_CASE("integration: bucket management", "[integration]")
             {
                 auto resp = wait_for_bucket_created(integration, bucket_name);
                 REQUIRE_FALSE(resp.ctx.ec);
-                REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::couchbase);
-                REQUIRE(resp.bucket.eviction_policy == couchbase::operations::management::bucket_settings::eviction_policy::full);
+                REQUIRE(resp.bucket.bucket_type == couchbase::management::cluster::bucket_type::couchbase);
+                REQUIRE(resp.bucket.eviction_policy == couchbase::management::cluster::bucket_eviction_policy::full);
             }
         }
 
@@ -361,8 +364,7 @@ TEST_CASE("integration: bucket management", "[integration]")
                 SECTION("couchstore")
                 {
                     {
-                        bucket_settings.storage_backend =
-                          couchbase::operations::management::bucket_settings::storage_backend_type::couchstore;
+                        bucket_settings.storage_backend = couchbase::management::cluster::bucket_storage_backend::couchstore;
                         couchbase::operations::management::bucket_create_request req{ bucket_settings };
                         auto resp = test::utils::execute(integration.cluster, req);
                         REQUIRE_FALSE(resp.ctx.ec);
@@ -371,17 +373,16 @@ TEST_CASE("integration: bucket management", "[integration]")
                     {
                         auto resp = wait_for_bucket_created(integration, bucket_name);
                         REQUIRE_FALSE(resp.ctx.ec);
-                        REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::couchbase);
-                        REQUIRE(resp.bucket.storage_backend ==
-                                couchbase::operations::management::bucket_settings::storage_backend_type::couchstore);
+                        REQUIRE(resp.bucket.bucket_type == couchbase::management::cluster::bucket_type::couchbase);
+                        REQUIRE(resp.bucket.storage_backend == couchbase::management::cluster::bucket_storage_backend::couchstore);
                     }
                 }
 
                 SECTION("magma")
                 {
                     {
-                        bucket_settings.ram_quota_mb = 256;
-                        bucket_settings.storage_backend = couchbase::operations::management::bucket_settings::storage_backend_type::magma;
+                        bucket_settings.ram_quota_mb = integration.cluster_version().is_neo() ? 1'024 : 256;
+                        bucket_settings.storage_backend = couchbase::management::cluster::bucket_storage_backend::magma;
                         couchbase::operations::management::bucket_create_request req{ bucket_settings };
                         auto resp = test::utils::execute(integration.cluster, req);
                         REQUIRE_FALSE(resp.ctx.ec);
@@ -390,9 +391,8 @@ TEST_CASE("integration: bucket management", "[integration]")
                     {
                         auto resp = wait_for_bucket_created(integration, bucket_name);
                         REQUIRE_FALSE(resp.ctx.ec);
-                        REQUIRE(resp.bucket.bucket_type == couchbase::operations::management::bucket_settings::bucket_type::couchbase);
-                        REQUIRE(resp.bucket.storage_backend ==
-                                couchbase::operations::management::bucket_settings::storage_backend_type::magma);
+                        REQUIRE(resp.bucket.bucket_type == couchbase::management::cluster::bucket_type::couchbase);
+                        REQUIRE(resp.bucket.storage_backend == couchbase::management::cluster::bucket_storage_backend::magma);
                     }
                 }
             }
@@ -402,7 +402,7 @@ TEST_CASE("integration: bucket management", "[integration]")
     SECTION("update no bucket")
     {
 
-        couchbase::operations::management::bucket_settings bucket_settings;
+        couchbase::management::cluster::bucket_settings bucket_settings;
         bucket_settings.name = bucket_name;
         couchbase::operations::management::bucket_update_request req;
         req.bucket = bucket_settings;
@@ -413,7 +413,7 @@ TEST_CASE("integration: bucket management", "[integration]")
     if (integration.cluster_version().supports_minimum_durability_level()) {
         SECTION("minimum durability level")
         {
-            couchbase::operations::management::bucket_settings bucket_settings;
+            couchbase::management::cluster::bucket_settings bucket_settings;
             bucket_settings.name = bucket_name;
 
             SECTION("default")
@@ -501,6 +501,7 @@ scope_exists(std::shared_ptr<couchbase::cluster> cluster, const std::string& buc
 TEST_CASE("integration: collection management", "[integration]")
 {
     test::utils::integration_test_guard integration;
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     if (!integration.cluster_version().supports_collections()) {
         return;
@@ -513,6 +514,8 @@ TEST_CASE("integration: collection management", "[integration]")
         couchbase::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+        REQUIRE(created);
     }
 
     {
@@ -527,9 +530,14 @@ TEST_CASE("integration: collection management", "[integration]")
     }
 
     {
-        couchbase::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name, 5 };
+        couchbase::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
+        if (integration.cluster_version().is_enterprise()) {
+            req.max_expiry = 5;
+        }
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+        REQUIRE(created);
     }
 
     {
@@ -583,8 +591,8 @@ TEST_CASE("integration: collection management", "[integration]")
 }
 
 void
-assert_user_and_metadata(const couchbase::operations::management::rbac::user_and_metadata& user,
-                         const couchbase::operations::management::rbac::user_and_metadata& expected)
+assert_user_and_metadata(const couchbase::management::rbac::user_and_metadata& user,
+                         const couchbase::management::rbac::user_and_metadata& expected)
 {
     REQUIRE(user.username == expected.username);
     REQUIRE(user.groups == expected.groups);
@@ -635,11 +643,11 @@ TEST_CASE("integration: user groups management", "[integration]")
         auto group_name_1 = test::utils::uniq_id("group");
         auto group_name_2 = test::utils::uniq_id("group");
 
-        couchbase::operations::management::rbac::group group{};
+        couchbase::management::rbac::group group{};
         group.name = group_name_1;
         group.description = "this is a test";
-        group.roles = { couchbase::operations::management::rbac::role{ "replication_target", integration.ctx.bucket },
-                        couchbase::operations::management::rbac::role{ "replication_admin" } };
+        group.roles = { couchbase::management::rbac::role{ "replication_target", integration.ctx.bucket },
+                        couchbase::management::rbac::role{ "replication_admin" } };
         group.ldap_group_reference = "asda=price";
 
         {
@@ -659,7 +667,7 @@ TEST_CASE("integration: user groups management", "[integration]")
 
         {
             group.description = "this is still a test";
-            group.roles.push_back(couchbase::operations::management::rbac::role{ "query_system_catalog" });
+            group.roles.push_back(couchbase::management::rbac::role{ "query_system_catalog" });
             couchbase::operations::management::group_upsert_request req{ group };
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
@@ -730,11 +738,11 @@ TEST_CASE("integration: user groups management", "[integration]")
         auto group_name = test::utils::uniq_id("group");
         auto user_name = test::utils::uniq_id("user");
 
-        couchbase::operations::management::rbac::group group{};
+        couchbase::management::rbac::group group{};
         group.name = group_name;
         group.description = "this is a test";
-        group.roles = { couchbase::operations::management::rbac::role{ "replication_target", integration.ctx.bucket },
-                        couchbase::operations::management::rbac::role{ "replication_admin" } };
+        group.roles = { couchbase::management::rbac::role{ "replication_target", integration.ctx.bucket },
+                        couchbase::management::rbac::role{ "replication_admin" } };
 
         {
             couchbase::operations::management::group_upsert_request req{ group };
@@ -742,11 +750,11 @@ TEST_CASE("integration: user groups management", "[integration]")
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
-        couchbase::operations::management::rbac::user user{ user_name };
+        couchbase::management::rbac::user user{ user_name };
         user.display_name = "display_name";
         user.password = "password";
         user.roles = {
-            couchbase::operations::management::rbac::role{ "bucket_admin", integration.ctx.bucket },
+            couchbase::management::rbac::role{ "bucket_admin", integration.ctx.bucket },
         };
         user.groups = { group_name };
 
@@ -757,26 +765,26 @@ TEST_CASE("integration: user groups management", "[integration]")
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
-        couchbase::operations::management::rbac::user_and_metadata expected{};
+        couchbase::management::rbac::user_and_metadata expected{};
         expected.username = user.username;
         expected.display_name = user.display_name;
         expected.roles = user.roles;
         expected.groups = user.groups;
-        expected.domain = couchbase::operations::management::rbac::auth_domain::local;
+        expected.domain = couchbase::management::rbac::auth_domain::local;
 
-        couchbase::operations::management::rbac::role_and_origins expected_role_1{};
+        couchbase::management::rbac::role_and_origins expected_role_1{};
         expected_role_1.name = "bucket_admin";
         expected_role_1.bucket = integration.ctx.bucket;
-        expected_role_1.origins = { couchbase::operations::management::rbac::origin{ "user" } };
+        expected_role_1.origins = { couchbase::management::rbac::origin{ "user" } };
 
-        couchbase::operations::management::rbac::role_and_origins expected_role_2{};
+        couchbase::management::rbac::role_and_origins expected_role_2{};
         expected_role_2.name = "replication_target";
         expected_role_2.bucket = integration.ctx.bucket;
-        expected_role_2.origins = { couchbase::operations::management::rbac::origin{ "group", group_name } };
+        expected_role_2.origins = { couchbase::management::rbac::origin{ "group", group_name } };
 
-        couchbase::operations::management::rbac::role_and_origins expected_role_3{};
+        couchbase::management::rbac::role_and_origins expected_role_3{};
         expected_role_3.name = "replication_admin";
-        expected_role_3.origins = { couchbase::operations::management::rbac::origin{ "group", group_name } };
+        expected_role_3.origins = { couchbase::management::rbac::origin{ "group", group_name } };
 
         expected.effective_roles = { expected_role_1, expected_role_2, expected_role_3 };
 
@@ -837,6 +845,10 @@ TEST_CASE("integration: user management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_user_management()) {
+        return;
+    }
+
     if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
@@ -869,7 +881,8 @@ TEST_CASE("integration: user management collections roles", "[integration]")
     test::utils::integration_test_guard integration;
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    if (!integration.cluster_version().supports_collections()) {
+    if (!integration.cluster_version().supports_user_management() || !integration.cluster_version().supports_collections() ||
+        integration.cluster_version().is_community()) {
         return;
     }
 
@@ -893,11 +906,11 @@ TEST_CASE("integration: user management collections roles", "[integration]")
         REQUIRE(created);
     }
 
-    couchbase::operations::management::rbac::user user{ user_name };
+    couchbase::management::rbac::user user{ user_name };
     user.display_name = "display_name";
     user.password = "password";
     user.roles = {
-        couchbase::operations::management::rbac::role{ "data_reader", integration.ctx.bucket, scope_name },
+        couchbase::management::rbac::role{ "data_reader", integration.ctx.bucket, scope_name },
     };
 
     {
@@ -918,7 +931,7 @@ TEST_CASE("integration: user management collections roles", "[integration]")
     }
 
     user.roles = {
-        couchbase::operations::management::rbac::role{ "data_reader", integration.ctx.bucket, scope_name, collection_name },
+        couchbase::management::rbac::role{ "data_reader", integration.ctx.bucket, scope_name, collection_name },
     };
 
     {
@@ -948,42 +961,50 @@ TEST_CASE("integration: query index management", "[integration]")
         return;
     }
 
-    auto bucket_name = test::utils::uniq_id("bucket");
     auto index_name = test::utils::uniq_id("index");
 
-    {
-        couchbase::operations::management::bucket_create_request req;
-        req.bucket.name = bucket_name;
-        req.bucket.bucket_type = couchbase::operations::management::bucket_settings::bucket_type::couchbase;
-        req.bucket.num_replicas = 0;
-        auto resp = test::utils::execute(integration.cluster, req);
-    }
-
-    REQUIRE(!wait_for_bucket_created(integration, bucket_name).ctx.ec);
-
-    SECTION("primary index")
-    {
+    if (integration.cluster_version().supports_bucket_management()) {
+        SECTION("primary index")
         {
-            couchbase::operations::management::query_index_create_response resp;
-            bool operation_completed = test::utils::wait_until([&integration, &bucket_name, &resp]() {
-                couchbase::operations::management::query_index_create_request req{};
+            auto bucket_name = test::utils::uniq_id("bucket");
+
+            {
+                couchbase::operations::management::bucket_create_request req;
+                req.bucket.name = bucket_name;
+                req.bucket.bucket_type = couchbase::management::cluster::bucket_type::couchbase;
+                req.bucket.num_replicas = 0;
+                auto resp = test::utils::execute(integration.cluster, req);
+            }
+
+            REQUIRE(!wait_for_bucket_created(integration, bucket_name).ctx.ec);
+
+            {
+                couchbase::operations::management::query_index_create_response resp;
+                bool operation_completed = test::utils::wait_until([&integration, &bucket_name, &resp]() {
+                    couchbase::operations::management::query_index_create_request req{};
+                    req.bucket_name = bucket_name;
+                    req.is_primary = true;
+                    resp = test::utils::execute(integration.cluster, req);
+                    return resp.ctx.ec != couchbase::error::common_errc::bucket_not_found;
+                });
+                REQUIRE(operation_completed);
+                REQUIRE_FALSE(resp.ctx.ec);
+            }
+
+            {
+                couchbase::operations::management::query_index_get_all_request req{};
                 req.bucket_name = bucket_name;
-                req.is_primary = true;
-                resp = test::utils::execute(integration.cluster, req);
-                return resp.ctx.ec != couchbase::error::common_errc::bucket_not_found;
-            });
-            REQUIRE(operation_completed);
-            REQUIRE_FALSE(resp.ctx.ec);
-        }
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_FALSE(resp.ctx.ec);
+                REQUIRE(resp.indexes.size() == 1);
+                REQUIRE(resp.indexes[0].name == "#primary");
+                REQUIRE(resp.indexes[0].is_primary);
+            }
 
-        {
-            couchbase::operations::management::query_index_get_all_request req{};
-            req.bucket_name = bucket_name;
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
-            REQUIRE(resp.indexes.size() == 1);
-            REQUIRE(resp.indexes[0].name == "#primary");
-            REQUIRE(resp.indexes[0].is_primary);
+            {
+                couchbase::operations::management::bucket_drop_request req{ bucket_name };
+                test::utils::execute(integration.cluster, req);
+            }
         }
     }
 
@@ -991,11 +1012,11 @@ TEST_CASE("integration: query index management", "[integration]")
     {
         {
             couchbase::operations::management::query_index_create_response resp;
-            bool operation_completed = test::utils::wait_until([&integration, &bucket_name, &index_name, &resp]() {
+            bool operation_completed = test::utils::wait_until([&integration, &index_name, &resp]() {
                 couchbase::operations::management::query_index_create_request req{};
-                req.bucket_name = bucket_name;
+                req.bucket_name = integration.ctx.bucket;
                 req.index_name = index_name;
-                req.fields = { "field" };
+                req.fields = { "field", "field2 DESC", "`two words` DESC" };
                 resp = test::utils::execute(integration.cluster, req);
                 return resp.ctx.ec != couchbase::error::common_errc::bucket_not_found;
             });
@@ -1005,7 +1026,7 @@ TEST_CASE("integration: query index management", "[integration]")
 
         {
             couchbase::operations::management::query_index_create_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             req.index_name = index_name;
             req.fields = { "field" };
             auto resp = test::utils::execute(integration.cluster, req);
@@ -1014,7 +1035,7 @@ TEST_CASE("integration: query index management", "[integration]")
 
         {
             couchbase::operations::management::query_index_create_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             req.index_name = index_name;
             req.fields = { "field" };
             req.ignore_if_exists = true;
@@ -1024,22 +1045,25 @@ TEST_CASE("integration: query index management", "[integration]")
 
         {
             couchbase::operations::management::query_index_get_all_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
-            REQUIRE(resp.indexes.size() == 1);
-            REQUIRE(resp.indexes[0].name == index_name);
-            REQUIRE_FALSE(resp.indexes[0].is_primary);
-            REQUIRE(resp.indexes[0].index_key.size() == 1);
-            REQUIRE(resp.indexes[0].index_key[0] == "`field`");
-            REQUIRE(resp.indexes[0].keyspace_id == bucket_name);
-            REQUIRE(resp.indexes[0].state == "online");
-            REQUIRE(resp.indexes[0].namespace_id == "default");
+            auto index = std::find_if(
+              resp.indexes.begin(), resp.indexes.end(), [&index_name](const auto& exp_index) { return exp_index.name == index_name; });
+            REQUIRE(index != resp.indexes.end());
+            REQUIRE(index->name == index_name);
+            REQUIRE_FALSE(index->is_primary);
+            REQUIRE(index->index_key.size() == 3);
+            REQUIRE(index->index_key[0] == "`field`");
+            REQUIRE(index->index_key[1] == "`field2` DESC");
+            REQUIRE(index->index_key[2] == "`two words` DESC");
+            REQUIRE(index->bucket_name == integration.ctx.bucket);
+            REQUIRE(index->state == "online");
         }
 
         {
             couchbase::operations::management::query_index_drop_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             req.index_name = index_name;
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
@@ -1047,7 +1071,7 @@ TEST_CASE("integration: query index management", "[integration]")
 
         {
             couchbase::operations::management::query_index_drop_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             req.index_name = index_name;
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE(resp.ctx.ec == couchbase::error::common_errc::index_not_found);
@@ -1058,9 +1082,9 @@ TEST_CASE("integration: query index management", "[integration]")
     {
         {
             couchbase::operations::management::query_index_create_response resp;
-            bool operation_completed = test::utils::wait_until([&integration, &bucket_name, &index_name, &resp]() {
+            bool operation_completed = test::utils::wait_until([&integration, &index_name, &resp]() {
                 couchbase::operations::management::query_index_create_request req{};
-                req.bucket_name = bucket_name;
+                req.bucket_name = integration.ctx.bucket;
                 req.index_name = index_name;
                 req.fields = { "field" };
                 req.deferred = true;
@@ -1073,29 +1097,33 @@ TEST_CASE("integration: query index management", "[integration]")
 
         {
             couchbase::operations::management::query_index_get_all_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
-            REQUIRE(resp.indexes.size() == 1);
-            REQUIRE(resp.indexes[0].name == index_name);
-            REQUIRE(resp.indexes[0].state == "deferred");
+            auto index = std::find_if(
+              resp.indexes.begin(), resp.indexes.end(), [&index_name](const auto& exp_index) { return exp_index.name == index_name; });
+            REQUIRE(index != resp.indexes.end());
+            REQUIRE(index->name == index_name);
+            REQUIRE(index->state == "deferred");
         }
 
         {
             couchbase::operations::management::query_index_build_deferred_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
-        test::utils::wait_until([&integration, bucket_name]() {
+        test::utils::wait_until([&integration, &index_name]() {
             couchbase::operations::management::query_index_get_all_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             auto resp = test::utils::execute(integration.cluster, req);
             if (resp.indexes.empty()) {
                 return false;
             }
-            return resp.indexes[0].state == "online";
+            auto index = std::find_if(
+              resp.indexes.begin(), resp.indexes.end(), [&index_name](const auto& exp_index) { return exp_index.name == index_name; });
+            return index->state == "online";
         });
     }
 
@@ -1125,12 +1153,6 @@ TEST_CASE("integration: query index management", "[integration]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::bucket_not_found);
     }
-
-    // drop any buckets that haven't already been dropped
-    {
-        couchbase::operations::management::bucket_drop_request req{ bucket_name };
-        test::utils::execute(integration.cluster, req);
-    }
 }
 
 TEST_CASE("integration: collections query index management", "[integration]")
@@ -1140,45 +1162,41 @@ TEST_CASE("integration: collections query index management", "[integration]")
     if (!integration.cluster_version().supports_query_index_management()) {
         return;
     }
+
     if (!integration.cluster_version().supports_collections()) {
         return;
     }
 
-    auto bucket_name = test::utils::uniq_id("collections_bucket");
     auto index_name = test::utils::uniq_id("collections_index");
     auto scope_name = test::utils::uniq_id("indexscope");
     auto collection_name = test::utils::uniq_id("indexcollection");
 
-    {
-        couchbase::operations::management::bucket_create_request req;
-        req.bucket.name = bucket_name;
-        req.bucket.bucket_type = couchbase::operations::management::bucket_settings::bucket_type::couchbase;
-        req.bucket.num_replicas = 0;
-        auto resp = test::utils::execute(integration.cluster, req);
-    }
-
-    REQUIRE(!wait_for_bucket_created(integration, bucket_name).ctx.ec);
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     // create the scope and collection that we'll do index management on.
     {
-        couchbase::operations::management::scope_create_request req{ bucket_name, scope_name };
+        couchbase::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+        REQUIRE(created);
     }
 
     {
-        couchbase::operations::management::collection_create_request req{ bucket_name, scope_name, collection_name };
+        couchbase::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+        REQUIRE(created);
     }
 
     SECTION("primary index")
     {
         {
             couchbase::operations::management::query_index_create_response resp;
-            bool operation_completed = test::utils::wait_until([&integration, &bucket_name, &scope_name, &collection_name, &resp]() {
+            bool operation_completed = test::utils::wait_until([&integration, &scope_name, &collection_name, &resp]() {
                 couchbase::operations::management::query_index_create_request req{};
-                req.bucket_name = bucket_name;
+                req.bucket_name = integration.ctx.bucket;
                 req.scope_name = scope_name;
                 req.collection_name = collection_name;
                 req.is_primary = true;
@@ -1191,7 +1209,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
 
         {
             couchbase::operations::management::query_index_get_all_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             req.scope_name = scope_name;
             req.collection_name = collection_name;
             auto resp = test::utils::execute(integration.cluster, req);
@@ -1202,28 +1220,69 @@ TEST_CASE("integration: collections query index management", "[integration]")
         }
     }
 
+    SECTION("named primary index")
+    {
+        {
+            couchbase::operations::management::query_index_create_response resp;
+            bool operation_completed = test::utils::wait_until([&integration, &index_name, &scope_name, &collection_name, &resp]() {
+                couchbase::operations::management::query_index_create_request req{};
+                req.bucket_name = integration.ctx.bucket;
+                req.scope_name = scope_name;
+                req.collection_name = collection_name;
+                req.index_name = index_name;
+                req.is_primary = true;
+                resp = test::utils::execute(integration.cluster, req);
+                return resp.ctx.ec != couchbase::error::common_errc::bucket_not_found;
+            });
+            REQUIRE(operation_completed);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+
+        {
+            couchbase::operations::management::query_index_get_all_request req{};
+            req.bucket_name = integration.ctx.bucket;
+            req.scope_name = scope_name;
+            req.collection_name = collection_name;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE(resp.indexes.size() == 1);
+            REQUIRE(resp.indexes[0].name == index_name);
+            REQUIRE(resp.indexes[0].is_primary);
+        }
+
+        {
+            couchbase::operations::management::query_index_drop_request req{};
+            req.bucket_name = integration.ctx.bucket;
+            req.index_name = index_name;
+            req.scope_name = scope_name;
+            req.is_primary = true;
+            req.collection_name = collection_name;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+        }
+    }
+
     SECTION("non primary index")
     {
         {
             couchbase::operations::management::query_index_create_response resp;
-            bool operation_completed =
-              test::utils::wait_until([&integration, &bucket_name, &index_name, &scope_name, &collection_name, &resp]() {
-                  couchbase::operations::management::query_index_create_request req{};
-                  req.bucket_name = bucket_name;
-                  req.index_name = index_name;
-                  req.scope_name = scope_name;
-                  req.collection_name = collection_name;
-                  req.fields = { "field" };
-                  resp = test::utils::execute(integration.cluster, req);
-                  return resp.ctx.ec != couchbase::error::common_errc::bucket_not_found;
-              });
+            bool operation_completed = test::utils::wait_until([&integration, &index_name, &scope_name, &collection_name, &resp]() {
+                couchbase::operations::management::query_index_create_request req{};
+                req.bucket_name = integration.ctx.bucket;
+                req.index_name = index_name;
+                req.scope_name = scope_name;
+                req.collection_name = collection_name;
+                req.fields = { "field" };
+                resp = test::utils::execute(integration.cluster, req);
+                return resp.ctx.ec != couchbase::error::common_errc::bucket_not_found;
+            });
             REQUIRE(operation_completed);
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
         {
             couchbase::operations::management::query_index_create_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             req.index_name = index_name;
             req.scope_name = scope_name;
             req.collection_name = collection_name;
@@ -1234,7 +1293,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
 
         {
             couchbase::operations::management::query_index_create_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             req.index_name = index_name;
             req.scope_name = scope_name;
             req.collection_name = collection_name;
@@ -1246,7 +1305,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
 
         {
             couchbase::operations::management::query_index_get_all_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             req.scope_name = scope_name;
             req.collection_name = collection_name;
             auto resp = test::utils::execute(integration.cluster, req);
@@ -1256,16 +1315,15 @@ TEST_CASE("integration: collections query index management", "[integration]")
             REQUIRE_FALSE(resp.indexes[0].is_primary);
             REQUIRE(resp.indexes[0].index_key.size() == 1);
             REQUIRE(resp.indexes[0].index_key[0] == "`field`");
-            REQUIRE(resp.indexes[0].keyspace_id == collection_name);
-            REQUIRE(resp.indexes[0].scope_id == scope_name);
-            REQUIRE(resp.indexes[0].bucket_id == bucket_name);
+            REQUIRE(resp.indexes[0].collection_name == collection_name);
+            REQUIRE(resp.indexes[0].scope_name == scope_name);
+            REQUIRE(resp.indexes[0].bucket_name == integration.ctx.bucket);
             REQUIRE(resp.indexes[0].state == "online");
-            REQUIRE(resp.indexes[0].namespace_id == "default");
         }
 
         {
             couchbase::operations::management::query_index_drop_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             req.index_name = index_name;
             req.scope_name = scope_name;
             req.collection_name = collection_name;
@@ -1275,7 +1333,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
 
         {
             couchbase::operations::management::query_index_drop_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             req.index_name = index_name;
             req.scope_name = scope_name;
             req.collection_name = collection_name;
@@ -1288,25 +1346,24 @@ TEST_CASE("integration: collections query index management", "[integration]")
     {
         {
             couchbase::operations::management::query_index_create_response resp;
-            bool operation_completed =
-              test::utils::wait_until([&integration, &bucket_name, &index_name, &scope_name, &collection_name, &resp]() {
-                  couchbase::operations::management::query_index_create_request req{};
-                  req.bucket_name = bucket_name;
-                  req.index_name = index_name;
-                  req.scope_name = scope_name;
-                  req.collection_name = collection_name;
-                  req.fields = { "field" };
-                  req.deferred = true;
-                  resp = test::utils::execute(integration.cluster, req);
-                  return resp.ctx.ec != couchbase::error::common_errc::bucket_not_found;
-              });
+            bool operation_completed = test::utils::wait_until([&integration, &index_name, &scope_name, &collection_name, &resp]() {
+                couchbase::operations::management::query_index_create_request req{};
+                req.bucket_name = integration.ctx.bucket;
+                req.index_name = index_name;
+                req.scope_name = scope_name;
+                req.collection_name = collection_name;
+                req.fields = { "field" };
+                req.deferred = true;
+                resp = test::utils::execute(integration.cluster, req);
+                return resp.ctx.ec != couchbase::error::common_errc::bucket_not_found;
+            });
             REQUIRE(operation_completed);
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
         {
             couchbase::operations::management::query_index_get_all_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             req.scope_name = scope_name;
             req.collection_name = collection_name;
             auto resp = test::utils::execute(integration.cluster, req);
@@ -1318,16 +1375,16 @@ TEST_CASE("integration: collections query index management", "[integration]")
 
         {
             couchbase::operations::management::query_index_build_deferred_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             req.scope_name = scope_name;
             req.collection_name = collection_name;
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
-        test::utils::wait_until([&integration, bucket_name, scope_name, collection_name]() {
+        test::utils::wait_until([&integration, scope_name, collection_name]() {
             couchbase::operations::management::query_index_get_all_request req{};
-            req.bucket_name = bucket_name;
+            req.bucket_name = integration.ctx.bucket;
             req.scope_name = scope_name;
             req.collection_name = collection_name;
             auto resp = test::utils::execute(integration.cluster, req);
@@ -1341,7 +1398,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
     SECTION("create missing collection")
     {
         couchbase::operations::management::query_index_create_request req{};
-        req.bucket_name = bucket_name;
+        req.bucket_name = integration.ctx.bucket;
         req.scope_name = scope_name;
         req.collection_name = "missing_collection";
         req.is_primary = true;
@@ -1352,7 +1409,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
     SECTION("create missing scope")
     {
         couchbase::operations::management::query_index_create_request req{};
-        req.bucket_name = bucket_name;
+        req.bucket_name = integration.ctx.bucket;
         req.scope_name = "missing_scope";
         req.collection_name = collection_name;
         req.is_primary = true;
@@ -1363,7 +1420,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
     SECTION("get missing collection")
     {
         couchbase::operations::management::query_index_get_all_request req{};
-        req.bucket_name = bucket_name;
+        req.bucket_name = integration.ctx.bucket;
         req.scope_name = scope_name;
         req.collection_name = "missing_collection";
         auto resp = test::utils::execute(integration.cluster, req);
@@ -1374,7 +1431,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
     SECTION("drop missing collection")
     {
         couchbase::operations::management::query_index_drop_request req{};
-        req.bucket_name = bucket_name;
+        req.bucket_name = integration.ctx.bucket;
         req.scope_name = scope_name;
         req.collection_name = "missing_collection";
         req.is_primary = true;
@@ -1385,18 +1442,12 @@ TEST_CASE("integration: collections query index management", "[integration]")
     SECTION("drop missing scope")
     {
         couchbase::operations::management::query_index_drop_request req{};
-        req.bucket_name = bucket_name;
+        req.bucket_name = integration.ctx.bucket;
         req.scope_name = "missing_scope";
         req.collection_name = collection_name;
         req.is_primary = true;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::scope_not_found);
-    }
-
-    // drop any buckets that haven't already been dropped
-    {
-        couchbase::operations::management::bucket_drop_request req{ bucket_name };
-        test::utils::execute(integration.cluster, req);
     }
 }
 
@@ -1404,12 +1455,12 @@ TEST_CASE("integration: analytics index management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_analytics()) {
+    if (!integration.cluster_version().supports_analytics() || !integration.has_analytics_service()) {
         return;
     }
 
     // MB-47718
-    if (integration.storage_backend() == couchbase::operations::management::bucket_settings::storage_backend_type::magma) {
+    if (integration.storage_backend() == couchbase::management::cluster::bucket_storage_backend::magma) {
         return;
     }
 
@@ -1707,30 +1758,28 @@ run_s3_link_test(test::utils::integration_test_guard& integration, std::string d
     }
 
     {
-        couchbase::operations::management::analytics_link::s3_external link{};
+        couchbase::management::analytics::s3_external_link link{};
         link.dataverse = dataverse_name;
         link.access_key_id = "access_key";
         link.secret_access_key = "secret_access_key";
         link.region = "us-east-1";
         link.service_endpoint = "service_endpoint";
         link.link_name = link_name;
-        couchbase::operations::management::analytics_link_create_request<couchbase::operations::management::analytics_link::s3_external>
-          req{};
+        couchbase::operations::management::analytics_link_create_request<couchbase::management::analytics::s3_external_link> req{};
         req.link = link;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
     {
-        couchbase::operations::management::analytics_link::s3_external link{};
+        couchbase::management::analytics::s3_external_link link{};
         link.dataverse = dataverse_name;
         link.access_key_id = "access_key";
         link.secret_access_key = "secret_access_key";
         link.region = "us-east-1";
         link.service_endpoint = "service_endpoint";
         link.link_name = link_name;
-        couchbase::operations::management::analytics_link_create_request<couchbase::operations::management::analytics_link::s3_external>
-          req{};
+        couchbase::operations::management::analytics_link_create_request<couchbase::management::analytics::s3_external_link> req{};
         req.link = link;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::analytics_errc::link_exists);
@@ -1773,15 +1822,14 @@ run_s3_link_test(test::utils::integration_test_guard& integration, std::string d
     }
 
     {
-        couchbase::operations::management::analytics_link::s3_external link{};
+        couchbase::management::analytics::s3_external_link link{};
         link.dataverse = dataverse_name;
         link.access_key_id = "access_key";
         link.secret_access_key = "secret_access_key";
         link.region = "eu-west-1";
         link.service_endpoint = "service_endpoint";
         link.link_name = link_name;
-        couchbase::operations::management::analytics_link_replace_request<couchbase::operations::management::analytics_link::s3_external>
-          req{};
+        couchbase::operations::management::analytics_link_replace_request<couchbase::management::analytics::s3_external_link> req{};
         req.link = link;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
@@ -1824,30 +1872,26 @@ run_azure_link_test(test::utils::integration_test_guard& integration, std::strin
     }
 
     {
-        couchbase::operations::management::analytics_link::azure_blob_external link{};
+        couchbase::management::analytics::azure_blob_external_link link{};
         link.dataverse = dataverse_name;
         link.connection_string = "connection_string";
         link.blob_endpoint = "blob_endpoint";
         link.endpoint_suffix = "endpoint_suffix";
         link.link_name = link_name;
-        couchbase::operations::management::analytics_link_create_request<
-          couchbase::operations::management::analytics_link::azure_blob_external>
-          req{};
+        couchbase::operations::management::analytics_link_create_request<couchbase::management::analytics::azure_blob_external_link> req{};
         req.link = link;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
     {
-        couchbase::operations::management::analytics_link::azure_blob_external link{};
+        couchbase::management::analytics::azure_blob_external_link link{};
         link.dataverse = dataverse_name;
         link.connection_string = "connection_string";
         link.blob_endpoint = "blob_endpoint";
         link.endpoint_suffix = "endpoint_suffix";
         link.link_name = link_name;
-        couchbase::operations::management::analytics_link_create_request<
-          couchbase::operations::management::analytics_link::azure_blob_external>
-          req{};
+        couchbase::operations::management::analytics_link_create_request<couchbase::management::analytics::azure_blob_external_link> req{};
         req.link = link;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::analytics_errc::link_exists);
@@ -1892,15 +1936,13 @@ run_azure_link_test(test::utils::integration_test_guard& integration, std::strin
     }
 
     {
-        couchbase::operations::management::analytics_link::azure_blob_external link{};
+        couchbase::management::analytics::azure_blob_external_link link{};
         link.dataverse = dataverse_name;
         link.connection_string = "connection_string";
         link.blob_endpoint = "new_blob_endpoint";
         link.endpoint_suffix = "endpoint_suffix";
         link.link_name = link_name;
-        couchbase::operations::management::analytics_link_replace_request<
-          couchbase::operations::management::analytics_link::azure_blob_external>
-          req{};
+        couchbase::operations::management::analytics_link_replace_request<couchbase::management::analytics::azure_blob_external_link> req{};
         req.link = link;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
@@ -1936,12 +1978,12 @@ TEST_CASE("integration: analytics external link management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_analytics_links()) {
+    if (!integration.cluster_version().supports_analytics_links() || !integration.has_analytics_service()) {
         return;
     }
 
     // MB-47718
-    if (integration.storage_backend() == couchbase::operations::management::bucket_settings::storage_backend_type::magma) {
+    if (integration.storage_backend() == couchbase::management::cluster::bucket_storage_backend::magma) {
         return;
     }
 
@@ -1956,7 +1998,7 @@ TEST_CASE("integration: analytics external link management", "[integration]")
 
     SECTION("missing dataverse")
     {
-        couchbase::operations::management::analytics_link::s3_external link{};
+        couchbase::management::analytics::s3_external_link link{};
         link.dataverse = "missing_dataverse";
         link.access_key_id = "access_key";
         link.secret_access_key = "secret_access_key";
@@ -1965,8 +2007,7 @@ TEST_CASE("integration: analytics external link management", "[integration]")
         link.link_name = link_name;
 
         {
-            couchbase::operations::management::analytics_link_create_request<couchbase::operations::management::analytics_link::s3_external>
-              req{};
+            couchbase::operations::management::analytics_link_create_request<couchbase::management::analytics::s3_external_link> req{};
             req.link = link;
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE(resp.ctx.ec == couchbase::error::analytics_errc::dataverse_not_found);
@@ -1975,9 +2016,8 @@ TEST_CASE("integration: analytics external link management", "[integration]")
 
     SECTION("missing argument")
     {
-        couchbase::operations::management::analytics_link_create_request<couchbase::operations::management::analytics_link::s3_external>
-          req{};
-        req.link = couchbase::operations::management::analytics_link::s3_external{};
+        couchbase::operations::management::analytics_link_create_request<couchbase::management::analytics::s3_external_link> req{};
+        req.link = couchbase::management::analytics::s3_external_link{};
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::invalid_argument);
     }
@@ -2045,7 +2085,7 @@ TEST_CASE("integration: search index management", "[integration]")
         auto alias_name = test::utils::uniq_id("alias");
 
         {
-            couchbase::operations::management::search_index index;
+            couchbase::management::search::index index;
             index.name = index1_name;
             index.type = "fulltext-index";
             index.source_type = "couchbase";
@@ -2057,7 +2097,7 @@ TEST_CASE("integration: search index management", "[integration]")
         }
 
         {
-            couchbase::operations::management::search_index index;
+            couchbase::management::search::index index;
             index.name = index1_name;
             index.type = "fulltext-index";
             index.source_type = "couchbase";
@@ -2069,7 +2109,7 @@ TEST_CASE("integration: search index management", "[integration]")
         }
 
         {
-            couchbase::operations::management::search_index index;
+            couchbase::management::search::index index;
             index.name = index2_name;
             index.type = "fulltext-index";
             index.source_type = "couchbase";
@@ -2083,7 +2123,7 @@ TEST_CASE("integration: search index management", "[integration]")
         }
 
         {
-            couchbase::operations::management::search_index index;
+            couchbase::management::search::index index;
             index.name = alias_name;
             index.type = "fulltext-alias";
             index.source_type = "nil";
@@ -2147,7 +2187,7 @@ TEST_CASE("integration: search index management", "[integration]")
 
     SECTION("upsert index no name")
     {
-        couchbase::operations::management::search_index index;
+        couchbase::management::search::index index;
         index.type = "fulltext-index";
         index.source_type = "couchbase";
         index.source_name = integration.ctx.bucket;
@@ -2162,7 +2202,7 @@ TEST_CASE("integration: search index management", "[integration]")
         auto index_name = test::utils::uniq_id("index");
 
         {
-            couchbase::operations::management::search_index index;
+            couchbase::management::search::index index;
             index.name = index_name;
             index.type = "fulltext-index";
             index.source_type = "couchbase";
@@ -2272,7 +2312,7 @@ TEST_CASE("integration: search index management analyze document", "[integration
     auto index_name = test::utils::uniq_id("index");
 
     {
-        couchbase::operations::management::search_index index;
+        couchbase::management::search::index index;
         index.name = index_name;
         index.type = "fulltext-index";
         index.source_type = "couchbase";
@@ -2314,7 +2354,7 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::invalid_argument);
     }
 
-    if (integration.cluster_version().supports_analytics()) {
+    if (integration.cluster_version().supports_analytics() && integration.has_analytics_service()) {
         SECTION("analytics")
         {
             couchbase::operations::management::freeform_request req{};
@@ -2360,23 +2400,25 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         REQUIRE(result.is_object());
     }
 
-    SECTION("view")
-    {
-        auto document_name = test::utils::uniq_id("design_document");
-        auto view_name = test::utils::uniq_id("view");
+    if (integration.cluster_version().supports_views()) {
+        SECTION("view")
+        {
+            auto document_name = test::utils::uniq_id("design_document");
+            auto view_name = test::utils::uniq_id("view");
 
-        couchbase::operations::management::freeform_request req{};
-        req.type = couchbase::service_type::view;
-        req.method = "POST";
-        req.path = fmt::format("/{}/_design/{}/_view/{}", integration.ctx.bucket, document_name, view_name);
-        req.body = R"({"keys":["foo","bar"]})";
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.status == 404);
-        REQUIRE_FALSE(resp.body.empty());
-        auto result = couchbase::utils::json::parse(resp.body);
-        INFO(resp.body)
-        REQUIRE(result["error"].get_string() == "not_found");
+            couchbase::operations::management::freeform_request req{};
+            req.type = couchbase::service_type::view;
+            req.method = "POST";
+            req.path = fmt::format("/{}/_design/{}/_view/{}", integration.ctx.bucket, document_name, view_name);
+            req.body = R"({"keys":["foo","bar"]})";
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE(resp.status == 404);
+            REQUIRE_FALSE(resp.body.empty());
+            auto result = couchbase::utils::json::parse(resp.body);
+            INFO(resp.body)
+            REQUIRE(result["error"].get_string() == "not_found");
+        }
     }
 
     SECTION("management")
@@ -2450,7 +2492,7 @@ wait_for_function_created(test::utils::integration_test_guard& integration, cons
 static bool
 wait_for_function_reach_status(test::utils::integration_test_guard& integration,
                                const std::string& function_name,
-                               couchbase::operations::management::eventing::function_status status)
+                               couchbase::management::eventing::function_status status)
 {
     return test::utils::wait_until(
       [&integration, function_name, status]() {
@@ -2505,7 +2547,7 @@ TEST_CASE("integration: eventing functions management", "[integration]")
         auto meta_bucket_name = test::utils::uniq_id("meta");
         {
 
-            couchbase::operations::management::bucket_settings bucket_settings;
+            couchbase::management::cluster::bucket_settings bucket_settings;
             bucket_settings.name = meta_bucket_name;
             bucket_settings.ram_quota_mb = 256;
 
@@ -2539,12 +2581,11 @@ function OnDelete(meta, options) {
             req.function.name = function_name;
             req.function.code = source_code;
             req.function.settings.handler_headers = { "// generated by Couchbase C++ SDK" };
-            req.function.constant_bindings.emplace_back(
-              couchbase::operations::management::eventing::function_constant_binding{ "PI", "3.14" });
-            req.function.bucket_bindings.emplace_back(couchbase::operations::management::eventing::function_bucket_binding{
-              "data", { integration.ctx.bucket }, couchbase::operations::management::eventing::function_bucket_access::read_write });
+            req.function.constant_bindings.emplace_back(couchbase::management::eventing::function_constant_binding{ "PI", "3.14" });
+            req.function.bucket_bindings.emplace_back(couchbase::management::eventing::function_bucket_binding{
+              "data", { integration.ctx.bucket }, couchbase::management::eventing::function_bucket_access::read_write });
             req.function.url_bindings.emplace_back(
-              couchbase::operations::management::eventing::function_url_binding{ "home", "https://couchbase.com" });
+              couchbase::management::eventing::function_url_binding{ "home", "https://couchbase.com" });
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
         }
@@ -2564,10 +2605,8 @@ function OnDelete(meta, options) {
             REQUIRE(function->code == source_code);
             REQUIRE(function->source_keyspace.bucket == integration.ctx.bucket);
             REQUIRE(function->metadata_keyspace.bucket == meta_bucket_name);
-            REQUIRE(function->settings.deployment_status ==
-                    couchbase::operations::management::eventing::function_deployment_status::undeployed);
-            REQUIRE(function->settings.processing_status ==
-                    couchbase::operations::management::eventing::function_processing_status::paused);
+            REQUIRE(function->settings.deployment_status == couchbase::management::eventing::function_deployment_status::undeployed);
+            REQUIRE(function->settings.processing_status == couchbase::management::eventing::function_processing_status::paused);
             REQUIRE(!function->settings.handler_headers.empty());
             REQUIRE(function->settings.handler_headers[0] == "// generated by Couchbase C++ SDK");
             REQUIRE(!function->constant_bindings.empty());
@@ -2576,12 +2615,11 @@ function OnDelete(meta, options) {
             REQUIRE(!function->bucket_bindings.empty());
             REQUIRE(function->bucket_bindings[0].alias == "data");
             REQUIRE(function->bucket_bindings[0].name.bucket == "default");
-            REQUIRE(function->bucket_bindings[0].access == couchbase::operations::management::eventing::function_bucket_access::read_write);
+            REQUIRE(function->bucket_bindings[0].access == couchbase::management::eventing::function_bucket_access::read_write);
             REQUIRE(!function->url_bindings.empty());
             REQUIRE(function->url_bindings[0].alias == "home");
             REQUIRE(function->url_bindings[0].hostname == "https://couchbase.com");
-            REQUIRE(
-              std::holds_alternative<couchbase::operations::management::eventing::function_url_no_auth>(function->url_bindings[0].auth));
+            REQUIRE(std::holds_alternative<couchbase::management::eventing::function_url_no_auth>(function->url_bindings[0].auth));
         }
 
         {
@@ -2593,9 +2631,9 @@ function OnDelete(meta, options) {
                 return function_name == fun.name;
             });
             REQUIRE(function != resp.status.functions.end());
-            REQUIRE(function->status == couchbase::operations::management::eventing::function_status::undeployed);
-            REQUIRE(function->deployment_status == couchbase::operations::management::eventing::function_deployment_status::undeployed);
-            REQUIRE(function->processing_status == couchbase::operations::management::eventing::function_processing_status::paused);
+            REQUIRE(function->status == couchbase::management::eventing::function_status::undeployed);
+            REQUIRE(function->deployment_status == couchbase::management::eventing::function_deployment_status::undeployed);
+            REQUIRE(function->processing_status == couchbase::management::eventing::function_processing_status::paused);
         }
 
         {
@@ -2610,8 +2648,7 @@ function OnDelete(meta, options) {
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
-        REQUIRE(wait_for_function_reach_status(
-          integration, function_name, couchbase::operations::management::eventing::function_status::deployed));
+        REQUIRE(wait_for_function_reach_status(integration, function_name, couchbase::management::eventing::function_status::deployed));
 
         {
             couchbase::operations::management::eventing_drop_function_request req{ function_name };
@@ -2631,8 +2668,7 @@ function OnDelete(meta, options) {
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
-        REQUIRE(
-          wait_for_function_reach_status(integration, function_name, couchbase::operations::management::eventing::function_status::paused));
+        REQUIRE(wait_for_function_reach_status(integration, function_name, couchbase::management::eventing::function_status::paused));
 
         {
             couchbase::operations::management::eventing_pause_function_request req{ function_name };
@@ -2646,8 +2682,7 @@ function OnDelete(meta, options) {
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
-        REQUIRE(wait_for_function_reach_status(
-          integration, function_name, couchbase::operations::management::eventing::function_status::deployed));
+        REQUIRE(wait_for_function_reach_status(integration, function_name, couchbase::management::eventing::function_status::deployed));
 
         {
             couchbase::operations::management::eventing_undeploy_function_request req{ function_name };
@@ -2655,8 +2690,7 @@ function OnDelete(meta, options) {
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
-        REQUIRE(wait_for_function_reach_status(
-          integration, function_name, couchbase::operations::management::eventing::function_status::undeployed));
+        REQUIRE(wait_for_function_reach_status(integration, function_name, couchbase::management::eventing::function_status::undeployed));
 
         {
             couchbase::operations::management::eventing_drop_function_request req{ function_name };

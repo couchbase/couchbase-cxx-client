@@ -20,7 +20,7 @@
 #include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
-#include <couchbase/operations/management/search_index.hxx>
+#include <couchbase/management/search_index.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
 
@@ -40,7 +40,7 @@ struct search_index_upsert_request {
 
     static const inline service_type type = service_type::search;
 
-    search_index index;
+    couchbase::management::search::index index;
 
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};

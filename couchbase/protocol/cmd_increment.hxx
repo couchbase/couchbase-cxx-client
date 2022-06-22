@@ -19,10 +19,10 @@
 
 #include <couchbase/document_id.hxx>
 #include <couchbase/io/mcbp_message.hxx>
+#include <couchbase/mutation_token.hxx>
 #include <couchbase/protocol/client_opcode.hxx>
 #include <couchbase/protocol/cmd_info.hxx>
 #include <couchbase/protocol/durability_level.hxx>
-#include <couchbase/protocol/mutation_token.hxx>
 #include <couchbase/protocol/status.hxx>
 
 namespace couchbase::protocol
@@ -91,8 +91,6 @@ class increment_request_body
 
     void durability(protocol::durability_level level, std::optional<std::uint16_t> timeout);
 
-    void preserve_expiry();
-
     [[nodiscard]] const std::string& key() const
     {
         return key_;
@@ -121,7 +119,7 @@ class increment_request_body
         if (extras_.empty()) {
             fill_extras();
         }
-        return extras_.size() + key_.size();
+        return extras_.size() + framing_extras_.size() + key_.size();
     }
 
   private:

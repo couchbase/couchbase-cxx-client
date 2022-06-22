@@ -28,9 +28,6 @@ remove_request::encode_to(remove_request::encoded_request_type& encoded, mcbp_co
     encoded.partition(partition);
     encoded.cas(cas);
     encoded.body().id(id);
-    if (durability_level != protocol::durability_level::none) {
-        encoded.body().durability(durability_level, durability_timeout);
-    }
     return {};
 }
 

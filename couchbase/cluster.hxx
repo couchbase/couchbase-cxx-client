@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/bucket.hxx>
+#include <couchbase/capella_ca.hxx>
 #include <couchbase/diagnostics.hxx>
 #include <couchbase/io/dns_client.hxx>
 #include <couchbase/io/http_command.hxx>
@@ -46,6 +47,14 @@ class cluster : public std::enable_shared_from_this<cluster>
     [[nodiscard]] static std::shared_ptr<cluster> create(asio::io_context& ctx)
     {
         return std::shared_ptr<cluster>(new cluster(ctx));
+    }
+
+    [[nodiscard]] std::pair<std::error_code, couchbase::origin> origin() const
+    {
+        if (stopped_) {
+            return { error::network_errc::cluster_closed, {} };
+        }
+        return { {}, origin_ };
     }
 
     template<typename Handler>
@@ -286,6 +295,36 @@ class cluster : public std::enable_shared_from_this<cluster>
     template<typename Handler>
     void do_open(Handler&& handler)
     {
+        // Warn users if they attempt to use Capella without TLS being enabled.
+        {
+            bool has_capella_host = false;
+            bool has_non_capella_host = false;
+            static std::string suffix = "cloud.couchbase.com";
+            for (const auto& node : origin_.get_hostnames()) {
+                if (auto pos = node.find(suffix); pos != std::string::npos && pos + suffix.size() == node.size()) {
+                    has_capella_host = true;
+                } else {
+                    has_non_capella_host = true;
+                }
+            }
+
+            if (has_capella_host && !origin_.options().enable_tls) {
+                LOG_WARNING("[{}]: TLS is required when connecting to Couchbase Capella. Please enable TLS by prefixing "
+                            "the connection string with \"couchbases://\" (note the final 's').",
+                            id_);
+            }
+
+            if (origin_.options().enable_tls                   /* TLS is enabled */
+                && origin_.options().trust_certificate.empty() /* No CA certificate (or other SDK-specific trust source) is specified */
+                && origin_.options().tls_verify != tls_verify_mode::none /* The user did not disable all TLS verification */
+                && has_non_capella_host /* The connection string has a hostname that does NOT end in ".cloud.couchbase.com" */) {
+                LOG_ERROR("[{}] When TLS is enabled, the cluster options must specify certificate(s) to trust. (Unless connecting to "
+                          "cloud.couchbase.com.)",
+                          id_);
+                return handler(error::common_errc::invalid_argument);
+            }
+        }
+
         if (origin_.options().enable_tls) {
             tls_.set_options(asio::ssl::context::default_workarounds | asio::ssl::context::no_sslv2 | asio::ssl::context::no_sslv3);
             switch (origin_.options().tls_verify) {
@@ -304,6 +343,16 @@ class cluster : public std::enable_shared_from_this<cluster>
                 if (ec) {
                     LOG_ERROR("[{}]: unable to load verify file \"{}\": {}", id_, origin_.options().trust_certificate, ec.message());
                     return handler(ec);
+                }
+            } else {
+                // add the cappela Root CA if no other CA was specified.
+                std::error_code ec{};
+                LOG_DEBUG(R"([{}]: use default CA for TLS verify)", id_);
+                tls_.add_certificate_authority(
+                  asio::const_buffer(couchbase::default_ca::capellaCaCert, strlen(couchbase::default_ca::capellaCaCert)), ec);
+                if (ec) {
+                    LOG_WARNING("[{}]: unable to load default CAs: {}", id_, ec.message());
+                    // we don't consider this fatal and try to continue without it
                 }
             }
 #ifdef COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE

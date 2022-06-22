@@ -194,6 +194,18 @@ parse_option(tls_verify_mode& receiver, const std::string& /* name */, const std
 }
 
 void
+parse_option(io::ip_protocol& receiver, const std::string& /* name */, const std::string& value)
+{
+    if (value == "any") {
+        receiver = io::ip_protocol::any;
+    } else if (value == "force_ipv4") {
+        receiver = io::ip_protocol::force_ipv4;
+    } else if (value == "force_ipv6") {
+        receiver = io::ip_protocol::force_ipv6;
+    }
+}
+
+void
 parse_option(std::size_t& receiver, const std::string& name, const std::string& value)
 {
     try {
@@ -294,7 +306,16 @@ extract_options(connection_string& connstr)
             /**
              * Sets the SDK configuration to do IPv4 Name Resolution
              */
-            parse_option(connstr.options.force_ipv4, name, value);
+            bool force_ipv4 = false;
+            parse_option(force_ipv4, name, value);
+            if (force_ipv4) {
+                connstr.options.use_ip_protocol = io::ip_protocol::force_ipv4;
+            }
+        } else if (name == "ip_protocol") {
+            /**
+             * Controls preference of IP protocol for name resolution
+             */
+            parse_option(connstr.options.use_ip_protocol, name, value);
         } else if (name == "config_poll_interval") {
             parse_option(connstr.options.config_poll_interval, name, value);
         } else if (name == "config_poll_floor") {

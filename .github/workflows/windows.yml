@@ -2,13 +2,16 @@ name: windows
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+    branches: [main]
 
 jobs:
-  vs22:
-    runs-on: windows-2022
+  build:
+    strategy:
+      matrix:
+        os: [windows-2022, windows-2019]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Install build environment
         run: |
@@ -16,17 +19,12 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: recursive
-      - name: Build tests
-        run: ruby ./bin/build-tests.rb
-
-  vs19:
-    runs-on: windows-2019
-    steps:
-      - name: Install build environment
-        run: |
-          choco install --no-progress openssl
-      - uses: actions/checkout@v2
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
         with:
-          submodules: recursive
+          key: ${{ github.job }}-${{ matrix.os }}
+          variant: sccache
       - name: Build tests
+        env:
+          CB_CACHE_OPTION: sccache
         run: ruby ./bin/build-tests.rb

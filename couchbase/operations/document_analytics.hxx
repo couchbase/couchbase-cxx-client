@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <couchbase/analytics_scan_consistency.hxx>
 #include <couchbase/error_context/analytics.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
@@ -63,8 +64,6 @@ struct analytics_request {
     using encoded_response_type = io::http_response;
     using error_context_type = error_context::analytics;
 
-    enum class scan_consistency_type { not_bounded, request_plus };
-
     static const inline service_type type = service_type::analytics;
 
     std::string statement;
@@ -75,7 +74,7 @@ struct analytics_request {
     std::optional<std::string> scope_name{};
     std::optional<std::string> scope_qualifier{};
 
-    std::optional<scan_consistency_type> scan_consistency{};
+    std::optional<couchbase::analytics_scan_consistency> scan_consistency{};
 
     std::map<std::string, couchbase::json_string> raw{};
     std::vector<couchbase::json_string> positional_parameters{};

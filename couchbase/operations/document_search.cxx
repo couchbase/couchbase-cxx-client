@@ -49,10 +49,10 @@ search_request::encode_to(search_request::encoded_request_type& encoded, http_co
         tao::json::value highlight;
         if (highlight_style) {
             switch (*highlight_style) {
-                case highlight_style_type::html:
+                case couchbase::search_highlight_style::html:
                     highlight["style"] = "html";
                     break;
-                case highlight_style_type::ansi:
+                case couchbase::search_highlight_style::ansi:
                     highlight["style"] = "ansi";
                     break;
             }

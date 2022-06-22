@@ -58,7 +58,7 @@ analytics_dataverse_create_request::make_response(error_context::http&& ctx, con
 
             if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
                 for (const auto& error : errors->get_array()) {
-                    analytics_dataverse_create_response::problem err{
+                    analytics_problem err{
                         error.at("code").as<std::uint32_t>(),
                         error.at("msg").get_string(),
                     };

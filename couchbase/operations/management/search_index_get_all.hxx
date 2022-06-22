@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include <couchbase/platform/uuid.h>
+#include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
+#include <couchbase/management/search_index.hxx>
+#include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
-#include <couchbase/error_context/http.hxx>
-#include <couchbase/operations/management/search_index.hxx>
 
 namespace couchbase::operations::management
 {
@@ -30,7 +30,7 @@ struct search_index_get_all_response {
     error_context::http ctx;
     std::string status{};
     std::string impl_version{};
-    std::vector<search_index> indexes{};
+    std::vector<couchbase::management::search::index> indexes{};
 };
 
 struct search_index_get_all_request {

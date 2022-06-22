@@ -30,7 +30,7 @@ namespace couchbase::operations
 struct get_projected_response {
     error_context::key_value ctx;
     std::string value{};
-    protocol::cas cas{};
+    couchbase::cas cas{};
     std::uint32_t flags{};
     std::optional<std::uint32_t> expiry{};
 };

@@ -47,7 +47,7 @@ analytics_get_pending_mutations_request::make_response(error_context::http&& ctx
             if (payload.is_object()) {
                 for (const auto& [dataverse, entry] : payload.get_object()) {
                     for (const auto& [dataset, counter] : entry.get_object()) {
-                        response.stats.try_emplace(fmt::format("{}.{}", dataverse, dataset), counter.get_unsigned());
+                        response.stats.try_emplace(fmt::format("{}.{}", dataverse, dataset), counter.as<std::int64_t>());
                     }
                 }
             }
@@ -56,7 +56,7 @@ analytics_get_pending_mutations_request::make_response(error_context::http&& ctx
         response.status = payload.optional<std::string>("status").value_or("unknown");
         if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
             for (const auto& error : errors->get_array()) {
-                analytics_get_pending_mutations_response::problem err{
+                analytics_problem err{
                     error.at("code").as<std::uint32_t>(),
                     error.at("msg").get_string(),
                 };

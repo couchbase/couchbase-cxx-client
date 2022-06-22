@@ -16,8 +16,8 @@
  */
 
 #include <couchbase/errors.hxx>
+#include <couchbase/management/eventing_function_json.hxx>
 #include <couchbase/operations/management/error_utils.hxx>
-#include <couchbase/operations/management/eventing_function_json.hxx>
 #include <couchbase/operations/management/eventing_get_function.hxx>
 #include <couchbase/utils/json.hxx>
 
@@ -49,7 +49,7 @@ eventing_get_function_request::make_response(error_context::http&& ctx, const en
             response.error.emplace(problem);
             return response;
         }
-        response.function = payload.as<eventing::function>();
+        response.function = payload.as<couchbase::management::eventing::function>();
     }
     return response;
 }

@@ -19,6 +19,7 @@
 
 #include <couchbase/error_context/key_value.hxx>
 #include <couchbase/io/mcbp_context.hxx>
+#include <couchbase/io/mcbp_traits.hxx>
 #include <couchbase/io/retry_context.hxx>
 #include <couchbase/protocol/client_request.hxx>
 #include <couchbase/protocol/cmd_prepend.hxx>
@@ -30,7 +31,7 @@ namespace couchbase::operations
 
 struct prepend_response {
     error_context::key_value ctx;
-    protocol::cas cas{};
+    couchbase::cas cas{};
     mutation_token token{};
 };
 
@@ -44,7 +45,6 @@ struct prepend_request {
     uint16_t partition{};
     uint32_t opaque{};
     protocol::durability_level durability_level{ protocol::durability_level::none };
-    std::optional<std::uint16_t> durability_timeout{};
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
 
@@ -54,3 +54,10 @@ struct prepend_request {
 };
 
 } // namespace couchbase::operations
+
+namespace couchbase::io::mcbp_traits
+{
+template<>
+struct supports_durability<couchbase::operations::prepend_request> : public std::true_type {
+};
+} // namespace couchbase::io::mcbp_traits

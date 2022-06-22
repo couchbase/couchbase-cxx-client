@@ -197,8 +197,11 @@ class http_session : public std::enable_shared_from_this<http_session>
     void start()
     {
         state_ = diag::endpoint_state::connecting;
-        resolver_.async_resolve(
-          hostname_, service_, std::bind(&http_session::on_resolve, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
+        async_resolve(http_ctx_.options.use_ip_protocol,
+                      resolver_,
+                      hostname_,
+                      service_,
+                      std::bind(&http_session::on_resolve, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
     }
 
     [[nodiscard]] std::string log_prefix()
@@ -403,7 +406,6 @@ class http_session : public std::enable_shared_from_this<http_session>
                 std::scoped_lock lock(info_mutex_);
                 info_ = http_session_info(client_id_, id_, stream_->local_endpoint(), it->endpoint());
             }
-            deadline_timer_.expires_at(asio::steady_timer::time_point::max());
             deadline_timer_.cancel();
             flush();
         }
@@ -416,7 +418,8 @@ class http_session : public std::enable_shared_from_this<http_session>
         }
         if (deadline_timer_.expiry() <= asio::steady_timer::clock_type::now()) {
             stream_->close([](std::error_code) {});
-            deadline_timer_.expires_at(asio::steady_timer::time_point::max());
+            deadline_timer_.cancel();
+            return;
         }
         deadline_timer_.async_wait(std::bind(&http_session::check_deadline, shared_from_this(), std::placeholders::_1));
     }

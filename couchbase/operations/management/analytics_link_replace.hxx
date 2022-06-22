@@ -20,7 +20,7 @@
 #include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
-#include <couchbase/operations/management/analytics_link.hxx>
+#include <couchbase/operations/management/analytics_link_utils.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
 
@@ -65,7 +65,7 @@ struct analytics_link_replace_request {
         encoded.headers["content-type"] = "application/x-www-form-urlencoded";
         encoded.headers["accept"] = "application/json";
         encoded.method = "PUT";
-        encoded.path = analytics_link::endpoint_from_link(link);
+        encoded.path = endpoint_from_analytics_link(link);
         encoded.body = link.encode();
         return {};
     }

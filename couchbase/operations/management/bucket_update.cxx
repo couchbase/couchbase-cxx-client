@@ -18,6 +18,7 @@
 #include <couchbase/operations/management/bucket_update.hxx>
 
 #include <couchbase/errors.hxx>
+#include <couchbase/management/bucket_settings.hxx>
 #include <couchbase/operations/management/error_utils.hxx>
 #include <couchbase/protocol/durability_level.hxx>
 #include <couchbase/utils/join_strings.hxx>
@@ -34,36 +35,38 @@ bucket_update_request::encode_to(encoded_request_type& encoded, http_context& /*
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";
     encoded.body.append(fmt::format("&ramQuotaMB={}", bucket.ram_quota_mb));
     encoded.body.append(fmt::format("&replicaNumber={}", bucket.num_replicas));
-    encoded.body.append(fmt::format("&maxTTL={}", bucket.max_expiry));
+    if (bucket.max_expiry > 0) {
+        encoded.body.append(fmt::format("&maxTTL={}", bucket.max_expiry));
+    }
     encoded.body.append(fmt::format("&replicaIndex={}", bucket.replica_indexes ? "1" : "0"));
     encoded.body.append(fmt::format("&flushEnabled={}", bucket.flush_enabled ? "1" : "0"));
     switch (bucket.eviction_policy) {
-        case bucket_settings::eviction_policy::full:
+        case couchbase::management::cluster::bucket_eviction_policy::full:
             encoded.body.append("&evictionPolicy=fullEviction");
             break;
-        case bucket_settings::eviction_policy::value_only:
+        case couchbase::management::cluster::bucket_eviction_policy::value_only:
             encoded.body.append("&evictionPolicy=valueOnly");
             break;
-        case bucket_settings::eviction_policy::no_eviction:
+        case couchbase::management::cluster::bucket_eviction_policy::no_eviction:
             encoded.body.append("&evictionPolicy=noEviction");
             break;
-        case bucket_settings::eviction_policy::not_recently_used:
+        case couchbase::management::cluster::bucket_eviction_policy::not_recently_used:
             encoded.body.append("&evictionPolicy=nruEviction");
             break;
-        case bucket_settings::eviction_policy::unknown:
+        case couchbase::management::cluster::bucket_eviction_policy::unknown:
             break;
     }
     switch (bucket.compression_mode) {
-        case bucket_settings::compression_mode::off:
+        case couchbase::management::cluster::bucket_compression::off:
             encoded.body.append("&compressionMode=off");
             break;
-        case bucket_settings::compression_mode::active:
+        case couchbase::management::cluster::bucket_compression::active:
             encoded.body.append("&compressionMode=active");
             break;
-        case bucket_settings::compression_mode::passive:
+        case couchbase::management::cluster::bucket_compression::passive:
             encoded.body.append("&compressionMode=passive");
             break;
-        case bucket_settings::compression_mode::unknown:
+        case couchbase::management::cluster::bucket_compression::unknown:
             break;
     }
     if (bucket.minimum_durability_level) {

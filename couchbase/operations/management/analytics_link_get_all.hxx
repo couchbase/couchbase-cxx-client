@@ -20,7 +20,7 @@
 #include <couchbase/error_context/http.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
-#include <couchbase/operations/management/analytics_link.hxx>
+#include <couchbase/management/analytics_link.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
 
@@ -36,9 +36,9 @@ struct analytics_link_get_all_response {
     std::string status{};
     std::vector<problem> errors{};
 
-    std::vector<analytics_link::couchbase_remote> couchbase{};
-    std::vector<analytics_link::s3_external> s3{};
-    std::vector<analytics_link::azure_blob_external> azure_blob{};
+    std::vector<couchbase::management::analytics::couchbase_remote_link> couchbase{};
+    std::vector<couchbase::management::analytics::s3_external_link> s3{};
+    std::vector<couchbase::management::analytics::azure_blob_external_link> azure_blob{};
 };
 
 struct analytics_link_get_all_request {

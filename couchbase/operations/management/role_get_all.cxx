@@ -18,8 +18,8 @@
 #include <couchbase/operations/management/role_get_all.hxx>
 
 #include <couchbase/errors.hxx>
+#include <couchbase/management/rbac_json.hxx>
 #include <couchbase/operations/management/error_utils.hxx>
-#include <couchbase/operations/management/rbac_json.hxx>
 #include <couchbase/utils/json.hxx>
 
 namespace couchbase::operations::management
@@ -50,7 +50,7 @@ role_get_all_request::make_response(error_context::http&& ctx, const encoded_res
             return response;
         }
         for (const auto& entry : payload.get_array()) {
-            response.roles.emplace_back(entry.as<rbac::role_and_description>());
+            response.roles.emplace_back(entry.as<couchbase::management::rbac::role_and_description>());
         }
     }
     return response;

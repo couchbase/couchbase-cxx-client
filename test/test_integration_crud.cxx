@@ -170,7 +170,7 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("locking") };
     uint32_t lock_time = 10;
 
-    couchbase::protocol::cas cas;
+    couchbase::cas cas;
 
     {
         couchbase::operations::insert_request req{ id, basic_doc_json };
@@ -209,7 +209,7 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
     // but unlock operation is not retried in this case, because it would never have succeeded
     {
         couchbase::operations::unlock_request req{ id };
-        req.cas = couchbase::protocol::cas{ cas.value - 1 };
+        req.cas = couchbase::cas{ cas.value - 1 };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::key_value_errc::document_locked);
         REQUIRE(resp.ctx.retry_reasons.count(couchbase::io::retry_reason::kv_locked) == 0);
@@ -260,7 +260,7 @@ TEST_CASE("integration: lock/unlock without lock time", "[integration]")
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
-    couchbase::protocol::cas cas;
+    couchbase::cas cas;
 
     {
         couchbase::operations::get_and_lock_request req{ id };
@@ -428,7 +428,7 @@ TEST_CASE("integration: cas replace", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("cas_replace") };
-    couchbase::protocol::cas cas;
+    couchbase::cas cas;
 
     {
         couchbase::operations::insert_request req{ id, basic_doc_json };
@@ -440,7 +440,7 @@ TEST_CASE("integration: cas replace", "[integration]")
     SECTION("incorrect")
     {
         couchbase::operations::replace_request req{ id, "" };
-        req.cas = couchbase::protocol::cas{ cas.value + 1 };
+        req.cas = couchbase::cas{ cas.value + 1 };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::cas_mismatch);
     }

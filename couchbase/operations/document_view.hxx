@@ -17,12 +17,14 @@
 
 #pragma once
 
+#include <couchbase/design_document_namespace.hxx>
 #include <couchbase/error_context/view.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
-#include <couchbase/operations/management/design_document.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
+#include <couchbase/view_scan_consistency.hxx>
+#include <couchbase/view_sort_order.hxx>
 
 namespace couchbase::operations
 {
@@ -60,17 +62,12 @@ struct document_view_request {
     std::string bucket_name;
     std::string document_name;
     std::string view_name;
-    design_document::name_space name_space;
+    design_document_namespace ns{ design_document_namespace::production };
 
     std::optional<std::uint64_t> limit;
     std::optional<std::uint64_t> skip;
 
-    enum class scan_consistency {
-        not_bounded,
-        update_after,
-        request_plus,
-    };
-    std::optional<scan_consistency> consistency;
+    std::optional<couchbase::view_scan_consistency> consistency;
 
     std::vector<std::string> keys;
 
@@ -87,8 +84,7 @@ struct document_view_request {
     bool debug{ false };
     std::map<std::string, std::string> raw{};
 
-    enum class sort_order { ascending, descending };
-    std::optional<sort_order> order;
+    std::optional<couchbase::view_sort_order> order;
     std::vector<std::string> query_string{};
     std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
     std::optional<std::string> client_context_id{};
