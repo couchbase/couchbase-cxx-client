@@ -62,7 +62,7 @@ struct document_view_request {
     std::string bucket_name;
     std::string document_name;
     std::string view_name;
-    design_document_namespace ns;
+    design_document_namespace ns{ design_document_namespace::production };
 
     std::optional<std::uint64_t> limit;
     std::optional<std::uint64_t> skip;
