@@ -82,6 +82,7 @@ struct document_view_request {
     std::optional<bool> group;
     std::optional<std::uint32_t> group_level;
     bool debug{ false };
+    std::map<std::string, std::string> raw{};
 
     std::optional<couchbase::view_sort_order> order;
     std::vector<std::string> query_string{};

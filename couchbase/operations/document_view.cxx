@@ -95,6 +95,9 @@ document_view_request::encode_to(document_view_request::encoded_request_type& en
         }
         body["keys"] = keys_array;
     }
+    for (const auto& [name, value] : raw) {
+        query_string.emplace_back(fmt::format("{}={}", name, value));
+    }
 
     encoded.type = type;
     encoded.method = "POST";
