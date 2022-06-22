@@ -31,8 +31,9 @@ options = {
   password: ENV.fetch("CB_PASSWORD", "password"),
   bucket: ENV.fetch("CB_BUCKET", "default"),
   sec_bucket: ENV.fetch("CB_SEC_BUCKET", ""),
-  server_quota: ENV.fetch("CB_SERVER_QUOTA", 2048).to_i,
+  server_quota: ENV.fetch("CB_SERVER_QUOTA", 3072).to_i,
   index_quota: ENV.fetch("CB_INDEX_QUOTA", 256).to_i,
+  fts_quota: ENV.fetch("CB_FTS_QUOTA", 512).to_i,
   bucket_quota: ENV.fetch("CB_BUCKET_QUOTA", 256).to_i,
   enable_developer_preview: ENV.fetch("CB_DEVELOPER_PREVIEW", false).to_b,
   cluster_run_nodes: ENV.fetch("CB_CLUSTER_RUN_NODES", 0).to_i,
@@ -126,7 +127,8 @@ services = resp['allowedServices']
 
 api.post_form("/pools/default",
               memoryQuota: options[:server_quota],
-              indexMemoryQuota: options[:index_quota])
+              indexMemoryQuota: options[:index_quota],
+              ftsMemoryQuota: options[:fts_quota])
 api.post_form("/node/controller/setupServices", services: services.join(","))
 
 if options[:strict_encryption]
