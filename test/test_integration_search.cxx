@@ -26,7 +26,7 @@ using Catch::Matchers::StartsWith;
 void
 wait_until_indexed(std::shared_ptr<couchbase::cluster> cluster, const std::string& index_name, std::uint64_t expected_count)
 {
-    auto indexed = test ::utils::wait_until([&]() {
+    auto indexed = test ::utils::wait_until([cluster = std::move(cluster), &index_name, &expected_count]() {
         couchbase::operations::management::search_index_get_documents_count_request req{};
         req.index_name = index_name;
         req.timeout = std::chrono::seconds{ 1 };
@@ -44,7 +44,7 @@ TEST_CASE("integration: search query")
 
     {
         auto sample_data = couchbase::utils::json::parse(couchbase::json_string(test::utils::read_test_data("search_beers_dataset.json")));
-        auto o = sample_data.get_object();
+        auto const& o = sample_data.get_object();
         for (const auto& [key, value] : o) {
             couchbase::document_id id(integration.ctx.bucket, "_default", "_default", key);
             couchbase::operations::upsert_request req{ id, couchbase::utils::json::generate(value) };
@@ -53,7 +53,7 @@ TEST_CASE("integration: search query")
         }
     }
 
-    std::string index_name = "beer-search-index";
+    std::string index_name = test::utils::uniq_id("beer-search-index");
 
     {
         auto params = test::utils::read_test_data("search_beers_index_params.json");
@@ -71,7 +71,7 @@ TEST_CASE("integration: search query")
         REQUIRE((!resp.ctx.ec || resp.ctx.ec == couchbase::error::common_errc::index_exists));
     }
 
-    couchbase::json_string simple_query = couchbase::json_string(R"({"query": "description:belgian"})");
+    couchbase::json_string simple_query(R"({"query": "description:belgian"})");
 
     std::uint64_t beer_sample_doc_count = 5;
     // Wait until expected documents are indexed
@@ -425,7 +425,7 @@ TEST_CASE("integration: search query collections")
     auto collection2_name = test::utils::uniq_id("collection");
     std::string doc = R"({"name": "test"})";
 
-    for (auto& collection : { collection1_name, collection2_name }) {
+    for (const auto& collection : { collection1_name, collection2_name }) {
         {
             couchbase::operations::management::collection_create_request req{ integration.ctx.bucket, "_default", collection };
             auto resp = test::utils::execute(integration.cluster, req);
@@ -488,7 +488,7 @@ TEST_CASE("integration: search query collections")
 
     wait_until_indexed(integration.cluster, index_name, 2);
 
-    couchbase::json_string simple_query = couchbase::json_string(R"({"query": "name:test"})");
+    couchbase::json_string simple_query(R"({"query": "name:test"})");
 
     // no collections parameter - both docs returned
     {
