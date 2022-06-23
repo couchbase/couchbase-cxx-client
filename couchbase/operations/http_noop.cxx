@@ -26,6 +26,7 @@ http_noop_request::encode_to(http_noop_request::encoded_request_type& encoded, h
 {
     encoded.headers["connection"] = "keep-alive";
     encoded.method = "GET";
+    encoded.path = "/";
     switch (type) {
         case service_type::query:
             timeout = timeout_defaults::query_timeout;
@@ -41,11 +42,14 @@ http_noop_request::encode_to(http_noop_request::encoded_request_type& encoded, h
             break;
         case service_type::view:
             timeout = timeout_defaults::view_timeout;
-            encoded.path = "/";
             break;
         case service_type::management:
-        case service_type::key_value:
+            timeout = timeout_defaults::management_timeout;
+            break;
         case service_type::eventing:
+            timeout = timeout_defaults::eventing_timeout;
+            break;
+        case service_type::key_value:
             return error::common_errc::feature_not_available;
     }
     return {};
