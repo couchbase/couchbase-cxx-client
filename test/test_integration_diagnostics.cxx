@@ -359,12 +359,22 @@ TEST_CASE("integration: ping", "[integration]")
           "my_report_id", {}, {}, [barrier](couchbase::diag::ping_result&& resp) mutable { barrier->set_value(std::move(resp)); });
         auto res = f.get();
         REQUIRE(res.services.size() > 0);
+
         REQUIRE(res.services.count(couchbase::service_type::key_value) > 0);
+        REQUIRE(res.services[couchbase::service_type::key_value].size() > 0);
+
         REQUIRE(res.services.count(couchbase::service_type::view) > 0);
+        REQUIRE(res.services[couchbase::service_type::view].size() > 0);
+
         REQUIRE(res.services.count(couchbase::service_type::query) > 0);
+        REQUIRE(res.services[couchbase::service_type::query].size() > 0);
+
         REQUIRE(res.services.count(couchbase::service_type::search) > 0);
+        REQUIRE(res.services[couchbase::service_type::search].size() > 0);
+
         if (integration.ctx.version.supports_analytics()) {
             REQUIRE(res.services.count(couchbase::service_type::analytics) > 0);
+            REQUIRE(res.services[couchbase::service_type::analytics].size() > 0);
         }
         REQUIRE(res.id == "my_report_id");
         INFO(res.sdk)
@@ -387,7 +397,32 @@ TEST_CASE("integration: ping allows to select services", "[integration]")
                                   [barrier](couchbase::diag::ping_result&& resp) mutable { barrier->set_value(std::move(resp)); });
         auto res = f.get();
         REQUIRE(res.services.size() == 2);
+
         REQUIRE(res.services.count(couchbase::service_type::key_value) > 0);
+        REQUIRE(res.services[couchbase::service_type::key_value].size() > 0);
+
         REQUIRE(res.services.count(couchbase::service_type::query) > 0);
+        REQUIRE(res.services[couchbase::service_type::query].size() > 0);
+    }
+}
+
+TEST_CASE("integration: ping allows to select bucket and opens it automatically", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    {
+        auto barrier = std::make_shared<std::promise<couchbase::diag::ping_result>>();
+        auto f = barrier->get_future();
+        integration.cluster->ping({},
+                                  integration.ctx.bucket,
+                                  { couchbase::service_type::key_value },
+                                  [barrier](couchbase::diag::ping_result&& resp) mutable { barrier->set_value(std::move(resp)); });
+        auto res = f.get();
+        REQUIRE(res.services.size() == 1);
+
+        REQUIRE(res.services.count(couchbase::service_type::key_value) > 0);
+        REQUIRE(res.services[couchbase::service_type::key_value].size() > 0);
+        REQUIRE(res.services[couchbase::service_type::key_value][0].bucket.has_value());
+        REQUIRE(res.services[couchbase::service_type::key_value][0].bucket.value() == integration.ctx.bucket);
     }
 }

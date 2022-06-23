@@ -79,22 +79,32 @@ cluster::do_ping(std::optional<std::string> report_id,
     if (services.empty()) {
         services = { service_type::key_value, service_type::view, service_type::query, service_type::search, service_type::analytics };
     }
-    asio::post(asio::bind_executor(ctx_, [this, report_id, bucket_name, services, handler = std::move(handler)]() mutable {
-        auto collector = std::make_shared<ping_collector>(report_id.value(), std::move(handler));
-        if (bucket_name) {
-            if (services.find(service_type::key_value) != services.end()) {
-                for_each_bucket([&collector](auto& bucket) { bucket->ping(collector); });
-            }
-        } else {
-            if (services.find(service_type::key_value) != services.end()) {
-                if (session_) {
-                    session_->ping(collector->build_reporter());
-                }
-                for_each_bucket([&collector](auto& bucket) { bucket->ping(collector); });
-            }
-            session_manager_->ping(services, collector, origin_.credentials());
-        }
-    }));
+    asio::post(
+      asio::bind_executor(ctx_, [cluster = shared_from_this(), report_id, bucket_name, services, handler = std::move(handler)]() mutable {
+          auto collector = std::make_shared<ping_collector>(report_id.value(), std::move(handler));
+          if (bucket_name) {
+              if (services.find(service_type::key_value) != services.end()) {
+                  if (auto bucket = cluster->find_bucket_by_name(bucket_name.value()); bucket) {
+                      return bucket->ping(collector);
+                  }
+                  cluster->open_bucket(bucket_name.value(), [collector, cluster, bucket_name](std::error_code ec) {
+                      if (!ec) {
+                          if (auto bucket = cluster->find_bucket_by_name(bucket_name.value()); bucket) {
+                              return bucket->ping(collector);
+                          }
+                      }
+                  });
+              }
+          } else {
+              if (services.find(service_type::key_value) != services.end()) {
+                  if (cluster->session_) {
+                      cluster->session_->ping(collector->build_reporter());
+                  }
+                  cluster->for_each_bucket([&collector](auto& bucket) { bucket->ping(collector); });
+              }
+              cluster->session_manager_->ping(services, collector, cluster->origin_.credentials());
+          }
+      }));
 }
 
 std::shared_ptr<bucket>
