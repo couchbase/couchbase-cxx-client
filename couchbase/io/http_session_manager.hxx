@@ -99,7 +99,10 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
     template<typename Collector>
     void ping(std::set<service_type> services, std::shared_ptr<Collector> collector, const couchbase::cluster_credentials& credentials)
     {
-        std::array<service_type, 4> known_types{ service_type::query, service_type::analytics, service_type::search, service_type::view };
+        std::array known_types{
+            service_type::query, service_type::analytics, service_type::search,
+            service_type::view,  service_type::eventing,  service_type::management,
+        };
         std::vector<topology::configuration::node> nodes{};
         {
             std::scoped_lock lock(config_mutex_);

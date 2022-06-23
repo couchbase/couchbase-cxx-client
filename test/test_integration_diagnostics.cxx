@@ -363,6 +363,9 @@ TEST_CASE("integration: ping", "[integration]")
         REQUIRE(res.services.count(couchbase::service_type::key_value) > 0);
         REQUIRE(res.services[couchbase::service_type::key_value].size() > 0);
 
+        REQUIRE(res.services.count(couchbase::service_type::management) > 0);
+        REQUIRE(res.services[couchbase::service_type::management].size() > 0);
+
         REQUIRE(res.services.count(couchbase::service_type::view) > 0);
         REQUIRE(res.services[couchbase::service_type::view].size() > 0);
 
@@ -376,6 +379,12 @@ TEST_CASE("integration: ping", "[integration]")
             REQUIRE(res.services.count(couchbase::service_type::analytics) > 0);
             REQUIRE(res.services[couchbase::service_type::analytics].size() > 0);
         }
+
+        if (integration.ctx.version.supports_eventing_functions()) {
+            REQUIRE(res.services.count(couchbase::service_type::eventing) > 0);
+            REQUIRE(res.services[couchbase::service_type::eventing].size() > 0);
+        }
+
         REQUIRE(res.id == "my_report_id");
         INFO(res.sdk)
         REQUIRE(res.sdk.find("cxx/") == 0);

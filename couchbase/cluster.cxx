@@ -77,7 +77,10 @@ cluster::do_ping(std::optional<std::string> report_id,
         return handler({ report_id.value(), meta::sdk_id() });
     }
     if (services.empty()) {
-        services = { service_type::key_value, service_type::view, service_type::query, service_type::search, service_type::analytics };
+        services = {
+            service_type::key_value, service_type::view,       service_type::query,    service_type::search,
+            service_type::analytics, service_type::management, service_type::eventing,
+        };
     }
     asio::post(
       asio::bind_executor(ctx_, [cluster = shared_from_this(), report_id, bucket_name, services, handler = std::move(handler)]() mutable {
