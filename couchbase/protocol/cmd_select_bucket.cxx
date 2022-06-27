@@ -17,6 +17,8 @@
 
 #include <couchbase/protocol/cmd_select_bucket.hxx>
 
+#include <couchbase/utils/binary.hxx>
+
 #include <gsl/assert>
 
 namespace couchbase::protocol
@@ -27,10 +29,17 @@ select_bucket_response_body::parse(protocol::status /* status */,
                                    std::uint8_t /* framing_extras_size */,
                                    std::uint16_t /* key_size */,
                                    std::uint8_t /* extras_size */,
-                                   const std::vector<uint8_t>& /* body */,
+                                   const std::vector<std::byte>& /* body */,
                                    const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<uint8_t>(opcode));
+    Expects(header[1] == static_cast<std::byte>(opcode));
     return false;
+}
+
+void
+select_bucket_request_body::bucket_name(std::string_view name)
+{
+    key_.reserve(name.size());
+    utils::to_binary(name, std::back_insert_iterator(key_));
 }
 } // namespace couchbase::protocol

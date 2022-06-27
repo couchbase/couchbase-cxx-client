@@ -29,7 +29,7 @@ namespace couchbase::operations
 
 struct get_response {
     error_context::key_value ctx;
-    std::string value{};
+    std::vector<std::byte> value{};
     couchbase::cas cas{};
     std::uint32_t flags{};
 };
@@ -40,8 +40,8 @@ struct get_request {
     using encoded_response_type = protocol::client_response<protocol::get_response_body>;
 
     document_id id;
-    uint16_t partition{};
-    uint32_t opaque{};
+    std::uint16_t partition{};
+    std::uint32_t opaque{};
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ true };
 

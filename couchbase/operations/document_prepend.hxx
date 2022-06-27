@@ -41,7 +41,7 @@ struct prepend_request {
     using encoded_response_type = protocol::client_response<protocol::prepend_response_body>;
 
     document_id id;
-    std::string value;
+    std::vector<std::byte> value;
     uint16_t partition{};
     uint32_t opaque{};
     protocol::durability_level durability_level{ protocol::durability_level::none };

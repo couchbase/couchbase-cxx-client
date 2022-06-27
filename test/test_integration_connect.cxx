@@ -131,7 +131,7 @@ TEST_CASE("integration: destroy cluster without waiting for close completion", "
     // hit KV
     {
         couchbase::document_id id{ ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
-        couchbase::operations::upsert_request req{ id, "{{}}" };
+        couchbase::operations::upsert_request req{ id, couchbase::utils::to_binary("{{}}") };
         auto resp = test::utils::execute(cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
     }

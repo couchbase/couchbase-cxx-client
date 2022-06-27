@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace couchbase
 {
@@ -99,4 +100,8 @@ struct document_id {
     bool use_collections_{ true };
     bool use_any_session_{ false };
 };
+
+[[nodiscard]] std::vector<std::byte>
+make_protocol_key(const document_id& id);
+
 } // namespace couchbase

@@ -30,10 +30,10 @@ get_and_touch_response_body::parse(protocol::status status,
                                    std::uint8_t framing_extras_size,
                                    std::uint16_t key_size,
                                    std::uint8_t extras_size,
-                                   const std::vector<uint8_t>& body,
+                                   const std::vector<std::byte>& body,
                                    const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<uint8_t>(opcode));
+    Expects(header[1] == static_cast<std::byte>(opcode));
     if (status == protocol::status::success) {
         std::vector<uint8_t>::difference_type offset = framing_extras_size;
         if (extras_size == 4) {
@@ -53,11 +53,7 @@ get_and_touch_response_body::parse(protocol::status status,
 void
 get_and_touch_request_body::id(const document_id& id)
 {
-    key_ = id.key();
-    if (id.is_collection_resolved()) {
-        utils::unsigned_leb128<uint32_t> encoded(id.collection_uid());
-        key_.insert(0, encoded.get());
-    }
+    key_ = make_protocol_key(id);
 }
 
 void

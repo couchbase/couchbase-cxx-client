@@ -41,11 +41,11 @@ struct insert_request {
     using encoded_response_type = protocol::client_response<protocol::insert_response_body>;
 
     document_id id;
-    std::string value;
-    uint16_t partition{};
-    uint32_t opaque{};
-    uint32_t flags{ 0 };
-    uint32_t expiry{ 0 };
+    std::vector<std::byte> value;
+    std::uint16_t partition{};
+    std::uint32_t opaque{};
+    std::uint32_t flags{ 0 };
+    std::uint32_t expiry{ 0 };
     protocol::durability_level durability_level{ protocol::durability_level::none };
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };

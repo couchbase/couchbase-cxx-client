@@ -27,7 +27,7 @@ TEST_CASE("integration: increment", "[integration]")
     SECTION("key exists")
     {
         {
-            couchbase::operations::insert_request req{ id, "0" };
+            couchbase::operations::insert_request req{ id, couchbase::utils::to_binary("0") };
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
         }
@@ -74,7 +74,7 @@ TEST_CASE("integration: decrement", "[integration]")
     SECTION("key exists")
     {
         {
-            couchbase::operations::insert_request req{ id, "20" };
+            couchbase::operations::insert_request req{ id, couchbase::utils::to_binary("20") };
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
         }

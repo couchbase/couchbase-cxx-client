@@ -253,7 +253,7 @@ enum class subdoc_opcode : uint8_t {
 constexpr bool
 is_valid_client_opcode(uint8_t code)
 {
-    switch (client_opcode(code)) {
+    switch (static_cast<client_opcode>(code)) {
         case client_opcode::get:
         case client_opcode::upsert:
         case client_opcode::insert:
@@ -332,7 +332,7 @@ is_valid_client_opcode(uint8_t code)
 constexpr bool
 is_valid_subdoc_opcode(uint8_t code)
 {
-    switch (subdoc_opcode(code)) {
+    switch (static_cast<subdoc_opcode>(code)) {
         case subdoc_opcode::get:
         case subdoc_opcode::exists:
         case subdoc_opcode::dict_add:
@@ -354,6 +354,6 @@ is_valid_subdoc_opcode(uint8_t code)
     return false;
 }
 
-const inline static std::vector<std::uint8_t> empty_buffer;
+const inline static std::vector<std::byte> empty_buffer;
 const inline static std::string empty_string;
 } // namespace couchbase::protocol

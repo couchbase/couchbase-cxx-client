@@ -70,7 +70,7 @@ class get_meta_response_body
                std::uint8_t framing_extras_size,
                std::uint16_t key_size,
                std::uint8_t extras_size,
-               const std::vector<uint8_t>& body,
+               const std::vector<std::byte>& body,
                const cmd_info& info);
 };
 
@@ -81,28 +81,29 @@ class get_meta_request_body
     static const inline client_opcode opcode = client_opcode::get_meta;
 
   private:
-    std::string key_;
-    std::vector<std::uint8_t> extras_{ 0x02 /* format version, supported since Couchbase Server 5.0, includes datatype into response */ };
+    std::vector<std::byte> key_;
+    std::vector<std::byte> extras_{ std::byte{ 0x02 },
+                                    /* format version, supported since Couchbase Server 5.0, includes datatype into response */ };
 
   public:
     void id(const document_id& id);
 
-    [[nodiscard]] const std::string& key() const
+    [[nodiscard]] const auto& key() const
     {
         return key_;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& framing_extras() const
+    [[nodiscard]] const auto& framing_extras() const
     {
         return empty_buffer;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& extras() const
+    [[nodiscard]] const auto& extras() const
     {
         return extras_;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& value()
+    [[nodiscard]] const auto& value()
     {
         return empty_buffer;
     }
@@ -111,9 +112,6 @@ class get_meta_request_body
     {
         return extras_.size() + key_.size();
     }
-
-  private:
-    void fill_body();
 };
 
 } // namespace couchbase::protocol

@@ -20,6 +20,7 @@
 #include <couchbase/utils/byteswap.hxx>
 #include <couchbase/utils/unsigned_leb128.hxx>
 
+#include "couchbase/logger/logger.hxx"
 #include <cstring>
 #include <gsl/assert>
 
@@ -31,13 +32,13 @@ lookup_in_response_body::parse(protocol::status status,
                                std::uint8_t framing_extras_size,
                                std::uint16_t key_size,
                                std::uint8_t extras_size,
-                               const std::vector<uint8_t>& body,
+                               const std::vector<std::byte>& body,
                                const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<uint8_t>(opcode));
+    Expects(header[1] == static_cast<std::byte>(opcode));
     if (status == protocol::status::success || status == protocol::status::subdoc_multi_path_failure ||
         status == protocol::status::subdoc_success_deleted || status == protocol::status::subdoc_multi_path_failure_deleted) {
-        using offset_type = std::vector<uint8_t>::difference_type;
+        using offset_type = std::vector<std::byte>::difference_type;
         offset_type offset = framing_extras_size + key_size + extras_size;
         fields_.reserve(16); /* we won't have more than 16 entries anyway */
         while (static_cast<std::size_t>(offset) < body.size()) {
@@ -47,7 +48,7 @@ lookup_in_response_body::parse(protocol::status status,
             memcpy(&entry_status, body.data() + offset, sizeof(entry_status));
             entry_status = utils::byte_swap(entry_status);
             Expects(is_valid_status(entry_status));
-            field.status = protocol::status(entry_status);
+            field.status = static_cast<protocol::status>(entry_status);
             offset += static_cast<offset_type>(sizeof(entry_status));
 
             std::uint32_t entry_size = 0;
@@ -59,6 +60,7 @@ lookup_in_response_body::parse(protocol::status status,
             field.value.resize(entry_size);
             memcpy(field.value.data(), body.data() + offset, entry_size);
             offset += static_cast<offset_type>(entry_size);
+            LOG_CRITICAL("field.value ({}): {}", entry_size, field.value);
 
             fields_.emplace_back(field);
         }
@@ -70,11 +72,7 @@ lookup_in_response_body::parse(protocol::status status,
 void
 lookup_in_request_body::id(const document_id& id)
 {
-    key_ = id.key();
-    if (id.is_collection_resolved()) {
-        utils::unsigned_leb128<uint32_t> encoded(id.collection_uid());
-        key_.insert(0, encoded.get());
-    }
+    key_ = make_protocol_key(id);
 }
 
 void
@@ -82,7 +80,7 @@ lookup_in_request_body::fill_extras()
 {
     if (flags_ != 0) {
         extras_.resize(sizeof(flags_));
-        extras_[0] = flags_;
+        extras_[0] = std::byte{ flags_ };
     }
 }
 
@@ -95,10 +93,12 @@ lookup_in_request_body::fill_value()
     }
     Expects(value_size > 0);
     value_.resize(value_size);
-    std::vector<std::uint8_t>::size_type offset = 0;
-    for (auto& spec : specs_.entries) {
-        value_[offset++] = spec.opcode;
-        value_[offset++] = spec.flags;
+    std::vector<std::byte>::size_type offset = 0;
+    for (const auto& spec : specs_.entries) {
+        value_[offset] = std::byte{ spec.opcode };
+        ++offset;
+        value_[offset] = std::byte{ spec.flags };
+        ++offset;
         std::uint16_t path_size = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(spec.path.size()));
         std::memcpy(value_.data() + offset, &path_size, sizeof(path_size));
         offset += sizeof(path_size);

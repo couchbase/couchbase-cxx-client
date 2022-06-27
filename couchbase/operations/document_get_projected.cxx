@@ -179,7 +179,10 @@ get_projected_request::make_response(error_context::key_value&& ctx, const encod
             // from full document
             if (projections.empty() && with_expiry) {
                 // special case when user only wanted full+expiration
-                response.value = encoded.body().fields()[1].value;
+                const auto& full_body = encoded.body().fields()[1].value;
+                response.value.resize(full_body.size());
+                std::transform(
+                  full_body.begin(), full_body.end(), response.value.begin(), [](auto ch) { return static_cast<std::byte>(ch); });
             } else {
                 tao::json::value full_doc{};
                 try {
@@ -197,13 +200,14 @@ get_projected_request::make_response(error_context::key_value&& ctx, const encod
                         return response;
                     }
                 }
-                response.value = utils::json::generate(new_doc);
+                response.value = utils::json::generate_binary(new_doc);
             }
         } else {
             tao::json::value new_doc = tao::json::empty_object;
             std::size_t offset = with_expiry ? 1 : 0;
             for (const auto& projection : projections) {
-                const auto& field = encoded.body().fields()[offset++];
+                const auto& field = encoded.body().fields()[offset];
+                ++offset;
                 if (field.status == protocol::status::success && !field.value.empty()) {
                     tao::json::value value_to_apply{};
                     try {
@@ -218,7 +222,7 @@ get_projected_request::make_response(error_context::key_value&& ctx, const encod
                     return response;
                 }
             }
-            response.value = utils::json::generate(new_doc);
+            response.value = utils::json::generate_binary(new_doc);
         }
     }
     return response;

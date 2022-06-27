@@ -36,7 +36,7 @@ get_and_lock_request::make_response(error_context::key_value&& ctx, const encode
 {
     get_and_lock_response response{ std::move(ctx) };
     if (!response.ctx.ec) {
-        response.value = std::move(encoded.body().value());
+        response.value = encoded.body().value();
         response.cas = encoded.cas();
         response.flags = encoded.body().flags();
     }

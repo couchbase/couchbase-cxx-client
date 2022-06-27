@@ -41,9 +41,9 @@ struct append_request {
     using encoded_response_type = protocol::client_response<protocol::append_response_body>;
 
     document_id id;
-    std::string value;
-    uint16_t partition{};
-    uint32_t opaque{};
+    std::vector<std::byte> value;
+    std::uint16_t partition{};
+    std::uint32_t opaque{};
     protocol::durability_level durability_level{ protocol::durability_level::none };
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };

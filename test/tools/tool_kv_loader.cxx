@@ -20,7 +20,6 @@
 #include "../utils/uniq_id.hxx"
 
 #include <couchbase/logger/logger.hxx>
-#include <couchbase/utils/json.hxx>
 
 #include <spdlog/details/os.h>
 
@@ -135,7 +134,7 @@ main()
              hit_chance_for_upsert,
              hit_chance_for_get);
 
-    const std::string json_doc = R"({
+    const auto json_doc = couchbase::utils::to_binary(R"({
   "type": "fake_profile",
   "random": 91,
   "random float": 16.439,
@@ -174,7 +173,7 @@ main()
   "Mildrid": {
     "age": 33
   }
-})";
+})");
 
     const auto start_time = std::chrono::system_clock::now();
 

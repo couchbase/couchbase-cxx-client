@@ -41,7 +41,7 @@ struct replace_request {
     using encoded_response_type = protocol::client_response<protocol::replace_response_body>;
 
     document_id id;
-    std::string value;
+    std::vector<std::byte> value;
     uint16_t partition{};
     uint32_t opaque{};
     uint32_t flags{ 0 };

@@ -40,6 +40,6 @@ struct mcbp_parser {
 
     result next(mcbp_message& msg);
 
-    std::vector<std::uint8_t> buf;
+    std::vector<std::byte> buf;
 };
 } // namespace couchbase::io

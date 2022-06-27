@@ -31,12 +31,12 @@ exists_response_body::parse(protocol::status status,
                             std::uint8_t framing_extras_size,
                             std::uint16_t key_size,
                             std::uint8_t extras_size,
-                            const std::vector<std::uint8_t>& body,
+                            const std::vector<std::byte>& body,
                             const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<std::uint8_t>(opcode));
+    Expects(header[1] == static_cast<std::byte>(opcode));
     if (status == protocol::status::success) {
-        using offset_type = std::vector<std::uint8_t>::difference_type;
+        using offset_type = std::vector<std::byte>::difference_type;
         offset_type offset = framing_extras_size + extras_size + key_size;
 
         memcpy(&partition_id_, body.data() + offset, sizeof(partition_id_));
@@ -52,7 +52,7 @@ exists_response_body::parse(protocol::status status,
         memcpy(key_.data(), body.data() + offset, key_len);
         offset += key_len;
 
-        status_ = body[static_cast<std::size_t>(offset)];
+        status_ = std::to_integer<std::uint8_t>(body[static_cast<std::size_t>(offset)]);
         offset++;
 
         memcpy(&cas_, body.data() + offset, sizeof(cas_));
@@ -65,17 +65,13 @@ void
 exists_request_body::id(std::uint16_t partition_id, const document_id& id)
 {
     partition_id_ = partition_id;
-    key_ = id.key();
-    if (id.is_collection_resolved()) {
-        utils::unsigned_leb128<uint32_t> encoded(id.collection_uid());
-        key_.insert(0, encoded.get());
-    }
+    key_ = make_protocol_key(id);
 }
 
 void
 exists_request_body::fill_body()
 {
-    std::vector<std::uint8_t>::size_type offset = 0;
+    std::vector<std::byte>::size_type offset = 0;
 
     value_.resize(2 * sizeof(std::uint16_t) + key_.size());
 

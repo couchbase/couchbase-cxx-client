@@ -36,9 +36,9 @@ parse_server_duration_us(const io::mcbp_message& msg)
     }
     std::size_t offset = 0;
     while (offset < framing_extras_size) {
-        auto frame_size = static_cast<std::uint8_t>(msg.body[offset] & 0xfU);
-        auto frame_id = static_cast<std::uint8_t>((static_cast<std::uint32_t>(msg.body[offset]) >> 4U) & 0xfU);
-        offset++;
+        auto frame_size = std::to_integer<std::uint8_t>(msg.body[offset] & std::byte{ 0b1111 });
+        auto frame_id = std::to_integer<std::uint8_t>((msg.body[offset] >> 4U) & std::byte{ 0b1111 });
+        ++offset;
         if (frame_id == static_cast<std::uint8_t>(response_frame_info_id::server_duration)) {
             if (frame_size == 2 && framing_extras_size - offset >= frame_size) {
                 std::uint16_t encoded_duration{};
@@ -53,7 +53,7 @@ parse_server_duration_us(const io::mcbp_message& msg)
 }
 
 bool
-parse_enhanced_error(const std::string& str, enhanced_error_info& info)
+parse_enhanced_error(std::string_view str, enhanced_error_info& info)
 {
     if (auto error = utils::json::parse(str); error.is_object()) {
         if (const auto* err_obj = error.find("error"); err_obj != nullptr && err_obj->is_object()) {

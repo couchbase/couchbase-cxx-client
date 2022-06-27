@@ -23,7 +23,7 @@ static const tao::json::value basic_doc = {
     { "a", 1.0 },
     { "b", 2.0 },
 };
-static const std::string basic_doc_json = couchbase::utils::json::generate(basic_doc);
+static const std::vector<std::byte> basic_doc_json = couchbase::utils::json::generate_binary(basic_doc);
 
 TEST_CASE("integration: crud on default collection", "[integration]")
 {
@@ -53,7 +53,7 @@ TEST_CASE("integration: crud on default collection", "[integration]")
     // update
     {
         auto doc = basic_doc;
-        auto json = couchbase::utils::json::generate(doc);
+        auto json = couchbase::utils::json::generate_binary(doc);
         doc["a"] = 2.0;
 
         {
@@ -170,7 +170,7 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("locking") };
     uint32_t lock_time = 10;
 
-    couchbase::cas cas;
+    couchbase::cas cas{};
 
     {
         couchbase::operations::insert_request req{ id, basic_doc_json };
@@ -260,7 +260,7 @@ TEST_CASE("integration: lock/unlock without lock time", "[integration]")
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
-    couchbase::cas cas;
+    couchbase::cas cas{};
 
     {
         couchbase::operations::get_and_lock_request req{ id };
@@ -380,7 +380,7 @@ TEST_CASE("integration: zero length value", "[integration]")
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("zero_length_value") };
 
     {
-        couchbase::operations::insert_request req{ id, "" };
+        couchbase::operations::insert_request req{ id, couchbase::utils::to_binary("") };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
     }
@@ -389,7 +389,7 @@ TEST_CASE("integration: zero length value", "[integration]")
         couchbase::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.value == "");
+        REQUIRE(resp.value == couchbase::utils::to_binary(""));
     }
 }
 
@@ -416,7 +416,7 @@ TEST_CASE("integration: ops on missing document", "[integration]")
 
     SECTION("replace")
     {
-        couchbase::operations::replace_request req{ id, "" };
+        couchbase::operations::replace_request req{ id, couchbase::utils::to_binary("") };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::key_value_errc::document_not_found);
     }
@@ -428,7 +428,7 @@ TEST_CASE("integration: cas replace", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("cas_replace") };
-    couchbase::cas cas;
+    couchbase::cas cas{};
 
     {
         couchbase::operations::insert_request req{ id, basic_doc_json };
@@ -439,7 +439,7 @@ TEST_CASE("integration: cas replace", "[integration]")
 
     SECTION("incorrect")
     {
-        couchbase::operations::replace_request req{ id, "" };
+        couchbase::operations::replace_request req{ id, couchbase::utils::to_binary("") };
         req.cas = couchbase::cas{ cas.value + 1 };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::cas_mismatch);
@@ -447,7 +447,7 @@ TEST_CASE("integration: cas replace", "[integration]")
 
     SECTION("correct")
     {
-        couchbase::operations::replace_request req{ id, "" };
+        couchbase::operations::replace_request req{ id, couchbase::utils::to_binary("") };
         req.cas = cas;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
@@ -466,7 +466,7 @@ TEST_CASE("integration: upsert preserve expiry", "[integration]")
 
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("preserve_expiry") };
     uint32_t expiry = std::numeric_limits<uint32_t>::max();
-    auto expiry_path = "$document.exptime";
+    const auto* expiry_path = "$document.exptime";
 
     {
         couchbase::operations::upsert_request req{ id, basic_doc_json };
@@ -518,7 +518,7 @@ TEST_CASE("integration: upsert with handler capturing non-copyable object", "[in
 
     {
         couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
-        couchbase::operations::upsert_request req{ id, R"({"foo":"bar"})" };
+        couchbase::operations::upsert_request req{ id, couchbase::utils::to_binary(R"({"foo":"bar"})") };
         auto barrier = std::make_shared<std::promise<couchbase::operations::upsert_response>>();
         auto f = barrier->get_future();
         test::utils::move_only_context ctx("foobar");
@@ -540,7 +540,7 @@ TEST_CASE("integration: upsert may trigger snappy compression", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
 
-    std::string compressible_json = R"(
+    auto compressible_json = couchbase::utils::to_binary(R"(
 {
   "name": "Emmy-lou Dickerson",
   "age": 26,
@@ -569,7 +569,7 @@ TEST_CASE("integration: upsert may trigger snappy compression", "[integration]")
     ]
   }
 }
-)";
+)");
 
     // create
     {

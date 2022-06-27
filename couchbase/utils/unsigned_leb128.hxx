@@ -50,20 +50,20 @@ template<class T>
 typename std::enable_if_t<std::is_unsigned_v<T>, std::pair<T, std::string_view>>
 decode_unsigned_leb128(std::string_view buf, struct Leb128NoThrow /* unused */)
 {
-    T rv = static_cast<uint8_t>(buf[0]) & 0x7fULL;
+    T rv = static_cast<std::byte>(buf[0]) & std::byte{ 0b0111'1111 };
     size_t end = 0;
-    if ((static_cast<uint8_t>(buf[0]) & 0x80ULL) == 0x80ULL) {
+    if ((static_cast<std::byte>(buf[0]) & std::byte{ 0b1000'0000 }) == std::byte{ 0b1000'0000 }) {
         T shift = 7;
         // shift in the remaining data
         for (end = 1; end < buf.size(); end++) {
-            rv |= (static_cast<uint8_t>(buf[end]) & 0x7fULL) << shift;
-            if ((static_cast<uint8_t>(buf[end]) & 0x80ULL) == 0) {
+            rv |= (static_cast<std::byte>(buf[end]) & std::byte{ 0b0111'1111 }) << shift;
+            if ((static_cast<std::byte>(buf[end]) & std::byte{ 0b1000'0000 }) == std::byte{ 0 }) {
                 break; // no more
             }
             shift += 7;
         }
 
-        // We should of stopped for a stop byte, not the end of the buffer
+        // We should be stopped for a stop byte, not the end of the buffer
         if (end == buf.size()) {
             return { 0, std::string_view{} };
         }
@@ -87,7 +87,7 @@ template<class T>
 typename std::enable_if_t<std::is_unsigned_v<T>, std::pair<T, std::string_view>>
 decode_unsigned_leb128(std::string_view buf)
 {
-    if (buf.size() > 0) {
+    if (!buf.empty()) {
         auto rv = decode_unsigned_leb128<T>(buf, Leb128NoThrow());
         if (rv.second.data()) {
             return rv;
@@ -123,17 +123,17 @@ class unsigned_leb128<T, typename std::enable_if_t<std::is_unsigned_v<T>>>
     explicit unsigned_leb128(T in)
     {
         while (in > 0) {
-            auto byte = gsl::narrow_cast<uint8_t>(in & 0x7fULL);
+            auto byte = gsl::narrow_cast<std::byte>(in) & std::byte{ 0b0111'1111 };
             in >>= 7;
 
             // In has more data?
             if (in > 0) {
-                byte |= 0x80;
-                encodedData[encodedSize - 1U] = byte;
+                byte |= std::byte{ 0b1000'0000 };
+                encoded_data_[encoded_size_ - 1U] = byte;
                 // Increase the size
-                encodedSize++;
+                encoded_size_++;
             } else {
-                encodedData[encodedSize - 1U] = byte;
+                encoded_data_[encoded_size_ - 1U] = byte;
             }
         }
     }
@@ -143,29 +143,29 @@ class unsigned_leb128<T, typename std::enable_if_t<std::is_unsigned_v<T>>>
         return { begin(), end() };
     }
 
-    [[nodiscard]] const uint8_t* begin() const
+    [[nodiscard]] const std::byte* begin() const
     {
-        return encodedData.data();
+        return encoded_data_.data();
     }
 
-    [[nodiscard]] const uint8_t* end() const
+    [[nodiscard]] const std::byte* end() const
     {
-        return encodedData.data() + encodedSize;
+        return encoded_data_.data() + encoded_size_;
     }
 
-    [[nodiscard]] const uint8_t* data() const
+    [[nodiscard]] const std::byte* data() const
     {
-        return encodedData.data();
+        return encoded_data_.data();
     }
 
-    [[nodiscard]] size_t size() const
+    [[nodiscard]] std::size_t size() const
     {
-        return encodedSize;
+        return encoded_size_;
     }
 
-    constexpr static size_t getMaxSize()
+    constexpr static std::size_t get_max_size()
     {
-        return maxSize;
+        return max_size;
     }
 
   private:
@@ -173,9 +173,9 @@ class unsigned_leb128<T, typename std::enable_if_t<std::is_unsigned_v<T>>>
     static_assert(sizeof(T) <= 8, "Class is only valid for uint 8/16/64");
 
     // value is large enough to store ~0 as leb128
-    static constexpr size_t maxSize = sizeof(T) + (((sizeof(T) + 1) / 8) + 1);
-    std::array<uint8_t, maxSize> encodedData{};
-    uint8_t encodedSize{ 1 };
+    static constexpr std::size_t max_size = sizeof(T) + (((sizeof(T) + 1) / 8) + 1);
+    std::array<std::byte, max_size> encoded_data_{};
+    std::size_t encoded_size_{ 1 };
 };
 
 } // namespace couchbase::utils

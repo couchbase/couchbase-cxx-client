@@ -27,12 +27,12 @@
 namespace couchbase::protocol
 {
 bool
-cluster_map_change_notification_request_body::parse(const header_buffer& header, const std::vector<uint8_t>& body, const cmd_info& info)
+cluster_map_change_notification_request_body::parse(const header_buffer& header, const std::vector<std::byte>& body, const cmd_info& info)
 {
-    Expects(header[1] == static_cast<uint8_t>(opcode));
-    using offset_type = std::vector<uint8_t>::difference_type;
+    Expects(header[1] == static_cast<std::byte>(opcode));
+    using offset_type = std::vector<std::byte>::difference_type;
 
-    uint8_t ext_size = header[4];
+    auto ext_size = std::to_integer<std::uint8_t>(header[4]);
     offset_type offset = ext_size;
     if (ext_size == 4) {
         memcpy(&protocol_revision_, body.data(), sizeof(protocol_revision_));
@@ -41,10 +41,12 @@ cluster_map_change_notification_request_body::parse(const header_buffer& header,
     uint16_t key_size = 0;
     memcpy(&key_size, header.data() + 2, sizeof(key_size));
     key_size = utils::byte_swap(key_size);
-    bucket_.assign(body.begin() + offset, body.begin() + offset + key_size);
+    const auto* data_ptr = reinterpret_cast<const char*>(body.data());
+    bucket_.assign(data_ptr + offset, data_ptr + offset + key_size);
     offset += key_size;
     if (body.size() > static_cast<std::size_t>(offset)) {
-        config_ = parse_config(std::string(body.begin() + offset, body.end()), info.endpoint_address, info.endpoint_port);
+        std::string_view config_text{ data_ptr + offset, body.size() - static_cast<std::size_t>(offset) };
+        config_ = parse_config(config_text, info.endpoint_address, info.endpoint_port);
     }
     return true;
 }

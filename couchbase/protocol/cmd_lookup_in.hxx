@@ -52,7 +52,7 @@ class lookup_in_response_body
                std::uint8_t framing_extras_size,
                std::uint16_t key_size,
                std::uint8_t extras_size,
-               const std::vector<uint8_t>& body,
+               const std::vector<std::byte>& body,
                const cmd_info& info);
 };
 
@@ -95,9 +95,9 @@ class lookup_in_request_body
     };
 
   private:
-    std::string key_;
-    std::vector<std::uint8_t> extras_{};
-    std::vector<std::uint8_t> value_{};
+    std::vector<std::byte> key_;
+    std::vector<std::byte> extras_{};
+    std::vector<std::byte> value_{};
 
     std::uint8_t flags_{ 0 };
     lookup_in_specs specs_;
@@ -119,17 +119,17 @@ class lookup_in_request_body
         specs_ = specs;
     }
 
-    [[nodiscard]] const std::string& key() const
+    [[nodiscard]] const auto& key() const
     {
         return key_;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& framing_extras() const
+    [[nodiscard]] const auto& framing_extras() const
     {
         return empty_buffer;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& extras()
+    [[nodiscard]] const auto& extras()
     {
         if (extras_.empty()) {
             fill_extras();
@@ -137,7 +137,7 @@ class lookup_in_request_body
         return extras_;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& value()
+    [[nodiscard]] const auto& value()
     {
         if (value_.empty()) {
             fill_value();

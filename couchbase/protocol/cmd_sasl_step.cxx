@@ -17,7 +17,11 @@
 
 #include <couchbase/protocol/cmd_sasl_step.hxx>
 
+#include <couchbase/utils/binary.hxx>
+
 #include <gsl/assert>
+
+#include <algorithm>
 
 namespace couchbase::protocol
 {
@@ -27,14 +31,31 @@ sasl_step_response_body::parse(protocol::status status,
                                std::uint8_t framing_extras_size,
                                std::uint16_t key_size,
                                std::uint8_t extras_size,
-                               const std::vector<uint8_t>& body,
+                               const std::vector<std::byte>& body,
                                const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<uint8_t>(opcode));
+    Expects(header[1] == static_cast<std::byte>(opcode));
     if (status == protocol::status::success) {
-        value_ = { body.begin() + framing_extras_size + extras_size + key_size, body.end() };
+        std::transform(body.begin() + framing_extras_size + extras_size + key_size,
+                       body.end(),
+                       std::back_insert_iterator(value_),
+                       [](auto b) { return static_cast<char>(b); });
         return true;
     }
     return false;
+}
+
+void
+sasl_step_request_body::mechanism(std::string_view mech)
+{
+    key_.reserve(mech.size());
+    utils::to_binary(mech, std::back_insert_iterator(key_));
+}
+
+void
+sasl_step_request_body::sasl_data(std::string_view data)
+{
+    value_.reserve(data.size());
+    utils::to_binary(data, std::back_insert_iterator(value_));
 }
 } // namespace couchbase::protocol

@@ -43,7 +43,7 @@ TEST_CASE("integration: missing scope and collection", "[integration]")
             { "a", 1.0 },
             { "b", 2.0 },
         };
-        couchbase::operations::insert_request req{ id, couchbase::utils::json::generate(value) };
+        couchbase::operations::insert_request req{ id, couchbase::utils::json::generate_binary(value) };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::scope_not_found);
     }
@@ -64,7 +64,7 @@ TEST_CASE("integration: missing scope and collection", "[integration]")
             { "a", 1.0 },
             { "b", 2.0 },
         };
-        couchbase::operations::insert_request req{ id, couchbase::utils::json::generate(value) };
+        couchbase::operations::insert_request req{ id, couchbase::utils::json::generate_binary(value) };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::ambiguous_timeout);
         REQUIRE(resp.ctx.retry_reasons.count(couchbase::io::retry_reason::kv_collection_outdated) == 1);
@@ -102,7 +102,7 @@ TEST_CASE("integration: get and insert non default scope and collection", "[inte
     }
 
     {
-        couchbase::operations::insert_request req{ id, key };
+        couchbase::operations::insert_request req{ id, couchbase::utils::to_binary(key) };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
     }
@@ -111,7 +111,7 @@ TEST_CASE("integration: get and insert non default scope and collection", "[inte
         couchbase::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.value == key);
+        REQUIRE(resp.value == couchbase::utils::to_binary(key));
     }
 }
 
@@ -146,7 +146,7 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
     }
 
     {
-        couchbase::operations::insert_request req{ id, key };
+        couchbase::operations::insert_request req{ id, couchbase::utils::to_binary(key) };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
     }
@@ -155,7 +155,7 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
         couchbase::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.value == key);
+        REQUIRE(resp.value == couchbase::utils::to_binary(key));
     }
 
     {
@@ -167,7 +167,7 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
     }
 
     {
-        couchbase::operations::upsert_request req{ id, key };
+        couchbase::operations::upsert_request req{ id, couchbase::utils::to_binary(key) };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::scope_not_found);
     }

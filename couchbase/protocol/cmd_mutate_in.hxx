@@ -61,7 +61,7 @@ class mutate_in_response_body
                std::uint8_t framing_extras_size,
                std::uint16_t key_size,
                std::uint8_t extras_size,
-               const std::vector<uint8_t>& body,
+               const std::vector<std::byte>& body,
                const cmd_info& /* info */);
 };
 
@@ -205,14 +205,14 @@ class mutate_in_request_body
     };
 
   private:
-    std::string key_;
-    std::vector<std::uint8_t> extras_{};
-    std::vector<std::uint8_t> value_{};
+    std::vector<std::byte> key_;
+    std::vector<std::byte> extras_{};
+    std::vector<std::byte> value_{};
 
     std::uint32_t expiry_{ 0 };
     std::uint8_t flags_{ 0 };
     mutate_in_specs specs_;
-    std::vector<std::uint8_t> framing_extras_{};
+    std::vector<std::byte> framing_extras_{};
 
   public:
     void id(const document_id& id);
@@ -265,17 +265,17 @@ class mutate_in_request_body
 
     void preserve_expiry();
 
-    [[nodiscard]] const std::string& key() const
+    [[nodiscard]] const auto& key() const
     {
         return key_;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& framing_extras() const
+    [[nodiscard]] const auto& framing_extras() const
     {
         return framing_extras_;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& extras()
+    [[nodiscard]] const auto& extras()
     {
         if (extras_.empty()) {
             fill_extras();
@@ -283,7 +283,7 @@ class mutate_in_request_body
         return extras_;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& value()
+    [[nodiscard]] const auto& value()
     {
         if (value_.empty()) {
             fill_value();

@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -15,31 +15,13 @@
  *   limitations under the License.
  */
 
-#include <couchbase/utils/byteswap.hxx>
+#include <couchbase/utils/binary.hxx>
 
 namespace couchbase::utils
 {
-constexpr std::uint64_t
-byte_swap(std::uint64_t val)
+binary
+to_binary(std::string_view value) noexcept
 {
-    std::uint64_t ret = 0U;
-    for (std::size_t i = 0; i < sizeof(std::uint64_t); ++i) {
-        ret <<= 8U;
-        ret |= val & 0xffU;
-        val >>= 8U;
-    }
-    return ret;
-}
-
-constexpr std::uint32_t
-byte_swap_32(std::uint32_t val)
-{
-    std::uint64_t ret = 0U;
-    for (std::size_t i = 0; i < sizeof(std::uint64_t); ++i) {
-        ret <<= 8U;
-        ret |= val & 0xffU;
-        val >>= 8U;
-    }
-    return ret;
+    return to_binary(value.data(), value.size());
 }
 } // namespace couchbase::utils

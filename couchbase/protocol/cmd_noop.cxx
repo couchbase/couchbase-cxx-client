@@ -27,10 +27,10 @@ mcbp_noop_response_body::parse(protocol::status /* status */,
                                std::uint8_t /* framing_extras_size */,
                                std::uint16_t /* key_size */,
                                std::uint8_t /* extras_size */,
-                               const std::vector<uint8_t>& /* body */,
+                               const std::vector<std::byte>& /* body */,
                                const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<uint8_t>(opcode));
+    Expects(header[1] == static_cast<std::byte>(opcode));
     return false;
 }
 } // namespace couchbase::protocol

@@ -34,7 +34,7 @@ class select_bucket_response_body
                std::uint8_t framing_extras_size,
                std::uint16_t key_size,
                std::uint8_t extras_size,
-               const std::vector<uint8_t>& body,
+               const std::vector<std::byte>& body,
                const cmd_info& info);
 };
 
@@ -45,30 +45,27 @@ class select_bucket_request_body
     static const inline client_opcode opcode = client_opcode::select_bucket;
 
   private:
-    std::string key_;
+    std::vector<std::byte> key_;
 
   public:
-    void bucket_name(std::string_view name)
-    {
-        key_ = name;
-    }
+    void bucket_name(std::string_view name);
 
-    [[nodiscard]] const std::string& key() const
+    [[nodiscard]] const auto& key() const
     {
         return key_;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& framing_extras() const
+    [[nodiscard]] const auto& framing_extras() const
     {
         return empty_buffer;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& extras() const
+    [[nodiscard]] const auto& extras() const
     {
         return empty_buffer;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& value() const
+    [[nodiscard]] const auto& value() const
     {
         return empty_buffer;
     }

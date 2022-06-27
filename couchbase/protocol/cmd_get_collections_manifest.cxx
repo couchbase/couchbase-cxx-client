@@ -17,6 +17,7 @@
 
 #include <couchbase/protocol/cmd_get_collections_manifest.hxx>
 
+#include <couchbase/logger/logger.hxx>
 #include <couchbase/topology/collections_manifest_json.hxx>
 #include <couchbase/utils/json.hxx>
 
@@ -30,13 +31,19 @@ get_collections_manifest_response_body::parse(protocol::status status,
                                               std::uint8_t framing_extras_size,
                                               std::uint16_t key_size,
                                               std::uint8_t extras_size,
-                                              const std::vector<uint8_t>& body,
+                                              const std::vector<std::byte>& body,
                                               const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<uint8_t>(opcode));
+    Expects(header[1] == static_cast<std::byte>(opcode));
     if (status == protocol::status::success) {
         std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
-        manifest_ = utils::json::parse(std::string(body.begin() + offset, body.end())).as<topology::collections_manifest>();
+        std::string_view manifest_text{ reinterpret_cast<const char*>(body.data()) + offset,
+                                        body.size() - static_cast<std::size_t>(offset) };
+        try {
+            manifest_ = utils::json::parse(manifest_text).as<topology::collections_manifest>();
+        } catch (const tao::pegtl::parse_error& e) {
+            LOG_DEBUG("unable to parse collections manifest as JSON: {}, {}", e.message(), manifest_text);
+        }
         return true;
     }
     return false;

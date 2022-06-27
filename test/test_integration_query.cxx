@@ -80,7 +80,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
         { "a", 1.0 },
         { "b", 2.0 },
     };
-    auto json = couchbase::utils::json::generate(value);
+    auto json = couchbase::utils::json::generate_binary(value);
 
     {
         couchbase::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
@@ -218,7 +218,7 @@ TEST_CASE("integration: preserve expiry for mutatation query", "[integration]")
     const char* expiry_path = "$document.exptime";
 
     {
-        couchbase::operations::upsert_request req{ id, R"({"foo":42})" };
+        couchbase::operations::upsert_request req{ id, couchbase::utils::to_binary(R"({"foo":42})") };
         req.expiry = expiry;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
