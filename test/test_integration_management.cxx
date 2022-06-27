@@ -461,11 +461,11 @@ TEST_CASE("integration: bucket management", "[integration]")
     }
 }
 
-bool
-collection_exists(std::shared_ptr<couchbase::cluster> cluster,
-                  const std::string& bucket_name,
-                  const std::string& scope_name,
-                  const std::string& collection_name)
+std::optional<couchbase::topology::collections_manifest::collection>
+get_collection(std::shared_ptr<couchbase::cluster> cluster,
+               const std::string& bucket_name,
+               const std::string& scope_name,
+               const std::string& collection_name)
 {
     couchbase::operations::management::scope_get_all_request req{ bucket_name };
     auto resp = test::utils::execute(cluster, req);
@@ -474,13 +474,13 @@ collection_exists(std::shared_ptr<couchbase::cluster> cluster,
             if (scope.name == scope_name) {
                 for (const auto& collection : scope.collections) {
                     if (collection.name == collection_name) {
-                        return true;
+                        return collection;
                     }
                 }
             }
         }
     }
-    return false;
+    return std::nullopt;
 }
 
 bool
@@ -509,6 +509,7 @@ TEST_CASE("integration: collection management", "[integration]")
 
     auto scope_name = test::utils::uniq_id("scope");
     auto collection_name = test::utils::uniq_id("collection");
+    std::uint32_t max_expiry = 5;
 
     {
         couchbase::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
@@ -532,7 +533,7 @@ TEST_CASE("integration: collection management", "[integration]")
     {
         couchbase::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
         if (integration.cluster_version().is_enterprise()) {
-            req.max_expiry = 5;
+            req.max_expiry = max_expiry;
         }
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
@@ -541,12 +542,20 @@ TEST_CASE("integration: collection management", "[integration]")
     }
 
     {
-        auto created = test::utils::wait_until(
-          [&]() { return collection_exists(integration.cluster, integration.ctx.bucket, scope_name, collection_name); });
+        couchbase::topology::collections_manifest::collection collection;
+        auto created = test::utils::wait_until([&]() {
+            auto coll = get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
+            if (coll) {
+                collection = *coll;
+                return true;
+            }
+            return false;
+        });
         REQUIRE(created);
+        if (integration.cluster_version().is_enterprise()) {
+            REQUIRE(collection.max_expiry == max_expiry);
+        }
     }
-
-    // TODO: Check collection was created with correct max expiry when supported
 
     {
         couchbase::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
@@ -562,7 +571,7 @@ TEST_CASE("integration: collection management", "[integration]")
 
     {
         auto dropped = test::utils::wait_until(
-          [&]() { return !collection_exists(integration.cluster, integration.ctx.bucket, scope_name, collection_name); });
+          [&]() { return !get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name).has_value(); });
         REQUIRE(dropped);
     }
 
