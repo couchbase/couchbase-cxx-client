@@ -114,7 +114,7 @@ struct server_version {
 
     [[nodiscard]] bool supports_analytics() const
     {
-        return is_alice() || is_mad_hatter() || is_cheshire_cat() || is_neo();
+        return is_enterprise() && (is_alice() || is_mad_hatter() || is_cheshire_cat() || is_neo());
     }
 
     [[nodiscard]] bool supports_analytics_pending_mutations() const
@@ -149,7 +149,7 @@ struct server_version {
 
     [[nodiscard]] bool supports_eventing_functions() const
     {
-        return (is_cheshire_cat() || is_neo()) && deployment == deployment_type::on_prem;
+        return is_enterprise() && (is_cheshire_cat() || is_neo()) && deployment == deployment_type::on_prem;
     }
 
     [[nodiscard]] bool is_enterprise() const
