@@ -1,4 +1,5 @@
 option(COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL "Rely on application to link OpenSSL library" FALSE)
+option(COUCHBASE_CXX_CLIENT_USE_HOMEBREW_TO_DETECT_OPENSSL "Use homebrew to determine OpenSSL root directory" TRUE)
 
 if(COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
   message(
@@ -8,6 +9,13 @@ else()
   option(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL "Statically link OpenSSL library" FALSE)
   if(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL)
     set(OPENSSL_USE_STATIC_LIBS ON)
+  endif()
+  if(APPLE AND COUCHBASE_CXX_CLIENT_USE_HOMEBREW_TO_DETECT_OPENSSL)
+    execute_process(
+      COMMAND brew --prefix openssl@1.1
+      OUTPUT_VARIABLE OPENSSL_ROOT_DIR
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    message(STATUS "Found OpenSSL prefix using homebrew: ${OPENSSL_ROOT_DIR}")
   endif()
   include(FindOpenSSL)
   if(OPENSSL_LIBRARIES AND OPENSSL_INCLUDE_DIR)
