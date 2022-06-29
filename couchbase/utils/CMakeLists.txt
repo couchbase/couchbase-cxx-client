@@ -3,6 +3,7 @@ add_library(
   connection_string.cxx
   url_codec.cxx
   json.cxx
+  binary.cxx
   duration_parser.cxx
   json_streaming_lexer.cxx)
 set_target_properties(couchbase_utils PROPERTIES POSITION_INDEPENDENT_CODE ON)

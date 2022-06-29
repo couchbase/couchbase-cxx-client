@@ -32,7 +32,7 @@ TEST_CASE("integration: durable operations", "[integration]")
             { "a", 1.0 },
             { "b", 2.0 },
         };
-        couchbase::operations::upsert_request req{ id, couchbase::utils::json::generate(value) };
+        couchbase::operations::upsert_request req{ id, couchbase::utils::json::generate_binary(value) };
         req.durability_level = couchbase::protocol::durability_level::majority_and_persist_to_active;
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec.message())
@@ -44,7 +44,7 @@ TEST_CASE("integration: durable operations", "[integration]")
         const tao::json::value value = {
             { "foo", "bar" },
         };
-        couchbase::operations::replace_request req{ id, couchbase::utils::json::generate(value) };
+        couchbase::operations::replace_request req{ id, couchbase::utils::json::generate_binary(value) };
         req.durability_level = couchbase::protocol::durability_level::majority_and_persist_to_active;
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec.message())
@@ -68,7 +68,7 @@ TEST_CASE("integration: durable operations", "[integration]")
         INFO(resp.ctx.ec.message())
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(!resp.cas.empty());
-        REQUIRE(resp.value == R"({"foo":"bar","baz":42})");
+        REQUIRE(resp.value == couchbase::utils::to_binary(R"({"foo":"bar","baz":42})"));
     }
     {
         couchbase::operations::remove_request req{ id };

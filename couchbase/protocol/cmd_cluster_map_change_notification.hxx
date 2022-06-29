@@ -51,7 +51,7 @@ class cluster_map_change_notification_request_body
         return config_;
     }
 
-    bool parse(const header_buffer& header, const std::vector<uint8_t>& body, const cmd_info& info);
+    bool parse(const header_buffer& header, const std::vector<std::byte>& body, const cmd_info& info);
 };
 
 } // namespace couchbase::protocol

@@ -26,7 +26,7 @@
 namespace couchbase::protocol
 {
 topology::configuration
-parse_config(const std::string& input, std::string_view endpoint_address, uint16_t endpoint_port)
+parse_config(std::string_view input, std::string_view endpoint_address, uint16_t endpoint_port)
 {
     auto config = utils::json::parse(input).as<topology::configuration>();
     for (auto& node : config.nodes) {
@@ -38,7 +38,7 @@ parse_config(const std::string& input, std::string_view endpoint_address, uint16
     // workaround for servers which don't specify this_node
     {
         bool has_this_node = false;
-        for (auto& node : config.nodes) {
+        for (const auto& node : config.nodes) {
             if (node.this_node) {
                 has_this_node = true;
                 break;
@@ -66,16 +66,17 @@ get_cluster_config_response_body::parse(protocol::status status,
                                         std::uint8_t framing_extras_size,
                                         std::uint16_t key_size,
                                         std::uint8_t extras_size,
-                                        const std::vector<uint8_t>& body,
+                                        const std::vector<std::byte>& body,
                                         const cmd_info& info)
 {
-    Expects(header[1] == static_cast<uint8_t>(opcode));
+    Expects(header[1] == static_cast<std::byte>(opcode));
     if (status == protocol::status::success) {
         std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
+        std::string_view config_text{ reinterpret_cast<const char*>(body.data()) + offset, body.size() - static_cast<std::size_t>(offset) };
         try {
-            config_ = parse_config(std::string(body.begin() + offset, body.end()), info.endpoint_address, info.endpoint_port);
+            config_ = parse_config(config_text, info.endpoint_address, info.endpoint_port);
         } catch (const tao::pegtl::parse_error& e) {
-            LOG_DEBUG("unable to parse cluster configuration as JSON: {}, {}", e.message(), std::string(body.begin(), body.end()));
+            LOG_DEBUG("unable to parse cluster configuration as JSON: {}, {}", e.message(), config_text);
         }
         return true;
     }

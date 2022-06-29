@@ -138,11 +138,12 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                 hello_req.body().enable_compression();
             }
             hello_req.opaque(session_->next_opaque());
-            hello_req.body().user_agent(
-              meta::user_agent_for_mcbp(session_->client_id_, session_->id_, session_->origin_.options().user_agent_extra, 250));
+            auto user_agent =
+              meta::user_agent_for_mcbp(session_->client_id_, session_->id_, session_->origin_.options().user_agent_extra, 250);
+            hello_req.body().user_agent(user_agent);
             LOG_DEBUG("{} user_agent={}, requested_features=[{}]",
                       session_->log_prefix_,
-                      hello_req.body().user_agent(),
+                      user_agent,
                       utils::join_strings_fmt("{}", hello_req.body().features(), ", "));
             session_->write(hello_req.data());
 
@@ -300,7 +301,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                                             session_->log_prefix_,
                                             resp.error_message(),
                                             resp.opaque(),
-                                            spdlog::to_hex(msg.header_data()));
+                                            spdlog::to_hex(resp.header()));
                                 return complete(error::network_errc::protocol_error);
                             }
                         } break;
@@ -327,7 +328,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                                             session_->log_prefix_,
                                             resp.error_message(),
                                             resp.opaque(),
-                                            spdlog::to_hex(msg.header_data()));
+                                            spdlog::to_hex(resp.header()));
                                 return complete(error::common_errc::bucket_not_found);
                             }
                         } break;
@@ -357,7 +358,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                                             session_->log_prefix_,
                                             resp.error_message(),
                                             resp.opaque(),
-                                            spdlog::to_hex(msg.header_data()));
+                                            spdlog::to_hex(resp.header()));
                                 return complete(error::network_errc::protocol_error);
                             }
                         } break;
@@ -666,7 +667,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         protocol::client_request<protocol::mcbp_noop_request_body> req;
         req.opaque(next_opaque());
         write_and_subscribe(req.opaque(),
-                            req.data(false),
+                            std::move(req.data(false)),
                             [start = std::chrono::steady_clock::now(), self = shared_from_this(), handler](
                               std::error_code ec, retry_reason reason, io::mcbp_message&& /* msg */) {
                                 diag::ping_state state = diag::ping_state::ok;
@@ -812,7 +813,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         state_ = diag::endpoint_state::disconnected;
     }
 
-    void write(const std::vector<uint8_t>& buf)
+    void write(std::vector<std::byte>&& buf)
     {
         if (stopped_) {
             return;
@@ -821,7 +822,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         std::memcpy(&opaque, buf.data() + 12, sizeof(opaque));
         LOG_TRACE("{} MCBP send, opaque={}, {:n}", log_prefix_, opaque, spdlog::to_hex(buf.begin(), buf.begin() + 24));
         std::scoped_lock lock(output_buffer_mutex_);
-        output_buffer_.push_back(buf);
+        output_buffer_.emplace_back(std::move(buf));
     }
 
     void flush()
@@ -832,17 +833,17 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         do_write();
     }
 
-    void write_and_flush(const std::vector<uint8_t>& buf)
+    void write_and_flush(std::vector<std::byte>&& buf)
     {
         if (stopped_) {
             return;
         }
-        write(buf);
+        write(std::move(buf));
         flush();
     }
 
-    void write_and_subscribe(uint32_t opaque,
-                             std::vector<std::uint8_t>& data,
+    void write_and_subscribe(std::uint32_t opaque,
+                             std::vector<std::byte>&& data,
                              std::function<void(std::error_code, retry_reason, io::mcbp_message&&)> handler)
     {
         if (stopped_) {
@@ -855,14 +856,14 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             command_handlers_.try_emplace(opaque, std::move(handler));
         }
         if (bootstrapped_ && stream_->is_open()) {
-            write_and_flush(data);
+            write_and_flush(std::move(data));
         } else {
             LOG_DEBUG("{} the stream is not ready yet, put the message into pending buffer, opaque={}", log_prefix_, opaque);
             std::scoped_lock lock(pending_buffer_mutex_);
             if (bootstrapped_ && stream_->is_open()) {
-                write_and_flush(data);
+                write_and_flush(std::move(data));
             } else {
-                pending_buffer_.push_back(data);
+                pending_buffer_.emplace_back(data);
             }
         }
     }
@@ -990,7 +991,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                 }
             }
         }
-        config_.emplace(config);
+        config_.emplace(std::move(config));
         configured_ = true;
         LOG_DEBUG("{} received new configuration: {}", log_prefix_, config_.value());
         for (const auto& listener : config_listeners_) {
@@ -998,7 +999,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         }
     }
 
-    void handle_not_my_vbucket(io::mcbp_message&& msg)
+    void handle_not_my_vbucket(const io::mcbp_message& msg)
     {
         if (stopped_) {
             return;
@@ -1006,7 +1007,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         Expects(msg.header.magic == static_cast<std::uint8_t>(protocol::magic::alt_client_response) ||
                 msg.header.magic == static_cast<std::uint8_t>(protocol::magic::client_response));
         if (protocol::has_json_datatype(msg.header.datatype)) {
-            auto magic = protocol::magic(msg.header.magic);
+            auto magic = static_cast<protocol::magic>(msg.header.magic);
             uint8_t extras_size = msg.header.extlen;
             uint8_t framing_extras_size = 0;
             uint16_t key_size = utils::byte_swap(msg.header.keylen);
@@ -1017,8 +1018,9 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
 
             std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
             if (utils::byte_swap(msg.header.bodylen) - offset > 0) {
-                auto config =
-                  protocol::parse_config(std::string(msg.body.begin() + offset, msg.body.end()), endpoint_address_, endpoint_.port());
+                std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()) + offset,
+                                              msg.body.size() - static_cast<std::size_t>(offset) };
+                auto config = protocol::parse_config(config_text, endpoint_address_, endpoint_.port());
                 LOG_DEBUG("{} received not_my_vbucket status for {}, opaque={} with config rev={} in the payload",
                           log_prefix_,
                           protocol::client_opcode(msg.header.opcode),
@@ -1071,8 +1073,8 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         std::scoped_lock lock(pending_buffer_mutex_);
         bootstrapped_ = true;
         if (!pending_buffer_.empty()) {
-            for (const auto& buf : pending_buffer_) {
-                write(buf);
+            for (auto& buf : pending_buffer_) {
+                write(std::move(buf));
             }
             pending_buffer_.clear();
             flush();
@@ -1301,10 +1303,10 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
 
     std::atomic<std::uint32_t> opaque_{ 0 };
 
-    std::array<std::uint8_t, 16384> input_buffer_{};
-    std::vector<std::vector<std::uint8_t>> output_buffer_{};
-    std::vector<std::vector<std::uint8_t>> pending_buffer_{};
-    std::vector<std::vector<std::uint8_t>> writing_buffer_{};
+    std::array<std::byte, 16384> input_buffer_{};
+    std::vector<std::vector<std::byte>> output_buffer_{};
+    std::vector<std::vector<std::byte>> pending_buffer_{};
+    std::vector<std::vector<std::byte>> writing_buffer_{};
     std::mutex output_buffer_mutex_{};
     std::mutex pending_buffer_mutex_{};
     std::mutex writing_buffer_mutex_{};

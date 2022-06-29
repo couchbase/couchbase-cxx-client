@@ -38,7 +38,7 @@ class sasl_auth_response_body
                std::uint8_t framing_extras_size,
                std::uint16_t key_size,
                std::uint8_t extras_size,
-               const std::vector<uint8_t>& body,
+               const std::vector<std::byte>& body,
                const cmd_info& info);
 
     [[nodiscard]] std::string_view value() const
@@ -54,36 +54,30 @@ class sasl_auth_request_body
     static const inline client_opcode opcode = client_opcode::sasl_auth;
 
   private:
-    std::string key_;
-    std::vector<std::uint8_t> value_;
+    std::vector<std::byte> key_;
+    std::vector<std::byte> value_;
 
   public:
-    void mechanism(std::string_view mech)
-    {
-        key_ = mech;
-    }
+    void mechanism(std::string_view mech);
 
-    void sasl_data(std::string_view data)
-    {
-        value_.assign(data.begin(), data.end());
-    }
+    void sasl_data(std::string_view data);
 
-    [[nodiscard]] const std::string& key() const
+    [[nodiscard]] const auto& key() const
     {
         return key_;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& framing_extras() const
+    [[nodiscard]] const auto& framing_extras() const
     {
         return empty_buffer;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& extras() const
+    [[nodiscard]] const auto& extras() const
     {
         return empty_buffer;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& value() const
+    [[nodiscard]] const auto& value() const
     {
         return value_;
     }

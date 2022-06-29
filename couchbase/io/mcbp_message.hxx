@@ -26,7 +26,7 @@ namespace couchbase
 namespace protocol
 {
 static const std::size_t header_size = 24;
-using header_buffer = std::array<std::uint8_t, header_size>;
+using header_buffer = std::array<std::byte, header_size>;
 } // namespace protocol
 
 namespace io
@@ -47,7 +47,7 @@ struct binary_header {
 
 struct mcbp_message {
     binary_header header;
-    std::vector<std::uint8_t> body;
+    std::vector<std::byte> body;
 
     [[nodiscard]] protocol::header_buffer header_data() const;
 };

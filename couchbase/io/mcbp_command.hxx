@@ -239,12 +239,12 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
               protocol::status status = protocol::status::invalid;
               std::optional<error_map::error_info> error_code{};
               if (protocol::is_valid_status(msg.header.status())) {
-                  status = protocol::status(msg.header.status());
+                  status = static_cast<protocol::status>(msg.header.status());
               } else {
                   error_code = self->session_->decode_error_code(msg.header.status());
               }
               if (status == protocol::status::not_my_vbucket) {
-                  self->session_->handle_not_my_vbucket(std::move(msg));
+                  self->session_->handle_not_my_vbucket(msg);
                   return io::retry_orchestrator::maybe_retry(self->manager_, self, io::retry_reason::kv_not_my_vbucket, ec);
               }
               if (status == protocol::status::unknown_collection) {

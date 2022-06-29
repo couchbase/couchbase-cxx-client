@@ -17,10 +17,13 @@
 
 #include <couchbase/protocol/cmd_hello.hxx>
 
+#include <couchbase/utils/binary.hxx>
 #include <couchbase/utils/byteswap.hxx>
 
-#include <cstring>
 #include <gsl/assert>
+
+#include <algorithm>
+#include <cstring>
 
 namespace couchbase::protocol
 {
@@ -30,10 +33,10 @@ hello_response_body::parse(protocol::status status,
                            std::uint8_t framing_extras_size,
                            std::uint16_t key_size,
                            std::uint8_t extras_size,
-                           const std::vector<uint8_t>& body,
+                           const std::vector<std::byte>& body,
                            const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<uint8_t>(opcode));
+    Expects(header[1] == static_cast<std::byte>(opcode));
     if (status == protocol::status::success) {
         std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
         size_t value_size = body.size() - static_cast<std::size_t>(offset);
@@ -59,8 +62,15 @@ hello_request_body::fill_body()
 {
     value_.resize(2 * features_.size());
     for (std::size_t idx = 0; idx < features_.size(); idx++) {
-        value_[idx * 2] = 0; // we don't need this byte while feature codes fit the 8-bit
-        value_[idx * 2 + 1] = static_cast<uint8_t>(features_[idx]);
+        value_[idx * 2] = std::byte{ 0 }; // we don't need this byte while feature codes fit the 8-bit
+        value_[idx * 2 + 1] = static_cast<std::byte>(features_[idx]);
     }
+}
+
+void
+hello_request_body::user_agent(std::string_view val)
+{
+    key_.reserve(val.size());
+    utils::to_binary(val, std::back_insert_iterator(key_));
 }
 } // namespace couchbase::protocol

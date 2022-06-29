@@ -51,7 +51,7 @@ TEST_CASE("integration: analytics query")
     auto value = couchbase::utils::json::generate({ { "testkey", test_value } });
     {
         auto id = couchbase::document_id(integration.ctx.bucket, "_default", "_default", key);
-        couchbase::operations::upsert_request req{ id, value };
+        couchbase::operations::upsert_request req{ id, couchbase::utils::to_binary(value) };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
     }
@@ -197,7 +197,7 @@ TEST_CASE("integration: analytics scope query")
     auto value = couchbase::utils::json::generate({ { "testkey", test_value } });
     {
         auto id = couchbase::document_id(integration.ctx.bucket, scope_name, collection_name, key);
-        couchbase::operations::upsert_request req{ id, value };
+        couchbase::operations::upsert_request req{ id, couchbase::utils::to_binary(value) };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
     }

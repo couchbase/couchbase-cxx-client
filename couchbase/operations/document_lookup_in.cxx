@@ -53,7 +53,7 @@ lookup_in_request::make_response(error_context::key_value&& ctx, const encoded_r
         for (size_t i = 0; i < specs.entries.size(); ++i) {
             const auto& req_entry = specs.entries[i];
             response.fields[i].original_index = req_entry.original_index;
-            response.fields[i].opcode = protocol::subdoc_opcode(req_entry.opcode);
+            response.fields[i].opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode);
             response.fields[i].path = req_entry.path;
             response.fields[i].status = protocol::status::success;
         }
@@ -61,7 +61,7 @@ lookup_in_request::make_response(error_context::key_value&& ctx, const encoded_r
             const auto& res_entry = encoded.body().fields()[i];
             response.fields[i].status = res_entry.status;
             response.fields[i].ec =
-              protocol::map_status_code(protocol::client_opcode::subdoc_multi_mutation, std::uint16_t(res_entry.status));
+              protocol::map_status_code(protocol::client_opcode::subdoc_multi_mutation, static_cast<std::uint16_t>(res_entry.status));
             response.fields[i].exists =
               res_entry.status == protocol::status::success || res_entry.status == protocol::status::subdoc_success_deleted;
             response.fields[i].value = res_entry.value;

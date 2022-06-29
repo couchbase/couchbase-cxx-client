@@ -17,6 +17,9 @@
 
 #include <couchbase/document_id.hxx>
 
+#include <couchbase/utils/binary.hxx>
+#include <couchbase/utils/unsigned_leb128.hxx>
+
 #include <fmt/core.h>
 
 #include <algorithm>
@@ -25,9 +28,9 @@
 namespace couchbase
 {
 document_id::document_id()
-  : scope_("_default")
-  , collection_("_default")
-  , collection_path_("_default._default")
+  : scope_{ "_default" }
+  , collection_{ "_default" }
+  , collection_path_{ "_default._default" }
 {
 }
 
@@ -85,5 +88,19 @@ bool
 document_id::has_default_collection() const
 {
     return !use_collections_ || collection_path_ == "_default._default";
+}
+
+std::vector<std::byte>
+make_protocol_key(const document_id& id)
+{
+    std::vector<std::byte> key{};
+    if (id.is_collection_resolved()) {
+        utils::unsigned_leb128<std::uint32_t> encoded(id.collection_uid());
+        key.reserve(encoded.size());
+        key.insert(key.end(), encoded.begin(), encoded.end());
+    }
+    key.reserve(key.size() + id.key().size());
+    couchbase::utils::to_binary(id.key(), std::back_insert_iterator(key));
+    return key;
 }
 } // namespace couchbase

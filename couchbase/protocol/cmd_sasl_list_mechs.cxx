@@ -28,19 +28,24 @@ sasl_list_mechs_response_body::parse(protocol::status status,
                                      std::uint8_t framing_extras_size,
                                      std::uint16_t key_size,
                                      std::uint8_t extras_size,
-                                     const std::vector<uint8_t>& body,
+                                     const std::vector<std::byte>& body,
                                      const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<uint8_t>(opcode));
+    Expects(header[1] == static_cast<std::byte>(opcode));
     if (status == protocol::status::success) {
         auto previous = body.begin();
-        auto current = std::find(body.begin() + framing_extras_size + extras_size + key_size, body.end(), ' ');
+        auto current = std::find(body.begin() + framing_extras_size + extras_size + key_size, body.end(), std::byte{ ' ' });
+        std::string mech;
         while (current != body.end()) {
-            supported_mechs_.emplace_back(previous, current);
+            mech.resize(static_cast<std::size_t>(std::distance(previous, current)));
+            std::transform(previous, current, mech.begin(), [](auto b) { return static_cast<char>(b); });
+            supported_mechs_.emplace_back(mech);
             previous = current + 1;
-            current = std::find(previous, body.end(), ' ');
+            current = std::find(previous, body.end(), std::byte{ ' ' });
         }
-        supported_mechs_.emplace_back(previous, current);
+        mech.resize(static_cast<std::size_t>(std::distance(previous, current)));
+        std::transform(previous, current, mech.begin(), [](auto b) { return static_cast<char>(b); });
+        supported_mechs_.emplace_back(mech);
         return true;
     }
     return false;

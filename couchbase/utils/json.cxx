@@ -46,7 +46,7 @@ struct last_key_wins : Consumer {
 };
 
 tao::json::value
-parse(const std::string& input)
+parse(std::string_view input)
 {
     return tao::json::from_string<utils::json::last_key_wins>(input);
 }
@@ -67,5 +67,215 @@ std::string
 generate(const tao::json::value& object)
 {
     return tao::json::to_string(object);
+}
+
+class to_byte_vector
+{
+  private:
+    std::vector<std::byte>& buffer_;
+    bool first_{ true };
+
+    void next()
+    {
+        if (!first_) {
+            buffer_.emplace_back(std::byte{ ',' });
+        }
+    }
+
+    void write(tao::binary_view data)
+    {
+        buffer_.reserve(buffer_.size() + data.size());
+        std::copy(data.begin(), data.end(), std::back_inserter(buffer_));
+    }
+
+    void write(std::string_view data)
+    {
+        buffer_.reserve(buffer_.size() + data.size());
+        std::transform(data.begin(), data.end(), std::back_inserter(buffer_), [](auto ch) { return static_cast<std::byte>(ch); });
+    }
+
+    inline void escape(const std::string_view s)
+    {
+        static std::array h{
+            std::byte{ '0' }, std::byte{ '1' }, std::byte{ '2' }, std::byte{ '3' }, std::byte{ '4' }, std::byte{ '5' },
+            std::byte{ '6' }, std::byte{ '7' }, std::byte{ '8' }, std::byte{ '9' }, std::byte{ 'a' }, std::byte{ 'b' },
+            std::byte{ 'c' }, std::byte{ 'd' }, std::byte{ 'e' }, std::byte{ 'f' },
+        };
+
+        const char* p = s.data();
+        const char* l = p;
+        const char* const e = p + s.size();
+        while (p != e) {
+            const char c = *p;
+            if (c == '\\' || c == '"') {
+                write({ l, static_cast<std::size_t>(p - l) });
+                l = ++p;
+                buffer_.emplace_back(std::byte{ '\\' });
+                buffer_.emplace_back(static_cast<std::byte>(c));
+            } else if (c < 32 || c == 127) {
+                write({ l, static_cast<std::size_t>(p - l) });
+                l = ++p;
+                switch (c) {
+                    case '\b':
+                        write("\\b");
+                        break;
+                    case '\f':
+                        write("\\f");
+                        break;
+                    case '\n':
+                        write("\\n");
+                        break;
+                    case '\r':
+                        write("\\r");
+                        break;
+                    case '\t':
+                        write("\\t");
+                        break;
+                    default:
+                        write(std::array{
+                          std::byte{ '\\' },
+                          std::byte{ 'u' },
+                          std::byte{ '0' },
+                          std::byte{ '0' },
+                          std::byte{ h[(c & 0xf0) >> 4] },
+                          std::byte{ h[c & 0x0f] },
+                        });
+                        write("\\u00");
+                }
+            } else {
+                ++p;
+            }
+        }
+        write({ l, static_cast<std::size_t>(p - l) });
+    }
+
+  public:
+    explicit to_byte_vector(std::vector<std::byte>& output) noexcept
+      : buffer_(output)
+    {
+    }
+
+    void null()
+    {
+        next();
+        static std::array literal_null{
+            std::byte{ 'n' },
+            std::byte{ 'u' },
+            std::byte{ 'l' },
+            std::byte{ 'l' },
+        };
+        write(literal_null);
+    }
+
+    void boolean(const bool v)
+    {
+        next();
+        if (v) {
+            static std::array literal_true{
+                std::byte{ 't' },
+                std::byte{ 'r' },
+                std::byte{ 'u' },
+                std::byte{ 'e' },
+            };
+            write(literal_true);
+        } else {
+            static std::array literal_false{
+                std::byte{ 'f' }, std::byte{ 'a' }, std::byte{ 'l' }, std::byte{ 's' }, std::byte{ 'e' },
+            };
+            write(literal_false);
+        }
+    }
+
+    void number(const std::int64_t v)
+    {
+        next();
+        char b[24]{};
+        const char* s = tao::json::itoa::i64toa(v, b);
+        write({ b, static_cast<std::size_t>(s - b) });
+    }
+
+    void number(const std::uint64_t v)
+    {
+        next();
+        char b[24]{};
+        const char* s = tao::json::itoa::u64toa(v, b);
+        write({ b, static_cast<std::size_t>(s - b) });
+    }
+
+    void number(const double v)
+    {
+        next();
+        if (!std::isfinite(v)) {
+            // if this throws, consider using non_finite_to_* transformers
+            throw std::runtime_error("non-finite double value invalid for JSON string representation");
+        }
+        char b[28];
+        const auto s = tao::json::ryu::d2s_finite(v, b);
+        write({ b, s });
+    }
+
+    void string(const std::string_view v)
+    {
+        next();
+        buffer_.emplace_back(std::byte{ '"' });
+        escape(v);
+        buffer_.emplace_back(std::byte{ '"' });
+    }
+
+    void binary(const tao::binary_view /*unused*/) // NOLINT(readability-convert-member-functions-to-static)
+    {
+        // if this throws, consider using binary_to_* transformers
+        throw std::runtime_error("binary data invalid for JSON string representation");
+    }
+
+    void begin_array(const std::size_t /*unused*/ = 0)
+    {
+        next();
+        buffer_.emplace_back(std::byte{ '[' });
+        first_ = true;
+    }
+
+    void element() noexcept
+    {
+        first_ = false;
+    }
+
+    void end_array(const std::size_t /*unused*/ = 0)
+    {
+        buffer_.emplace_back(std::byte{ ']' });
+    }
+
+    void begin_object(const std::size_t /*unused*/ = 0)
+    {
+        next();
+        buffer_.emplace_back(std::byte{ '{' });
+        first_ = true;
+    }
+
+    void key(const std::string_view v)
+    {
+        string(v);
+        buffer_.emplace_back(std::byte{ ':' });
+        first_ = true;
+    }
+
+    void member() noexcept
+    {
+        first_ = false;
+    }
+
+    void end_object(const std::size_t /*unused*/ = 0)
+    {
+        buffer_.emplace_back(std::byte{ '}' });
+    }
+};
+
+std::vector<std::byte>
+generate_binary(const tao::json::value& object)
+{
+    std::vector<std::byte> out;
+    tao::json::events::transformer<to_byte_vector> consumer(out);
+    tao::json::events::from_value(consumer, object);
+    return out;
 }
 } // namespace couchbase::utils::json

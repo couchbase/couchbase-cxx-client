@@ -17,10 +17,13 @@
 
 #include <couchbase/protocol/cmd_get_collection_id.hxx>
 
+#include <couchbase/utils/binary.hxx>
 #include <couchbase/utils/byteswap.hxx>
 
-#include <cstring>
 #include <gsl/assert>
+
+#include <algorithm>
+#include <cstring>
 
 namespace couchbase::protocol
 {
@@ -30,10 +33,10 @@ get_collection_id_response_body::parse(protocol::status status,
                                        std::uint8_t framing_extras_size,
                                        std::uint16_t key_size,
                                        std::uint8_t extras_size,
-                                       const std::vector<uint8_t>& body,
+                                       const std::vector<std::byte>& body,
                                        const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<uint8_t>(opcode));
+    Expects(header[1] == static_cast<std::byte>(opcode));
     if (status == protocol::status::success && extras_size == 12) {
         std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size;
 
@@ -46,5 +49,12 @@ get_collection_id_response_body::parse(protocol::status status,
         return true;
     }
     return false;
+}
+
+void
+get_collection_id_request_body::collection_path(const std::string_view& path)
+{
+    value_.reserve(path.size());
+    utils::to_binary(path, std::back_insert_iterator(value_));
 }
 } // namespace couchbase::protocol

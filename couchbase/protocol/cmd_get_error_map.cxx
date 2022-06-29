@@ -33,16 +33,18 @@ get_error_map_response_body::parse(protocol::status status,
                                    std::uint8_t framing_extras_size,
                                    std::uint16_t key_size,
                                    std::uint8_t extras_size,
-                                   const std::vector<uint8_t>& body,
+                                   const std::vector<std::byte>& body,
                                    const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<uint8_t>(opcode));
+    Expects(header[1] == static_cast<std::byte>(opcode));
     if (status == protocol::status::success) {
+        std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
+        std::string_view error_map_text{ reinterpret_cast<const char*>(body.data()) + offset,
+                                         body.size() - static_cast<std::size_t>(offset) };
         try {
-            std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
-            errmap_ = utils::json::parse(std::string(body.begin() + offset, body.end())).as<error_map>();
+            errmap_ = utils::json::parse(error_map_text).as<error_map>();
         } catch (const tao::pegtl::parse_error& e) {
-            LOG_DEBUG("unable to parse error map as JSON: {}, {}", e.message(), std::string(body.begin(), body.end()));
+            LOG_DEBUG("unable to parse error map as JSON: {}, {}", e.message(), error_map_text);
         }
         return true;
     }

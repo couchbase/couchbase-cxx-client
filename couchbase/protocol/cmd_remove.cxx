@@ -31,12 +31,12 @@ remove_response_body::parse(protocol::status status,
                             std::uint8_t framing_extras_size,
                             std::uint16_t /* key_size */,
                             std::uint8_t extras_size,
-                            const std::vector<uint8_t>& body,
+                            const std::vector<std::byte>& body,
                             const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<uint8_t>(opcode));
+    Expects(header[1] == static_cast<std::byte>(opcode));
     if (status == protocol::status::success) {
-        using offset_type = std::vector<uint8_t>::difference_type;
+        using offset_type = std::vector<std::byte>::difference_type;
         offset_type offset = framing_extras_size;
         if (extras_size == 16) {
             memcpy(&token_.partition_uuid, body.data() + offset, sizeof(token_.partition_uuid));
@@ -54,11 +54,7 @@ remove_response_body::parse(protocol::status status,
 void
 remove_request_body::id(const document_id& id)
 {
-    key_ = id.key();
-    if (id.is_collection_resolved()) {
-        utils::unsigned_leb128<uint32_t> encoded(id.collection_uid());
-        key_.insert(0, encoded.get());
-    }
+    key_ = make_protocol_key(id);
 }
 
 void
@@ -67,17 +63,17 @@ remove_request_body::durability(protocol::durability_level level, std::optional<
     if (level == protocol::durability_level::none) {
         return;
     }
-    auto frame_id = static_cast<uint8_t>(protocol::request_frame_info_id::durability_requirement);
+    auto frame_id = static_cast<std::byte>(protocol::request_frame_info_id::durability_requirement);
     if (timeout) {
         framing_extras_.resize(4);
-        framing_extras_[0] = static_cast<std::uint8_t>((static_cast<std::uint32_t>(frame_id) << 4U) | 3U);
-        framing_extras_[1] = static_cast<std::uint8_t>(level);
-        uint16_t val = utils::byte_swap(*timeout);
+        framing_extras_[0] = (frame_id << 4U) | std::byte{ 0b0011 };
+        framing_extras_[1] = static_cast<std::byte>(level);
+        std::uint16_t val = utils::byte_swap(*timeout);
         memcpy(framing_extras_.data() + 2, &val, sizeof(val));
     } else {
         framing_extras_.resize(2);
-        framing_extras_[0] = static_cast<std::uint8_t>(static_cast<std::uint32_t>(frame_id) << 4U | 1U);
-        framing_extras_[1] = static_cast<std::uint8_t>(level);
+        framing_extras_[0] = (frame_id << 4U) | std::byte{ 0b0001 };
+        framing_extras_[1] = static_cast<std::byte>(level);
     }
 }
 } // namespace couchbase::protocol

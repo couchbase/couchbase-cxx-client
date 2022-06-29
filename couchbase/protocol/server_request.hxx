@@ -38,8 +38,8 @@ class server_request
     Body body_;
     server_opcode opcode_{ server_opcode::invalid };
     header_buffer header_;
-    uint8_t data_type_;
-    std::vector<std::uint8_t> data_;
+    std::uint8_t data_type_;
+    std::vector<std::byte> data_;
     std::size_t body_size_;
     std::uint32_t opaque_;
     std::uint64_t cas_;
@@ -93,10 +93,10 @@ class server_request
 
     void verify_header()
     {
-        Expects(header_[0] == static_cast<std::uint8_t>(magic_));
-        Expects(header_[1] == static_cast<std::uint8_t>(Body::opcode));
-        opcode_ = server_opcode(header_[1]);
-        data_type_ = header_[5];
+        Expects(header_[0] == static_cast<std::byte>(magic_));
+        Expects(header_[1] == static_cast<std::byte>(Body::opcode));
+        opcode_ = static_cast<server_opcode>(header_[1]);
+        data_type_ = std::to_integer<std::uint8_t>(header_[5]);
 
         uint32_t field = 0;
         memcpy(&field, header_.data() + 8, sizeof(field));
@@ -113,7 +113,7 @@ class server_request
         body_.parse(header_, data_, info_);
     }
 
-    [[nodiscard]] std::vector<std::uint8_t>& data()
+    [[nodiscard]] std::vector<std::byte>& data()
     {
         return data_;
     }

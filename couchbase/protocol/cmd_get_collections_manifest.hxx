@@ -45,7 +45,7 @@ class get_collections_manifest_response_body
                std::uint8_t framing_extras_size,
                std::uint16_t key_size,
                std::uint8_t extras_size,
-               const std::vector<uint8_t>& body,
+               const std::vector<std::byte>& body,
                const cmd_info& info);
 };
 
@@ -60,17 +60,17 @@ class get_collections_manifest_request_body
         return empty_string;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& framing_extras() const
+    [[nodiscard]] const auto& framing_extras() const
     {
         return empty_buffer;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& extras() const
+    [[nodiscard]] const auto& extras() const
     {
         return empty_buffer;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& value() const
+    [[nodiscard]] const auto& value() const
     {
         return empty_buffer;
     }

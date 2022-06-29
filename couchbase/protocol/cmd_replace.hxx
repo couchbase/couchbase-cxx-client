@@ -52,7 +52,7 @@ class replace_response_body
                std::uint8_t framing_extras_size,
                std::uint16_t key_size,
                std::uint8_t extras_size,
-               const std::vector<uint8_t>& body,
+               const std::vector<std::byte>& body,
                const cmd_info& info);
 };
 
@@ -63,12 +63,12 @@ class replace_request_body
     static const inline client_opcode opcode = client_opcode::replace;
 
   private:
-    std::string key_{};
-    std::vector<std::uint8_t> extras_{};
-    std::vector<std::uint8_t> content_{};
+    std::vector<std::byte> key_{};
+    std::vector<std::byte> extras_{};
+    std::vector<std::byte> content_{};
     std::uint32_t flags_{};
     std::uint32_t expiry_{};
-    std::vector<std::uint8_t> framing_extras_{};
+    std::vector<std::byte> framing_extras_{};
 
   public:
     void id(const document_id& id);
@@ -77,7 +77,7 @@ class replace_request_body
 
     void preserve_expiry();
 
-    void content(const std::string_view& content)
+    void content(const std::vector<std::byte>& content)
     {
         content_ = { content.begin(), content.end() };
     }
@@ -92,17 +92,17 @@ class replace_request_body
         expiry_ = value;
     }
 
-    [[nodiscard]] const std::string& key() const
+    [[nodiscard]] const auto& key() const
     {
         return key_;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& framing_extras() const
+    [[nodiscard]] const auto& framing_extras() const
     {
         return framing_extras_;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& extras()
+    [[nodiscard]] const auto& extras()
     {
         if (extras_.empty()) {
             fill_extras();
@@ -110,7 +110,7 @@ class replace_request_body
         return extras_;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& value() const
+    [[nodiscard]] const auto& value() const
     {
         return content_;
     }

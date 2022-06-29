@@ -24,8 +24,8 @@ namespace couchbase::utils
 static constexpr std::uint16_t
 byte_swap(std::uint16_t value)
 {
-    auto hi = std::uint16_t(value << 8U);
-    auto lo = std::uint16_t(value >> 8U);
+    auto hi = static_cast<std::uint16_t>(value << 8U);
+    auto lo = static_cast<std::uint16_t>(value >> 8U);
     return hi | lo;
 }
 
@@ -42,8 +42,8 @@ byte_swap(std::uint32_t value)
 static constexpr std::uint64_t
 byte_swap(std::uint64_t value)
 {
-    std::uint64_t hi = byte_swap(std::uint32_t(value));
-    std::uint32_t lo = byte_swap(std::uint32_t(value >> 32));
+    std::uint64_t hi = byte_swap(static_cast<std::uint32_t>(value));
+    std::uint32_t lo = byte_swap(static_cast<std::uint32_t>(value >> 32));
     return (hi << 32) | lo;
 }
 } // namespace couchbase::utils

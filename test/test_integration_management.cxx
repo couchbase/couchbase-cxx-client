@@ -159,7 +159,7 @@ TEST_CASE("integration: bucket management", "[integration]")
             REQUIRE_FALSE(resp.ctx.ec);
             REQUIRE(!resp.buckets.empty());
             auto known_buckets =
-              std::count_if(resp.buckets.begin(), resp.buckets.end(), [bucket_name](auto& entry) { return entry.name == bucket_name; });
+              std::count_if(resp.buckets.begin(), resp.buckets.end(), [&bucket_name](auto& entry) { return entry.name == bucket_name; });
             REQUIRE(known_buckets == 0);
         }
     }
@@ -186,7 +186,7 @@ TEST_CASE("integration: bucket management", "[integration]")
                 const tao::json::value value = {
                     { "a", 1.0 },
                 };
-                couchbase::operations::insert_request req{ id, couchbase::utils::json::generate(value) };
+                couchbase::operations::insert_request req{ id, couchbase::utils::json::generate_binary(value) };
                 auto resp = test::utils::execute(integration.cluster, req);
                 REQUIRE_FALSE(resp.ctx.ec);
             }
@@ -1571,7 +1571,7 @@ TEST_CASE("integration: analytics index management", "[integration]")
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
             REQUIRE_FALSE(resp.datasets.empty());
-            auto dataset = std::find_if(resp.datasets.begin(), resp.datasets.end(), [dataset_name](const auto& exp_dataset) {
+            auto dataset = std::find_if(resp.datasets.begin(), resp.datasets.end(), [&dataset_name](const auto& exp_dataset) {
                 return exp_dataset.name == dataset_name;
             });
             REQUIRE(dataset != resp.datasets.end());
@@ -1586,7 +1586,7 @@ TEST_CASE("integration: analytics index management", "[integration]")
             REQUIRE_FALSE(resp.ctx.ec);
             REQUIRE_FALSE(resp.indexes.empty());
             auto index = std::find_if(
-              resp.indexes.begin(), resp.indexes.end(), [index_name](const auto& exp_index) { return exp_index.name == index_name; });
+              resp.indexes.begin(), resp.indexes.end(), [&index_name](const auto& exp_index) { return exp_index.name == index_name; });
             REQUIRE(index != resp.indexes.end());
             REQUIRE(index->dataverse_name == dataverse_name);
             REQUIRE(index->dataset_name == dataset_name);
@@ -1757,7 +1757,7 @@ TEST_CASE("integration: analytics index management", "[integration]")
 }
 
 void
-run_s3_link_test(test::utils::integration_test_guard& integration, std::string dataverse_name, std::string link_name)
+run_s3_link_test(test::utils::integration_test_guard& integration, const std::string& dataverse_name, const std::string& link_name)
 {
     {
         couchbase::operations::management::analytics_dataverse_create_request req{};
@@ -1871,7 +1871,7 @@ run_s3_link_test(test::utils::integration_test_guard& integration, std::string d
 }
 
 void
-run_azure_link_test(test::utils::integration_test_guard& integration, std::string dataverse_name, std::string link_name)
+run_azure_link_test(test::utils::integration_test_guard& integration, const std::string& dataverse_name, const std::string& link_name)
 {
     {
         couchbase::operations::management::analytics_dataverse_create_request req{};
@@ -2609,7 +2609,7 @@ function OnDelete(meta, options) {
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
             auto function = std::find_if(
-              resp.functions.begin(), resp.functions.end(), [function_name](const auto& fun) { return function_name == fun.name; });
+              resp.functions.begin(), resp.functions.end(), [&function_name](const auto& fun) { return function_name == fun.name; });
             REQUIRE(function != resp.functions.end());
             REQUIRE(function->code == source_code);
             REQUIRE(function->source_keyspace.bucket == integration.ctx.bucket);
@@ -2636,7 +2636,7 @@ function OnDelete(meta, options) {
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
             REQUIRE(resp.status.num_eventing_nodes > 0);
-            auto function = std::find_if(resp.status.functions.begin(), resp.status.functions.end(), [function_name](const auto& fun) {
+            auto function = std::find_if(resp.status.functions.begin(), resp.status.functions.end(), [&function_name](const auto& fun) {
                 return function_name == fun.name;
             });
             REQUIRE(function != resp.status.functions.end());

@@ -33,17 +33,12 @@ class get_and_lock_response_body
 
   private:
     std::uint32_t flags_;
-    std::string value_;
+    std::vector<std::byte> value_;
 
   public:
-    [[nodiscard]] const std::string& value() const
+    [[nodiscard]] const auto& value() const
     {
         return value_;
-    }
-
-    [[nodiscard]] std::string&& value()
-    {
-        return std::move(value_);
     }
 
     [[nodiscard]] std::uint32_t flags() const
@@ -56,7 +51,7 @@ class get_and_lock_response_body
                std::uint8_t framing_extras_size,
                std::uint16_t key_size,
                std::uint8_t extras_size,
-               const std::vector<uint8_t>& body,
+               const std::vector<std::byte>& body,
                const cmd_info& info);
 };
 
@@ -67,9 +62,9 @@ class get_and_lock_request_body
     static const inline client_opcode opcode = client_opcode::get_and_lock;
 
   private:
-    std::string key_;
+    std::vector<std::byte> key_;
     std::uint32_t lock_time_;
-    std::vector<std::uint8_t> extras_{};
+    std::vector<std::byte> extras_{};
 
   public:
     void id(const document_id& id);
@@ -79,17 +74,17 @@ class get_and_lock_request_body
         lock_time_ = seconds;
     }
 
-    [[nodiscard]] const std::string& key() const
+    [[nodiscard]] const auto& key() const
     {
         return key_;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& framing_extras() const
+    [[nodiscard]] const auto& framing_extras() const
     {
         return empty_buffer;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& extras()
+    [[nodiscard]] const auto& extras()
     {
         if (extras_.empty()) {
             fill_extras();
@@ -97,7 +92,7 @@ class get_and_lock_request_body
         return extras_;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& value() const
+    [[nodiscard]] const auto& value() const
     {
         return empty_buffer;
     }

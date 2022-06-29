@@ -16,20 +16,21 @@
  */
 
 #include <couchbase/protocol/client_request.hxx>
+#include <couchbase/utils/binary.hxx>
 
 #include <snappy.h>
 
 namespace couchbase::protocol
 {
 std::pair<bool, std::uint32_t>
-compress_value(const std::vector<std::uint8_t>& value, std::vector<uint8_t>::iterator& output)
+compress_value(const std::vector<std::byte>& value, std::vector<std::byte>::iterator& output)
 {
     static const double min_ratio = 0.83;
 
     std::string compressed;
     std::size_t compressed_size = snappy::Compress(reinterpret_cast<const char*>(value.data()), value.size(), &compressed);
     if (gsl::narrow_cast<double>(compressed_size) / gsl::narrow_cast<double>(value.size()) < min_ratio) {
-        std::copy(compressed.begin(), compressed.end(), output);
+        utils::to_binary(compressed, output);
         return { true, gsl::narrow_cast<std::uint32_t>(compressed_size) };
     }
     return { false, 0 };

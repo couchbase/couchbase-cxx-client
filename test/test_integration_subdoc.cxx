@@ -92,10 +92,9 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
     test::utils::integration_test_guard integration;
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc") };
-    std::string value_json{ R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})" };
-    auto value = couchbase::utils::json::parse(value_json);
 
     {
+        auto value_json = couchbase::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
@@ -178,7 +177,7 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
     SECTION("non json")
     {
         couchbase::document_id non_json_id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("non_json") };
-        std::string non_json_doc{ "string" };
+        auto non_json_doc = couchbase::utils::to_binary("string");
 
         {
             couchbase::operations::insert_request req{ non_json_id, non_json_doc };
@@ -250,8 +249,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
     couchbase::cas cas{};
 
     {
-        std::string value_json{ R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})" };
-        auto value = couchbase::utils::json::parse(value_json);
+        auto value_json = couchbase::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
@@ -410,8 +408,7 @@ TEST_CASE("integration: subdoc unique", "[integration]")
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc") };
 
     {
-        auto value_json = R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})";
-        auto value = couchbase::utils::json::parse(value_json);
+        auto value_json = couchbase::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
@@ -467,8 +464,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc") };
 
     {
-        auto value_json = R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})";
-        auto value = couchbase::utils::json::parse(value_json);
+        auto value_json = couchbase::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
@@ -570,10 +566,9 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
     test::utils::integration_test_guard integration;
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc") };
-    auto value_json = R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})";
-    auto value = couchbase::utils::json::parse(value_json);
 
     {
+        auto value_json = couchbase::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
@@ -630,10 +625,9 @@ TEST_CASE("integration: subdoc multi mutation", "[integration]")
     test::utils::integration_test_guard integration;
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc") };
-    auto value_json = R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})";
-    auto value = couchbase::utils::json::parse(value_json);
 
     {
+        auto value_json = couchbase::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
@@ -673,10 +667,9 @@ TEST_CASE("integration: subdoc expiry")
     test::utils::integration_test_guard integration;
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc") };
-    auto value_json = R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})";
-    auto value = couchbase::utils::json::parse(value_json);
 
     {
+        auto value_json = couchbase::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
@@ -696,10 +689,9 @@ TEST_CASE("integration: subdoc get count", "[integration]")
     test::utils::integration_test_guard integration;
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc") };
-    auto value_json = R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})";
-    auto value = couchbase::utils::json::parse(value_json);
 
     {
+        auto value_json = couchbase::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
@@ -733,9 +725,9 @@ TEST_CASE("integration: subdoc insert error consistency", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("sd_err") };
 
-    couchbase::cas cas;
+    couchbase::cas cas{};
     {
-        couchbase::operations::insert_request req{ id, "{}" };
+        couchbase::operations::insert_request req{ id, couchbase::utils::to_binary("{}") };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
         cas = resp.cas;
@@ -783,7 +775,7 @@ TEST_CASE("integration: subdoc remove with empty path", "[integration]")
 
     // create initial document
     {
-        std::string initial_value{ R"({"bar":"foo"})" };
+        auto initial_value = couchbase::utils::to_binary(R"({"bar":"foo"})");
         couchbase::operations::insert_request req{ id, initial_value };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
@@ -801,7 +793,7 @@ TEST_CASE("integration: subdoc remove with empty path", "[integration]")
         couchbase::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.value == value);
+        REQUIRE(resp.value == couchbase::utils::to_binary(value));
     }
 
     // remove with empty path removes the document
@@ -839,7 +831,7 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
         couchbase::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.value == "[1]");
+        REQUIRE(resp.value == couchbase::utils::to_binary("[1]"));
     }
 
     // try to add number 1 but only if it is not in the array yet
@@ -862,7 +854,7 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
         couchbase::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.value == "[1,42]");
+        REQUIRE(resp.value == couchbase::utils::to_binary("[1,42]"));
     }
 
     // add number 2 to the end of the array
@@ -878,7 +870,7 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
         couchbase::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
-        REQUIRE(resp.value == "[1,42,2]");
+        REQUIRE(resp.value == couchbase::utils::to_binary("[1,42,2]"));
     }
 
     // check size of the top-level array

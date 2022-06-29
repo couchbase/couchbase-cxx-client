@@ -30,7 +30,7 @@ TEST_CASE("benchmark: get a document", "[benchmark]")
             { "a", 1.0 },
             { "b", 2.0 },
         };
-        couchbase::operations::upsert_request req{ id, couchbase::utils::json::generate(value) };
+        couchbase::operations::upsert_request req{ id, couchbase::utils::json::generate_binary(value) };
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec.message())
         REQUIRE_FALSE(resp.ctx.ec);

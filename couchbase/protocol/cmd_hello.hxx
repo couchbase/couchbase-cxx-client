@@ -45,7 +45,7 @@ class hello_response_body
                std::uint8_t framing_extras_size,
                std::uint16_t key_size,
                std::uint8_t extras_size,
-               const std::vector<uint8_t>& body,
+               const std::vector<std::byte>& body,
                const cmd_info& info);
 };
 
@@ -56,7 +56,7 @@ class hello_request_body
     static const inline client_opcode opcode = client_opcode::hello;
 
   private:
-    std::string key_;
+    std::vector<std::byte> key_;
     std::vector<hello_feature> features_{
         hello_feature::tcp_nodelay,
         hello_feature::mutation_seqno,
@@ -73,18 +73,10 @@ class hello_request_body
         hello_feature::subdoc_create_as_deleted,
         hello_feature::preserve_ttl,
     };
-    std::vector<std::uint8_t> value_;
+    std::vector<std::byte> value_;
 
   public:
-    void user_agent(std::string val)
-    {
-        key_ = std::move(val);
-    }
-
-    [[nodiscard]] const std::string& user_agent() const
-    {
-        return key_;
-    }
+    void user_agent(std::string_view val);
 
     void enable_unordered_execution()
     {
@@ -106,22 +98,22 @@ class hello_request_body
         return features_;
     }
 
-    [[nodiscard]] const std::string& key() const
+    [[nodiscard]] const auto& key() const
     {
         return key_;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& framing_extras() const
+    [[nodiscard]] const auto& framing_extras() const
     {
         return empty_buffer;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& extras() const
+    [[nodiscard]] const auto& extras() const
     {
         return empty_buffer;
     }
 
-    [[nodiscard]] const std::vector<std::uint8_t>& value()
+    [[nodiscard]] const auto& value()
     {
         if (value_.empty()) {
             fill_body();
