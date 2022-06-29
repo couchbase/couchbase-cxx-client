@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <couchbase/api/document_id.hxx>
+
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -25,22 +27,24 @@
 namespace couchbase
 {
 struct document_id {
-    document_id();
-    document_id(std::string bucket, std::string scope, std::string collection, std::string key, bool use_collections = true);
+    document_id() = default;
+    document_id(std::string bucket, std::string key, bool use_collections = true);
+    document_id(std::string bucket, std::string scope, std::string collection, std::string key);
+    explicit document_id(api::document_id id);
 
     [[nodiscard]] const std::string& bucket() const
     {
-        return bucket_;
+        return id_.bucket();
     }
 
     [[nodiscard]] const std::string& scope() const
     {
-        return scope_;
+        return id_.scope();
     }
 
     [[nodiscard]] const std::string& collection() const
     {
-        return collection_;
+        return id_.collection();
     }
 
     [[nodiscard]] const std::string& collection_path() const
@@ -50,7 +54,7 @@ struct document_id {
 
     [[nodiscard]] const std::string& key() const
     {
-        return key_;
+        return id_.key();
     }
 
     [[nodiscard]] bool has_default_collection() const;
@@ -90,15 +94,23 @@ struct document_id {
         use_any_session_ = value;
     }
 
+    [[nodiscard]] std::size_t node_index() const
+    {
+        return node_index_;
+    }
+
+    void node_index(std::size_t index)
+    {
+        node_index_ = index;
+    }
+
   private:
-    std::string bucket_{};
-    std::string scope_;
-    std::string collection_;
-    std::string key_{};
+    api::document_id id_{ "", "", false };
     std::string collection_path_{};
     std::optional<std::uint32_t> collection_uid_{}; // filled with resolved UID during request lifetime
     bool use_collections_{ true };
     bool use_any_session_{ false };
+    std::size_t node_index_{ 0 };
 };
 
 [[nodiscard]] std::vector<std::byte>

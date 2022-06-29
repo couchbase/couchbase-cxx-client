@@ -38,7 +38,7 @@ struct collections_manifest_get_request {
     using encoded_request_type = protocol::client_request<protocol::get_collections_manifest_request_body>;
     using encoded_response_type = protocol::client_response<protocol::get_collections_manifest_response_body>;
 
-    document_id id{ "", "_default", "_default", "" };
+    document_id id{};
     uint16_t partition{};
     uint32_t opaque{};
 

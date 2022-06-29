@@ -11,12 +11,14 @@ integration_test(arithmetic)
 integration_test(collections)
 integration_test(subdoc)
 integration_test(analytics)
+integration_test(read_replica)
 
 unit_test(connection_string)
 unit_test(utils)
 unit_test(json_streaming_lexer)
 unit_test(jsonsl)
 target_link_libraries(test_unit_jsonsl jsonsl)
+unit_test(document_id)
 
 integration_benchmark(get)
 

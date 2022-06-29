@@ -27,13 +27,6 @@
 
 namespace couchbase
 {
-document_id::document_id()
-  : scope_{ "_default" }
-  , collection_{ "_default" }
-  , collection_path_{ "_default._default" }
-{
-}
-
 static bool
 is_valid_collection_char(char ch)
 {
@@ -56,8 +49,8 @@ is_valid_collection_char(char ch)
     }
 }
 
-static bool
-is_valid_collection_element(const std::string_view element)
+bool
+is_valid_collection_element(std::string_view element)
 {
     if (element.empty() || element.size() > 251) {
         return false;
@@ -65,29 +58,35 @@ is_valid_collection_element(const std::string_view element)
     return std::all_of(element.begin(), element.end(), is_valid_collection_char);
 }
 
-document_id::document_id(std::string bucket, std::string scope, std::string collection, std::string key, bool use_collections)
-  : bucket_(std::move(bucket))
-  , scope_(std::move(scope))
-  , collection_(std::move(collection))
-  , key_(std::move(key))
+[[nodiscard]] static std::string
+compile_collection_path(const std::string& scope, const std::string& collection)
+{
+    return fmt::format("{}.{}", scope, collection);
+}
+
+document_id::document_id(std::string bucket, std::string key, bool use_collections)
+  : id_(std::move(bucket), std::move(key), use_collections)
   , use_collections_(use_collections)
 {
-    if (use_collections_) {
-        if (!is_valid_collection_element(scope_)) {
-            throw std::invalid_argument("invalid scope name");
-        }
-        if (!is_valid_collection_element(collection_)) {
-            throw std::invalid_argument("invalid collection name");
-        }
-    }
+    collection_path_ = compile_collection_path(id_.scope(), id_.collection());
+}
 
-    collection_path_ = fmt::format("{}.{}", scope_, collection_);
+document_id::document_id(std::string bucket, std::string scope, std::string collection, std::string key)
+  : id_(std::move(bucket), std::move(scope), std::move(collection), std::move(key))
+{
+    collection_path_ = compile_collection_path(id_.scope(), id_.collection());
 }
 
 bool
 document_id::has_default_collection() const
 {
     return !use_collections_ || collection_path_ == "_default._default";
+}
+
+document_id::document_id(api::document_id id)
+  : id_{ std::move(id) }
+{
+    collection_path_ = compile_collection_path(id_.scope(), id_.collection());
 }
 
 std::vector<std::byte>

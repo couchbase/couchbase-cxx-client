@@ -60,7 +60,6 @@ lookup_in_response_body::parse(protocol::status status,
             field.value.resize(entry_size);
             memcpy(field.value.data(), body.data() + offset, entry_size);
             offset += static_cast<offset_type>(entry_size);
-            LOG_CRITICAL("field.value ({}): {}", entry_size, field.value);
 
             fields_.emplace_back(field);
         }
