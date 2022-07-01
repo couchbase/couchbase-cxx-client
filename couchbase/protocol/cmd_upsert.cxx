@@ -17,7 +17,7 @@
 
 #include <couchbase/protocol/cmd_upsert.hxx>
 
-#include <couchbase/protocol/frame_info_id.hxx>
+#include <couchbase/protocol/frame_info_utils.hxx>
 #include <couchbase/utils/byteswap.hxx>
 #include <couchbase/utils/unsigned_leb128.hxx>
 
@@ -62,28 +62,14 @@ upsert_request_body::durability(protocol::durability_level level, std::optional<
     if (level == protocol::durability_level::none) {
         return;
     }
-    auto frame_id = static_cast<std::byte>(protocol::request_frame_info_id::durability_requirement);
-    auto extras_size = framing_extras_.size();
-    if (timeout) {
-        framing_extras_.resize(extras_size + 4);
-        framing_extras_[extras_size + 0] = (frame_id << 4U) | std::byte{ 0b0011 };
-        framing_extras_[extras_size + 1] = static_cast<std::byte>(level);
-        std::uint16_t val = utils::byte_swap(*timeout);
-        memcpy(framing_extras_.data() + extras_size + 2, &val, sizeof(val));
-    } else {
-        framing_extras_.resize(extras_size + 2);
-        framing_extras_[extras_size + 0] = (frame_id << 4U) | std::byte{ 0b0001 };
-        framing_extras_[extras_size + 1] = static_cast<std::byte>(level);
-    }
+
+    add_durability_frame_info(framing_extras_, level, timeout);
 }
 
 void
 upsert_request_body::preserve_expiry()
 {
-    auto frame_id = static_cast<std::byte>(protocol::request_frame_info_id::preserve_ttl);
-    auto extras_size = framing_extras_.size();
-    framing_extras_.resize(extras_size + 1);
-    framing_extras_[extras_size + 0] = frame_id << 4U;
+    add_preserve_expiry_frame_info(framing_extras_);
 }
 
 void
