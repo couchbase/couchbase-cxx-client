@@ -64,13 +64,13 @@ insert_request_body::durability(protocol::durability_level level, std::optional<
     auto frame_id = static_cast<std::byte>(protocol::request_frame_info_id::durability_requirement);
     if (timeout) {
         framing_extras_.resize(4);
-        framing_extras_[0] = (frame_id << 4U) | std::byte{ 0x0011 };
+        framing_extras_[0] = (frame_id << 4U) | std::byte{ 0b0011 };
         framing_extras_[1] = static_cast<std::byte>(level);
         std::uint16_t val = utils::byte_swap(*timeout);
         memcpy(framing_extras_.data() + 2, &val, sizeof(val));
     } else {
         framing_extras_.resize(2);
-        framing_extras_[0] = (frame_id << 4U) | std::byte{ 0x0001 };
+        framing_extras_[0] = (frame_id << 4U) | std::byte{ 0b0001 };
         framing_extras_[1] = static_cast<std::byte>(level);
     }
 }
