@@ -30,6 +30,7 @@ add_library(
   cmd_touch.cxx
   cmd_unlock.cxx
   cmd_upsert.cxx
+  frame_info_utils.cxx
   status.cxx)
 set_target_properties(couchbase_protocol PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(
