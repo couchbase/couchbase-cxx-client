@@ -32,7 +32,7 @@
 namespace couchbase::tracing
 {
 struct reported_span {
-    std::chrono::milliseconds duration;
+    std::chrono::microseconds duration;
     tao::json::value payload;
 
     bool operator<(const reported_span& other) const
@@ -54,7 +54,7 @@ class threshold_logging_span
         { attributes::span_kind, "client" },
         { attributes::component, couchbase::meta::sdk_id() },
     };
-    std::chrono::milliseconds duration_{ 0 };
+    std::chrono::microseconds duration_{ 0 };
     std::uint64_t last_server_duration_us_{ 0 };
     std::uint64_t total_server_duration_us_{ 0 };
 
@@ -90,7 +90,7 @@ class threshold_logging_span
         return string_tags_;
     }
 
-    [[nodiscard]] std::chrono::milliseconds duration() const
+    [[nodiscard]] std::chrono::microseconds duration() const
     {
         return duration_;
     }
@@ -415,7 +415,7 @@ threshold_logging_tracer::start()
 void
 threshold_logging_span::end()
 {
-    duration_ = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start_);
+    duration_ = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start_);
     tracer_->report(shared_from_this());
 }
 
