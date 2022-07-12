@@ -140,3 +140,8 @@ option(COUCHBASE_CXX_CLIENT_BUILD_TESTS "Build test programs" TRUE)
 if(COUCHBASE_CXX_CLIENT_BUILD_TESTS)
   include(cmake/Testing.cmake)
 endif()
+
+option(COUCHBASE_CXX_CLIENT_BUILD_DOCS "Build API documentation" TRUE)
+if(COUCHBASE_CXX_CLIENT_BUILD_DOCS)
+  include(cmake/Documentation.cmake)
+endif()
