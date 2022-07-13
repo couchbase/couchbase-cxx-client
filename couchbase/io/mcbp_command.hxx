@@ -160,8 +160,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                   request.id,
                   std::chrono::duration_cast<std::chrono::milliseconds>(time_left).count(),
                   id_);
+        request.retries.reasons.insert(couchbase::io::retry_reason::kv_collection_outdated);
         if (time_left < backoff) {
-            request.retries.reasons.insert(couchbase::io::retry_reason::kv_collection_outdated);
             return invoke_handler(make_error_code(request.retries.idempotent ? error::common_errc::unambiguous_timeout
                                                                              : error::common_errc::ambiguous_timeout));
         }
