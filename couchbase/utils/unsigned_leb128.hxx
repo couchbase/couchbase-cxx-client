@@ -50,13 +50,13 @@ template<class T>
 typename std::enable_if_t<std::is_unsigned_v<T>, std::pair<T, std::string_view>>
 decode_unsigned_leb128(std::string_view buf, struct Leb128NoThrow /* unused */)
 {
-    T rv = static_cast<std::byte>(buf[0]) & std::byte{ 0b0111'1111 };
-    size_t end = 0;
+    T rv = std::to_integer<T>(static_cast<std::byte>(buf[0]) & std::byte{ 0b0111'1111 });
+    std::size_t end = 0;
     if ((static_cast<std::byte>(buf[0]) & std::byte{ 0b1000'0000 }) == std::byte{ 0b1000'0000 }) {
         T shift = 7;
         // shift in the remaining data
         for (end = 1; end < buf.size(); end++) {
-            rv |= (static_cast<std::byte>(buf[end]) & std::byte{ 0b0111'1111 }) << shift;
+            rv |= std::to_integer<T>((static_cast<std::byte>(buf[end]) & std::byte{ 0b0111'1111 }) << shift);
             if ((static_cast<std::byte>(buf[end]) & std::byte{ 0b1000'0000 }) == std::byte{ 0 }) {
                 break; // no more
             }
@@ -65,7 +65,7 @@ decode_unsigned_leb128(std::string_view buf, struct Leb128NoThrow /* unused */)
 
         // We should be stopped for a stop byte, not the end of the buffer
         if (end == buf.size()) {
-            return { 0, std::string_view{} };
+            return { 0U, std::string_view{} };
         }
     }
     // Return the decoded value and a buffer for any remaining data
