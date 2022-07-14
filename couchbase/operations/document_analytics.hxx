@@ -42,7 +42,7 @@ struct analytics_response {
         std::uint64_t code;
         std::string message;
     };
-    
+
     enum analytics_status {
         running = 0,
         success,
@@ -53,7 +53,7 @@ struct analytics_response {
         closed,
         fatal,
         aborted,
-        unknown
+        unknown,
     };
 
     struct analytics_meta_data {

@@ -115,23 +115,23 @@ analytics_request::make_response(error_context::analytics&& ctx, const encoded_r
         }
         if (auto& status_prop = payload.at("status"); status_prop.is_string()) {
             const auto status = status_prop.get_string();
-             if (status ==  "running") {
+            if (status == "running") {
                 response.meta.status = analytics_response::analytics_status::running;
-            } else if (status ==  "success") {
+            } else if (status == "success") {
                 response.meta.status = analytics_response::analytics_status::success;
-            } else if (status ==  "errors") {
+            } else if (status == "errors") {
                 response.meta.status = analytics_response::analytics_status::errors;
-            } else if (status ==  "completed") {
+            } else if (status == "completed") {
                 response.meta.status = analytics_response::analytics_status::completed;
-            } else if (status ==  "stopped") {
+            } else if (status == "stopped") {
                 response.meta.status = analytics_response::analytics_status::stopped;
-            } else if (status ==  "timedout") {
+            } else if (status == "timedout") {
                 response.meta.status = analytics_response::analytics_status::timedout;
-            } else if (status ==  "closed") {
+            } else if (status == "closed") {
                 response.meta.status = analytics_response::analytics_status::closed;
-            } else if (status ==  "fatal") {
+            } else if (status == "fatal") {
                 response.meta.status = analytics_response::analytics_status::fatal;
-            } else if (status ==  "aborted") {
+            } else if (status == "aborted") {
                 response.meta.status = analytics_response::analytics_status::aborted;
             } else {
                 response.meta.status = analytics_response::analytics_status::unknown;
