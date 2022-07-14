@@ -17,27 +17,17 @@
 
 #pragma once
 
-#include <couchbase/api/document_id.hxx>
+#include <couchbase/api/get_replica_result.hxx>
+#include <couchbase/error_context/key_value.hxx>
 
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace couchbase
 {
-namespace impl
-{
-/**
- * Opaque structure representing get_all_replicas request.
- *
- * @see make_get_all_replicas_request()
- *
- * @since 1.0.0
- * @committed
- */
-class get_all_replicas_request;
-} // namespace impl
-
 namespace api
 {
 /**
@@ -56,19 +46,26 @@ struct get_all_replicas_options {
     std::optional<std::chrono::milliseconds> timeout{};
 };
 
-/**
- * Creates operation to retrieve a document for a given id, leveraging both the active and all available replicas.
- *
- * @param id the document identifier
- * @param options operation customization
- * @return couchbase::operation::get_all_replicas_request
- *
- * @see make_get_any_replica_request
- *
- * @since 1.0.0
- * @committed
- */
-[[nodiscard]] std::shared_ptr<couchbase::impl::get_all_replicas_request>
-make_get_all_replicas_request(document_id id, const get_all_replicas_options& options);
+using get_all_replicas_error_context = couchbase::error_context::key_value;
+using get_all_replicas_result = std::vector<get_replica_result>;
+using get_all_replicas_handler = std::function<void(get_all_replicas_error_context, get_all_replicas_result)>;
 } // namespace api
+
+class cluster;
+namespace impl
+{
+
+/**
+ * @since 1.0.0
+ * @internal
+ */
+void
+initiate_get_all_replicas_operation(std::shared_ptr<couchbase::cluster> core,
+                                    const std::string& bucket_name,
+                                    const std::string& scope_name,
+                                    const std::string& collection_name,
+                                    std::string document_key,
+                                    const api::get_all_replicas_options& options,
+                                    api::get_all_replicas_handler&& handler);
+} // namespace impl
 } // namespace couchbase

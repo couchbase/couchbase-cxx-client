@@ -19,6 +19,8 @@
 
 #include <couchbase/api/result.hxx>
 
+#include <vector>
+
 namespace couchbase::api
 {
 
@@ -39,9 +41,7 @@ class get_replica_result : public result
      * @internal
      */
     get_replica_result()
-      : result{}
-      , is_replica_{ false }
-      , value_{}
+      : is_replica_{ false }
       , flags_{ 0 }
     {
     }

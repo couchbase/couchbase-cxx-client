@@ -397,7 +397,7 @@ class bucket : public std::enable_shared_from_this<bucket>
                 }
             }
             ctx.enhanced_error_info = resp.error_info();
-            handler(cmd->request.make_response(std::move(ctx), resp));
+            handler(cmd->request.make_response(std::move(ctx), std::move(resp)));
         });
         if (configured_) {
             map_and_send(cmd);

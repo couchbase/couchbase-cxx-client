@@ -18,7 +18,6 @@
 #pragma once
 
 #include <couchbase/api/get_any_replica.hxx>
-#include <couchbase/api/get_replica_result.hxx>
 
 #include <couchbase/document_id.hxx>
 #include <couchbase/error_context/key_value.hxx>
@@ -38,11 +37,12 @@ namespace couchbase::impl
 class get_any_replica_request
 {
   public:
-    using context_type = couchbase::error_context::key_value;
-    using response_type = api::get_replica_result;
-
-    explicit get_any_replica_request(document_id id, std::optional<std::chrono::milliseconds> timeout)
-      : id_{ std::move(id) }
+    explicit get_any_replica_request(std::string bucket_name,
+                                     std::string scope_name,
+                                     std::string collection_name,
+                                     std::string document_key,
+                                     std::optional<std::chrono::milliseconds> timeout)
+      : id_{ std::move(bucket_name), std::move(scope_name), std::move(collection_name), std::move(document_key) }
       , timeout_{ timeout }
     {
     }

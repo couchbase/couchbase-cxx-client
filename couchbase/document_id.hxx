@@ -17,8 +17,6 @@
 
 #pragma once
 
-#include <couchbase/api/document_id.hxx>
-
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -28,23 +26,22 @@ namespace couchbase
 {
 struct document_id {
     document_id() = default;
-    document_id(std::string bucket, std::string key, bool use_collections = true);
+    document_id(std::string bucket, std::string key);
     document_id(std::string bucket, std::string scope, std::string collection, std::string key);
-    explicit document_id(api::document_id id);
 
     [[nodiscard]] const std::string& bucket() const
     {
-        return id_.bucket();
+        return bucket_;
     }
 
     [[nodiscard]] const std::string& scope() const
     {
-        return id_.scope();
+        return scope_;
     }
 
     [[nodiscard]] const std::string& collection() const
     {
-        return id_.collection();
+        return collection_;
     }
 
     [[nodiscard]] const std::string& collection_path() const
@@ -54,7 +51,7 @@ struct document_id {
 
     [[nodiscard]] const std::string& key() const
     {
-        return id_.key();
+        return key_;
     }
 
     [[nodiscard]] bool has_default_collection() const;
@@ -105,7 +102,10 @@ struct document_id {
     }
 
   private:
-    api::document_id id_{ "", "", false };
+    std::string bucket_{};
+    std::string scope_{};
+    std::string collection_{};
+    std::string key_{};
     std::string collection_path_{};
     std::optional<std::uint32_t> collection_uid_{}; // filled with resolved UID during request lifetime
     bool use_collections_{ true };

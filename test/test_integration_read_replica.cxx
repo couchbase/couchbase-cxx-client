@@ -18,6 +18,7 @@
 #include "test_helper_integration.hxx"
 #include "utils/move_only_context.hxx"
 
+#include <couchbase/api/cluster.hxx>
 #include <couchbase/api/get_any_replica.hxx>
 
 static const tao::json::value basic_doc = {
@@ -36,12 +37,12 @@ TEST_CASE("integration: get any replica", "[integration]")
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    std::string scope{ "_default" };
-    std::string collection{ "_default" };
+    std::string scope_name{ "_default" };
+    std::string collection_name{ "_default" };
     std::string key = test::utils::uniq_id("get_any_replica");
 
     {
-        couchbase::document_id id{ integration.ctx.bucket, scope, collection, key };
+        couchbase::document_id id{ integration.ctx.bucket, scope_name, collection_name, key };
 
         couchbase::operations::insert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
@@ -49,11 +50,11 @@ TEST_CASE("integration: get any replica", "[integration]")
     }
 
     {
-        couchbase::api::document_id id{ integration.ctx.bucket, scope, collection, key };
-        auto req = couchbase::api::make_get_any_replica_request(id, {});
-        auto [ctx, resp] = test::utils::execute(integration.cluster, req);
+        auto collection =
+          couchbase::api::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
+        auto [ctx, result] = collection.get_any_replica(key, {}).get();
         REQUIRE_FALSE(ctx.ec);
-        REQUIRE(resp.content() == basic_doc_json);
+        REQUIRE(result.content() == basic_doc_json);
     }
 }
 
@@ -68,12 +69,12 @@ TEST_CASE("integration: get all replicas", "[integration]")
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    std::string scope{ "_default" };
-    std::string collection{ "_default" };
+    std::string scope_name{ "_default" };
+    std::string collection_name{ "_default" };
     std::string key = test::utils::uniq_id("get_any_replica");
 
     {
-        couchbase::document_id id{ integration.ctx.bucket, scope, collection, key };
+        couchbase::document_id id{ integration.ctx.bucket, scope_name, collection_name, key };
 
         couchbase::operations::insert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
@@ -81,12 +82,12 @@ TEST_CASE("integration: get all replicas", "[integration]")
     }
 
     {
-        couchbase::api::document_id id{ integration.ctx.bucket, scope, collection, key };
-        auto req = couchbase::api::make_get_all_replicas_request(id, {});
-        auto [ctx, resp] = test::utils::execute(integration.cluster, req);
+        auto collection =
+          couchbase::api::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
+        auto [ctx, result] = collection.get_all_replicas(key, {}).get();
         REQUIRE_FALSE(ctx.ec);
-        REQUIRE(resp.size() == number_of_replicas + 1);
-        auto responses_from_active = std::count_if(resp.begin(), resp.end(), [](const auto& r) { return !r.is_replica(); });
+        REQUIRE(result.size() == number_of_replicas + 1);
+        auto responses_from_active = std::count_if(result.begin(), result.end(), [](const auto& r) { return !r.is_replica(); });
         REQUIRE(responses_from_active == 1);
     }
 }

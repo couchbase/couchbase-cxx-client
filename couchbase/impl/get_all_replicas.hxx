@@ -40,21 +40,22 @@ namespace couchbase::impl
 class get_all_replicas_request
 {
   public:
-    using context_type = couchbase::error_context::key_value;
-    using response_type = std::vector<api::get_replica_result>;
-
-    explicit get_all_replicas_request(document_id id, std::optional<std::chrono::milliseconds> timeout)
-      : id_{ std::move(id) }
+    explicit get_all_replicas_request(std::string bucket_name,
+                                      std::string scope_name,
+                                      std::string collection_name,
+                                      std::string document_key,
+                                      std::optional<std::chrono::milliseconds> timeout)
+      : id_{ std::move(bucket_name), std::move(scope_name), std::move(collection_name), std::move(document_key) }
       , timeout_{ timeout }
     {
     }
 
-    [[nodiscard]] auto id() const
+    [[nodiscard]] const auto& id() const
     {
         return id_;
     }
 
-    [[nodiscard]] auto timeout() const
+    [[nodiscard]] const auto& timeout() const
     {
         return timeout_;
     }

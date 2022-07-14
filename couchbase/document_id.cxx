@@ -64,29 +64,26 @@ compile_collection_path(const std::string& scope, const std::string& collection)
     return fmt::format("{}.{}", scope, collection);
 }
 
-document_id::document_id(std::string bucket, std::string key, bool use_collections)
-  : id_(std::move(bucket), std::move(key), use_collections)
-  , use_collections_(use_collections)
+document_id::document_id(std::string bucket, std::string key)
+  : bucket_(std::move(bucket))
+  , key_(std::move(key))
+  , use_collections_(false)
 {
-    collection_path_ = compile_collection_path(id_.scope(), id_.collection());
 }
 
 document_id::document_id(std::string bucket, std::string scope, std::string collection, std::string key)
-  : id_(std::move(bucket), std::move(scope), std::move(collection), std::move(key))
+  : bucket_(std::move(bucket))
+  , scope_(std::move(scope))
+  , collection_(std::move(collection))
+  , key_(std::move(key))
 {
-    collection_path_ = compile_collection_path(id_.scope(), id_.collection());
+    collection_path_ = compile_collection_path(scope_, collection_);
 }
 
 bool
 document_id::has_default_collection() const
 {
     return !use_collections_ || collection_path_ == "_default._default";
-}
-
-document_id::document_id(api::document_id id)
-  : id_{ std::move(id) }
-{
-    collection_path_ = compile_collection_path(id_.scope(), id_.collection());
 }
 
 std::vector<std::byte>
