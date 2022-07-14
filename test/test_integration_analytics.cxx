@@ -69,7 +69,7 @@ TEST_CASE("integration: analytics query")
         REQUIRE(resp.rows[0] == value);
         REQUIRE_FALSE(resp.meta.request_id.empty());
         REQUIRE_FALSE(resp.meta.client_context_id.empty());
-        REQUIRE_FALSE(resp.meta.status.empty());
+        REQUIRE(resp.meta.status == couchbase::operations::analytics_response::analytics_status::success);
     }
 
     SECTION("positional params")
@@ -146,6 +146,7 @@ TEST_CASE("integration: analytics query")
         req.readonly = true;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::error::common_errc::internal_server_failure);
+        REQUIRE(resp.meta.status == couchbase::operations::analytics_response::analytics_status::fatal);
     }
 
     {
