@@ -42,11 +42,24 @@ struct analytics_response {
         std::uint64_t code;
         std::string message;
     };
+    
+    enum analytics_status {
+        running = 0,
+        success,
+        errors,
+        completed,
+        stopped,
+        timedout,
+        closed,
+        fatal,
+        aborted,
+        unknown
+    };
 
     struct analytics_meta_data {
         std::string request_id;
         std::string client_context_id;
-        std::string status;
+        analytics_status status;
         analytics_metrics metrics{};
         std::optional<std::string> signature{};
         std::vector<analytics_problem> errors{};
