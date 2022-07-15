@@ -25,10 +25,7 @@ namespace couchbase::api
 {
 
 /**
- * Represents result of get_any_replica operations, also returned by get_all_replicas.
- *
- * @see couchbase::api::make_get_any_replica_request
- * @see couchbase::api::make_get_all_replicas_request
+ * Represents result of @ref collection#get_any_replica operations, also returned by @ref collection#get_all_replicas.
  *
  * @since 1.0.0
  * @committed
@@ -72,7 +69,7 @@ class get_replica_result : public result
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] bool is_replica() const
+    [[nodiscard]] auto is_replica() const -> bool
     {
         return is_replica_;
     }
@@ -85,7 +82,7 @@ class get_replica_result : public result
      * @since 1.0.0
      * @internal
      */
-    [[nodiscard]] auto& content() const
+    [[nodiscard]] auto content() const -> const std::vector<std::byte>&
     {
         return value_;
     }
@@ -102,7 +99,7 @@ class get_replica_result : public result
      * @committed
      */
     template<typename Transcoder, typename value_type = typename Transcoder::value_type>
-    [[nodiscard]] value_type content_as() const
+    [[nodiscard]] auto content_as() const -> value_type
     {
         return Transcoder::decode(value_, flags_);
     }

@@ -20,6 +20,7 @@
 #include <couchbase/api/get_all_replicas.hxx>
 #include <couchbase/api/get_any_replica.hxx>
 
+#include <future>
 #include <memory>
 
 namespace couchbase
@@ -32,11 +33,20 @@ namespace couchbase::api
 class bucket;
 class scope;
 
+/**
+ * The {@link collection} provides access to all collection APIs.
+ *
+ * @since 1.0.0
+ * @committed
+ */
 class collection
 {
   public:
     /**
      * Constant for the name of the default collection in the bucket.
+     *
+     * @since 1.0.0
+     * @committed
      */
     static constexpr auto default_name{ "_default" };
 
@@ -48,7 +58,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] const std::string& bucket_name() const
+    [[nodiscard]] auto bucket_name() const -> const std::string&
     {
         return bucket_name_;
     }
@@ -61,7 +71,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] const std::string& scope_name() const
+    [[nodiscard]] auto scope_name() const -> const std::string&
     {
         return scope_name_;
     }
@@ -74,44 +84,94 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] const std::string& name() const
+    [[nodiscard]] auto name() const -> const std::string&
     {
         return name_;
     }
 
+    /**
+     * Reads all available replicas, and returns the first found.
+     *
+     * @tparam Handler callable type that implements @ref get_any_replica_handler signature
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param options the custom options
+     * @param handler the handler that implements @ref get_any_replica_handler
+     *
+     * @since 1.0.0
+     * @committed
+     */
     template<typename Handler>
-    void get_any_replica(std::string document_key, const get_any_replica_options& options, Handler&& handler) const
+    void get_any_replica(std::string document_id, const get_any_replica_options& options, Handler&& handler) const
     {
         return impl::initiate_get_any_replica_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_key), options, std::forward<Handler>(handler));
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), options, std::forward<Handler>(handler));
     }
 
-    [[nodiscard]] auto get_any_replica(std::string document_key, const get_any_replica_options& options) const
+    /**
+     * Reads all available replicas, and returns the first found.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param options the custom options
+     * @return the future object with first available result, might be the active or a replica.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto get_any_replica(std::string document_id, const get_any_replica_options& options) const
       -> std::future<std::pair<get_any_replica_error_context, get_any_replica_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<get_any_replica_error_context, get_any_replica_result>>>();
         auto future = barrier->get_future();
         impl::initiate_get_any_replica_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_key), options, [barrier](auto ctx, auto result) {
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), options, [barrier](auto ctx, auto result) {
               barrier->set_value({ std::move(ctx), std::move(result) });
           });
         return future;
     }
 
+    /**
+     * Reads from all available replicas and the active node and returns the results as a vector.
+     *
+     * @note Individual errors are ignored, so you can think of this API as a best effort
+     * approach which explicitly emphasises availability over consistency.
+     *
+     * @tparam Handler callable type that implements @ref get_all_replicas_handler signature
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param options the custom options
+     * @param handler the handler that implements @ref get_all_replicas_handler
+     *
+     * @since 1.0.0
+     * @committed
+     */
     template<typename Handler>
-    void get_all_replicas(std::string document_key, const get_all_replicas_options& options, Handler&& handler) const
+    void get_all_replicas(std::string document_id, const get_all_replicas_options& options, Handler&& handler) const
     {
         return impl::initiate_get_all_replicas_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_key), options, std::forward<Handler>(handler));
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), options, std::forward<Handler>(handler));
     }
 
-    [[nodiscard]] auto get_all_replicas(std::string document_key, const get_all_replicas_options& options) const
+    /**
+     * Reads from all available replicas and the active node and returns the results as a vector.
+     *
+     * @note Individual errors are ignored, so you can think of this API as a best effort
+     * approach which explicitly emphasises availability over consistency.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param options the custom options
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto get_all_replicas(std::string document_id, const get_all_replicas_options& options) const
       -> std::future<std::pair<get_all_replicas_error_context, get_all_replicas_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<get_all_replicas_error_context, get_all_replicas_result>>>();
         auto future = barrier->get_future();
         impl::initiate_get_all_replicas_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_key), options, [barrier](auto ctx, auto result) {
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), options, [barrier](auto ctx, auto result) {
               barrier->set_value({ std::move(ctx), std::move(result) });
           });
         return future;

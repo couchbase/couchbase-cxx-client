@@ -31,20 +31,51 @@ namespace couchbase::api
 {
 class cluster;
 
+/**
+ * Provides access to Couchbase bucket
+ *
+ * @since 1.0.0
+ * @committed
+ */
 class bucket
 {
   public:
-    [[nodiscard]] api::scope default_scope() const
+    /**
+     * Opens default {@link scope}.
+     *
+     * @return the {@link scope} once opened.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto default_scope() const -> scope
     {
         return { core_, name_, scope::default_name };
     }
 
-    [[nodiscard]] api::collection default_collection() const
+    /**
+     * Opens the default collection for this bucket using the default scope.
+     *
+     * @return the opened default {@link collection}.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto default_collection() const -> collection
     {
         return { core_, name_, scope::default_name, collection::default_name };
     }
 
-    [[nodiscard]] api::scope scope(std::string_view scope_name) const
+    /**
+     * Opens the {@link scope} with the given name.
+     *
+     * @param scope_name the name of the scope.
+     * @return the {@link scope} once opened.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto scope(std::string_view scope_name) const -> scope
     {
         return { core_, name_, scope_name };
     }

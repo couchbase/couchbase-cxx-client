@@ -28,15 +28,38 @@ class cluster;
 
 namespace couchbase::api
 {
+/**
+ * The {@link cluster} is the main entry point when connecting to a Couchbase cluster.
+ *
+ * @since 1.0.0
+ * @committed
+ */
 class cluster
 {
   public:
+    /**
+     * Wraps low-level implementation of the SDK to provide common API.
+     *
+     * @param core pointer to the low-level SDK handle
+     *
+     * @since 1.0.0
+     * @volatile
+     */
     explicit cluster(std::shared_ptr<couchbase::cluster> core)
       : core_(std::move(core))
     {
     }
 
-    [[nodiscard]] api::bucket bucket(std::string_view bucket_name) const
+    /**
+     * Opens a {@link bucket} with the given name.
+     *
+     * @param bucket_name the name of the bucket to open.
+     * @return a {@link bucket} once opened.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto bucket(std::string_view bucket_name) const -> bucket
     {
         return { core_, bucket_name };
     }

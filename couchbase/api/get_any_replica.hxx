@@ -30,7 +30,7 @@ namespace couchbase
 namespace api
 {
 /**
- * Options for make_get_any_replica_request().
+ * Options for collection#get_any_replica().
  *
  * @since 1.0.0
  * @committed
@@ -45,8 +45,28 @@ struct get_any_replica_options {
     std::optional<std::chrono::milliseconds> timeout{};
 };
 
+/**
+ * The error context for the @ref collection#get_any_replica() operation
+ *
+ * @since 1.0.0
+ * @committed
+ */
 using get_any_replica_error_context = couchbase::error_context::key_value;
+
+/**
+ * The result for the @ref collection#get_any_replica() operation
+ *
+ * @since 1.0.0
+ * @uncommitted
+ */
 using get_any_replica_result = get_replica_result;
+
+/**
+ * The signature for the handler of the @ref collection#get_any_replica() operation
+ *
+ * @since 1.0.0
+ * @uncommitted
+ */
 using get_any_replica_handler = std::function<void(get_any_replica_error_context, get_any_replica_result)>;
 } // namespace api
 

@@ -31,7 +31,7 @@ namespace couchbase
 namespace api
 {
 /**
- * Options for make_get_all_replicas_request().
+ * Options for @ref collection#get_all_replicas().
  *
  * @since 1.0.0
  * @committed
@@ -46,8 +46,28 @@ struct get_all_replicas_options {
     std::optional<std::chrono::milliseconds> timeout{};
 };
 
+/**
+ * The error context for the @ref collection#get_all_replicas() operation
+ *
+ * @since 1.0.0
+ * @committed
+ */
 using get_all_replicas_error_context = couchbase::error_context::key_value;
+
+/**
+ * The result for the @ref collection#get_all_replicas() operation
+ *
+ * @since 1.0.0
+ * @uncommitted
+ */
 using get_all_replicas_result = std::vector<get_replica_result>;
+
+/**
+ * The signature for the handler of the @ref collection#get_all_replicas() operation
+ *
+ * @since 1.0.0
+ * @uncommitted
+ */
 using get_all_replicas_handler = std::function<void(get_all_replicas_error_context, get_all_replicas_result)>;
 } // namespace api
 

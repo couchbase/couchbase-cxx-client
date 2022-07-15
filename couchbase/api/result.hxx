@@ -57,7 +57,7 @@ class result
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] couchbase::cas cas() const
+    [[nodiscard]] auto cas() const -> couchbase::cas
     {
         return cas_;
     }

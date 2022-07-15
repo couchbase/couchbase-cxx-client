@@ -26,11 +26,19 @@ class cluster;
 
 namespace couchbase::api
 {
+/**
+ * The scope identifies a group of collections and allows high application density as a result.
+ *
+ * @since 1.0.0
+ */
 class scope
 {
   public:
     /**
      * Constant for the name of the default scope in the bucket.
+     *
+     * @since 1.0.0
+     * @committed
      */
     static constexpr auto default_name{ "_default" };
 
@@ -42,7 +50,7 @@ class scope
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] const std::string& bucket_name() const
+    [[nodiscard]] auto bucket_name() const -> const std::string&
     {
         return bucket_name_;
     }
@@ -55,12 +63,21 @@ class scope
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] const std::string& name() const
+    [[nodiscard]] auto name() const -> const std::string&
     {
         return name_;
     }
 
-    [[nodiscard]] api::collection collection(std::string_view collection_name) const
+    /**
+     * Opens a collection for this scope with an explicit name.
+     *
+     * @param collection_name the collection name.
+     * @return the requested collection if successful.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto collection(std::string_view collection_name) const -> collection
     {
         return { core_, bucket_name_, name_, collection_name };
     }

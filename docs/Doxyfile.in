@@ -269,10 +269,10 @@ TAB_SIZE               = 4
 # commands \{ and \} for these it is advised to use the version @{ and @} or use
 # a double escape (\\{ and \\})
 
-ALIASES                = "committed=\xrefitem stability_committed \"Committed\" \"Committed Interfaces\"" \
-                         "uncommitted=\xrefitem stability_uncomitted \"Uncommitted\" \"Uncommitted Interfaces\"" \            
-                         "volatile=\xrefitem stability_volatile \"Volatile\" \"Volatile Interfaces\"" \
-                         "internal=\xrefitem stability_internal \"Internal\" \"Internal Interfaces\"" \
+ALIASES                = "committed=\xrefitem stability_committed \"Committed\" \"Committed Interfaces\" Generally available API and should be preferred in production" \
+                         "uncommitted=\xrefitem stability_uncomitted \"Uncommitted\" \"Uncommitted Interfaces\" Might be changed in the future, and eventually promoted to committed" \
+                         "volatile=\xrefitem stability_volatile \"Volatile\" \"Volatile Interfaces\" Should not be used in production" \
+                         "internal=\xrefitem stability_internal \"Internal\" \"Internal Interfaces\" Internal interface" \
 
 
 # Set the OPTIMIZE_OUTPUT_FOR_C tag to YES if your project consists of C sources
@@ -1289,7 +1289,8 @@ HTML_STYLESHEET        =
 # list). For an example see the documentation.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-HTML_EXTRA_STYLESHEET  = ${PROJECT_SOURCE_DIR}/docs/doxygen-awesome.css
+# Temporarily disable custom stylesheet, because of trailing return types formatting
+# HTML_EXTRA_STYLESHEET  = ${PROJECT_SOURCE_DIR}/docs/doxygen-awesome.css
 
 # The HTML_EXTRA_FILES tag can be used to specify one or more extra images or
 # other source files which should be copied to the HTML output directory. Note
