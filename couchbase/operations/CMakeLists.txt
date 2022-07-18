@@ -2,9 +2,6 @@ add_subdirectory(management)
 
 add_library(
   couchbase_operations OBJECT
-  ../impl/get_all_replicas.cxx
-  ../impl/get_any_replica.cxx
-  ../impl/get_replica.cxx
   document_analytics.cxx
   document_append.cxx
   document_decrement.cxx
