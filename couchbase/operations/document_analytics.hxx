@@ -21,6 +21,7 @@
 #include <couchbase/error_context/analytics.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
+#include <couchbase/io/http_traits.hxx>
 #include <couchbase/json_string.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
@@ -100,6 +101,13 @@ struct analytics_request {
     [[nodiscard]] analytics_response make_response(error_context::analytics&& ctx, const encoded_response_type& encoded) const;
 
     std::string body_str{};
+    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 };
 
 } // namespace couchbase::operations
+namespace couchbase::io::http_traits
+{
+template<>
+struct supports_parent_span<couchbase::operations::analytics_request> : public std::true_type {
+};
+} // namespace couchbase::io::http_traits

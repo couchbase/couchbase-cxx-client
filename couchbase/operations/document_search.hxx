@@ -20,6 +20,7 @@
 #include <couchbase/error_context/search.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
+#include <couchbase/io/http_traits.hxx>
 #include <couchbase/json_string.hxx>
 #include <couchbase/mutation_token.hxx>
 #include <couchbase/platform/uuid.h>
@@ -148,6 +149,14 @@ struct search_request {
     [[nodiscard]] search_response make_response(error_context::search&& ctx, const encoded_response_type& encoded) const;
 
     std::string body_str{};
+
+    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 };
 
 } // namespace couchbase::operations
+namespace couchbase::io::http_traits
+{
+template<>
+struct supports_parent_span<couchbase::operations::search_request> : public std::true_type {
+};
+} // namespace couchbase::io::http_traits

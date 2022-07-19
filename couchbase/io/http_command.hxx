@@ -45,6 +45,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     http_command_handler handler_{};
     std::chrono::milliseconds timeout_{};
     std::string client_context_id_;
+    std::shared_ptr<tracing::request_span> parent_span{ nullptr };
 
     http_command(asio::io_context& ctx,
                  Request req,
@@ -59,6 +60,9 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
       , timeout_(request.timeout.value_or(default_timeout))
       , client_context_id_(request.client_context_id.value_or(uuid::to_string(uuid::random())))
     {
+        if constexpr (io::http_traits::supports_parent_span_v<Request>) {
+            parent_span = request.parent_span;
+        }
     }
 
     void finish_dispatch(const std::string& remote_address, const std::string& local_address)
@@ -74,7 +78,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
 
     void start(http_command_handler&& handler)
     {
-        span_ = tracer_->start_span(tracing::span_name_for_http_service(request.type));
+        span_ = tracer_->start_span(tracing::span_name_for_http_service(request.type), parent_span);
         span_->add_tag(tracing::attributes::service, tracing::service_name_for_http_service(request.type));
         span_->add_tag(tracing::attributes::operation_id, client_context_id_);
         handler_ = std::move(handler);

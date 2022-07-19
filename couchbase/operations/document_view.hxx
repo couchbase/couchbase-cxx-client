@@ -21,6 +21,7 @@
 #include <couchbase/error_context/view.hxx>
 #include <couchbase/io/http_context.hxx>
 #include <couchbase/io/http_message.hxx>
+#include <couchbase/io/http_traits.hxx>
 #include <couchbase/platform/uuid.h>
 #include <couchbase/timeout_defaults.hxx>
 #include <couchbase/view_scan_consistency.hxx>
@@ -89,6 +90,7 @@ struct document_view_request {
     std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
+    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
 
@@ -96,3 +98,10 @@ struct document_view_request {
 };
 
 } // namespace couchbase::operations
+
+namespace couchbase::io::http_traits
+{
+template<>
+struct supports_parent_span<couchbase::operations::document_view_request> : public std::true_type {
+};
+} // namespace couchbase::io::http_traits

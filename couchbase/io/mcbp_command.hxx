@@ -53,6 +53,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     std::chrono::milliseconds timeout_{};
     std::string id_{ uuid::to_string(uuid::random()) };
     std::shared_ptr<tracing::request_span> span_{ nullptr };
+    std::shared_ptr<tracing::request_span> parent_span{ nullptr };
 
     mcbp_command(asio::io_context& ctx, std::shared_ptr<Manager> manager, Request req, std::chrono::milliseconds default_timeout)
       : deadline(ctx)
@@ -73,11 +74,14 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                 timeout_ = durability_timeout_floor;
             }
         }
+        if constexpr (io::mcbp_traits::supports_parent_span_v<Request>) {
+            parent_span = request.parent_span;
+        }
     }
 
     void start(mcbp_command_handler&& handler)
     {
-        span_ = manager_->tracer()->start_span(tracing::span_name_for_mcbp_command(encoded_request_type::body_type::opcode), nullptr);
+        span_ = manager_->tracer()->start_span(tracing::span_name_for_mcbp_command(encoded_request_type::body_type::opcode), parent_span);
         span_->add_tag(tracing::attributes::service, tracing::service::key_value);
         span_->add_tag(tracing::attributes::instance, request.id.bucket());
 

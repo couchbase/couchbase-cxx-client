@@ -25,6 +25,7 @@
 #include <couchbase/protocol/cmd_remove.hxx>
 #include <couchbase/protocol/durability_level.hxx>
 #include <couchbase/timeout_defaults.hxx>
+#include <couchbase/tracing/request_tracer.hxx>
 
 namespace couchbase::operations
 {
@@ -47,6 +48,7 @@ struct remove_request {
     protocol::durability_level durability_level{ protocol::durability_level::none };
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
+    std::shared_ptr<tracing::request_span> parent_span{ nullptr };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 
@@ -59,5 +61,9 @@ namespace couchbase::io::mcbp_traits
 {
 template<>
 struct supports_durability<couchbase::operations::remove_request> : public std::true_type {
+};
+
+template<>
+struct supports_parent_span<couchbase::operations::remove_request> : public std::true_type {
 };
 } // namespace couchbase::io::mcbp_traits

@@ -39,6 +39,20 @@ integration_test_guard::integration_test_guard()
     open_cluster(cluster, origin);
 }
 
+integration_test_guard::integration_test_guard(const couchbase::cluster_options& opts)
+{
+    init_logger();
+    ctx = test_context::load_from_environment();
+    auto auth = ctx.build_auth();
+    auto conn_str = couchbase::utils::parse_connection_string(ctx.connection_string);
+    auto addr = conn_str.bootstrap_nodes.front().address;
+    auto port = conn_str.default_port;
+    couchbase::origin orig(auth, addr, port, opts);
+    cluster = couchbase::cluster::create(io);
+    io_thread = std::thread([this]() { io.run(); });
+    open_cluster(cluster, orig);
+}
+
 integration_test_guard::~integration_test_guard()
 {
     close_cluster(cluster);

@@ -19,8 +19,10 @@
 
 #include <couchbase/io/ip_protocol.hxx>
 #include <couchbase/metrics/logging_meter_options.hxx>
+#include <couchbase/metrics/meter.hxx>
 #include <couchbase/service_type.hxx>
 #include <couchbase/timeout_defaults.hxx>
+#include <couchbase/tracing/request_tracer.hxx>
 #include <couchbase/tracing/threshold_logging_options.hxx>
 
 #include <chrono>
@@ -62,6 +64,8 @@ struct cluster_options {
     tracing::threshold_logging_options tracing_options{};
     metrics::logging_meter_options metrics_options{};
     tls_verify_mode tls_verify{ tls_verify_mode::peer };
+    std::shared_ptr<tracing::request_tracer> tracer{ nullptr };
+    std::shared_ptr<metrics::meter> meter{ nullptr };
 
     std::chrono::milliseconds tcp_keep_alive_interval = timeout_defaults::tcp_keep_alive_interval;
     std::chrono::milliseconds config_poll_interval = timeout_defaults::config_poll_interval;
