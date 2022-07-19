@@ -70,15 +70,26 @@ class cluster : public std::enable_shared_from_this<cluster>
         }
 
         origin_ = origin;
-        if (origin_.options().enable_tracing) {
-            tracer_ = std::make_shared<tracing::threshold_logging_tracer>(ctx_, origin.options().tracing_options);
+        // ignore the enable_tracing flag if a tracer was passed in
+        if (nullptr != origin_.options().tracer) {
+            tracer_ = origin_.options().tracer;
         } else {
-            tracer_ = std::make_shared<tracing::noop_tracer>();
+            if (origin_.options().enable_tracing) {
+                tracer_ = std::make_shared<tracing::threshold_logging_tracer>(ctx_, origin.options().tracing_options);
+            } else {
+                tracer_ = std::make_shared<tracing::noop_tracer>();
+            }
         }
-        if (origin_.options().enable_metrics) {
-            meter_ = std::make_shared<metrics::logging_meter>(ctx_, origin.options().metrics_options);
+        // ignore the metrics options if a meter was passed in.
+        if (nullptr != origin_.options().meter) {
+            meter_ = origin_.options().meter;
         } else {
-            meter_ = std::make_shared<metrics::noop_meter>();
+
+            if (origin_.options().enable_metrics) {
+                meter_ = std::make_shared<metrics::logging_meter>(ctx_, origin.options().metrics_options);
+            } else {
+                meter_ = std::make_shared<metrics::noop_meter>();
+            }
         }
         session_manager_->set_tracer(tracer_);
         if (origin_.options().enable_dns_srv) {

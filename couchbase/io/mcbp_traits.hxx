@@ -27,4 +27,12 @@ struct supports_durability : public std::false_type {
 
 template<typename T>
 inline constexpr bool supports_durability_v = supports_durability<T>::value;
+
+template<typename T>
+struct supports_parent_span : public std::false_type {
+};
+
+template<typename T>
+inline constexpr bool supports_parent_span_v = supports_parent_span<T>::value;
+
 } // namespace couchbase::io::mcbp_traits

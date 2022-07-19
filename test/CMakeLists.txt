@@ -11,6 +11,8 @@ integration_test(arithmetic)
 integration_test(collections)
 integration_test(subdoc)
 integration_test(analytics)
+integration_test(tracer)
+integration_test(meter)
 
 unit_test(connection_string)
 unit_test(utils)

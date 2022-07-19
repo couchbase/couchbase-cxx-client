@@ -25,6 +25,7 @@
 #include <couchbase/protocol/cmd_mutate_in.hxx>
 #include <couchbase/protocol/durability_level.hxx>
 #include <couchbase/timeout_defaults.hxx>
+#include <couchbase/tracing/request_tracer.hxx>
 
 namespace couchbase::operations
 {
@@ -66,6 +67,7 @@ struct mutate_in_request {
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
     bool preserve_expiry{ false };
+    std::shared_ptr<tracing::request_span> parent_span{ nullptr };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context);
 
@@ -78,5 +80,9 @@ namespace couchbase::io::mcbp_traits
 {
 template<>
 struct supports_durability<couchbase::operations::mutate_in_request> : public std::true_type {
+};
+
+template<>
+struct supports_parent_span<couchbase::operations::mutate_in_request> : public std::true_type {
 };
 } // namespace couchbase::io::mcbp_traits
