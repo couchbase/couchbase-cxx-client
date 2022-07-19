@@ -11,6 +11,7 @@ integration_test(arithmetic)
 integration_test(collections)
 integration_test(subdoc)
 integration_test(analytics)
+integration_test(read_replica)
 
 unit_test(connection_string)
 unit_test(utils)

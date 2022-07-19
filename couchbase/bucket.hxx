@@ -320,7 +320,7 @@ class bucket : public std::enable_shared_from_this<bucket>
 
     void drain_deferred_queue()
     {
-        std::queue<std::function<void()>> commands{};
+        std::queue<utils::movable_function<void()>> commands{};
         {
             std::scoped_lock lock(deferred_commands_mutex_);
             std::swap(deferred_commands_, commands);
@@ -329,6 +329,41 @@ class bucket : public std::enable_shared_from_this<bucket>
             commands.front()();
             commands.pop();
         }
+    }
+
+    template<typename Handler>
+    void with_configuration(Handler&& handler)
+    {
+        if (closed_) {
+            return handler(error::network_errc::configuration_not_available, topology::configuration{});
+        }
+        if (configured_) {
+            std::optional<topology::configuration> config{};
+            {
+                std::scoped_lock config_lock(config_mutex_);
+                config = config_;
+            }
+            if (config) {
+                return handler({}, config.value());
+            }
+            return handler(error::network_errc::configuration_not_available, topology::configuration{});
+        }
+        std::scoped_lock lock(deferred_commands_mutex_);
+        deferred_commands_.emplace([self = shared_from_this(), handler = std::forward<Handler>(handler)]() mutable {
+            if (self->closed_ || !self->configured_) {
+                return handler(error::network_errc::configuration_not_available, topology::configuration{});
+            }
+
+            std::optional<topology::configuration> config{};
+            {
+                std::scoped_lock config_lock(self->config_mutex_);
+                config = self->config_;
+            }
+            if (config) {
+                return handler({}, config.value());
+            }
+            return handler(error::network_errc::configuration_not_available, topology::configuration{});
+        });
     }
 
     template<typename Request, typename Handler>
@@ -362,7 +397,7 @@ class bucket : public std::enable_shared_from_this<bucket>
                 }
             }
             ctx.enhanced_error_info = resp.error_info();
-            handler(cmd->request.make_response(std::move(ctx), resp));
+            handler(cmd->request.make_response(std::move(ctx), std::move(resp)));
         });
         if (configured_) {
             map_and_send(cmd);
@@ -402,7 +437,7 @@ class bucket : public std::enable_shared_from_this<bucket>
     std::pair<std::uint16_t, std::int16_t> map_id(const document_id& id)
     {
         std::scoped_lock lock(config_mutex_);
-        return config_->map_key(id.key());
+        return config_->map_key(id.key(), id.node_index());
     }
 
     template<typename Request>
@@ -519,7 +554,7 @@ class bucket : public std::enable_shared_from_this<bucket>
     mutable std::mutex config_mutex_{};
     std::vector<protocol::hello_feature> known_features_;
 
-    std::queue<std::function<void()>> deferred_commands_{};
+    std::queue<utils::movable_function<void()>> deferred_commands_{};
     std::mutex deferred_commands_mutex_{};
 
     std::atomic_bool closed_{ false };

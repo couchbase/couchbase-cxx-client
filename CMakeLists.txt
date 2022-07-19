@@ -82,10 +82,18 @@ add_subdirectory(couchbase/operations)
 add_subdirectory(couchbase/tracing)
 add_subdirectory(couchbase/metrics)
 
+set(couchbase_cxx_client_FILES
+    couchbase/cluster.cxx
+    couchbase/document_id.cxx
+    couchbase/cluster_options.cxx
+    couchbase/impl/get_all_replicas.cxx
+    couchbase/impl/get_any_replica.cxx
+    couchbase/impl/get_replica.cxx)
+
 if(COUCHBASE_CXX_CLIENT_BUILD_SHARED)
-  add_library(couchbase_cxx_client SHARED couchbase/cluster.cxx couchbase/document_id.cxx couchbase/cluster_options.cxx)
+  add_library(couchbase_cxx_client SHARED ${couchbase_cxx_client_FILES})
 else()
-  add_library(couchbase_cxx_client STATIC couchbase/cluster.cxx couchbase/document_id.cxx couchbase/cluster_options.cxx)
+  add_library(couchbase_cxx_client STATIC ${couchbase_cxx_client_FILES})
 endif()
 set_target_properties(couchbase_cxx_client PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(couchbase_cxx_client PUBLIC ${PROJECT_SOURCE_DIR})

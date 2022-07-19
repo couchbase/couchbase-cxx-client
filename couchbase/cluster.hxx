@@ -168,6 +168,18 @@ class cluster : public std::enable_shared_from_this<cluster>
         return handler({});
     }
 
+    template<class Handler>
+    void with_bucket_configuration(const std::string& bucket_name, Handler&& handler)
+    {
+        if (stopped_) {
+            return handler(error::network_errc::cluster_closed, {});
+        }
+        if (auto bucket = find_bucket_by_name(bucket_name); bucket != nullptr) {
+            return bucket->with_configuration(std::forward<Handler>(handler));
+        }
+        return handler(error::common_errc::bucket_not_found, {});
+    }
+
     template<class Request,
              class Handler,
              typename std::enable_if_t<!std::is_same_v<typename Request::encoded_request_type, io::http_request>, int> = 0>

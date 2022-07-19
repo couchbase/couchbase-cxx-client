@@ -21,7 +21,7 @@ if(DOXYGEN_FOUND)
     WORKING_DIRECTORY ${DOXYGEN_OUTPUT_DIR}
     MAIN_DEPENDENCY ${DOXYGEN_CONFIG}
     ${DOXYGEN_CONFIG_TEMPLATE}
-    COMMENT "Generating documentation with Doxygen")
+    COMMENT "Generating documentation with Doxygen: ${DOXYGEN_INDEX_FILE}")
   add_custom_target(doxygen ALL DEPENDS ${DOXYGEN_INDEX_FILE})
 else()
   message(STATUS "Could not find doxygen executable. Documentation generation will be disabled.")

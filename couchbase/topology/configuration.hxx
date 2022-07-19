@@ -112,7 +112,7 @@ struct configuration {
     [[nodiscard]] std::size_t index_for_this_node() const;
     [[nodiscard]] bool has_node_with_hostname(const std::string& hostname) const;
 
-    std::pair<std::uint16_t, std::int16_t> map_key(const std::string& key);
+    std::pair<std::uint16_t, std::int16_t> map_key(const std::string& key, std::size_t index);
 };
 
 configuration

@@ -8,6 +8,7 @@ add_library(
   cmd_exists.cxx
   cmd_get.cxx
   cmd_get_and_lock.cxx
+  cmd_get_replica.cxx
   cmd_get_and_touch.cxx
   cmd_get_cluster_config.cxx
   cmd_get_collection_id.cxx

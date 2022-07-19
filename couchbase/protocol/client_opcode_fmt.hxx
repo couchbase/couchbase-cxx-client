@@ -191,7 +191,7 @@ struct fmt::formatter<couchbase::protocol::client_opcode> {
                 name = "dcp_oso_snapshot (0x65)";
                 break;
             case couchbase::protocol::client_opcode::get_replica:
-                name = "dcp_get_replica (0x83)";
+                name = "get_replica (0x83)";
                 break;
             case couchbase::protocol::client_opcode::list_buckets:
                 name = "list_buckets (0x87)";
