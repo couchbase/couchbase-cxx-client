@@ -23,7 +23,7 @@
 #include <future>
 #include <memory>
 
-namespace couchbase
+namespace couchbase::core
 {
 class cluster;
 } // namespace couchbase
@@ -104,7 +104,7 @@ class collection
     template<typename Handler>
     void get_any_replica(std::string document_id, const get_any_replica_options& options, Handler&& handler) const
     {
-        return impl::initiate_get_any_replica_operation(
+        return core::impl::initiate_get_any_replica_operation(
           core_, bucket_name_, scope_name_, name_, std::move(document_id), options, std::forward<Handler>(handler));
     }
 
@@ -123,7 +123,7 @@ class collection
     {
         auto barrier = std::make_shared<std::promise<std::pair<get_any_replica_error_context, get_any_replica_result>>>();
         auto future = barrier->get_future();
-        impl::initiate_get_any_replica_operation(
+        core::impl::initiate_get_any_replica_operation(
           core_, bucket_name_, scope_name_, name_, std::move(document_id), options, [barrier](auto ctx, auto result) {
               barrier->set_value({ std::move(ctx), std::move(result) });
           });
@@ -148,7 +148,7 @@ class collection
     template<typename Handler>
     void get_all_replicas(std::string document_id, const get_all_replicas_options& options, Handler&& handler) const
     {
-        return impl::initiate_get_all_replicas_operation(
+        return core::impl::initiate_get_all_replicas_operation(
           core_, bucket_name_, scope_name_, name_, std::move(document_id), options, std::forward<Handler>(handler));
     }
 
@@ -170,7 +170,7 @@ class collection
     {
         auto barrier = std::make_shared<std::promise<std::pair<get_all_replicas_error_context, get_all_replicas_result>>>();
         auto future = barrier->get_future();
-        impl::initiate_get_all_replicas_operation(
+        core::impl::initiate_get_all_replicas_operation(
           core_, bucket_name_, scope_name_, name_, std::move(document_id), options, [barrier](auto ctx, auto result) {
               barrier->set_value({ std::move(ctx), std::move(result) });
           });
@@ -190,7 +190,10 @@ class collection
      * @since 1.0.0
      * @internal
      */
-    collection(std::shared_ptr<couchbase::cluster> core, std::string_view bucket_name, std::string_view scope_name, std::string_view name)
+    collection(std::shared_ptr<couchbase::core::cluster> core,
+               std::string_view bucket_name,
+               std::string_view scope_name,
+               std::string_view name)
       : core_(std::move(core))
       , bucket_name_(bucket_name)
       , scope_name_(scope_name)
@@ -198,7 +201,7 @@ class collection
     {
     }
 
-    std::shared_ptr<couchbase::cluster> core_;
+    std::shared_ptr<couchbase::core::cluster> core_;
     std::string bucket_name_;
     std::string scope_name_;
     std::string name_;

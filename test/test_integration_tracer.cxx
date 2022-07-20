@@ -16,16 +16,17 @@
  */
 
 #include "test_helper_integration.hxx"
-#include <couchbase/platform/uuid.h>
 
-class test_span : public couchbase::tracing::request_span
+#include "core/platform/uuid.h"
+
+class test_span : public couchbase::core::tracing::request_span
 {
   public:
     test_span(const std::string& name)
       : test_span(name, nullptr)
     {
     }
-    test_span(const std::string& name, std::shared_ptr<couchbase::tracing::request_span> parent)
+    test_span(const std::string& name, std::shared_ptr<couchbase::core::tracing::request_span> parent)
       : request_span(name, parent)
     {
         start_ = std::chrono::steady_clock::now();
@@ -72,11 +73,11 @@ class test_span : public couchbase::tracing::request_span
     std::map<std::string, std::uint64_t> int_tags_;
 };
 
-class test_tracer : public couchbase::tracing::request_tracer
+class test_tracer : public couchbase::core::tracing::request_tracer
 {
   public:
-    std::shared_ptr<couchbase::tracing::request_span> start_span(std::string name,
-                                                                 std::shared_ptr<couchbase::tracing::request_span> parent = {})
+    std::shared_ptr<couchbase::core::tracing::request_span> start_span(std::string name,
+                                                                       std::shared_ptr<couchbase::core::tracing::request_span> parent = {})
     {
         std::lock_guard<std::mutex> lock(mutex_);
         spans_.push_back(std::make_shared<test_span>(name, parent));
@@ -97,13 +98,13 @@ class test_tracer : public couchbase::tracing::request_tracer
     std::mutex mutex_;
 };
 
-couchbase::document_id
+couchbase::core::document_id
 make_id(const test::utils::test_context& ctx, std::string key = "")
 {
     if (key.empty()) {
         key = test::utils::uniq_id("tracer");
     }
-    return couchbase::document_id{ ctx.bucket, "_default", "_default", key };
+    return couchbase::core::document_id{ ctx.bucket, "_default", "_default", key };
 }
 
 void
@@ -148,29 +149,29 @@ assert_http_op_span_ok(std::shared_ptr<test_span> span, const std::string& op, s
 
 TEST_CASE("integration: enable external tracer", "[integration]")
 {
-    couchbase::cluster_options opts{};
+    couchbase::core::cluster_options opts{};
     auto tracer = std::make_shared<test_tracer>();
     opts.tracer = tracer;
     test::utils::integration_test_guard guard(opts);
     test::utils::open_bucket(guard.cluster, guard.ctx.bucket);
     auto parent_span = GENERATE(std::shared_ptr<test_span>{ nullptr }, std::make_shared<test_span>("parent"));
-    auto value = couchbase::utils::to_binary(R"({"some":"thing"})");
+    auto value = couchbase::core::utils::to_binary(R"({"some":"thing"})");
     auto existing_id = make_id(guard.ctx);
     SECTION("upsert doc 'foo'")
     {
-        couchbase::operations::upsert_request r{ existing_id, value };
+        couchbase::core::operations::upsert_request r{ existing_id, value };
         auto response = test::utils::execute(guard.cluster, r);
-        REQUIRE_FALSE(response.ctx.ec);
+        REQUIRE_FALSE(response.ctx.ec());
 
         SECTION("test some KV ops:")
         {
             SECTION("upsert")
             {
                 tracer->reset();
-                couchbase::operations::upsert_request req{ make_id(guard.ctx), value };
+                couchbase::core::operations::upsert_request req{ make_id(guard.ctx), value };
                 req.parent_span = parent_span;
                 auto resp = test::utils::execute(guard.cluster, req);
-                REQUIRE_FALSE(resp.ctx.ec);
+                REQUIRE_FALSE(resp.ctx.ec());
                 auto spans = tracer->spans();
                 REQUIRE_FALSE(spans.empty());
                 assert_kv_op_span_ok(guard, spans.front(), "cb.upsert", parent_span);
@@ -178,10 +179,10 @@ TEST_CASE("integration: enable external tracer", "[integration]")
             SECTION("insert")
             {
                 tracer->reset();
-                couchbase::operations::insert_request req{ make_id(guard.ctx), value };
+                couchbase::core::operations::insert_request req{ make_id(guard.ctx), value };
                 req.parent_span = parent_span;
                 auto resp = test::utils::execute(guard.cluster, req);
-                REQUIRE_FALSE(resp.ctx.ec);
+                REQUIRE_FALSE(resp.ctx.ec());
                 auto spans = tracer->spans();
                 REQUIRE_FALSE(spans.empty());
                 assert_kv_op_span_ok(guard, spans.front(), "cb.insert", parent_span);
@@ -190,10 +191,10 @@ TEST_CASE("integration: enable external tracer", "[integration]")
             SECTION("get")
             {
                 tracer->reset();
-                couchbase::operations::get_request req{ existing_id };
+                couchbase::core::operations::get_request req{ existing_id };
                 req.parent_span = parent_span;
                 auto resp = test::utils::execute(guard.cluster, req);
-                REQUIRE_FALSE(resp.ctx.ec);
+                REQUIRE_FALSE(resp.ctx.ec());
                 auto spans = tracer->spans();
                 REQUIRE_FALSE(spans.empty());
                 assert_kv_op_span_ok(guard, spans.front(), "cb.get", parent_span);
@@ -201,11 +202,11 @@ TEST_CASE("integration: enable external tracer", "[integration]")
             SECTION("replace")
             {
                 tracer->reset();
-                auto new_value = couchbase::utils::to_binary(R"({"some": "thing else")");
-                couchbase::operations::replace_request req{ existing_id, new_value };
+                auto new_value = couchbase::core::utils::to_binary(R"({"some": "thing else")");
+                couchbase::core::operations::replace_request req{ existing_id, new_value };
                 req.parent_span = parent_span;
                 auto resp = test::utils::execute(guard.cluster, req);
-                REQUIRE_FALSE(resp.ctx.ec);
+                REQUIRE_FALSE(resp.ctx.ec());
                 auto spans = tracer->spans();
                 REQUIRE_FALSE(spans.empty());
                 assert_kv_op_span_ok(guard, spans.front(), "cb.replace", parent_span);
@@ -213,12 +214,12 @@ TEST_CASE("integration: enable external tracer", "[integration]")
             SECTION("lookup_in")
             {
                 tracer->reset();
-                couchbase::operations::lookup_in_request req{};
+                couchbase::core::operations::lookup_in_request req{};
                 req.parent_span = parent_span;
                 req.id = existing_id;
-                req.specs.add_spec(couchbase::protocol::subdoc_opcode::get, false, "some");
+                req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::get, false, "some");
                 auto resp = test::utils::execute(guard.cluster, req);
-                REQUIRE_FALSE(resp.ctx.ec);
+                REQUIRE_FALSE(resp.ctx.ec());
                 auto spans = tracer->spans();
                 REQUIRE_FALSE(spans.empty());
                 assert_kv_op_span_ok(guard, spans.front(), "cb.lookup_in", parent_span);
@@ -226,12 +227,12 @@ TEST_CASE("integration: enable external tracer", "[integration]")
             SECTION("mutate_in")
             {
                 tracer->reset();
-                couchbase::operations::mutate_in_request req{};
+                couchbase::core::operations::mutate_in_request req{};
                 req.parent_span = parent_span;
                 req.id = existing_id;
-                req.specs.add_spec(couchbase::protocol::subdoc_opcode::dict_upsert, false, false, false, "another", R"("field")");
+                req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::dict_upsert, false, false, false, "another", R"("field")");
                 auto resp = test::utils::execute(guard.cluster, req);
-                REQUIRE_FALSE(resp.ctx.ec);
+                REQUIRE_FALSE(resp.ctx.ec());
                 auto spans = tracer->spans();
                 REQUIRE_FALSE(spans.empty());
                 assert_kv_op_span_ok(guard, spans.front(), "cb.mutate_in", parent_span);
@@ -243,7 +244,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
         SECTION("query")
         {
             tracer->reset();
-            couchbase::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
+            couchbase::core::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
             req.parent_span = parent_span;
             auto resp = test::utils::execute(guard.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
@@ -254,7 +255,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
         SECTION("search")
         {
             tracer->reset();
-            couchbase::operations::search_request req{};
+            couchbase::core::operations::search_request req{};
             req.parent_span = parent_span;
             req.index_name = "idontexist";
             req.query = R"("foo")";
@@ -271,7 +272,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
                 return;
             }
             tracer->reset();
-            couchbase::operations::analytics_request req{};
+            couchbase::core::operations::analytics_request req{};
             req.parent_span = parent_span;
             req.bucket_name = guard.ctx.bucket;
             req.statement = R"(SELECT "ruby rules" AS greeting)";
@@ -284,7 +285,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
         SECTION("view")
         {
             tracer->reset();
-            couchbase::operations::document_view_request req{};
+            couchbase::core::operations::document_view_request req{};
             req.parent_span = parent_span;
             req.bucket_name = guard.ctx.bucket;
             req.view_name = "idontexist";

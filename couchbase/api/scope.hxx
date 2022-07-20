@@ -85,14 +85,14 @@ class scope
   private:
     friend class bucket;
 
-    scope(std::shared_ptr<couchbase::cluster> core, std::string_view bucket_name, std::string_view name)
+    scope(std::shared_ptr<couchbase::core::cluster> core, std::string_view bucket_name, std::string_view name)
       : core_(std::move(core))
       , bucket_name_(bucket_name)
       , name_(name)
     {
     }
 
-    std::shared_ptr<couchbase::cluster> core_;
+    std::shared_ptr<couchbase::core::cluster> core_;
     std::string bucket_name_;
     std::string name_;
 };

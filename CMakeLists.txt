@@ -68,27 +68,158 @@ include(cmake/OpenSSL.cmake)
 
 include(cmake/VersionInfo.cmake)
 
-add_subdirectory(couchbase/meta)
-add_subdirectory(couchbase/platform)
-add_subdirectory(couchbase/logger)
-add_subdirectory(couchbase/crypto)
-add_subdirectory(couchbase/sasl)
-add_subdirectory(couchbase/topology)
-add_subdirectory(couchbase/utils)
-add_subdirectory(couchbase/protocol)
-add_subdirectory(couchbase/io)
-add_subdirectory(couchbase/management)
-add_subdirectory(couchbase/operations)
-add_subdirectory(couchbase/tracing)
-add_subdirectory(couchbase/metrics)
+add_subdirectory(core/meta)
+add_subdirectory(core/platform)
+add_subdirectory(core/logger)
+add_subdirectory(core/crypto)
+add_subdirectory(core/sasl)
+add_subdirectory(core/io)
+add_subdirectory(core/tracing)
+add_subdirectory(core/metrics)
 
 set(couchbase_cxx_client_FILES
-    couchbase/cluster.cxx
-    couchbase/document_id.cxx
-    couchbase/cluster_options.cxx
-    couchbase/impl/get_all_replicas.cxx
-    couchbase/impl/get_any_replica.cxx
-    couchbase/impl/get_replica.cxx)
+    core/cluster.cxx
+    core/cluster_options.cxx
+    core/document_id.cxx
+    core/error_context/key_value.cxx
+    core/management/analytics_link_azure_blob_external.cxx
+    core/management/analytics_link_couchbase_remote.cxx
+    core/management/analytics_link_s3_external.cxx
+    core/operations/document_analytics.cxx
+    core/operations/document_append.cxx
+    core/operations/document_decrement.cxx
+    core/operations/document_exists.cxx
+    core/operations/document_get.cxx
+    core/operations/document_get_and_lock.cxx
+    core/operations/document_get_and_touch.cxx
+    core/operations/document_get_projected.cxx
+    core/operations/document_increment.cxx
+    core/operations/document_insert.cxx
+    core/operations/document_lookup_in.cxx
+    core/operations/document_mutate_in.cxx
+    core/operations/document_prepend.cxx
+    core/operations/document_query.cxx
+    core/operations/document_remove.cxx
+    core/operations/document_replace.cxx
+    core/operations/document_search.cxx
+    core/operations/document_touch.cxx
+    core/operations/document_unlock.cxx
+    core/operations/document_upsert.cxx
+    core/operations/document_view.cxx
+    core/operations/http_noop.cxx
+    core/operations/management/analytics_dataset_create.cxx
+    core/operations/management/analytics_dataset_drop.cxx
+    core/operations/management/analytics_dataset_get_all.cxx
+    core/operations/management/analytics_dataverse_create.cxx
+    core/operations/management/analytics_dataverse_drop.cxx
+    core/operations/management/analytics_get_pending_mutations.cxx
+    core/operations/management/analytics_index_create.cxx
+    core/operations/management/analytics_index_drop.cxx
+    core/operations/management/analytics_index_get_all.cxx
+    core/operations/management/analytics_link_connect.cxx
+    core/operations/management/analytics_link_create.cxx
+    core/operations/management/analytics_link_disconnect.cxx
+    core/operations/management/analytics_link_drop.cxx
+    core/operations/management/analytics_link_get_all.cxx
+    core/operations/management/analytics_link_replace.cxx
+    core/operations/management/bucket_create.cxx
+    core/operations/management/bucket_describe.cxx
+    core/operations/management/bucket_drop.cxx
+    core/operations/management/bucket_flush.cxx
+    core/operations/management/bucket_get.cxx
+    core/operations/management/bucket_get_all.cxx
+    core/operations/management/bucket_update.cxx
+    core/operations/management/cluster_describe.cxx
+    core/operations/management/cluster_developer_preview_enable.cxx
+    core/operations/management/collection_create.cxx
+    core/operations/management/collection_drop.cxx
+    core/operations/management/collections_manifest_get.cxx
+    core/operations/management/error_utils.cxx
+    core/operations/management/eventing_deploy_function.cxx
+    core/operations/management/eventing_drop_function.cxx
+    core/operations/management/eventing_get_all_functions.cxx
+    core/operations/management/eventing_get_function.cxx
+    core/operations/management/eventing_get_status.cxx
+    core/operations/management/eventing_pause_function.cxx
+    core/operations/management/eventing_resume_function.cxx
+    core/operations/management/eventing_undeploy_function.cxx
+    core/operations/management/eventing_upsert_function.cxx
+    core/operations/management/freeform.cxx
+    core/operations/management/group_drop.cxx
+    core/operations/management/group_get.cxx
+    core/operations/management/group_get_all.cxx
+    core/operations/management/group_upsert.cxx
+    core/operations/management/query_index_build_deferred.cxx
+    core/operations/management/query_index_create.cxx
+    core/operations/management/query_index_drop.cxx
+    core/operations/management/query_index_get_all.cxx
+    core/operations/management/role_get_all.cxx
+    core/operations/management/scope_create.cxx
+    core/operations/management/scope_drop.cxx
+    core/operations/management/scope_get_all.cxx
+    core/operations/management/search_get_stats.cxx
+    core/operations/management/search_index_analyze_document.cxx
+    core/operations/management/search_index_control_ingest.cxx
+    core/operations/management/search_index_control_plan_freeze.cxx
+    core/operations/management/search_index_control_query.cxx
+    core/operations/management/search_index_drop.cxx
+    core/operations/management/search_index_get.cxx
+    core/operations/management/search_index_get_all.cxx
+    core/operations/management/search_index_get_documents_count.cxx
+    core/operations/management/search_index_get_stats.cxx
+    core/operations/management/search_index_upsert.cxx
+    core/operations/management/user_drop.cxx
+    core/operations/management/user_get.cxx
+    core/operations/management/user_get_all.cxx
+    core/operations/management/user_upsert.cxx
+    core/operations/management/view_index_drop.cxx
+    core/operations/management/view_index_get.cxx
+    core/operations/management/view_index_get_all.cxx
+    core/operations/management/view_index_upsert.cxx
+    core/operations/mcbp_noop.cxx
+    core/protocol/client_request.cxx
+    core/protocol/client_response.cxx
+    core/protocol/cmd_append.cxx
+    core/protocol/cmd_cluster_map_change_notification.cxx
+    core/protocol/cmd_decrement.cxx
+    core/protocol/cmd_exists.cxx
+    core/protocol/cmd_get.cxx
+    core/protocol/cmd_get_and_lock.cxx
+    core/protocol/cmd_get_and_touch.cxx
+    core/protocol/cmd_get_cluster_config.cxx
+    core/protocol/cmd_get_collection_id.cxx
+    core/protocol/cmd_get_collections_manifest.cxx
+    core/protocol/cmd_get_error_map.cxx
+    core/protocol/cmd_get_meta.cxx
+    core/protocol/cmd_get_replica.cxx
+    core/protocol/cmd_hello.cxx
+    core/protocol/cmd_increment.cxx
+    core/protocol/cmd_insert.cxx
+    core/protocol/cmd_lookup_in.cxx
+    core/protocol/cmd_mutate_in.cxx
+    core/protocol/cmd_noop.cxx
+    core/protocol/cmd_prepend.cxx
+    core/protocol/cmd_remove.cxx
+    core/protocol/cmd_replace.cxx
+    core/protocol/cmd_sasl_auth.cxx
+    core/protocol/cmd_sasl_list_mechs.cxx
+    core/protocol/cmd_sasl_step.cxx
+    core/protocol/cmd_select_bucket.cxx
+    core/protocol/cmd_touch.cxx
+    core/protocol/cmd_unlock.cxx
+    core/protocol/cmd_upsert.cxx
+    core/protocol/frame_info_utils.cxx
+    core/protocol/status.cxx
+    core/topology/configuration.cxx
+    core/utils/binary.cxx
+    core/utils/connection_string.cxx
+    core/utils/duration_parser.cxx
+    core/utils/json.cxx
+    core/utils/json_streaming_lexer.cxx
+    core/utils/url_codec.cxx
+    core/impl/get_all_replicas.cxx
+    core/impl/get_any_replica.cxx
+    core/impl/get_replica.cxx)
 
 if(COUCHBASE_CXX_CLIENT_BUILD_SHARED)
   add_library(couchbase_cxx_client SHARED ${couchbase_cxx_client_FILES})
@@ -125,6 +256,9 @@ target_link_libraries(
   couchbase_cxx_client
   PUBLIC fmt::fmt
          spdlog::spdlog
+         snappy
+         jsonsl
+         hdr_histogram_static
          couchbase_backtrace
          couchbase_logger
          couchbase_platform
@@ -132,12 +266,6 @@ target_link_libraries(
          couchbase_meta
          couchbase_crypto
          couchbase_sasl
-         couchbase_topology
-         couchbase_utils
-         couchbase_protocol
-         couchbase_management
-         couchbase_operations
-         couchbase_operations_management
          couchbase_tracing
          couchbase_metrics)
 if(NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)

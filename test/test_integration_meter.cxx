@@ -16,9 +16,10 @@
  */
 
 #include "test_helper_integration.hxx"
-#include <couchbase/platform/uuid.h>
 
-class test_value_recorder : public couchbase::metrics::value_recorder
+#include "core/platform/uuid.h"
+
+class test_value_recorder : public couchbase::core::metrics::value_recorder
 {
   public:
     test_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags)
@@ -53,15 +54,15 @@ class test_value_recorder : public couchbase::metrics::value_recorder
     std::list<std::uint64_t> values_;
 };
 
-class test_meter : public couchbase::metrics::meter
+class test_meter : public couchbase::core::metrics::meter
 {
   public:
     test_meter()
-      : couchbase::metrics::meter()
+      : couchbase::core::metrics::meter()
     {
     }
-    std::shared_ptr<couchbase::metrics::value_recorder> get_value_recorder(const std::string& name,
-                                                                           const std::map<std::string, std::string>& tags) override
+    std::shared_ptr<couchbase::core::metrics::value_recorder> get_value_recorder(const std::string& name,
+                                                                                 const std::map<std::string, std::string>& tags) override
     {
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = value_recorders_.equal_range(name);
@@ -108,38 +109,38 @@ assert_kv_recorder_tags(std::list<std::shared_ptr<test_value_recorder>> recorder
     REQUIRE(recorders.front()->tags()["db.operation"].find(op, 0) == 0);
 }
 
-couchbase::document_id
+couchbase::core::document_id
 make_id(const test::utils::test_context& ctx, std::string key = "")
 {
     if (key.empty()) {
         key = test::utils::uniq_id("tracer");
     }
-    return couchbase::document_id{ ctx.bucket, "_default", "_default", key };
+    return couchbase::core::document_id{ ctx.bucket, "_default", "_default", key };
 }
 
 TEST_CASE("integration: use external meter", "[integration]")
 {
-    couchbase::cluster_options opts{};
+    couchbase::core::cluster_options opts{};
     auto meter = std::make_shared<test_meter>();
     opts.meter = meter;
     test::utils::integration_test_guard guard(opts);
     test::utils::open_bucket(guard.cluster, guard.ctx.bucket);
-    auto value = couchbase::utils::to_binary("{\"some\": \"thing\"");
+    auto value = couchbase::core::utils::to_binary(R"({"some": "thing")");
     auto existing_id = make_id(guard.ctx, "foo");
     SECTION("add doc 'foo'")
     {
-        couchbase::operations::upsert_request r{ existing_id, value };
+        couchbase::core::operations::upsert_request r{ existing_id, value };
         auto response = test::utils::execute(guard.cluster, r);
-        REQUIRE_FALSE(response.ctx.ec);
+        REQUIRE_FALSE(response.ctx.ec());
     }
     SECTION("test KV ops")
     {
         SECTION("upsert")
         {
             meter->reset();
-            couchbase::operations::upsert_request r{ existing_id, value };
+            couchbase::core::operations::upsert_request r{ existing_id, value };
             auto response = test::utils::execute(guard.cluster, r);
-            REQUIRE_FALSE(response.ctx.ec);
+            REQUIRE_FALSE(response.ctx.ec());
             auto recorders = meter->get_recorders("db.couchbase.operations");
             REQUIRE_FALSE(recorders.empty());
             assert_kv_recorder_tags(recorders, "upsert");
@@ -147,9 +148,9 @@ TEST_CASE("integration: use external meter", "[integration]")
         SECTION("insert")
         {
             meter->reset();
-            couchbase::operations::insert_request r{ make_id(guard.ctx), value };
+            couchbase::core::operations::insert_request r{ make_id(guard.ctx), value };
             auto response = test::utils::execute(guard.cluster, r);
-            REQUIRE_FALSE(response.ctx.ec);
+            REQUIRE_FALSE(response.ctx.ec());
             auto recorders = meter->get_recorders("db.couchbase.operations");
             REQUIRE_FALSE(recorders.empty());
             assert_kv_recorder_tags(recorders, "insert");
@@ -157,10 +158,10 @@ TEST_CASE("integration: use external meter", "[integration]")
         SECTION("replace")
         {
             meter->reset();
-            auto new_value = couchbase::utils::to_binary("{\"some\": \"thing else\"");
-            couchbase::operations::replace_request r{ existing_id, new_value };
+            auto new_value = couchbase::core::utils::to_binary("{\"some\": \"thing else\"");
+            couchbase::core::operations::replace_request r{ existing_id, new_value };
             auto response = test::utils::execute(guard.cluster, r);
-            REQUIRE_FALSE(response.ctx.ec);
+            REQUIRE_FALSE(response.ctx.ec());
             auto recorders = meter->get_recorders("db.couchbase.operations");
             REQUIRE_FALSE(recorders.empty());
             assert_kv_recorder_tags(recorders, "replace");
@@ -168,9 +169,9 @@ TEST_CASE("integration: use external meter", "[integration]")
         SECTION("get")
         {
             meter->reset();
-            couchbase::operations::get_request r{ existing_id };
+            couchbase::core::operations::get_request r{ existing_id };
             auto response = test::utils::execute(guard.cluster, r);
-            REQUIRE_FALSE(response.ctx.ec);
+            REQUIRE_FALSE(response.ctx.ec());
             auto meters = meter->get_recorders("db.couchbase.operations");
             REQUIRE_FALSE(meters.empty());
             assert_kv_recorder_tags(meters, "get");

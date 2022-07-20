@@ -21,7 +21,7 @@
 
 #include <memory>
 
-namespace couchbase
+namespace couchbase::core
 {
 class cluster;
 } // namespace couchbase
@@ -45,7 +45,7 @@ class cluster
      * @since 1.0.0
      * @volatile
      */
-    explicit cluster(std::shared_ptr<couchbase::cluster> core)
+    explicit cluster(std::shared_ptr<couchbase::core::cluster> core)
       : core_(std::move(core))
     {
     }
@@ -65,6 +65,6 @@ class cluster
     }
 
   private:
-    std::shared_ptr<couchbase::cluster> core_;
+    std::shared_ptr<couchbase::core::cluster> core_;
 };
 } // namespace couchbase::api

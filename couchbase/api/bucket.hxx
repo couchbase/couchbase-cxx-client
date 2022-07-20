@@ -22,10 +22,10 @@
 
 #include <memory>
 
-namespace couchbase
+namespace couchbase::core
 {
 class cluster;
-} // namespace couchbase
+} // namespace couchbase::core
 
 namespace couchbase::api
 {
@@ -83,13 +83,13 @@ class bucket
   private:
     friend class cluster;
 
-    bucket(std::shared_ptr<couchbase::cluster> core, std::string_view name)
+    bucket(std::shared_ptr<couchbase::core::cluster> core, std::string_view name)
       : core_(std::move(core))
       , name_(name)
     {
     }
 
-    std::shared_ptr<couchbase::cluster> core_;
+    std::shared_ptr<couchbase::core::cluster> core_;
     std::string name_;
 };
 } // namespace couchbase::api

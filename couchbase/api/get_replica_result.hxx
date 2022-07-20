@@ -54,7 +54,7 @@ class get_replica_result : public result
      * @since 1.0.0
      * @committed
      */
-    get_replica_result(couchbase::cas cas, bool is_replica, std::vector<std::byte> value, std::uint32_t flags)
+    get_replica_result(couchbase::api::cas cas, bool is_replica, std::vector<std::byte> value, std::uint32_t flags)
       : result{ cas }
       , is_replica_{ is_replica }
       , value_{ std::move(value) }

@@ -20,9 +20,9 @@
 #include "integration_shortcuts.hxx"
 #include "test_context.hxx"
 
-#include <couchbase/management/bucket_settings.hxx>
-#include <couchbase/operations/management/bucket_describe.hxx>
-#include <couchbase/operations/management/cluster_describe.hxx>
+#include "core/management/bucket_settings.hxx"
+#include "core/operations/management/bucket_describe.hxx"
+#include "core/operations/management/cluster_describe.hxx"
 
 #include <optional>
 
@@ -32,16 +32,16 @@ class integration_test_guard
 {
   public:
     integration_test_guard();
-    integration_test_guard(const couchbase::cluster_options& opts);
+    integration_test_guard(const couchbase::core::cluster_options& opts);
     ~integration_test_guard();
 
-    inline const couchbase::operations::management::bucket_describe_response::bucket_info& load_bucket_info(bool refresh = false)
+    inline const couchbase::core::operations::management::bucket_describe_response::bucket_info& load_bucket_info(bool refresh = false)
     {
         return load_bucket_info(ctx.bucket, refresh);
     }
 
-    const couchbase::operations::management::bucket_describe_response::bucket_info& load_bucket_info(const std::string& bucket_name,
-                                                                                                     bool refresh = false);
+    const couchbase::core::operations::management::bucket_describe_response::bucket_info& load_bucket_info(const std::string& bucket_name,
+                                                                                                           bool refresh = false);
 
     inline std::size_t number_of_nodes()
     {
@@ -63,26 +63,26 @@ class integration_test_guard
         return load_bucket_info(bucket_name).number_of_replicas;
     }
 
-    inline couchbase::management::cluster::bucket_storage_backend storage_backend()
+    inline couchbase::core::management::cluster::bucket_storage_backend storage_backend()
     {
         return load_bucket_info(ctx.bucket).storage_backend;
     }
 
-    const couchbase::operations::management::cluster_describe_response::cluster_info& load_cluster_info(bool refresh = false);
+    const couchbase::core::operations::management::cluster_describe_response::cluster_info& load_cluster_info(bool refresh = false);
 
-    inline bool has_service(couchbase::service_type service)
+    inline bool has_service(couchbase::core::service_type service)
     {
         return load_cluster_info().services.count(service) > 0;
     }
 
     inline bool has_eventing_service()
     {
-        return has_service(couchbase::service_type::eventing);
+        return has_service(couchbase::core::service_type::eventing);
     }
 
     inline bool has_analytics_service()
     {
-        return has_service(couchbase::service_type::analytics);
+        return has_service(couchbase::core::service_type::analytics);
     }
 
     auto number_of_query_nodes()
@@ -97,11 +97,11 @@ class integration_test_guard
 
     std::thread io_thread{};
     asio::io_context io{};
-    std::shared_ptr<couchbase::cluster> cluster;
+    std::shared_ptr<couchbase::core::cluster> cluster;
     test_context ctx;
-    couchbase::origin origin;
+    couchbase::core::origin origin;
 
-    std::map<std::string, couchbase::operations::management::bucket_describe_response::bucket_info, std::less<>> info{};
-    std::optional<couchbase::operations::management::cluster_describe_response::cluster_info> cluster_info{};
+    std::map<std::string, couchbase::core::operations::management::bucket_describe_response::bucket_info, std::less<>> info{};
+    std::optional<couchbase::core::operations::management::cluster_describe_response::cluster_info> cluster_info{};
 };
 } // namespace test::utils

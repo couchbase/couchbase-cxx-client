@@ -17,8 +17,7 @@
 
 #include "test_helper_integration.hxx"
 
-#include <couchbase/cas_fmt.hxx>
-#include <couchbase/utils/binary.hxx>
+#include "core/utils/binary.hxx"
 
 TEST_CASE("integration: append", "[integration]")
 {
@@ -26,33 +25,32 @@ TEST_CASE("integration: append", "[integration]")
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
     {
-        couchbase::operations::upsert_request req{ id, couchbase::utils::to_binary("world") };
+        couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary("world") };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec.message())
-        REQUIRE_FALSE(resp.ctx.ec);
-        INFO("cas=" << fmt::to_string(resp.cas))
+        INFO(resp.ctx.ec().message())
+        REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         INFO("seqno=" << resp.token.sequence_number)
         REQUIRE(resp.token.sequence_number != 0);
     }
     {
-        couchbase::operations::append_request req{ id, couchbase::utils::to_binary("!") };
+        couchbase::core::operations::append_request req{ id, couchbase::core::utils::to_binary("!") };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec.message())
-        REQUIRE_FALSE(resp.ctx.ec);
+        INFO(resp.ctx.ec().message())
+        REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         INFO("seqno=" << resp.token.sequence_number)
         REQUIRE(resp.token.sequence_number != 0);
     }
     {
-        couchbase::operations::get_request req{ id };
+        couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec.message())
-        REQUIRE_FALSE(resp.ctx.ec);
+        INFO(resp.ctx.ec().message())
+        REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
-        REQUIRE(resp.value == couchbase::utils::to_binary("world!"));
+        REQUIRE(resp.value == couchbase::core::utils::to_binary("world!"));
     }
 }
 
@@ -62,32 +60,32 @@ TEST_CASE("integration: prepend", "[integration]")
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
     {
-        couchbase::operations::upsert_request req{ id, couchbase::utils::to_binary("world") };
+        couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary("world") };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec.message())
-        REQUIRE_FALSE(resp.ctx.ec);
+        INFO(resp.ctx.ec().message())
+        REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         INFO("seqno=" << resp.token.sequence_number)
         REQUIRE(resp.token.sequence_number != 0);
     }
     {
-        couchbase::operations::prepend_request req{ id, couchbase::utils::to_binary("Hello, ") };
+        couchbase::core::operations::prepend_request req{ id, couchbase::core::utils::to_binary("Hello, ") };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec.message())
-        REQUIRE_FALSE(resp.ctx.ec);
+        INFO(resp.ctx.ec().message())
+        REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         INFO("seqno=" << resp.token.sequence_number)
         REQUIRE(resp.token.sequence_number != 0);
     }
     {
-        couchbase::operations::get_request req{ id };
+        couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec.message())
-        REQUIRE_FALSE(resp.ctx.ec);
+        INFO(resp.ctx.ec().message())
+        REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
-        REQUIRE(resp.value == couchbase::utils::to_binary("Hello, world"));
+        REQUIRE(resp.value == couchbase::core::utils::to_binary("Hello, world"));
     }
 }
 
@@ -96,19 +94,19 @@ TEST_CASE("integration: binary ops on missing document", "[integration]")
     test::utils::integration_test_guard integration;
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", "missing_key" };
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", "missing_key" };
 
     SECTION("append")
     {
-        couchbase::operations::append_request req{ id, couchbase::utils::to_binary("") };
+        couchbase::core::operations::append_request req{ id, couchbase::core::utils::to_binary("") };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::error::key_value_errc::document_not_found);
+        REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::document_not_found);
     }
 
     SECTION("prepend")
     {
-        couchbase::operations::prepend_request req{ id, couchbase::utils::to_binary("") };
+        couchbase::core::operations::prepend_request req{ id, couchbase::core::utils::to_binary("") };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::error::key_value_errc::document_not_found);
+        REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::document_not_found);
     }
 }

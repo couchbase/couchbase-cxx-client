@@ -17,12 +17,12 @@
 
 #include "integration_shortcuts.hxx"
 
-#include <couchbase/utils/join_strings.hxx>
+#include "core/utils/join_strings.hxx"
 
 namespace test::utils
 {
 void
-open_cluster(std::shared_ptr<couchbase::cluster> cluster, const couchbase::origin& origin)
+open_cluster(std::shared_ptr<couchbase::core::cluster> cluster, const couchbase::core::origin& origin)
 {
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();
@@ -30,12 +30,12 @@ open_cluster(std::shared_ptr<couchbase::cluster> cluster, const couchbase::origi
     auto rc = f.get();
     if (rc) {
         LOG_CRITICAL(
-          "unable to connect to the cluster: {}, nodes={}", rc.message(), couchbase::utils::join_strings(origin.get_nodes(), ", "));
+          "unable to connect to the cluster: {}, nodes={}", rc.message(), couchbase::core::utils::join_strings(origin.get_nodes(), ", "));
         throw std::system_error(rc);
     }
 }
 void
-close_cluster(std::shared_ptr<couchbase::cluster> cluster)
+close_cluster(std::shared_ptr<couchbase::core::cluster> cluster)
 {
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
@@ -44,7 +44,7 @@ close_cluster(std::shared_ptr<couchbase::cluster> cluster)
 }
 
 void
-open_bucket(std::shared_ptr<couchbase::cluster> cluster, const std::string& bucket_name)
+open_bucket(std::shared_ptr<couchbase::core::cluster> cluster, const std::string& bucket_name)
 {
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();
@@ -57,7 +57,7 @@ open_bucket(std::shared_ptr<couchbase::cluster> cluster, const std::string& buck
 }
 
 void
-close_bucket(std::shared_ptr<couchbase::cluster> cluster, const std::string& bucket_name)
+close_bucket(std::shared_ptr<couchbase::core::cluster> cluster, const std::string& bucket_name)
 {
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();

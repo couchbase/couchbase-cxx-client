@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/cas.hxx>
+#include <couchbase/api/cas.hxx>
 
 namespace couchbase::api
 {
@@ -46,7 +46,7 @@ class result
      * @since 1.0.0
      * @committed
      */
-    explicit result(couchbase::cas cas)
+    explicit result(couchbase::api::cas cas)
       : cas_(cas)
     {
     }
@@ -57,13 +57,13 @@ class result
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto cas() const -> couchbase::cas
+    [[nodiscard]] auto cas() const -> couchbase::api::cas
     {
         return cas_;
     }
 
   private:
-    couchbase::cas cas_;
+    couchbase::api::cas cas_;
 };
 
 } // namespace couchbase::api

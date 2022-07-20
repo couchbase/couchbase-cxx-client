@@ -18,7 +18,7 @@
 #pragma once
 
 #include <couchbase/api/get_replica_result.hxx>
-#include <couchbase/error_context/key_value.hxx>
+#include <couchbase/api/key_value_error_context.hxx>
 
 #include <chrono>
 #include <functional>
@@ -52,7 +52,7 @@ struct get_all_replicas_options {
  * @since 1.0.0
  * @committed
  */
-using get_all_replicas_error_context = couchbase::error_context::key_value;
+using get_all_replicas_error_context = couchbase::api::key_value_error_context;
 
 /**
  * The result for the @ref collection#get_all_replicas() operation
@@ -71,6 +71,8 @@ using get_all_replicas_result = std::vector<get_replica_result>;
 using get_all_replicas_handler = std::function<void(get_all_replicas_error_context, get_all_replicas_result)>;
 } // namespace api
 
+namespace core
+{
 class cluster;
 namespace impl
 {
@@ -80,7 +82,7 @@ namespace impl
  * @internal
  */
 void
-initiate_get_all_replicas_operation(std::shared_ptr<couchbase::cluster> core,
+initiate_get_all_replicas_operation(std::shared_ptr<couchbase::core::cluster> core,
                                     const std::string& bucket_name,
                                     const std::string& scope_name,
                                     const std::string& collection_name,
@@ -88,4 +90,5 @@ initiate_get_all_replicas_operation(std::shared_ptr<couchbase::cluster> core,
                                     const api::get_all_replicas_options& options,
                                     api::get_all_replicas_handler&& handler);
 } // namespace impl
+} // namespace core
 } // namespace couchbase
