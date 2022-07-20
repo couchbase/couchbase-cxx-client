@@ -19,10 +19,12 @@
 
 #include <couchbase/error_context/key_value.hxx>
 #include <couchbase/io/mcbp_context.hxx>
+#include <couchbase/io/mcbp_traits.hxx>
 #include <couchbase/io/retry_context.hxx>
 #include <couchbase/protocol/client_request.hxx>
 #include <couchbase/protocol/cmd_lookup_in.hxx>
 #include <couchbase/timeout_defaults.hxx>
+#include <couchbase/tracing/request_tracer.hxx>
 
 namespace couchbase::operations
 {
@@ -55,6 +57,7 @@ struct lookup_in_request {
     protocol::lookup_in_request_body::lookup_in_specs specs{};
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
+    std::shared_ptr<tracing::request_span> parent_span{ nullptr };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context);
 
@@ -62,3 +65,10 @@ struct lookup_in_request {
 };
 
 } // namespace couchbase::operations
+namespace couchbase::io::mcbp_traits
+{
+
+template<>
+struct supports_parent_span<couchbase::operations::lookup_in_request> : public std::true_type {
+};
+} // namespace couchbase::io::mcbp_traits

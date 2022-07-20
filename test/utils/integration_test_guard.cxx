@@ -39,6 +39,21 @@ integration_test_guard::integration_test_guard()
     open_cluster(cluster, origin);
 }
 
+integration_test_guard::integration_test_guard(const couchbase::cluster_options& opts)
+{
+    init_logger();
+    ctx = test_context::load_from_environment();
+    auto auth = ctx.build_auth();
+    auto connstr = couchbase::utils::parse_connection_string(ctx.connection_string);
+    // for now, lets _only_ add a tracer or meter from the incoming options
+    connstr.options.meter = opts.meter;
+    connstr.options.tracer = opts.tracer;
+    couchbase::origin orig(auth, connstr);
+    cluster = couchbase::cluster::create(io);
+    io_thread = std::thread([this]() { io.run(); });
+    open_cluster(cluster, orig);
+}
+
 integration_test_guard::~integration_test_guard()
 {
     close_cluster(cluster);
