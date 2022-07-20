@@ -39,14 +39,17 @@ integration_test_guard::integration_test_guard()
     open_cluster(cluster, origin);
 }
 
-integration_test_guard::integration_test_guard(const couchbase::cluster_options& opts)
+integration_test_guard::integration_test_guard(couchbase::cluster_options& opts)
 {
     init_logger();
     ctx = test_context::load_from_environment();
     auto auth = ctx.build_auth();
     auto conn_str = couchbase::utils::parse_connection_string(ctx.connection_string);
     auto addr = conn_str.bootstrap_nodes.front().address;
-    auto port = conn_str.default_port;
+    auto port = conn_str.bootstrap_nodes.front().port;
+    // NOTE: this OVERRIDES any tls option you set in the options, so we match
+    // what the environment is setup to use.
+    opts.enable_tls = conn_str.tls;
     couchbase::origin orig(auth, addr, port, opts);
     cluster = couchbase::cluster::create(io);
     io_thread = std::thread([this]() { io.run(); });

@@ -32,7 +32,7 @@ class integration_test_guard
 {
   public:
     integration_test_guard();
-    integration_test_guard(const couchbase::cluster_options& opts);
+    integration_test_guard(couchbase::cluster_options& opts);
     ~integration_test_guard();
 
     inline const couchbase::operations::management::bucket_describe_response::bucket_info& load_bucket_info(bool refresh = false)
