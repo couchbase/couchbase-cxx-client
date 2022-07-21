@@ -19,7 +19,7 @@
 
 #include "server_version.hxx"
 
-#include <couchbase/origin.hxx>
+#include "core/origin.hxx"
 
 #include <string>
 
@@ -35,9 +35,9 @@ struct test_context {
     server_version version{ 6, 6, 0 };
     deployment_type deployment{ deployment_type::on_prem };
 
-    [[nodiscard]] couchbase::cluster_credentials build_auth() const
+    [[nodiscard]] couchbase::core::cluster_credentials build_auth() const
     {
-        couchbase::cluster_credentials auth{};
+        couchbase::core::cluster_credentials auth{};
         if (certificate_path.empty()) {
             auth.username = username;
             auth.password = password;

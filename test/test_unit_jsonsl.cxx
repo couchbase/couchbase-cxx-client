@@ -17,7 +17,7 @@
 
 #include "test_helper.hxx"
 
-#include <couchbase/utils/json_streaming_lexer.hxx>
+#include "core/utils/json_streaming_lexer.hxx"
 
 #include <jsonsl.h>
 #include <ostream>

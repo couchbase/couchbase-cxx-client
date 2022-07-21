@@ -19,8 +19,8 @@
 
 #include "utils/move_only_context.hxx"
 
-#include <couchbase/operations/management/collections.hxx>
-#include <couchbase/operations/management/query.hxx>
+#include "core/operations/management/collections.hxx"
+#include "core/operations/management/query.hxx"
 
 TEST_CASE("integration: trivial non-data query", "[integration]")
 {
@@ -31,7 +31,7 @@ TEST_CASE("integration: trivial non-data query", "[integration]")
     }
 
     {
-        couchbase::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
+        couchbase::core::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec.message())
         REQUIRE_FALSE(resp.ctx.ec);
@@ -49,11 +49,11 @@ TEST_CASE("integration: query with handler capturing non-copyable object", "[int
     }
 
     {
-        couchbase::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
-        auto barrier = std::make_shared<std::promise<couchbase::operations::query_response>>();
+        couchbase::core::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
+        auto barrier = std::make_shared<std::promise<couchbase::core::operations::query_response>>();
         auto f = barrier->get_future();
         test::utils::move_only_context ctx("foobar");
-        auto handler = [barrier, ctx = std::move(ctx)](couchbase::operations::query_response&& resp) {
+        auto handler = [barrier, ctx = std::move(ctx)](couchbase::core::operations::query_response&& resp) {
             CHECK(ctx.payload() == "foobar");
             barrier->set_value(std::move(resp));
         };
@@ -80,10 +80,10 @@ TEST_CASE("integration: query on a collection", "[integration]")
         { "a", 1.0 },
         { "b", 2.0 },
     };
-    auto json = couchbase::utils::json::generate_binary(value);
+    auto json = couchbase::core::utils::json::generate_binary(value);
 
     {
-        couchbase::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
+        couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
         auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
@@ -91,7 +91,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
     }
 
     {
-        couchbase::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
+        couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
         auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
@@ -99,7 +99,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
     }
 
     {
-        couchbase::operations::management::query_index_create_request req{};
+        couchbase::core::operations::management::query_index_create_request req{};
         req.bucket_name = integration.ctx.bucket;
         req.scope_name = scope_name;
         req.collection_name = collection_name;
@@ -109,51 +109,54 @@ TEST_CASE("integration: query on a collection", "[integration]")
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
-    couchbase::mutation_token mutation_token;
+    couchbase::core::mutation_token mutation_token;
 
     {
-        couchbase::document_id id{ integration.ctx.bucket, scope_name, collection_name, key };
-        couchbase::operations::insert_request req{ id, json };
+        couchbase::core::document_id id{ integration.ctx.bucket, scope_name, collection_name, key };
+        couchbase::core::operations::insert_request req{ id, json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_FALSE(resp.ctx.ec());
         mutation_token = resp.token;
     }
 
     SECTION("correct scope and collection")
     {
-        couchbase::operations::query_request req{ fmt::format(R"(SELECT a, b FROM {} WHERE META().id = "{}")", collection_name, key) };
+        couchbase::core::operations::query_request req{ fmt::format(
+          R"(SELECT a, b FROM {} WHERE META().id = "{}")", collection_name, key) };
         req.bucket_name = integration.ctx.bucket;
         req.scope_name = scope_name;
         req.mutation_state = { mutation_token };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 1);
-        REQUIRE(value == couchbase::utils::json::parse(resp.rows[0]));
+        REQUIRE(value == couchbase::core::utils::json::parse(resp.rows[0]));
     }
 
     SECTION("missing scope")
     {
-        couchbase::operations::query_request req{ fmt::format(R"(SELECT a, b FROM {} WHERE META().id = "{}")", collection_name, key) };
+        couchbase::core::operations::query_request req{ fmt::format(
+          R"(SELECT a, b FROM {} WHERE META().id = "{}")", collection_name, key) };
         req.bucket_name = integration.ctx.bucket;
         req.scope_name = "missing_scope";
         req.mutation_state = { mutation_token };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::error::query_errc::index_failure);
+        REQUIRE(resp.ctx.ec == couchbase::core::error::query_errc::index_failure);
     }
 
     SECTION("missing collection")
     {
-        couchbase::operations::query_request req{ fmt::format(R"(SELECT a, b FROM missing_collection WHERE META().id = "{}")", key) };
+        couchbase::core::operations::query_request req{ fmt::format(R"(SELECT a, b FROM missing_collection WHERE META().id = "{}")", key) };
         req.bucket_name = integration.ctx.bucket;
         req.scope_name = scope_name;
         req.mutation_state = { mutation_token };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::error::query_errc::index_failure);
+        REQUIRE(resp.ctx.ec == couchbase::core::error::query_errc::index_failure);
     }
 
     SECTION("prepared")
     {
-        couchbase::operations::query_request req{ fmt::format(R"(SELECT a, b FROM {} WHERE META().id = "{}")", collection_name, key) };
+        couchbase::core::operations::query_request req{ fmt::format(
+          R"(SELECT a, b FROM {} WHERE META().id = "{}")", collection_name, key) };
         req.bucket_name = integration.ctx.bucket;
         req.scope_name = scope_name;
         req.mutation_state = { mutation_token };
@@ -161,7 +164,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 1);
-        REQUIRE(value == couchbase::utils::json::parse(resp.rows[0]));
+        REQUIRE(value == couchbase::core::utils::json::parse(resp.rows[0]));
     }
 }
 
@@ -174,7 +177,7 @@ TEST_CASE("integration: read only with no results", "[integration]")
     }
 
     {
-        couchbase::operations::query_request req{ fmt::format("SELECT * FROM {} LIMIT 0", integration.ctx.bucket) };
+        couchbase::core::operations::query_request req{ fmt::format("SELECT * FROM {} LIMIT 0", integration.ctx.bucket) };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.rows.empty());
@@ -190,10 +193,10 @@ TEST_CASE("integration: invalid query", "[integration]")
     }
 
     {
-        couchbase::operations::query_request req{ "I'm not n1ql" };
+        couchbase::core::operations::query_request req{ "I'm not n1ql" };
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec.message());
-        REQUIRE(resp.ctx.ec == couchbase::error::common_errc::parsing_failure);
+        REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::parsing_failure);
     }
 }
 
@@ -207,7 +210,7 @@ TEST_CASE("integration: preserve expiry for mutatation query", "[integration]")
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    couchbase::document_id id{
+    couchbase::core::document_id id{
         integration.ctx.bucket,
         "_default",
         "_default",
@@ -218,16 +221,16 @@ TEST_CASE("integration: preserve expiry for mutatation query", "[integration]")
     const char* expiry_path = "$document.exptime";
 
     {
-        couchbase::operations::upsert_request req{ id, couchbase::utils::to_binary(R"({"foo":42})") };
+        couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary(R"({"foo":42})") };
         req.expiry = expiry;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_FALSE(resp.ctx.ec());
     }
 
     {
-        couchbase::operations::lookup_in_request req{ id };
-        req.specs.add_spec(couchbase::protocol::subdoc_opcode::get, true, expiry_path);
-        req.specs.add_spec(couchbase::protocol::subdoc_opcode::get, false, "foo");
+        couchbase::core::operations::lookup_in_request req{ id };
+        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::get, true, expiry_path);
+        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::get, false, "foo");
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(expiry == std::stoul(resp.fields[0].value));
         REQUIRE("42" == resp.fields[1].value);
@@ -235,16 +238,16 @@ TEST_CASE("integration: preserve expiry for mutatation query", "[integration]")
 
     {
         std::string statement = fmt::format("UPDATE {} AS b USE KEYS '{}' SET b.foo = 43", integration.ctx.bucket, id.key());
-        couchbase::operations::query_request req{ statement };
+        couchbase::core::operations::query_request req{ statement };
         req.preserve_expiry = true;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
     {
-        couchbase::operations::lookup_in_request req{ id };
-        req.specs.add_spec(couchbase::protocol::subdoc_opcode::get, true, expiry_path);
-        req.specs.add_spec(couchbase::protocol::subdoc_opcode::get, false, "foo");
+        couchbase::core::operations::lookup_in_request req{ id };
+        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::get, true, expiry_path);
+        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::get, false, "foo");
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(expiry == std::stoul(resp.fields[0].value));
         REQUIRE("43" == resp.fields[1].value);
@@ -260,11 +263,11 @@ TEST_CASE("integration: streaming query results", "[integration]")
     }
 
     {
-        couchbase::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
+        couchbase::core::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
         std::vector<std::string> rows{};
         req.row_callback = [&rows](std::string&& row) {
             rows.emplace_back(std::move(row));
-            return couchbase::utils::json::stream_control::next_row;
+            return couchbase::core::utils::json::stream_control::next_row;
         };
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec.message())
@@ -283,15 +286,17 @@ TEST_CASE("integration: streaming query results with stop in the middle", "[inte
     }
 
     {
-        couchbase::operations::query_request req{ R"(SELECT * FROM  [{"tech": "C++"}, {"tech": "Ruby"}, {"tech": "Couchbase"}] AS data)" };
+        couchbase::core::operations::query_request req{
+            R"(SELECT * FROM  [{"tech": "C++"}, {"tech": "Ruby"}, {"tech": "Couchbase"}] AS data)"
+        };
         std::vector<std::string> rows{};
         req.row_callback = [&rows](std::string&& row) {
             bool should_stop = row.find("Ruby") != std::string::npos;
             rows.emplace_back(std::move(row));
             if (should_stop) {
-                return couchbase::utils::json::stream_control::stop;
+                return couchbase::core::utils::json::stream_control::stop;
             }
-            return couchbase::utils::json::stream_control::next_row;
+            return couchbase::core::utils::json::stream_control::next_row;
         };
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec.message())
@@ -315,13 +320,13 @@ TEST_CASE("integration: streaming analytics results", "[integration]")
     }
 
     {
-        couchbase::operations::analytics_request req{
+        couchbase::core::operations::analytics_request req{
             R"(SELECT * FROM  [{"tech": "C++"}, {"tech": "Ruby"}, {"tech": "Couchbase"}] AS data)"
         };
         std::vector<std::string> rows{};
         req.row_callback = [&rows](std::string&& row) {
             rows.emplace_back(std::move(row));
-            return couchbase::utils::json::stream_control::next_row;
+            return couchbase::core::utils::json::stream_control::next_row;
         };
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec.message())
@@ -343,7 +348,7 @@ TEST_CASE("integration: sticking query to the service node", "[integration]")
 
     std::string node_to_stick_queries;
     {
-        couchbase::operations::query_request req{ R"(SELECT 42 AS answer)" };
+        couchbase::core::operations::query_request req{ R"(SELECT 42 AS answer)" };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 1);
@@ -360,7 +365,7 @@ TEST_CASE("integration: sticking query to the service node", "[integration]")
         threads.reserve(10);
         for (int i = 0; i < 10; ++i) {
             threads.emplace_back([i, &cluster = integration.cluster, node_to_stick_queries, &used_nodes, &used_nodes_mutex]() {
-                couchbase::operations::query_request req{ fmt::format(R"(SELECT {} AS answer)", i) };
+                couchbase::core::operations::query_request req{ fmt::format(R"(SELECT {} AS answer)", i) };
                 auto resp = test::utils::execute(cluster, req);
                 if (resp.ctx.ec || resp.served_by_node.empty() || resp.rows.size() != 1 ||
                     resp.rows[0] != fmt::format(R"({{"answer":{}}})", i)) {
@@ -381,7 +386,7 @@ TEST_CASE("integration: sticking query to the service node", "[integration]")
 
         for (int i = 0; i < 10; ++i) {
             threads.emplace_back([i, &cluster = integration.cluster, node_to_stick_queries, &used_nodes, &used_nodes_mutex]() {
-                couchbase::operations::query_request req{ fmt::format(R"(SELECT {} AS answer)", i) };
+                couchbase::core::operations::query_request req{ fmt::format(R"(SELECT {} AS answer)", i) };
                 req.send_to_node = node_to_stick_queries;
                 auto resp = test::utils::execute(cluster, req);
                 if (resp.ctx.ec || resp.served_by_node.empty() || resp.rows.size() != 1 ||
@@ -411,11 +416,12 @@ TEST_CASE("analytics create dataset")
     if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
-    couchbase::operations::analytics_request req{ fmt::format("CREATE DATAVERSE `{}`.`test-scope` IF NOT EXISTS", integration.ctx.bucket) };
+    couchbase::core::operations::analytics_request req{ fmt::format("CREATE DATAVERSE `{}`.`test-scope` IF NOT EXISTS",
+                                                                    integration.ctx.bucket) };
     std::vector<std::string> rows{};
     req.row_callback = [&rows](std::string&& row) {
         rows.emplace_back(std::move(row));
-        return couchbase::utils::json::stream_control::next_row;
+        return couchbase::core::utils::json::stream_control::next_row;
     };
 
     auto resp = test::utils::execute(integration.cluster, req);

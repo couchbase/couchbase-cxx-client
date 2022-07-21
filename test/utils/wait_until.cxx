@@ -20,10 +20,10 @@
 namespace test::utils
 {
 bool
-wait_until_bucket_healthy(std::shared_ptr<couchbase::cluster> cluster, const std::string& bucket_name)
+wait_until_bucket_healthy(std::shared_ptr<couchbase::core::cluster> cluster, const std::string& bucket_name)
 {
     return wait_until([cluster, bucket_name]() {
-        couchbase::operations::management::bucket_get_request req{ bucket_name };
+        couchbase::core::operations::management::bucket_get_request req{ bucket_name };
         auto resp = test::utils::execute(cluster, req);
         if (resp.ctx.ec) {
             return false;
@@ -41,12 +41,12 @@ wait_until_bucket_healthy(std::shared_ptr<couchbase::cluster> cluster, const std
 }
 
 bool
-wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::cluster> cluster,
+wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::core::cluster> cluster,
                                           const std::string& bucket_name,
                                           const std::uint64_t current_manifest_uid)
 {
     auto propagated = test::utils::wait_until([cluster, bucket_name, current_manifest_uid]() {
-        couchbase::operations::management::collections_manifest_get_request req{ { bucket_name, "_default", "_default", "" } };
+        couchbase::core::operations::management::collections_manifest_get_request req{ { bucket_name, "_default", "_default", "" } };
         auto resp = test::utils::execute(cluster, req);
         return resp.manifest.uid >= current_manifest_uid;
     });

@@ -23,23 +23,23 @@ TEST_CASE("benchmark: get a document", "[benchmark]")
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    couchbase::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
 
     {
         const tao::json::value value = {
             { "a", 1.0 },
             { "b", 2.0 },
         };
-        couchbase::operations::upsert_request req{ id, couchbase::utils::json::generate_binary(value) };
+        couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::json::generate_binary(value) };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec.message())
-        REQUIRE_FALSE(resp.ctx.ec);
+        INFO(resp.ctx.ec().message())
+        REQUIRE_FALSE(resp.ctx.ec());
     }
 
     BENCHMARK("get")
     {
-        couchbase::operations::get_request req{ id };
+        couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_FALSE(resp.ctx.ec());
     };
 }

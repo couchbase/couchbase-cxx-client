@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -25,23 +25,89 @@ namespace couchbase
  * CAS is a special type that represented in protocol using unsigned 64-bit integer, but only equality checks allowed.
  *
  * The user should not interpret the integer value of the CAS.
+ *
+ * @since 1.0.0
+ * @committed
  */
-struct cas {
-    std::uint64_t value;
+class cas
+{
+  public:
+    /**
+     * Constructs empty CAS value.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    cas() = default;
 
-    bool operator==(const cas& other) const
+    /**
+     * Constructs CAS value using its integer representation that typically comes from protocol level.
+     *
+     * @param value numeric CAS representation
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    explicit cas(std::uint64_t value)
+      : value_{ value }
     {
-        return this->value == other.value;
     }
 
-    bool operator!=(const cas& other) const
+    /**
+     * Checks if CAS instances represent the same value
+     *
+     * @param other
+     * @return true if CAS values represent the same value
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    auto operator==(const cas& other) const -> bool
+    {
+        return this->value_ == other.value_;
+    }
+
+    /**
+     * Checks if CAS instances represent the same value
+     *
+     * @param other another CAS
+     * @return true if CAS values don't represent the same value
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    auto operator!=(const cas& other) const -> bool
     {
         return !(*this == other);
     }
 
-    [[nodiscard]] bool empty() const
+    /**
+     * Checks if CAS contains meaningful value.
+     *
+     * @return true if CAS is empty
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto empty() const -> bool
     {
-        return value == 0;
+        return value_ == 0;
     }
+
+    /**
+     * Returns internal representation of the CAS value.
+     *
+     * @return raw CAS value
+     *
+     * @since 1.0.0
+     * @internal
+     */
+    [[nodiscard]] auto value() const -> std::uint64_t
+    {
+        return value_;
+    }
+
+  private:
+    std::uint64_t value_{ 0 };
 };
 } // namespace couchbase

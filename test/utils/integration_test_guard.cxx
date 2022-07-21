@@ -21,12 +21,12 @@
 namespace test::utils
 {
 integration_test_guard::integration_test_guard()
-  : cluster(couchbase::cluster::create(io))
+  : cluster(couchbase::core::cluster::create(io))
   , ctx(test_context::load_from_environment())
 {
     init_logger();
-    auto connstr = couchbase::utils::parse_connection_string(ctx.connection_string);
-    couchbase::cluster_credentials auth{};
+    auto connstr = couchbase::core::utils::parse_connection_string(ctx.connection_string);
+    couchbase::core::cluster_credentials auth{};
     if (!ctx.certificate_path.empty()) {
         auth.certificate_path = ctx.certificate_path;
         auth.key_path = ctx.key_path;
@@ -35,21 +35,21 @@ integration_test_guard::integration_test_guard()
         auth.password = ctx.password;
     }
     io_thread = std::thread([this]() { io.run(); });
-    origin = couchbase::origin(auth, connstr);
+    origin = couchbase::core::origin(auth, connstr);
     open_cluster(cluster, origin);
 }
 
-integration_test_guard::integration_test_guard(const couchbase::cluster_options& opts)
+integration_test_guard::integration_test_guard(const couchbase::core::cluster_options& opts)
 {
     init_logger();
     ctx = test_context::load_from_environment();
     auto auth = ctx.build_auth();
-    auto connstr = couchbase::utils::parse_connection_string(ctx.connection_string);
+    auto connstr = couchbase::core::utils::parse_connection_string(ctx.connection_string);
     // for now, lets _only_ add a tracer or meter from the incoming options
     connstr.options.meter = opts.meter;
     connstr.options.tracer = opts.tracer;
-    couchbase::origin orig(auth, connstr);
-    cluster = couchbase::cluster::create(io);
+    couchbase::core::origin orig(auth, connstr);
+    cluster = couchbase::core::cluster::create(io);
     io_thread = std::thread([this]() { io.run(); });
     open_cluster(cluster, orig);
 }
@@ -60,17 +60,17 @@ integration_test_guard::~integration_test_guard()
     io_thread.join();
 }
 
-const couchbase::operations::management::bucket_describe_response::bucket_info&
+const couchbase::core::operations::management::bucket_describe_response::bucket_info&
 integration_test_guard::load_bucket_info(const std::string& bucket_name, bool refresh)
 {
     if (info.count(bucket_name) > 0 && !refresh) {
         return info[bucket_name];
     }
 
-    auto resp = execute(cluster, couchbase::operations::management::bucket_describe_request{ bucket_name });
-    if (resp.ctx.ec == couchbase::error::common_errc::service_not_available) {
+    auto resp = execute(cluster, couchbase::core::operations::management::bucket_describe_request{ bucket_name });
+    if (resp.ctx.ec == couchbase::core::error::common_errc::service_not_available) {
         open_bucket(cluster, ctx.bucket);
-        resp = execute(cluster, couchbase::operations::management::bucket_describe_request{ bucket_name });
+        resp = execute(cluster, couchbase::core::operations::management::bucket_describe_request{ bucket_name });
     }
     if (resp.ctx.ec) {
         LOG_CRITICAL("unable to load info for bucket \"{}\": {}", bucket_name, resp.ctx.ec.message());
@@ -81,17 +81,17 @@ integration_test_guard::load_bucket_info(const std::string& bucket_name, bool re
     return info[bucket_name];
 }
 
-const couchbase::operations::management::cluster_describe_response::cluster_info&
+const couchbase::core::operations::management::cluster_describe_response::cluster_info&
 integration_test_guard::load_cluster_info(bool refresh)
 {
     if (cluster_info && !refresh) {
         return cluster_info.value();
     }
 
-    auto resp = execute(cluster, couchbase::operations::management::cluster_describe_request{});
-    if (resp.ctx.ec == couchbase::error::common_errc::service_not_available) {
+    auto resp = execute(cluster, couchbase::core::operations::management::cluster_describe_request{});
+    if (resp.ctx.ec == couchbase::core::error::common_errc::service_not_available) {
         open_bucket(cluster, ctx.bucket);
-        resp = execute(cluster, couchbase::operations::management::cluster_describe_request{});
+        resp = execute(cluster, couchbase::core::operations::management::cluster_describe_request{});
     }
     if (resp.ctx.ec) {
         LOG_CRITICAL("unable to load info for cluster: {}", resp.ctx.ec.message());
