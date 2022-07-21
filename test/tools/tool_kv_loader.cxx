@@ -245,7 +245,9 @@ main()
                std::chrono::duration_cast<std::chrono::seconds>(total_time).count(),
                std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count());
     auto diff = std::chrono::duration_cast<std::chrono::seconds>(total_time).count();
-    fmt::print("total rate: {} ops/s\n", total / static_cast<std::uint64_t>(diff));
+    if (diff > 0) {
+        fmt::print("total rate: {} ops/s\n", total / static_cast<std::uint64_t>(diff));
+    }
     std::scoped_lock lock(errors_mutex);
     if (!errors.empty()) {
         fmt::print("error stats:\n");
