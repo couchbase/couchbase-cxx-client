@@ -63,5 +63,7 @@ wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::core::clust
                                           const std::uint64_t current_manifest_uid);
 
 bool
-wait_for_search_pindexes_ready(std::shared_ptr<couchbase::cluster> cluster, const std::string& bucket_name, const std::string& index_name);
+wait_for_search_pindexes_ready(std::shared_ptr<couchbase::core::cluster> cluster,
+                               const std::string& bucket_name,
+                               const std::string& index_name);
 } // namespace test::utils

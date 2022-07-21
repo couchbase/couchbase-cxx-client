@@ -16,10 +16,11 @@
  */
 
 #include "wait_until.hxx"
-#include <couchbase/operations/management/bucket_get.hxx>
-#include <couchbase/operations/management/collections_manifest_get.hxx>
-#include <couchbase/operations/management/search_get_stats.hxx>
-#include <couchbase/utils/json.hxx>
+
+#include "core/operations/management/bucket_get.hxx"
+#include "core/operations/management/collections_manifest_get.hxx"
+#include "core/operations/management/search_get_stats.hxx"
+#include "core/utils/json.hxx"
 
 namespace test::utils
 {
@@ -62,15 +63,17 @@ wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::core::clust
 }
 
 bool
-wait_for_search_pindexes_ready(std::shared_ptr<couchbase::cluster> cluster, const std::string& bucket_name, const std::string& index_name)
+wait_for_search_pindexes_ready(std::shared_ptr<couchbase::core::cluster> cluster,
+                               const std::string& bucket_name,
+                               const std::string& index_name)
 {
     return test::utils::wait_until([&]() {
-        couchbase::operations::management::search_index_stats_request req{};
+        couchbase::core::operations::management::search_index_stats_request req{};
         auto resp = test::utils::execute(cluster, req);
         if (resp.ctx.ec || resp.stats.empty()) {
             return false;
         }
-        auto stats = couchbase::utils::json::parse(resp.stats);
+        auto stats = couchbase::core::utils::json::parse(resp.stats);
         const auto* num_pindexes_actual = stats.find(fmt::format("{}:{}:num_pindexes_actual", bucket_name, index_name));
         if (num_pindexes_actual == nullptr || !num_pindexes_actual->is_number()) {
             return false;
