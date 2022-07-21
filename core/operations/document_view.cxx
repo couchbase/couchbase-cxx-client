@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -83,6 +83,16 @@ document_view_request::encode_to(document_view_request::encoded_request_type& en
                 break;
             case couchbase::core::view_sort_order::ascending:
                 query_string.emplace_back("descending=false");
+                break;
+        }
+    }
+    if (on_error) {
+        switch (*on_error) {
+            case couchbase::core::view_on_error::resume:
+                query_string.emplace_back("on_error=continue");
+                break;
+            case couchbase::core::view_on_error::stop:
+                query_string.emplace_back("on_error=stop");
                 break;
         }
     }

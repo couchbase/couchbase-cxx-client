@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@
 #include "core/io/http_traits.hxx"
 #include "core/platform/uuid.h"
 #include "core/timeout_defaults.hxx"
+#include "core/view_on_error.hxx"
 #include "core/view_scan_consistency.hxx"
 #include "core/view_sort_order.hxx"
 
@@ -86,6 +87,7 @@ struct document_view_request {
     std::map<std::string, std::string> raw{};
 
     std::optional<couchbase::core::view_sort_order> order;
+    std::optional<couchbase::core::view_on_error> on_error;
     std::vector<std::string> query_string{};
     std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
     std::optional<std::string> client_context_id{};
