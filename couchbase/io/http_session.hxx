@@ -250,9 +250,8 @@ class http_session : public std::enable_shared_from_this<http_session>
             }
         }
 
-        if (on_stop_handler_) {
-            on_stop_handler_();
-            on_stop_handler_ = nullptr;
+        if (auto handler = std::move(on_stop_handler_); handler) {
+            handler();
         }
         state_ = diag::endpoint_state::disconnected;
     }
