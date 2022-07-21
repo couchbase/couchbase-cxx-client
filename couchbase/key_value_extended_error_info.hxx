@@ -19,7 +19,7 @@
 
 #include <string>
 
-namespace couchbase::api
+namespace couchbase
 {
 /**
  * Represents extended error information returned by the server in some cases.
@@ -83,4 +83,4 @@ class key_value_extended_error_info
     std::string reference_{};
     std::string context_{};
 };
-} // namespace couchbase::api
+} // namespace couchbase

@@ -23,7 +23,7 @@
 namespace couchbase::core::uuid
 {
 
-using uuid_t = std::array<uint8_t, 16>;
+using uuid_t = std::array<std::uint8_t, 16>;
 
 /**
  * Get a random uuid (version 4 of the uuids)

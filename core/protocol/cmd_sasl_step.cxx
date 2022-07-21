@@ -26,7 +26,7 @@
 namespace couchbase::core::protocol
 {
 bool
-sasl_step_response_body::parse(api::key_value_status_code status,
+sasl_step_response_body::parse(key_value_status_code status,
                                const header_buffer& header,
                                std::uint8_t framing_extras_size,
                                std::uint16_t key_size,
@@ -35,7 +35,7 @@ sasl_step_response_body::parse(api::key_value_status_code status,
                                const cmd_info& /* info */)
 {
     Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == api::key_value_status_code::success) {
+    if (status == key_value_status_code::success) {
         std::transform(body.begin() + framing_extras_size + extras_size + key_size,
                        body.end(),
                        std::back_insert_iterator(value_),

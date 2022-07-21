@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/api/cas.hxx>
+#include <couchbase/cas.hxx>
 
 #include "client_opcode.hxx"
 #include "client_response.hxx"
@@ -62,7 +62,7 @@ class client_request
         opaque_ = val;
     }
 
-    void cas(api::cas val)
+    void cas(couchbase::cas val)
     {
         cas_ = utils::byte_swap(val.value());
     }
@@ -110,7 +110,7 @@ class client_request
 
         const auto& framing_extras = body_.framing_extras();
 
-        uint16_t key_size = gsl::narrow_cast<uint16_t>(body_.key().size());
+        std::uint16_t key_size = gsl::narrow_cast<std::uint16_t>(body_.key().size());
         if (framing_extras.size() == 0) {
             key_size = utils::byte_swap(key_size);
             memcpy(payload.data() + 2, &key_size, sizeof(key_size));
@@ -121,13 +121,13 @@ class client_request
             payload[3] = gsl::narrow_cast<std::byte>(key_size);
         }
 
-        uint8_t ext_size = gsl::narrow_cast<uint8_t>(body_.extras().size());
+        std::uint8_t ext_size = gsl::narrow_cast<std::uint8_t>(body_.extras().size());
         memcpy(payload.data() + 4, &ext_size, sizeof(ext_size));
 
-        uint16_t vbucket = utils::byte_swap(gsl::narrow_cast<uint16_t>(partition_));
+        std::uint16_t vbucket = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(partition_));
         memcpy(payload.data() + 6, &vbucket, sizeof(vbucket));
 
-        uint32_t body_size = utils::byte_swap(gsl::narrow_cast<uint32_t>(body_.size()));
+        std::uint32_t body_size = utils::byte_swap(gsl::narrow_cast<std::uint32_t>(body_.size()));
         memcpy(payload.data() + 8, &body_size, sizeof(body_size));
 
         memcpy(payload.data() + 12, &opaque_, sizeof(opaque_));

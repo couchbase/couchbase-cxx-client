@@ -19,7 +19,7 @@
 
 #include <cstdint>
 
-namespace couchbase::api
+namespace couchbase
 {
 enum class key_value_status_code : std::uint16_t {
     success = 0x00,
@@ -90,4 +90,4 @@ enum class key_value_status_code : std::uint16_t {
     subdoc_can_only_revive_deleted_documents = 0xd6,
     subdoc_deleted_document_cannot_have_value = 0xd7,
 };
-} // namespace couchbase::api
+} // namespace couchbase

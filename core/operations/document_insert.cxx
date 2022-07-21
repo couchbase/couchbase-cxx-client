@@ -34,7 +34,7 @@ insert_request::encode_to(insert_request::encoded_request_type& encoded, mcbp_co
 }
 
 insert_response
-insert_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const
+insert_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
     insert_response response{ std::move(ctx) };
     if (!response.ctx.ec()) {

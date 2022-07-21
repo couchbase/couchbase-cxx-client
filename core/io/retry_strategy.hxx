@@ -126,7 +126,7 @@ class best_effort
 {
   public:
     template<class Request>
-    retry_action should_retry(Request& request, couchbase::api::retry_reason reason)
+    retry_action should_retry(Request& request, couchbase::retry_reason reason)
     {
         if (request.retries.idempotent || allows_non_idempotent_retry(reason)) {
             backoff::backoff_delay delay = backoff_(request);

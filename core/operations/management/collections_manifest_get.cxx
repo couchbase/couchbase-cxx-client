@@ -29,7 +29,7 @@ collections_manifest_get_request::encode_to(encoded_request_type& encoded, mcbp_
 }
 
 collections_manifest_get_response
-collections_manifest_get_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const
+collections_manifest_get_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
     collections_manifest_get_response response{ std::move(ctx) };
     if (!response.ctx.ec()) {

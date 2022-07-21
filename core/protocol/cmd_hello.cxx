@@ -28,7 +28,7 @@
 namespace couchbase::core::protocol
 {
 bool
-hello_response_body::parse(api::key_value_status_code status,
+hello_response_body::parse(key_value_status_code status,
                            const header_buffer& header,
                            std::uint8_t framing_extras_size,
                            std::uint16_t key_size,
@@ -37,8 +37,8 @@ hello_response_body::parse(api::key_value_status_code status,
                            const cmd_info& /* info */)
 {
     Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == api::key_value_status_code::success) {
-        std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
+    if (status == key_value_status_code::success) {
+        std::vector<std::uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
         size_t value_size = body.size() - static_cast<std::size_t>(offset);
         Expects(value_size % 2 == 0);
         size_t num_features = value_size / 2;

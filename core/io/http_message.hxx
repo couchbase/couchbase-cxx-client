@@ -100,7 +100,7 @@ class http_response_body
 };
 
 struct http_response {
-    uint32_t status_code;
+    std::uint32_t status_code;
     std::string status_message;
     std::map<std::string, std::string> headers;
     http_response_body body{};

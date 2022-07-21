@@ -19,7 +19,7 @@
 
 namespace couchbase::core::protocol
 {
-enum class request_frame_info_id : uint8_t {
+enum class request_frame_info_id : std::uint8_t {
     /**
      * No commands may be executed in parallel (received on the same connection) as this command (the command before MUST be completed
      * before execution of this command is started, and this command MUST be completed before execution of the next command is started).
@@ -65,8 +65,8 @@ enum class request_frame_info_id : uint8_t {
      *       +---------------+
      *      0|  ID:2 | Len:2 |
      *
-     * The 2nd and 3rd byte contain a network byte order (uint16) storing the stream ID value which was specified in the DCP stream-request
-     * that created the stream.
+     * The 2nd and 3rd byte contain a network byte order (std::uint16) storing the stream ID value which was specified in the DCP
+     * stream-request that created the stream.
      */
     dcp_stream_id = 0x02,
 
@@ -94,7 +94,7 @@ enum class request_frame_info_id : uint8_t {
 };
 
 constexpr bool
-is_valid_request_frame_info_id(uint8_t value)
+is_valid_request_frame_info_id(std::uint8_t value)
 {
     switch (request_frame_info_id(value)) {
         case request_frame_info_id::barrier:
@@ -108,7 +108,7 @@ is_valid_request_frame_info_id(uint8_t value)
     return false;
 }
 
-enum class response_frame_info_id : uint8_t {
+enum class response_frame_info_id : std::uint8_t {
     /**
      * Time (in microseconds) server spent on the operation. Measured from receiving header from OS to when response given to OS. Size: 2
      * bytes; encoded as variable-precision value (see below)
@@ -130,7 +130,7 @@ enum class response_frame_info_id : uint8_t {
 };
 
 constexpr bool
-is_valid_response_frame_info_id(uint8_t value)
+is_valid_response_frame_info_id(std::uint8_t value)
 {
     switch (response_frame_info_id(value)) {
         case response_frame_info_id::server_duration:

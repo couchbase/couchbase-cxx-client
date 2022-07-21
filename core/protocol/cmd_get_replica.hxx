@@ -42,7 +42,7 @@ class get_replica_response_body
 
     [[nodiscard]] std::uint32_t flags() const;
 
-    [[nodiscard]] bool parse(api::key_value_status_code status,
+    [[nodiscard]] bool parse(key_value_status_code status,
                              const header_buffer& header,
                              std::uint8_t framing_extras_size,
                              std::uint16_t key_size,

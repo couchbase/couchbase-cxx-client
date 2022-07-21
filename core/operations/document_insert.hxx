@@ -31,8 +31,8 @@ namespace couchbase::core::operations
 {
 
 struct insert_response {
-    api::key_value_error_context ctx;
-    couchbase::api::cas cas{};
+    key_value_error_context ctx;
+    couchbase::cas cas{};
     mutation_token token{};
 };
 
@@ -54,7 +54,7 @@ struct insert_request {
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 
-    [[nodiscard]] insert_response make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+    [[nodiscard]] insert_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
 };
 
 } // namespace couchbase::core::operations

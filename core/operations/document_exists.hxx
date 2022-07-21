@@ -30,9 +30,9 @@ namespace couchbase::core::operations
 {
 
 struct exists_response {
-    api::key_value_error_context ctx;
+    key_value_error_context ctx;
     bool deleted{};
-    couchbase::api::cas cas{};
+    couchbase::cas cas{};
     std::uint32_t flags{};
     std::uint32_t expiry{};
     std::uint64_t sequence_number{};
@@ -50,7 +50,7 @@ struct exists_request {
     using encoded_response_type = protocol::client_response<protocol::get_meta_response_body>;
 
     document_id id;
-    uint16_t partition{};
+    std::uint16_t partition{};
     std::uint32_t opaque{};
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
@@ -58,7 +58,7 @@ struct exists_request {
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 
-    [[nodiscard]] exists_response make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+    [[nodiscard]] exists_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
 };
 
 } // namespace couchbase::core::operations

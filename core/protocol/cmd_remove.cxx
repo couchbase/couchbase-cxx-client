@@ -26,7 +26,7 @@
 namespace couchbase::core::protocol
 {
 bool
-remove_response_body::parse(api::key_value_status_code status,
+remove_response_body::parse(key_value_status_code status,
                             const header_buffer& header,
                             std::uint8_t framing_extras_size,
                             std::uint16_t /* key_size */,
@@ -35,7 +35,7 @@ remove_response_body::parse(api::key_value_status_code status,
                             const cmd_info& /* info */)
 {
     Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == api::key_value_status_code::success) {
+    if (status == key_value_status_code::success) {
         using offset_type = std::vector<std::byte>::difference_type;
         offset_type offset = framing_extras_size;
         if (extras_size == 16) {

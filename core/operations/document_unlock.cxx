@@ -32,7 +32,7 @@ unlock_request::encode_to(unlock_request::encoded_request_type& encoded, mcbp_co
 }
 
 unlock_response
-unlock_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const
+unlock_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
     unlock_response response{ std::move(ctx) };
     if (!response.ctx.ec()) {

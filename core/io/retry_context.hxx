@@ -18,7 +18,7 @@
 #pragma once
 
 #include "retry_strategy.hxx"
-#include <couchbase/api/retry_reason.hxx>
+#include <couchbase/retry_reason.hxx>
 
 #include <chrono>
 #include <set>

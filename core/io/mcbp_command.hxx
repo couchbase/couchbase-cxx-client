@@ -91,11 +91,11 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
             if (ec == asio::error::operation_aborted) {
                 return;
             }
-            self->cancel(io::retry_reason::do_not_retry);
+            self->cancel(retry_reason::do_not_retry);
         });
     }
 
-    void cancel(io::retry_reason reason)
+    void cancel(retry_reason reason)
     {
         if (opaque_ && session_) {
             if (session_->cancel(opaque_.value(), asio::error::operation_aborted, reason)) {
@@ -135,7 +135,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         session_->write_and_subscribe(
           req.opaque(),
           req.data(session_->supports_feature(protocol::hello_feature::snappy)),
-          [self = this->shared_from_this()](std::error_code ec, io::retry_reason /* reason */, io::mcbp_message&& msg) mutable {
+          [self = this->shared_from_this()](std::error_code ec, retry_reason /* reason */, io::mcbp_message&& msg) mutable {
               if (ec == asio::error::operation_aborted) {
                   return self->invoke_handler(error::common_errc::ambiguous_timeout);
               }
@@ -164,7 +164,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                   request.id,
                   std::chrono::duration_cast<std::chrono::milliseconds>(time_left).count(),
                   id_);
-        request.retries.reasons.insert(couchbase::core::io::retry_reason::kv_collection_outdated);
+        request.retries.reasons.insert(retry_reason::kv_collection_outdated);
         if (time_left < backoff) {
             return invoke_handler(make_error_code(request.retries.idempotent ? error::common_errc::unambiguous_timeout
                                                                              : error::common_errc::ambiguous_timeout));
@@ -217,7 +217,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
           request.opaque,
           encoded.data(session_->supports_feature(protocol::hello_feature::snappy)),
           [self = this->shared_from_this(),
-           start = std::chrono::steady_clock::now()](std::error_code ec, io::retry_reason reason, io::mcbp_message&& msg) mutable {
+           start = std::chrono::steady_clock::now()](std::error_code ec, retry_reason reason, io::mcbp_message&& msg) mutable {
               static std::string meter_name = "db.couchbase.operations";
               static std::map<std::string, std::string> tags = {
                   { "db.couchbase.service", "kv" },
@@ -234,53 +234,53 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                                                                                                : error::common_errc::ambiguous_timeout));
               }
               if (ec == error::common_errc::request_canceled) {
-                  if (reason == io::retry_reason::do_not_retry) {
+                  if (reason == retry_reason::do_not_retry) {
                       self->span_->add_tag(tracing::attributes::orphan, "canceled");
                       return self->invoke_handler(ec);
                   }
                   return io::retry_orchestrator::maybe_retry(self->manager_, self, reason, ec);
               }
-              api::key_value_status_code status = api::key_value_status_code::invalid;
-              std::optional<api::key_value_error_map_info> error_code{};
+              key_value_status_code status = key_value_status_code::invalid;
+              std::optional<key_value_error_map_info> error_code{};
               if (protocol::is_valid_status(msg.header.status())) {
-                  status = static_cast<api::key_value_status_code>(msg.header.status());
+                  status = static_cast<key_value_status_code>(msg.header.status());
               } else {
                   error_code = self->session_->decode_error_code(msg.header.status());
               }
-              if (status == api::key_value_status_code::not_my_vbucket) {
+              if (status == key_value_status_code::not_my_vbucket) {
                   self->session_->handle_not_my_vbucket(msg);
-                  return io::retry_orchestrator::maybe_retry(self->manager_, self, io::retry_reason::kv_not_my_vbucket, ec);
+                  return io::retry_orchestrator::maybe_retry(self->manager_, self, retry_reason::kv_not_my_vbucket, ec);
               }
-              if (status == api::key_value_status_code::unknown_collection) {
+              if (status == key_value_status_code::unknown_collection) {
                   return self->handle_unknown_collection();
               }
               if (error_code && error_code.value().has_retry_attribute()) {
-                  reason = io::retry_reason::kv_error_map_retry_indicated;
+                  reason = retry_reason::kv_error_map_retry_indicated;
               } else {
                   switch (status) {
-                      case api::key_value_status_code::locked:
+                      case key_value_status_code::locked:
                           if constexpr (encoded_request_type::body_type::opcode != protocol::client_opcode::unlock) {
                               /**
                                * special case for unlock command, when it should not be retried, because it does not make sense
                                * (someone else unlocked the document)
                                */
-                              reason = io::retry_reason::kv_locked;
+                              reason = retry_reason::kv_locked;
                           }
                           break;
-                      case api::key_value_status_code::temporary_failure:
-                          reason = io::retry_reason::kv_temporary_failure;
+                      case key_value_status_code::temporary_failure:
+                          reason = retry_reason::kv_temporary_failure;
                           break;
-                      case api::key_value_status_code::sync_write_in_progress:
-                          reason = io::retry_reason::kv_sync_write_in_progress;
+                      case key_value_status_code::sync_write_in_progress:
+                          reason = retry_reason::kv_sync_write_in_progress;
                           break;
-                      case api::key_value_status_code::sync_write_re_commit_in_progress:
-                          reason = io::retry_reason::kv_sync_write_re_commit_in_progress;
+                      case key_value_status_code::sync_write_re_commit_in_progress:
+                          reason = retry_reason::kv_sync_write_re_commit_in_progress;
                           break;
                       default:
                           break;
                   }
               }
-              if (reason == io::retry_reason::do_not_retry) {
+              if (reason == retry_reason::do_not_retry) {
                   self->invoke_handler(ec, msg);
               } else {
                   io::retry_orchestrator::maybe_retry(self->manager_, self, reason, ec);

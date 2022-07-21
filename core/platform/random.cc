@@ -100,15 +100,15 @@ RandomGenerator::RandomGenerator()
     }
 }
 
-uint64_t
+std::uint64_t
 RandomGenerator::next()
 {
-    uint64_t ret;
+    std::uint64_t ret;
     if (getBytes(&ret, sizeof(ret))) {
         return ret;
     }
 
-    return static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+    return static_cast<std::uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
 }
 
 bool

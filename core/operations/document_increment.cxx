@@ -39,7 +39,7 @@ increment_request::encode_to(increment_request::encoded_request_type& encoded, m
 }
 
 increment_response
-increment_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const
+increment_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
     increment_response response{ std::move(ctx) };
     if (!response.ctx.ec()) {

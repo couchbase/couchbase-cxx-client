@@ -27,9 +27,9 @@ namespace couchbase::core
  * @param buffer the input buffer
  * @return the value of the string
  * @throws std::invalid_argument for an invalid character in the string
- *         std::overflow_error if the input string won't fit in uint64_t
+ *         std::overflow_error if the input string won't fit in std::uint64_t
  */
-uint64_t
+std::uint64_t
 from_hex(std::string_view buffer);
 
 std::string

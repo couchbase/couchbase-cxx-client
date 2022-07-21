@@ -46,7 +46,7 @@ mcbp_parser::next(mcbp_message& msg)
     msg.body.reserve(body_size);
     std::uint32_t key_size = utils::byte_swap(msg.header.keylen);
     std::uint32_t prefix_size = static_cast<std::uint32_t>(msg.header.extlen) + key_size;
-    if (msg.header.magic == static_cast<uint8_t>(protocol::magic::alt_client_response)) {
+    if (msg.header.magic == static_cast<std::uint8_t>(protocol::magic::alt_client_response)) {
         std::uint8_t framing_extras_size = msg.header.keylen & 0xfU;
         key_size = (msg.header.keylen & 0xf0U) >> 8U;
         prefix_size = static_cast<std::uint32_t>(framing_extras_size) + static_cast<std::uint32_t>(msg.header.extlen) + key_size;

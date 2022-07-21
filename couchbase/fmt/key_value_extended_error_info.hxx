@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include <couchbase/api/key_value_extended_error_info.hxx>
+#include <couchbase/key_value_extended_error_info.hxx>
 
 #include <fmt/core.h>
 
 template<>
-struct fmt::formatter<couchbase::api::key_value_extended_error_info> {
+struct fmt::formatter<couchbase::key_value_extended_error_info> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext& ctx)
     {
@@ -30,7 +30,7 @@ struct fmt::formatter<couchbase::api::key_value_extended_error_info> {
     }
 
     template<typename FormatContext>
-    auto format(const couchbase::api::key_value_extended_error_info& error, FormatContext& ctx) const
+    auto format(const couchbase::key_value_extended_error_info& error, FormatContext& ctx) const
     {
         if (!error.reference().empty() && !error.context().empty()) {
             return format_to(ctx.out(), R"((ref: "{}", ctx: "{}"))", error.reference(), error.context());

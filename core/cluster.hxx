@@ -109,7 +109,7 @@ class cluster : public std::enable_shared_from_this<cluster>
         stopped_ = true;
         asio::post(asio::bind_executor(ctx_, [self = shared_from_this(), handler = std::forward<Handler>(handler)]() mutable {
             if (self->session_) {
-                self->session_->stop(io::retry_reason::do_not_retry);
+                self->session_->stop(retry_reason::do_not_retry);
             }
             self->for_each_bucket([](auto& bucket) { bucket->close(); });
             self->session_manager_->close();
@@ -443,7 +443,7 @@ class cluster : public std::enable_shared_from_this<cluster>
                 self->session_->on_configuration_update([manager = self->session_manager_](topology::configuration new_config) {
                     manager->update_configuration(std::move(new_config));
                 });
-                self->session_->on_stop([self](io::retry_reason) { self->session_.reset(); });
+                self->session_->on_stop([self](retry_reason) { self->session_.reset(); });
             }
             handler(ec);
         });

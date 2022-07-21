@@ -167,7 +167,7 @@ get_projected_request::encode_to(get_projected_request::encoded_request_type& en
 }
 
 get_projected_response
-get_projected_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const
+get_projected_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
     get_projected_response response{ std::move(ctx) };
     if (!response.ctx.ec()) {
@@ -208,7 +208,7 @@ get_projected_request::make_response(api::key_value_error_context&& ctx, const e
             for (const auto& projection : projections) {
                 const auto& field = encoded.body().fields()[offset];
                 ++offset;
-                if (field.status == api::key_value_status_code::success && !field.value.empty()) {
+                if (field.status == key_value_status_code::success && !field.value.empty()) {
                     tao::json::value value_to_apply{};
                     try {
                         value_to_apply = utils::json::parse(field.value);

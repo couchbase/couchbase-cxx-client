@@ -17,7 +17,7 @@
 
 #pragma once
 
-namespace couchbase::api
+namespace couchbase
 {
 /**
  * Enumeration of possible retry reasons for operations.
@@ -98,4 +98,4 @@ enum class retry_reason {
 
     views_no_active_partition,
 };
-} // namespace couchbase::api
+} // namespace couchbase

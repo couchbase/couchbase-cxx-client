@@ -23,9 +23,9 @@
 namespace couchbase::core
 {
 struct mutation_token {
-    uint64_t partition_uuid{ 0 };
-    uint64_t sequence_number{ 0 };
-    uint16_t partition_id{ 0 };
+    std::uint64_t partition_uuid{ 0 };
+    std::uint64_t sequence_number{ 0 };
+    std::uint16_t partition_id{ 0 };
     std::string bucket_name{};
 };
 } // namespace couchbase::core

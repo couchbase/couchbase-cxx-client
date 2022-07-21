@@ -37,7 +37,7 @@ class mutate_in_response_body
 
     struct mutate_in_field {
         std::uint8_t index{};
-        api::key_value_status_code status{};
+        key_value_status_code status{};
         std::string value{};
     };
 
@@ -56,7 +56,7 @@ class mutate_in_response_body
         return token_;
     }
 
-    bool parse(api::key_value_status_code status,
+    bool parse(key_value_status_code status,
                const header_buffer& header,
                std::uint8_t framing_extras_size,
                std::uint16_t key_size,
@@ -92,50 +92,50 @@ class mutate_in_request_body
      * Create the document if it does not exist. Implies `path_flag_create_parents`.
      * and `upsert` mutation semantics. Not valid with `insert`.
      */
-    static const inline uint8_t doc_flag_mkdoc = 0b0000'0001;
+    static const inline std::uint8_t doc_flag_mkdoc = 0b0000'0001;
 
     /**
      * Add the document only if it does not exist. Implies `path_flag_create_parents`.
      * Not valid with `doc_flag_mkdoc`.
      */
-    static const inline uint8_t doc_flag_add = 0b0000'0010;
+    static const inline std::uint8_t doc_flag_add = 0b0000'0010;
 
     /**
      * Allow access to XATTRs for deleted documents (instead of returning KEY_ENOENT).
      */
-    static const inline uint8_t doc_flag_access_deleted = 0b0000'0100;
+    static const inline std::uint8_t doc_flag_access_deleted = 0b0000'0100;
 
     /**
      * Used with `doc_flag_mkdoc` / `doc_flag_add`; if the document does not exist then create
      * it in the "Deleted" state, instead of the normal "Alive" state.
      * Not valid unless `doc_flag_mkdoc` or `doc_flag_add` specified.
      */
-    static const inline uint8_t doc_flag_create_as_deleted = 0b0000'1000;
+    static const inline std::uint8_t doc_flag_create_as_deleted = 0b0000'1000;
 
     /**
      * If the document exists and isn't deleted the operation will fail with .
      * If the input document _is_ deleted the result of the operation will store the
      * document as a "live" document instead of a deleted document.
      */
-    static const inline uint8_t doc_flag_revive_document = 0b0001'0000;
+    static const inline std::uint8_t doc_flag_revive_document = 0b0001'0000;
 
     struct mutate_in_specs {
         /**
          * Should non-existent intermediate paths be created
          */
-        static const inline uint8_t path_flag_create_parents = 0b0000'0001;
+        static const inline std::uint8_t path_flag_create_parents = 0b0000'0001;
 
         /**
          * If set, the path refers to an Extended Attribute (XATTR).
          * If clear, the path refers to a path inside the document body.
          */
-        static const inline uint8_t path_flag_xattr = 0b0000'0100;
+        static const inline std::uint8_t path_flag_xattr = 0b0000'0100;
 
         /**
          * Expand macro values inside extended attributes. The request is
          * invalid if this flag is set without `path_flag_create_parents` being set.
          */
-        static const inline uint8_t path_flag_expand_macros = 0b0001'0000;
+        static const inline std::uint8_t path_flag_expand_macros = 0b0001'0000;
 
         struct entry {
             std::uint8_t opcode;
@@ -146,9 +146,9 @@ class mutate_in_request_body
         };
         std::vector<entry> entries;
 
-        static inline uint8_t build_path_flags(bool xattr, bool create_parents, bool expand_macros)
+        static inline std::uint8_t build_path_flags(bool xattr, bool create_parents, bool expand_macros)
         {
-            uint8_t flags = 0;
+            std::uint8_t flags = 0;
             if (xattr) {
                 flags |= path_flag_xattr;
             }
@@ -197,7 +197,7 @@ class mutate_in_request_body
             add_spec(static_cast<std::uint8_t>(operation), build_path_flags(xattr, false, false), path, "");
         }
 
-        void add_spec(uint8_t operation, uint8_t flags, const std::string& path, const std::string& param)
+        void add_spec(std::uint8_t operation, std::uint8_t flags, const std::string& path, const std::string& param)
         {
             Expects(is_valid_subdoc_opcode(operation));
             entries.emplace_back(entry{ operation, flags, path, param });
@@ -217,7 +217,7 @@ class mutate_in_request_body
   public:
     void id(const document_id& id);
 
-    void expiry(uint32_t value)
+    void expiry(std::uint32_t value)
     {
         expiry_ = value;
     }

@@ -348,7 +348,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
             return { "", std::uint16_t(0U) };
         }
         auto hostname = address.substr(0, last_colon);
-        auto port = gsl::narrow_cast<uint16_t>(std::stoul(address.substr(last_colon + 1)));
+        auto port = gsl::narrow_cast<std::uint16_t>(std::stoul(address.substr(last_colon + 1)));
         return { hostname, port };
     }
 

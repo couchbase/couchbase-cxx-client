@@ -30,9 +30,9 @@ namespace couchbase::core::operations
 {
 
 struct get_projected_response {
-    api::key_value_error_context ctx;
+    key_value_error_context ctx;
     std::vector<std::byte> value{};
-    couchbase::api::cas cas{};
+    couchbase::cas cas{};
     std::uint32_t flags{};
     std::optional<std::uint32_t> expiry{};
 };
@@ -55,7 +55,7 @@ struct get_projected_request {
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context);
 
-    [[nodiscard]] get_projected_response make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+    [[nodiscard]] get_projected_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
 };
 
 } // namespace couchbase::core::operations

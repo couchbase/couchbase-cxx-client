@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include <couchbase/api/collection.hxx>
-#include <couchbase/api/scope.hxx>
+#include <couchbase/collection.hxx>
+#include <couchbase/scope.hxx>
 
 #include <memory>
 
@@ -27,7 +27,7 @@ namespace couchbase::core
 class cluster;
 } // namespace couchbase::core
 
-namespace couchbase::api
+namespace couchbase
 {
 class cluster;
 
@@ -92,4 +92,4 @@ class bucket
     std::shared_ptr<couchbase::core::cluster> core_;
     std::string name_;
 };
-} // namespace couchbase::api
+} // namespace couchbase

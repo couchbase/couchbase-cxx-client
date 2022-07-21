@@ -19,7 +19,7 @@
 
 #include <cstdint>
 
-namespace couchbase::api
+namespace couchbase
 {
 /**
  * CAS is a special type that represented in protocol using unsigned 64-bit integer, but only equality checks allowed.
@@ -110,4 +110,4 @@ class cas
   private:
     std::uint64_t value_{ 0 };
 };
-} // namespace couchbase::api
+} // namespace couchbase

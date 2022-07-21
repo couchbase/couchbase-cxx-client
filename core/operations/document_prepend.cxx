@@ -32,7 +32,7 @@ prepend_request::encode_to(prepend_request::encoded_request_type& encoded, mcbp_
 }
 
 prepend_response
-prepend_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const
+prepend_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
     prepend_response response{ std::move(ctx) };
     if (!response.ctx.ec()) {

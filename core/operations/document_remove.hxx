@@ -31,8 +31,8 @@ namespace couchbase::core::operations
 {
 
 struct remove_response {
-    api::key_value_error_context ctx;
-    couchbase::api::cas cas{};
+    key_value_error_context ctx;
+    couchbase::cas cas{};
     mutation_token token{};
 };
 
@@ -44,7 +44,7 @@ struct remove_request {
     document_id id;
     std::uint16_t partition{};
     std::uint32_t opaque{};
-    couchbase::api::cas cas{ 0 };
+    couchbase::cas cas{ 0 };
     protocol::durability_level durability_level{ protocol::durability_level::none };
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
@@ -52,7 +52,7 @@ struct remove_request {
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 
-    [[nodiscard]] remove_response make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+    [[nodiscard]] remove_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
 };
 
 } // namespace couchbase::core::operations

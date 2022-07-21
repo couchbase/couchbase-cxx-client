@@ -27,7 +27,7 @@
 namespace couchbase::core::protocol
 {
 bool
-replace_response_body::parse(api::key_value_status_code status,
+replace_response_body::parse(key_value_status_code status,
                              const header_buffer& header,
                              std::uint8_t framing_extras_size,
                              std::uint16_t /* key_size */,
@@ -36,8 +36,8 @@ replace_response_body::parse(api::key_value_status_code status,
                              const cmd_info& /* info */)
 {
     Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == api::key_value_status_code::success) {
-        std::vector<uint8_t>::difference_type offset = framing_extras_size;
+    if (status == key_value_status_code::success) {
+        std::vector<std::uint8_t>::difference_type offset = framing_extras_size;
         if (extras_size == 16) {
             memcpy(&token_.partition_uuid, body.data() + offset, sizeof(token_.partition_uuid));
             token_.partition_uuid = utils::byte_swap(token_.partition_uuid);
@@ -78,7 +78,7 @@ replace_request_body::fill_extras()
 {
     extras_.resize(sizeof(flags_) + sizeof(expiry_));
 
-    uint32_t field = utils::byte_swap(flags_);
+    std::uint32_t field = utils::byte_swap(flags_);
     memcpy(extras_.data(), &field, sizeof(field));
 
     field = utils::byte_swap(expiry_);

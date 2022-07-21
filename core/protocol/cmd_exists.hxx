@@ -22,7 +22,7 @@
 #include "core/document_id.hxx"
 #include "core/io/mcbp_message.hxx"
 #include "status.hxx"
-#include <couchbase/api/cas.hxx>
+#include <couchbase/cas.hxx>
 
 namespace couchbase::core::protocol
 {
@@ -44,9 +44,9 @@ class exists_response_body
         return partition_id_;
     }
 
-    [[nodiscard]] couchbase::api::cas cas() const
+    [[nodiscard]] couchbase::cas cas() const
     {
-        return couchbase::api::cas{ cas_ };
+        return couchbase::cas{ cas_ };
     }
 
     [[nodiscard]] const auto& key() const
@@ -59,7 +59,7 @@ class exists_response_body
         return status_;
     }
 
-    bool parse(api::key_value_status_code status,
+    bool parse(key_value_status_code status,
                const header_buffer& header,
                std::uint8_t framing_extras_size,
                std::uint16_t key_size,

@@ -33,7 +33,7 @@ exists_request::encode_to(exists_request::encoded_request_type& encoded, mcbp_co
 }
 
 exists_response
-exists_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const
+exists_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
     exists_response response{ std::move(ctx) };
     if (!response.ctx.ec()) {

@@ -17,12 +17,10 @@
 
 #pragma once
 
-#include <couchbase/api/retry_reason.hxx>
+#include <couchbase/retry_reason.hxx>
 
 namespace couchbase::core::io
 {
-using api::retry_reason;
-
 constexpr bool
 allows_non_idempotent_retry(retry_reason reason)
 {

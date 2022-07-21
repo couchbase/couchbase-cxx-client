@@ -139,7 +139,7 @@ class dns_client
                       self->deadline_.cancel();
                       return handler({ ec1 });
                   }
-                  auto send_size = static_cast<uint16_t>(self->send_buf_.size());
+                  auto send_size = static_cast<std::uint16_t>(self->send_buf_.size());
                   self->send_buf_.insert(self->send_buf_.begin(), std::uint8_t(send_size & 0xffU));
                   self->send_buf_.insert(self->send_buf_.begin(), std::uint8_t(send_size >> 8U));
                   asio::async_write(
@@ -194,9 +194,9 @@ class dns_client
         asio::ip::address address_;
         std::uint16_t port_;
 
-        std::vector<uint8_t> send_buf_{};
+        std::vector<std::uint8_t> send_buf_{};
         std::uint16_t recv_buf_size_{ 0 };
-        std::vector<uint8_t> recv_buf_{};
+        std::vector<std::uint8_t> recv_buf_{};
     };
 
     explicit dns_client(asio::io_context& ctx)

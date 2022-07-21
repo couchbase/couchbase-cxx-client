@@ -17,21 +17,50 @@
 
 #pragma once
 
-#include <couchbase/api/cas.hxx>
+#include <couchbase/cas.hxx>
 
-#include <fmt/core.h>
+namespace couchbase
+{
 
-template<>
-struct fmt::formatter<couchbase::api::cas> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
+/**
+ * Base class for operations of data service.
+ *
+ * @since 1.0.0
+ * @committed
+ */
+class result
+{
+  public:
+    /**
+     * @since 1.0.0
+     * @internal
+     */
+    result() = default;
+
+    /**
+     * @param cas
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    explicit result(couchbase::cas cas)
+      : cas_(cas)
     {
-        return ctx.begin();
     }
 
-    template<typename FormatContext>
-    auto format(const couchbase::api::cas& cas, FormatContext& ctx) const
+    /**
+     * @return
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto cas() const -> couchbase::cas
     {
-        return format_to(ctx.out(), "{:x}", cas.value());
+        return cas_;
     }
+
+  private:
+    couchbase::cas cas_{ 0U };
 };
+
+} // namespace couchbase

@@ -29,7 +29,7 @@
 namespace couchbase::core::operations::management
 {
 struct collections_manifest_get_response {
-    api::key_value_error_context ctx;
+    key_value_error_context ctx;
     topology::collections_manifest manifest{};
 };
 
@@ -39,15 +39,15 @@ struct collections_manifest_get_request {
     using encoded_response_type = protocol::client_response<protocol::get_collections_manifest_response_body>;
 
     document_id id{};
-    uint16_t partition{};
-    uint32_t opaque{};
+    std::uint16_t partition{};
+    std::uint32_t opaque{};
 
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ true };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& /* context */) const;
 
-    [[nodiscard]] collections_manifest_get_response make_response(api::key_value_error_context&& ctx,
+    [[nodiscard]] collections_manifest_get_response make_response(key_value_error_context&& ctx,
                                                                   const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::operations::management

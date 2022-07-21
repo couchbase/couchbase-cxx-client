@@ -22,7 +22,7 @@
 namespace couchbase::core::protocol
 {
 bool
-mcbp_noop_response_body::parse(api::key_value_status_code /* status */,
+mcbp_noop_response_body::parse(key_value_status_code /* status */,
                                const header_buffer& header,
                                std::uint8_t /* framing_extras_size */,
                                std::uint16_t /* key_size */,

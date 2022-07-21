@@ -29,7 +29,7 @@ namespace couchbase::core::protocol
 {
 
 topology::configuration
-parse_config(std::string_view input, std::string_view endpoint_address, uint16_t endpoint_port);
+parse_config(std::string_view input, std::string_view endpoint_address, std::uint16_t endpoint_port);
 
 class get_cluster_config_response_body
 {
@@ -45,7 +45,7 @@ class get_cluster_config_response_body
         return std::move(config_);
     }
 
-    bool parse(api::key_value_status_code status,
+    bool parse(key_value_status_code status,
                const header_buffer& header,
                std::uint8_t framing_extras_size,
                std::uint16_t key_size,

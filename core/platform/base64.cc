@@ -72,14 +72,14 @@ code2val(const std::uint8_t code)
 static void
 encode_rest(const std::uint8_t* s, std::string& result, size_t num)
 {
-    uint32_t val = 0;
+    std::uint32_t val = 0;
 
     switch (num) {
         case 2:
-            val = static_cast<uint32_t>((*s << 16U) | (*(s + 1) << 8U));
+            val = static_cast<std::uint32_t>((*s << 16U) | (*(s + 1) << 8U));
             break;
         case 1:
-            val = static_cast<uint32_t>((*s << 16U));
+            val = static_cast<std::uint32_t>((*s << 16U));
             break;
         default:
             throw std::invalid_argument("base64::encode_rest num may be 1 or 2");
@@ -104,7 +104,7 @@ encode_rest(const std::uint8_t* s, std::string& result, size_t num)
 static void
 encode_triplet(const std::uint8_t* s, std::string& str)
 {
-    auto val = static_cast<uint32_t>((*s << 16U) | (*(s + 1) << 8U) | (*(s + 2)));
+    auto val = static_cast<std::uint32_t>((*s << 16U) | (*(s + 1) << 8U) | (*(s + 2)));
     str.push_back(static_cast<char>(codemap[(val >> 18U) & 63]));
     str.push_back(static_cast<char>(codemap[(val >> 12U) & 63]));
     str.push_back(static_cast<char>(codemap[(val >> 6U) & 63]));
@@ -121,7 +121,7 @@ encode_triplet(const std::uint8_t* s, std::string& str)
 static int
 decode_quad(const std::uint8_t* s, std::string& d)
 {
-    uint32_t value = code2val(s[0]) << 18U;
+    std::uint32_t value = code2val(s[0]) << 18U;
     value |= code2val(s[1]) << 12U;
 
     int ret = 3;

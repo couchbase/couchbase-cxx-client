@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-#include <couchbase/api/key_value_error_context.hxx>
+#include <couchbase/key_value_error_context.hxx>
 
 #include "core/io/mcbp_context.hxx"
 #include "core/io/retry_context.hxx"
@@ -26,9 +26,9 @@
 namespace couchbase::core::impl
 {
 struct get_replica_response {
-    api::key_value_error_context ctx{};
+    key_value_error_context ctx{};
     std::vector<std::byte> value{};
-    api::cas cas{};
+    couchbase::cas cas{};
     std::uint32_t flags{};
 };
 
@@ -45,6 +45,6 @@ struct get_replica_request {
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, core::mcbp_context&& context);
 
-    [[nodiscard]] get_replica_response make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+    [[nodiscard]] get_replica_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::impl

@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/api/get_any_replica.hxx>
+#include <couchbase/get_any_replica.hxx>
 
 #include "core/document_id.hxx"
 #include "core/error_context/key_value.hxx"

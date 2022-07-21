@@ -71,9 +71,9 @@ class server_request
         return body_size_;
     }
 
-    [[nodiscard]] couchbase::api::cas cas() const
+    [[nodiscard]] couchbase::cas cas() const
     {
-        return couchbase::api::cas{ cas_ };
+        return couchbase::cas{ cas_ };
     }
 
     [[nodiscard]] std::uint32_t opaque() const
@@ -98,7 +98,7 @@ class server_request
         opcode_ = static_cast<server_opcode>(header_[1]);
         data_type_ = std::to_integer<std::uint8_t>(header_[5]);
 
-        uint32_t field = 0;
+        std::uint32_t field = 0;
         memcpy(&field, header_.data() + 8, sizeof(field));
         body_size_ = utils::byte_swap(field);
         data_.resize(body_size_);

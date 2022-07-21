@@ -30,7 +30,7 @@ mcbp_noop_request::encode_to(mcbp_noop_request::encoded_request_type& encoded, m
 }
 
 mcbp_noop_response
-mcbp_noop_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& /* encoded */) const
+mcbp_noop_request::make_response(key_value_error_context&& ctx, const encoded_response_type& /* encoded */) const
 {
     mcbp_noop_response response{ std::move(ctx) };
     return response;

@@ -31,7 +31,7 @@ get_request::encode_to(get_request::encoded_request_type& encoded, mcbp_context&
 }
 
 get_response
-get_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const
+get_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
     get_response response{ std::move(ctx) };
     if (!response.ctx.ec()) {

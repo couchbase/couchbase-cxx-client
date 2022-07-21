@@ -27,7 +27,7 @@
 namespace couchbase::core::protocol
 {
 bool
-lookup_in_response_body::parse(api::key_value_status_code status,
+lookup_in_response_body::parse(key_value_status_code status,
                                const header_buffer& header,
                                std::uint8_t framing_extras_size,
                                std::uint16_t key_size,
@@ -36,9 +36,8 @@ lookup_in_response_body::parse(api::key_value_status_code status,
                                const cmd_info& /* info */)
 {
     Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == api::key_value_status_code::success || status == api::key_value_status_code::subdoc_multi_path_failure ||
-        status == api::key_value_status_code::subdoc_success_deleted ||
-        status == api::key_value_status_code::subdoc_multi_path_failure_deleted) {
+    if (status == key_value_status_code::success || status == key_value_status_code::subdoc_multi_path_failure ||
+        status == key_value_status_code::subdoc_success_deleted || status == key_value_status_code::subdoc_multi_path_failure_deleted) {
         using offset_type = std::vector<std::byte>::difference_type;
         offset_type offset = framing_extras_size + key_size + extras_size;
         fields_.reserve(16); /* we won't have more than 16 entries anyway */
@@ -49,7 +48,7 @@ lookup_in_response_body::parse(api::key_value_status_code status,
             memcpy(&entry_status, body.data() + offset, sizeof(entry_status));
             entry_status = utils::byte_swap(entry_status);
             Expects(is_valid_status(entry_status));
-            field.status = static_cast<api::key_value_status_code>(entry_status);
+            field.status = static_cast<key_value_status_code>(entry_status);
             offset += static_cast<offset_type>(sizeof(entry_status));
 
             std::uint32_t entry_size = 0;

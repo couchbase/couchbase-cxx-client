@@ -32,7 +32,7 @@ get_and_touch_request::encode_to(get_and_touch_request::encoded_request_type& en
 }
 
 get_and_touch_response
-get_and_touch_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const
+get_and_touch_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
     get_and_touch_response response{ std::move(ctx) };
     if (!response.ctx.ec()) {

@@ -28,7 +28,7 @@ namespace couchbase::core::io::dns
 class dns_codec
 {
   public:
-    static dns_message decode(const std::vector<uint8_t>& payload)
+    static dns_message decode(const std::vector<std::uint8_t>& payload)
     {
         dns_message message{};
         std::size_t offset = 0;
@@ -37,7 +37,7 @@ class dns_codec
         offset += sizeof(std::uint16_t);
         message.header.id = utils::byte_swap(message.header.id);
 
-        uint16_t flags = 0;
+        std::uint16_t flags = 0;
         std::memcpy(&flags, payload.data() + offset, sizeof(std::uint16_t));
         offset += sizeof(std::uint16_t);
         message.header.flags.decode(utils::byte_swap(flags));
@@ -126,7 +126,7 @@ class dns_codec
         return message;
     }
 
-    static std::vector<uint8_t> encode(const dns_message& message)
+    static std::vector<std::uint8_t> encode(const dns_message& message)
     {
         std::vector<std::uint8_t> payload;
         payload.resize(message.request_size(), 0);
@@ -134,7 +134,7 @@ class dns_codec
 
         // write header
         {
-            uint16_t val;
+            std::uint16_t val;
 
             val = utils::byte_swap(message.header.id);
             std::memcpy(payload.data() + offset, &val, sizeof(std::uint16_t));
@@ -160,7 +160,7 @@ class dns_codec
             payload[offset] = '\0';
             ++offset;
 
-            uint16_t val;
+            std::uint16_t val;
 
             val = utils::byte_swap(static_cast<std::uint16_t>(question.type));
             std::memcpy(payload.data() + offset, &val, sizeof(std::uint16_t));

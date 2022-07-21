@@ -34,7 +34,7 @@ class lookup_in_response_body
     static const inline client_opcode opcode = client_opcode::subdoc_multi_lookup;
 
     struct lookup_in_field {
-        api::key_value_status_code status{};
+        key_value_status_code status{};
         std::string value;
     };
 
@@ -47,7 +47,7 @@ class lookup_in_response_body
         return fields_;
     }
 
-    bool parse(api::key_value_status_code status,
+    bool parse(key_value_status_code status,
                const header_buffer& header,
                std::uint8_t framing_extras_size,
                std::uint16_t key_size,
@@ -65,14 +65,14 @@ class lookup_in_request_body
     /**
      * Allow access to XATTRs for deleted documents (instead of returning KEY_ENOENT).
      */
-    static const inline uint8_t doc_flag_access_deleted = 0b0000'0100;
+    static const inline std::uint8_t doc_flag_access_deleted = 0b0000'0100;
 
     struct lookup_in_specs {
         /**
          * If set, the path refers to an Extended Attribute (XATTR).
          * If clear, the path refers to a path inside the document body.
          */
-        static const inline uint8_t path_flag_xattr = 0b0000'0100;
+        static const inline std::uint8_t path_flag_xattr = 0b0000'0100;
 
         struct entry {
             std::uint8_t opcode;
@@ -87,7 +87,7 @@ class lookup_in_request_body
             add_spec(static_cast<std::uint8_t>(operation), xattr ? path_flag_xattr : 0, path);
         }
 
-        void add_spec(uint8_t operation, uint8_t flags, const std::string& path)
+        void add_spec(std::uint8_t operation, std::uint8_t flags, const std::string& path)
         {
             Expects(is_valid_subdoc_opcode(operation));
             entries.emplace_back(entry{ operation, flags, path });

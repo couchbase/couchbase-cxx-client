@@ -33,14 +33,14 @@ struct lookup_in_response {
     struct field {
         protocol::subdoc_opcode opcode;
         bool exists;
-        api::key_value_status_code status;
+        key_value_status_code status;
         std::string path;
         std::string value;
         std::size_t original_index;
         std::error_code ec{};
     };
-    api::key_value_error_context ctx;
-    couchbase::api::cas cas{};
+    key_value_error_context ctx;
+    couchbase::cas cas{};
     std::vector<field> fields{};
     bool deleted{ false };
 };
@@ -51,8 +51,8 @@ struct lookup_in_request {
     using encoded_response_type = protocol::client_response<protocol::lookup_in_response_body>;
 
     document_id id;
-    uint16_t partition{};
-    uint32_t opaque{};
+    std::uint16_t partition{};
+    std::uint32_t opaque{};
     bool access_deleted{ false };
     protocol::lookup_in_request_body::lookup_in_specs specs{};
     std::optional<std::chrono::milliseconds> timeout{};
@@ -61,7 +61,7 @@ struct lookup_in_request {
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context);
 
-    [[nodiscard]] lookup_in_response make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+    [[nodiscard]] lookup_in_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
 };
 
 } // namespace couchbase::core::operations

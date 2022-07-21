@@ -17,16 +17,16 @@
 
 #pragma once
 
-#include <couchbase/api/cas.hxx>
-#include <couchbase/api/error_context.hxx>
-#include <couchbase/api/key_value_error_map_info.hxx>
-#include <couchbase/api/key_value_extended_error_info.hxx>
-#include <couchbase/api/key_value_status_code.hxx>
+#include <couchbase/cas.hxx>
+#include <couchbase/error_context.hxx>
+#include <couchbase/key_value_error_map_info.hxx>
+#include <couchbase/key_value_extended_error_info.hxx>
+#include <couchbase/key_value_status_code.hxx>
 
 #include <cstdint>
 #include <optional>
 
-namespace couchbase::api
+namespace couchbase
 {
 /**
  * The error context returned with key/value operations.
@@ -77,7 +77,7 @@ class key_value_error_context : public error_context
                             std::string collection,
                             std::uint32_t opaque,
                             std::optional<key_value_status_code> status_code,
-                            couchbase::api::cas cas,
+                            couchbase::cas cas,
                             std::optional<key_value_error_map_info> error_map_info,
                             std::optional<key_value_extended_error_info> extended_error_info)
       : error_context{ ec, std::move(last_dispatched_to), std::move(last_dispatched_from), retry_attempts, std::move(retry_reasons) }
@@ -179,7 +179,7 @@ class key_value_error_context : public error_context
      * @since 1.0.0
      * @uncommitted
      */
-    [[nodiscard]] auto cas() const -> couchbase::api::cas
+    [[nodiscard]] auto cas() const -> couchbase::cas
     {
         return cas_;
     }
@@ -217,8 +217,8 @@ class key_value_error_context : public error_context
     std::string collection_{};
     std::uint32_t opaque_{};
     std::optional<key_value_status_code> status_code_{};
-    couchbase::api::cas cas_{};
+    couchbase::cas cas_{};
     std::optional<key_value_error_map_info> error_map_info_{};
     std::optional<key_value_extended_error_info> extended_error_info_{};
 };
-} // namespace couchbase::api
+} // namespace couchbase

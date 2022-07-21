@@ -31,9 +31,9 @@ namespace couchbase::core::operations
 {
 
 struct increment_response {
-    api::key_value_error_context ctx;
+    key_value_error_context ctx;
     std::uint64_t content{};
-    couchbase::api::cas cas{};
+    couchbase::cas cas{};
     mutation_token token{};
 };
 
@@ -55,7 +55,7 @@ struct increment_request {
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 
-    [[nodiscard]] increment_response make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+    [[nodiscard]] increment_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
 };
 
 } // namespace couchbase::core::operations

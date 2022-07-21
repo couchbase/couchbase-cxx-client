@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include <couchbase/api/get_all_replicas.hxx>
-#include <couchbase/api/get_any_replica.hxx>
+#include <couchbase/get_all_replicas.hxx>
+#include <couchbase/get_any_replica.hxx>
 
 #include <future>
 #include <memory>
@@ -26,9 +26,9 @@
 namespace couchbase::core
 {
 class cluster;
-} // namespace couchbase
+} // namespace couchbase::core
 
-namespace couchbase::api
+namespace couchbase
 {
 class bucket;
 class scope;
@@ -206,4 +206,4 @@ class collection
     std::string scope_name_;
     std::string name_;
 };
-} // namespace couchbase::api
+} // namespace couchbase

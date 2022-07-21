@@ -39,7 +39,7 @@ decrement_request::encode_to(decrement_request::encoded_request_type& encoded, m
 }
 
 decrement_response
-decrement_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const
+decrement_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
     decrement_response response{ std::move(ctx) };
     if (!response.ctx.ec()) {

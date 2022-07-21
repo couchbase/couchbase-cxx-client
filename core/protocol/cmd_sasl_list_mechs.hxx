@@ -38,7 +38,7 @@ class sasl_list_mechs_response_body
         return supported_mechs_;
     }
 
-    bool parse(api::key_value_status_code status,
+    bool parse(key_value_status_code status,
                const header_buffer& header,
                std::uint8_t framing_extras_size,
                std::uint16_t key_size,

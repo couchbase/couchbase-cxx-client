@@ -22,7 +22,7 @@
 #include "core/document_id.hxx"
 #include "core/io/mcbp_message.hxx"
 #include "status.hxx"
-#include <couchbase/api/cas.hxx>
+#include <couchbase/cas.hxx>
 
 namespace couchbase::core::protocol
 {
@@ -65,7 +65,7 @@ class get_meta_response_body
         return datatype_;
     }
 
-    bool parse(api::key_value_status_code status,
+    bool parse(key_value_status_code status,
                const header_buffer& header,
                std::uint8_t framing_extras_size,
                std::uint16_t key_size,

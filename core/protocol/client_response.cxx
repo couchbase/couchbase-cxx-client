@@ -53,7 +53,7 @@ parse_server_duration_us(const io::mcbp_message& msg)
 }
 
 bool
-parse_enhanced_error(std::string_view str, api::key_value_extended_error_info& info)
+parse_enhanced_error(std::string_view str, key_value_extended_error_info& info)
 {
     if (auto error = utils::json::parse(str); error.is_object()) {
         if (const auto* err_obj = error.find("error"); err_obj != nullptr && err_obj->is_object()) {
@@ -66,7 +66,7 @@ parse_enhanced_error(std::string_view str, api::key_value_extended_error_info& i
                 context = ctx->get_string();
             }
 
-            info = api::key_value_extended_error_info{ reference, context };
+            info = key_value_extended_error_info{ reference, context };
             return true;
         }
     }

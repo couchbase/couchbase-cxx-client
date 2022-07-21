@@ -30,8 +30,8 @@ namespace couchbase::core::operations
 {
 
 struct unlock_response {
-    api::key_value_error_context ctx;
-    couchbase::api::cas cas{};
+    key_value_error_context ctx;
+    couchbase::cas cas{};
 };
 
 struct unlock_request {
@@ -40,16 +40,16 @@ struct unlock_request {
     using encoded_response_type = protocol::client_response<protocol::unlock_response_body>;
 
     document_id id;
-    uint16_t partition{};
-    uint32_t opaque{};
-    couchbase::api::cas cas{};
+    std::uint16_t partition{};
+    std::uint32_t opaque{};
+    couchbase::cas cas{};
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
     std::shared_ptr<tracing::request_span> parent_span{ nullptr };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 
-    [[nodiscard]] unlock_response make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+    [[nodiscard]] unlock_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
 };
 
 } // namespace couchbase::core::operations

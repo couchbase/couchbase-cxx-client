@@ -20,7 +20,7 @@
 namespace couchbase::core
 {
 
-api::key_value_error_context
+key_value_error_context
 make_key_value_error_context(std::error_code ec, const document_id& id)
 {
     return {

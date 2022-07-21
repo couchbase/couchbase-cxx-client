@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/api/key_value_error_context.hxx>
+#include <couchbase/key_value_error_context.hxx>
 
 #include "core/io/mcbp_context.hxx"
 #include "core/io/mcbp_traits.hxx"
@@ -31,9 +31,9 @@ namespace couchbase::core::operations
 {
 
 struct get_and_touch_response {
-    api::key_value_error_context ctx;
+    key_value_error_context ctx;
     std::vector<std::byte> value{};
-    couchbase::api::cas cas{};
+    couchbase::cas cas{};
     std::uint32_t flags{};
 };
 
@@ -52,7 +52,7 @@ struct get_and_touch_request {
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 
-    [[nodiscard]] get_and_touch_response make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+    [[nodiscard]] get_and_touch_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
 };
 
 } // namespace couchbase::core::operations

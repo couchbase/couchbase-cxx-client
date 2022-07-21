@@ -38,7 +38,7 @@ upsert_request::encode_to(upsert_request::encoded_request_type& encoded, mcbp_co
 }
 
 upsert_response
-upsert_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const
+upsert_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
     upsert_response response{ std::move(ctx) };
     if (!response.ctx.ec()) {

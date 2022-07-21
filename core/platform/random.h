@@ -32,7 +32,7 @@ class RandomGenerator
   public:
     RandomGenerator();
 
-    uint64_t next();
+    std::uint64_t next();
 
     bool getBytes(void* dest, size_t size);
 };

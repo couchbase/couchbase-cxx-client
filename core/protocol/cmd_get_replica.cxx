@@ -32,7 +32,7 @@ get_replica_response_body::flags() const
 }
 
 bool
-get_replica_response_body::parse(api::key_value_status_code status,
+get_replica_response_body::parse(key_value_status_code status,
                                  const header_buffer& header,
                                  std::uint8_t framing_extras_size,
                                  std::uint16_t key_size,
@@ -41,8 +41,8 @@ get_replica_response_body::parse(api::key_value_status_code status,
                                  const cmd_info& /* info */)
 {
     Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == api::key_value_status_code::success) {
-        std::vector<uint8_t>::difference_type offset = framing_extras_size;
+    if (status == key_value_status_code::success) {
+        std::vector<std::uint8_t>::difference_type offset = framing_extras_size;
         if (extras_size == 4) {
             memcpy(&flags_, body.data() + offset, sizeof(flags_));
             flags_ = utils::byte_swap(flags_);

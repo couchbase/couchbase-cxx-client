@@ -41,11 +41,11 @@ lookup_in_request::encode_to(lookup_in_request::encoded_request_type& encoded, m
 }
 
 lookup_in_response
-lookup_in_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const
+lookup_in_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
     lookup_in_response response{ std::move(ctx) };
-    if (encoded.status() == api::key_value_status_code::subdoc_success_deleted ||
-        encoded.status() == api::key_value_status_code::subdoc_multi_path_failure_deleted) {
+    if (encoded.status() == key_value_status_code::subdoc_success_deleted ||
+        encoded.status() == key_value_status_code::subdoc_multi_path_failure_deleted) {
         response.deleted = true;
     }
     if (!response.ctx.ec()) {
@@ -55,15 +55,15 @@ lookup_in_request::make_response(api::key_value_error_context&& ctx, const encod
             response.fields[i].original_index = req_entry.original_index;
             response.fields[i].opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode);
             response.fields[i].path = req_entry.path;
-            response.fields[i].status = api::key_value_status_code::success;
+            response.fields[i].status = key_value_status_code::success;
         }
         for (size_t i = 0; i < encoded.body().fields().size(); ++i) {
             const auto& res_entry = encoded.body().fields()[i];
             response.fields[i].status = res_entry.status;
             response.fields[i].ec =
               protocol::map_status_code(protocol::client_opcode::subdoc_multi_mutation, static_cast<std::uint16_t>(res_entry.status));
-            response.fields[i].exists = res_entry.status == api::key_value_status_code::success ||
-                                        res_entry.status == api::key_value_status_code::subdoc_success_deleted;
+            response.fields[i].exists =
+              res_entry.status == key_value_status_code::success || res_entry.status == key_value_status_code::subdoc_success_deleted;
             response.fields[i].value = res_entry.value;
             if (!response.fields[i].ec && !response.ctx.ec()) {
                 response.ctx.override_ec(response.fields[i].ec);

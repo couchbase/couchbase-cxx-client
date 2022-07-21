@@ -50,7 +50,9 @@
 #include "mcbp_parser.hxx"
 #include "retry_orchestrator.hxx"
 #include "streams.hxx"
-#include <couchbase/api/fmt/retry_reason.hxx>
+
+#include <couchbase/fmt/retry_reason.hxx>
+#include <couchbase/retry_reason.hxx>
 
 #include <asio.hpp>
 #include <cstring>
@@ -199,11 +201,11 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                 case protocol::magic::client_response:
                 case protocol::magic::alt_client_response:
                     Expects(protocol::is_valid_client_opcode(msg.header.opcode));
-                    switch (auto status = static_cast<api::key_value_status_code>(msg.header.status())) {
-                        case api::key_value_status_code::rate_limited_max_commands:
-                        case api::key_value_status_code::rate_limited_max_connections:
-                        case api::key_value_status_code::rate_limited_network_egress:
-                        case api::key_value_status_code::rate_limited_network_ingress:
+                    switch (auto status = static_cast<key_value_status_code>(msg.header.status())) {
+                        case key_value_status_code::rate_limited_max_commands:
+                        case key_value_status_code::rate_limited_max_connections:
+                        case key_value_status_code::rate_limited_network_egress:
+                        case key_value_status_code::rate_limited_network_ingress:
                             LOG_DEBUG(
                               "{} unable to bootstrap MCBP session (bucket={}, opcode={}, status={}), the user has reached rate limit",
                               session_->log_prefix_,
@@ -212,7 +214,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                               status);
                             return complete(error::common_errc::rate_limited);
 
-                        case api::key_value_status_code::scope_size_limit_exceeded:
+                        case key_value_status_code::scope_size_limit_exceeded:
                             LOG_DEBUG(
                               "{} unable to bootstrap MCBP session (bucket={}, opcode={}, status={}), the user has reached quota limit",
                               session_->log_prefix_,
@@ -227,7 +229,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                     switch (auto opcode = static_cast<protocol::client_opcode>(msg.header.opcode)) {
                         case protocol::client_opcode::hello: {
                             protocol::client_response<protocol::hello_response_body> resp(std::move(msg));
-                            if (resp.status() == api::key_value_status_code::success) {
+                            if (resp.status() == key_value_status_code::success) {
                                 session_->supported_features_ = resp.body().supported_features();
                                 LOG_DEBUG("{} supported_features=[{}]",
                                           session_->log_prefix_,
@@ -246,7 +248,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                         } break;
                         case protocol::client_opcode::sasl_list_mechs: {
                             protocol::client_response<protocol::sasl_list_mechs_response_body> resp(std::move(msg));
-                            if (resp.status() != api::key_value_status_code::success) {
+                            if (resp.status() != key_value_status_code::success) {
                                 LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
                                             session_->log_prefix_,
                                             resp.error_message(),
@@ -256,10 +258,10 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                         } break;
                         case protocol::client_opcode::sasl_auth: {
                             protocol::client_response<protocol::sasl_auth_response_body> resp(std::move(msg));
-                            if (resp.status() == api::key_value_status_code::success) {
+                            if (resp.status() == key_value_status_code::success) {
                                 return auth_success();
                             }
-                            if (resp.status() == api::key_value_status_code::auth_continue) {
+                            if (resp.status() == key_value_status_code::auth_continue) {
                                 auto [sasl_code, sasl_payload] = sasl_.step(resp.body().value());
                                 if (sasl_code == sasl::error::OK) {
                                     return auth_success();
@@ -287,14 +289,14 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                         } break;
                         case protocol::client_opcode::sasl_step: {
                             protocol::client_response<protocol::sasl_step_response_body> resp(std::move(msg));
-                            if (resp.status() == api::key_value_status_code::success) {
+                            if (resp.status() == key_value_status_code::success) {
                                 return auth_success();
                             }
                             return complete(error::common_errc::authentication_failure);
                         }
                         case protocol::client_opcode::get_error_map: {
                             protocol::client_response<protocol::get_error_map_response_body> resp(std::move(msg));
-                            if (resp.status() == api::key_value_status_code::success) {
+                            if (resp.status() == key_value_status_code::success) {
                                 session_->error_map_.emplace(resp.body().errmap());
                             } else {
                                 LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
@@ -307,17 +309,17 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                         } break;
                         case protocol::client_opcode::select_bucket: {
                             protocol::client_response<protocol::select_bucket_response_body> resp(std::move(msg));
-                            if (resp.status() == api::key_value_status_code::success) {
+                            if (resp.status() == key_value_status_code::success) {
                                 LOG_DEBUG("{} selected bucket: {}", session_->log_prefix_, session_->bucket_name_.value_or(""));
                                 session_->bucket_selected_ = true;
-                            } else if (resp.status() == api::key_value_status_code::not_found) {
+                            } else if (resp.status() == key_value_status_code::not_found) {
                                 LOG_DEBUG("{} kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
                                           session_->log_prefix_,
                                           opcode,
                                           resp.status(),
                                           resp.opaque());
                                 return complete(error::network_errc::configuration_not_available);
-                            } else if (resp.status() == api::key_value_status_code::no_access) {
+                            } else if (resp.status() == key_value_status_code::no_access) {
                                 LOG_DEBUG("{} unable to select bucket: {}, probably the bucket does not exist",
                                           session_->log_prefix_,
                                           session_->bucket_name_.value_or(""));
@@ -335,17 +337,17 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                         case protocol::client_opcode::get_cluster_config: {
                             protocol::cmd_info info{ session_->endpoint_address_, session_->endpoint_.port() };
                             protocol::client_response<protocol::get_cluster_config_response_body> resp(std::move(msg), info);
-                            if (resp.status() == api::key_value_status_code::success) {
+                            if (resp.status() == key_value_status_code::success) {
                                 session_->update_configuration(resp.body().config());
                                 complete({});
-                            } else if (resp.status() == api::key_value_status_code::not_found) {
+                            } else if (resp.status() == key_value_status_code::not_found) {
                                 LOG_DEBUG("{} kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
                                           session_->log_prefix_,
                                           opcode,
                                           resp.status(),
                                           resp.opaque());
                                 return complete(error::network_errc::configuration_not_available);
-                            } else if (resp.status() == api::key_value_status_code::no_bucket && !session_->bucket_name_) {
+                            } else if (resp.status() == key_value_status_code::no_bucket && !session_->bucket_name_) {
                                 // bucket-less session, but the server wants bucket
                                 session_->supports_gcccp_ = false;
                                 LOG_WARNING("{} this server does not support GCCCP, open bucket before making any cluster-level command",
@@ -458,7 +460,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                         case protocol::client_opcode::get_cluster_config: {
                             protocol::cmd_info info{ session_->endpoint_address_, session_->endpoint_.port() };
                             protocol::client_response<protocol::get_cluster_config_response_body> resp(std::move(msg), info);
-                            if (resp.status() == api::key_value_status_code::success) {
+                            if (resp.status() == key_value_status_code::success) {
                                 if (session_) {
                                     session_->update_configuration(resp.body().config());
                                 }
@@ -768,7 +770,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         return stopped_;
     }
 
-    void on_stop(std::function<void(io::retry_reason)> handler)
+    void on_stop(std::function<void(retry_reason)> handler)
     {
         on_stop_handler_ = std::move(handler);
     }
@@ -869,7 +871,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         }
     }
 
-    [[nodiscard]] bool cancel(uint32_t opaque, std::error_code ec, retry_reason reason)
+    [[nodiscard]] bool cancel(std::uint32_t opaque, std::error_code ec, retry_reason reason)
     {
         if (stopped_) {
             return false;
@@ -932,12 +934,12 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         return bootstrap_port_;
     }
 
-    [[nodiscard]] uint32_t next_opaque()
+    [[nodiscard]] std::uint32_t next_opaque()
     {
         return ++opaque_;
     }
 
-    std::optional<api::key_value_error_map_info> decode_error_code(std::uint16_t code)
+    std::optional<key_value_error_map_info> decode_error_code(std::uint16_t code)
     {
         if (error_map_) {
             auto info = error_map_->errors.find(code);
@@ -1009,15 +1011,15 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                 msg.header.magic == static_cast<std::uint8_t>(protocol::magic::client_response));
         if (protocol::has_json_datatype(msg.header.datatype)) {
             auto magic = static_cast<protocol::magic>(msg.header.magic);
-            uint8_t extras_size = msg.header.extlen;
-            uint8_t framing_extras_size = 0;
-            uint16_t key_size = utils::byte_swap(msg.header.keylen);
+            std::uint8_t extras_size = msg.header.extlen;
+            std::uint8_t framing_extras_size = 0;
+            std::uint16_t key_size = utils::byte_swap(msg.header.keylen);
             if (magic == protocol::magic::alt_client_response) {
                 framing_extras_size = static_cast<std::uint8_t>(msg.header.keylen >> 8U);
                 key_size = msg.header.keylen & 0xffU;
             }
 
-            std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
+            std::vector<std::uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
             if (utils::byte_swap(msg.header.bodylen) - offset > 0) {
                 std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()) + offset,
                                               msg.body.size() - static_cast<std::size_t>(offset) };
@@ -1291,9 +1293,9 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     std::shared_ptr<message_handler> handler_;
     utils::movable_function<void(std::error_code, const topology::configuration&)> bootstrap_handler_{};
     std::mutex command_handlers_mutex_{};
-    std::map<uint32_t, utils::movable_function<void(std::error_code, retry_reason, io::mcbp_message&&)>> command_handlers_{};
+    std::map<std::uint32_t, utils::movable_function<void(std::error_code, retry_reason, io::mcbp_message&&)>> command_handlers_{};
     std::vector<std::function<void(const topology::configuration&)>> config_listeners_{};
-    std::function<void(io::retry_reason)> on_stop_handler_{};
+    std::function<void(retry_reason)> on_stop_handler_{};
 
     std::atomic_bool bootstrapped_{ false };
     std::atomic_bool stopped_{ false };

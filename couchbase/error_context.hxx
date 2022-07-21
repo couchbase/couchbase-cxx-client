@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/api/retry_reason.hxx>
+#include <couchbase/retry_reason.hxx>
 
 #include <cstdint>
 #include <optional>
@@ -25,7 +25,7 @@
 #include <string>
 #include <system_error>
 
-namespace couchbase::api
+namespace couchbase
 {
 /**
  * The error_context is the parent interface for all service-specific error contexts that are returned by operation handler.
@@ -168,4 +168,4 @@ class error_context
     int retry_attempts_{ 0 };
     std::set<retry_reason> retry_reasons_{};
 };
-} // namespace couchbase::api
+} // namespace couchbase

@@ -19,13 +19,13 @@
 
 namespace couchbase::core::protocol
 {
-enum class server_opcode : uint8_t {
+enum class server_opcode : std::uint8_t {
     cluster_map_change_notification = 0x01,
     invalid = 0xff,
 };
 
 constexpr bool
-is_valid_server_request_opcode(uint8_t code)
+is_valid_server_request_opcode(std::uint8_t code)
 {
     switch (server_opcode(code)) {
         case server_opcode::cluster_map_change_notification:

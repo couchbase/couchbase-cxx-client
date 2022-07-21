@@ -17,7 +17,7 @@
 
 #pragma once
 
-namespace couchbase::api
+namespace couchbase
 {
 /**
  * This enum defines known attributes, that could be associated with the error code in the error map.
@@ -121,4 +121,4 @@ enum class key_value_error_map_attribute {
      */
     rate_limit,
 };
-} // namespace couchbase::api
+} // namespace couchbase

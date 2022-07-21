@@ -22,7 +22,7 @@
 
 namespace couchbase::core::protocol
 {
-enum class client_opcode : uint8_t {
+enum class client_opcode : std::uint8_t {
     get = 0x00,
     upsert = 0x01,
     insert = 0x02,
@@ -231,7 +231,7 @@ enum class client_opcode : uint8_t {
 /**
  * subdocument opcodes are listed separately, because we are not going to implement/support single-op messages
  */
-enum class subdoc_opcode : uint8_t {
+enum class subdoc_opcode : std::uint8_t {
     get_doc = 0x00,
     set_doc = 0x01,
     remove_doc = 0x04,
@@ -251,7 +251,7 @@ enum class subdoc_opcode : uint8_t {
 };
 
 constexpr bool
-is_valid_client_opcode(uint8_t code)
+is_valid_client_opcode(std::uint8_t code)
 {
     switch (static_cast<client_opcode>(code)) {
         case client_opcode::get:
@@ -330,7 +330,7 @@ is_valid_client_opcode(uint8_t code)
 }
 
 constexpr bool
-is_valid_subdoc_opcode(uint8_t code)
+is_valid_subdoc_opcode(std::uint8_t code)
 {
     switch (static_cast<subdoc_opcode>(code)) {
         case subdoc_opcode::get:

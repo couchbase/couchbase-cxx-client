@@ -24,7 +24,7 @@ namespace couchbase
 class cluster;
 } // namespace couchbase
 
-namespace couchbase::api
+namespace couchbase
 {
 /**
  * The scope identifies a group of collections and allows high application density as a result.
@@ -96,4 +96,4 @@ class scope
     std::string bucket_name_;
     std::string name_;
 };
-} // namespace couchbase::api
+} // namespace couchbase

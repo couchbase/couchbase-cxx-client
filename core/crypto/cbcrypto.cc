@@ -89,7 +89,7 @@ hash(std::string_view key, std::string_view data, LPCWSTR algorithm, int flags)
         throw std::runtime_error("digest: BCryptHashData return: " + std::to_string(status));
     }
 
-    status = BCryptFinishHash(hHash, reinterpret_cast<uint8_t*>(ret.data()), cbHash, 0);
+    status = BCryptFinishHash(hHash, reinterpret_cast<std::uint8_t*>(ret.data()), cbHash, 0);
 
     // Release resources
     BCryptCloseAlgorithmProvider(hAlg, 0);
@@ -255,7 +255,7 @@ AES_256_cbc(bool encrypt, std::string_view key, std::string_view iv, std::string
                                nullptr,
                                (PBYTE)civ.data(),
                                ULONG(civ.size()),
-                               reinterpret_cast<uint8_t*>(ret.data()),
+                               reinterpret_cast<std::uint8_t*>(ret.data()),
                                ULONG(ret.size()),
                                &cbData,
                                BCRYPT_BLOCK_PADDING);
@@ -266,7 +266,7 @@ AES_256_cbc(bool encrypt, std::string_view key, std::string_view iv, std::string
                                nullptr,
                                (PBYTE)civ.data(),
                                ULONG(civ.size()),
-                               reinterpret_cast<uint8_t*>(ret.data()),
+                               reinterpret_cast<std::uint8_t*>(ret.data()),
                                ULONG(ret.size()),
                                &cbData,
                                BCRYPT_BLOCK_PADDING);
@@ -308,7 +308,7 @@ HMAC_SHA1(std::string_view key, std::string_view data)
 {
     std::string ret;
     ret.resize(couchbase::core::crypto::SHA1_DIGEST_SIZE);
-    CCHmac(kCCHmacAlgSHA1, key.data(), key.size(), data.data(), data.size(), reinterpret_cast<uint8_t*>(ret.data()));
+    CCHmac(kCCHmacAlgSHA1, key.data(), key.size(), data.data(), data.size(), reinterpret_cast<std::uint8_t*>(ret.data()));
     return ret;
 }
 
@@ -317,7 +317,7 @@ HMAC_SHA256(std::string_view key, std::string_view data)
 {
     std::string ret;
     ret.resize(couchbase::core::crypto::SHA256_DIGEST_SIZE);
-    CCHmac(kCCHmacAlgSHA256, key.data(), key.size(), data.data(), data.size(), reinterpret_cast<uint8_t*>(ret.data()));
+    CCHmac(kCCHmacAlgSHA256, key.data(), key.size(), data.data(), data.size(), reinterpret_cast<std::uint8_t*>(ret.data()));
     return ret;
 }
 
@@ -326,7 +326,7 @@ HMAC_SHA512(std::string_view key, std::string_view data)
 {
     std::string ret;
     ret.resize(couchbase::core::crypto::SHA512_DIGEST_SIZE);
-    CCHmac(kCCHmacAlgSHA512, key.data(), key.size(), data.data(), data.size(), reinterpret_cast<uint8_t*>(ret.data()));
+    CCHmac(kCCHmacAlgSHA512, key.data(), key.size(), data.data(), data.size(), reinterpret_cast<std::uint8_t*>(ret.data()));
     return ret;
 }
 
@@ -338,11 +338,11 @@ PBKDF2_HMAC_SHA1(const std::string& pass, std::string_view salt, unsigned int it
     auto err = CCKeyDerivationPBKDF(kCCPBKDF2,
                                     pass.data(),
                                     pass.size(),
-                                    reinterpret_cast<const uint8_t*>(salt.data()),
+                                    reinterpret_cast<const std::uint8_t*>(salt.data()),
                                     salt.size(),
                                     kCCPRFHmacAlgSHA1,
                                     iterationCount,
-                                    reinterpret_cast<uint8_t*>(ret.data()),
+                                    reinterpret_cast<std::uint8_t*>(ret.data()),
                                     ret.size());
 
     if (err != 0) {
@@ -359,11 +359,11 @@ PBKDF2_HMAC_SHA256(const std::string& pass, std::string_view salt, unsigned int 
     auto err = CCKeyDerivationPBKDF(kCCPBKDF2,
                                     pass.data(),
                                     pass.size(),
-                                    reinterpret_cast<const uint8_t*>(salt.data()),
+                                    reinterpret_cast<const std::uint8_t*>(salt.data()),
                                     salt.size(),
                                     kCCPRFHmacAlgSHA256,
                                     iterationCount,
-                                    reinterpret_cast<uint8_t*>(ret.data()),
+                                    reinterpret_cast<std::uint8_t*>(ret.data()),
                                     ret.size());
     if (err != 0) {
         throw std::runtime_error("couchbase::core::crypto::PBKDF2_HMAC(SHA256): CCKeyDerivationPBKDF "
@@ -381,11 +381,11 @@ PBKDF2_HMAC_SHA512(const std::string& pass, std::string_view salt, unsigned int 
     auto err = CCKeyDerivationPBKDF(kCCPBKDF2,
                                     pass.data(),
                                     pass.size(),
-                                    reinterpret_cast<const uint8_t*>(salt.data()),
+                                    reinterpret_cast<const std::uint8_t*>(salt.data()),
                                     salt.size(),
                                     kCCPRFHmacAlgSHA512,
                                     iterationCount,
-                                    reinterpret_cast<uint8_t*>(ret.data()),
+                                    reinterpret_cast<std::uint8_t*>(ret.data()),
                                     ret.size());
     if (err != 0) {
         throw std::runtime_error("couchbase::core::crypto::PBKDF2_HMAC(SHA512): CCKeyDerivationPBKDF "
@@ -400,7 +400,7 @@ digest_sha1(std::string_view data)
 {
     std::string ret;
     ret.resize(couchbase::core::crypto::SHA1_DIGEST_SIZE);
-    CC_SHA1(data.data(), static_cast<CC_LONG>(data.size()), reinterpret_cast<uint8_t*>(ret.data()));
+    CC_SHA1(data.data(), static_cast<CC_LONG>(data.size()), reinterpret_cast<std::uint8_t*>(ret.data()));
     return ret;
 }
 
@@ -409,7 +409,7 @@ digest_sha256(std::string_view data)
 {
     std::string ret;
     ret.resize(couchbase::core::crypto::SHA256_DIGEST_SIZE);
-    CC_SHA256(data.data(), static_cast<CC_LONG>(data.size()), reinterpret_cast<uint8_t*>(ret.data()));
+    CC_SHA256(data.data(), static_cast<CC_LONG>(data.size()), reinterpret_cast<std::uint8_t*>(ret.data()));
     return ret;
 }
 
@@ -418,7 +418,7 @@ digest_sha512(std::string_view data)
 {
     std::string ret;
     ret.resize(couchbase::core::crypto::SHA512_DIGEST_SIZE);
-    CC_SHA512(data.data(), static_cast<CC_LONG>(data.size()), reinterpret_cast<uint8_t*>(ret.data()));
+    CC_SHA512(data.data(), static_cast<CC_LONG>(data.size()), reinterpret_cast<std::uint8_t*>(ret.data()));
     return ret;
 }
 
@@ -469,7 +469,7 @@ encrypt(const couchbase::core::crypto::Cipher cipher, std::string_view key, std:
                           iv.data(),
                           data.data(),
                           data.size(),
-                          reinterpret_cast<uint8_t*>(ret.data()),
+                          reinterpret_cast<std::uint8_t*>(ret.data()),
                           ret.size(),
                           &outputsize);
 
@@ -498,7 +498,7 @@ decrypt(const couchbase::core::crypto::Cipher cipher, std::string_view key, std:
                           iv.data(),
                           data.data(),
                           data.size(),
-                          reinterpret_cast<uint8_t*>(ret.data()),
+                          reinterpret_cast<std::uint8_t*>(ret.data()),
                           ret.size(),
                           &outputsize);
 
@@ -527,9 +527,9 @@ HMAC_SHA1(std::string_view key, std::string_view data)
     if (HMAC(EVP_sha1(),
              key.data(),
              static_cast<int>(key.size()),
-             reinterpret_cast<const uint8_t*>(data.data()),
+             reinterpret_cast<const std::uint8_t*>(data.data()),
              data.size(),
-             reinterpret_cast<uint8_t*>(ret.data()),
+             reinterpret_cast<std::uint8_t*>(ret.data()),
              nullptr) == nullptr) {
         throw std::runtime_error("couchbase::core::crypto::HMAC(SHA1): HMAC failed");
     }
@@ -544,9 +544,9 @@ HMAC_SHA256(std::string_view key, std::string_view data)
     if (HMAC(EVP_sha256(),
              key.data(),
              static_cast<int>(key.size()),
-             reinterpret_cast<const uint8_t*>(data.data()),
+             reinterpret_cast<const std::uint8_t*>(data.data()),
              data.size(),
-             reinterpret_cast<uint8_t*>(ret.data()),
+             reinterpret_cast<std::uint8_t*>(ret.data()),
              nullptr) == nullptr) {
         throw std::runtime_error("couchbase::core::crypto::HMAC(SHA256): HMAC failed");
     }
@@ -561,9 +561,9 @@ HMAC_SHA512(std::string_view key, std::string_view data)
     if (HMAC(EVP_sha512(),
              key.data(),
              static_cast<int>(key.size()),
-             reinterpret_cast<const uint8_t*>(data.data()),
+             reinterpret_cast<const std::uint8_t*>(data.data()),
              data.size(),
-             reinterpret_cast<uint8_t*>(ret.data()),
+             reinterpret_cast<std::uint8_t*>(ret.data()),
              nullptr) == nullptr) {
         throw std::runtime_error("couchbase::core::crypto::HMAC(SHA512): HMAC failed");
     }
@@ -577,12 +577,12 @@ PBKDF2_HMAC_SHA1(const std::string& pass, std::string_view salt, unsigned int it
     ret.resize(couchbase::core::crypto::SHA1_DIGEST_SIZE);
     auto err = PKCS5_PBKDF2_HMAC(pass.data(),
                                  int(pass.size()),
-                                 reinterpret_cast<const uint8_t*>(salt.data()),
+                                 reinterpret_cast<const std::uint8_t*>(salt.data()),
                                  int(salt.size()),
                                  int(iterationCount),
                                  EVP_sha1(),
                                  couchbase::core::crypto::SHA1_DIGEST_SIZE,
-                                 reinterpret_cast<uint8_t*>(ret.data()));
+                                 reinterpret_cast<std::uint8_t*>(ret.data()));
 
     if (err != 1) {
         throw std::runtime_error("couchbase::core::crypto::PBKDF2_HMAC(SHA1): PKCS5_PBKDF2_HMAC_SHA1 "
@@ -600,12 +600,12 @@ PBKDF2_HMAC_SHA256(const std::string& pass, std::string_view salt, unsigned int 
     ret.resize(couchbase::core::crypto::SHA256_DIGEST_SIZE);
     auto err = PKCS5_PBKDF2_HMAC(pass.data(),
                                  int(pass.size()),
-                                 reinterpret_cast<const uint8_t*>(salt.data()),
+                                 reinterpret_cast<const std::uint8_t*>(salt.data()),
                                  int(salt.size()),
                                  int(iterationCount),
                                  EVP_sha256(),
                                  couchbase::core::crypto::SHA256_DIGEST_SIZE,
-                                 reinterpret_cast<uint8_t*>(ret.data()));
+                                 reinterpret_cast<std::uint8_t*>(ret.data()));
     if (err != 1) {
         throw std::runtime_error("couchbase::core::crypto::PBKDF2_HMAC(SHA256): PKCS5_PBKDF2_HMAC failed" + std::to_string(err));
     }
@@ -620,12 +620,12 @@ PBKDF2_HMAC_SHA512(const std::string& pass, std::string_view salt, unsigned int 
     ret.resize(couchbase::core::crypto::SHA512_DIGEST_SIZE);
     auto err = PKCS5_PBKDF2_HMAC(pass.data(),
                                  int(pass.size()),
-                                 reinterpret_cast<const uint8_t*>(salt.data()),
+                                 reinterpret_cast<const std::uint8_t*>(salt.data()),
                                  int(salt.size()),
                                  int(iterationCount),
                                  EVP_sha512(),
                                  couchbase::core::crypto::SHA512_DIGEST_SIZE,
-                                 reinterpret_cast<uint8_t*>(ret.data()));
+                                 reinterpret_cast<std::uint8_t*>(ret.data()));
     if (err != 1) {
         throw std::runtime_error("couchbase::core::crypto::PBKDF2_HMAC(SHA512): PKCS5_PBKDF2_HMAC failed" + std::to_string(err));
     }
@@ -638,7 +638,7 @@ digest_sha1(std::string_view data)
 {
     std::string ret;
     ret.resize(couchbase::core::crypto::SHA1_DIGEST_SIZE);
-    SHA1(reinterpret_cast<const uint8_t*>(data.data()), data.size(), reinterpret_cast<uint8_t*>(ret.data()));
+    SHA1(reinterpret_cast<const std::uint8_t*>(data.data()), data.size(), reinterpret_cast<std::uint8_t*>(ret.data()));
     return ret;
 }
 
@@ -647,7 +647,7 @@ digest_sha256(std::string_view data)
 {
     std::string ret;
     ret.resize(couchbase::core::crypto::SHA256_DIGEST_SIZE);
-    SHA256(reinterpret_cast<const uint8_t*>(data.data()), data.size(), reinterpret_cast<uint8_t*>(ret.data()));
+    SHA256(reinterpret_cast<const std::uint8_t*>(data.data()), data.size(), reinterpret_cast<std::uint8_t*>(ret.data()));
     return ret;
 }
 
@@ -656,7 +656,7 @@ digest_sha512(std::string_view data)
 {
     std::string ret;
     ret.resize(couchbase::core::crypto::SHA512_DIGEST_SIZE);
-    SHA512(reinterpret_cast<const uint8_t*>(data.data()), data.size(), reinterpret_cast<uint8_t*>(ret.data()));
+    SHA512(reinterpret_cast<const std::uint8_t*>(data.data()), data.size(), reinterpret_cast<std::uint8_t*>(ret.data()));
     return ret;
 }
 
@@ -712,7 +712,8 @@ encrypt(const couchbase::core::crypto::Cipher cipher, std::string_view key, std:
 
     auto* cip = getCipher(cipher, key, iv);
     if (EVP_EncryptInit_ex(
-          ctx.get(), cip, nullptr, reinterpret_cast<const uint8_t*>(key.data()), reinterpret_cast<const uint8_t*>(iv.data())) != 1) {
+          ctx.get(), cip, nullptr, reinterpret_cast<const std::uint8_t*>(key.data()), reinterpret_cast<const std::uint8_t*>(iv.data())) !=
+        1) {
         throw std::runtime_error("couchbase::core::crypto::encrypt: EVP_EncryptInit_ex failed");
     }
 
@@ -720,13 +721,16 @@ encrypt(const couchbase::core::crypto::Cipher cipher, std::string_view key, std:
     ret.resize(data.size() + static_cast<std::string_view::size_type>(EVP_CIPHER_block_size(cip)));
     int len1 = int(ret.size());
 
-    if (EVP_EncryptUpdate(
-          ctx.get(), reinterpret_cast<uint8_t*>(ret.data()), &len1, reinterpret_cast<const uint8_t*>(data.data()), int(data.size())) != 1) {
+    if (EVP_EncryptUpdate(ctx.get(),
+                          reinterpret_cast<std::uint8_t*>(ret.data()),
+                          &len1,
+                          reinterpret_cast<const std::uint8_t*>(data.data()),
+                          int(data.size())) != 1) {
         throw std::runtime_error("couchbase::core::crypto::encrypt: EVP_EncryptUpdate failed");
     }
 
     int len2 = int(ret.size()) - len1;
-    if (EVP_EncryptFinal_ex(ctx.get(), reinterpret_cast<uint8_t*>(ret.data()) + len1, &len2) != 1) {
+    if (EVP_EncryptFinal_ex(ctx.get(), reinterpret_cast<std::uint8_t*>(ret.data()) + len1, &len2) != 1) {
         throw std::runtime_error("couchbase::core::crypto::encrypt: EVP_EncryptFinal_ex failed");
     }
 
@@ -742,7 +746,8 @@ decrypt(const couchbase::core::crypto::Cipher cipher, std::string_view key, std:
     auto* cip = getCipher(cipher, key, iv);
 
     if (EVP_DecryptInit_ex(
-          ctx.get(), cip, nullptr, reinterpret_cast<const uint8_t*>(key.data()), reinterpret_cast<const uint8_t*>(iv.data())) != 1) {
+          ctx.get(), cip, nullptr, reinterpret_cast<const std::uint8_t*>(key.data()), reinterpret_cast<const std::uint8_t*>(iv.data())) !=
+        1) {
         throw std::runtime_error("couchbase::core::crypto::decrypt: EVP_DecryptInit_ex failed");
     }
 
@@ -750,13 +755,16 @@ decrypt(const couchbase::core::crypto::Cipher cipher, std::string_view key, std:
     ret.resize(data.size());
     int len1 = int(ret.size());
 
-    if (EVP_DecryptUpdate(
-          ctx.get(), reinterpret_cast<uint8_t*>(ret.data()), &len1, reinterpret_cast<const uint8_t*>(data.data()), int(data.size())) != 1) {
+    if (EVP_DecryptUpdate(ctx.get(),
+                          reinterpret_cast<std::uint8_t*>(ret.data()),
+                          &len1,
+                          reinterpret_cast<const std::uint8_t*>(data.data()),
+                          int(data.size())) != 1) {
         throw std::runtime_error("couchbase::core::crypto::decrypt: EVP_DecryptUpdate failed");
     }
 
     int len2 = int(data.size()) - len1;
-    if (EVP_DecryptFinal_ex(ctx.get(), reinterpret_cast<uint8_t*>(ret.data()) + len1, &len2) != 1) {
+    if (EVP_DecryptFinal_ex(ctx.get(), reinterpret_cast<std::uint8_t*>(ret.data()) + len1, &len2) != 1) {
         throw std::runtime_error("couchbase::core::crypto::decrypt: EVP_DecryptFinal_ex failed");
     }
 

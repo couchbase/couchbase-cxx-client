@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/api/key_value_error_context.hxx>
+#include <couchbase/key_value_error_context.hxx>
 
 #include "core/document_id.hxx"
 
@@ -29,11 +29,11 @@
 namespace couchbase::core
 {
 
-api::key_value_error_context
+key_value_error_context
 make_key_value_error_context(std::error_code ec, const document_id& id);
 
 template<typename Command, typename Response>
-api::key_value_error_context
+key_value_error_context
 make_key_value_error_context(std::error_code ec, std::uint16_t status_code, const Command& command, const Response& response)
 {
 
@@ -47,7 +47,7 @@ make_key_value_error_context(std::error_code ec, std::uint16_t status_code, cons
     auto retry_reasons = command->request.retries.reasons;
     std::optional<std::string> last_dispatched_from{};
     std::optional<std::string> last_dispatched_to{};
-    std::optional<api::key_value_error_map_info> error_map_info{};
+    std::optional<key_value_error_map_info> error_map_info{};
     if (command->session_) {
         last_dispatched_from = command->session_->local_address();
         last_dispatched_to = command->session_->remote_address();

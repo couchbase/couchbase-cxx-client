@@ -17,21 +17,21 @@
 
 #pragma once
 
-#include <couchbase/api/fmt/key_value_extended_error_info.hxx>
+#include <couchbase/fmt/key_value_extended_error_info.hxx>
+#include <couchbase/fmt/key_value_status_code.hxx>
 
 #include "client_opcode.hxx"
 #include "client_opcode_fmt.hxx"
 #include "cmd_info.hxx"
 #include "core/io/mcbp_message.hxx"
 #include "core/utils/byteswap.hxx"
-#include "couchbase/api/fmt/key_value_status_code.hxx"
 #include "datatype.hxx"
 #include "enhanced_error_info.hxx"
 #include "frame_info_id.hxx"
 #include "magic.hxx"
 #include "magic_fmt.hxx"
 #include "status.hxx"
-#include <couchbase/api/cas.hxx>
+#include <couchbase/cas.hxx>
 
 #include <cmath>
 #include <cstring>
@@ -46,7 +46,7 @@ double
 parse_server_duration_us(const io::mcbp_message& msg);
 
 bool
-parse_enhanced_error(std::string_view str, api::key_value_extended_error_info& info);
+parse_enhanced_error(std::string_view str, key_value_extended_error_info& info);
 
 template<typename Body>
 class client_response
@@ -62,8 +62,8 @@ class client_response
     std::uint8_t framing_extras_size_{ 0 };
     std::uint8_t extras_size_{ 0 };
     std::size_t body_size_{ 0 };
-    api::key_value_status_code status_{};
-    std::optional<api::key_value_extended_error_info> error_;
+    key_value_status_code status_{};
+    std::optional<key_value_extended_error_info> error_;
     std::uint32_t opaque_{};
     std::uint64_t cas_{};
     cmd_info info_{};
@@ -89,14 +89,14 @@ class client_response
         return opcode_;
     }
 
-    [[nodiscard]] api::key_value_status_code status() const
+    [[nodiscard]] key_value_status_code status() const
     {
         return status_;
     }
 
-    [[nodiscard]] couchbase::api::cas cas() const
+    [[nodiscard]] couchbase::cas cas() const
     {
-        return couchbase::api::cas{ cas_ };
+        return couchbase::cas{ cas_ };
     }
 
     [[nodiscard]] std::uint32_t opaque() const
@@ -128,10 +128,10 @@ class client_response
         opcode_ = static_cast<client_opcode>(header_[1]);
         data_type_ = std::to_integer<std::uint8_t>(header_[5]);
 
-        uint16_t status = 0;
+        std::uint16_t status = 0;
         memcpy(&status, header_.data() + 6, sizeof(status));
         status = utils::byte_swap(status);
-        status_ = static_cast<api::key_value_status_code>(status);
+        status_ = static_cast<key_value_status_code>(status);
 
         extras_size_ = std::to_integer<std::uint8_t>(header_[4]);
         if (magic_ == magic::alt_client_response) {
@@ -142,7 +142,7 @@ class client_response
             key_size_ = utils::byte_swap(key_size_);
         }
 
-        uint32_t field = 0;
+        std::uint32_t field = 0;
         memcpy(&field, header_.data() + 8, sizeof(field));
         body_size_ = utils::byte_swap(field);
         data_.resize(body_size_);
@@ -153,7 +153,7 @@ class client_response
         cas_ = utils::byte_swap(cas_);
     }
 
-    [[nodiscard]] std::optional<api::key_value_extended_error_info> error_info() const
+    [[nodiscard]] std::optional<key_value_extended_error_info> error_info() const
     {
         return error_;
     }
@@ -170,9 +170,9 @@ class client_response
     {
         parse_framing_extras();
         bool parsed = body_.parse(status_, header_, framing_extras_size_, key_size_, extras_size_, data_, info_);
-        if (status_ != api::key_value_status_code::success && !parsed && has_json_datatype(data_type_)) {
-            api::key_value_extended_error_info err;
-            std::vector<uint8_t>::difference_type offset = framing_extras_size_ + extras_size_ + key_size_;
+        if (status_ != key_value_status_code::success && !parsed && has_json_datatype(data_type_)) {
+            key_value_extended_error_info err;
+            std::vector<std::uint8_t>::difference_type offset = framing_extras_size_ + extras_size_ + key_size_;
             std::string_view enhanced_error_text{ reinterpret_cast<const char*>(data_.data()) + offset,
                                                   data_.size() - static_cast<std::size_t>(offset) };
             if (parse_enhanced_error(enhanced_error_text, err)) {

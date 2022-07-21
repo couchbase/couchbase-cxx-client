@@ -170,7 +170,7 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("locking") };
     uint32_t lock_time = 10;
 
-    couchbase::api::cas cas{};
+    couchbase::cas cas{};
 
     {
         couchbase::core::operations::insert_request req{ id, basic_doc_json };
@@ -203,16 +203,16 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
         req.lock_time = lock_time;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::core::error::common_errc::ambiguous_timeout);
-        REQUIRE(resp.ctx.retried_because_of(couchbase::core::io::retry_reason::kv_locked));
+        REQUIRE(resp.ctx.retried_because_of(couchbase::retry_reason::kv_locked));
     }
 
     // but unlock operation is not retried in this case, because it would never have succeeded
     {
         couchbase::core::operations::unlock_request req{ id };
-        req.cas = couchbase::api::cas{ cas.value() - 1 };
+        req.cas = couchbase::cas{ cas.value() - 1 };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::document_locked);
-        REQUIRE_FALSE(resp.ctx.retried_because_of(couchbase::core::io::retry_reason::kv_locked));
+        REQUIRE_FALSE(resp.ctx.retried_because_of(couchbase::retry_reason::kv_locked));
     }
 
     // but mutating the locked key is allowed with known cas
@@ -260,7 +260,7 @@ TEST_CASE("integration: lock/unlock without lock time", "[integration]")
         REQUIRE_FALSE(resp.ctx.ec());
     }
 
-    couchbase::api::cas cas{};
+    couchbase::cas cas{};
 
     {
         couchbase::core::operations::get_and_lock_request req{ id };
@@ -428,7 +428,7 @@ TEST_CASE("integration: cas replace", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("cas_replace") };
-    couchbase::api::cas cas{};
+    couchbase::cas cas{};
 
     {
         couchbase::core::operations::insert_request req{ id, basic_doc_json };
@@ -440,7 +440,7 @@ TEST_CASE("integration: cas replace", "[integration]")
     SECTION("incorrect")
     {
         couchbase::core::operations::replace_request req{ id, couchbase::core::utils::to_binary("") };
-        req.cas = couchbase::api::cas{ cas.value() + 1 };
+        req.cas = couchbase::cas{ cas.value() + 1 };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::core::error::common_errc::cas_mismatch);
     }
@@ -699,7 +699,7 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
         REQUIRE(resp.first_error_index == 0);
         REQUIRE(resp.fields.size() == 1);
         REQUIRE(resp.fields[0].path == "a");
-        REQUIRE(resp.fields[0].status == couchbase::api::key_value_status_code::subdoc_path_exists);
+        REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::subdoc_path_exists);
     }
 }
 

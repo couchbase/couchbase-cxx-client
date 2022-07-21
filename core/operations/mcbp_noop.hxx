@@ -28,7 +28,7 @@ namespace couchbase::core::operations
 {
 
 struct mcbp_noop_response {
-    api::key_value_error_context ctx;
+    key_value_error_context ctx;
 };
 
 struct mcbp_noop_request {
@@ -36,14 +36,14 @@ struct mcbp_noop_request {
     using encoded_request_type = protocol::client_request<protocol::mcbp_noop_request_body>;
     using encoded_response_type = protocol::client_response<protocol::mcbp_noop_response_body>;
 
-    uint16_t partition{};
-    uint32_t opaque{};
+    std::uint16_t partition{};
+    std::uint32_t opaque{};
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ true };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 
-    [[nodiscard]] mcbp_noop_response make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+    [[nodiscard]] mcbp_noop_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
 };
 
 } // namespace couchbase::core::operations

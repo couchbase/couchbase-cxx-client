@@ -17,16 +17,16 @@
 
 #pragma once
 
-#include <couchbase/api/bucket.hxx>
+#include <couchbase/bucket.hxx>
 
 #include <memory>
 
 namespace couchbase::core
 {
 class cluster;
-} // namespace couchbase
+} // namespace couchbase::core
 
-namespace couchbase::api
+namespace couchbase
 {
 /**
  * The {@link cluster} is the main entry point when connecting to a Couchbase cluster.
@@ -67,4 +67,4 @@ class cluster
   private:
     std::shared_ptr<couchbase::core::cluster> core_;
 };
-} // namespace couchbase::api
+} // namespace couchbase

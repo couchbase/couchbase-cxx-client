@@ -32,7 +32,7 @@ get_and_lock_request::encode_to(get_and_lock_request::encoded_request_type& enco
 }
 
 get_and_lock_response
-get_and_lock_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const
+get_and_lock_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
     get_and_lock_response response{ std::move(ctx) };
     if (!response.ctx.ec()) {

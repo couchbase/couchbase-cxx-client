@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-#include <couchbase/api/fmt/key_value_status_code.hxx>
+#include <couchbase/fmt/key_value_status_code.hxx>
 
 #include "core/errors.hxx"
 #include "status.hxx"
@@ -26,159 +26,159 @@ std::string
 status_to_string(std::uint16_t code)
 {
     if (is_valid_status(code)) {
-        return fmt::format("{} ({})", code, static_cast<api::key_value_status_code>(code));
+        return fmt::format("{} ({})", code, static_cast<key_value_status_code>(code));
     }
     return fmt::format("{} (unknown)", code);
 }
 
 [[nodiscard]] std::error_code
-map_status_code(protocol::client_opcode opcode, uint16_t status)
+map_status_code(protocol::client_opcode opcode, std::uint16_t status)
 {
-    switch (static_cast<api::key_value_status_code>(status)) {
-        case api::key_value_status_code::success:
-        case api::key_value_status_code::subdoc_multi_path_failure:
-        case api::key_value_status_code::subdoc_success_deleted:
-        case api::key_value_status_code::subdoc_multi_path_failure_deleted:
+    switch (static_cast<key_value_status_code>(status)) {
+        case key_value_status_code::success:
+        case key_value_status_code::subdoc_multi_path_failure:
+        case key_value_status_code::subdoc_success_deleted:
+        case key_value_status_code::subdoc_multi_path_failure_deleted:
             return {};
 
-        case api::key_value_status_code::not_found:
-        case api::key_value_status_code::not_stored:
+        case key_value_status_code::not_found:
+        case key_value_status_code::not_stored:
             return error::key_value_errc::document_not_found;
 
-        case api::key_value_status_code::exists:
+        case key_value_status_code::exists:
             if (opcode == protocol::client_opcode::insert) {
                 return error::key_value_errc::document_exists;
             }
             return error::common_errc::cas_mismatch;
 
-        case api::key_value_status_code::too_big:
+        case key_value_status_code::too_big:
             return error::key_value_errc::value_too_large;
 
-        case api::key_value_status_code::invalid:
-        case api::key_value_status_code::xattr_invalid:
-        case api::key_value_status_code::subdoc_invalid_combo:
-        case api::key_value_status_code::subdoc_deleted_document_cannot_have_value:
+        case key_value_status_code::invalid:
+        case key_value_status_code::xattr_invalid:
+        case key_value_status_code::subdoc_invalid_combo:
+        case key_value_status_code::subdoc_deleted_document_cannot_have_value:
             return error::common_errc::invalid_argument;
 
-        case api::key_value_status_code::delta_bad_value:
+        case key_value_status_code::delta_bad_value:
             return error::key_value_errc::delta_invalid;
 
-        case api::key_value_status_code::no_bucket:
+        case key_value_status_code::no_bucket:
             return error::common_errc::bucket_not_found;
 
-        case api::key_value_status_code::locked:
+        case key_value_status_code::locked:
             return error::key_value_errc::document_locked;
 
-        case api::key_value_status_code::auth_stale:
-        case api::key_value_status_code::auth_error:
-        case api::key_value_status_code::no_access:
+        case key_value_status_code::auth_stale:
+        case key_value_status_code::auth_error:
+        case key_value_status_code::no_access:
             return error::common_errc::authentication_failure;
 
-        case api::key_value_status_code::not_supported:
-        case api::key_value_status_code::unknown_command:
+        case key_value_status_code::not_supported:
+        case key_value_status_code::unknown_command:
             return error::common_errc::unsupported_operation;
 
-        case api::key_value_status_code::internal:
+        case key_value_status_code::internal:
             return error::common_errc::internal_server_failure;
 
-        case api::key_value_status_code::busy:
-        case api::key_value_status_code::temporary_failure:
-        case api::key_value_status_code::no_memory:
-        case api::key_value_status_code::not_initialized:
+        case key_value_status_code::busy:
+        case key_value_status_code::temporary_failure:
+        case key_value_status_code::no_memory:
+        case key_value_status_code::not_initialized:
             return error::common_errc::temporary_failure;
 
-        case api::key_value_status_code::unknown_collection:
+        case key_value_status_code::unknown_collection:
             return error::common_errc::collection_not_found;
 
-        case api::key_value_status_code::unknown_scope:
+        case key_value_status_code::unknown_scope:
             return error::common_errc::scope_not_found;
 
-        case api::key_value_status_code::durability_invalid_level:
+        case key_value_status_code::durability_invalid_level:
             return error::key_value_errc::durability_level_not_available;
 
-        case api::key_value_status_code::durability_impossible:
+        case key_value_status_code::durability_impossible:
             return error::key_value_errc::durability_impossible;
 
-        case api::key_value_status_code::sync_write_in_progress:
+        case key_value_status_code::sync_write_in_progress:
             return error::key_value_errc::durable_write_in_progress;
 
-        case api::key_value_status_code::sync_write_ambiguous:
+        case key_value_status_code::sync_write_ambiguous:
             return error::key_value_errc::durability_ambiguous;
 
-        case api::key_value_status_code::sync_write_re_commit_in_progress:
+        case key_value_status_code::sync_write_re_commit_in_progress:
             return error::key_value_errc::durable_write_re_commit_in_progress;
 
-        case api::key_value_status_code::subdoc_path_not_found:
+        case key_value_status_code::subdoc_path_not_found:
             return error::key_value_errc::path_not_found;
 
-        case api::key_value_status_code::subdoc_path_mismatch:
+        case key_value_status_code::subdoc_path_mismatch:
             return error::key_value_errc::path_mismatch;
 
-        case api::key_value_status_code::subdoc_path_invalid:
+        case key_value_status_code::subdoc_path_invalid:
             return error::key_value_errc::path_invalid;
 
-        case api::key_value_status_code::subdoc_path_too_big:
+        case key_value_status_code::subdoc_path_too_big:
             return error::key_value_errc::path_too_big;
 
-        case api::key_value_status_code::subdoc_doc_too_deep:
+        case key_value_status_code::subdoc_doc_too_deep:
             return error::key_value_errc::value_too_deep;
 
-        case api::key_value_status_code::subdoc_value_cannot_insert:
+        case key_value_status_code::subdoc_value_cannot_insert:
             return error::key_value_errc::value_invalid;
 
-        case api::key_value_status_code::subdoc_doc_not_json:
+        case key_value_status_code::subdoc_doc_not_json:
             return error::key_value_errc::document_not_json;
 
-        case api::key_value_status_code::subdoc_num_range_error:
+        case key_value_status_code::subdoc_num_range_error:
             return error::key_value_errc::number_too_big;
 
-        case api::key_value_status_code::subdoc_delta_invalid:
+        case key_value_status_code::subdoc_delta_invalid:
             return error::key_value_errc::delta_invalid;
 
-        case api::key_value_status_code::subdoc_path_exists:
+        case key_value_status_code::subdoc_path_exists:
             return error::key_value_errc::path_exists;
 
-        case api::key_value_status_code::subdoc_value_too_deep:
+        case key_value_status_code::subdoc_value_too_deep:
             return error::key_value_errc::value_too_deep;
 
-        case api::key_value_status_code::subdoc_xattr_invalid_flag_combo:
-        case api::key_value_status_code::subdoc_xattr_invalid_key_combo:
+        case key_value_status_code::subdoc_xattr_invalid_flag_combo:
+        case key_value_status_code::subdoc_xattr_invalid_key_combo:
             return error::key_value_errc::xattr_invalid_key_combo;
 
-        case api::key_value_status_code::subdoc_xattr_unknown_macro:
-        case api::key_value_status_code::subdoc_xattr_unknown_vattr_macro:
+        case key_value_status_code::subdoc_xattr_unknown_macro:
+        case key_value_status_code::subdoc_xattr_unknown_vattr_macro:
             return error::key_value_errc::xattr_unknown_macro;
 
-        case api::key_value_status_code::subdoc_xattr_unknown_vattr:
+        case key_value_status_code::subdoc_xattr_unknown_vattr:
             return error::key_value_errc::xattr_unknown_virtual_attribute;
 
-        case api::key_value_status_code::subdoc_xattr_cannot_modify_vattr:
+        case key_value_status_code::subdoc_xattr_cannot_modify_vattr:
             return error::key_value_errc::xattr_cannot_modify_virtual_attribute;
 
-        case api::key_value_status_code::subdoc_can_only_revive_deleted_documents:
+        case key_value_status_code::subdoc_can_only_revive_deleted_documents:
             return error::key_value_errc::cannot_revive_living_document;
 
-        case api::key_value_status_code::rate_limited_network_ingress:
-        case api::key_value_status_code::rate_limited_network_egress:
-        case api::key_value_status_code::rate_limited_max_connections:
-        case api::key_value_status_code::rate_limited_max_commands:
+        case key_value_status_code::rate_limited_network_ingress:
+        case key_value_status_code::rate_limited_network_egress:
+        case key_value_status_code::rate_limited_max_connections:
+        case key_value_status_code::rate_limited_max_commands:
             return error::common_errc::rate_limited;
 
-        case api::key_value_status_code::scope_size_limit_exceeded:
+        case key_value_status_code::scope_size_limit_exceeded:
             return error::common_errc::quota_limited;
 
-        case api::key_value_status_code::subdoc_invalid_xattr_order:
-        case api::key_value_status_code::not_my_vbucket:
-        case api::key_value_status_code::auth_continue:
-        case api::key_value_status_code::range_error:
-        case api::key_value_status_code::rollback:
-        case api::key_value_status_code::unknown_frame_info:
-        case api::key_value_status_code::no_collections_manifest:
-        case api::key_value_status_code::cannot_apply_collections_manifest:
-        case api::key_value_status_code::collections_manifest_is_ahead:
-        case api::key_value_status_code::dcp_stream_id_invalid:
-        case api::key_value_status_code::dcp_stream_not_found:
-        case api::key_value_status_code::opaque_no_match:
+        case key_value_status_code::subdoc_invalid_xattr_order:
+        case key_value_status_code::not_my_vbucket:
+        case key_value_status_code::auth_continue:
+        case key_value_status_code::range_error:
+        case key_value_status_code::rollback:
+        case key_value_status_code::unknown_frame_info:
+        case key_value_status_code::no_collections_manifest:
+        case key_value_status_code::cannot_apply_collections_manifest:
+        case key_value_status_code::collections_manifest_is_ahead:
+        case key_value_status_code::dcp_stream_id_invalid:
+        case key_value_status_code::dcp_stream_not_found:
+        case key_value_status_code::opaque_no_match:
             break;
     }
     return error::network_errc::protocol_error;

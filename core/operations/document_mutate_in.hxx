@@ -33,14 +33,14 @@ namespace couchbase::core::operations
 struct mutate_in_response {
     struct field {
         protocol::subdoc_opcode opcode;
-        api::key_value_status_code status;
+        key_value_status_code status;
         std::string path;
         std::string value;
         std::size_t original_index;
         std::error_code ec{};
     };
-    api::key_value_error_context ctx;
-    couchbase::api::cas cas{};
+    key_value_error_context ctx;
+    couchbase::cas cas{};
     mutation_token token{};
     std::vector<field> fields{};
     std::optional<std::size_t> first_error_index{};
@@ -53,9 +53,9 @@ struct mutate_in_request {
     using encoded_response_type = protocol::client_response<protocol::mutate_in_response_body>;
 
     document_id id;
-    uint16_t partition{};
-    uint32_t opaque{};
-    couchbase::api::cas cas{ 0 };
+    std::uint16_t partition{};
+    std::uint32_t opaque{};
+    couchbase::cas cas{ 0 };
     bool access_deleted{ false };
     bool create_as_deleted{ false };
     std::optional<std::uint32_t> expiry{};
@@ -71,7 +71,7 @@ struct mutate_in_request {
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context);
 
-    [[nodiscard]] mutate_in_response make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+    [[nodiscard]] mutate_in_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
 };
 
 } // namespace couchbase::core::operations

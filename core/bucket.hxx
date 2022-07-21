@@ -152,8 +152,8 @@ class bucket : public std::enable_shared_from_this<bucket>
                               session->id(),
                               session->bootstrap_hostname(),
                               session->bootstrap_port());
-                    asio::post(asio::bind_executor(
-                      ctx_, [session = std::move(session)]() { return session->stop(io::retry_reason::do_not_retry); }));
+                    asio::post(
+                      asio::bind_executor(ctx_, [session = std::move(session)]() { return session->stop(retry_reason::do_not_retry); }));
                 }
             }
 
@@ -183,8 +183,8 @@ class bucket : public std::enable_shared_from_this<bucket>
                             [self](topology::configuration new_config) { self->update_config(std::move(new_config)); });
                           session->on_stop(
                             [index = session->index(), hostname = session->bootstrap_hostname(), port = session->bootstrap_port(), self](
-                              io::retry_reason reason) {
-                                if (reason == io::retry_reason::socket_closed_while_in_flight) {
+                              retry_reason reason) {
+                                if (reason == retry_reason::socket_closed_while_in_flight) {
                                     self->restart_node(index, hostname, port);
                                 }
                             });
@@ -255,8 +255,8 @@ class bucket : public std::enable_shared_from_this<bucket>
           [self = shared_from_this(), session, this_index = index, hostname, port](std::error_code ec,
                                                                                    const topology::configuration& config) {
               if (self->closed_) {
-                  asio::post(asio::bind_executor(
-                    self->ctx_, [session = std::move(session)]() { return session->stop(io::retry_reason::do_not_retry); }));
+                  asio::post(asio::bind_executor(self->ctx_,
+                                                 [session = std::move(session)]() { return session->stop(retry_reason::do_not_retry); }));
                   return;
               }
               if (ec) {
@@ -265,8 +265,8 @@ class bucket : public std::enable_shared_from_this<bucket>
                   return;
               }
               session->on_configuration_update([self](topology::configuration new_config) { self->update_config(std::move(new_config)); });
-              session->on_stop([this_index, hostname, port, self](io::retry_reason reason) {
-                  if (reason == io::retry_reason::socket_closed_while_in_flight) {
+              session->on_stop([this_index, hostname, port, self](retry_reason reason) {
+                  if (reason == retry_reason::socket_closed_while_in_flight) {
                       self->restart_node(this_index, hostname, port);
                   }
               });
@@ -295,8 +295,8 @@ class bucket : public std::enable_shared_from_this<bucket>
                 size_t this_index = new_session->index();
                 new_session->on_configuration_update([self](topology::configuration config) { self->update_config(std::move(config)); });
                 new_session->on_stop([this_index, hostname = new_session->bootstrap_hostname(), port = new_session->bootstrap_port(), self](
-                                       io::retry_reason reason) {
-                    if (reason == io::retry_reason::socket_closed_while_in_flight) {
+                                       retry_reason reason) {
+                    if (reason == retry_reason::socket_closed_while_in_flight) {
                         self->restart_node(this_index, hostname, port);
                     }
                 });
@@ -411,7 +411,7 @@ class bucket : public std::enable_shared_from_this<bucket>
         for (auto& [index, session] : old_sessions) {
             if (session) {
                 LOG_DEBUG(R"({} shutdown session session="{}", idx={})", log_prefix_, session->id(), index);
-                session->stop(io::retry_reason::do_not_retry);
+                session->stop(retry_reason::do_not_retry);
             }
         }
     }
@@ -426,7 +426,7 @@ class bucket : public std::enable_shared_from_this<bucket>
     void map_and_send(std::shared_ptr<operations::mcbp_command<bucket, Request>> cmd)
     {
         if (closed_) {
-            return cmd->cancel(io::retry_reason::do_not_retry);
+            return cmd->cancel(retry_reason::do_not_retry);
         }
         std::int16_t index = 0;
         if (cmd->request.id.use_any_session()) {
@@ -443,7 +443,7 @@ class bucket : public std::enable_shared_from_this<bucket>
             std::tie(cmd->request.partition, index) = map_id(cmd->request.id);
             if (index < 0) {
                 return io::retry_orchestrator::maybe_retry(
-                  cmd->manager_, cmd, io::retry_reason::node_not_available, error::common_errc::request_canceled);
+                  cmd->manager_, cmd, retry_reason::node_not_available, error::common_errc::request_canceled);
             }
         }
         std::shared_ptr<io::mcbp_session> session{};
@@ -463,7 +463,7 @@ class bucket : public std::enable_shared_from_this<bucket>
         }
         if (session->is_stopped()) {
             return io::retry_orchestrator::maybe_retry(
-              cmd->manager_, cmd, io::retry_reason::node_not_available, error::common_errc::request_canceled);
+              cmd->manager_, cmd, retry_reason::node_not_available, error::common_errc::request_canceled);
         }
         cmd->send_to(session);
     }
@@ -472,7 +472,7 @@ class bucket : public std::enable_shared_from_this<bucket>
     void schedule_for_retry(std::shared_ptr<operations::mcbp_command<bucket, Request>> cmd, std::chrono::milliseconds duration)
     {
         if (closed_) {
-            return cmd->cancel(io::retry_reason::do_not_retry);
+            return cmd->cancel(retry_reason::do_not_retry);
         }
         cmd->retry_backoff.expires_after(duration);
         cmd->retry_backoff.async_wait([self = shared_from_this(), cmd](std::error_code ec) mutable {

@@ -201,8 +201,8 @@ configuration::map_key(const std::string& key, std::size_t index)
     if (!vbmap.has_value()) {
         throw std::runtime_error("cannot map key: partition map is not available");
     }
-    uint32_t crc = utils::hash_crc32(key.data(), key.size());
-    auto vbucket = uint16_t(crc % vbmap->size());
+    std::uint32_t crc = utils::hash_crc32(key.data(), key.size());
+    auto vbucket = std::uint16_t(crc % vbmap->size());
     return { vbucket, vbmap->at(vbucket)[index] };
 }
 

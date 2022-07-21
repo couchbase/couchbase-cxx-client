@@ -31,8 +31,8 @@ namespace couchbase::core::operations
 {
 
 struct prepend_response {
-    api::key_value_error_context ctx;
-    couchbase::api::cas cas{};
+    key_value_error_context ctx;
+    couchbase::cas cas{};
     mutation_token token{};
 };
 
@@ -43,8 +43,8 @@ struct prepend_request {
 
     document_id id;
     std::vector<std::byte> value;
-    uint16_t partition{};
-    uint32_t opaque{};
+    std::uint16_t partition{};
+    std::uint32_t opaque{};
     protocol::durability_level durability_level{ protocol::durability_level::none };
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
@@ -52,7 +52,7 @@ struct prepend_request {
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 
-    [[nodiscard]] prepend_response make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+    [[nodiscard]] prepend_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
 };
 
 } // namespace couchbase::core::operations

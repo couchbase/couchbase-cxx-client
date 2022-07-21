@@ -26,7 +26,7 @@
 namespace couchbase::core::protocol
 {
 bool
-exists_response_body::parse(api::key_value_status_code status,
+exists_response_body::parse(key_value_status_code status,
                             const header_buffer& header,
                             std::uint8_t framing_extras_size,
                             std::uint16_t key_size,
@@ -35,7 +35,7 @@ exists_response_body::parse(api::key_value_status_code status,
                             const cmd_info& /* info */)
 {
     Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == api::key_value_status_code::success) {
+    if (status == key_value_status_code::success) {
         using offset_type = std::vector<std::byte>::difference_type;
         offset_type offset = framing_extras_size + extras_size + key_size;
 
@@ -75,11 +75,11 @@ exists_request_body::fill_body()
 
     value_.resize(2 * sizeof(std::uint16_t) + key_.size());
 
-    uint16_t field = utils::byte_swap(partition_id_);
+    std::uint16_t field = utils::byte_swap(partition_id_);
     memcpy(value_.data() + offset, &field, sizeof(field));
     offset += sizeof(field);
 
-    field = utils::byte_swap(static_cast<uint16_t>(key_.size()));
+    field = utils::byte_swap(static_cast<std::uint16_t>(key_.size()));
     memcpy(value_.data() + offset, &field, sizeof(field));
     offset += sizeof(field);
 

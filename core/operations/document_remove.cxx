@@ -32,7 +32,7 @@ remove_request::encode_to(remove_request::encoded_request_type& encoded, mcbp_co
 }
 
 remove_response
-remove_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const
+remove_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
     remove_response response{ std::move(ctx) };
     if (!response.ctx.ec()) {

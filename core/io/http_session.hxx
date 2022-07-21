@@ -266,7 +266,7 @@ class http_session : public std::enable_shared_from_this<http_session>
         return stopped_;
     }
 
-    void write(const std::vector<uint8_t>& buf)
+    void write(const std::vector<std::uint8_t>& buf)
     {
         if (stopped_) {
             return;

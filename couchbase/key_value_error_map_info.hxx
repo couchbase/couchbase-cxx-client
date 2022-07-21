@@ -17,13 +17,13 @@
 
 #pragma once
 
-#include <couchbase/api/key_value_error_map_attribute.hxx>
+#include <couchbase/key_value_error_map_attribute.hxx>
 
 #include <cstdint>
 #include <set>
 #include <string>
 
-namespace couchbase::api
+namespace couchbase
 {
 /**
  * Entry of the ErrorMap.
@@ -135,4 +135,4 @@ class key_value_error_map_info
     std::string description_{};
     std::set<key_value_error_map_attribute> attributes_{};
 };
-} // namespace couchbase::api
+} // namespace couchbase

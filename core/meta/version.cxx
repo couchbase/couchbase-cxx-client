@@ -18,8 +18,9 @@
 #include "version.hxx"
 
 #include "core/utils/json.hxx"
-#include "couchbase/build_info.hxx"
-#include "couchbase/build_version.hxx"
+
+#include <couchbase/build_info.hxx>
+#include <couchbase/build_version.hxx>
 
 #include <asio/version.hpp>
 #include <fmt/core.h>

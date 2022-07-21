@@ -28,7 +28,7 @@
 namespace couchbase::core::protocol
 {
 bool
-get_collection_id_response_body::parse(api::key_value_status_code status,
+get_collection_id_response_body::parse(key_value_status_code status,
                                        const header_buffer& header,
                                        std::uint8_t framing_extras_size,
                                        std::uint16_t key_size,
@@ -37,8 +37,8 @@ get_collection_id_response_body::parse(api::key_value_status_code status,
                                        const cmd_info& /* info */)
 {
     Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == api::key_value_status_code::success && extras_size == 12) {
-        std::vector<uint8_t>::difference_type offset = framing_extras_size + key_size;
+    if (status == key_value_status_code::success && extras_size == 12) {
+        std::vector<std::uint8_t>::difference_type offset = framing_extras_size + key_size;
 
         std::memcpy(&manifest_uid_, body.data() + offset, sizeof(manifest_uid_));
         manifest_uid_ = utils::byte_swap(manifest_uid_);

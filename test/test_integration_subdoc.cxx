@@ -32,7 +32,7 @@ assert_single_lookup_success(test::utils::integration_test_guard& integration,
     REQUIRE(resp.fields.size() == 1);
     REQUIRE(resp.fields[0].exists);
     REQUIRE(resp.fields[0].path == path);
-    REQUIRE(resp.fields[0].status == couchbase::api::key_value_status_code::success);
+    REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::success);
     REQUIRE_FALSE(resp.fields[0].ec);
     if (expected_value.has_value()) {
         REQUIRE(expected_value == resp.fields[0].value);
@@ -44,7 +44,7 @@ assert_single_lookup_error(test::utils::integration_test_guard& integration,
                            couchbase::core::protocol::subdoc_opcode opcode,
                            const couchbase::core::document_id& id,
                            const std::string& path,
-                           couchbase::api::key_value_status_code expected_status,
+                           couchbase::key_value_status_code expected_status,
                            std::error_code expected_ec)
 {
     couchbase::core::operations::lookup_in_request req{ id };
@@ -67,7 +67,7 @@ assert_single_mutate_success(couchbase::core::operations::mutate_in_response res
     REQUIRE_FALSE(resp.cas.empty());
     REQUIRE(resp.fields.size() == 1);
     REQUIRE(resp.fields[0].path == path);
-    REQUIRE(resp.fields[0].status == couchbase::api::key_value_status_code::success);
+    REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::success);
     REQUIRE_FALSE(resp.fields[0].ec);
     REQUIRE(resp.fields[0].value == value);
 }
@@ -75,7 +75,7 @@ assert_single_mutate_success(couchbase::core::operations::mutate_in_response res
 void
 assert_single_mutate_error(couchbase::core::operations::mutate_in_response resp,
                            const std::string& path,
-                           couchbase::api::key_value_status_code expected_status,
+                           couchbase::key_value_status_code expected_status,
                            std::error_code expected_ec)
 {
     REQUIRE(resp.ctx.ec() == expected_ec);
@@ -137,7 +137,7 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
                                    couchbase::core::protocol::subdoc_opcode::get,
                                    id,
                                    "non-exist",
-                                   couchbase::api::key_value_status_code::subdoc_path_not_found,
+                                   couchbase::key_value_status_code::subdoc_path_not_found,
                                    couchbase::core::error::key_value_errc::path_not_found);
     }
 
@@ -147,7 +147,7 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
                                    couchbase::core::protocol::subdoc_opcode::exists,
                                    id,
                                    "non-exist",
-                                   couchbase::api::key_value_status_code::subdoc_path_not_found,
+                                   couchbase::key_value_status_code::subdoc_path_not_found,
                                    couchbase::core::error::key_value_errc::path_not_found);
     }
 
@@ -191,7 +191,7 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
                                        couchbase::core::protocol::subdoc_opcode::get,
                                        non_json_id,
                                        "non-exist",
-                                       couchbase::api::key_value_status_code::subdoc_doc_not_json,
+                                       couchbase::key_value_status_code::subdoc_doc_not_json,
                                        couchbase::core::error::key_value_errc::document_not_json);
         }
 
@@ -201,7 +201,7 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
                                        couchbase::core::protocol::subdoc_opcode::exists,
                                        non_json_id,
                                        "non-exist",
-                                       couchbase::api::key_value_status_code::subdoc_doc_not_json,
+                                       couchbase::key_value_status_code::subdoc_doc_not_json,
                                        couchbase::core::error::key_value_errc::document_not_json);
         }
     }
@@ -214,7 +214,7 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
                                        couchbase::core::protocol::subdoc_opcode::get,
                                        id,
                                        path,
-                                       couchbase::api::key_value_status_code::subdoc_path_invalid,
+                                       couchbase::key_value_status_code::subdoc_path_invalid,
                                        couchbase::core::error::key_value_errc::path_invalid);
         }
     }
@@ -235,7 +235,7 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
                                    couchbase::core::protocol::subdoc_opcode::get,
                                    id,
                                    "array.key",
-                                   couchbase::api::key_value_status_code::subdoc_path_mismatch,
+                                   couchbase::key_value_status_code::subdoc_path_mismatch,
                                    couchbase::core::error::key_value_errc::path_mismatch);
     }
 }
@@ -246,7 +246,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc") };
 
-    couchbase::api::cas cas{};
+    couchbase::cas cas{};
 
     {
         auto value_json = couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
@@ -273,7 +273,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
             req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::dict_add, false, false, false, path, value);
             auto resp = test::utils::execute(integration.cluster, req);
             assert_single_mutate_error(
-              resp, path, couchbase::api::key_value_status_code::subdoc_path_exists, couchbase::core::error::key_value_errc::path_exists);
+              resp, path, couchbase::key_value_status_code::subdoc_path_exists, couchbase::core::error::key_value_errc::path_exists);
         }
 
         {
@@ -289,7 +289,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
     SECTION("bad cas")
     {
         couchbase::core::operations::mutate_in_request req{ id };
-        req.cas = couchbase::api::cas{ cas.value() + 1 };
+        req.cas = couchbase::cas{ cas.value() + 1 };
         req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::dict_upsert, false, false, false, "newpath", "123");
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::core::error::common_errc::cas_mismatch);
@@ -314,10 +314,8 @@ TEST_CASE("integration: subdoc store", "[integration]")
         couchbase::core::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::dict_upsert, false, false, false, path, value);
         auto resp = test::utils::execute(integration.cluster, req);
-        assert_single_mutate_error(resp,
-                                   path,
-                                   couchbase::api::key_value_status_code::subdoc_value_cannot_insert,
-                                   couchbase::core::error::key_value_errc::value_invalid);
+        assert_single_mutate_error(
+          resp, path, couchbase::key_value_status_code::subdoc_value_cannot_insert, couchbase::core::error::key_value_errc::value_invalid);
     }
 
     SECTION("unknown parent")
@@ -328,7 +326,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
         req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::dict_upsert, false, false, false, path, value);
         auto resp = test::utils::execute(integration.cluster, req);
         assert_single_mutate_error(
-          resp, path, couchbase::api::key_value_status_code::subdoc_path_not_found, couchbase::core::error::key_value_errc::path_not_found);
+          resp, path, couchbase::key_value_status_code::subdoc_path_not_found, couchbase::core::error::key_value_errc::path_not_found);
     }
 
     SECTION("create parents")
@@ -362,10 +360,8 @@ TEST_CASE("integration: subdoc store", "[integration]")
             couchbase::core::operations::mutate_in_request req{ id };
             req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::replace, false, false, false, path, value);
             auto resp = test::utils::execute(integration.cluster, req);
-            assert_single_mutate_error(resp,
-                                       path,
-                                       couchbase::api::key_value_status_code::subdoc_path_not_found,
-                                       couchbase::core::error::key_value_errc::path_not_found);
+            assert_single_mutate_error(
+              resp, path, couchbase::key_value_status_code::subdoc_path_not_found, couchbase::core::error::key_value_errc::path_not_found);
         }
 
         SECTION("array element")
@@ -432,7 +428,7 @@ TEST_CASE("integration: subdoc unique", "[integration]")
         req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::array_add_unique, false, true, false, "a", "1");
         auto resp = test::utils::execute(integration.cluster, req);
         assert_single_mutate_error(
-          resp, "a", couchbase::api::key_value_status_code::subdoc_path_exists, couchbase::core::error::key_value_errc::path_exists);
+          resp, "a", couchbase::key_value_status_code::subdoc_path_exists, couchbase::core::error::key_value_errc::path_exists);
     }
 
     // try adding object, can't be unique compared
@@ -440,10 +436,8 @@ TEST_CASE("integration: subdoc unique", "[integration]")
         couchbase::core::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::array_add_unique, false, true, false, "a", "{}");
         auto resp = test::utils::execute(integration.cluster, req);
-        assert_single_mutate_error(resp,
-                                   "a",
-                                   couchbase::api::key_value_status_code::subdoc_value_cannot_insert,
-                                   couchbase::core::error::key_value_errc::value_invalid);
+        assert_single_mutate_error(
+          resp, "a", couchbase::key_value_status_code::subdoc_value_cannot_insert, couchbase::core::error::key_value_errc::value_invalid);
     }
 
     {
@@ -459,7 +453,7 @@ TEST_CASE("integration: subdoc unique", "[integration]")
         req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::array_add_unique, false, true, false, "a", "null");
         auto resp = test::utils::execute(integration.cluster, req);
         assert_single_mutate_error(
-          resp, "a", couchbase::api::key_value_status_code::subdoc_path_mismatch, couchbase::core::error::key_value_errc::path_mismatch);
+          resp, "a", couchbase::key_value_status_code::subdoc_path_mismatch, couchbase::core::error::key_value_errc::path_mismatch);
     }
 }
 
@@ -510,7 +504,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
             auto resp = test::utils::execute(integration.cluster, req);
             assert_single_mutate_error(resp,
                                        "counter",
-                                       couchbase::api::key_value_status_code::subdoc_value_cannot_insert,
+                                       couchbase::key_value_status_code::subdoc_value_cannot_insert,
                                        couchbase::core::error::key_value_errc::value_invalid);
         }
     }
@@ -520,10 +514,8 @@ TEST_CASE("integration: subdoc counter", "[integration]")
         couchbase::core::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::counter, false, false, false, "counter", "0");
         auto resp = test::utils::execute(integration.cluster, req);
-        assert_single_mutate_error(resp,
-                                   "counter",
-                                   couchbase::api::key_value_status_code::subdoc_delta_invalid,
-                                   couchbase::core::error::key_value_errc::delta_invalid);
+        assert_single_mutate_error(
+          resp, "counter", couchbase::key_value_status_code::subdoc_delta_invalid, couchbase::core::error::key_value_errc::delta_invalid);
     }
 
     SECTION("increase number already too big")
@@ -542,7 +534,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
             auto resp = test::utils::execute(integration.cluster, req);
             assert_single_mutate_error(resp,
                                        "counter",
-                                       couchbase::api::key_value_status_code::subdoc_num_range_error,
+                                       couchbase::key_value_status_code::subdoc_num_range_error,
                                        couchbase::core::error::key_value_errc::number_too_big);
         }
     }
@@ -552,10 +544,8 @@ TEST_CASE("integration: subdoc counter", "[integration]")
         couchbase::core::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::counter, false, false, false, "dictkey", "1");
         auto resp = test::utils::execute(integration.cluster, req);
-        assert_single_mutate_error(resp,
-                                   "dictkey",
-                                   couchbase::api::key_value_status_code::subdoc_path_mismatch,
-                                   couchbase::core::error::key_value_errc::path_mismatch);
+        assert_single_mutate_error(
+          resp, "dictkey", couchbase::key_value_status_code::subdoc_path_mismatch, couchbase::core::error::key_value_errc::path_mismatch);
     }
 
     SECTION("simple decrement")
@@ -601,17 +591,17 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
         REQUIRE(resp.fields.size() == 4);
 
         REQUIRE(resp.fields[0].value == R"("dictval")");
-        REQUIRE(resp.fields[0].status == couchbase::api::key_value_status_code::success);
+        REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::success);
 
         REQUIRE(resp.fields[1].value.empty());
-        REQUIRE(resp.fields[1].status == couchbase::api::key_value_status_code::success);
+        REQUIRE(resp.fields[1].status == couchbase::key_value_status_code::success);
         REQUIRE(resp.fields[1].exists);
 
         REQUIRE(resp.fields[2].value.empty());
-        REQUIRE(resp.fields[2].status == couchbase::api::key_value_status_code::subdoc_path_not_found);
+        REQUIRE(resp.fields[2].status == couchbase::key_value_status_code::subdoc_path_not_found);
 
         REQUIRE(resp.fields[3].value == "2");
-        REQUIRE(resp.fields[3].status == couchbase::api::key_value_status_code::success);
+        REQUIRE(resp.fields[3].status == couchbase::key_value_status_code::success);
     }
 
     SECTION("mismatched type and opcode")
@@ -658,7 +648,7 @@ TEST_CASE("integration: subdoc multi mutation", "[integration]")
         REQUIRE(resp.fields.size() == 2);
 
         REQUIRE(resp.fields[1].value == "42");
-        REQUIRE(resp.fields[1].status == couchbase::api::key_value_status_code::success);
+        REQUIRE(resp.fields[1].status == couchbase::key_value_status_code::success);
 
         assert_single_lookup_success(integration, couchbase::core::protocol::subdoc_opcode::get, id, "newpath", "true");
         assert_single_lookup_success(integration, couchbase::core::protocol::subdoc_opcode::get, id, "counter", "42");
@@ -673,7 +663,7 @@ TEST_CASE("integration: subdoc multi mutation", "[integration]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::path_not_found);
         REQUIRE(resp.fields.size() == 3);
-        REQUIRE(resp.fields[1].status == couchbase::api::key_value_status_code::subdoc_path_not_found);
+        REQUIRE(resp.fields[1].status == couchbase::key_value_status_code::subdoc_path_not_found);
     }
 }
 
@@ -727,10 +717,10 @@ TEST_CASE("integration: subdoc get count", "[integration]")
         REQUIRE(resp.fields.size() == 2);
 
         REQUIRE(resp.fields[0].value.empty());
-        REQUIRE(resp.fields[0].status == couchbase::api::key_value_status_code::subdoc_path_not_found);
+        REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::subdoc_path_not_found);
 
         REQUIRE(resp.fields[1].value == "5");
-        REQUIRE(resp.fields[1].status == couchbase::api::key_value_status_code::success);
+        REQUIRE(resp.fields[1].status == couchbase::key_value_status_code::success);
     }
 }
 
@@ -740,7 +730,7 @@ TEST_CASE("integration: subdoc insert error consistency", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("sd_err") };
 
-    couchbase::api::cas cas{};
+    couchbase::cas cas{};
     {
         couchbase::core::operations::insert_request req{ id, couchbase::core::utils::to_binary("{}") };
         auto resp = test::utils::execute(integration.cluster, req);
@@ -763,7 +753,7 @@ TEST_CASE("integration: subdoc insert error consistency", "[integration]")
     {
         couchbase::core::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::dict_upsert, false, false, false, "foo", "42");
-        req.cas = couchbase::api::cas{ cas.value() + 1 };
+        req.cas = couchbase::cas{ cas.value() + 1 };
         req.store_semantics = couchbase::core::protocol::mutate_in_request_body::store_semantics_type::upsert;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::core::error::common_errc::invalid_argument);
@@ -774,7 +764,7 @@ TEST_CASE("integration: subdoc insert error consistency", "[integration]")
     {
         couchbase::core::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::dict_upsert, false, false, false, "foo", "42");
-        req.cas = couchbase::api::cas{ cas.value() + 1 };
+        req.cas = couchbase::cas{ cas.value() + 1 };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::core::error::common_errc::cas_mismatch);
     }

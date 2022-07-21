@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/api/retry_reason.hxx>
+#include <couchbase/retry_reason.hxx>
 
 #include <optional>
 #include <set>
@@ -45,7 +45,7 @@ struct query {
     std::optional<std::string> last_dispatched_to{};
     std::optional<std::string> last_dispatched_from{};
     int retry_attempts{ 0 };
-    std::set<api::retry_reason> retry_reasons{};
+    std::set<retry_reason> retry_reasons{};
 };
 
 } // namespace couchbase::core::error_context

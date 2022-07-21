@@ -18,8 +18,8 @@
 #include "test_helper_integration.hxx"
 #include "utils/move_only_context.hxx"
 
-#include <couchbase/api/cluster.hxx>
-#include <couchbase/api/get_any_replica.hxx>
+#include <couchbase/cluster.hxx>
+#include <couchbase/get_any_replica.hxx>
 
 static const tao::json::value basic_doc = {
     { "a", 1.0 },
@@ -51,7 +51,7 @@ TEST_CASE("integration: get any replica", "[integration]")
 
     {
         auto collection =
-          couchbase::api::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
+          couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
         auto [ctx, result] = collection.get_any_replica(key, {}).get();
         REQUIRE_FALSE(ctx.ec());
         REQUIRE(result.content() == basic_doc_json);
@@ -83,7 +83,7 @@ TEST_CASE("integration: get all replicas", "[integration]")
 
     {
         auto collection =
-          couchbase::api::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
+          couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
         auto [ctx, result] = collection.get_all_replicas(key, {}).get();
         REQUIRE_FALSE(ctx.ec());
         REQUIRE(result.size() == number_of_replicas + 1);

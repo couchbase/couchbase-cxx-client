@@ -58,11 +58,11 @@ mutate_in_request::encode_to(mutate_in_request::encoded_request_type& encoded, m
 }
 
 mutate_in_response
-mutate_in_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const
+mutate_in_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
     mutate_in_response response{ std::move(ctx) };
-    if (encoded.status() == api::key_value_status_code::subdoc_success_deleted ||
-        encoded.status() == api::key_value_status_code::subdoc_multi_path_failure_deleted) {
+    if (encoded.status() == key_value_status_code::subdoc_success_deleted ||
+        encoded.status() == key_value_status_code::subdoc_multi_path_failure_deleted) {
         response.deleted = true;
     }
     if (!response.ctx.ec()) {
@@ -72,10 +72,10 @@ mutate_in_request::make_response(api::key_value_error_context&& ctx, const encod
             response.fields[i].original_index = req_entry.original_index;
             response.fields[i].opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode);
             response.fields[i].path = req_entry.path;
-            response.fields[i].status = api::key_value_status_code::success;
+            response.fields[i].status = key_value_status_code::success;
         }
         for (const auto& entry : encoded.body().fields()) {
-            if (entry.status == api::key_value_status_code::success) {
+            if (entry.status == key_value_status_code::success) {
                 response.fields[entry.index].value = entry.value;
             } else {
                 response.fields[entry.index].status = entry.status;

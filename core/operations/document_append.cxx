@@ -32,7 +32,7 @@ append_request::encode_to(protocol::client_request<protocol::append_request_body
 }
 
 append_response
-append_request::make_response(api::key_value_error_context&& ctx, const encoded_response_type& encoded) const
+append_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
     append_response response{ std::move(ctx) };
     if (!response.ctx.ec()) {
