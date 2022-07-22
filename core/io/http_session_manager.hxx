@@ -187,7 +187,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
         if (idle_sessions_[type].empty()) {
             auto [hostname, port] = preferred_node.empty() ? next_node(type) : lookup_node(type, preferred_node);
             if (port == 0) {
-                return { error::common_errc::service_not_available, nullptr };
+                return { errc::common::service_not_available, nullptr };
             }
             auto session = bootstrap_session(type, credentials, hostname, port);
             busy_sessions_[type].push_back(session);

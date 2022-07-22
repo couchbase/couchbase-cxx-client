@@ -150,7 +150,7 @@ TEST_CASE("integration: bucket management", "[integration]")
         {
             couchbase::core::operations::management::bucket_get_request req{ bucket_name };
             auto resp = retry_on_error(integration, req, {});
-            REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::bucket_not_found);
+            REQUIRE(resp.ctx.ec == couchbase::errc::common::bucket_not_found);
         }
 
         {
@@ -206,7 +206,7 @@ TEST_CASE("integration: bucket management", "[integration]")
             auto flushed = test::utils::wait_until([&integration, id]() {
                 couchbase::core::operations::get_request req{ id };
                 auto resp = test::utils::execute(integration.cluster, req);
-                return resp.ctx.ec() == couchbase::core::error::key_value_errc::document_not_found;
+                return resp.ctx.ec() == couchbase::errc::key_value::document_not_found;
             });
             REQUIRE(flushed);
         }
@@ -215,7 +215,7 @@ TEST_CASE("integration: bucket management", "[integration]")
         {
             couchbase::core::operations::management::bucket_flush_request req{ bucket_name };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::bucket_not_found);
+            REQUIRE(resp.ctx.ec == couchbase::errc::common::bucket_not_found);
         }
 
         SECTION("flush disabled")
@@ -233,7 +233,7 @@ TEST_CASE("integration: bucket management", "[integration]")
             {
                 couchbase::core::operations::management::bucket_flush_request req{ bucket_name };
                 auto resp = test::utils::execute(integration.cluster, req);
-                REQUIRE(resp.ctx.ec == couchbase::core::error::management_errc::bucket_not_flushable);
+                REQUIRE(resp.ctx.ec == couchbase::errc::management::bucket_not_flushable);
             }
         }
     }
@@ -407,7 +407,7 @@ TEST_CASE("integration: bucket management", "[integration]")
         couchbase::core::operations::management::bucket_update_request req;
         req.bucket = bucket_settings;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::bucket_not_found);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::bucket_not_found);
     }
 
     if (integration.cluster_version().supports_minimum_durability_level()) {
@@ -527,7 +527,7 @@ TEST_CASE("integration: collection management", "[integration]")
     {
         couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::management_errc::scope_exists);
+        REQUIRE(resp.ctx.ec == couchbase::errc::management::scope_exists);
     }
 
     {
@@ -560,7 +560,7 @@ TEST_CASE("integration: collection management", "[integration]")
     {
         couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::management_errc::collection_exists);
+        REQUIRE(resp.ctx.ec == couchbase::errc::management::collection_exists);
     }
 
     {
@@ -578,7 +578,7 @@ TEST_CASE("integration: collection management", "[integration]")
     {
         couchbase::core::operations::management::collection_drop_request req{ integration.ctx.bucket, scope_name, collection_name };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::collection_not_found);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::collection_not_found);
     }
 
     {
@@ -595,7 +595,7 @@ TEST_CASE("integration: collection management", "[integration]")
     {
         couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket, scope_name };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::scope_not_found);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::scope_not_found);
     }
 }
 
@@ -667,7 +667,7 @@ TEST_CASE("integration: user groups management", "[integration]")
 
         {
             couchbase::core::operations::management::group_get_request req{ group_name_1 };
-            auto resp = retry_on_error(integration, req, couchbase::core::error::management_errc::group_not_found);
+            auto resp = retry_on_error(integration, req, couchbase::errc::management::group_not_found);
             REQUIRE_FALSE(resp.ctx.ec);
             REQUIRE(resp.group.name == group.name);
             REQUIRE(resp.group.description == group.description);
@@ -732,14 +732,14 @@ TEST_CASE("integration: user groups management", "[integration]")
     {
         couchbase::core::operations::management::group_get_request req{ test::utils::uniq_id("group") };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::management_errc::group_not_found);
+        REQUIRE(resp.ctx.ec == couchbase::errc::management::group_not_found);
     }
 
     SECTION("drop missing group")
     {
         couchbase::core::operations::management::group_drop_request req{ test::utils::uniq_id("group") };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::management_errc::group_not_found);
+        REQUIRE(resp.ctx.ec == couchbase::errc::management::group_not_found);
     }
 
     SECTION("user and groups crud")
@@ -770,7 +770,7 @@ TEST_CASE("integration: user groups management", "[integration]")
         {
             couchbase::core::operations::management::user_upsert_request req{};
             req.user = user;
-            auto resp = retry_on_error(integration, req, couchbase::core::error::common_errc::invalid_argument);
+            auto resp = retry_on_error(integration, req, couchbase::errc::common::invalid_argument);
             REQUIRE_FALSE(resp.ctx.ec);
         }
 
@@ -799,7 +799,7 @@ TEST_CASE("integration: user groups management", "[integration]")
 
         {
             couchbase::core::operations::management::user_get_request req{ user_name };
-            auto resp = retry_on_error(integration, req, couchbase::core::error::management_errc::user_not_found);
+            auto resp = retry_on_error(integration, req, couchbase::errc::management::user_not_found);
             REQUIRE_FALSE(resp.ctx.ec);
             assert_user_and_metadata(resp.user, expected);
         }
@@ -866,14 +866,14 @@ TEST_CASE("integration: user management", "[integration]")
     {
         couchbase::core::operations::management::user_get_request req{ test::utils::uniq_id("user") };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::management_errc::user_not_found);
+        REQUIRE(resp.ctx.ec == couchbase::errc::management::user_not_found);
     }
 
     SECTION("drop missing user")
     {
         couchbase::core::operations::management::user_drop_request req{ test::utils::uniq_id("user") };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::management_errc::user_not_found);
+        REQUIRE(resp.ctx.ec == couchbase::errc::management::user_not_found);
     }
 
     SECTION("get roles")
@@ -931,7 +931,7 @@ TEST_CASE("integration: user management collections roles", "[integration]")
 
     {
         couchbase::core::operations::management::user_get_request req{ user_name };
-        auto resp = retry_on_error(integration, req, couchbase::core::error::management_errc::user_not_found);
+        auto resp = retry_on_error(integration, req, couchbase::errc::management::user_not_found);
         REQUIRE_FALSE(resp.ctx.ec);
         REQUIRE(resp.user.roles.size() == 1);
         REQUIRE(resp.user.roles[0].name == "data_reader");
@@ -994,7 +994,7 @@ TEST_CASE("integration: query index management", "[integration]")
                     req.bucket_name = bucket_name;
                     req.is_primary = true;
                     resp = test::utils::execute(integration.cluster, req);
-                    return resp.ctx.ec != couchbase::core::error::common_errc::bucket_not_found;
+                    return resp.ctx.ec != couchbase::errc::common::bucket_not_found;
                 });
                 REQUIRE(operation_completed);
                 REQUIRE_FALSE(resp.ctx.ec);
@@ -1027,7 +1027,7 @@ TEST_CASE("integration: query index management", "[integration]")
                 req.index_name = index_name;
                 req.fields = { "field", "field2 DESC", "`two words` DESC" };
                 resp = test::utils::execute(integration.cluster, req);
-                return resp.ctx.ec != couchbase::core::error::common_errc::bucket_not_found;
+                return resp.ctx.ec != couchbase::errc::common::bucket_not_found;
             });
             REQUIRE(operation_completed);
             REQUIRE_FALSE(resp.ctx.ec);
@@ -1039,7 +1039,7 @@ TEST_CASE("integration: query index management", "[integration]")
             req.index_name = index_name;
             req.fields = { "field" };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::index_exists);
+            REQUIRE(resp.ctx.ec == couchbase::errc::common::index_exists);
         }
 
         {
@@ -1083,7 +1083,7 @@ TEST_CASE("integration: query index management", "[integration]")
             req.bucket_name = integration.ctx.bucket;
             req.index_name = index_name;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::index_not_found);
+            REQUIRE(resp.ctx.ec == couchbase::errc::common::index_not_found);
         }
     }
 
@@ -1098,7 +1098,7 @@ TEST_CASE("integration: query index management", "[integration]")
                 req.fields = { "field" };
                 req.deferred = true;
                 resp = test::utils::execute(integration.cluster, req);
-                return resp.ctx.ec != couchbase::core::error::common_errc::bucket_not_found;
+                return resp.ctx.ec != couchbase::errc::common::bucket_not_found;
             });
             REQUIRE(operation_completed);
             REQUIRE_FALSE(resp.ctx.ec);
@@ -1142,7 +1142,7 @@ TEST_CASE("integration: query index management", "[integration]")
         req.bucket_name = "missing_bucket";
         req.is_primary = true;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::bucket_not_found);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::bucket_not_found);
     }
 
     SECTION("get missing bucket")
@@ -1160,7 +1160,7 @@ TEST_CASE("integration: query index management", "[integration]")
         req.bucket_name = "missing_bucket";
         req.is_primary = true;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::bucket_not_found);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::bucket_not_found);
     }
 }
 
@@ -1210,7 +1210,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
                 req.collection_name = collection_name;
                 req.is_primary = true;
                 resp = test::utils::execute(integration.cluster, req);
-                return resp.ctx.ec != couchbase::core::error::common_errc::bucket_not_found;
+                return resp.ctx.ec != couchbase::errc::common::bucket_not_found;
             });
             REQUIRE(operation_completed);
             REQUIRE_FALSE(resp.ctx.ec);
@@ -1241,7 +1241,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
                 req.index_name = index_name;
                 req.is_primary = true;
                 resp = test::utils::execute(integration.cluster, req);
-                return resp.ctx.ec != couchbase::core::error::common_errc::bucket_not_found;
+                return resp.ctx.ec != couchbase::errc::common::bucket_not_found;
             });
             REQUIRE(operation_completed);
             REQUIRE_FALSE(resp.ctx.ec);
@@ -1283,7 +1283,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
                 req.collection_name = collection_name;
                 req.fields = { "field" };
                 resp = test::utils::execute(integration.cluster, req);
-                return resp.ctx.ec != couchbase::core::error::common_errc::bucket_not_found;
+                return resp.ctx.ec != couchbase::errc::common::bucket_not_found;
             });
             REQUIRE(operation_completed);
             REQUIRE_FALSE(resp.ctx.ec);
@@ -1297,7 +1297,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
             req.collection_name = collection_name;
             req.fields = { "field" };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::index_exists);
+            REQUIRE(resp.ctx.ec == couchbase::errc::common::index_exists);
         }
 
         {
@@ -1347,7 +1347,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
             req.scope_name = scope_name;
             req.collection_name = collection_name;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::index_not_found);
+            REQUIRE(resp.ctx.ec == couchbase::errc::common::index_not_found);
         }
     }
 
@@ -1364,7 +1364,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
                 req.fields = { "field" };
                 req.deferred = true;
                 resp = test::utils::execute(integration.cluster, req);
-                return resp.ctx.ec != couchbase::core::error::common_errc::bucket_not_found;
+                return resp.ctx.ec != couchbase::errc::common::bucket_not_found;
             });
             REQUIRE(operation_completed);
             REQUIRE_FALSE(resp.ctx.ec);
@@ -1412,7 +1412,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
         req.collection_name = "missing_collection";
         req.is_primary = true;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::collection_not_found);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::collection_not_found);
     }
 
     SECTION("create missing scope")
@@ -1423,7 +1423,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
         req.collection_name = collection_name;
         req.is_primary = true;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::scope_not_found);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::scope_not_found);
     }
 
     SECTION("get missing collection")
@@ -1445,7 +1445,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
         req.collection_name = "missing_collection";
         req.is_primary = true;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::collection_not_found);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::collection_not_found);
     }
 
     SECTION("drop missing scope")
@@ -1456,7 +1456,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
         req.collection_name = collection_name;
         req.is_primary = true;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::scope_not_found);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::scope_not_found);
     }
 }
 
@@ -1490,7 +1490,7 @@ TEST_CASE("integration: analytics index management", "[integration]")
             couchbase::core::operations::management::analytics_dataverse_create_request req{};
             req.dataverse_name = dataverse_name;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::analytics_errc::dataverse_exists);
+            REQUIRE(resp.ctx.ec == couchbase::errc::analytics::dataverse_exists);
         }
 
         {
@@ -1516,7 +1516,7 @@ TEST_CASE("integration: analytics index management", "[integration]")
             req.bucket_name = integration.ctx.bucket;
             req.dataverse_name = dataverse_name;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::analytics_errc::dataset_exists);
+            REQUIRE(resp.ctx.ec == couchbase::errc::analytics::dataset_exists);
         }
 
         {
@@ -1546,7 +1546,7 @@ TEST_CASE("integration: analytics index management", "[integration]")
             req.index_name = index_name;
             req.fields["testkey"] = "string";
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::index_exists);
+            REQUIRE(resp.ctx.ec == couchbase::errc::common::index_exists);
         }
 
         {
@@ -1621,7 +1621,7 @@ TEST_CASE("integration: analytics index management", "[integration]")
             req.dataverse_name = dataverse_name;
             req.dataset_name = dataset_name;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::index_not_found);
+            REQUIRE(resp.ctx.ec == couchbase::errc::common::index_not_found);
         }
 
         {
@@ -1647,7 +1647,7 @@ TEST_CASE("integration: analytics index management", "[integration]")
             req.dataverse_name = dataverse_name;
             req.dataset_name = dataset_name;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::analytics_errc::dataset_not_found);
+            REQUIRE(resp.ctx.ec == couchbase::errc::analytics::dataset_not_found);
         }
 
         {
@@ -1670,7 +1670,7 @@ TEST_CASE("integration: analytics index management", "[integration]")
             couchbase::core::operations::management::analytics_dataverse_drop_request req{};
             req.dataverse_name = dataverse_name;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::analytics_errc::dataverse_not_found);
+            REQUIRE(resp.ctx.ec == couchbase::errc::analytics::dataverse_not_found);
         }
 
         {
@@ -1793,7 +1793,7 @@ run_s3_link_test(test::utils::integration_test_guard& integration, const std::st
           req{};
         req.link = link;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::analytics_errc::link_exists);
+        REQUIRE(resp.ctx.ec == couchbase::errc::analytics::link_exists);
     }
 
     {
@@ -1869,7 +1869,7 @@ run_s3_link_test(test::utils::integration_test_guard& integration, const std::st
         req.dataverse_name = dataverse_name;
         req.link_name = link_name;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::analytics_errc::link_not_found);
+        REQUIRE(resp.ctx.ec == couchbase::errc::analytics::link_not_found);
     }
 }
 
@@ -1910,7 +1910,7 @@ run_azure_link_test(test::utils::integration_test_guard& integration, const std:
           req{};
         req.link = link;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::analytics_errc::link_exists);
+        REQUIRE(resp.ctx.ec == couchbase::errc::analytics::link_exists);
     }
 
     {
@@ -1988,7 +1988,7 @@ run_azure_link_test(test::utils::integration_test_guard& integration, const std:
         req.dataverse_name = dataverse_name;
         req.link_name = link_name;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::analytics_errc::link_not_found);
+        REQUIRE(resp.ctx.ec == couchbase::errc::analytics::link_not_found);
     }
 }
 
@@ -2029,7 +2029,7 @@ TEST_CASE("integration: analytics external link management", "[integration]")
               req{};
             req.link = link;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::analytics_errc::dataverse_not_found);
+            REQUIRE(resp.ctx.ec == couchbase::errc::analytics::dataverse_not_found);
         }
     }
 
@@ -2039,7 +2039,7 @@ TEST_CASE("integration: analytics external link management", "[integration]")
           req{};
         req.link = couchbase::core::management::analytics::s3_external_link{};
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::invalid_argument);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::invalid_argument);
     }
 
     SECTION("link crud")
@@ -2125,7 +2125,7 @@ TEST_CASE("integration: search index management", "[integration]")
             couchbase::core::operations::management::search_index_upsert_request req{};
             req.index = index;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::index_exists);
+            REQUIRE(resp.ctx.ec == couchbase::errc::common::index_exists);
         }
 
         {
@@ -2168,7 +2168,7 @@ TEST_CASE("integration: search index management", "[integration]")
             couchbase::core::operations::management::search_index_get_request req{};
             req.index_name = "missing_index";
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::index_not_found);
+            REQUIRE(resp.ctx.ec == couchbase::errc::common::index_not_found);
         }
 
         {
@@ -2202,7 +2202,7 @@ TEST_CASE("integration: search index management", "[integration]")
         couchbase::core::operations::management::search_index_drop_request req{};
         req.index_name = "missing_index";
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::index_not_found);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::index_not_found);
     }
 
     SECTION("upsert index no name")
@@ -2214,7 +2214,7 @@ TEST_CASE("integration: search index management", "[integration]")
         couchbase::core::operations::management::search_index_upsert_request req{};
         req.index = index;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::invalid_argument);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::invalid_argument);
     }
 
     SECTION("control")
@@ -2351,7 +2351,7 @@ TEST_CASE("integration: search index management analyze document", "[integration
         req.index_name = index_name;
         req.encoded_document = R"({ "name": "hello world" })";
         resp = test::utils::execute(integration.cluster, req);
-        return resp.ctx.ec != couchbase::core::error::common_errc::internal_server_failure;
+        return resp.ctx.ec != couchbase::errc::common::internal_server_failure;
     });
     REQUIRE(operation_completed);
     REQUIRE_FALSE(resp.ctx.ec);
@@ -2371,7 +2371,7 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         couchbase::core::operations::management::freeform_request req{};
         req.type = couchbase::core::service_type::key_value;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::invalid_argument);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::invalid_argument);
     }
 
     if (integration.cluster_version().supports_analytics() && integration.has_analytics_service()) {
@@ -2552,16 +2552,16 @@ TEST_CASE("integration: eventing functions management", "[integration]")
             couchbase::core::operations::management::eventing_drop_function_request req{ function_name };
             auto resp = test::utils::execute(integration.cluster, req);
             if (integration.cluster_version().is_cheshire_cat()) {
-                REQUIRE(resp.ctx.ec == couchbase::core::error::management_errc::eventing_function_not_deployed);
+                REQUIRE(resp.ctx.ec == couchbase::errc::management::eventing_function_not_deployed);
             } else {
-                REQUIRE(resp.ctx.ec == couchbase::core::error::management_errc::eventing_function_not_found);
+                REQUIRE(resp.ctx.ec == couchbase::errc::management::eventing_function_not_found);
             }
         }
 
         {
             couchbase::core::operations::management::eventing_get_function_request req{ function_name };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::management_errc::eventing_function_not_found);
+            REQUIRE(resp.ctx.ec == couchbase::errc::management::eventing_function_not_found);
         }
 
         auto meta_bucket_name = test::utils::uniq_id("meta");
@@ -2659,7 +2659,7 @@ function OnDelete(meta, options) {
         {
             couchbase::core::operations::management::eventing_undeploy_function_request req{ function_name };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::management_errc::eventing_function_not_deployed);
+            REQUIRE(resp.ctx.ec == couchbase::errc::management::eventing_function_not_deployed);
         }
 
         {
@@ -2674,13 +2674,13 @@ function OnDelete(meta, options) {
         {
             couchbase::core::operations::management::eventing_drop_function_request req{ function_name };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::management_errc::eventing_function_deployed);
+            REQUIRE(resp.ctx.ec == couchbase::errc::management::eventing_function_deployed);
         }
 
         {
             couchbase::core::operations::management::eventing_resume_function_request req{ function_name };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::management_errc::eventing_function_deployed);
+            REQUIRE(resp.ctx.ec == couchbase::errc::management::eventing_function_deployed);
         }
 
         {
@@ -2694,7 +2694,7 @@ function OnDelete(meta, options) {
         {
             couchbase::core::operations::management::eventing_pause_function_request req{ function_name };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::management_errc::eventing_function_paused);
+            REQUIRE(resp.ctx.ec == couchbase::errc::management::eventing_function_paused);
         }
 
         {
@@ -2724,7 +2724,7 @@ function OnDelete(meta, options) {
         {
             couchbase::core::operations::management::eventing_get_function_request req{ function_name };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec == couchbase::core::error::management_errc::eventing_function_not_found);
+            REQUIRE(resp.ctx.ec == couchbase::errc::management::eventing_function_not_found);
         }
 
         {

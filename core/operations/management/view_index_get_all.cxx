@@ -17,7 +17,6 @@
 
 #include "view_index_get_all.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
@@ -41,7 +40,7 @@ view_index_get_all_request::make_response(error_context::http&& ctx, const encod
             try {
                 payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
-                response.ctx.ec = error::common_errc::parsing_failure;
+                response.ctx.ec = errc::common::parsing_failure;
                 return response;
             }
             auto* rows = payload.find("rows");
@@ -98,7 +97,7 @@ view_index_get_all_request::make_response(error_context::http&& ctx, const encod
                 }
             }
         } else if (encoded.status_code == 404) {
-            response.ctx.ec = error::common_errc::bucket_not_found;
+            response.ctx.ec = errc::common::bucket_not_found;
         } else {
             response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
         }

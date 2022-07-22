@@ -90,9 +90,9 @@ class get_replica_result : public result
     /**
      * Decodes content of the document using given transcoder.
      *
-     * @tparam Transcoder type that has static function @c decode that takes @c std::vector<std::byte> with @c flags and returns @c
-     * value_type
-     * @tparam value_type type that @c Transcoder returns
+     * @tparam Transcoder type that has static function `decode` that takes `std::vector<std::byte>` with `flags` and returns
+     * `value_type`
+     * @tparam value_type type that `Transcoder` returns
      * @return decoded document content
      *
      * @since 1.0.0

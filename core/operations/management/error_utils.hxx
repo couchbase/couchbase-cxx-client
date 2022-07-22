@@ -17,8 +17,9 @@
 
 #pragma once
 
-#include "core/errors.hxx"
 #include "eventing_problem.hxx"
+
+#include <couchbase/error_codes.hxx>
 
 #include <tao/json/forward.hpp>
 

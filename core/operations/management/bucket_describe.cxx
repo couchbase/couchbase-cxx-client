@@ -17,7 +17,6 @@
 
 #include "bucket_describe.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 

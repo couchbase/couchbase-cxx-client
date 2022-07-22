@@ -102,7 +102,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                 handler_ = nullptr;
             }
         }
-        invoke_handler(request.retries.idempotent ? error::common_errc::unambiguous_timeout : error::common_errc::ambiguous_timeout);
+        invoke_handler(request.retries.idempotent ? errc::common::unambiguous_timeout : errc::common::ambiguous_timeout);
     }
 
     void invoke_handler(std::error_code ec, std::optional<io::mcbp_message> msg = {})
@@ -137,9 +137,9 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
           req.data(session_->supports_feature(protocol::hello_feature::snappy)),
           [self = this->shared_from_this()](std::error_code ec, retry_reason /* reason */, io::mcbp_message&& msg) mutable {
               if (ec == asio::error::operation_aborted) {
-                  return self->invoke_handler(error::common_errc::ambiguous_timeout);
+                  return self->invoke_handler(errc::common::ambiguous_timeout);
               }
-              if (ec == error::common_errc::collection_not_found) {
+              if (ec == errc::common::collection_not_found) {
                   if (self->request.id.is_collection_resolved()) {
                       return self->invoke_handler(ec);
                   }
@@ -166,8 +166,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                   id_);
         request.retries.reasons.insert(retry_reason::kv_collection_outdated);
         if (time_left < backoff) {
-            return invoke_handler(make_error_code(request.retries.idempotent ? error::common_errc::unambiguous_timeout
-                                                                             : error::common_errc::ambiguous_timeout));
+            return invoke_handler(
+              make_error_code(request.retries.idempotent ? errc::common::unambiguous_timeout : errc::common::ambiguous_timeout));
         }
         retry_backoff.expires_after(backoff);
         retry_backoff.async_wait([self = this->shared_from_this()](std::error_code ec) mutable {
@@ -198,7 +198,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                 }
             } else {
                 if (!request.id.has_default_collection()) {
-                    return invoke_handler(error::common_errc::unsupported_operation);
+                    return invoke_handler(errc::common::unsupported_operation);
                 }
             }
         }
@@ -230,10 +230,10 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
               self->retry_backoff.cancel();
               if (ec == asio::error::operation_aborted) {
                   self->span_->add_tag(tracing::attributes::orphan, "aborted");
-                  return self->invoke_handler(make_error_code(self->request.retries.idempotent ? error::common_errc::unambiguous_timeout
-                                                                                               : error::common_errc::ambiguous_timeout));
+                  return self->invoke_handler(make_error_code(self->request.retries.idempotent ? errc::common::unambiguous_timeout
+                                                                                               : errc::common::ambiguous_timeout));
               }
-              if (ec == error::common_errc::request_canceled) {
+              if (ec == errc::common::request_canceled) {
                   if (reason == retry_reason::do_not_retry) {
                       self->span_->add_tag(tracing::attributes::orphan, "canceled");
                       return self->invoke_handler(ec);

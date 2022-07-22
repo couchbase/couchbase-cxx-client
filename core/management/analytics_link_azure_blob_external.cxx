@@ -17,8 +17,9 @@
 
 #include "analytics_link_azure_blob_external.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/url_codec.hxx"
+
+#include <couchbase/error_codes.hxx>
 
 #include <algorithm>
 
@@ -28,12 +29,12 @@ std::error_code
 azure_blob_external_link::validate() const
 {
     if (dataverse.empty() || link_name.empty()) {
-        return error::common_errc::invalid_argument;
+        return errc::common::invalid_argument;
     }
     if (connection_string.has_value() || (account_name.has_value() && (account_key.has_value() || shared_access_signature.has_value()))) {
         return {};
     }
-    return error::common_errc::invalid_argument;
+    return errc::common::invalid_argument;
 }
 
 std::string

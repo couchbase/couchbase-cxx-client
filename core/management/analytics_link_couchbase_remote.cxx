@@ -17,8 +17,9 @@
 
 #include "analytics_link_couchbase_remote.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/url_codec.hxx"
+
+#include <couchbase/error_codes.hxx>
 
 #include <algorithm>
 
@@ -28,7 +29,7 @@ std::error_code
 couchbase_remote_link::validate() const
 {
     if (dataverse.empty() || link_name.empty() || hostname.empty()) {
-        return error::common_errc::invalid_argument;
+        return errc::common::invalid_argument;
     }
     switch (encryption.level) {
         case couchbase_link_encryption_level::none:
@@ -39,7 +40,7 @@ couchbase_remote_link::validate() const
 
                 return {};
             }
-            return error::common_errc::invalid_argument;
+            return errc::common::invalid_argument;
 
         case couchbase_link_encryption_level::full:
             if (/* certificate must be provided and */ encryption.certificate.has_value() &&
@@ -51,7 +52,7 @@ couchbase_remote_link::validate() const
                                                               encryption.client_key.has_value()))) {
                 return {};
             }
-            return error::common_errc::invalid_argument;
+            return errc::common::invalid_argument;
     }
     return {};
 }

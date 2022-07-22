@@ -17,7 +17,6 @@
 
 #include "analytics_link_create.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "core/utils/name_codec.hxx"
 #include "error_utils.hxx"
@@ -40,7 +39,7 @@ make_analytics_link_create_response(error_context::http&& ctx, const io::http_re
         } catch (const tao::pegtl::parse_error&) {
             auto colon = encoded.body.data().find(':');
             if (colon == std::string::npos) {
-                response.ctx.ec = error::common_errc::parsing_failure;
+                response.ctx.ec = errc::common::parsing_failure;
                 return response;
             }
             auto code = static_cast<std::uint32_t>(std::stoul(encoded.body.data()));
@@ -74,9 +73,9 @@ make_analytics_link_create_response(error_context::http&& ctx, const io::http_re
             }
         }
         if (dataverse_does_not_exist) {
-            response.ctx.ec = error::analytics_errc::dataverse_not_found;
+            response.ctx.ec = errc::analytics::dataverse_not_found;
         } else if (link_exists) {
-            response.ctx.ec = error::analytics_errc::link_exists;
+            response.ctx.ec = errc::analytics::link_exists;
         } else {
             response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
         }

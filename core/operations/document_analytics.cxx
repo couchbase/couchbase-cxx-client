@@ -16,10 +16,11 @@
  */
 
 #include "document_analytics.hxx"
-#include "core/errors.hxx"
 #include "core/logger/logger.hxx"
 #include "core/utils/duration_parser.hxx"
 #include "core/utils/json.hxx"
+
+#include <couchbase/error_codes.hxx>
 
 #include <gsl/assert>
 
@@ -103,7 +104,7 @@ analytics_request::make_response(error_context::analytics&& ctx, const encoded_r
         try {
             payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = error::common_errc::parsing_failure;
+            response.ctx.ec = errc::common::parsing_failure;
             return response;
         }
         response.meta.request_id = payload.at("requestID").get_string();
@@ -183,35 +184,35 @@ analytics_request::make_response(error_context::analytics&& ctx, const encoded_r
             response.ctx.first_error_message = response.meta.errors.front().message;
             switch (response.ctx.first_error_code) {
                 case 21002: /* Request timed out and will be cancelled */
-                    response.ctx.ec = error::common_errc::unambiguous_timeout;
+                    response.ctx.ec = errc::common::unambiguous_timeout;
                     break;
                 case 23007: /* Job queue is full with [string] jobs */
-                    response.ctx.ec = error::analytics_errc::job_queue_full;
+                    response.ctx.ec = errc::analytics::job_queue_full;
                     break;
                 case 24044: /* Cannot find dataset [string] because there is no dataverse declared, nor an alias with name [string]! */
                 case 24045: /* Cannot find dataset [string] in dataverse [string] nor an alias with name [string]! */
                 case 24025: /* Cannot find dataset with name [string] in dataverse [string] */
-                    response.ctx.ec = error::analytics_errc::dataset_not_found;
+                    response.ctx.ec = errc::analytics::dataset_not_found;
                     break;
                 case 24034: /* Cannot find dataverse with name [string] */
-                    response.ctx.ec = error::analytics_errc::dataverse_not_found;
+                    response.ctx.ec = errc::analytics::dataverse_not_found;
                     break;
                 case 24040: /* A dataset with name [string] already exists in dataverse [string] */
-                    response.ctx.ec = error::analytics_errc::dataset_exists;
+                    response.ctx.ec = errc::analytics::dataset_exists;
                     break;
                 case 24039: /* A dataverse with this name [string] already exists. */
-                    response.ctx.ec = error::analytics_errc::dataverse_exists;
+                    response.ctx.ec = errc::analytics::dataverse_exists;
                     break;
                 case 24006: /* Link [string] does not exist | Link [string] does not exist */
-                    response.ctx.ec = error::analytics_errc::link_not_found;
+                    response.ctx.ec = errc::analytics::link_not_found;
                     break;
                 default:
                     if (response.ctx.first_error_code >= 24000 && response.ctx.first_error_code < 25000) {
-                        response.ctx.ec = error::analytics_errc::compilation_failure;
+                        response.ctx.ec = errc::analytics::compilation_failure;
                     }
             }
             if (!response.ctx.ec) {
-                response.ctx.ec = error::common_errc::internal_server_failure;
+                response.ctx.ec = errc::common::internal_server_failure;
             }
         }
     }

@@ -17,7 +17,6 @@
 
 #include "bucket_get.hxx"
 
-#include "core/errors.hxx"
 #include "core/management/bucket_settings_json.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
@@ -39,13 +38,13 @@ bucket_get_request::make_response(error_context::http&& ctx, const encoded_respo
     if (!response.ctx.ec) {
         switch (encoded.status_code) {
             case 404:
-                response.ctx.ec = error::common_errc::bucket_not_found;
+                response.ctx.ec = errc::common::bucket_not_found;
                 break;
             case 200:
                 try {
                     response.bucket = utils::json::parse(encoded.body.data()).as<couchbase::core::management::cluster::bucket_settings>();
                 } catch (const tao::pegtl::parse_error&) {
-                    response.ctx.ec = error::common_errc::parsing_failure;
+                    response.ctx.ec = errc::common::parsing_failure;
                     return response;
                 }
                 break;

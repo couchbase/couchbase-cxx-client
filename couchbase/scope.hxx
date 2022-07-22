@@ -19,10 +19,12 @@
 
 #include <memory>
 
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace couchbase
 {
 class cluster;
 } // namespace couchbase
+#endif
 
 namespace couchbase
 {

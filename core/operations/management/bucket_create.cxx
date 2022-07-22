@@ -17,7 +17,6 @@
 
 #include "bucket_create.hxx"
 
-#include "core/errors.hxx"
 #include "core/protocol/durability_level.hxx"
 #include "core/utils/join_strings.hxx"
 #include "core/utils/json.hxx"
@@ -136,17 +135,17 @@ bucket_create_request::make_response(error_context::http&& ctx, const encoded_re
     if (!response.ctx.ec) {
         switch (encoded.status_code) {
             case 404:
-                response.ctx.ec = error::common_errc::bucket_not_found;
+                response.ctx.ec = errc::common::bucket_not_found;
                 break;
             case 400: {
                 tao::json::value payload{};
                 try {
                     payload = utils::json::parse(encoded.body.data());
                 } catch (const tao::pegtl::parse_error&) {
-                    response.ctx.ec = error::common_errc::parsing_failure;
+                    response.ctx.ec = errc::common::parsing_failure;
                     return response;
                 }
-                response.ctx.ec = error::common_errc::invalid_argument;
+                response.ctx.ec = errc::common::invalid_argument;
                 auto* errors = payload.find("errors");
                 if (errors != nullptr) {
                     std::vector<std::string> error_list{};

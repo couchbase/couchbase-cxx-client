@@ -17,7 +17,6 @@
 
 #include "group_drop.hxx"
 
-#include "core/errors.hxx"
 #include "error_utils.hxx"
 
 namespace couchbase::core::operations::management
@@ -39,7 +38,7 @@ group_drop_request::make_response(error_context::http&& ctx, const encoded_respo
             case 200:
                 break;
             case 404:
-                response.ctx.ec = error::management_errc::group_not_found;
+                response.ctx.ec = errc::management::group_not_found;
                 break;
             default:
                 response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());

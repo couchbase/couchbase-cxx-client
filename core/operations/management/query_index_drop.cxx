@@ -17,7 +17,6 @@
 
 #include "query_index_drop.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
@@ -27,7 +26,7 @@ std::error_code
 query_index_drop_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
     if ((scope_name.empty() && !collection_name.empty()) || (!scope_name.empty() && collection_name.empty())) {
-        return error::common_errc::invalid_argument;
+        return errc::common::invalid_argument;
     }
     encoded.headers["content-type"] = "application/json";
     std::string keyspace = fmt::format("`{}`", bucket_name);
@@ -62,7 +61,7 @@ query_index_drop_request::make_response(error_context::http&& ctx, const encoded
         try {
             payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = error::common_errc::parsing_failure;
+            response.ctx.ec = errc::common::parsing_failure;
             return response;
         }
         response.status = payload.at("status").get_string();
@@ -109,14 +108,14 @@ query_index_drop_request::make_response(error_context::http&& ctx, const encoded
             }
             if (index_not_found) {
                 if (!ignore_if_does_not_exist) {
-                    response.ctx.ec = error::common_errc::index_not_found;
+                    response.ctx.ec = errc::common::index_not_found;
                 }
             } else if (bucket_not_found) {
-                response.ctx.ec = error::common_errc::bucket_not_found;
+                response.ctx.ec = errc::common::bucket_not_found;
             } else if (collection_not_found) {
-                response.ctx.ec = error::common_errc::collection_not_found;
+                response.ctx.ec = errc::common::collection_not_found;
             } else if (scope_not_found) {
-                response.ctx.ec = error::common_errc::scope_not_found;
+                response.ctx.ec = errc::common::scope_not_found;
             } else if (common_ec) {
                 response.ctx.ec = common_ec.value();
             } else if (!response.errors.empty()) {

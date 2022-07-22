@@ -17,7 +17,6 @@
 
 #include "search_index_analyze_document.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
@@ -27,7 +26,7 @@ std::error_code
 search_index_analyze_document_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
     if (index_name.empty()) {
-        return error::common_errc::invalid_argument;
+        return errc::common::invalid_argument;
     }
     encoded.method = "POST";
     encoded.headers["cache-control"] = "no-cache";
@@ -47,7 +46,7 @@ search_index_analyze_document_request::make_response(error_context::http&& ctx, 
             try {
                 payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
-                response.ctx.ec = error::common_errc::parsing_failure;
+                response.ctx.ec = errc::common::parsing_failure;
                 return response;
             }
             response.status = payload.at("status").get_string();
@@ -57,24 +56,24 @@ search_index_analyze_document_request::make_response(error_context::http&& ctx, 
             }
         } else if (encoded.status_code == 400) {
             if (encoded.body.data().find("no indexName:") != std::string::npos) {
-                response.ctx.ec = error::common_errc::index_not_found;
+                response.ctx.ec = errc::common::index_not_found;
                 return response;
             }
             tao::json::value payload{};
             try {
                 payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
-                response.ctx.ec = error::common_errc::parsing_failure;
+                response.ctx.ec = errc::common::parsing_failure;
                 return response;
             }
             response.status = payload.at("status").get_string();
             response.error = payload.at("error").get_string();
             if (response.error.find("index not found") != std::string::npos) {
-                response.ctx.ec = error::common_errc::index_not_found;
+                response.ctx.ec = errc::common::index_not_found;
                 return response;
             }
             if (response.error.find("index with the same name already exists") != std::string::npos) {
-                response.ctx.ec = error::common_errc::index_exists;
+                response.ctx.ec = errc::common::index_exists;
                 return response;
             }
         }

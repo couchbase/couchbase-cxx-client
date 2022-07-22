@@ -17,8 +17,9 @@
 
 #pragma once
 
-#include "core/errors.hxx"
 #include "json_stream_control.hxx"
+
+#include <couchbase/error_codes.hxx>
 
 #include <functional>
 #include <memory>

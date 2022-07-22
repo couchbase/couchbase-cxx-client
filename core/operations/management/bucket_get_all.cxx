@@ -17,7 +17,6 @@
 
 #include "bucket_get_all.hxx"
 
-#include "core/errors.hxx"
 #include "core/management/bucket_settings_json.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
@@ -45,7 +44,7 @@ bucket_get_all_request::make_response(error_context::http&& ctx, const encoded_r
         try {
             payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = error::common_errc::parsing_failure;
+            response.ctx.ec = errc::common::parsing_failure;
             return response;
         }
         const auto& entries = payload.get_array();

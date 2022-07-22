@@ -18,7 +18,6 @@
 #pragma once
 
 #include "core/diagnostics.hxx"
-#include "core/errors.hxx"
 #include "core/logger/logger.hxx"
 #include "core/meta/version.hxx"
 #include "core/origin.hxx"
@@ -29,6 +28,8 @@
 #include "http_message.hxx"
 #include "http_parser.hxx"
 #include "streams.hxx"
+
+#include <couchbase/error_codes.hxx>
 
 #include <asio.hpp>
 #include <list>
@@ -246,7 +247,7 @@ class http_session : public std::enable_shared_from_this<http_session>
             std::scoped_lock lock(current_response_mutex_);
             auto ctx = std::move(current_response_);
             if (ctx.handler) {
-                ctx.handler(error::common_errc::ambiguous_timeout, {});
+                ctx.handler(errc::common::ambiguous_timeout, {});
             }
         }
 

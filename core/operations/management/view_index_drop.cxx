@@ -17,7 +17,6 @@
 
 #include "view_index_drop.hxx"
 
-#include "core/errors.hxx"
 #include "error_utils.hxx"
 
 namespace couchbase::core::operations::management
@@ -36,7 +35,7 @@ view_index_drop_request::make_response(error_context::http&& ctx, const encoded_
     view_index_drop_response response{ std::move(ctx) };
     if (!response.ctx.ec) {
         if (encoded.status_code == 404) {
-            response.ctx.ec = error::view_errc::design_document_not_found;
+            response.ctx.ec = errc::view::design_document_not_found;
         } else if (encoded.status_code != 200) {
             response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
         }

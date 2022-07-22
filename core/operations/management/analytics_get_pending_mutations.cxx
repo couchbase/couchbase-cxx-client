@@ -17,7 +17,6 @@
 
 #include "analytics_get_pending_mutations.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
@@ -40,7 +39,7 @@ analytics_get_pending_mutations_request::make_response(error_context::http&& ctx
         try {
             payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = error::common_errc::parsing_failure;
+            response.ctx.ec = errc::common::parsing_failure;
             return response;
         }
         if (encoded.status_code == 200) {

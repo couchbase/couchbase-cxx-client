@@ -17,7 +17,6 @@
 
 #include "collection_create.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
@@ -48,19 +47,19 @@ collection_create_request::make_response(error_context::http&& ctx, const encode
             case 400: {
                 std::regex collection_exists("Collection with name .+ already exists");
                 if (std::regex_search(encoded.body.data(), collection_exists)) {
-                    response.ctx.ec = error::management_errc::collection_exists;
+                    response.ctx.ec = errc::management::collection_exists;
                 } else if (encoded.body.data().find("Not allowed on this version of cluster") != std::string::npos) {
-                    response.ctx.ec = error::common_errc::feature_not_available;
+                    response.ctx.ec = errc::common::feature_not_available;
                 } else {
-                    response.ctx.ec = error::common_errc::invalid_argument;
+                    response.ctx.ec = errc::common::invalid_argument;
                 }
             } break;
             case 404: {
                 std::regex scope_not_found("Scope with name .+ is not found");
                 if (std::regex_search(encoded.body.data(), scope_not_found)) {
-                    response.ctx.ec = error::common_errc::scope_not_found;
+                    response.ctx.ec = errc::common::scope_not_found;
                 } else {
-                    response.ctx.ec = error::common_errc::bucket_not_found;
+                    response.ctx.ec = errc::common::bucket_not_found;
                 }
             } break;
             case 200: {
@@ -68,7 +67,7 @@ collection_create_request::make_response(error_context::http&& ctx, const encode
                 try {
                     payload = utils::json::parse(encoded.body.data());
                 } catch (const tao::pegtl::parse_error&) {
-                    response.ctx.ec = error::common_errc::parsing_failure;
+                    response.ctx.ec = errc::common::parsing_failure;
                     return response;
                 }
                 response.uid = std::stoull(payload.at("uid").get_string(), nullptr, 16);

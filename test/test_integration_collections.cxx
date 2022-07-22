@@ -33,7 +33,7 @@ TEST_CASE("integration: missing scope and collection", "[integration]")
         couchbase::core::document_id id{ integration.ctx.bucket, "missing_scope", "_default", "key" };
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::common_errc::scope_not_found);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::common::scope_not_found);
     }
 
     SECTION("insert missing scope")
@@ -45,7 +45,7 @@ TEST_CASE("integration: missing scope and collection", "[integration]")
         };
         couchbase::core::operations::insert_request req{ id, couchbase::core::utils::json::generate_binary(value) };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::common_errc::scope_not_found);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::common::scope_not_found);
     }
 
     SECTION("get missing collection")
@@ -53,7 +53,7 @@ TEST_CASE("integration: missing scope and collection", "[integration]")
         couchbase::core::document_id id{ integration.ctx.bucket, "_default", "missing_collection", "key" };
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::common_errc::unambiguous_timeout);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::common::unambiguous_timeout);
         REQUIRE(resp.ctx.retried_because_of(couchbase::retry_reason::kv_collection_outdated));
     }
 
@@ -66,7 +66,7 @@ TEST_CASE("integration: missing scope and collection", "[integration]")
         };
         couchbase::core::operations::insert_request req{ id, couchbase::core::utils::json::generate_binary(value) };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::common_errc::ambiguous_timeout);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::common::ambiguous_timeout);
         REQUIRE(resp.ctx.retried_because_of(couchbase::retry_reason::kv_collection_outdated));
     }
 }
@@ -169,6 +169,6 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
     {
         couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary(key) };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::common_errc::scope_not_found);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::common::scope_not_found);
     }
 }

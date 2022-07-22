@@ -17,7 +17,6 @@
 
 #include "group_upsert.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/join_strings.hxx"
 #include "core/utils/json.hxx"
 #include "core/utils/url_codec.hxx"
@@ -71,12 +70,12 @@ group_upsert_request::make_response(error_context::http&& ctx, const encoded_res
             case 200:
                 break;
             case 400: {
-                response.ctx.ec = error::common_errc::invalid_argument;
+                response.ctx.ec = errc::common::invalid_argument;
                 tao::json::value payload{};
                 try {
                     payload = utils::json::parse(encoded.body.data());
                 } catch (const tao::pegtl::parse_error&) {
-                    response.ctx.ec = error::common_errc::parsing_failure;
+                    response.ctx.ec = errc::common::parsing_failure;
                     return response;
                 }
 

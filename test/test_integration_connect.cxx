@@ -32,7 +32,7 @@ TEST_CASE("integration: connecting with empty bootstrap nodes list", "[integrati
     auto f = barrier->get_future();
     cluster->open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
-    REQUIRE(rc == couchbase::core::error::common_errc::invalid_argument);
+    REQUIRE(rc == couchbase::errc::common::invalid_argument);
     test::utils::close_cluster(cluster);
     io_thread.join();
 }

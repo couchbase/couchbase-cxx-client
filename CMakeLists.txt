@@ -217,9 +217,19 @@ set(couchbase_cxx_client_FILES
     core/utils/json.cxx
     core/utils/json_streaming_lexer.cxx
     core/utils/url_codec.cxx
+    core/impl/analytics_error_category.cxx
+    core/impl/common_error_category.cxx
+    core/impl/field_level_encryption_error_category.cxx
     core/impl/get_all_replicas.cxx
     core/impl/get_any_replica.cxx
-    core/impl/get_replica.cxx)
+    core/impl/get_replica.cxx
+    core/impl/key_value_error_category.cxx
+    core/impl/management_error_category.cxx
+    core/impl/network_error_category.cxx
+    core/impl/query_error_category.cxx
+    core/impl/search_error_category.cxx
+    core/impl/streaming_json_lexter_error_category.cxx
+    core/impl/view_error_category.cxx)
 
 if(COUCHBASE_CXX_CLIENT_BUILD_SHARED)
   add_library(couchbase_cxx_client SHARED ${couchbase_cxx_client_FILES})

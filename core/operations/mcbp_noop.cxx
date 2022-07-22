@@ -17,7 +17,7 @@
 
 #include "mcbp_noop.hxx"
 
-#include "core/errors.hxx"
+#include <couchbase/error_codes.hxx>
 
 namespace couchbase::core::operations
 {

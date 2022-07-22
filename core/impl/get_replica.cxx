@@ -17,7 +17,7 @@
 
 #include "get_replica.hxx"
 
-#include "core/errors.hxx"
+#include <couchbase/error_codes.hxx>
 
 namespace couchbase::core::impl
 {

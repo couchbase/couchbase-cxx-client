@@ -92,7 +92,7 @@ TEST_CASE("integration: crud on default collection", "[integration]")
         {
             couchbase::core::operations::get_request req{ id };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::document_not_found);
+            REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
         }
     }
 }
@@ -109,7 +109,7 @@ TEST_CASE("integration: get", "[integration]")
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec().message());
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::document_not_found);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
     }
 
     SECTION("hit")
@@ -143,7 +143,7 @@ TEST_CASE("integration: touch", "[integration]")
         couchbase::core::operations::touch_request req{ id };
         req.expiry = 666;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::document_not_found);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
     }
 
     SECTION("hit")
@@ -202,7 +202,7 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
         couchbase::core::operations::get_and_lock_request req{ id };
         req.lock_time = lock_time;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::common_errc::ambiguous_timeout);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::common::ambiguous_timeout);
         REQUIRE(resp.ctx.retried_because_of(couchbase::retry_reason::kv_locked));
     }
 
@@ -211,7 +211,7 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
         couchbase::core::operations::unlock_request req{ id };
         req.cas = couchbase::cas{ cas.value() - 1 };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::document_locked);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_locked);
         REQUIRE_FALSE(resp.ctx.retried_because_of(couchbase::retry_reason::kv_locked));
     }
 
@@ -329,7 +329,7 @@ TEST_CASE("integration: exists", "[integration]")
         couchbase::core::operations::exists_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.exists());
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::document_not_found);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
         REQUIRE_FALSE(resp.deleted);
         REQUIRE(resp.cas.empty());
         REQUIRE(resp.sequence_number == 0);
@@ -404,21 +404,21 @@ TEST_CASE("integration: ops on missing document", "[integration]")
     {
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::document_not_found);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
     }
 
     SECTION("remove")
     {
         couchbase::core::operations::remove_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::document_not_found);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
     }
 
     SECTION("replace")
     {
         couchbase::core::operations::replace_request req{ id, couchbase::core::utils::to_binary("") };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::document_not_found);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
     }
 }
 
@@ -442,7 +442,7 @@ TEST_CASE("integration: cas replace", "[integration]")
         couchbase::core::operations::replace_request req{ id, couchbase::core::utils::to_binary("") };
         req.cas = couchbase::cas{ cas.value() + 1 };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::common_errc::cas_mismatch);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::common::cas_mismatch);
     }
 
     SECTION("correct")
@@ -608,7 +608,7 @@ TEST_CASE("integration: multi-threaded open/close bucket", "[integration]")
             couchbase::core::operations::upsert_request req{ id, basic_doc_json };
             req.timeout = std::chrono::seconds{ 10 };
             if (auto resp = test::utils::execute(integration.cluster, req); resp.ctx.ec()) {
-                if (resp.ctx.ec() != couchbase::core::error::common_errc::ambiguous_timeout) {
+                if (resp.ctx.ec() != couchbase::errc::common::ambiguous_timeout) {
                     throw std::system_error(resp.ctx.ec());
                 }
             }
@@ -635,7 +635,7 @@ TEST_CASE("integration: open bucket that does not exist", "[integration]")
     auto f = barrier->get_future();
     integration.cluster->open_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
-    REQUIRE(rc == couchbase::core::error::common_errc::bucket_not_found);
+    REQUIRE(rc == couchbase::errc::common::bucket_not_found);
 }
 
 TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
@@ -669,7 +669,7 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
     {
         couchbase::core::operations::insert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::document_exists);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_exists);
         REQUIRE(resp.token.bucket_name.empty());
         REQUIRE(resp.token.partition_id == 0);
         REQUIRE(resp.token.partition_uuid == 0);
@@ -680,7 +680,7 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
         req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::dict_upsert, false, true, false, "foo", "42");
         req.store_semantics = couchbase::core::protocol::mutate_in_request_body::store_semantics_type::insert;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::document_exists);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_exists);
         REQUIRE(resp.token.bucket_name.empty());
         REQUIRE(resp.token.partition_id == 0);
         REQUIRE(resp.token.partition_uuid == 0);
@@ -691,7 +691,7 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
         req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::dict_add, false, false, false, "a", "{}");
         req.store_semantics = couchbase::core::protocol::mutate_in_request_body::store_semantics_type::replace;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::path_exists);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::path_exists);
         REQUIRE(resp.token.bucket_name.empty());
         REQUIRE(resp.token.partition_id == 0);
         REQUIRE(resp.token.partition_uuid == 0);
@@ -721,6 +721,6 @@ TEST_CASE("integration: upsert is cancelled immediately if the cluster was close
     {
         couchbase::core::operations::upsert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::network_errc::cluster_closed);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::network::cluster_closed);
     }
 }

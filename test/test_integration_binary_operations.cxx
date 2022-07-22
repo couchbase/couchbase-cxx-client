@@ -100,13 +100,13 @@ TEST_CASE("integration: binary ops on missing document", "[integration]")
     {
         couchbase::core::operations::append_request req{ id, couchbase::core::utils::to_binary("") };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::document_not_found);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
     }
 
     SECTION("prepend")
     {
         couchbase::core::operations::prepend_request req{ id, couchbase::core::utils::to_binary("") };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::core::error::key_value_errc::document_not_found);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
     }
 }

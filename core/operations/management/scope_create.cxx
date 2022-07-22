@@ -17,7 +17,6 @@
 
 #include "scope_create.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
@@ -45,22 +44,22 @@ scope_create_request::make_response(error_context::http&& ctx, const encoded_res
             case 400: {
                 std::regex scope_exists("Scope with name .+ already exists");
                 if (std::regex_search(encoded.body.data(), scope_exists)) {
-                    response.ctx.ec = error::management_errc::scope_exists;
+                    response.ctx.ec = errc::management::scope_exists;
                 } else if (encoded.body.data().find("Not allowed on this version of cluster") != std::string::npos) {
-                    response.ctx.ec = error::common_errc::feature_not_available;
+                    response.ctx.ec = errc::common::feature_not_available;
                 } else {
-                    response.ctx.ec = error::common_errc::invalid_argument;
+                    response.ctx.ec = errc::common::invalid_argument;
                 }
             } break;
             case 404:
-                response.ctx.ec = error::common_errc::bucket_not_found;
+                response.ctx.ec = errc::common::bucket_not_found;
                 break;
             case 200: {
                 tao::json::value payload{};
                 try {
                     payload = utils::json::parse(encoded.body.data());
                 } catch (const tao::pegtl::parse_error&) {
-                    response.ctx.ec = error::common_errc::parsing_failure;
+                    response.ctx.ec = errc::common::parsing_failure;
                     return response;
                 }
                 response.uid = std::stoull(payload.at("uid").get_string(), nullptr, 16);

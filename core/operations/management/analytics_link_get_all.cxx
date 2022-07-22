@@ -17,7 +17,6 @@
 
 #include "analytics_link_get_all.hxx"
 
-#include "core/errors.hxx"
 #include "core/management/analytics_link_azure_blob_external_json.hxx"
 #include "core/management/analytics_link_couchbase_remote_json.hxx"
 #include "core/management/analytics_link_s3_external_json.hxx"
@@ -73,7 +72,7 @@ analytics_link_get_all_request::make_response(error_context::http&& ctx, const e
         } catch (const tao::pegtl::parse_error&) {
             auto colon = encoded.body.data().find(':');
             if (colon == std::string::npos) {
-                response.ctx.ec = error::common_errc::parsing_failure;
+                response.ctx.ec = errc::common::parsing_failure;
                 return response;
             }
             auto code = static_cast<std::uint32_t>(std::stoul(encoded.body.data()));
@@ -117,9 +116,9 @@ analytics_link_get_all_request::make_response(error_context::http&& ctx, const e
             }
         }
         if (dataverse_does_not_exist) {
-            response.ctx.ec = error::analytics_errc::dataverse_not_found;
+            response.ctx.ec = errc::analytics::dataverse_not_found;
         } else if (link_not_found) {
-            response.ctx.ec = error::analytics_errc::link_not_found;
+            response.ctx.ec = errc::analytics::link_not_found;
         } else if (response.ctx.http_status != 200) {
             response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
         }

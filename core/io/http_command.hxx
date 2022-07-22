@@ -96,7 +96,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
         if (session_) {
             session_->stop();
         }
-        invoke_handler(error::common_errc::unambiguous_timeout, {});
+        invoke_handler(errc::common::unambiguous_timeout, {});
     }
 
     void invoke_handler(std::error_code ec, io::http_response&& msg)
@@ -144,7 +144,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
           encoded,
           [self = this->shared_from_this(), start = std::chrono::steady_clock::now()](std::error_code ec, io::http_response&& msg) {
               if (ec == asio::error::operation_aborted) {
-                  return self->invoke_handler(error::common_errc::ambiguous_timeout, std::move(msg));
+                  return self->invoke_handler(errc::common::ambiguous_timeout, std::move(msg));
               }
               static std::string meter_name = "db.couchbase.operations";
               static std::map<std::string, std::string> tags = {

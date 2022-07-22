@@ -17,8 +17,9 @@
 
 #include <couchbase/fmt/key_value_status_code.hxx>
 
-#include "core/errors.hxx"
 #include "status.hxx"
+
+#include <couchbase/error_codes.hxx>
 
 namespace couchbase::core::protocol
 {
@@ -43,129 +44,129 @@ map_status_code(protocol::client_opcode opcode, std::uint16_t status)
 
         case key_value_status_code::not_found:
         case key_value_status_code::not_stored:
-            return error::key_value_errc::document_not_found;
+            return errc::key_value::document_not_found;
 
         case key_value_status_code::exists:
             if (opcode == protocol::client_opcode::insert) {
-                return error::key_value_errc::document_exists;
+                return errc::key_value::document_exists;
             }
-            return error::common_errc::cas_mismatch;
+            return errc::common::cas_mismatch;
 
         case key_value_status_code::too_big:
-            return error::key_value_errc::value_too_large;
+            return errc::key_value::value_too_large;
 
         case key_value_status_code::invalid:
         case key_value_status_code::xattr_invalid:
         case key_value_status_code::subdoc_invalid_combo:
         case key_value_status_code::subdoc_deleted_document_cannot_have_value:
-            return error::common_errc::invalid_argument;
+            return errc::common::invalid_argument;
 
         case key_value_status_code::delta_bad_value:
-            return error::key_value_errc::delta_invalid;
+            return errc::key_value::delta_invalid;
 
         case key_value_status_code::no_bucket:
-            return error::common_errc::bucket_not_found;
+            return errc::common::bucket_not_found;
 
         case key_value_status_code::locked:
-            return error::key_value_errc::document_locked;
+            return errc::key_value::document_locked;
 
         case key_value_status_code::auth_stale:
         case key_value_status_code::auth_error:
         case key_value_status_code::no_access:
-            return error::common_errc::authentication_failure;
+            return errc::common::authentication_failure;
 
         case key_value_status_code::not_supported:
         case key_value_status_code::unknown_command:
-            return error::common_errc::unsupported_operation;
+            return errc::common::unsupported_operation;
 
         case key_value_status_code::internal:
-            return error::common_errc::internal_server_failure;
+            return errc::common::internal_server_failure;
 
         case key_value_status_code::busy:
         case key_value_status_code::temporary_failure:
         case key_value_status_code::no_memory:
         case key_value_status_code::not_initialized:
-            return error::common_errc::temporary_failure;
+            return errc::common::temporary_failure;
 
         case key_value_status_code::unknown_collection:
-            return error::common_errc::collection_not_found;
+            return errc::common::collection_not_found;
 
         case key_value_status_code::unknown_scope:
-            return error::common_errc::scope_not_found;
+            return errc::common::scope_not_found;
 
         case key_value_status_code::durability_invalid_level:
-            return error::key_value_errc::durability_level_not_available;
+            return errc::key_value::durability_level_not_available;
 
         case key_value_status_code::durability_impossible:
-            return error::key_value_errc::durability_impossible;
+            return errc::key_value::durability_impossible;
 
         case key_value_status_code::sync_write_in_progress:
-            return error::key_value_errc::durable_write_in_progress;
+            return errc::key_value::durable_write_in_progress;
 
         case key_value_status_code::sync_write_ambiguous:
-            return error::key_value_errc::durability_ambiguous;
+            return errc::key_value::durability_ambiguous;
 
         case key_value_status_code::sync_write_re_commit_in_progress:
-            return error::key_value_errc::durable_write_re_commit_in_progress;
+            return errc::key_value::durable_write_re_commit_in_progress;
 
         case key_value_status_code::subdoc_path_not_found:
-            return error::key_value_errc::path_not_found;
+            return errc::key_value::path_not_found;
 
         case key_value_status_code::subdoc_path_mismatch:
-            return error::key_value_errc::path_mismatch;
+            return errc::key_value::path_mismatch;
 
         case key_value_status_code::subdoc_path_invalid:
-            return error::key_value_errc::path_invalid;
+            return errc::key_value::path_invalid;
 
         case key_value_status_code::subdoc_path_too_big:
-            return error::key_value_errc::path_too_big;
+            return errc::key_value::path_too_big;
 
         case key_value_status_code::subdoc_doc_too_deep:
-            return error::key_value_errc::value_too_deep;
+            return errc::key_value::value_too_deep;
 
         case key_value_status_code::subdoc_value_cannot_insert:
-            return error::key_value_errc::value_invalid;
+            return errc::key_value::value_invalid;
 
         case key_value_status_code::subdoc_doc_not_json:
-            return error::key_value_errc::document_not_json;
+            return errc::key_value::document_not_json;
 
         case key_value_status_code::subdoc_num_range_error:
-            return error::key_value_errc::number_too_big;
+            return errc::key_value::number_too_big;
 
         case key_value_status_code::subdoc_delta_invalid:
-            return error::key_value_errc::delta_invalid;
+            return errc::key_value::delta_invalid;
 
         case key_value_status_code::subdoc_path_exists:
-            return error::key_value_errc::path_exists;
+            return errc::key_value::path_exists;
 
         case key_value_status_code::subdoc_value_too_deep:
-            return error::key_value_errc::value_too_deep;
+            return errc::key_value::value_too_deep;
 
         case key_value_status_code::subdoc_xattr_invalid_flag_combo:
         case key_value_status_code::subdoc_xattr_invalid_key_combo:
-            return error::key_value_errc::xattr_invalid_key_combo;
+            return errc::key_value::xattr_invalid_key_combo;
 
         case key_value_status_code::subdoc_xattr_unknown_macro:
         case key_value_status_code::subdoc_xattr_unknown_vattr_macro:
-            return error::key_value_errc::xattr_unknown_macro;
+            return errc::key_value::xattr_unknown_macro;
 
         case key_value_status_code::subdoc_xattr_unknown_vattr:
-            return error::key_value_errc::xattr_unknown_virtual_attribute;
+            return errc::key_value::xattr_unknown_virtual_attribute;
 
         case key_value_status_code::subdoc_xattr_cannot_modify_vattr:
-            return error::key_value_errc::xattr_cannot_modify_virtual_attribute;
+            return errc::key_value::xattr_cannot_modify_virtual_attribute;
 
         case key_value_status_code::subdoc_can_only_revive_deleted_documents:
-            return error::key_value_errc::cannot_revive_living_document;
+            return errc::key_value::cannot_revive_living_document;
 
         case key_value_status_code::rate_limited_network_ingress:
         case key_value_status_code::rate_limited_network_egress:
         case key_value_status_code::rate_limited_max_connections:
         case key_value_status_code::rate_limited_max_commands:
-            return error::common_errc::rate_limited;
+            return errc::common::rate_limited;
 
         case key_value_status_code::scope_size_limit_exceeded:
-            return error::common_errc::quota_limited;
+            return errc::common::quota_limited;
 
         case key_value_status_code::subdoc_invalid_xattr_order:
         case key_value_status_code::not_my_vbucket:
@@ -181,6 +182,6 @@ map_status_code(protocol::client_opcode opcode, std::uint16_t status)
         case key_value_status_code::opaque_no_match:
             break;
     }
-    return error::network_errc::protocol_error;
+    return errc::network::protocol_error;
 }
 } // namespace couchbase::core::protocol

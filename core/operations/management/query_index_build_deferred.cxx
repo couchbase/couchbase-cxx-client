@@ -17,7 +17,6 @@
 
 #include "query_index_build_deferred.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
@@ -27,7 +26,7 @@ std::error_code
 query_index_build_deferred_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
     if ((scope_name.empty() && !collection_name.empty()) || (!scope_name.empty() && collection_name.empty())) {
-        return error::common_errc::invalid_argument;
+        return errc::common::invalid_argument;
     }
     std::string statement;
     if (!scope_name.empty() && !collection_name.empty()) {
@@ -62,7 +61,7 @@ query_index_build_deferred_request::make_response(error_context::http&& ctx, con
         try {
             payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = error::common_errc::parsing_failure;
+            response.ctx.ec = errc::common::parsing_failure;
             return response;
         }
         response.status = payload.at("status").get_string();

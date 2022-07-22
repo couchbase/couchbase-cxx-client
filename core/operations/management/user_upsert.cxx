@@ -17,7 +17,6 @@
 
 #include "user_upsert.hxx"
 
-#include "core/errors.hxx"
 #include "core/management/rbac_fmt.hxx"
 #include "core/utils/join_strings.hxx"
 #include "core/utils/json.hxx"
@@ -80,10 +79,10 @@ user_upsert_request::make_response(error_context::http&& ctx, const encoded_resp
                 try {
                     payload = utils::json::parse(encoded.body.data());
                 } catch (const tao::pegtl::parse_error&) {
-                    response.ctx.ec = error::common_errc::parsing_failure;
+                    response.ctx.ec = errc::common::parsing_failure;
                     return response;
                 }
-                response.ctx.ec = error::common_errc::invalid_argument;
+                response.ctx.ec = errc::common::invalid_argument;
                 const auto* errors = payload.find("errors");
                 if (errors != nullptr && errors->is_object()) {
                     for (const auto& [code, message] : errors->get_object()) {
