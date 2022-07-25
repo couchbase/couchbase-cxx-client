@@ -245,15 +245,16 @@ main()
     fmt::print("total time: {}s ({}ms)\n",
                std::chrono::duration_cast<std::chrono::seconds>(total_time).count(),
                std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count());
-    auto diff = std::chrono::duration_cast<std::chrono::seconds>(total_time).count();
-    if (diff > 0) {
+    if (auto diff = std::chrono::duration_cast<std::chrono::seconds>(total_time).count(); diff > 0) {
         fmt::print("total rate: {} ops/s\n", total / static_cast<std::uint64_t>(diff));
     }
-    std::scoped_lock lock(errors_mutex);
-    if (!errors.empty()) {
-        fmt::print("error stats:\n");
-        for (auto [ec, count] : errors) {
-            fmt::print("    {} ({}): {}\n", ec.message(), ec.value(), count);
+    {
+        std::scoped_lock lock(errors_mutex);
+        if (!errors.empty()) {
+            fmt::print("error stats:\n");
+            for (auto [ec, count] : errors) {
+                fmt::print("    {}: {}\n", ec.message(), count);
+            }
         }
     }
 
