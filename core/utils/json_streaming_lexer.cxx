@@ -68,12 +68,12 @@ struct streaming_lexer_impl {
         root_has_been_validated_ = true;
 
         if (state->type != JSONSL_T_OBJECT) {
-            error_ = error::streaming_json_lexer_errc::root_is_not_an_object;
+            error_ = errc::streaming_json_lexer::root_is_not_an_object;
             return;
         }
 
         if (match != JSONSL_MATCH_POSSIBLE) {
-            error_ = error::streaming_json_lexer_errc::root_does_not_match_json_pointer;
+            error_ = errc::streaming_json_lexer::root_does_not_match_json_pointer;
             return;
         }
         /* tag the state */
@@ -146,87 +146,87 @@ convert_status(jsonsl_error_t error)
             return {};
 
         case JSONSL_ERROR_GARBAGE_TRAILING:
-            return error::streaming_json_lexer_errc::garbage_trailing;
+            return errc::streaming_json_lexer::garbage_trailing;
 
         case JSONSL_ERROR_SPECIAL_EXPECTED:
-            return error::streaming_json_lexer_errc::special_expected;
+            return errc::streaming_json_lexer::special_expected;
 
         case JSONSL_ERROR_SPECIAL_INCOMPLETE:
-            return error::streaming_json_lexer_errc::special_incomplete;
+            return errc::streaming_json_lexer::special_incomplete;
 
         case JSONSL_ERROR_STRAY_TOKEN:
-            return error::streaming_json_lexer_errc::stray_token;
+            return errc::streaming_json_lexer::stray_token;
 
         case JSONSL_ERROR_MISSING_TOKEN:
-            return error::streaming_json_lexer_errc::missing_token;
+            return errc::streaming_json_lexer::missing_token;
 
         case JSONSL_ERROR_CANT_INSERT:
-            return error::streaming_json_lexer_errc::cannot_insert;
+            return errc::streaming_json_lexer::cannot_insert;
 
         case JSONSL_ERROR_ESCAPE_OUTSIDE_STRING:
-            return error::streaming_json_lexer_errc::escape_outside_string;
+            return errc::streaming_json_lexer::escape_outside_string;
 
         case JSONSL_ERROR_KEY_OUTSIDE_OBJECT:
-            return error::streaming_json_lexer_errc::key_outside_object;
+            return errc::streaming_json_lexer::key_outside_object;
 
         case JSONSL_ERROR_STRING_OUTSIDE_CONTAINER:
-            return error::streaming_json_lexer_errc::string_outside_container;
+            return errc::streaming_json_lexer::string_outside_container;
 
         case JSONSL_ERROR_FOUND_NULL_BYTE:
-            return error::streaming_json_lexer_errc::found_null_byte;
+            return errc::streaming_json_lexer::found_null_byte;
 
         case JSONSL_ERROR_LEVELS_EXCEEDED:
-            return error::streaming_json_lexer_errc::levels_exceeded;
+            return errc::streaming_json_lexer::levels_exceeded;
 
         case JSONSL_ERROR_BRACKET_MISMATCH:
-            return error::streaming_json_lexer_errc::bracket_mismatch;
+            return errc::streaming_json_lexer::bracket_mismatch;
 
         case JSONSL_ERROR_HKEY_EXPECTED:
-            return error::streaming_json_lexer_errc::object_key_expected;
+            return errc::streaming_json_lexer::object_key_expected;
 
         case JSONSL_ERROR_WEIRD_WHITESPACE:
-            return error::streaming_json_lexer_errc::weird_whitespace;
+            return errc::streaming_json_lexer::weird_whitespace;
 
         case JSONSL_ERROR_UESCAPE_TOOSHORT:
-            return error::streaming_json_lexer_errc::unicode_escape_is_too_short;
+            return errc::streaming_json_lexer::unicode_escape_is_too_short;
 
         case JSONSL_ERROR_ESCAPE_INVALID:
-            return error::streaming_json_lexer_errc::escape_invalid;
+            return errc::streaming_json_lexer::escape_invalid;
 
         case JSONSL_ERROR_TRAILING_COMMA:
-            return error::streaming_json_lexer_errc::trailing_comma;
+            return errc::streaming_json_lexer::trailing_comma;
 
         case JSONSL_ERROR_INVALID_NUMBER:
-            return error::streaming_json_lexer_errc::invalid_number;
+            return errc::streaming_json_lexer::invalid_number;
 
         case JSONSL_ERROR_VALUE_EXPECTED:
-            return error::streaming_json_lexer_errc::value_expected;
+            return errc::streaming_json_lexer::value_expected;
 
         case JSONSL_ERROR_PERCENT_BADHEX:
-            return error::streaming_json_lexer_errc::percent_bad_hex;
+            return errc::streaming_json_lexer::percent_bad_hex;
 
         case JSONSL_ERROR_JPR_BADPATH:
-            return error::streaming_json_lexer_errc::json_pointer_bad_path;
+            return errc::streaming_json_lexer::json_pointer_bad_path;
 
         case JSONSL_ERROR_JPR_DUPSLASH:
-            return error::streaming_json_lexer_errc::json_pointer_duplicated_slash;
+            return errc::streaming_json_lexer::json_pointer_duplicated_slash;
 
         case JSONSL_ERROR_JPR_NOROOT:
-            return error::streaming_json_lexer_errc::json_pointer_missing_root;
+            return errc::streaming_json_lexer::json_pointer_missing_root;
 
         case JSONSL_ERROR_ENOMEM:
-            return error::streaming_json_lexer_errc::not_enough_memory;
+            return errc::streaming_json_lexer::not_enough_memory;
 
         case JSONSL_ERROR_INVALID_CODEPOINT:
-            return error::streaming_json_lexer_errc::invalid_codepoint;
+            return errc::streaming_json_lexer::invalid_codepoint;
 
         case JSONSL_ERROR_GENERIC:
-            return error::streaming_json_lexer_errc::generic;
+            return errc::streaming_json_lexer::generic;
 
         default:
             break;
     }
-    return error::streaming_json_lexer_errc::generic;
+    return errc::streaming_json_lexer::generic;
 }
 
 static int

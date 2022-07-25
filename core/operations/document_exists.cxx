@@ -17,9 +17,7 @@
 
 #include "document_exists.hxx"
 
-#include "core/document_id_fmt.hxx"
-#include "core/errors.hxx"
-#include "core/logger/logger.hxx"
+#include <couchbase/error_codes.hxx>
 
 namespace couchbase::core::operations
 {

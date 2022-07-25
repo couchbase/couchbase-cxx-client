@@ -17,7 +17,6 @@
 
 #include "view_index_upsert.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
@@ -57,10 +56,10 @@ view_index_upsert_request::make_response(error_context::http&& ctx, const encode
             case 201:
                 break;
             case 400:
-                response.ctx.ec = error::common_errc::invalid_argument;
+                response.ctx.ec = errc::common::invalid_argument;
                 break;
             case 404:
-                response.ctx.ec = error::view_errc::design_document_not_found;
+                response.ctx.ec = errc::view::design_document_not_found;
                 break;
             default:
                 response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());

@@ -16,7 +16,6 @@
  */
 
 #include "eventing_get_status.hxx"
-#include "core/errors.hxx"
 #include "core/management/eventing_status_json.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
@@ -40,7 +39,7 @@ eventing_get_status_request::make_response(error_context::http&& ctx, const enco
         try {
             payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = error::common_errc::parsing_failure;
+            response.ctx.ec = errc::common::parsing_failure;
             return response;
         }
         auto [ec, problem] = extract_eventing_error_code(payload);

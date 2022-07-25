@@ -17,7 +17,6 @@
 
 #include "user_get_all.hxx"
 
-#include "core/errors.hxx"
 #include "core/management/rbac_fmt.hxx"
 #include "core/management/rbac_json.hxx"
 #include "core/utils/json.hxx"
@@ -44,7 +43,7 @@ user_get_all_request::make_response(error_context::http&& ctx, const encoded_res
             try {
                 payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
-                response.ctx.ec = error::common_errc::parsing_failure;
+                response.ctx.ec = errc::common::parsing_failure;
                 return response;
             }
             for (const auto& entry : payload.get_array()) {

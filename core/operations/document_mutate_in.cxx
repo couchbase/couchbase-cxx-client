@@ -16,7 +16,8 @@
  */
 
 #include "document_mutate_in.hxx"
-#include "core/errors.hxx"
+
+#include <couchbase/error_codes.hxx>
 
 #include <algorithm>
 
@@ -26,10 +27,10 @@ std::error_code
 mutate_in_request::encode_to(mutate_in_request::encoded_request_type& encoded, mcbp_context&& context)
 {
     if (store_semantics == protocol::mutate_in_request_body::store_semantics_type::upsert && !cas.empty()) {
-        return error::common_errc::invalid_argument;
+        return errc::common::invalid_argument;
     }
     if (create_as_deleted && !context.supports_feature(protocol::hello_feature::subdoc_create_as_deleted)) {
-        return error::common_errc::unsupported_operation;
+        return errc::common::unsupported_operation;
     }
     for (std::size_t i = 0; i < specs.entries.size(); ++i) {
         auto& entry = specs.entries[i];
@@ -96,8 +97,8 @@ mutate_in_request::make_response(key_value_error_context&& ctx, const encoded_re
             return lhs.original_index < rhs.original_index;
         });
     } else if (store_semantics == protocol::mutate_in_request_body::store_semantics_type::insert &&
-               response.ctx.ec() == error::common_errc::cas_mismatch) {
-        response.ctx.override_ec(error::key_value_errc::document_exists);
+               response.ctx.ec() == errc::common::cas_mismatch) {
+        response.ctx.override_ec(errc::key_value::document_exists);
     }
     return response;
 }

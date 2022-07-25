@@ -17,7 +17,6 @@
 
 #include "user_get.hxx"
 
-#include "core/errors.hxx"
 #include "core/management/rbac_fmt.hxx"
 #include "core/management/rbac_json.hxx"
 #include "core/utils/json.hxx"
@@ -44,12 +43,12 @@ user_get_request::make_response(error_context::http&& ctx, const encoded_respons
                 try {
                     response.user = utils::json::parse(encoded.body.data()).as<couchbase::core::management::rbac::user_and_metadata>();
                 } catch (const tao::pegtl::parse_error&) {
-                    response.ctx.ec = error::common_errc::parsing_failure;
+                    response.ctx.ec = errc::common::parsing_failure;
                     return response;
                 }
             } break;
             case 404:
-                response.ctx.ec = error::management_errc::user_not_found;
+                response.ctx.ec = errc::management::user_not_found;
                 break;
             default:
                 response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());

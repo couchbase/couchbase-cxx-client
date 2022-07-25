@@ -16,7 +16,6 @@
  */
 
 #include "eventing_upsert_function.hxx"
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
@@ -326,7 +325,7 @@ eventing_upsert_function_request::make_response(error_context::http&& ctx, const
         try {
             payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = error::common_errc::parsing_failure;
+            response.ctx.ec = errc::common::parsing_failure;
             return response;
         }
         auto [ec, problem] = extract_eventing_error_code(payload);

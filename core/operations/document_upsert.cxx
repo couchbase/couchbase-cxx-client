@@ -17,8 +17,7 @@
 
 #include "document_upsert.hxx"
 
-#include "core/errors.hxx"
-#include "core/utils/name_codec.hxx"
+#include <couchbase/error_codes.hxx>
 
 namespace couchbase::core::operations
 {

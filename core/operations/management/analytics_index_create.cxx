@@ -17,7 +17,6 @@
 
 #include "analytics_index_create.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/join_strings.hxx"
 #include "core/utils/json.hxx"
 #include "core/utils/name_codec.hxx"
@@ -60,7 +59,7 @@ analytics_index_create_request::make_response(error_context::http&& ctx, const e
         try {
             payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = error::common_errc::parsing_failure;
+            response.ctx.ec = errc::common::parsing_failure;
             return response;
         }
         response.status = payload.optional<std::string>("status").value_or("unknown");
@@ -91,11 +90,11 @@ analytics_index_create_request::make_response(error_context::http&& ctx, const e
                 }
             }
             if (index_exists) {
-                response.ctx.ec = error::common_errc::index_exists;
+                response.ctx.ec = errc::common::index_exists;
             } else if (dataset_not_found) {
-                response.ctx.ec = error::analytics_errc::dataset_not_found;
+                response.ctx.ec = errc::analytics::dataset_not_found;
             } else if (link_not_found) {
-                response.ctx.ec = error::analytics_errc::link_not_found;
+                response.ctx.ec = errc::analytics::link_not_found;
             } else {
                 response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
             }

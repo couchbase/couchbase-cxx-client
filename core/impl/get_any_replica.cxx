@@ -73,7 +73,7 @@ initiate_get_any_replica_operation(std::shared_ptr<cluster> core,
                               return;
                           }
                           // consider document irretrievable and give up
-                          resp.ctx.override_ec(core::error::key_value_errc::document_irretrievable);
+                          resp.ctx.override_ec(errc::key_value::document_irretrievable);
                       }
                       ctx->done_ = true;
                       std::swap(local_handler, ctx->handler_);
@@ -101,7 +101,7 @@ initiate_get_any_replica_operation(std::shared_ptr<cluster> core,
                           return;
                       }
                       // consider document irretrievable and give up
-                      resp.ctx.override_ec(core::error::key_value_errc::document_irretrievable);
+                      resp.ctx.override_ec(errc::key_value::document_irretrievable);
                   }
                   ctx->done_ = true;
                   std::swap(local_handler, ctx->handler_);

@@ -17,7 +17,6 @@
 
 #include "freeform.hxx"
 
-#include "core/errors.hxx"
 #include "error_utils.hxx"
 
 namespace couchbase::core::operations::management
@@ -34,7 +33,7 @@ freeform_request::encode_to(encoded_request_type& encoded, http_context& /* cont
         case service_type::eventing:
             break;
         default:
-            return error::common_errc::invalid_argument;
+            return errc::common::invalid_argument;
     }
     encoded.method = method;
     encoded.headers = headers;

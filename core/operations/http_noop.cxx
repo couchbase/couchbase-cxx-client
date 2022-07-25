@@ -17,7 +17,7 @@
 
 #include "http_noop.hxx"
 
-#include "core/errors.hxx"
+#include <couchbase/error_codes.hxx>
 
 namespace couchbase::core::operations
 {
@@ -50,7 +50,7 @@ http_noop_request::encode_to(http_noop_request::encoded_request_type& encoded, h
             timeout = timeout_defaults::eventing_timeout;
             break;
         case service_type::key_value:
-            return error::common_errc::feature_not_available;
+            return errc::common::feature_not_available;
     }
     return {};
 }

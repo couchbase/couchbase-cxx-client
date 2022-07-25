@@ -17,7 +17,6 @@
 
 #include "cluster_developer_preview_enable.hxx"
 
-#include "core/errors.hxx"
 #include "error_utils.hxx"
 
 namespace couchbase::core::operations::management

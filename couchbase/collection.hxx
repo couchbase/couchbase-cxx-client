@@ -23,10 +23,12 @@
 #include <future>
 #include <memory>
 
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace couchbase::core
 {
 class cluster;
 } // namespace couchbase::core
+#endif
 
 namespace couchbase
 {
@@ -58,7 +60,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto bucket_name() const -> const std::string&
+    [[nodiscard]] auto bucket_name() const noexcept -> const std::string&
     {
         return bucket_name_;
     }
@@ -71,7 +73,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto scope_name() const -> const std::string&
+    [[nodiscard]] auto scope_name() const noexcept -> const std::string&
     {
         return scope_name_;
     }
@@ -84,7 +86,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto name() const -> const std::string&
+    [[nodiscard]] auto name() const noexcept -> const std::string&
     {
         return name_;
     }
@@ -97,6 +99,13 @@ class collection
      * @param document_id the document id which is used to uniquely identify it.
      * @param options the custom options
      * @param handler the handler that implements @ref get_any_replica_handler
+     *
+     * @exception errc::key_value::document_irretrievable
+     *    the situation where the SDK got all responses (most likely: key not found) but none of them were successful so it
+     *    ended up not returning anything
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
      *
      * @since 1.0.0
      * @committed
@@ -114,6 +123,13 @@ class collection
      * @param document_id the document id which is used to uniquely identify it.
      * @param options the custom options
      * @return the future object with first available result, might be the active or a replica.
+     *
+     * @exception errc::key_value::document_irretrievable
+     *    the situation where the SDK got all responses (most likely: key not found) but none of them were successful so it
+     *    ended up not returning anything
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
      *
      * @since 1.0.0
      * @committed
@@ -142,6 +158,9 @@ class collection
      * @param options the custom options
      * @param handler the handler that implements @ref get_all_replicas_handler
      *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
      * @since 1.0.0
      * @committed
      */
@@ -161,6 +180,9 @@ class collection
      * @param document_id the document id which is used to uniquely identify it.
      * @param options the custom options
      * @return future object that carries result of the operation
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
      *
      * @since 1.0.0
      * @committed

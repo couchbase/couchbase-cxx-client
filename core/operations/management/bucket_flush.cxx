@@ -17,7 +17,6 @@
 
 #include "bucket_flush.hxx"
 
-#include "core/errors.hxx"
 #include "error_utils.hxx"
 
 namespace couchbase::core::operations::management
@@ -38,13 +37,13 @@ bucket_flush_request::make_response(error_context::http&& ctx, const encoded_res
         switch (encoded.status_code) {
             case 400: {
                 if (encoded.body.data().find("Flush is disabled") != std::string::npos) {
-                    response.ctx.ec = error::management_errc::bucket_not_flushable;
+                    response.ctx.ec = errc::management::bucket_not_flushable;
                 } else {
-                    response.ctx.ec = error::common_errc::invalid_argument;
+                    response.ctx.ec = errc::common::invalid_argument;
                 }
             } break;
             case 404:
-                response.ctx.ec = error::common_errc::bucket_not_found;
+                response.ctx.ec = errc::common::bucket_not_found;
                 break;
             case 200:
                 response.ctx.ec = {};

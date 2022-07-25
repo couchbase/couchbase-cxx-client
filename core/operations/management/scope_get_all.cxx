@@ -17,7 +17,6 @@
 
 #include "scope_get_all.hxx"
 
-#include "core/errors.hxx"
 #include "core/topology/collections_manifest_json.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
@@ -39,16 +38,16 @@ scope_get_all_request::make_response(error_context::http&& ctx, const encoded_re
     if (!response.ctx.ec) {
         switch (encoded.status_code) {
             case 400:
-                response.ctx.ec = error::common_errc::unsupported_operation;
+                response.ctx.ec = errc::common::unsupported_operation;
                 break;
             case 404:
-                response.ctx.ec = error::common_errc::bucket_not_found;
+                response.ctx.ec = errc::common::bucket_not_found;
                 break;
             case 200:
                 try {
                     response.manifest = utils::json::parse(encoded.body.data()).as<topology::collections_manifest>();
                 } catch (const tao::pegtl::parse_error&) {
-                    response.ctx.ec = error::common_errc::parsing_failure;
+                    response.ctx.ec = errc::common::parsing_failure;
                     return response;
                 }
                 break;

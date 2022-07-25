@@ -16,11 +16,12 @@
  */
 
 #include "document_query.hxx"
-#include "core/errors.hxx"
 #include "core/logger/logger.hxx"
 #include "core/operations/management/error_utils.hxx"
 #include "core/utils/duration_parser.hxx"
 #include "core/utils/json.hxx"
+
+#include <couchbase/error_codes.hxx>
 
 #include <gsl/assert>
 
@@ -194,12 +195,12 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
         if (encoded.body.data().empty()) {
             switch (encoded.status_code) {
                 case 503:
-                    response.ctx.ec = error::common_errc::service_not_available;
+                    response.ctx.ec = errc::common::service_not_available;
                     break;
 
                 case 500:
                 default:
-                    response.ctx.ec = error::common_errc::internal_server_failure;
+                    response.ctx.ec = errc::common::internal_server_failure;
                     break;
             }
             return response;
@@ -208,7 +209,7 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
         try {
             payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = error::common_errc::parsing_failure;
+            response.ctx.ec = errc::common::parsing_failure;
             return response;
         }
         response.meta.request_id = payload.at("requestID").get_string();
@@ -288,7 +289,7 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                     try {
                         row = utils::json::parse(response.rows[0]);
                     } catch (const tao::pegtl::parse_error&) {
-                        response.ctx.ec = error::common_errc::parsing_failure;
+                        response.ctx.ec = errc::common::parsing_failure;
                         return response;
                     }
                     auto* plan = row.find("encoded_plan");
@@ -297,10 +298,10 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                         ctx_->cache.put(statement, name->get_string(), plan->get_string());
                         throw couchbase::core::priv::retry_http_request{};
                     }
-                    response.ctx.ec = error::query_errc::prepared_statement_failure;
+                    response.ctx.ec = errc::query::prepared_statement_failure;
 
                 } else {
-                    response.ctx.ec = error::query_errc::prepared_statement_failure;
+                    response.ctx.ec = errc::query::prepared_statement_failure;
                 }
             }
         } else {
@@ -309,13 +310,13 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                 response.ctx.first_error_message = response.meta.errors->front().message;
                 switch (response.ctx.first_error_code) {
                     case 1065: /* IKey: "service.io.request.unrecognized_parameter" */
-                        response.ctx.ec = error::common_errc::invalid_argument;
+                        response.ctx.ec = errc::common::invalid_argument;
                         break;
                     case 1080: /* IKey: "timeout" */
-                        response.ctx.ec = error::common_errc::unambiguous_timeout;
+                        response.ctx.ec = errc::common::unambiguous_timeout;
                         break;
                     case 3000: /* IKey: "parse.syntax_error" */
-                        response.ctx.ec = error::common_errc::parsing_failure;
+                        response.ctx.ec = errc::common::parsing_failure;
                         break;
                     case 4040: /* IKey: "plan.build_prepared.no_such_name" */
                     case 4050: /* IKey: "plan.build_prepared.unrecognized_prepared" */
@@ -323,24 +324,24 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                     case 4070: /* IKey: "plan.build_prepared.decoding" */
                     case 4080: /* IKey: "plan.build_prepared.name_encoded_plan_mismatch" */
                     case 4090: /* IKey: "plan.build_prepared.name_not_in_encoded_plan" */
-                        response.ctx.ec = error::query_errc::prepared_statement_failure;
+                        response.ctx.ec = errc::query::prepared_statement_failure;
                         break;
                     case 12009: /* IKey: "datastore.couchbase.DML_error" */
                         if (response.ctx.first_error_message.find("CAS mismatch") != std::string::npos) {
-                            response.ctx.ec = error::common_errc::cas_mismatch;
+                            response.ctx.ec = errc::common::cas_mismatch;
                         } else {
                             switch (response.meta.errors->front().reason.value_or(0)) {
                                 case 12033:
-                                    response.ctx.ec = error::common_errc::cas_mismatch;
+                                    response.ctx.ec = errc::common::cas_mismatch;
                                     break;
                                 case 17014:
-                                    response.ctx.ec = error::key_value_errc::document_not_found;
+                                    response.ctx.ec = errc::key_value::document_not_found;
                                     break;
                                 case 17012:
-                                    response.ctx.ec = error::key_value_errc::document_exists;
+                                    response.ctx.ec = errc::key_value::document_exists;
                                     break;
                                 default:
-                                    response.ctx.ec = error::query_errc::dml_failure;
+                                    response.ctx.ec = errc::query::dml_failure;
                                     break;
                             }
                         }
@@ -348,17 +349,17 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
 
                     case 12004: /* IKey: "datastore.couchbase.primary_idx_not_found" */
                     case 12016: /* IKey: "datastore.couchbase.index_not_found" */
-                        response.ctx.ec = error::common_errc::index_not_found;
+                        response.ctx.ec = errc::common::index_not_found;
                         break;
                     case 13014: /* IKey: "datastore.couchbase.insufficient_credentials" */
-                        response.ctx.ec = error::common_errc::authentication_failure;
+                        response.ctx.ec = errc::common::authentication_failure;
                         break;
                     default:
                         if ((response.ctx.first_error_code >= 12000 && response.ctx.first_error_code < 13000) ||
                             (response.ctx.first_error_code >= 14000 && response.ctx.first_error_code < 15000)) {
-                            response.ctx.ec = error::query_errc::index_failure;
+                            response.ctx.ec = errc::query::index_failure;
                         } else if (response.ctx.first_error_code >= 4000 && response.ctx.first_error_code < 5000) {
-                            response.ctx.ec = error::query_errc::planning_failure;
+                            response.ctx.ec = errc::query::planning_failure;
                         } else {
                             auto common_ec =
                               management::extract_common_query_error_code(response.ctx.first_error_code, response.ctx.first_error_message);
@@ -373,7 +374,7 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                 LOG_TRACE("Unexpected error returned by query engine: client_context_id=\"{}\", body={}",
                           response.ctx.client_context_id,
                           encoded.body.data());
-                response.ctx.ec = error::common_errc::internal_server_failure;
+                response.ctx.ec = errc::common::internal_server_failure;
             }
         }
     }

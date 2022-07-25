@@ -17,9 +17,10 @@
 
 #include "document_search.hxx"
 
-#include "core/errors.hxx"
 #include "core/logger/logger.hxx"
 #include "core/utils/json.hxx"
+
+#include <couchbase/error_codes.hxx>
 
 #include <tao/json/contrib/traits.hpp>
 
@@ -131,7 +132,7 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
             try {
                 payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
-                response.ctx.ec = error::common_errc::parsing_failure;
+                response.ctx.ec = errc::common::parsing_failure;
                 return response;
             }
             response.meta.metrics.took = std::chrono::nanoseconds(payload.at("took").get_unsigned());
@@ -152,7 +153,7 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
                     }
                 }
             } else {
-                response.ctx.ec = error::common_errc::internal_server_failure;
+                response.ctx.ec = errc::common::internal_server_failure;
                 return response;
             }
 
@@ -264,25 +265,25 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
             try {
                 payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
-                response.ctx.ec = error::common_errc::parsing_failure;
+                response.ctx.ec = errc::common::parsing_failure;
                 return response;
             }
             response.status = payload.at("status").get_string();
             response.error = payload.at("error").get_string();
             if (response.error.find("index not found") != std::string::npos) {
-                response.ctx.ec = error::common_errc::index_not_found;
+                response.ctx.ec = errc::common::index_not_found;
                 return response;
             }
             if (response.error.find("no planPIndexes for indexName") != std::string::npos) {
-                response.ctx.ec = error::search_errc::index_not_ready;
+                response.ctx.ec = errc::search::index_not_ready;
                 return response;
             }
             if (response.error.find("pindex_consistency mismatched partition") != std::string::npos) {
-                response.ctx.ec = error::search_errc::consistency_mismatch;
+                response.ctx.ec = errc::search::consistency_mismatch;
                 return response;
             }
             if (response.error.find("num_fts_indexes (active + pending)") != std::string::npos) {
-                response.ctx.ec = error::common_errc::quota_limited;
+                response.ctx.ec = errc::common::quota_limited;
                 return response;
             }
         } else if (encoded.status_code == 429) {
@@ -290,7 +291,7 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
             try {
                 payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
-                response.ctx.ec = error::common_errc::parsing_failure;
+                response.ctx.ec = errc::common::parsing_failure;
                 return response;
             }
             response.status = payload.at("status").get_string();
@@ -300,11 +301,11 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
                 response.error.find("num_queries_per_min") != std::string::npos ||
                 response.error.find("ingress_mib_per_min") != std::string::npos ||
                 response.error.find("egress_mib_per_min") != std::string::npos) {
-                response.ctx.ec = error::common_errc::rate_limited;
+                response.ctx.ec = errc::common::rate_limited;
                 return response;
             }
         }
-        response.ctx.ec = error::common_errc::internal_server_failure;
+        response.ctx.ec = errc::common::internal_server_failure;
     }
     return response;
 }

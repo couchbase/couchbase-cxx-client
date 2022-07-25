@@ -18,7 +18,6 @@
 #pragma once
 
 #include "core/diagnostics.hxx"
-#include "core/errors.hxx"
 #include "core/logger/logger.hxx"
 #include "core/meta/version.hxx"
 #include "core/origin.hxx"
@@ -51,6 +50,7 @@
 #include "retry_orchestrator.hxx"
 #include "streams.hxx"
 
+#include <couchbase/error_codes.hxx>
 #include <couchbase/fmt/retry_reason.hxx>
 #include <couchbase/retry_reason.hxx>
 
@@ -212,7 +212,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                               session_->bucket_name_.value_or(""),
                               protocol::client_opcode(msg.header.opcode),
                               status);
-                            return complete(error::common_errc::rate_limited);
+                            return complete(errc::common::rate_limited);
 
                         case key_value_status_code::scope_size_limit_exceeded:
                             LOG_DEBUG(
@@ -221,7 +221,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                               session_->bucket_name_.value_or(""),
                               protocol::client_opcode(msg.header.opcode),
                               status);
-                            return complete(error::common_errc::quota_limited);
+                            return complete(errc::common::quota_limited);
 
                         default:
                             break;
@@ -243,7 +243,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                                             session_->log_prefix_,
                                             resp.error_message(),
                                             resp.opaque());
-                                return complete(error::network_errc::handshake_failure);
+                                return complete(errc::network::handshake_failure);
                             }
                         } break;
                         case protocol::client_opcode::sasl_list_mechs: {
@@ -253,7 +253,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                                             session_->log_prefix_,
                                             resp.error_message(),
                                             resp.opaque());
-                                return complete(error::common_errc::authentication_failure);
+                                return complete(errc::common::authentication_failure);
                             }
                         } break;
                         case protocol::client_opcode::sasl_auth: {
@@ -277,14 +277,14 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                                               session_->log_prefix_,
                                               sasl_code,
                                               resp.opaque());
-                                    return complete(error::common_errc::authentication_failure);
+                                    return complete(errc::common::authentication_failure);
                                 }
                             } else {
                                 LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
                                             session_->log_prefix_,
                                             resp.error_message(),
                                             resp.opaque());
-                                return complete(error::common_errc::authentication_failure);
+                                return complete(errc::common::authentication_failure);
                             }
                         } break;
                         case protocol::client_opcode::sasl_step: {
@@ -292,7 +292,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                             if (resp.status() == key_value_status_code::success) {
                                 return auth_success();
                             }
-                            return complete(error::common_errc::authentication_failure);
+                            return complete(errc::common::authentication_failure);
                         }
                         case protocol::client_opcode::get_error_map: {
                             protocol::client_response<protocol::get_error_map_response_body> resp(std::move(msg));
@@ -304,7 +304,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                                             resp.error_message(),
                                             resp.opaque(),
                                             spdlog::to_hex(resp.header()));
-                                return complete(error::network_errc::protocol_error);
+                                return complete(errc::network::protocol_error);
                             }
                         } break;
                         case protocol::client_opcode::select_bucket: {
@@ -318,20 +318,20 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                                           opcode,
                                           resp.status(),
                                           resp.opaque());
-                                return complete(error::network_errc::configuration_not_available);
+                                return complete(errc::network::configuration_not_available);
                             } else if (resp.status() == key_value_status_code::no_access) {
                                 LOG_DEBUG("{} unable to select bucket: {}, probably the bucket does not exist",
                                           session_->log_prefix_,
                                           session_->bucket_name_.value_or(""));
                                 session_->bucket_selected_ = false;
-                                return complete(error::common_errc::bucket_not_found);
+                                return complete(errc::common::bucket_not_found);
                             } else {
                                 LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
                                             session_->log_prefix_,
                                             resp.error_message(),
                                             resp.opaque(),
                                             spdlog::to_hex(resp.header()));
-                                return complete(error::common_errc::bucket_not_found);
+                                return complete(errc::common::bucket_not_found);
                             }
                         } break;
                         case protocol::client_opcode::get_cluster_config: {
@@ -346,7 +346,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                                           opcode,
                                           resp.status(),
                                           resp.opaque());
-                                return complete(error::network_errc::configuration_not_available);
+                                return complete(errc::network::configuration_not_available);
                             } else if (resp.status() == key_value_status_code::no_bucket && !session_->bucket_name_) {
                                 // bucket-less session, but the server wants bucket
                                 session_->supports_gcccp_ = false;
@@ -361,12 +361,12 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                                             resp.error_message(),
                                             resp.opaque(),
                                             spdlog::to_hex(resp.header()));
-                                return complete(error::network_errc::protocol_error);
+                                return complete(errc::network::protocol_error);
                             }
                         } break;
                         default:
                             LOG_WARNING("{} unexpected message during bootstrap: {}", session_->log_prefix_, opcode);
-                            return complete(error::network_errc::protocol_error);
+                            return complete(errc::network::protocol_error);
                     }
                     break;
                 case protocol::magic::server_request:
@@ -708,7 +708,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             }
             LOG_WARNING("{} unable to bootstrap in time", self->log_prefix_);
             auto h = std::move(self->bootstrap_handler_);
-            h(error::common_errc::unambiguous_timeout, {});
+            h(errc::common::unambiguous_timeout, {});
             self->stop(retry_reason::do_not_retry);
         });
         initiate_bootstrap();
@@ -788,7 +788,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         retry_backoff_.cancel();
         resolver_.cancel();
         stream_->close([](std::error_code) {});
-        std::error_code ec = error::common_errc::request_canceled;
+        std::error_code ec = errc::common::request_canceled;
         if (!bootstrapped_ && bootstrap_handler_) {
             auto h = std::move(bootstrap_handler_);
             h(ec, {});
@@ -851,7 +851,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     {
         if (stopped_) {
             LOG_WARNING("{} MCBP cancel operation, while trying to write to closed session, opaque={}", log_prefix_, opaque);
-            handler(error::common_errc::request_canceled, retry_reason::socket_closed_while_in_flight, {});
+            handler(errc::common::request_canceled, retry_reason::socket_closed_while_in_flight, {});
             return;
         }
         {
@@ -1050,10 +1050,10 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
   private:
     void invoke_bootstrap_handler(std::error_code ec)
     {
-        if (ec == error::network_errc::configuration_not_available) {
+        if (ec == errc::network::configuration_not_available) {
             return initiate_bootstrap();
         }
-        if (retry_bootstrap_on_bucket_not_found_ && ec == error::common_errc::bucket_not_found) {
+        if (retry_bootstrap_on_bucket_not_found_ && ec == errc::common::bucket_not_found) {
             LOG_DEBUG(R"({} server returned {} ({}), it must be transient condition, retrying)", log_prefix_, ec.value(), ec.message());
             return initiate_bootstrap();
         }

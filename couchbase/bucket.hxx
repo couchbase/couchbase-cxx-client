@@ -22,10 +22,12 @@
 
 #include <memory>
 
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace couchbase::core
 {
 class cluster;
 } // namespace couchbase::core
+#endif
 
 namespace couchbase
 {

@@ -17,8 +17,9 @@
 
 #include "document_get_projected.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
+
+#include <couchbase/error_codes.hxx>
 
 namespace couchbase::core::operations
 {
@@ -188,7 +189,7 @@ get_projected_request::make_response(key_value_error_context&& ctx, const encode
                 try {
                     full_doc = utils::json::parse(encoded.body().fields()[with_expiry ? 1 : 0].value);
                 } catch (const tao::pegtl::parse_error&) {
-                    response.ctx.override_ec(error::common_errc::parsing_failure);
+                    response.ctx.override_ec(errc::common::parsing_failure);
                     return response;
                 }
                 tao::json::value new_doc;
@@ -196,7 +197,7 @@ get_projected_request::make_response(key_value_error_context&& ctx, const encode
                     if (auto value_to_apply = subdoc_lookup(full_doc, projection)) {
                         subdoc_apply_projection(new_doc, projection, *value_to_apply, preserve_array_indexes);
                     } else {
-                        response.ctx.override_ec(error::key_value_errc::path_not_found);
+                        response.ctx.override_ec(errc::key_value::path_not_found);
                         return response;
                     }
                 }
@@ -213,12 +214,12 @@ get_projected_request::make_response(key_value_error_context&& ctx, const encode
                     try {
                         value_to_apply = utils::json::parse(field.value);
                     } catch (const tao::pegtl::parse_error&) {
-                        response.ctx.override_ec(error::common_errc::parsing_failure);
+                        response.ctx.override_ec(errc::common::parsing_failure);
                         return response;
                     }
                     subdoc_apply_projection(new_doc, projection, value_to_apply, preserve_array_indexes);
                 } else {
-                    response.ctx.override_ec(error::key_value_errc::path_not_found);
+                    response.ctx.override_ec(errc::key_value::path_not_found);
                     return response;
                 }
             }

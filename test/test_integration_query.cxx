@@ -140,7 +140,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
         req.scope_name = "missing_scope";
         req.mutation_state = { mutation_token };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::query_errc::index_failure);
+        REQUIRE(resp.ctx.ec == couchbase::errc::query::index_failure);
     }
 
     SECTION("missing collection")
@@ -150,7 +150,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
         req.scope_name = scope_name;
         req.mutation_state = { mutation_token };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::query_errc::index_failure);
+        REQUIRE(resp.ctx.ec == couchbase::errc::query::index_failure);
     }
 
     SECTION("prepared")
@@ -196,7 +196,7 @@ TEST_CASE("integration: invalid query", "[integration]")
         couchbase::core::operations::query_request req{ "I'm not n1ql" };
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec.message());
-        REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::parsing_failure);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::parsing_failure);
     }
 }
 

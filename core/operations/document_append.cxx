@@ -17,7 +17,7 @@
 
 #include "document_append.hxx"
 
-#include "core/errors.hxx"
+#include <couchbase/error_codes.hxx>
 
 namespace couchbase::core::operations
 {

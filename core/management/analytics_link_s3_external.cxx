@@ -17,8 +17,9 @@
 
 #include "analytics_link_s3_external.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/url_codec.hxx"
+
+#include <couchbase/error_codes.hxx>
 
 #include <algorithm>
 
@@ -28,7 +29,7 @@ std::error_code
 s3_external_link::validate() const
 {
     if (dataverse.empty() || link_name.empty() || access_key_id.empty() || secret_access_key.empty() || region.empty()) {
-        return error::common_errc::invalid_argument;
+        return errc::common::invalid_argument;
     }
     return {};
 }

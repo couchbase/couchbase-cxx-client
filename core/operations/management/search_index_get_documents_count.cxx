@@ -17,7 +17,6 @@
 
 #include "search_index_get_documents_count.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
@@ -42,7 +41,7 @@ search_index_get_documents_count_request::make_response(error_context::http&& ct
                 try {
                     payload = utils::json::parse(encoded.body.data());
                 } catch (const tao::pegtl::parse_error&) {
-                    response.ctx.ec = error::common_errc::parsing_failure;
+                    response.ctx.ec = errc::common::parsing_failure;
                     return response;
                 }
                 response.status = payload.at("status").get_string();
@@ -57,17 +56,17 @@ search_index_get_documents_count_request::make_response(error_context::http&& ct
                 try {
                     payload = utils::json::parse(encoded.body.data());
                 } catch (const tao::pegtl::parse_error&) {
-                    response.ctx.ec = error::common_errc::parsing_failure;
+                    response.ctx.ec = errc::common::parsing_failure;
                     return response;
                 }
                 response.status = payload.at("status").get_string();
                 response.error = payload.at("error").get_string();
                 if (response.error.find("index not found") != std::string::npos) {
-                    response.ctx.ec = error::common_errc::index_not_found;
+                    response.ctx.ec = errc::common::index_not_found;
                     return response;
                 }
                 if (response.error.find("no planPIndexes for indexName") != std::string::npos) {
-                    response.ctx.ec = error::search_errc::index_not_ready;
+                    response.ctx.ec = errc::search::index_not_ready;
                     return response;
                 }
             } break;

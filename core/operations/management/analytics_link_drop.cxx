@@ -17,7 +17,6 @@
 
 #include "analytics_link_drop.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
@@ -57,7 +56,7 @@ analytics_link_drop_request::make_response(error_context::http&& ctx, const enco
         } catch (const tao::pegtl::parse_error&) {
             auto colon = encoded.body.data().find(':');
             if (colon == std::string::npos) {
-                response.ctx.ec = error::common_errc::parsing_failure;
+                response.ctx.ec = errc::common::parsing_failure;
                 return response;
             }
             auto code = static_cast<std::uint32_t>(std::stoul(encoded.body.data()));
@@ -91,9 +90,9 @@ analytics_link_drop_request::make_response(error_context::http&& ctx, const enco
             }
         }
         if (dataverse_does_not_exist) {
-            response.ctx.ec = error::analytics_errc::dataverse_not_found;
+            response.ctx.ec = errc::analytics::dataverse_not_found;
         } else if (link_not_found) {
-            response.ctx.ec = error::analytics_errc::link_not_found;
+            response.ctx.ec = errc::analytics::link_not_found;
         } else {
             response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
         }

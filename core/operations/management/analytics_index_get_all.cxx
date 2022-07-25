@@ -17,7 +17,6 @@
 
 #include "analytics_index_get_all.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
@@ -47,7 +46,7 @@ analytics_index_get_all_request::make_response(error_context::http&& ctx, const 
         try {
             payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = error::common_errc::parsing_failure;
+            response.ctx.ec = errc::common::parsing_failure;
             return response;
         }
         response.status = payload.optional<std::string>("status").value_or("unknown");

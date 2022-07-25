@@ -17,7 +17,6 @@
 
 #include "analytics_link_connect.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "core/utils/name_codec.hxx"
 #include "error_utils.hxx"
@@ -48,7 +47,7 @@ analytics_link_connect_request::make_response(error_context::http&& ctx, const e
         try {
             payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = error::common_errc::parsing_failure;
+            response.ctx.ec = errc::common::parsing_failure;
             return response;
         }
         response.status = payload.optional<std::string>("status").value_or("unknown");
@@ -71,7 +70,7 @@ analytics_link_connect_request::make_response(error_context::http&& ctx, const e
                 }
             }
             if (link_not_found) {
-                response.ctx.ec = error::analytics_errc::link_not_found;
+                response.ctx.ec = errc::analytics::link_not_found;
             } else {
                 response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
             }

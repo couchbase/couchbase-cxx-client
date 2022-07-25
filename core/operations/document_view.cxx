@@ -17,10 +17,11 @@
 
 #include "document_view.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/join_strings.hxx"
 #include "core/utils/json.hxx"
 #include "core/utils/url_codec.hxx"
+
+#include <couchbase/error_codes.hxx>
 
 namespace couchbase::core::operations
 {
@@ -142,7 +143,7 @@ document_view_request::make_response(error_context::view&& ctx, const encoded_re
             try {
                 payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
-                response.ctx.ec = error::common_errc::parsing_failure;
+                response.ctx.ec = errc::common::parsing_failure;
                 return response;
             }
 
@@ -171,7 +172,7 @@ document_view_request::make_response(error_context::view&& ctx, const encoded_re
             try {
                 payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
-                response.ctx.ec = error::common_errc::parsing_failure;
+                response.ctx.ec = errc::common::parsing_failure;
                 return response;
             }
             document_view_response::problem problem{};
@@ -184,11 +185,11 @@ document_view_request::make_response(error_context::view&& ctx, const encoded_re
                 problem.message = reason->get_string();
             }
             response.error.emplace(problem);
-            response.ctx.ec = error::common_errc::invalid_argument;
+            response.ctx.ec = errc::common::invalid_argument;
         } else if (encoded.status_code == 404) {
-            response.ctx.ec = error::view_errc::design_document_not_found;
+            response.ctx.ec = errc::view::design_document_not_found;
         } else {
-            response.ctx.ec = error::common_errc::internal_server_failure;
+            response.ctx.ec = errc::common::internal_server_failure;
         }
     }
     return response;

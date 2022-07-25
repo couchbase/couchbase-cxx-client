@@ -17,7 +17,6 @@
 
 #include "bucket_drop.hxx"
 
-#include "core/errors.hxx"
 #include "error_utils.hxx"
 
 namespace couchbase::core::operations::management
@@ -37,7 +36,7 @@ bucket_drop_request::make_response(error_context::http&& ctx, const encoded_resp
     if (!response.ctx.ec) {
         switch (encoded.status_code) {
             case 404:
-                response.ctx.ec = error::common_errc::bucket_not_found;
+                response.ctx.ec = errc::common::bucket_not_found;
                 break;
             case 200:
                 response.ctx.ec = {};

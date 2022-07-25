@@ -17,12 +17,13 @@
 
 #include "test_helper.hxx"
 
-#include "core/errors.hxx"
 #include "core/meta/version.hxx"
 #include "core/utils/join_strings.hxx"
 #include "core/utils/json.hxx"
 #include "core/utils/url_codec.hxx"
 #include <couchbase/build_version.hxx>
+
+#include <couchbase/error_codes.hxx>
 
 #include <tao/json.hpp>
 
@@ -44,7 +45,7 @@ TEST_CASE("unit: transformer to deduplicate JSON keys", "[unit]")
 
 TEST_CASE("unit: string representation of the error codes", "[unit]")
 {
-    std::error_code rc = couchbase::core::error::common_errc::authentication_failure;
+    std::error_code rc = couchbase::errc::common::authentication_failure;
     CHECK(rc.category().name() == std::string("couchbase.common"));
     CHECK(rc.value() == 6);
     std::stringstream ss;

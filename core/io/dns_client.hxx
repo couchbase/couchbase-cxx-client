@@ -17,10 +17,11 @@
 
 #pragma once
 
-#include "core/errors.hxx"
 #include "core/utils/join_strings.hxx"
 #include "dns_codec.hxx"
 #include "dns_config.hxx"
+
+#include <couchbase/error_codes.hxx>
 
 #include <asio/ip/tcp.hpp>
 #include <asio/read.hpp>
@@ -82,7 +83,7 @@ class dns_client
                                  std::error_code ec1, std::size_t /* bytes_transferred */) mutable {
                                    if (ec1 == asio::error::operation_aborted) {
                                        self->deadline_.cancel();
-                                       return handler({ error::common_errc::unambiguous_timeout });
+                                       return handler({ errc::common::unambiguous_timeout });
                                    }
                                    if (ec1) {
                                        self->deadline_.cancel();
@@ -149,7 +150,7 @@ class dns_client
                         if (ec2) {
                             self->deadline_.cancel();
                             if (ec2 == asio::error::operation_aborted) {
-                                ec2 = error::common_errc::unambiguous_timeout;
+                                ec2 = errc::common::unambiguous_timeout;
                             }
                             return handler({ ec2 });
                         }

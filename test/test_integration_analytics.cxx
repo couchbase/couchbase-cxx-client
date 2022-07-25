@@ -145,7 +145,7 @@ TEST_CASE("integration: analytics query")
         req.statement = fmt::format("DROP DATASET Default.`{}`", dataset_name);
         req.readonly = true;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::core::error::common_errc::internal_server_failure);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::internal_server_failure);
         REQUIRE(resp.meta.status == couchbase::core::operations::analytics_response::analytics_status::fatal);
     }
 

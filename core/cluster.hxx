@@ -52,7 +52,7 @@ class cluster : public std::enable_shared_from_this<cluster>
     [[nodiscard]] std::pair<std::error_code, couchbase::core::origin> origin() const
     {
         if (stopped_) {
-            return { error::network_errc::cluster_closed, {} };
+            return { errc::network::cluster_closed, {} };
         }
         return { {}, origin_ };
     }
@@ -61,12 +61,12 @@ class cluster : public std::enable_shared_from_this<cluster>
     void open(const couchbase::core::origin& origin, Handler&& handler)
     {
         if (stopped_) {
-            return handler(error::network_errc::cluster_closed);
+            return handler(errc::network::cluster_closed);
         }
         if (origin.get_nodes().empty()) {
             stopped_ = true;
             work_.reset();
-            return handler(error::common_errc::invalid_argument);
+            return handler(errc::common::invalid_argument);
         }
 
         origin_ = origin;
@@ -124,7 +124,7 @@ class cluster : public std::enable_shared_from_this<cluster>
     void open_bucket(const std::string& bucket_name, Handler&& handler)
     {
         if (stopped_) {
-            return handler(error::network_errc::cluster_closed);
+            return handler(errc::network::cluster_closed);
         }
         std::shared_ptr<bucket> b{};
         {
@@ -162,7 +162,7 @@ class cluster : public std::enable_shared_from_this<cluster>
     void close_bucket(const std::string& bucket_name, Handler&& handler)
     {
         if (stopped_) {
-            return handler(error::network_errc::cluster_closed);
+            return handler(errc::network::cluster_closed);
         }
         std::shared_ptr<bucket> b{};
         {
@@ -183,12 +183,12 @@ class cluster : public std::enable_shared_from_this<cluster>
     void with_bucket_configuration(const std::string& bucket_name, Handler&& handler)
     {
         if (stopped_) {
-            return handler(error::network_errc::cluster_closed, {});
+            return handler(errc::network::cluster_closed, {});
         }
         if (auto bucket = find_bucket_by_name(bucket_name); bucket != nullptr) {
             return bucket->with_configuration(std::forward<Handler>(handler));
         }
-        return handler(error::common_errc::bucket_not_found, {});
+        return handler(errc::common::bucket_not_found, {});
     }
 
     template<class Request,
@@ -198,14 +198,12 @@ class cluster : public std::enable_shared_from_this<cluster>
     {
         using response_type = typename Request::encoded_response_type;
         if (stopped_) {
-            return handler(
-              request.make_response(make_key_value_error_context(error::network_errc::cluster_closed, request.id), response_type{}));
+            return handler(request.make_response(make_key_value_error_context(errc::network::cluster_closed, request.id), response_type{}));
         }
         if (auto bucket = find_bucket_by_name(request.id.bucket()); bucket != nullptr) {
             return bucket->execute(request, std::forward<Handler>(handler));
         }
-        return handler(
-          request.make_response(make_key_value_error_context(error::common_errc::bucket_not_found, request.id), response_type{}));
+        return handler(request.make_response(make_key_value_error_context(errc::common::bucket_not_found, request.id), response_type{}));
     }
 
     template<class Request,
@@ -215,7 +213,7 @@ class cluster : public std::enable_shared_from_this<cluster>
     {
         using response_type = typename Request::encoded_response_type;
         if (stopped_) {
-            return handler(request.make_response({ error::network_errc::cluster_closed }, response_type{}));
+            return handler(request.make_response({ errc::network::cluster_closed }, response_type{}));
         }
         return session_manager_->execute(request, std::forward<Handler>(handler), origin_.credentials());
     }
@@ -346,7 +344,7 @@ class cluster : public std::enable_shared_from_this<cluster>
                 LOG_ERROR("[{}] When TLS is enabled, the cluster options must specify certificate(s) to trust. (Unless connecting to "
                           "cloud.couchbase.com.)",
                           id_);
-                return handler(error::common_errc::invalid_argument);
+                return handler(errc::common::invalid_argument);
             }
         }
 

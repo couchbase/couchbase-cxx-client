@@ -68,7 +68,7 @@ integration_test_guard::load_bucket_info(const std::string& bucket_name, bool re
     }
 
     auto resp = execute(cluster, couchbase::core::operations::management::bucket_describe_request{ bucket_name });
-    if (resp.ctx.ec == couchbase::core::error::common_errc::service_not_available) {
+    if (resp.ctx.ec == couchbase::errc::common::service_not_available) {
         open_bucket(cluster, ctx.bucket);
         resp = execute(cluster, couchbase::core::operations::management::bucket_describe_request{ bucket_name });
     }
@@ -89,7 +89,7 @@ integration_test_guard::load_cluster_info(bool refresh)
     }
 
     auto resp = execute(cluster, couchbase::core::operations::management::cluster_describe_request{});
-    if (resp.ctx.ec == couchbase::core::error::common_errc::service_not_available) {
+    if (resp.ctx.ec == couchbase::errc::common::service_not_available) {
         open_bucket(cluster, ctx.bucket);
         resp = execute(cluster, couchbase::core::operations::management::cluster_describe_request{});
     }

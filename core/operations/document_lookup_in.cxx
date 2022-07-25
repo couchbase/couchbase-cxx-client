@@ -16,8 +16,8 @@
  */
 
 #include "document_lookup_in.hxx"
-#include "core/errors.hxx"
-#include "core/utils/json.hxx"
+
+#include <couchbase/error_codes.hxx>
 
 namespace couchbase::core::operations
 {

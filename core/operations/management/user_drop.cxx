@@ -17,7 +17,6 @@
 
 #include "user_drop.hxx"
 
-#include "core/errors.hxx"
 #include "core/management/rbac_fmt.hxx"
 #include "error_utils.hxx"
 
@@ -40,7 +39,7 @@ user_drop_request::make_response(error_context::http&& ctx, const encoded_respon
             case 200:
                 break;
             case 404:
-                response.ctx.ec = error::management_errc::user_not_found;
+                response.ctx.ec = errc::management::user_not_found;
                 break;
             default:
                 response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());

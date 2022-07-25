@@ -17,7 +17,6 @@
 
 #include "view_index_get.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
@@ -44,7 +43,7 @@ view_index_get_request::make_response(error_context::http&& ctx, const encoded_r
             try {
                 payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
-                response.ctx.ec = error::common_errc::parsing_failure;
+                response.ctx.ec = errc::common::parsing_failure;
                 return response;
             }
             const auto* views = payload.find("views");
@@ -64,7 +63,7 @@ view_index_get_request::make_response(error_context::http&& ctx, const encoded_r
                 }
             }
         } else if (encoded.status_code == 404) {
-            response.ctx.ec = error::view_errc::design_document_not_found;
+            response.ctx.ec = errc::view::design_document_not_found;
         } else {
             response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
         }

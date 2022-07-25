@@ -335,7 +335,7 @@ class bucket : public std::enable_shared_from_this<bucket>
     void with_configuration(Handler&& handler)
     {
         if (closed_) {
-            return handler(error::network_errc::configuration_not_available, topology::configuration{});
+            return handler(errc::network::configuration_not_available, topology::configuration{});
         }
         if (configured_) {
             std::optional<topology::configuration> config{};
@@ -346,12 +346,12 @@ class bucket : public std::enable_shared_from_this<bucket>
             if (config) {
                 return handler({}, config.value());
             }
-            return handler(error::network_errc::configuration_not_available, topology::configuration{});
+            return handler(errc::network::configuration_not_available, topology::configuration{});
         }
         std::scoped_lock lock(deferred_commands_mutex_);
         deferred_commands_.emplace([self = shared_from_this(), handler = std::forward<Handler>(handler)]() mutable {
             if (self->closed_ || !self->configured_) {
-                return handler(error::network_errc::configuration_not_available, topology::configuration{});
+                return handler(errc::network::configuration_not_available, topology::configuration{});
             }
 
             std::optional<topology::configuration> config{};
@@ -362,7 +362,7 @@ class bucket : public std::enable_shared_from_this<bucket>
             if (config) {
                 return handler({}, config.value());
             }
-            return handler(error::network_errc::configuration_not_available, topology::configuration{});
+            return handler(errc::network::configuration_not_available, topology::configuration{});
         });
     }
 
@@ -443,7 +443,7 @@ class bucket : public std::enable_shared_from_this<bucket>
             std::tie(cmd->request.partition, index) = map_id(cmd->request.id);
             if (index < 0) {
                 return io::retry_orchestrator::maybe_retry(
-                  cmd->manager_, cmd, retry_reason::node_not_available, error::common_errc::request_canceled);
+                  cmd->manager_, cmd, retry_reason::node_not_available, errc::common::request_canceled);
             }
         }
         std::shared_ptr<io::mcbp_session> session{};
@@ -463,7 +463,7 @@ class bucket : public std::enable_shared_from_this<bucket>
         }
         if (session->is_stopped()) {
             return io::retry_orchestrator::maybe_retry(
-              cmd->manager_, cmd, retry_reason::node_not_available, error::common_errc::request_canceled);
+              cmd->manager_, cmd, retry_reason::node_not_available, errc::common::request_canceled);
         }
         cmd->send_to(session);
     }

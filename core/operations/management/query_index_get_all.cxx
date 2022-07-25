@@ -17,7 +17,6 @@
 
 #include "query_index_get_all.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
@@ -75,7 +74,7 @@ query_index_get_all_request::make_response(couchbase::core::error_context::http&
         try {
             payload = utils::json::parse(encoded.body.data());
         } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = error::common_errc::parsing_failure;
+            response.ctx.ec = errc::common::parsing_failure;
             return response;
         }
         response.status = payload.at("status").get_string();

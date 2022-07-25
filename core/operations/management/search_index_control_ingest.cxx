@@ -17,7 +17,6 @@
 
 #include "search_index_control_ingest.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
@@ -27,7 +26,7 @@ std::error_code
 search_index_control_ingest_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
     if (index_name.empty()) {
-        return error::common_errc::invalid_argument;
+        return errc::common::invalid_argument;
     }
     encoded.method = "POST";
     encoded.path = fmt::format("/api/index/{}/ingestControl/{}", index_name, pause ? "pause" : "resume");
@@ -44,7 +43,7 @@ search_index_control_ingest_request::make_response(error_context::http&& ctx, co
             try {
                 payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
-                response.ctx.ec = error::common_errc::parsing_failure;
+                response.ctx.ec = errc::common::parsing_failure;
                 return response;
             }
             response.status = payload.at("status").get_string();
@@ -56,13 +55,13 @@ search_index_control_ingest_request::make_response(error_context::http&& ctx, co
             try {
                 payload = utils::json::parse(encoded.body.data());
             } catch (const tao::pegtl::parse_error&) {
-                response.ctx.ec = error::common_errc::parsing_failure;
+                response.ctx.ec = errc::common::parsing_failure;
                 return response;
             }
             response.status = payload.at("status").get_string();
             response.error = payload.at("error").get_string();
             if (response.error.find("index not found") != std::string::npos) {
-                response.ctx.ec = error::common_errc::index_not_found;
+                response.ctx.ec = errc::common::index_not_found;
                 return response;
             }
         }

@@ -17,7 +17,6 @@
 
 #include "scope_drop.hxx"
 
-#include "core/errors.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
@@ -40,14 +39,14 @@ scope_drop_request::make_response(error_context::http&& ctx, const encoded_respo
     if (!response.ctx.ec) {
         switch (encoded.status_code) {
             case 400:
-                response.ctx.ec = error::common_errc::unsupported_operation;
+                response.ctx.ec = errc::common::unsupported_operation;
                 break;
             case 404: {
                 std::regex scope_not_found("Scope with name .+ is not found");
                 if (std::regex_search(encoded.body.data(), scope_not_found)) {
-                    response.ctx.ec = error::common_errc::scope_not_found;
+                    response.ctx.ec = errc::common::scope_not_found;
                 } else {
-                    response.ctx.ec = error::common_errc::bucket_not_found;
+                    response.ctx.ec = errc::common::bucket_not_found;
                 }
             } break;
             case 200: {
@@ -55,7 +54,7 @@ scope_drop_request::make_response(error_context::http&& ctx, const encoded_respo
                 try {
                     payload = utils::json::parse(encoded.body.data());
                 } catch (const tao::pegtl::parse_error&) {
-                    response.ctx.ec = error::common_errc::parsing_failure;
+                    response.ctx.ec = errc::common::parsing_failure;
                     return response;
                 }
                 response.uid = std::stoull(payload.at("uid").get_string(), nullptr, 16);
