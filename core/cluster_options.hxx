@@ -56,7 +56,7 @@ struct cluster_options {
     bool enable_dns_srv{ true };
     bool show_queries{ false };
     bool enable_unordered_execution{ true };
-    bool enable_clustermap_notification{ true };
+    bool enable_clustermap_notification{ false };
     bool enable_compression{ true };
     bool enable_tracing{ true };
     bool enable_metrics{ true };
