@@ -20,9 +20,9 @@
 #include "integration_shortcuts.hxx"
 #include "server_version.hxx"
 
-#include <couchbase/cluster.hxx>
-#include <couchbase/operations/management/bucket.hxx>
-#include <couchbase/operations/management/collections.hxx>
+#include "core/cluster.hxx"
+#include "core/operations/management/bucket.hxx"
+#include "core/operations/management/collections.hxx"
 
 namespace test::utils
 {
@@ -55,10 +55,10 @@ wait_until(ConditionChecker&& condition_checker)
 }
 
 bool
-wait_until_bucket_healthy(std::shared_ptr<couchbase::cluster> cluster, const std::string& bucket_name);
+wait_until_bucket_healthy(std::shared_ptr<couchbase::core::cluster> cluster, const std::string& bucket_name);
 
 bool
-wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::cluster> cluster,
+wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::core::cluster> cluster,
                                           const std::string& bucket_name,
                                           const std::uint64_t current_manifest_uid);
 } // namespace test::utils

@@ -21,4 +21,4 @@ namespace test::utils
 {
 void
 init_logger();
-}
+} // namespace test::utils

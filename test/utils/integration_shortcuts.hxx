@@ -17,13 +17,13 @@
 
 #pragma once
 
-#include <couchbase/cluster.hxx>
+#include "core/cluster.hxx"
 
 namespace test::utils
 {
 template<class Request>
 auto
-execute(std::shared_ptr<couchbase::cluster> cluster, Request request)
+execute(std::shared_ptr<couchbase::core::cluster> cluster, Request request)
 {
     using response_type = typename Request::response_type;
     auto barrier = std::make_shared<std::promise<response_type>>();
@@ -34,14 +34,14 @@ execute(std::shared_ptr<couchbase::cluster> cluster, Request request)
 }
 
 void
-open_cluster(std::shared_ptr<couchbase::cluster> cluster, const couchbase::origin& origin);
+open_cluster(std::shared_ptr<couchbase::core::cluster> cluster, const couchbase::core::origin& origin);
 
 void
-close_cluster(std::shared_ptr<couchbase::cluster> cluster);
+close_cluster(std::shared_ptr<couchbase::core::cluster> cluster);
 
 void
-open_bucket(std::shared_ptr<couchbase::cluster> cluster, const std::string& bucket_name);
+open_bucket(std::shared_ptr<couchbase::core::cluster> cluster, const std::string& bucket_name);
 
 void
-close_bucket(std::shared_ptr<couchbase::cluster> cluster, const std::string& bucket_name);
+close_bucket(std::shared_ptr<couchbase::core::cluster> cluster, const std::string& bucket_name);
 } // namespace test::utils

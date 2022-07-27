@@ -15,11 +15,12 @@
  *   limitations under the License.
  */
 
-#include "couchbase/logger/logger.hxx"
-#include "test_helper.hxx"
-#include "utils/logger.hxx"
+#include "core/logger/logger.hxx"
 
-#include <couchbase/utils/json_streaming_lexer.hxx>
+#include "test/utils/logger.hxx"
+#include "test_helper.hxx"
+
+#include "core/utils/json_streaming_lexer.hxx"
 
 struct query_result {
     std::error_code ec{};
@@ -45,11 +46,11 @@ null,1,false
 "status": "success"
 }
 )";
-    couchbase::utils::json::streaming_lexer lexer("/results/^", 4);
+    couchbase::core::utils::json::streaming_lexer lexer("/results/^", 4);
     query_result result{};
     lexer.on_row([&result](std::string&& row) {
         result.rows.emplace_back(std::move(row));
-        return couchbase::utils::json::stream_control::next_row;
+        return couchbase::core::utils::json::stream_control::next_row;
     });
     lexer.on_complete([&result](std::error_code ec, std::size_t number_of_rows, std::string&& meta) {
         result.ec = ec;
@@ -94,11 +95,11 @@ TEST_CASE("unit: json_streaming_lexer parse query result", "[unit]")
         R"(], "status": "success", "metrics": {"elapsedTime": "1.284307ms","executionTime": "1.231972ms","resultCount": 3,"resultSize": 1658,"serviceLoad": 3} })"
     };
 
-    couchbase::utils::json::streaming_lexer lexer("/results/^", 4);
+    couchbase::core::utils::json::streaming_lexer lexer("/results/^", 4);
     query_result result{};
     lexer.on_row([&result](std::string&& row) {
         result.rows.emplace_back(std::move(row));
-        return couchbase::utils::json::stream_control::next_row;
+        return couchbase::core::utils::json::stream_control::next_row;
     });
     lexer.on_complete([&result](std::error_code ec, std::size_t number_of_rows, std::string&& meta) {
         result.ec = ec;
@@ -125,11 +126,11 @@ TEST_CASE("unit: json_streaming_lexer parse query result in multiple chunks", "[
         R"(1,"#itemsOut":1,"#phaseSwitches":2,"execTime":"7.078µs"},"optimizer_estimates":{"cardinality":1,"cost":0.001,"fr_cost":0.001,"size":1}}]},"~versions":["7.1.0-N1QL","7.1.0-2534-enterprise"]},"optimizerEstimates": {"cardinality":1,"cost":0.001}}})"
     };
 
-    couchbase::utils::json::streaming_lexer lexer("/results/^", 4);
+    couchbase::core::utils::json::streaming_lexer lexer("/results/^", 4);
     query_result result{};
     lexer.on_row([&result](std::string&& row) {
         result.rows.emplace_back(std::move(row));
-        return couchbase::utils::json::stream_control::next_row;
+        return couchbase::core::utils::json::stream_control::next_row;
     });
     lexer.on_complete([&result](std::error_code ec, std::size_t number_of_rows, std::string&& meta) {
         result.ec = ec;
@@ -163,11 +164,11 @@ TEST_CASE("unit: json_streaming_lexer parse chunked metadata trailer", "[unit]")
         /* 3 */
         R"("status": "success"})",
     };
-    couchbase::utils::json::streaming_lexer lexer("/results/^", 4);
+    couchbase::core::utils::json::streaming_lexer lexer("/results/^", 4);
     query_result result{};
     lexer.on_row([&result](std::string&& row) {
         result.rows.emplace_back(std::move(row));
-        return couchbase::utils::json::stream_control::next_row;
+        return couchbase::core::utils::json::stream_control::next_row;
     });
     lexer.on_complete([&result](std::error_code ec, std::size_t number_of_rows, std::string&& meta) {
         result.ec = ec;
@@ -209,13 +210,13 @@ TEST_CASE("unit: json_streaming_lexer parse payload with missing results", "[uni
 	}
 }
 )";
-    couchbase::utils::json::streaming_lexer lexer("/results/^", 4);
+    couchbase::core::utils::json::streaming_lexer lexer("/results/^", 4);
     query_result result{};
     bool on_row_handler_executed = false;
     lexer.on_row([&result, &on_row_handler_executed](std::string&& row) {
         on_row_handler_executed = true;
         result.rows.emplace_back(std::move(row));
-        return couchbase::utils::json::stream_control::next_row;
+        return couchbase::core::utils::json::stream_control::next_row;
     });
     bool on_complete_handler_excecuted = false;
     lexer.on_complete([&result, &on_complete_handler_excecuted](std::error_code ec, std::size_t number_of_rows, std::string&& meta) {

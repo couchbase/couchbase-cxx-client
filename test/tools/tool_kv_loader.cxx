@@ -19,7 +19,7 @@
 #include "../utils/test_context.hxx"
 #include "../utils/uniq_id.hxx"
 
-#include <couchbase/logger/logger.hxx>
+#include "core/logger/logger.hxx"
 
 #include <spdlog/details/os.h>
 
@@ -60,11 +60,11 @@ dump_stats(asio::steady_timer& timer, std::chrono::system_clock::time_point star
 int
 main()
 {
-    couchbase::logger::create_console_logger();
+    couchbase::core::logger::create_console_logger();
     if (auto val = spdlog::details::os::getenv("TEST_LOG_LEVEL"); !val.empty()) {
-        couchbase::logger::set_log_levels(couchbase::logger::level_from_str(val));
+        couchbase::core::logger::set_log_levels(couchbase::core::logger::level_from_str(val));
     } else {
-        couchbase::logger::set_log_levels(couchbase::logger::level::info);
+        couchbase::core::logger::set_log_levels(couchbase::core::logger::level::info);
     }
 
     auto ctx = test::utils::test_context::load_from_environment();
@@ -88,8 +88,8 @@ main()
              ctx.connection_string,
              ctx.bucket);
 
-    auto connstr = couchbase::utils::parse_connection_string(ctx.connection_string);
-    couchbase::cluster_credentials auth{};
+    auto connstr = couchbase::core::utils::parse_connection_string(ctx.connection_string);
+    couchbase::core::cluster_credentials auth{};
     if (!ctx.certificate_path.empty()) {
         auth.certificate_path = ctx.certificate_path;
         auth.key_path = ctx.key_path;
@@ -100,8 +100,8 @@ main()
 
     asio::io_context io(static_cast<int>(number_of_io_threads));
 
-    auto origin = couchbase::origin(auth, connstr);
-    auto cluster = couchbase::cluster::create(io);
+    auto origin = couchbase::core::origin(auth, connstr);
+    auto cluster = couchbase::core::cluster::create(io);
 
     std::vector<std::thread> io_pool{};
     io_pool.reserve(number_of_io_threads);
@@ -134,7 +134,7 @@ main()
              hit_chance_for_upsert,
              hit_chance_for_get);
 
-    const auto json_doc = couchbase::utils::to_binary(R"({
+    const auto json_doc = couchbase::core::utils::to_binary(R"({
   "type": "fake_profile",
   "random": 91,
   "random float": 16.439,
@@ -201,32 +201,33 @@ main()
             known_keys.emplace_back(current_key);
         }
 
-        couchbase::document_id id{ ctx.bucket, "_default", "_default", current_key };
+        couchbase::core::document_id id{ ctx.bucket, "_default", "_default", current_key };
         switch (opcode) {
             case operation::get: {
-                couchbase::operations::upsert_request req{ id, json_doc };
-                cluster->execute(req, [&total, &errors_mutex, &errors](const couchbase::operations::upsert_response& resp) {
+                couchbase::core::operations::upsert_request req{ id, json_doc };
+                cluster->execute(req, [&total, &errors_mutex, &errors](const couchbase::core::operations::upsert_response& resp) {
                     ++total;
-                    if (resp.ctx.ec) {
+                    if (resp.ctx.ec()) {
                         std::scoped_lock lock(errors_mutex);
-                        ++errors[resp.ctx.ec];
+                        ++errors[resp.ctx.ec()];
                     }
                 });
             } break;
             case operation::upsert: {
-                couchbase::operations::get_request req{ id };
-                cluster->execute(req, [&total, &errors_mutex, &errors](const couchbase::operations::get_response&& resp) {
+                couchbase::core::operations::get_request req{ id };
+                cluster->execute(req, [&total, &errors_mutex, &errors](const couchbase::core::operations::get_response&& resp) {
                     ++total;
-                    if (resp.ctx.ec) {
+                    if (resp.ctx.ec()) {
                         std::scoped_lock lock(errors_mutex);
-                        ++errors[resp.ctx.ec];
+                        ++errors[resp.ctx.ec()];
                     }
                 });
             } break;
         }
         if (send_queries) {
-            couchbase::operations::query_request req{ fmt::format("SELECT COUNT(*) FROM `{}` WHERE type = \"fake_profile\"", ctx.bucket) };
-            cluster->execute(req, [&total, &errors_mutex, &errors](const couchbase::operations::query_response&& resp) {
+            couchbase::core::operations::query_request req{ fmt::format("SELECT COUNT(*) FROM `{}` WHERE type = \"fake_profile\"",
+                                                                        ctx.bucket) };
+            cluster->execute(req, [&total, &errors_mutex, &errors](const couchbase::core::operations::query_response&& resp) {
                 ++total;
                 if (resp.ctx.ec) {
                     std::scoped_lock lock(errors_mutex);
@@ -244,15 +245,16 @@ main()
     fmt::print("total time: {}s ({}ms)\n",
                std::chrono::duration_cast<std::chrono::seconds>(total_time).count(),
                std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count());
-    auto diff = std::chrono::duration_cast<std::chrono::seconds>(total_time).count();
-    if (diff > 0) {
+    if (auto diff = std::chrono::duration_cast<std::chrono::seconds>(total_time).count(); diff > 0) {
         fmt::print("total rate: {} ops/s\n", total / static_cast<std::uint64_t>(diff));
     }
-    std::scoped_lock lock(errors_mutex);
-    if (!errors.empty()) {
-        fmt::print("error stats:\n");
-        for (auto [ec, count] : errors) {
-            fmt::print("    {} ({}): {}\n", ec.message(), ec.value(), count);
+    {
+        std::scoped_lock lock(errors_mutex);
+        if (!errors.empty()) {
+            fmt::print("error stats:\n");
+            for (auto [ec, count] : errors) {
+                fmt::print("    {}: {}\n", ec.message(), count);
+            }
         }
     }
 
