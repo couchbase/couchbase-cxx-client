@@ -88,12 +88,29 @@ class get_replica_result : public result
     }
 
     /**
+     * Returns flags associated with the document.
+     *
+     * @return
+     *
+     * @since 1.0.0
+     * @internal
+     */
+    [[nodiscard]] auto flags() const -> std::uint32_t
+    {
+        return flags_;
+    }
+
+    /**
      * Decodes content of the document using given transcoder.
      *
      * @tparam Transcoder type that has static function `decode` that takes `std::vector<std::byte>` with `flags` and returns
      * `value_type`
      * @tparam value_type type that `Transcoder` returns
      * @return decoded document content
+     *
+     * @par Get flags and value as they are stored in the result
+     *  Here is an example of custom transcoder, that just extracts value and flags as they are stored in the result.
+     * @snippet test_integration_read_replica.cxx smuggling-transcoder
      *
      * @since 1.0.0
      * @committed

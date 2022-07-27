@@ -70,10 +70,13 @@ initiate_get_all_replicas_operation(std::shared_ptr<cluster> core,
                       }
                       --ctx->expected_responses_;
                       if (resp.ctx.ec()) {
-                          // just ignore the response
-                          return;
+                          if (ctx->expected_responses_ > 0) {
+                              // just ignore the response
+                              return;
+                          }
+                      } else {
+                          ctx->result_.emplace_back(resp.cas, true /* replica */, std::move(resp.value), resp.flags);
                       }
-                      ctx->result_.emplace_back(resp.cas, true /* replica */, std::move(resp.value), resp.flags);
                       if (ctx->expected_responses_ == 0) {
                           ctx->done_ = true;
                           std::swap(local_handler, ctx->handler_);
@@ -96,10 +99,13 @@ initiate_get_all_replicas_operation(std::shared_ptr<cluster> core,
                   }
                   --ctx->expected_responses_;
                   if (resp.ctx.ec()) {
-                      // just ignore the response
-                      return;
+                      if (ctx->expected_responses_ > 0) {
+                          // just ignore the response
+                          return;
+                      }
+                  } else {
+                      ctx->result_.emplace_back(resp.cas, false /* active */, std::move(resp.value), resp.flags);
                   }
-                  ctx->result_.emplace_back(resp.cas, false /* active */, std::move(resp.value), resp.flags);
                   if (ctx->expected_responses_ == 0) {
                       ctx->done_ = true;
                       std::swap(local_handler, ctx->handler_);
