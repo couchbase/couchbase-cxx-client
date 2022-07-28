@@ -154,7 +154,7 @@ namespace detail
  * @param msg message to log
  */
 void
-log(level lvl, std::string_view msg);
+log(const char* file, int line, const char* function, level lvl, std::string_view msg);
 } // namespace detail
 
 /**
@@ -165,9 +165,9 @@ log(level lvl, std::string_view msg);
  */
 template<typename String, typename... Args>
 inline void
-log(level lvl, const String& msg, Args&&... args)
+log(const char* file, int line, const char* function, level lvl, const String& msg, Args&&... args)
 {
-    detail::log(lvl, fmt::format(msg, std::forward<Args>(args)...));
+    detail::log(file, line, function, lvl, fmt::format(msg, std::forward<Args>(args)...));
 }
 
 /**
@@ -191,24 +191,30 @@ is_initialized();
 
 } // namespace couchbase::core::logger
 
+#if defined(__GNUC__) || defined(__clang__)
+#define COUCHBASE_LOGGER_FUNCTION __PRETTY_FUNCTION__
+#else
+#define COUCHBASE_LOGGER_FUNCTION __FUNCTION__
+#endif
 /**
  * We implement this macro to avoid having argument evaluation performed
  * on log messages which likely will not actually be logged due to their
  * severity value not matching the logger.
  */
-#define COUCHBASE_LOG(severity, ...)                                                                                                       \
+#define COUCHBASE_LOG(file, line, function, severity, ...)                                                                                 \
     do {                                                                                                                                   \
         if (couchbase::core::logger::should_log(severity)) {                                                                               \
-            couchbase::core::logger::log(severity, __VA_ARGS__);                                                                           \
+            couchbase::core::logger::log(file, line, function, severity, __VA_ARGS__);                                                     \
         }                                                                                                                                  \
     } while (false)
 
-#define LOG_TRACE(...) COUCHBASE_LOG(couchbase::core::logger::level::trace, __VA_ARGS__)
-#define LOG_DEBUG(...) COUCHBASE_LOG(couchbase::core::logger::level::debug, __VA_ARGS__)
-#define LOG_INFO(...) COUCHBASE_LOG(couchbase::core::logger::level::info, __VA_ARGS__)
-#define LOG_WARNING(...) COUCHBASE_LOG(couchbase::core::logger::level::warn, __VA_ARGS__)
-#define LOG_ERROR(...) COUCHBASE_LOG(couchbase::core::logger::level::err, __VA_ARGS__)
-#define LOG_CRITICAL(...) COUCHBASE_LOG(couchbase::core::logger::level::critical, __VA_ARGS__)
+#define LOG_TRACE(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::trace, __VA_ARGS__)
+#define LOG_DEBUG(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::debug, __VA_ARGS__)
+#define LOG_INFO(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::info, __VA_ARGS__)
+#define LOG_WARNING(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::warn, __VA_ARGS__)
+#define LOG_ERROR(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::err, __VA_ARGS__)
+#define LOG_CRITICAL(...)                                                                                                                  \
+    COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::critical, __VA_ARGS__)
 
 /**
  * Convenience macros which log with the given level, and message, if the given
@@ -220,16 +226,17 @@ is_initialized();
  *   LOG_INFO_RAW("Starting flusher");
  *   LOG_INFO_RAW(std:string{...});
  */
-#define COUCHBASE_LOG_RAW(severity, msg)                                                                                                   \
+#define COUCHBASE_LOG_RAW(file, line, function, severity, msg)                                                                             \
     do {                                                                                                                                   \
         if (couchbase::core::logger::should_log(severity)) {                                                                               \
-            couchbase::core::logger::detail::log(severity, msg);                                                                           \
+            couchbase::core::logger::detail::log(file, line, function, severity, msg);                                                     \
         }                                                                                                                                  \
     } while (false)
 
-#define LOG_TRACE_RAW(msg) COUCHBASE_LOG_RAW(couchbase::core::logger::level::trace, msg)
-#define LOG_DEBUG_RAW(msg) COUCHBASE_LOG_RAW(couchbase::core::logger::level::debug, msg)
-#define LOG_INFO_RAW(msg) COUCHBASE_LOG_RAW(couchbase::core::logger::level::info, msg)
-#define LOG_WARNING_RAW(msg) COUCHBASE_LOG_RAW(couchbase::core::logger::level::warn, msg)
-#define LOG_ERROR_RAW(msg) COUCHBASE_LOG_RAW(couchbase::core::logger::level::err, msg)
-#define LOG_CRITICAL_RAW(msg) COUCHBASE_LOG_RAW(couchbase::core::logger::level::critical, msg)
+#define LOG_TRACE_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::trace, msg)
+#define LOG_DEBUG_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::debug, msg)
+#define LOG_INFO_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::info, msg)
+#define LOG_WARNING_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::warn, msg)
+#define LOG_ERROR_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::err, msg)
+#define LOG_CRITICAL_RAW(msg)                                                                                                              \
+    COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::critical, msg)
