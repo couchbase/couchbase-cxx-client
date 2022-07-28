@@ -102,10 +102,10 @@ should_log(level lvl)
 namespace detail
 {
 void
-log(level lvl, std::string_view msg)
+log(const char* file, int line, const char* function, level lvl, std::string_view msg)
 {
     if (is_initialized()) {
-        return file_logger->log(translate_level(lvl), msg);
+        return file_logger->log(spdlog::source_loc{ file, line, function }, translate_level(lvl), msg);
     }
 }
 } // namespace detail
