@@ -33,7 +33,7 @@ struct common_error_category : std::error_category {
             case errc::common::unambiguous_timeout:
                 return "unambiguous_timeout (14)";
             case errc::common::ambiguous_timeout:
-                return "ambiguous_timeout (15)";
+                return "ambiguous_timeout (13)";
             case errc::common::request_canceled:
                 return "request_canceled (2)";
             case errc::common::invalid_argument:
