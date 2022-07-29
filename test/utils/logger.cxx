@@ -18,6 +18,7 @@
 #include "core/logger/logger.hxx"
 
 #include <spdlog/details/os.h>
+#include <spdlog/spdlog.h>
 
 namespace test::utils
 {
@@ -31,6 +32,7 @@ init_logger()
         if (auto env_val = spdlog::details::os::getenv("TEST_LOG_LEVEL"); !env_val.empty()) {
             couchbase::core::logger::set_log_levels(couchbase::core::logger::level_from_str(env_val));
         }
+        spdlog::set_pattern("[%Y-%m-%d %T.%e] [%P,%t] [%^%l%$] %oms, %v at %@ %!");
         initialized = true;
     }
 }
