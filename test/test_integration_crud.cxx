@@ -329,7 +329,7 @@ TEST_CASE("integration: exists", "[integration]")
         couchbase::core::operations::exists_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.exists());
-        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
+        REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE_FALSE(resp.deleted);
         REQUIRE(resp.cas.empty());
         REQUIRE(resp.sequence_number == 0);

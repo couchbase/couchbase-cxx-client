@@ -37,10 +37,11 @@ struct exists_response {
     std::uint32_t expiry{};
     std::uint64_t sequence_number{};
     std::uint8_t datatype{};
+    bool document_exists{ false };
 
     [[nodiscard]] inline bool exists() const
     {
-        return ctx.ec().value() == 0 && !deleted;
+        return document_exists;
     }
 };
 

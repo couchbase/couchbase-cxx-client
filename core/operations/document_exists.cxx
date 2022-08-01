@@ -41,6 +41,9 @@ exists_request::make_response(key_value_error_context&& ctx, const encoded_respo
         response.expiry = encoded.body().expiry();
         response.sequence_number = encoded.body().sequence_number();
         response.datatype = encoded.body().datatype();
+        response.document_exists = !response.deleted;
+    } else if (response.ctx.ec() == errc::key_value::document_not_found) {
+        response.ctx.override_ec({});
     }
     return response;
 }
