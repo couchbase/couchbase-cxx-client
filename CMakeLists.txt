@@ -149,10 +149,11 @@ set(couchbase_cxx_client_FILES
     core/operations/management/group_get.cxx
     core/operations/management/group_get_all.cxx
     core/operations/management/group_upsert.cxx
-    core/operations/management/query_index_build_deferred.cxx
+    core/operations/management/query_index_build.cxx
     core/operations/management/query_index_create.cxx
     core/operations/management/query_index_drop.cxx
     core/operations/management/query_index_get_all.cxx
+    core/operations/management/query_index_get_all_deferred.cxx
     core/operations/management/role_get_all.cxx
     core/operations/management/scope_create.cxx
     core/operations/management/scope_drop.cxx
@@ -222,6 +223,7 @@ set(couchbase_cxx_client_FILES
     core/impl/field_level_encryption_error_category.cxx
     core/impl/get_all_replicas.cxx
     core/impl/get_any_replica.cxx
+    core/impl/build_deferred_query_indexes.cxx
     core/impl/get_replica.cxx
     core/impl/key_value_error_category.cxx
     core/impl/management_error_category.cxx

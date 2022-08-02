@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/bucket.hxx>
+#include <couchbase/query_index_manager.hxx>
 
 #include <memory>
 
@@ -64,6 +65,19 @@ class cluster
     [[nodiscard]] auto bucket(std::string_view bucket_name) const -> bucket
     {
         return { core_, bucket_name };
+    }
+
+    /**
+     * Provides access to the N1QL index management services.
+     *
+     * @return a manager instance
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto query_indexes() const -> query_index_manager
+    {
+        return query_index_manager{ core_ };
     }
 
   private:
