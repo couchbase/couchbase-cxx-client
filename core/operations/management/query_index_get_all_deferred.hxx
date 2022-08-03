@@ -20,25 +20,20 @@
 #include "core/error_context/http.hxx"
 #include "core/io/http_context.hxx"
 #include "core/io/http_message.hxx"
+#include "core/management/query_index.hxx"
 #include "core/platform/uuid.h"
 #include "core/timeout_defaults.hxx"
 
-namespace couchbase::core::operations
+namespace couchbase::core::operations::management
 {
-namespace management
-{
-struct query_index_build_deferred_response {
-    struct query_problem {
-        std::uint64_t code;
-        std::string message;
-    };
+struct query_index_get_all_deferred_response {
     error_context::http ctx;
     std::string status{};
-    std::vector<query_problem> errors{};
+    std::vector<std::string> index_names{};
 };
 
-struct query_index_build_deferred_request {
-    using response_type = query_index_build_deferred_response;
+struct query_index_get_all_deferred_request {
+    using response_type = query_index_get_all_deferred_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
     using error_context_type = error_context::http;
@@ -54,8 +49,7 @@ struct query_index_build_deferred_request {
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 
-    [[nodiscard]] query_index_build_deferred_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
+    [[nodiscard]] query_index_get_all_deferred_response make_response(error_context::http&& ctx,
+                                                                      const encoded_response_type& encoded) const;
 };
-} // namespace management
-
-} // namespace couchbase::core::operations
+} // namespace couchbase::core::operations::management

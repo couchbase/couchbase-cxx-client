@@ -42,7 +42,7 @@ add_library(
         group_get.cxx
         group_get_all.cxx
         group_upsert.cxx
-        query_index_build_deferred.cxx
+        query_index_build.cxx
         query_index_create.cxx
         query_index_drop.cxx
         query_index_get_all.cxx

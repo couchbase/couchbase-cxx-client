@@ -27,6 +27,8 @@
 #include "core/operations/management/search.hxx"
 #include "core/operations/management/user.hxx"
 
+#include <couchbase/cluster.hxx>
+
 static couchbase::core::operations::management::bucket_get_response
 wait_for_bucket_created(test::utils::integration_test_guard& integration, const std::string& bucket_name)
 {
@@ -1117,10 +1119,9 @@ TEST_CASE("integration: query index management", "[integration]")
         }
 
         {
-            couchbase::core::operations::management::query_index_build_deferred_request req{};
-            req.bucket_name = integration.ctx.bucket;
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
+            auto manager = couchbase::cluster(integration.cluster).query_indexes();
+            auto ctx = manager.build_deferred_indexes(integration.ctx.bucket, {}).get();
+            REQUIRE_FALSE(ctx.ec());
         }
 
         test::utils::wait_until([&integration, &index_name]() {
@@ -1383,12 +1384,9 @@ TEST_CASE("integration: collections query index management", "[integration]")
         }
 
         {
-            couchbase::core::operations::management::query_index_build_deferred_request req{};
-            req.bucket_name = integration.ctx.bucket;
-            req.scope_name = scope_name;
-            req.collection_name = collection_name;
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
+            auto manager = couchbase::cluster(integration.cluster).query_indexes();
+            auto ctx = manager.build_deferred_indexes(integration.ctx.bucket, {}).get();
+            REQUIRE_FALSE(ctx.ec());
         }
 
         test::utils::wait_until([&integration, scope_name, collection_name]() {
