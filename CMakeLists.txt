@@ -183,7 +183,6 @@ set(couchbase_cxx_client_FILES
     core/protocol/cmd_append.cxx
     core/protocol/cmd_cluster_map_change_notification.cxx
     core/protocol/cmd_decrement.cxx
-    core/protocol/cmd_exists.cxx
     core/protocol/cmd_get.cxx
     core/protocol/cmd_get_and_lock.cxx
     core/protocol/cmd_get_and_touch.cxx
@@ -199,6 +198,7 @@ set(couchbase_cxx_client_FILES
     core/protocol/cmd_lookup_in.cxx
     core/protocol/cmd_mutate_in.cxx
     core/protocol/cmd_noop.cxx
+    core/protocol/cmd_observe_seqno.cxx
     core/protocol/cmd_prepend.cxx
     core/protocol/cmd_remove.cxx
     core/protocol/cmd_replace.cxx
@@ -236,6 +236,8 @@ set(couchbase_cxx_client_FILES
     core/impl/management_error_category.cxx
     core/impl/mutate_in.cxx
     core/impl/network_error_category.cxx
+    core/impl/observe_poll.cxx
+    core/impl/observe_seqno.cxx
     core/impl/prepend.cxx
     core/impl/query_error_category.cxx
     core/impl/remove.cxx

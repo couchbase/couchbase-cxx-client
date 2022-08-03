@@ -26,6 +26,7 @@
 #include "core/timeout_defaults.hxx"
 #include "core/tracing/request_tracer.hxx"
 
+#include <couchbase/durability_level.hxx>
 #include <couchbase/mutate_in_result.hxx>
 #include <couchbase/subdoc/command.hxx>
 
