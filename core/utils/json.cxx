@@ -63,6 +63,12 @@ parse(const char* input, std::size_t size)
     return tao::json::from_string<utils::json::last_key_wins>(input, size);
 }
 
+tao::json::value
+parse_binary(const std::vector<std::byte>& input)
+{
+    return tao::json::from_string<utils::json::last_key_wins>(reinterpret_cast<const char*>(input.data()), input.size());
+}
+
 std::string
 generate(const tao::json::value& object)
 {

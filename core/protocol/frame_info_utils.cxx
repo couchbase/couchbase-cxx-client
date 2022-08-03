@@ -27,7 +27,7 @@ namespace couchbase::core::protocol
 {
 
 void
-add_durability_frame_info(std::vector<std::byte>& framing_extras, protocol::durability_level level, std::optional<std::uint16_t> timeout)
+add_durability_frame_info(std::vector<std::byte>& framing_extras, durability_level level, std::optional<std::uint16_t> timeout)
 {
     const auto frame_id = static_cast<std::byte>(protocol::request_frame_info_id::durability_requirement);
     const auto extras_old_size = framing_extras.size();

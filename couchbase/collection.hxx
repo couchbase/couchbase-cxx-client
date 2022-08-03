@@ -17,8 +17,11 @@
 
 #pragma once
 
-#include <couchbase/get_all_replicas.hxx>
-#include <couchbase/get_any_replica.hxx>
+#include <couchbase/codec/json_transcoder.hxx>
+#include <couchbase/get_all_replicas_options.hxx>
+#include <couchbase/get_any_replica_options.hxx>
+#include <couchbase/get_options.hxx>
+#include <couchbase/upsert_options.hxx>
 
 #include <future>
 #include <memory>
@@ -114,7 +117,7 @@ class collection
     void get_any_replica(std::string document_id, const get_any_replica_options& options, Handler&& handler) const
     {
         return core::impl::initiate_get_any_replica_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), options, std::forward<Handler>(handler));
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
     }
 
     /**
@@ -135,14 +138,13 @@ class collection
      * @committed
      */
     [[nodiscard]] auto get_any_replica(std::string document_id, const get_any_replica_options& options) const
-      -> std::future<std::pair<get_any_replica_error_context, get_any_replica_result>>
+      -> std::future<std::pair<key_value_error_context, get_any_replica_result>>
     {
-        auto barrier = std::make_shared<std::promise<std::pair<get_any_replica_error_context, get_any_replica_result>>>();
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_any_replica_result>>>();
         auto future = barrier->get_future();
-        core::impl::initiate_get_any_replica_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), options, [barrier](auto ctx, auto result) {
-              barrier->set_value({ std::move(ctx), std::move(result) });
-          });
+        get_any_replica(std::move(document_id), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
         return future;
     }
 
@@ -168,7 +170,7 @@ class collection
     void get_all_replicas(std::string document_id, const get_all_replicas_options& options, Handler&& handler) const
     {
         return core::impl::initiate_get_all_replicas_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), options, std::forward<Handler>(handler));
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
     }
 
     /**
@@ -188,14 +190,56 @@ class collection
      * @committed
      */
     [[nodiscard]] auto get_all_replicas(std::string document_id, const get_all_replicas_options& options) const
-      -> std::future<std::pair<get_all_replicas_error_context, get_all_replicas_result>>
+      -> std::future<std::pair<key_value_error_context, get_all_replicas_result>>
     {
-        auto barrier = std::make_shared<std::promise<std::pair<get_all_replicas_error_context, get_all_replicas_result>>>();
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_all_replicas_result>>>();
         auto future = barrier->get_future();
-        core::impl::initiate_get_all_replicas_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), options, [barrier](auto ctx, auto result) {
-              barrier->set_value({ std::move(ctx), std::move(result) });
-          });
+        get_all_replicas(std::move(document_id), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    template<typename Transcoder = codec::json_transcoder, typename Document, typename Handler>
+    void upsert(std::string document_id, Document document, const upsert_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_upsert_operation(core_,
+                                                     bucket_name_,
+                                                     scope_name_,
+                                                     name_,
+                                                     std::move(document_id),
+                                                     Transcoder::encode(document),
+                                                     options.build(),
+                                                     std::forward<Handler>(handler));
+    }
+
+    template<typename Transcoder = codec::json_transcoder, typename Document>
+    [[nodiscard]] auto upsert(std::string document_id, const Document& document, const upsert_options& options) const
+      -> std::future<std::pair<key_value_error_context, mutation_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
+        auto future = barrier->get_future();
+        upsert<Transcoder>(std::move(document_id), document, options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    template<typename Handler>
+    void get(std::string document_id, const get_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_get_operation(
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
+    }
+
+    [[nodiscard]] auto get(std::string document_id, const get_options& options) const
+      -> std::future<std::pair<key_value_error_context, get_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
+        auto future = barrier->get_future();
+        get(std::move(document_id), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
         return future;
     }
 

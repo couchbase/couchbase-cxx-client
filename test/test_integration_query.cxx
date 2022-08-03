@@ -109,7 +109,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
-    couchbase::core::mutation_token mutation_token;
+    couchbase::mutation_token mutation_token;
 
     {
         couchbase::core::document_id id{ integration.ctx.bucket, scope_name, collection_name, key };

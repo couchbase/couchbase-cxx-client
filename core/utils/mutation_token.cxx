@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -15,23 +15,19 @@
  *   limitations under the License.
  */
 
-#pragma once
-
 #include "mutation_token.hxx"
 
-#include <fmt/core.h>
+namespace couchbase::utils
+{
+[[nodiscard]] auto
+build_mutation_token(const mutation_token& source, std::uint16_t partition_id, std::string bucket_name) -> mutation_token
+{
+    return mutation_token{ source.partition_uuid(), source.sequence_number(), partition_id, std::move(bucket_name) };
+}
 
-template<>
-struct fmt::formatter<couchbase::core::mutation_token> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
-
-    template<typename FormatContext>
-    auto format(const couchbase::core::mutation_token& token, FormatContext& ctx) const
-    {
-        return format_to(ctx.out(), "{}:{}:{}:{}", token.bucket_name, token.partition_id, token.partition_uuid, token.sequence_number);
-    }
-};
+[[nodiscard]] auto
+build_mutation_token(std::uint64_t partition_uuid, std::uint64_t sequence_number) -> mutation_token
+{
+    return mutation_token{ partition_uuid, sequence_number, 0, {} };
+}
+} // namespace couchbase::utils

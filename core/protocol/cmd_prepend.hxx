@@ -21,9 +21,10 @@
 #include "cmd_info.hxx"
 #include "core/document_id.hxx"
 #include "core/io/mcbp_message.hxx"
-#include "core/mutation_token.hxx"
-#include "durability_level.hxx"
 #include "status.hxx"
+
+#include <couchbase/durability_level.hxx>
+#include <couchbase/mutation_token.hxx>
 
 namespace couchbase::core::protocol
 {
@@ -66,7 +67,7 @@ class prepend_request_body
   public:
     void id(const document_id& id);
 
-    void durability(protocol::durability_level level, std::optional<std::uint16_t> timeout);
+    void durability(durability_level level, std::optional<std::uint16_t> timeout);
 
     void content(const std::vector<std::byte>& content)
     {

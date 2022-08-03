@@ -21,12 +21,13 @@
 #include "core/metrics/meter.hxx"
 #include "core/platform/uuid.h"
 #include "core/protocol/cmd_get_collection_id.hxx"
-#include "core/protocol/durability_level.hxx"
 #include "core/tracing/request_tracer.hxx"
 #include "core/utils/movable_function.hxx"
 #include "mcbp_session.hxx"
 #include "mcbp_traits.hxx"
 #include "retry_orchestrator.hxx"
+
+#include <couchbase/durability_level.hxx>
 
 #include <functional>
 #include <utility>
@@ -63,7 +64,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
       , timeout_(request.timeout.value_or(default_timeout))
     {
         if constexpr (io::mcbp_traits::supports_durability_v<Request>) {
-            if (request.durability_level != protocol::durability_level::none && timeout_ < durability_timeout_floor) {
+            if (request.durability_level != durability_level::none && timeout_ < durability_timeout_floor) {
                 LOG_DEBUG(
                   R"({} Timeout is too low for operation with durability, increasing to sensible value. timeout={}ms, floor={}ms, id="{}")",
                   session_->log_prefix(),
@@ -207,7 +208,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
             return invoke_handler(ec);
         }
         if constexpr (io::mcbp_traits::supports_durability_v<Request>) {
-            if (request.durability_level != protocol::durability_level::none) {
+            if (request.durability_level != durability_level::none) {
                 encoded.body().durability(request.durability_level,
                                           static_cast<std::uint16_t>(static_cast<double>(timeout_.count()) * 0.9));
             }

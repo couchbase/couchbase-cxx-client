@@ -35,6 +35,9 @@ parse(const char* input, std::size_t size);
 std::string
 generate(const tao::json::value& object);
 
+tao::json::value
+parse_binary(const std::vector<std::byte>& input);
+
 std::vector<std::byte>
 generate_binary(const tao::json::value& object);
 } // namespace couchbase::core::utils::json

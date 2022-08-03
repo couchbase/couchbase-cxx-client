@@ -429,7 +429,7 @@ TEST_CASE("integration: bucket management", "[integration]")
                 {
                     auto resp = wait_for_bucket_created(integration, bucket_name);
                     REQUIRE_FALSE(resp.ctx.ec);
-                    REQUIRE(resp.bucket.minimum_durability_level == couchbase::core::protocol::durability_level::none);
+                    REQUIRE(resp.bucket.minimum_durability_level == couchbase::durability_level::none);
                 }
             }
 
@@ -437,7 +437,7 @@ TEST_CASE("integration: bucket management", "[integration]")
                 SECTION("majority")
                 {
                     {
-                        bucket_settings.minimum_durability_level = couchbase::core::protocol::durability_level::majority;
+                        bucket_settings.minimum_durability_level = couchbase::durability_level::majority;
                         couchbase::core::operations::management::bucket_create_request req{ bucket_settings };
                         auto resp = test::utils::execute(integration.cluster, req);
                         INFO(resp.error_message)
@@ -447,7 +447,7 @@ TEST_CASE("integration: bucket management", "[integration]")
                     {
                         auto resp = wait_for_bucket_created(integration, bucket_name);
                         REQUIRE_FALSE(resp.ctx.ec);
-                        REQUIRE(resp.bucket.minimum_durability_level == couchbase::core::protocol::durability_level::majority);
+                        REQUIRE(resp.bucket.minimum_durability_level == couchbase::durability_level::majority);
                     }
                 }
             }

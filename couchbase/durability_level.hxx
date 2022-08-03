@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -19,41 +19,46 @@
 
 #include <cstdint>
 
-namespace couchbase::core::protocol
+namespace couchbase
 {
+/**
+ * Specifies enhanced durability options for the mutation.
+ *
+ * @since 1.0.0
+ * @committed
+ */
 enum class durability_level : std::uint8_t {
     /**
-     * no enhanced durability required for the mutation
+     * No enhanced durability required for the mutation
+     *
+     * @since 1.0.0
+     * @committed
      */
     none = 0x00,
 
     /**
-     * the mutation must be replicated to a majority of the Data Service nodes (that is, held in the memory allocated to the bucket)
+     * The mutation must be replicated to a majority of the Data Service nodes (that is, held in the memory allocated to the bucket)
+     *
+     * @since 1.0.0
+     * @committed
      */
     majority = 0x01,
 
     /**
      * The mutation must be replicated to a majority of the Data Service nodes. Additionally, it must be persisted (that is, written and
      * synchronised to disk) on the node hosting the active partition (vBucket) for the data.
+     *
+     * @since 1.0.0
+     * @committed
      */
     majority_and_persist_to_active = 0x02,
 
     /**
      * The mutation must be persisted to a majority of the Data Service nodes. Accordingly, it will be written to disk on those nodes.
+     *
+     * @since 1.0.0
+     * @committed
      */
     persist_to_majority = 0x03,
 };
-
-constexpr bool
-is_valid_durability_level(std::uint8_t value)
-{
-    switch (durability_level(value)) {
-        case durability_level::none:
-        case durability_level::majority:
-        case durability_level::majority_and_persist_to_active:
-        case durability_level::persist_to_majority:
-            return true;
-    }
-    return false;
-}
-} // namespace couchbase::core::protocol
+} // namespace couchbase

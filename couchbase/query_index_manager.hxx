@@ -45,8 +45,8 @@ class query_index_manager
     /**
      * Builds all currently deferred indexes.
      *
-     * By default, this method will build the indexes on the bucket. If the indexes should be built on a collection, both {@link
-     * build_query_index_options#scope_name} and {@link build_query_index_options#collection_name} must be set.
+     * By default, this method will build the indexes on the bucket. If the indexes should be built on a collection, both
+     * {@link build_query_index_options#scope_name} and {@link build_query_index_options#collection_name} must be set.
      *
      * @tparam Handler
      * @param bucket_name name of the bucket

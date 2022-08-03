@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,15 +17,39 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstdint>
-#include <string>
 
-namespace couchbase::core
+namespace couchbase::core::impl
 {
-struct mutation_token {
-    std::uint64_t partition_uuid{ 0 };
-    std::uint64_t sequence_number{ 0 };
-    std::uint16_t partition_id{ 0 };
-    std::string bucket_name{};
-};
-} // namespace couchbase::core
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+/**
+ * @return value that represents absence of expiry time
+ *
+ * @since 1.0.0
+ * @internal
+ */
+std::uint32_t
+expiry_none();
+
+/**
+ * @param expiry number of seconds
+ * @return value encoding relative time for KV protocol
+ *
+ * @since 1.0.0
+ * @internal
+ */
+std::uint32_t
+expiry_relative(std::chrono::seconds expiry);
+
+/**
+ * @param time_point
+ * @return value encoding absolute time for KV protocol
+ *
+ * @since 1.0.0
+ * @internal
+ */
+std::uint32_t
+expiry_absolute(std::chrono::system_clock::time_point time_point);
+#endif
+} // namespace couchbase::core::impl

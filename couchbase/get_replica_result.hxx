@@ -37,11 +37,7 @@ class get_replica_result : public result
      * @since 1.0.0
      * @internal
      */
-    get_replica_result()
-      : is_replica_{ false }
-      , flags_{ 0 }
-    {
-    }
+    get_replica_result() = default;
 
     /**
      * Constructs result for get_any_replica operation, or an entry for get_all_replicas operation.
@@ -122,9 +118,9 @@ class get_replica_result : public result
     }
 
   private:
-    bool is_replica_;
-    std::vector<std::byte> value_;
-    std::uint32_t flags_;
+    bool is_replica_{ false };
+    std::vector<std::byte> value_{};
+    std::uint32_t flags_{ 0 };
 };
 
 } // namespace couchbase

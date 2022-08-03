@@ -56,7 +56,7 @@ TEST_CASE("integration: increment", "[integration]")
         {
             couchbase::core::operations::increment_request req{ id };
             req.initial_value = 2;
-            req.durability_level = couchbase::core::protocol::durability_level::persist_to_majority;
+            req.durability_level = couchbase::durability_level::persist_to_majority;
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec());
             REQUIRE(resp.content == 2);
@@ -103,7 +103,7 @@ TEST_CASE("integration: decrement", "[integration]")
         {
             couchbase::core::operations::decrement_request req{ id };
             req.initial_value = 2;
-            req.durability_level = couchbase::core::protocol::durability_level::persist_to_majority;
+            req.durability_level = couchbase::durability_level::persist_to_majority;
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec());
             REQUIRE(resp.content == 2);

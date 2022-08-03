@@ -21,9 +21,10 @@
 #include "cmd_info.hxx"
 #include "core/document_id.hxx"
 #include "core/io/mcbp_message.hxx"
-#include "core/mutation_token.hxx"
-#include "durability_level.hxx"
 #include "status.hxx"
+
+#include <couchbase/durability_level.hxx>
+#include <couchbase/mutation_token.hxx>
 
 #include <gsl/assert>
 
@@ -261,7 +262,7 @@ class mutate_in_request_body
         specs_ = specs;
     }
 
-    void durability(protocol::durability_level level, std::optional<std::uint16_t> timeout);
+    void durability(durability_level level, std::optional<std::uint16_t> timeout);
 
     void preserve_expiry();
 

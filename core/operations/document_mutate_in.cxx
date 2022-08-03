@@ -16,6 +16,7 @@
  */
 
 #include "document_mutate_in.hxx"
+#include "core/utils/mutation_token.hxx"
 
 #include <couchbase/error_codes.hxx>
 
@@ -89,9 +90,7 @@ mutate_in_request::make_response(key_value_error_context&& ctx, const encoded_re
         }
         if (!response.ctx.ec()) {
             response.cas = encoded.cas();
-            response.token = encoded.body().token();
-            response.token.partition_id = partition;
-            response.token.bucket_name = response.ctx.bucket();
+            response.token = couchbase::utils::build_mutation_token(encoded.body().token(), partition, response.ctx.bucket());
         }
         std::sort(response.fields.begin(), response.fields.end(), [](const auto& lhs, const auto& rhs) {
             return lhs.original_index < rhs.original_index;

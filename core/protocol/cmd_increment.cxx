@@ -18,6 +18,7 @@
 #include "cmd_increment.hxx"
 
 #include "core/utils/byteswap.hxx"
+#include "core/utils/mutation_token.hxx"
 #include "core/utils/unsigned_leb128.hxx"
 #include "frame_info_utils.hxx"
 
@@ -40,12 +41,16 @@ increment_response_body::parse(key_value_status_code status,
         using offset_type = std::vector<std::byte>::difference_type;
         offset_type offset = framing_extras_size;
         if (extras_size == 16) {
-            memcpy(&token_.partition_uuid, body.data() + offset, sizeof(token_.partition_uuid));
-            token_.partition_uuid = utils::byte_swap(token_.partition_uuid);
+            std::uint64_t partition_uuid{};
+            memcpy(&partition_uuid, body.data() + offset, sizeof(partition_uuid));
+            partition_uuid = utils::byte_swap(partition_uuid);
             offset += 8;
 
-            memcpy(&token_.sequence_number, body.data() + offset, sizeof(token_.sequence_number));
-            token_.sequence_number = utils::byte_swap(token_.sequence_number);
+            std::uint64_t sequence_number{};
+            memcpy(&sequence_number, body.data() + offset, sizeof(sequence_number));
+            sequence_number = utils::byte_swap(sequence_number);
+
+            token_ = couchbase::utils::build_mutation_token(partition_uuid, sequence_number);
             offset += 8;
         }
         offset += key_size;
@@ -63,9 +68,9 @@ increment_request_body::id(const document_id& id)
 }
 
 void
-increment_request_body::durability(protocol::durability_level level, std::optional<std::uint16_t> timeout)
+increment_request_body::durability(durability_level level, std::optional<std::uint16_t> timeout)
 {
-    if (level == protocol::durability_level::none) {
+    if (level == durability_level::none) {
         return;
     }
 

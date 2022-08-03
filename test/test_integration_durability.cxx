@@ -33,34 +33,34 @@ TEST_CASE("integration: durable operations", "[integration]")
             { "b", 2.0 },
         };
         couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::json::generate_binary(value) };
-        req.durability_level = couchbase::core::protocol::durability_level::majority_and_persist_to_active;
+        req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec().message())
         REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
-        REQUIRE(resp.token.sequence_number != 0);
+        REQUIRE(resp.token.sequence_number() != 0);
     }
     {
         const tao::json::value value = {
             { "foo", "bar" },
         };
         couchbase::core::operations::replace_request req{ id, couchbase::core::utils::json::generate_binary(value) };
-        req.durability_level = couchbase::core::protocol::durability_level::majority_and_persist_to_active;
+        req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec().message())
         REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
-        REQUIRE(resp.token.sequence_number != 0);
+        REQUIRE(resp.token.sequence_number() != 0);
     }
     {
         couchbase::core::operations::mutate_in_request req{ id };
         req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::dict_upsert, false, false, false, "baz", "42");
-        req.durability_level = couchbase::core::protocol::durability_level::majority_and_persist_to_active;
+        req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec().message())
         REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
-        REQUIRE(resp.token.sequence_number != 0);
+        REQUIRE(resp.token.sequence_number() != 0);
     }
     {
         couchbase::core::operations::get_request req{ id };
@@ -72,11 +72,11 @@ TEST_CASE("integration: durable operations", "[integration]")
     }
     {
         couchbase::core::operations::remove_request req{ id };
-        req.durability_level = couchbase::core::protocol::durability_level::majority_and_persist_to_active;
+        req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec().message())
         REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
-        REQUIRE(resp.token.sequence_number != 0);
+        REQUIRE(resp.token.sequence_number() != 0);
     }
 }
