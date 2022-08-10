@@ -224,14 +224,19 @@ set(couchbase_cxx_client_FILES
     core/impl/common_error_category.cxx
     core/impl/expiry.cxx
     core/impl/field_level_encryption_error_category.cxx
+    core/impl/append.cxx
     core/impl/get.cxx
     core/impl/get_all_replicas.cxx
     core/impl/get_any_replica.cxx
     core/impl/get_replica.cxx
+    core/impl/insert.cxx
     core/impl/key_value_error_category.cxx
     core/impl/management_error_category.cxx
     core/impl/network_error_category.cxx
+    core/impl/prepend.cxx
     core/impl/query_error_category.cxx
+    core/impl/remove.cxx
+    core/impl/replace.cxx
     core/impl/search_error_category.cxx
     core/impl/streaming_json_lexter_error_category.cxx
     core/impl/upsert.cxx

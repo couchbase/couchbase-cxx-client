@@ -70,10 +70,28 @@ class get_result : public result
      * @since 1.0.0
      * @committed
      */
-    template<typename Document, typename Transcoder = codec::json_transcoder>
+    template<typename Document,
+             typename Transcoder = codec::json_transcoder,
+             std::enable_if_t<!codec::is_transcoder_v<Document>, bool> = true,
+             std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
     [[nodiscard]] auto content_as() const -> Document
     {
         return Transcoder::template decode<Document>(value_);
+    }
+
+    /**
+     * Decodes content of the document using given codec.
+     *
+     * @tparam Transcoder type that has static function `decode` that takes codec::encoded_value and returns `Transcoder::value_type`
+     * @return decoded document content
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Transcoder, std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
+    [[nodiscard]] auto content_as() const -> typename Transcoder::document_type
+    {
+        return Transcoder::decode(value_);
     }
 
     [[nodiscard]] auto expiry_time() const -> const std::optional<std::chrono::system_clock::time_point>&

@@ -17,10 +17,14 @@
 
 #pragma once
 
+#include <couchbase/binary_collection.hxx>
 #include <couchbase/codec/json_transcoder.hxx>
 #include <couchbase/get_all_replicas_options.hxx>
 #include <couchbase/get_any_replica_options.hxx>
 #include <couchbase/get_options.hxx>
+#include <couchbase/insert_options.hxx>
+#include <couchbase/remove_options.hxx>
+#include <couchbase/replace_options.hxx>
 #include <couchbase/upsert_options.hxx>
 
 #include <future>
@@ -92,6 +96,37 @@ class collection
     [[nodiscard]] auto name() const noexcept -> const std::string&
     {
         return name_;
+    }
+
+    /**
+     * Provides access to the binary APIs, not used for JSON documents.
+     *
+     * @return the requested collection if successful.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto binary() const -> binary_collection
+    {
+        return { core_, bucket_name_, scope_name_, name_ };
+    }
+
+    template<typename Handler>
+    void get(std::string document_id, const get_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_get_operation(
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
+    }
+
+    [[nodiscard]] auto get(std::string document_id, const get_options& options) const
+      -> std::future<std::pair<key_value_error_context, get_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
+        auto future = barrier->get_future();
+        get(std::move(document_id), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
     }
 
     /**
@@ -225,19 +260,69 @@ class collection
         return future;
     }
 
-    template<typename Handler>
-    void get(std::string document_id, const get_options& options, Handler&& handler) const
+    template<typename Transcoder = codec::json_transcoder, typename Document, typename Handler>
+    void insert(std::string document_id, Document document, const insert_options& options, Handler&& handler) const
     {
-        return core::impl::initiate_get_operation(
+        return core::impl::initiate_insert_operation(core_,
+                                                     bucket_name_,
+                                                     scope_name_,
+                                                     name_,
+                                                     std::move(document_id),
+                                                     Transcoder::encode(document),
+                                                     options.build(),
+                                                     std::forward<Handler>(handler));
+    }
+
+    template<typename Transcoder = codec::json_transcoder, typename Document>
+    [[nodiscard]] auto insert(std::string document_id, const Document& document, const insert_options& options) const
+      -> std::future<std::pair<key_value_error_context, mutation_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
+        auto future = barrier->get_future();
+        insert<Transcoder>(std::move(document_id), document, options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    template<typename Transcoder = codec::json_transcoder, typename Document, typename Handler>
+    void replace(std::string document_id, Document document, const replace_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_replace_operation(core_,
+                                                      bucket_name_,
+                                                      scope_name_,
+                                                      name_,
+                                                      std::move(document_id),
+                                                      Transcoder::encode(document),
+                                                      options.build(),
+                                                      std::forward<Handler>(handler));
+    }
+
+    template<typename Transcoder = codec::json_transcoder, typename Document>
+    [[nodiscard]] auto replace(std::string document_id, const Document& document, const replace_options& options) const
+      -> std::future<std::pair<key_value_error_context, mutation_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
+        auto future = barrier->get_future();
+        replace<Transcoder>(std::move(document_id), document, options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    template<typename Handler>
+    void remove(std::string document_id, const remove_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_remove_operation(
           core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
     }
 
-    [[nodiscard]] auto get(std::string document_id, const get_options& options) const
-      -> std::future<std::pair<key_value_error_context, get_result>>
+    [[nodiscard]] auto remove(std::string document_id, const remove_options& options) const
+      -> std::future<std::pair<key_value_error_context, mutation_result>>
     {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
         auto future = barrier->get_future();
-        get(std::move(document_id), options, [barrier](auto ctx, auto result) {
+        remove(std::move(document_id), options, [barrier](auto ctx, auto result) {
             barrier->set_value({ std::move(ctx), std::move(result) });
         });
         return future;

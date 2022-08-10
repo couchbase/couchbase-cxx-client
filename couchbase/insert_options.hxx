@@ -33,21 +33,20 @@ namespace couchbase
 {
 
 /**
- * Options for @ref collection#upsert().
+ * Options for @ref collection#insert().
  *
  * @since 1.0.0
  * @committed
  */
-struct upsert_options : public common_durability_options<upsert_options> {
+struct insert_options : public common_durability_options<insert_options> {
     /**
      * Immutable value object representing consistent options.
      *
      * @since 1.0.0
      * @internal
      */
-    struct built : public common_durability_options<upsert_options>::built {
+    struct built : public common_durability_options<insert_options>::built {
         const std::uint32_t expiry;
-        const bool preserve_expiry;
     };
 
     /**
@@ -62,27 +61,7 @@ struct upsert_options : public common_durability_options<upsert_options> {
      */
     [[nodiscard]] auto build() const -> built
     {
-        return { build_common_durability_options(), expiry_, preserve_expiry_ };
-    }
-
-    /**
-     * Specifies whether an existing document's expiry should be preserved. Defaults to false.
-     *
-     * If true, and the document exists, its expiry will not be modified. Otherwise the document's expiry is determined by
-     * {@link #expiry(Duration)} or {@link #expiry(Instant)}.
-     *
-     * Requires Couchbase Server 7.0 or later.
-     *
-     * @param reserve `true` to preserve expiry, `false` to set new expiry
-     * @return this options class for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto preserve_expiry(bool preserve) -> upsert_options&
-    {
-        preserve_expiry_ = preserve;
-        return self();
+        return { build_common_durability_options(), expiry_ };
     }
 
     /**
@@ -96,7 +75,7 @@ struct upsert_options : public common_durability_options<upsert_options> {
      * @since 1.0.0
      * @committed
      */
-    auto expiry(std::chrono::seconds duration) -> upsert_options&
+    auto expiry(std::chrono::seconds duration) -> insert_options&
     {
         expiry_ = core::impl::expiry_relative(duration);
         return self();
@@ -111,7 +90,7 @@ struct upsert_options : public common_durability_options<upsert_options> {
      * @since 1.0.0
      * @committed
      */
-    auto expiry(std::chrono::system_clock::time_point time_point) -> upsert_options&
+    auto expiry(std::chrono::system_clock::time_point time_point) -> insert_options&
     {
         expiry_ = core::impl::expiry_absolute(time_point);
         return self();
@@ -119,16 +98,15 @@ struct upsert_options : public common_durability_options<upsert_options> {
 
   private:
     std::uint32_t expiry_{ 0 };
-    bool preserve_expiry_{ false };
 };
 
 /**
- * The signature for the handler of the @ref collection#upsert() operation
+ * The signature for the handler of the @ref collection#insert() operation
  *
  * @since 1.0.0
  * @uncommitted
  */
-using upsert_handler = std::function<void(couchbase::key_value_error_context, mutation_result)>;
+using insert_handler = std::function<void(couchbase::key_value_error_context, mutation_result)>;
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace core
@@ -142,14 +120,14 @@ namespace impl
  * @internal
  */
 void
-initiate_upsert_operation(std::shared_ptr<couchbase::core::cluster> core,
+initiate_insert_operation(std::shared_ptr<couchbase::core::cluster> core,
                           std::string bucket_name,
                           std::string scope_name,
                           std::string collection_name,
                           std::string document_key,
                           codec::encoded_value encoded,
-                          upsert_options::built options,
-                          upsert_handler&& handler);
+                          insert_options::built options,
+                          insert_handler&& handler);
 #endif
 } // namespace impl
 } // namespace core

@@ -33,21 +33,22 @@ namespace couchbase
 {
 
 /**
- * Options for @ref collection#upsert().
+ * Options for @ref collection#replace().
  *
  * @since 1.0.0
  * @committed
  */
-struct upsert_options : public common_durability_options<upsert_options> {
+struct replace_options : public common_durability_options<replace_options> {
     /**
      * Immutable value object representing consistent options.
      *
      * @since 1.0.0
      * @internal
      */
-    struct built : public common_durability_options<upsert_options>::built {
+    struct built : public common_durability_options<replace_options>::built {
         const std::uint32_t expiry;
         const bool preserve_expiry;
+        const couchbase::cas cas;
     };
 
     /**
@@ -62,7 +63,7 @@ struct upsert_options : public common_durability_options<upsert_options> {
      */
     [[nodiscard]] auto build() const -> built
     {
-        return { build_common_durability_options(), expiry_, preserve_expiry_ };
+        return { build_common_durability_options(), expiry_, preserve_expiry_, cas_ };
     }
 
     /**
@@ -79,7 +80,7 @@ struct upsert_options : public common_durability_options<upsert_options> {
      * @since 1.0.0
      * @committed
      */
-    auto preserve_expiry(bool preserve) -> upsert_options&
+    auto preserve_expiry(bool preserve) -> replace_options&
     {
         preserve_expiry_ = preserve;
         return self();
@@ -96,7 +97,7 @@ struct upsert_options : public common_durability_options<upsert_options> {
      * @since 1.0.0
      * @committed
      */
-    auto expiry(std::chrono::seconds duration) -> upsert_options&
+    auto expiry(std::chrono::seconds duration) -> replace_options&
     {
         expiry_ = core::impl::expiry_relative(duration);
         return self();
@@ -111,24 +112,46 @@ struct upsert_options : public common_durability_options<upsert_options> {
      * @since 1.0.0
      * @committed
      */
-    auto expiry(std::chrono::system_clock::time_point time_point) -> upsert_options&
+    auto expiry(std::chrono::system_clock::time_point time_point) -> replace_options&
     {
         expiry_ = core::impl::expiry_absolute(time_point);
+        return self();
+    }
+
+    /**
+     * Specifies a CAS value that will be taken into account on the server side for optimistic concurrency.
+     *
+     * The CAS value is an opaque identifier which is associated with a specific state of the document on the server. The
+     * CAS value is received on read operations (or after mutations) and can be used during a subsequent mutation to
+     * make sure that the document has not been modified in the meantime.
+     *
+     * If document on the server has been modified in the meantime the SDK will raise a {@link errc::common::cas_mismatch}. In
+     * this case the caller is expected to re-do the whole "fetch-modify-update" cycle again. Please refer to the
+     * SDK documentation for more information on CAS mismatches and subsequent retries.
+     *
+     * @param cas the opaque CAS identifier to use for this operation.
+     * @return the {@link replace_options} for chaining purposes.
+     */
+    auto cas(couchbase::cas cas) -> replace_options&
+    {
+
+        cas_ = cas;
         return self();
     }
 
   private:
     std::uint32_t expiry_{ 0 };
     bool preserve_expiry_{ false };
+    couchbase::cas cas_{};
 };
 
 /**
- * The signature for the handler of the @ref collection#upsert() operation
+ * The signature for the handler of the @ref collection#replace() operation
  *
  * @since 1.0.0
  * @uncommitted
  */
-using upsert_handler = std::function<void(couchbase::key_value_error_context, mutation_result)>;
+using replace_handler = std::function<void(couchbase::key_value_error_context, mutation_result)>;
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace core
@@ -142,14 +165,14 @@ namespace impl
  * @internal
  */
 void
-initiate_upsert_operation(std::shared_ptr<couchbase::core::cluster> core,
-                          std::string bucket_name,
-                          std::string scope_name,
-                          std::string collection_name,
-                          std::string document_key,
-                          codec::encoded_value encoded,
-                          upsert_options::built options,
-                          upsert_handler&& handler);
+initiate_replace_operation(std::shared_ptr<couchbase::core::cluster> core,
+                           std::string bucket_name,
+                           std::string scope_name,
+                           std::string collection_name,
+                           std::string document_key,
+                           codec::encoded_value encoded,
+                           replace_options::built options,
+                           replace_handler&& handler);
 #endif
 } // namespace impl
 } // namespace core

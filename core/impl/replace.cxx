@@ -17,36 +17,37 @@
 
 #include "core/cluster.hxx"
 #include "core/error_context/key_value.hxx"
-#include "core/operations/document_upsert.hxx"
+#include "core/operations/document_replace.hxx"
 
-#include <couchbase/upsert_options.hxx>
+#include <couchbase/replace_options.hxx>
 
 namespace couchbase::core::impl
 {
 void
-initiate_upsert_operation(std::shared_ptr<couchbase::core::cluster> core,
-                          std::string bucket_name,
-                          std::string scope_name,
-                          std::string collection_name,
-                          std::string document_key,
-                          codec::encoded_value encoded,
-                          upsert_options::built options,
-                          upsert_handler&& handler)
+initiate_replace_operation(std::shared_ptr<couchbase::core::cluster> core,
+                           std::string bucket_name,
+                           std::string scope_name,
+                           std::string collection_name,
+                           std::string document_key,
+                           codec::encoded_value encoded,
+                           replace_options::built options,
+                           replace_handler&& handler)
 {
     auto value = std::move(encoded);
     core->execute(
-      operations::upsert_request{
+      operations::replace_request{
         document_id{ std::move(bucket_name), std::move(scope_name), std::move(collection_name), std::move(document_key) },
         std::move(value.data),
         {},
         {},
         value.flags,
         options.expiry,
+        options.cas,
         options.durability_level,
         options.timeout,
         {},
         options.preserve_expiry },
-      [handler = std::move(handler)](operations::upsert_response&& resp) mutable {
+      [handler = std::move(handler)](operations::replace_response&& resp) mutable {
           if (resp.ctx.ec()) {
               return handler(std::move(resp.ctx), mutation_result{});
           }

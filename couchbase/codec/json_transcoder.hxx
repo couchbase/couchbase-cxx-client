@@ -19,6 +19,7 @@
 
 #include <couchbase/codec/codec_flags.hxx>
 #include <couchbase/codec/encoded_value.hxx>
+#include <couchbase/codec/transcoder_traits.hxx>
 #include <couchbase/error_codes.hxx>
 
 #include <tao/json/value.hpp>
@@ -66,5 +67,11 @@ class json_transcoder
         }
     }
 };
+
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+template<>
+struct is_transcoder<json_transcoder> : public std::true_type {
+};
+#endif
 } // namespace codec
 } // namespace couchbase
