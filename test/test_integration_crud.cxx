@@ -676,8 +676,8 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
     }
     {
         couchbase::core::operations::mutate_in_request req{ id };
-        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::dict_upsert, false, true, false, "foo", "42");
-        req.store_semantics = couchbase::core::protocol::mutate_in_request_body::store_semantics_type::insert;
+        req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert("foo", "42").create_path() }.specs();
+        req.store_semantics = couchbase::store_semantics::insert;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_exists);
         REQUIRE(resp.token.bucket_name().empty());
@@ -687,8 +687,8 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
     }
     {
         couchbase::core::operations::mutate_in_request req{ id };
-        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::dict_add, false, false, false, "a", "{}");
-        req.store_semantics = couchbase::core::protocol::mutate_in_request_body::store_semantics_type::replace;
+        req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::insert("a", tao::json::empty_object) }.specs();
+        req.store_semantics = couchbase::store_semantics::replace;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::path_exists);
         REQUIRE(resp.token.bucket_name().empty());
@@ -698,7 +698,7 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
         REQUIRE(resp.first_error_index == 0);
         REQUIRE(resp.fields.size() == 1);
         REQUIRE(resp.fields[0].path == "a");
-        REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::subdoc_path_exists);
+        REQUIRE(resp.fields_meta[0].status == couchbase::key_value_status_code::subdoc_path_exists);
     }
 }
 

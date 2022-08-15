@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/key_value_error_context.hxx>
+#include <couchbase/subdocument_error_context.hxx>
 
 #include "core/document_id.hxx"
 
@@ -71,4 +72,12 @@ make_key_value_error_context(std::error_code ec, std::uint16_t status_code, cons
              std::move(error_map_info),
              response.error_info() };
 }
+
+subdocument_error_context
+make_subdocument_error_context(const key_value_error_context& ctx,
+                               std::error_code ec,
+                               std::optional<std::string> first_error_path,
+                               std::optional<std::uint64_t> first_error_index,
+                               bool deleted);
+
 } // namespace couchbase::core

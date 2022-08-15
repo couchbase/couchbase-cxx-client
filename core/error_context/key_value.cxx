@@ -27,4 +27,32 @@ make_key_value_error_context(std::error_code ec, const document_id& id)
         ec, {}, {}, 0, {}, id.key(), id.bucket(), id.scope(), id.collection(), 0, {}, {}, {}, {},
     };
 }
+
+subdocument_error_context
+make_subdocument_error_context(const key_value_error_context& ctx,
+                               std::error_code ec,
+                               std::optional<std::string> first_error_path,
+                               std::optional<std::uint64_t> first_error_index,
+                               bool deleted)
+{
+    return {
+        ec,
+        ctx.last_dispatched_to(),
+        ctx.last_dispatched_from(),
+        ctx.retry_attempts(),
+        ctx.retry_reasons(),
+        ctx.id(),
+        ctx.bucket(),
+        ctx.scope(),
+        ctx.collection(),
+        ctx.opaque(),
+        ctx.status_code(),
+        ctx.cas(),
+        ctx.error_map_info(),
+        ctx.extended_error_info(),
+        std::move(first_error_path),
+        first_error_index,
+        deleted,
+    };
+}
 } // namespace couchbase::core

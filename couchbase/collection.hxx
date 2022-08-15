@@ -23,6 +23,8 @@
 #include <couchbase/get_any_replica_options.hxx>
 #include <couchbase/get_options.hxx>
 #include <couchbase/insert_options.hxx>
+#include <couchbase/mutate_in_options.hxx>
+#include <couchbase/mutate_in_specs.hxx>
 #include <couchbase/remove_options.hxx>
 #include <couchbase/replace_options.hxx>
 #include <couchbase/upsert_options.hxx>
@@ -323,6 +325,24 @@ class collection
         auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
         auto future = barrier->get_future();
         remove(std::move(document_id), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    template<typename Handler>
+    void mutate_in(std::string document_id, mutate_in_specs specs, const mutate_in_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_mutate_in_operation(
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), specs.specs(), options.build(), std::forward<Handler>(handler));
+    }
+
+    [[nodiscard]] auto mutate_in(std::string document_id, mutate_in_specs specs, const mutate_in_options& options) const
+      -> std::future<std::pair<key_value_error_context, mutate_in_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutate_in_result>>>();
+        auto future = barrier->get_future();
+        mutate_in(std::move(document_id), std::move(specs), options, [barrier](auto ctx, auto result) {
             barrier->set_value({ std::move(ctx), std::move(result) });
         });
         return future;

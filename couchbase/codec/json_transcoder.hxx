@@ -49,15 +49,10 @@ class json_transcoder
     }
 
     template<typename Document>
-    static auto decode(const encoded_value& encoded) -> Document
+    static auto decode(const binary& data) -> Document
     {
-        if (!codec_flags::has_common_flags(encoded.flags, codec_flags::json_common_flags)) {
-            throw std::system_error(errc::common::decoding_failure,
-                                    "json_transcoder excepts document to have JSON common flags, flags=" + std::to_string(encoded.flags));
-        }
-
         try {
-            return core::utils::json::parse_binary(encoded.data).as<Document>();
+            return core::utils::json::parse_binary(data).as<Document>();
         } catch (const tao::pegtl::parse_error& e) {
             throw std::system_error(errc::common::decoding_failure,
                                     std::string("json_transcoder cannot parse document as JSON: ").append(e.message()));
@@ -65,6 +60,17 @@ class json_transcoder
             throw std::system_error(errc::common::decoding_failure,
                                     std::string("json_transcoder cannot parse document: ").append(e.what()));
         }
+    }
+
+    template<typename Document>
+    static auto decode(const encoded_value& encoded) -> Document
+    {
+        if (!codec_flags::has_common_flags(encoded.flags, codec_flags::json_common_flags)) {
+            throw std::system_error(errc::common::decoding_failure,
+                                    "json_transcoder excepts document to have JSON common flags, flags=" + std::to_string(encoded.flags));
+        }
+
+        return decode<Document>(encoded.data);
     }
 };
 

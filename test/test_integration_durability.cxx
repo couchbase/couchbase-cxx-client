@@ -54,7 +54,7 @@ TEST_CASE("integration: durable operations", "[integration]")
     }
     {
         couchbase::core::operations::mutate_in_request req{ id };
-        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::dict_upsert, false, false, false, "baz", "42");
+        req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert("baz", 42) }.specs();
         req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.ec().message())

@@ -18,14 +18,30 @@
 #pragma once
 
 #include <cinttypes>
-#include <vector>
+#include <string>
 
-namespace couchbase::codec
+namespace couchbase::subdoc
 {
-using binary = std::vector<std::byte>;
-
-struct encoded_value {
-    binary data;
-    std::uint32_t flags;
+/**
+ * @since 1.0.0
+ * @internal
+ */
+enum class opcode : std::uint8_t {
+    get_doc = 0x00,
+    set_doc = 0x01,
+    remove_doc = 0x04,
+    get = 0xc5,
+    exists = 0xc6,
+    dict_add = 0xc7,
+    dict_upsert = 0xc8,
+    remove = 0xc9,
+    replace = 0xca,
+    array_push_last = 0xcb,
+    array_push_first = 0xcc,
+    array_insert = 0xcd,
+    array_add_unique = 0xce,
+    counter = 0xcf,
+    get_count = 0xd2,
+    replace_body_with_xattr = 0xd3,
 };
-} // namespace couchbase::codec
+} // namespace couchbase::subdoc

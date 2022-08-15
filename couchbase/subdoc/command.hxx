@@ -17,15 +17,27 @@
 
 #pragma once
 
+#include <couchbase/subdoc/opcode.hxx>
+
 #include <cinttypes>
+#include <string>
 #include <vector>
 
-namespace couchbase::codec
+namespace couchbase::subdoc
 {
-using binary = std::vector<std::byte>;
-
-struct encoded_value {
-    binary data;
-    std::uint32_t flags;
+/**
+ * Internal structure to represent subdocument operations.
+ *
+ * @since 1.0.0
+ * @internal
+ */
+struct command {
+    opcode opcode_;
+    std::string path_;
+    std::vector<std::byte> value_;
+    bool create_path_{ false };
+    bool xattr_{ false };
+    bool expand_macro_{ false };
+    std::size_t original_index_{};
 };
-} // namespace couchbase::codec
+} // namespace couchbase::subdoc

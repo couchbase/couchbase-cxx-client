@@ -21,7 +21,9 @@
 #include <couchbase/common_durability_options.hxx>
 #include <couchbase/expiry.hxx>
 #include <couchbase/key_value_error_context.hxx>
-#include <couchbase/mutation_result.hxx>
+#include <couchbase/mutate_in_result.hxx>
+#include <couchbase/store_semantics.hxx>
+#include <couchbase/subdoc/command.hxx>
 
 #include <chrono>
 #include <functional>
@@ -33,22 +35,25 @@ namespace couchbase
 {
 
 /**
- * Options for @ref collection#replace().
+ * Options for @ref collection#mutate_in().
  *
  * @since 1.0.0
  * @committed
  */
-struct replace_options : public common_durability_options<replace_options> {
+struct mutate_in_options : public common_durability_options<mutate_in_options> {
     /**
      * Immutable value object representing consistent options.
      *
      * @since 1.0.0
      * @internal
      */
-    struct built : public common_durability_options<replace_options>::built {
+    struct built : public common_durability_options<mutate_in_options>::built {
         const std::uint32_t expiry;
         const bool preserve_expiry;
+        const couchbase::store_semantics store_semantics;
         const couchbase::cas cas;
+        const bool access_deleted;
+        const bool create_as_deleted;
     };
 
     /**
@@ -63,7 +68,9 @@ struct replace_options : public common_durability_options<replace_options> {
      */
     [[nodiscard]] auto build() const -> built
     {
-        return { build_common_durability_options(), expiry_, preserve_expiry_, cas_ };
+        return {
+            build_common_durability_options(), expiry_, preserve_expiry_, store_semantics_, cas_, access_deleted_, create_as_deleted_
+        };
     }
 
     /**
@@ -80,7 +87,7 @@ struct replace_options : public common_durability_options<replace_options> {
      * @since 1.0.0
      * @committed
      */
-    auto preserve_expiry(bool preserve) -> replace_options&
+    auto preserve_expiry(bool preserve) -> mutate_in_options&
     {
         preserve_expiry_ = preserve;
         return self();
@@ -97,7 +104,7 @@ struct replace_options : public common_durability_options<replace_options> {
      * @since 1.0.0
      * @committed
      */
-    auto expiry(std::chrono::seconds duration) -> replace_options&
+    auto expiry(std::chrono::seconds duration) -> mutate_in_options&
     {
         expiry_ = core::impl::expiry_relative(duration);
         return self();
@@ -112,7 +119,7 @@ struct replace_options : public common_durability_options<replace_options> {
      * @since 1.0.0
      * @committed
      */
-    auto expiry(std::chrono::system_clock::time_point time_point) -> replace_options&
+    auto expiry(std::chrono::system_clock::time_point time_point) -> mutate_in_options&
     {
         expiry_ = core::impl::expiry_absolute(time_point);
         return self();
@@ -130,31 +137,74 @@ struct replace_options : public common_durability_options<replace_options> {
      * SDK documentation for more information on CAS mismatches and subsequent retries.
      *
      * @param cas the opaque CAS identifier to use for this operation.
-     * @return the {@link replace_options} for chaining purposes.
+     * @return the {@link mutate_in_options} for chaining purposes.
      *
      * @since 1.0.0
      * @committed
      */
-    auto cas(couchbase::cas cas) -> replace_options&
+    auto cas(couchbase::cas cas) -> mutate_in_options&
     {
-
         cas_ = cas;
+        return self();
+    }
+    /**
+     * Changes the storing semantics of the outer/enclosing document.
+     *
+     * While each individual {@link mutate_in_specs} describes the semantics of the respective sub-document section, the
+     * {@link store_semantics} are applied to the outer enclosing document as a whole. You can think of using the same
+     * verb for a {@link couchbase::store_semantics store_semantics} aligns with the corresponding full document. So for example a
+     * {@link store_semantics::insert} works semantically similar to a {@link collection#insert(} and will fail if the document as a whole
+     * already exists.
+     *
+     * @param semantics the store semantics to apply to the document.
+     * @return this {@link mutate_in_options} for chaining purposes.
+     */
+    auto store_semantics(couchbase::store_semantics semantics) -> mutate_in_options&
+    {
+        store_semantics_ = semantics;
+        return self();
+    }
+
+    /**
+     * For internal use only: allows access to deleted documents that are in 'tombstone' form.
+     *
+     * @since 1.0.0
+     * @internal
+     */
+    auto access_deleted(bool value) -> mutate_in_options&
+    {
+        access_deleted_ = value;
+        return self();
+    }
+
+    /**
+     * For internal use only: allows creating documents in 'tombstone' form.
+     *
+     * @since 1.0.0
+     * @internal
+     */
+    auto create_as_deleted(bool value) -> mutate_in_options&
+    {
+        create_as_deleted_ = value;
         return self();
     }
 
   private:
+    couchbase::store_semantics store_semantics_{ couchbase::store_semantics::replace };
+    couchbase::cas cas_{};
     std::uint32_t expiry_{ 0 };
     bool preserve_expiry_{ false };
-    couchbase::cas cas_{};
+    bool access_deleted_{ false };
+    bool create_as_deleted_{ false };
 };
 
 /**
- * The signature for the handler of the @ref collection#replace() operation
+ * The signature for the handler of the @ref collection#mutate_in() operation
  *
  * @since 1.0.0
  * @uncommitted
  */
-using replace_handler = std::function<void(couchbase::key_value_error_context, mutation_result)>;
+using mutate_in_handler = std::function<void(couchbase::subdocument_error_context, mutate_in_result)>;
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace core
@@ -168,14 +218,14 @@ namespace impl
  * @internal
  */
 void
-initiate_replace_operation(std::shared_ptr<couchbase::core::cluster> core,
-                           std::string bucket_name,
-                           std::string scope_name,
-                           std::string collection_name,
-                           std::string document_key,
-                           codec::encoded_value encoded,
-                           replace_options::built options,
-                           replace_handler&& handler);
+initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
+                             std::string bucket_name,
+                             std::string scope_name,
+                             std::string collection_name,
+                             std::string document_key,
+                             std::vector<couchbase::subdoc::command> specs,
+                             mutate_in_options::built options,
+                             mutate_in_handler&& handler);
 #endif
 } // namespace impl
 } // namespace core

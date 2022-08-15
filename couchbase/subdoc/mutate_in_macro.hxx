@@ -17,15 +17,19 @@
 
 #pragma once
 
+#include <couchbase/subdoc/opcode.hxx>
+
 #include <cinttypes>
 #include <vector>
 
-namespace couchbase::codec
+namespace couchbase::subdoc
 {
-using binary = std::vector<std::byte>;
+/**
+ * @since 1.0.0
+ * @volatile
+ */
+enum class mutate_in_macro { cas, sequence_number, value_crc32c };
 
-struct encoded_value {
-    binary data;
-    std::uint32_t flags;
-};
-} // namespace couchbase::codec
+auto
+to_binary(mutate_in_macro value) -> std::vector<std::byte>&;
+} // namespace couchbase::subdoc
