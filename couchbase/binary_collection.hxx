@@ -18,6 +18,8 @@
 #pragma once
 
 #include <couchbase/append_options.hxx>
+#include <couchbase/decrement_options.hxx>
+#include <couchbase/increment_options.hxx>
 #include <couchbase/prepend_options.hxx>
 
 #include <future>
@@ -125,6 +127,42 @@ class binary_collection
         auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
         auto future = barrier->get_future();
         prepend(std::move(document_id), std::move(data), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    template<typename Handler>
+    void increment(std::string document_id, const increment_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_increment_operation(
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
+    }
+
+    [[nodiscard]] auto increment(std::string document_id, const increment_options& options) const
+      -> std::future<std::pair<key_value_error_context, counter_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, counter_result>>>();
+        auto future = barrier->get_future();
+        increment(std::move(document_id), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    template<typename Handler>
+    void decrement(std::string document_id, const decrement_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_decrement_operation(
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
+    }
+
+    [[nodiscard]] auto decrement(std::string document_id, const decrement_options& options) const
+      -> std::future<std::pair<key_value_error_context, counter_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, counter_result>>>();
+        auto future = barrier->get_future();
+        decrement(std::move(document_id), options, [barrier](auto ctx, auto result) {
             barrier->set_value({ std::move(ctx), std::move(result) });
         });
         return future;

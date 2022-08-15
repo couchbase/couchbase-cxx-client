@@ -220,15 +220,17 @@ set(couchbase_cxx_client_FILES
     core/utils/mutation_token.cxx
     core/utils/url_codec.cxx
     core/impl/analytics_error_category.cxx
+    core/impl/append.cxx
     core/impl/build_deferred_query_indexes.cxx
     core/impl/common_error_category.cxx
+    core/impl/decrement.cxx
     core/impl/expiry.cxx
     core/impl/field_level_encryption_error_category.cxx
-    core/impl/append.cxx
     core/impl/get.cxx
     core/impl/get_all_replicas.cxx
     core/impl/get_any_replica.cxx
     core/impl/get_replica.cxx
+    core/impl/increment.cxx
     core/impl/insert.cxx
     core/impl/key_value_error_category.cxx
     core/impl/management_error_category.cxx

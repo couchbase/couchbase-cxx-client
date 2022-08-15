@@ -90,7 +90,7 @@ increment_request_body::fill_extras()
 
     num = utils::byte_swap(initial_value_);
     memcpy(extras_.data() + offset, &num, sizeof(num));
-    offset += static_cast<offset_type>(sizeof(delta_));
+    offset += static_cast<offset_type>(sizeof(initial_value_));
 
     std::uint32_t ttl = utils::byte_swap(expiry_);
     memcpy(extras_.data() + offset, &ttl, sizeof(ttl));
