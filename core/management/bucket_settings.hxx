@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "core/protocol/durability_level.hxx"
+#include <couchbase/durability_level.hxx>
 
 #include <map>
 #include <optional>
@@ -109,7 +109,7 @@ struct bucket_settings {
     std::uint64_t ram_quota_mb{ 100 };
     std::uint32_t max_expiry{ 0 };
     bucket_compression compression_mode{ bucket_compression::unknown };
-    std::optional<protocol::durability_level> minimum_durability_level{};
+    std::optional<couchbase::durability_level> minimum_durability_level{};
     std::uint32_t num_replicas{ 1 };
     bool replica_indexes{ false };
     bool flush_enabled{ false };

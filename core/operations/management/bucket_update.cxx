@@ -18,10 +18,11 @@
 #include "bucket_update.hxx"
 
 #include "core/management/bucket_settings.hxx"
-#include "core/protocol/durability_level.hxx"
 #include "core/utils/join_strings.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
+
+#include <couchbase/durability_level.hxx>
 
 namespace couchbase::core::operations::management
 {
@@ -70,16 +71,16 @@ bucket_update_request::encode_to(encoded_request_type& encoded, http_context& /*
     }
     if (bucket.minimum_durability_level) {
         switch (bucket.minimum_durability_level.value()) {
-            case protocol::durability_level::none:
+            case durability_level::none:
                 encoded.body.append("&durabilityMinLevel=none");
                 break;
-            case protocol::durability_level::majority:
+            case durability_level::majority:
                 encoded.body.append("&durabilityMinLevel=majority");
                 break;
-            case protocol::durability_level::majority_and_persist_to_active:
+            case durability_level::majority_and_persist_to_active:
                 encoded.body.append("&durabilityMinLevel=majorityAndPersistActive");
                 break;
-            case protocol::durability_level::persist_to_majority:
+            case durability_level::persist_to_majority:
                 encoded.body.append("&durabilityMinLevel=persistToMajority");
                 break;
         }

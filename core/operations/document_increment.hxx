@@ -23,9 +23,10 @@
 #include "core/io/retry_context.hxx"
 #include "core/protocol/client_request.hxx"
 #include "core/protocol/cmd_increment.hxx"
-#include "core/protocol/durability_level.hxx"
 #include "core/timeout_defaults.hxx"
 #include "core/tracing/request_tracer.hxx"
+
+#include <couchbase/durability_level.hxx>
 
 namespace couchbase::core::operations
 {
@@ -48,7 +49,7 @@ struct increment_request {
     std::uint32_t expiry{ 0 };
     std::uint64_t delta{ 1 };
     std::optional<std::uint64_t> initial_value{};
-    protocol::durability_level durability_level{ protocol::durability_level::none };
+    couchbase::durability_level durability_level{ durability_level::none };
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
     std::shared_ptr<tracing::request_span> parent_span{ nullptr };

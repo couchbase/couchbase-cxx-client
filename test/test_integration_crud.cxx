@@ -39,8 +39,7 @@ TEST_CASE("integration: crud on default collection", "[integration]")
         INFO(resp.ctx.ec().message())
         REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
-        INFO("seqno=" << resp.token.sequence_number)
-        REQUIRE(resp.token.sequence_number != 0);
+        REQUIRE(resp.token.sequence_number() != 0);
     }
 
     // read
@@ -645,15 +644,15 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
 
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("upsert_mt") };
 
-    couchbase::core::mutation_token token{};
+    couchbase::mutation_token token{};
     {
         couchbase::core::operations::upsert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
         token = resp.token;
         REQUIRE_FALSE(resp.ctx.ec());
-        REQUIRE(token.bucket_name == integration.ctx.bucket);
-        REQUIRE(token.partition_uuid > 0);
-        REQUIRE(token.sequence_number > 0);
+        REQUIRE(token.bucket_name() == integration.ctx.bucket);
+        REQUIRE(token.partition_uuid() > 0);
+        REQUIRE(token.sequence_number() > 0);
     }
     {
         couchbase::core::operations::lookup_in_request req{ id };
@@ -662,44 +661,44 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(resp.fields[0].value.find("\"0x") == 0);
-        REQUIRE(std::strtoull(resp.fields[0].value.data() + 3, nullptr, 16) == token.partition_uuid);
+        REQUIRE(std::strtoull(resp.fields[0].value.data() + 3, nullptr, 16) == token.partition_uuid());
         REQUIRE(resp.fields[1].value.find("\"0x") == 0);
-        REQUIRE(std::strtoull(resp.fields[1].value.data() + 3, nullptr, 16) == token.sequence_number);
+        REQUIRE(std::strtoull(resp.fields[1].value.data() + 3, nullptr, 16) == token.sequence_number());
     }
     {
         couchbase::core::operations::insert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_exists);
-        REQUIRE(resp.token.bucket_name.empty());
-        REQUIRE(resp.token.partition_id == 0);
-        REQUIRE(resp.token.partition_uuid == 0);
-        REQUIRE(resp.token.sequence_number == 0);
+        REQUIRE(resp.token.bucket_name().empty());
+        REQUIRE(resp.token.partition_id() == 0);
+        REQUIRE(resp.token.partition_uuid() == 0);
+        REQUIRE(resp.token.sequence_number() == 0);
     }
     {
         couchbase::core::operations::mutate_in_request req{ id };
-        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::dict_upsert, false, true, false, "foo", "42");
-        req.store_semantics = couchbase::core::protocol::mutate_in_request_body::store_semantics_type::insert;
+        req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert("foo", "42").create_path() }.specs();
+        req.store_semantics = couchbase::store_semantics::insert;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_exists);
-        REQUIRE(resp.token.bucket_name.empty());
-        REQUIRE(resp.token.partition_id == 0);
-        REQUIRE(resp.token.partition_uuid == 0);
-        REQUIRE(resp.token.sequence_number == 0);
+        REQUIRE(resp.token.bucket_name().empty());
+        REQUIRE(resp.token.partition_id() == 0);
+        REQUIRE(resp.token.partition_uuid() == 0);
+        REQUIRE(resp.token.sequence_number() == 0);
     }
     {
         couchbase::core::operations::mutate_in_request req{ id };
-        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::dict_add, false, false, false, "a", "{}");
-        req.store_semantics = couchbase::core::protocol::mutate_in_request_body::store_semantics_type::replace;
+        req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::insert("a", tao::json::empty_object) }.specs();
+        req.store_semantics = couchbase::store_semantics::replace;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::path_exists);
-        REQUIRE(resp.token.bucket_name.empty());
-        REQUIRE(resp.token.partition_id == 0);
-        REQUIRE(resp.token.partition_uuid == 0);
-        REQUIRE(resp.token.sequence_number == 0);
+        REQUIRE(resp.token.bucket_name().empty());
+        REQUIRE(resp.token.partition_id() == 0);
+        REQUIRE(resp.token.partition_uuid() == 0);
+        REQUIRE(resp.token.sequence_number() == 0);
         REQUIRE(resp.first_error_index == 0);
         REQUIRE(resp.fields.size() == 1);
         REQUIRE(resp.fields[0].path == "a");
-        REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::subdoc_path_exists);
+        REQUIRE(resp.fields_meta[0].status == couchbase::key_value_status_code::subdoc_path_exists);
     }
 }
 

@@ -31,7 +31,7 @@ initiate_get_any_replica_operation(std::shared_ptr<cluster> core,
                                    const std::string& scope_name,
                                    const std::string& collection_name,
                                    std::string document_key,
-                                   const get_any_replica_options& options,
+                                   get_any_replica_options::built options,
                                    get_any_replica_handler&& handler)
 {
     auto request =

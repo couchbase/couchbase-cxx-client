@@ -22,11 +22,12 @@
 #include "core/io/http_message.hxx"
 #include "core/io/http_traits.hxx"
 #include "core/json_string.hxx"
-#include "core/mutation_token.hxx"
 #include "core/platform/uuid.h"
 #include "core/query_profile_mode.hxx"
 #include "core/query_scan_consistency.hxx"
 #include "core/timeout_defaults.hxx"
+
+#include <couchbase/mutation_token.hxx>
 
 namespace couchbase::core::operations
 {

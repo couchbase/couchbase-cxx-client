@@ -21,9 +21,10 @@
 #include "cmd_info.hxx"
 #include "core/document_id.hxx"
 #include "core/io/mcbp_message.hxx"
-#include "core/mutation_token.hxx"
-#include "durability_level.hxx"
 #include "status.hxx"
+
+#include <couchbase/durability_level.hxx>
+#include <couchbase/mutation_token.hxx>
 
 namespace couchbase::core::protocol
 {
@@ -89,7 +90,7 @@ class decrement_request_body
         expiry_ = value;
     }
 
-    void durability(protocol::durability_level level, std::optional<std::uint16_t> timeout);
+    void durability(durability_level level, std::optional<std::uint16_t> timeout);
 
     [[nodiscard]] const auto& key() const
     {

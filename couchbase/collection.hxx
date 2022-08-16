@@ -17,8 +17,17 @@
 
 #pragma once
 
-#include <couchbase/get_all_replicas.hxx>
-#include <couchbase/get_any_replica.hxx>
+#include <couchbase/binary_collection.hxx>
+#include <couchbase/codec/json_transcoder.hxx>
+#include <couchbase/get_all_replicas_options.hxx>
+#include <couchbase/get_any_replica_options.hxx>
+#include <couchbase/get_options.hxx>
+#include <couchbase/insert_options.hxx>
+#include <couchbase/mutate_in_options.hxx>
+#include <couchbase/mutate_in_specs.hxx>
+#include <couchbase/remove_options.hxx>
+#include <couchbase/replace_options.hxx>
+#include <couchbase/upsert_options.hxx>
 
 #include <future>
 #include <memory>
@@ -92,6 +101,67 @@ class collection
     }
 
     /**
+     * Provides access to the binary APIs, not used for JSON documents.
+     *
+     * @return the requested collection if successful.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto binary() const -> binary_collection
+    {
+        return { core_, bucket_name_, scope_name_, name_ };
+    }
+
+    /**
+     * Fetches the full document from this collection.
+     *
+     * @tparam Handler callable type that implements @ref get_handler signature
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param options options to customize the get request.
+     * @param handler the handler that implements @ref get_handler
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Handler>
+    void get(std::string document_id, const get_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_get_operation(
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
+    }
+
+    /**
+     * Fetches the full document from this collection.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param options options to customize the get request.
+     * @return the future object with first available result, might be the active or a replica.
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto get(std::string document_id, const get_options& options) const
+      -> std::future<std::pair<key_value_error_context, get_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
+        auto future = barrier->get_future();
+        get(std::move(document_id), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    /**
      * Reads all available replicas, and returns the first found.
      *
      * @tparam Handler callable type that implements @ref get_any_replica_handler signature
@@ -114,7 +184,7 @@ class collection
     void get_any_replica(std::string document_id, const get_any_replica_options& options, Handler&& handler) const
     {
         return core::impl::initiate_get_any_replica_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), options, std::forward<Handler>(handler));
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
     }
 
     /**
@@ -135,14 +205,13 @@ class collection
      * @committed
      */
     [[nodiscard]] auto get_any_replica(std::string document_id, const get_any_replica_options& options) const
-      -> std::future<std::pair<get_any_replica_error_context, get_any_replica_result>>
+      -> std::future<std::pair<key_value_error_context, get_any_replica_result>>
     {
-        auto barrier = std::make_shared<std::promise<std::pair<get_any_replica_error_context, get_any_replica_result>>>();
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_any_replica_result>>>();
         auto future = barrier->get_future();
-        core::impl::initiate_get_any_replica_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), options, [barrier](auto ctx, auto result) {
-              barrier->set_value({ std::move(ctx), std::move(result) });
-          });
+        get_any_replica(std::move(document_id), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
         return future;
     }
 
@@ -168,7 +237,7 @@ class collection
     void get_all_replicas(std::string document_id, const get_all_replicas_options& options, Handler&& handler) const
     {
         return core::impl::initiate_get_all_replicas_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), options, std::forward<Handler>(handler));
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
     }
 
     /**
@@ -188,14 +257,303 @@ class collection
      * @committed
      */
     [[nodiscard]] auto get_all_replicas(std::string document_id, const get_all_replicas_options& options) const
-      -> std::future<std::pair<get_all_replicas_error_context, get_all_replicas_result>>
+      -> std::future<std::pair<key_value_error_context, get_all_replicas_result>>
     {
-        auto barrier = std::make_shared<std::promise<std::pair<get_all_replicas_error_context, get_all_replicas_result>>>();
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_all_replicas_result>>>();
         auto future = barrier->get_future();
-        core::impl::initiate_get_all_replicas_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), options, [barrier](auto ctx, auto result) {
-              barrier->set_value({ std::move(ctx), std::move(result) });
-          });
+        get_all_replicas(std::move(document_id), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    /**
+     * Upserts a full document which might or might not exist yet with custom options.
+     *
+     * @tparam Transcoder type of the transcoder that will be used to encode the document
+     * @tparam Document type of the document
+     * @tparam Handler type of the handler that implements @ref upsert_handler
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param document the document content to upsert.
+     * @param options custom options to customize the upsert behavior.
+     * @param handler callable that implements @ref upsert_handler
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Transcoder = codec::json_transcoder, typename Document, typename Handler>
+    void upsert(std::string document_id, Document document, const upsert_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_upsert_operation(core_,
+                                                     bucket_name_,
+                                                     scope_name_,
+                                                     name_,
+                                                     std::move(document_id),
+                                                     Transcoder::encode(document),
+                                                     options.build(),
+                                                     std::forward<Handler>(handler));
+    }
+
+    /**
+     * Upserts a full document which might or might not exist yet with custom options.
+     *
+     * @tparam Transcoder type of the transcoder that will be used to encode the document
+     * @tparam Document type of the document
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param document the document content to upsert.
+     * @param options custom options to customize the upsert behavior.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Transcoder = codec::json_transcoder, typename Document>
+    [[nodiscard]] auto upsert(std::string document_id, const Document& document, const upsert_options& options) const
+      -> std::future<std::pair<key_value_error_context, mutation_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
+        auto future = barrier->get_future();
+        upsert<Transcoder>(std::move(document_id), document, options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    /**
+     * Inserts a full document which does not exist yet with custom options.
+     *
+     * @tparam Transcoder type of the transcoder that will be used to encode the document
+     * @tparam Document type of the document
+     * @tparam Handler type of the handler that implements @ref insert_handler
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param document the document content to insert.
+     * @param options custom options to customize the insert behavior.
+     * @param handler callable that implements @ref insert_handler
+     *
+     * @exception errc::key_value::document_exists the given document id is already present in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Transcoder = codec::json_transcoder, typename Document, typename Handler>
+    void insert(std::string document_id, Document document, const insert_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_insert_operation(core_,
+                                                     bucket_name_,
+                                                     scope_name_,
+                                                     name_,
+                                                     std::move(document_id),
+                                                     Transcoder::encode(document),
+                                                     options.build(),
+                                                     std::forward<Handler>(handler));
+    }
+
+    /**
+     * Inserts a full document which does not exist yet with custom options.
+     *
+     * @tparam Transcoder type of the transcoder that will be used to encode the document
+     * @tparam Document type of the document
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param document the document content to insert.
+     * @param options custom options to customize the insert behavior.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::key_value::document_exists the given document id is already present in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Transcoder = codec::json_transcoder, typename Document>
+    [[nodiscard]] auto insert(std::string document_id, const Document& document, const insert_options& options) const
+      -> std::future<std::pair<key_value_error_context, mutation_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
+        auto future = barrier->get_future();
+        insert<Transcoder>(std::move(document_id), document, options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    /**
+     * Replaces a full document which already exists.
+     *
+     * @tparam Transcoder type of the transcoder that will be used to encode the document
+     * @tparam Document type of the document
+     * @tparam Handler type of the handler that implements @ref replace_handler
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param document the document content to replace.
+     * @param options custom options to customize the replace behavior.
+     * @param handler callable that implements @ref replace_handler
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::cas_mismatch if the document has been concurrently modified on the server.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Transcoder = codec::json_transcoder, typename Document, typename Handler>
+    void replace(std::string document_id, Document document, const replace_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_replace_operation(core_,
+                                                      bucket_name_,
+                                                      scope_name_,
+                                                      name_,
+                                                      std::move(document_id),
+                                                      Transcoder::encode(document),
+                                                      options.build(),
+                                                      std::forward<Handler>(handler));
+    }
+
+    /**
+     * Replaces a full document which already exists.
+     *
+     * @tparam Transcoder type of the transcoder that will be used to encode the document
+     * @tparam Document type of the document
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param document the document content to replace.
+     * @param options custom options to customize the replace behavior.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::cas_mismatch if the document has been concurrently modified on the server.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Transcoder = codec::json_transcoder, typename Document>
+    [[nodiscard]] auto replace(std::string document_id, const Document& document, const replace_options& options) const
+      -> std::future<std::pair<key_value_error_context, mutation_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
+        auto future = barrier->get_future();
+        replace<Transcoder>(std::move(document_id), document, options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    /**
+     * Removes a Document from a collection.
+     *
+     * @tparam Handler type of the handler that implements @ref remove_handler
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param options custom options to customize the remove behavior.
+     * @param handler callable that implements @ref remove_handler
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::cas_mismatch if the document has been concurrently modified on the server.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Handler>
+    void remove(std::string document_id, const remove_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_remove_operation(
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
+    }
+
+    /**
+     * Removes a Document from a collection.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param options custom options to customize the remove behavior.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::cas_mismatch if the document has been concurrently modified on the server.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto remove(std::string document_id, const remove_options& options) const
+      -> std::future<std::pair<key_value_error_context, mutation_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
+        auto future = barrier->get_future();
+        remove(std::move(document_id), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    /**
+     * Performs mutations to document fragments
+     *
+     * @tparam Handler type of the handler that implements @ref mutate_in_handler
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param specs the spec which specifies the type of mutations to perform.
+     * @param options custom options to customize the mutate_in behavior.
+     * @param handler callable that implements @ref mutate_in_handler
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::key_value::document_exists the given document id is already present in the collection and insert is was selected.
+     * @exception errc::common::cas_mismatch if the document has been concurrently modified on the server.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Handler>
+    void mutate_in(std::string document_id, mutate_in_specs specs, const mutate_in_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_mutate_in_operation(
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), specs.specs(), options.build(), std::forward<Handler>(handler));
+    }
+
+    /**
+     * Performs mutations to document fragments
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param specs the spec which specifies the type of mutations to perform.
+     * @param options custom options to customize the mutate_in behavior.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::key_value::document_exists the given document id is already present in the collection and insert is was selected.
+     * @exception errc::common::cas_mismatch if the document has been concurrently modified on the server.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto mutate_in(std::string document_id, mutate_in_specs specs, const mutate_in_options& options) const
+      -> std::future<std::pair<key_value_error_context, mutate_in_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutate_in_result>>>();
+        auto future = barrier->get_future();
+        mutate_in(std::move(document_id), std::move(specs), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
         return future;
     }
 

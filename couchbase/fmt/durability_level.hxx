@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include "durability_level.hxx"
+#include <couchbase/durability_level.hxx>
 
 #include <fmt/core.h>
 
 template<>
-struct fmt::formatter<couchbase::core::protocol::durability_level> {
+struct fmt::formatter<couchbase::durability_level> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext& ctx)
     {
@@ -30,20 +30,20 @@ struct fmt::formatter<couchbase::core::protocol::durability_level> {
     }
 
     template<typename FormatContext>
-    auto format(couchbase::core::protocol::durability_level value, FormatContext& ctx) const
+    auto format(couchbase::durability_level value, FormatContext& ctx) const
     {
         string_view name = "unknown";
         switch (value) {
-            case couchbase::core::protocol::durability_level::none:
+            case couchbase::durability_level::none:
                 name = "none";
                 break;
-            case couchbase::core::protocol::durability_level::majority:
+            case couchbase::durability_level::majority:
                 name = "majority";
                 break;
-            case couchbase::core::protocol::durability_level::majority_and_persist_to_active:
+            case couchbase::durability_level::majority_and_persist_to_active:
                 name = "majority_and_persist_to_active";
                 break;
-            case couchbase::core::protocol::durability_level::persist_to_majority:
+            case couchbase::durability_level::persist_to_majority:
                 name = "persist_to_majority";
                 break;
         }

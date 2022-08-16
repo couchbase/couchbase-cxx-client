@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <couchbase/common_options.hxx>
 #include <couchbase/get_replica_result.hxx>
 #include <couchbase/key_value_error_context.hxx>
 
@@ -33,14 +34,30 @@ namespace couchbase
  * @since 1.0.0
  * @committed
  */
-struct get_any_replica_options {
+struct get_any_replica_options : public common_options<get_any_replica_options> {
     /**
-     * The time allowed for the operation to be terminated.
+     * Immutable value object representing consistent options.
      *
      * @since 1.0.0
-     * @committed
+     * @internal
      */
-    std::optional<std::chrono::milliseconds> timeout{};
+    struct built : public common_options<get_any_replica_options>::built {
+    };
+
+    /**
+     * Validates options and returns them as an immutable value.
+     *
+     * @return consistent options as an immutable value
+     *
+     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
+     *
+     * @since 1.0.0
+     * @internal
+     */
+    [[nodiscard]] auto build() const -> built
+    {
+        return { build_common_options() };
+    }
 };
 
 /**
@@ -84,7 +101,7 @@ initiate_get_any_replica_operation(std::shared_ptr<couchbase::core::cluster> cor
                                    const std::string& scope_name,
                                    const std::string& collection_name,
                                    std::string document_key,
-                                   const get_any_replica_options& options,
+                                   get_any_replica_options::built options,
                                    get_any_replica_handler&& handler);
 #endif
 } // namespace impl

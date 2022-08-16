@@ -18,6 +18,7 @@
 #include "cmd_mutate_in.hxx"
 
 #include "core/utils/byteswap.hxx"
+#include "core/utils/mutation_token.hxx"
 #include "core/utils/unsigned_leb128.hxx"
 #include "frame_info_utils.hxx"
 
@@ -40,12 +41,16 @@ mutate_in_response_body::parse(key_value_status_code status,
         using offset_type = std::vector<std::byte>::difference_type;
         offset_type offset = framing_extras_size;
         if (extras_size == 16) {
-            memcpy(&token_.partition_uuid, body.data() + offset, sizeof(token_.partition_uuid));
-            token_.partition_uuid = utils::byte_swap(token_.partition_uuid);
+            std::uint64_t partition_uuid{};
+            memcpy(&partition_uuid, body.data() + offset, sizeof(partition_uuid));
+            partition_uuid = utils::byte_swap(partition_uuid);
             offset += 8;
 
-            memcpy(&token_.sequence_number, body.data() + offset, sizeof(token_.sequence_number));
-            token_.sequence_number = utils::byte_swap(token_.sequence_number);
+            std::uint64_t sequence_number{};
+            memcpy(&sequence_number, body.data() + offset, sizeof(sequence_number));
+            sequence_number = utils::byte_swap(sequence_number);
+
+            token_ = couchbase::utils::build_mutation_token(partition_uuid, sequence_number);
             offset += 8;
         } else {
             offset += extras_size;
@@ -91,9 +96,9 @@ mutate_in_request_body::id(const document_id& id)
 }
 
 void
-mutate_in_request_body::durability(protocol::durability_level level, std::optional<std::uint16_t> timeout)
+mutate_in_request_body::durability(durability_level level, std::optional<std::uint16_t> timeout)
 {
-    if (level == protocol::durability_level::none) {
+    if (level == durability_level::none) {
         return;
     }
 
@@ -114,44 +119,77 @@ mutate_in_request_body::fill_extras()
         std::uint32_t field = utils::byte_swap(expiry_);
         memcpy(extras_.data(), &field, sizeof(field));
     }
-    if (flags_ != 0) {
+    if (flags_ != std::byte{ 0U }) {
         std::size_t offset = extras_.size();
         extras_.resize(offset + sizeof(flags_));
         extras_[offset] = std::byte{ flags_ };
     }
 }
 
+/**
+ * Should non-existent intermediate paths be created
+ */
+static constexpr std::byte path_flag_create_parents{ 0b0000'0001U };
+
+/**
+ * If set, the path refers to an Extended Attribute (XATTR).
+ * If clear, the path refers to a path inside the document body.
+ */
+static constexpr std::byte path_flag_xattr{ 0b0000'0100U };
+
+/**
+ * Expand macro values inside extended attributes. The request is
+ * invalid if this flag is set without `path_flag_create_parents` being set.
+ */
+static constexpr std::byte path_flag_expand_macros{ 0b0001'0000U };
+
+static constexpr std::uint8_t
+build_path_flags(const couchbase::subdoc::command& spec)
+{
+    std::byte flags{ 0 };
+    if (spec.xattr_) {
+        flags |= path_flag_xattr;
+    }
+    if (spec.create_path_) {
+        flags |= path_flag_create_parents;
+    }
+    if (spec.expand_macro_) {
+        flags |= path_flag_expand_macros;
+    }
+    return std::to_integer<std::uint8_t>(flags);
+}
+
 void
 mutate_in_request_body::fill_value()
 {
     size_t value_size = 0;
-    for (const auto& spec : specs_.entries) {
-        value_size +=
-          sizeof(spec.opcode) + sizeof(spec.flags) + sizeof(std::uint16_t) + spec.path.size() + sizeof(std::uint32_t) + spec.param.size();
+    for (const auto& spec : specs_) {
+        value_size += sizeof(spec.opcode_) + sizeof(std::uint8_t) + sizeof(std::uint16_t) + spec.path_.size() + sizeof(std::uint32_t) +
+                      spec.value_.size();
     }
     Expects(value_size > 0);
     value_.resize(value_size);
     std::vector<std::byte>::size_type offset = 0;
-    for (auto& spec : specs_.entries) {
-        value_[offset] = std::byte{ spec.opcode };
+    for (const auto& spec : specs_) {
+        value_[offset] = static_cast<std::byte>(spec.opcode_);
         ++offset;
-        value_[offset] = std::byte{ spec.flags };
+        value_[offset] = static_cast<std::byte>(build_path_flags(spec));
         ++offset;
 
-        std::uint16_t path_size = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(spec.path.size()));
+        std::uint16_t path_size = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(spec.path_.size()));
         std::memcpy(value_.data() + offset, &path_size, sizeof(path_size));
         offset += sizeof(path_size);
 
-        std::uint32_t param_size = utils::byte_swap(gsl::narrow_cast<std::uint32_t>(spec.param.size()));
+        std::uint32_t param_size = utils::byte_swap(gsl::narrow_cast<std::uint32_t>(spec.value_.size()));
         std::memcpy(value_.data() + offset, &param_size, sizeof(param_size));
         offset += sizeof(param_size);
 
-        std::memcpy(value_.data() + offset, spec.path.data(), spec.path.size());
-        offset += spec.path.size();
+        std::memcpy(value_.data() + offset, spec.path_.data(), spec.path_.size());
+        offset += spec.path_.size();
 
         if (param_size != 0U) {
-            std::memcpy(value_.data() + offset, spec.param.data(), spec.param.size());
-            offset += spec.param.size();
+            std::memcpy(value_.data() + offset, spec.value_.data(), spec.value_.size());
+            offset += spec.value_.size();
         }
     }
 }

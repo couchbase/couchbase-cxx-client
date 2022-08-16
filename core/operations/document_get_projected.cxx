@@ -144,6 +144,7 @@ get_projected_request::encode_to(get_projected_request::encoded_request_type& en
 
     effective_projections = projections;
     std::size_t num_projections = effective_projections.size();
+    num_projections++; // flags
     if (with_expiry) {
         num_projections++;
     }
@@ -153,6 +154,7 @@ get_projected_request::encode_to(get_projected_request::encoded_request_type& en
     }
 
     protocol::lookup_in_request_body::lookup_in_specs specs{};
+    specs.add_spec(protocol::subdoc_opcode::get, true, "$document.flags");
     if (with_expiry) {
         specs.add_spec(protocol::subdoc_opcode::get, true, "$document.exptime");
     }
@@ -173,21 +175,22 @@ get_projected_request::make_response(key_value_error_context&& ctx, const encode
     get_projected_response response{ std::move(ctx) };
     if (!response.ctx.ec()) {
         response.cas = encoded.cas();
-        if (with_expiry && !encoded.body().fields()[0].value.empty()) {
-            response.expiry = gsl::narrow_cast<std::uint32_t>(std::stoul(encoded.body().fields()[0].value));
+        response.flags = gsl::narrow_cast<std::uint32_t>(std::stoul(encoded.body().fields()[0].value));
+        if (with_expiry && !encoded.body().fields()[1].value.empty()) {
+            response.expiry = gsl::narrow_cast<std::uint32_t>(std::stoul(encoded.body().fields()[1].value));
         }
         if (effective_projections.empty()) {
             // from full document
             if (projections.empty() && with_expiry) {
                 // special case when user only wanted full+expiration
-                const auto& full_body = encoded.body().fields()[1].value;
+                const auto& full_body = encoded.body().fields()[2].value;
                 response.value.resize(full_body.size());
                 std::transform(
                   full_body.begin(), full_body.end(), response.value.begin(), [](auto ch) { return static_cast<std::byte>(ch); });
             } else {
                 tao::json::value full_doc{};
                 try {
-                    full_doc = utils::json::parse(encoded.body().fields()[with_expiry ? 1 : 0].value);
+                    full_doc = utils::json::parse(encoded.body().fields()[with_expiry ? 2 : 1].value);
                 } catch (const tao::pegtl::parse_error&) {
                     response.ctx.override_ec(errc::common::parsing_failure);
                     return response;
@@ -205,7 +208,7 @@ get_projected_request::make_response(key_value_error_context&& ctx, const encode
             }
         } else {
             tao::json::value new_doc = tao::json::empty_object;
-            std::size_t offset = with_expiry ? 1 : 0;
+            std::size_t offset = with_expiry ? 2 : 1;
             for (const auto& projection : projections) {
                 const auto& field = encoded.body().fields()[offset];
                 ++offset;

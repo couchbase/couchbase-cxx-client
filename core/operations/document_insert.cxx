@@ -16,6 +16,7 @@
  */
 
 #include "document_insert.hxx"
+#include "core/utils/mutation_token.hxx"
 
 #include <couchbase/error_codes.hxx>
 
@@ -39,9 +40,7 @@ insert_request::make_response(key_value_error_context&& ctx, const encoded_respo
     insert_response response{ std::move(ctx) };
     if (!response.ctx.ec()) {
         response.cas = encoded.cas();
-        response.token = encoded.body().token();
-        response.token.partition_id = partition;
-        response.token.bucket_name = response.ctx.bucket();
+        response.token = couchbase::utils::build_mutation_token(encoded.body().token(), partition, response.ctx.bucket());
     }
     return response;
 }

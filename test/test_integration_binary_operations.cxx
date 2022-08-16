@@ -32,8 +32,7 @@ TEST_CASE("integration: append", "[integration]")
         INFO(resp.ctx.ec().message())
         REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
-        INFO("seqno=" << resp.token.sequence_number)
-        REQUIRE(resp.token.sequence_number != 0);
+        REQUIRE(resp.token.sequence_number() != 0);
     }
     {
         couchbase::core::operations::append_request req{ id, couchbase::core::utils::to_binary("!") };
@@ -41,8 +40,7 @@ TEST_CASE("integration: append", "[integration]")
         INFO(resp.ctx.ec().message())
         REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
-        INFO("seqno=" << resp.token.sequence_number)
-        REQUIRE(resp.token.sequence_number != 0);
+        REQUIRE(resp.token.sequence_number() != 0);
     }
     {
         couchbase::core::operations::get_request req{ id };
@@ -67,8 +65,7 @@ TEST_CASE("integration: prepend", "[integration]")
         INFO(resp.ctx.ec().message())
         REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
-        INFO("seqno=" << resp.token.sequence_number)
-        REQUIRE(resp.token.sequence_number != 0);
+        REQUIRE(resp.token.sequence_number() != 0);
     }
     {
         couchbase::core::operations::prepend_request req{ id, couchbase::core::utils::to_binary("Hello, ") };
@@ -76,8 +73,7 @@ TEST_CASE("integration: prepend", "[integration]")
         INFO(resp.ctx.ec().message())
         REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
-        INFO("seqno=" << resp.token.sequence_number)
-        REQUIRE(resp.token.sequence_number != 0);
+        REQUIRE(resp.token.sequence_number() != 0);
     }
     {
         couchbase::core::operations::get_request req{ id };

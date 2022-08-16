@@ -123,14 +123,14 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
         body["scan_consistency"] = "at_plus";
         tao::json::value scan_vectors = tao::json::empty_object;
         for (const auto& token : mutation_state) {
-            auto* bucket = scan_vectors.find(token.bucket_name);
+            auto* bucket = scan_vectors.find(token.bucket_name());
             if (bucket == nullptr) {
-                scan_vectors[token.bucket_name] = tao::json::empty_object;
-                bucket = scan_vectors.find(token.bucket_name);
+                scan_vectors[token.bucket_name()] = tao::json::empty_object;
+                bucket = scan_vectors.find(token.bucket_name());
             }
             auto& bucket_obj = bucket->get_object();
-            bucket_obj[std::to_string(token.partition_id)] =
-              std::vector<tao::json::value>{ token.sequence_number, std::to_string(token.partition_uuid) };
+            bucket_obj[std::to_string(token.partition_id())] =
+              std::vector<tao::json::value>{ token.sequence_number(), std::to_string(token.partition_uuid()) };
         }
         body["scan_vectors"] = scan_vectors;
     }

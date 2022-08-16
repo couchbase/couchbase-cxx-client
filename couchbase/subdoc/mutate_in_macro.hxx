@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,15 +17,19 @@
 
 #pragma once
 
-#include <cstdint>
-#include <string>
+#include <couchbase/subdoc/opcode.hxx>
 
-namespace couchbase::core
+#include <cinttypes>
+#include <vector>
+
+namespace couchbase::subdoc
 {
-struct mutation_token {
-    std::uint64_t partition_uuid{ 0 };
-    std::uint64_t sequence_number{ 0 };
-    std::uint16_t partition_id{ 0 };
-    std::string bucket_name{};
-};
-} // namespace couchbase::core
+/**
+ * @since 1.0.0
+ * @volatile
+ */
+enum class mutate_in_macro { cas, sequence_number, value_crc32c };
+
+auto
+to_binary(mutate_in_macro value) -> std::vector<std::byte>&;
+} // namespace couchbase::subdoc

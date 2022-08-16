@@ -19,7 +19,7 @@
 #include "utils/move_only_context.hxx"
 
 #include <couchbase/cluster.hxx>
-#include <couchbase/get_any_replica.hxx>
+#include <couchbase/get_any_replica_options.hxx>
 
 static const tao::json::value basic_doc = {
     { "a", 1.0 },
@@ -137,7 +137,7 @@ TEST_CASE("integration: get any replica with missing key", "[integration]")
     }
 }
 
-TEST_CASE("unit: get any replica result with custom transcoder", "[integration]")
+TEST_CASE("unit: get any replica result with custom coder", "[integration]")
 {
     couchbase::get_replica_result result{
         couchbase::cas{ 0 }, true, { std::byte{ 0xde }, std::byte{ 0xad }, std::byte{ 0xbe }, std::byte{ 0xaf } }, 0xcafebebe

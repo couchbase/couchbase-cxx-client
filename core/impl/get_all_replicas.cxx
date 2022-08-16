@@ -31,10 +31,9 @@ initiate_get_all_replicas_operation(std::shared_ptr<cluster> core,
                                     const std::string& scope_name,
                                     const std::string& collection_name,
                                     std::string document_key,
-                                    const get_all_replicas_options& options,
+                                    get_all_replicas_options::built options,
                                     get_all_replicas_handler&& handler)
 {
-
     auto request = std::make_shared<couchbase::core::impl::get_all_replicas_request>(
       bucket_name, scope_name, collection_name, std::move(document_key), options.timeout);
     core->with_bucket_configuration(

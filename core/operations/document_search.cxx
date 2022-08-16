@@ -81,10 +81,10 @@ search_request::encode_to(search_request::encoded_request_type& encoded, http_co
     if (!mutation_state.empty()) {
         tao::json::value scan_vectors = tao::json::empty_object;
         for (const auto& token : mutation_state) {
-            auto key = fmt::format("{}/{}", token.partition_id, token.partition_uuid);
+            auto key = fmt::format("{}/{}", token.partition_id(), token.partition_uuid());
             const auto* old_val = scan_vectors.find(key);
-            if (old_val == nullptr || (old_val->is_integer() && old_val->get_unsigned() < token.sequence_number)) {
-                scan_vectors[key] = token.sequence_number;
+            if (old_val == nullptr || (old_val->is_integer() && old_val->get_unsigned() < token.sequence_number())) {
+                scan_vectors[key] = token.sequence_number();
             }
         }
         body["ctl"]["consistency"] = tao::json::value{

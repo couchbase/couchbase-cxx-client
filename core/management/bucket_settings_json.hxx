@@ -77,13 +77,13 @@ struct traits<couchbase::core::management::cluster::bucket_settings> {
 
         if (auto* min_level = v.find("durabilityMinLevel"); min_level != nullptr) {
             if (auto& str = min_level->get_string(); str == "none") {
-                result.minimum_durability_level = couchbase::core::protocol::durability_level::none;
+                result.minimum_durability_level = couchbase::durability_level::none;
             } else if (str == "majority") {
-                result.minimum_durability_level = couchbase::core::protocol::durability_level::majority;
+                result.minimum_durability_level = couchbase::durability_level::majority;
             } else if (str == "majorityAndPersistActive") {
-                result.minimum_durability_level = couchbase::core::protocol::durability_level::majority_and_persist_to_active;
+                result.minimum_durability_level = couchbase::durability_level::majority_and_persist_to_active;
             } else if (str == "persistToMajority") {
-                result.minimum_durability_level = couchbase::core::protocol::durability_level::persist_to_majority;
+                result.minimum_durability_level = couchbase::durability_level::persist_to_majority;
             }
         }
 

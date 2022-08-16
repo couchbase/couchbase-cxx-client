@@ -230,7 +230,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
                 couchbase::core::operations::mutate_in_request req{};
                 req.parent_span = parent_span;
                 req.id = existing_id;
-                req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::dict_upsert, false, false, false, "another", R"("field")");
+                req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert("another", "field") }.specs();
                 auto resp = test::utils::execute(guard.cluster, req);
                 REQUIRE_FALSE(resp.ctx.ec());
                 auto spans = tracer->spans();

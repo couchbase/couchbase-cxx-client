@@ -16,6 +16,7 @@
  */
 
 #include "document_mutate_in.hxx"
+#include "core/utils/mutation_token.hxx"
 
 #include <couchbase/error_codes.hxx>
 
@@ -26,19 +27,19 @@ namespace couchbase::core::operations
 std::error_code
 mutate_in_request::encode_to(mutate_in_request::encoded_request_type& encoded, mcbp_context&& context)
 {
-    if (store_semantics == protocol::mutate_in_request_body::store_semantics_type::upsert && !cas.empty()) {
+    if (store_semantics == couchbase::store_semantics::upsert && !cas.empty()) {
         return errc::common::invalid_argument;
     }
     if (create_as_deleted && !context.supports_feature(protocol::hello_feature::subdoc_create_as_deleted)) {
         return errc::common::unsupported_operation;
     }
-    for (std::size_t i = 0; i < specs.entries.size(); ++i) {
-        auto& entry = specs.entries[i];
-        entry.original_index = i;
+    for (std::size_t i = 0; i < specs.size(); ++i) {
+        auto& entry = specs[i];
+        entry.original_index_ = i;
     }
-    std::stable_sort(specs.entries.begin(), specs.entries.end(), [](const auto& lhs, const auto& rhs) {
-        return (lhs.flags & protocol::mutate_in_request_body::mutate_in_specs::path_flag_xattr) >
-               (rhs.flags & protocol::mutate_in_request_body::mutate_in_specs::path_flag_xattr);
+    std::stable_sort(specs.begin(), specs.end(), [](const auto& lhs, const auto& rhs) {
+        /* move XATTRs to the beginning of the vector */
+        return lhs.xattr_ && !rhs.xattr_;
     });
 
     encoded.opaque(opaque);
@@ -61,45 +62,58 @@ mutate_in_request::encode_to(mutate_in_request::encoded_request_type& encoded, m
 mutate_in_response
 mutate_in_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
-    mutate_in_response response{ std::move(ctx) };
+    bool deleted = false;
+    couchbase::cas response_cas{};
+    couchbase::mutation_token response_token{};
+    std::vector<couchbase::mutate_in_result::entry> fields{};
+    std::vector<mutate_in_response::entry_meta> fields_meta{};
+    std::error_code ec = ctx.ec();
+    std::optional<std::size_t> first_error_index{};
+    std::optional<std::string> first_error_path{};
+
     if (encoded.status() == key_value_status_code::subdoc_success_deleted ||
         encoded.status() == key_value_status_code::subdoc_multi_path_failure_deleted) {
-        response.deleted = true;
+        deleted = true;
     }
-    if (!response.ctx.ec()) {
-        response.fields.resize(specs.entries.size());
-        for (size_t i = 0; i < specs.entries.size(); ++i) {
-            const auto& req_entry = specs.entries[i];
-            response.fields[i].original_index = req_entry.original_index;
-            response.fields[i].opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode);
-            response.fields[i].path = req_entry.path;
-            response.fields[i].status = key_value_status_code::success;
+    if (!ctx.ec()) {
+        fields.resize(specs.size());
+        fields_meta.resize(specs.size());
+        for (size_t i = 0; i < specs.size(); ++i) {
+            const auto& req_entry = specs[i];
+            fields[i].original_index = req_entry.original_index_;
+            fields[i].path = req_entry.path_;
+            fields_meta[i].opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode_);
+            fields_meta[i].status = key_value_status_code::success;
         }
         for (const auto& entry : encoded.body().fields()) {
             if (entry.status == key_value_status_code::success) {
-                response.fields[entry.index].value = entry.value;
+                fields[entry.index].value = utils::to_binary(entry.value);
             } else {
-                response.fields[entry.index].status = entry.status;
-                response.fields[entry.index].ec =
+                first_error_index = entry.index;
+                first_error_path = fields[entry.index].path;
+                fields_meta[entry.index].status = entry.status;
+                fields_meta[entry.index].ec =
                   protocol::map_status_code(protocol::client_opcode::subdoc_multi_mutation, static_cast<std::uint16_t>(entry.status));
-                response.first_error_index = entry.index;
-                response.ctx.override_ec(response.fields[entry.index].ec);
+                ec = fields_meta[entry.index].ec;
                 break;
             }
         }
-        if (!response.ctx.ec()) {
-            response.cas = encoded.cas();
-            response.token = encoded.body().token();
-            response.token.partition_id = partition;
-            response.token.bucket_name = response.ctx.bucket();
+        if (!ec) {
+            response_cas = encoded.cas();
+            response_token = couchbase::utils::build_mutation_token(encoded.body().token(), partition, ctx.bucket());
         }
-        std::sort(response.fields.begin(), response.fields.end(), [](const auto& lhs, const auto& rhs) {
-            return lhs.original_index < rhs.original_index;
-        });
-    } else if (store_semantics == protocol::mutate_in_request_body::store_semantics_type::insert &&
-               response.ctx.ec() == errc::common::cas_mismatch) {
-        response.ctx.override_ec(errc::key_value::document_exists);
+        std::sort(fields.begin(), fields.end(), [](const auto& lhs, const auto& rhs) { return lhs.original_index < rhs.original_index; });
+    } else if (store_semantics == couchbase::store_semantics::insert && ctx.ec() == errc::common::cas_mismatch) {
+        ec = errc::key_value::document_exists;
     }
-    return response;
+    return mutate_in_response{
+        make_subdocument_error_context(ctx, ec, first_error_path, first_error_index, deleted),
+        response_cas,
+        std::move(response_token),
+        std::move(fields),
+        fields_meta,
+        first_error_index,
+        deleted,
+    };
 }
 } // namespace couchbase::core::operations

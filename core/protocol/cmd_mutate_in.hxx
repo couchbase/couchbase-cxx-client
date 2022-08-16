@@ -21,9 +21,12 @@
 #include "cmd_info.hxx"
 #include "core/document_id.hxx"
 #include "core/io/mcbp_message.hxx"
-#include "core/mutation_token.hxx"
-#include "durability_level.hxx"
 #include "status.hxx"
+
+#include <couchbase/durability_level.hxx>
+#include <couchbase/mutate_in_specs.hxx>
+#include <couchbase/mutation_token.hxx>
+#include <couchbase/store_semantics.hxx>
 
 #include <gsl/assert>
 
@@ -71,138 +74,36 @@ class mutate_in_request_body
     using response_body_type = mutate_in_response_body;
     static const inline client_opcode opcode = client_opcode::subdoc_multi_mutation;
 
-    enum class store_semantics_type {
-        /**
-         * Replace the document, fail if it does not exist. This is the default.
-         */
-        replace,
-
-        /**
-         * Replace the document or create it if it does not exist.
-         */
-        upsert,
-
-        /**
-         * Replace the document or create it if it does not exist.
-         */
-        insert,
-    };
-
     /**
      * Create the document if it does not exist. Implies `path_flag_create_parents`.
      * and `upsert` mutation semantics. Not valid with `insert`.
      */
-    static const inline std::uint8_t doc_flag_mkdoc = 0b0000'0001;
+    static constexpr std::byte doc_flag_mkdoc{ 0b0000'0001U };
 
     /**
      * Add the document only if it does not exist. Implies `path_flag_create_parents`.
      * Not valid with `doc_flag_mkdoc`.
      */
-    static const inline std::uint8_t doc_flag_add = 0b0000'0010;
+    static constexpr std::byte doc_flag_add{ 0b0000'0010U };
 
     /**
      * Allow access to XATTRs for deleted documents (instead of returning KEY_ENOENT).
      */
-    static const inline std::uint8_t doc_flag_access_deleted = 0b0000'0100;
+    static constexpr std::byte doc_flag_access_deleted{ 0b0000'0100U };
 
     /**
      * Used with `doc_flag_mkdoc` / `doc_flag_add`; if the document does not exist then create
      * it in the "Deleted" state, instead of the normal "Alive" state.
      * Not valid unless `doc_flag_mkdoc` or `doc_flag_add` specified.
      */
-    static const inline std::uint8_t doc_flag_create_as_deleted = 0b0000'1000;
+    static constexpr std::byte doc_flag_create_as_deleted{ 0b0000'1000U };
 
     /**
      * If the document exists and isn't deleted the operation will fail with .
      * If the input document _is_ deleted the result of the operation will store the
      * document as a "live" document instead of a deleted document.
      */
-    static const inline std::uint8_t doc_flag_revive_document = 0b0001'0000;
-
-    struct mutate_in_specs {
-        /**
-         * Should non-existent intermediate paths be created
-         */
-        static const inline std::uint8_t path_flag_create_parents = 0b0000'0001;
-
-        /**
-         * If set, the path refers to an Extended Attribute (XATTR).
-         * If clear, the path refers to a path inside the document body.
-         */
-        static const inline std::uint8_t path_flag_xattr = 0b0000'0100;
-
-        /**
-         * Expand macro values inside extended attributes. The request is
-         * invalid if this flag is set without `path_flag_create_parents` being set.
-         */
-        static const inline std::uint8_t path_flag_expand_macros = 0b0001'0000;
-
-        struct entry {
-            std::uint8_t opcode;
-            std::uint8_t flags;
-            std::string path;
-            std::string param;
-            std::size_t original_index{};
-        };
-        std::vector<entry> entries;
-
-        static inline std::uint8_t build_path_flags(bool xattr, bool create_parents, bool expand_macros)
-        {
-            std::uint8_t flags = 0;
-            if (xattr) {
-                flags |= path_flag_xattr;
-            }
-            if (create_parents) {
-                flags |= path_flag_create_parents;
-            }
-            if (expand_macros) {
-                flags |= path_flag_expand_macros;
-            }
-            return flags;
-        }
-
-        void add_spec(subdoc_opcode operation,
-                      bool xattr,
-                      bool create_parents,
-                      bool expand_macros,
-                      const std::string& path,
-                      const std::string& param)
-        {
-            if (operation == protocol::subdoc_opcode::replace && path.empty()) {
-                operation = protocol::subdoc_opcode::set_doc;
-            }
-            add_spec(static_cast<std::uint8_t>(operation), build_path_flags(xattr, create_parents, expand_macros), path, param);
-        }
-
-        void add_spec(subdoc_opcode operation,
-                      bool xattr,
-                      bool create_parents,
-                      bool expand_macros,
-                      const std::string& path,
-                      const std::int64_t increment)
-        {
-            Expects(operation == protocol::subdoc_opcode::counter);
-            add_spec(static_cast<std::uint8_t>(operation),
-                     build_path_flags(xattr, create_parents, expand_macros),
-                     path,
-                     std::to_string(increment));
-        }
-
-        void add_spec(subdoc_opcode operation, bool xattr, const std::string& path)
-        {
-            Expects(operation == protocol::subdoc_opcode::remove || operation == protocol::subdoc_opcode::remove_doc);
-            if (operation == protocol::subdoc_opcode::remove && path.empty()) {
-                operation = protocol::subdoc_opcode::remove_doc;
-            }
-            add_spec(static_cast<std::uint8_t>(operation), build_path_flags(xattr, false, false), path, "");
-        }
-
-        void add_spec(std::uint8_t operation, std::uint8_t flags, const std::string& path, const std::string& param)
-        {
-            Expects(is_valid_subdoc_opcode(operation));
-            entries.emplace_back(entry{ operation, flags, path, param });
-        }
-    };
+    static constexpr std::byte doc_flag_revive_document{ 0b0001'0000U };
 
   private:
     std::vector<std::byte> key_;
@@ -210,8 +111,8 @@ class mutate_in_request_body
     std::vector<std::byte> value_{};
 
     std::uint32_t expiry_{ 0 };
-    std::uint8_t flags_{ 0 };
-    mutate_in_specs specs_;
+    std::byte flags_{ 0 };
+    std::vector<couchbase::subdoc::command> specs_;
     std::vector<std::byte> framing_extras_{};
 
   public:
@@ -227,7 +128,7 @@ class mutate_in_request_body
         if (value) {
             flags_ |= doc_flag_access_deleted;
         } else {
-            flags_ &= static_cast<std::uint8_t>(~doc_flag_access_deleted);
+            flags_ &= ~doc_flag_access_deleted;
         }
     }
 
@@ -236,32 +137,34 @@ class mutate_in_request_body
         if (value) {
             flags_ |= doc_flag_create_as_deleted;
         } else {
-            flags_ &= static_cast<std::uint8_t>(~doc_flag_create_as_deleted);
+            flags_ &= ~doc_flag_create_as_deleted;
         }
     }
 
-    void store_semantics(store_semantics_type semantics)
+    void store_semantics(couchbase::store_semantics semantics)
     {
-        flags_ &= 0b1111'1100; /* reset first two bits */
+        flags_ &= std::byte{ 0b1111'1100U }; /* reset first two bits */
         switch (semantics) {
-            case store_semantics_type::replace:
+            case couchbase::store_semantics::replace:
                 /* leave bits as zeros */
                 break;
-            case store_semantics_type::upsert:
+            case couchbase::store_semantics::upsert:
                 flags_ |= doc_flag_mkdoc;
                 break;
-            case store_semantics_type::insert:
+            case couchbase::store_semantics::insert:
                 flags_ |= doc_flag_add;
+                break;
+            case store_semantics::revive:
                 break;
         }
     }
 
-    void specs(const mutate_in_specs& specs)
+    void specs(std::vector<couchbase::subdoc::command> specs)
     {
-        specs_ = specs;
+        specs_ = std::move(specs);
     }
 
-    void durability(protocol::durability_level level, std::optional<std::uint16_t> timeout);
+    void durability(durability_level level, std::optional<std::uint16_t> timeout);
 
     void preserve_expiry();
 
