@@ -93,6 +93,7 @@ class get_result : public result
     {
         return Transcoder::decode(value_);
     }
+
     /**
      * If the document has an expiry, returns the point in time when the loaded
      * document expires.

@@ -109,6 +109,13 @@ struct configuration {
         return cluster_capabilities.find(cluster_capability::n1ql_enhanced_prepared_statements) != cluster_capabilities.end();
     }
 
+    [[nodiscard]] bool ephemeral() const
+    {
+        // Use bucket capabilities to identify if couchapi is missing (then its ephemeral). If its null then
+        // we are running an old version of couchbase which doesn't have ephemeral buckets at all.
+        return bucket_capabilities.count(couchbase::core::bucket_capability::couchapi) == 0;
+    }
+
     [[nodiscard]] std::size_t index_for_this_node() const;
     [[nodiscard]] bool has_node_with_hostname(const std::string& hostname) const;
 

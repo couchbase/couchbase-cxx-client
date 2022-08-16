@@ -17,6 +17,8 @@
 
 #include "core/cluster.hxx"
 #include "core/error_context/key_value.hxx"
+#include "core/impl/observe_poll.hxx"
+#include "core/impl/observe_seqno.hxx"
 #include "core/operations/document_prepend.hxx"
 
 #include <couchbase/prepend_options.hxx>
@@ -33,19 +35,49 @@ initiate_prepend_operation(std::shared_ptr<couchbase::core::cluster> core,
                            prepend_options::built options,
                            prepend_handler&& handler)
 {
-    core->execute(
-      operations::prepend_request{
-        document_id{ std::move(bucket_name), std::move(scope_name), std::move(collection_name), std::move(document_key) },
-        std::move(data),
-        {},
-        {},
-        options.durability_level,
-        options.timeout },
-      [handler = std::move(handler)](operations::prepend_response&& resp) mutable {
+    auto id = document_id{
+        std::move(bucket_name),
+        std::move(scope_name),
+        std::move(collection_name),
+        std::move(document_key),
+    };
+    if (options.persist_to == persist_to::none && options.replicate_to == replicate_to::none) {
+        return core->execute(
+          operations::prepend_request{
+            std::move(id),
+            std::move(data),
+            {},
+            {},
+            options.durability_level,
+            options.timeout,
+          },
+          [handler = std::move(handler)](operations::prepend_response&& resp) mutable {
+              if (resp.ctx.ec()) {
+                  return handler(std::move(resp.ctx), mutation_result{});
+              }
+              return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+          });
+    }
+
+    operations::prepend_request request{ id, std::move(data), {}, {}, durability_level::none, options.timeout };
+    return core->execute(
+      std::move(request), [core, id = std::move(id), options, handler = std::move(handler)](operations::prepend_response&& resp) mutable {
           if (resp.ctx.ec()) {
-              return handler(std::move(resp.ctx), mutation_result{});
+              return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
           }
-          return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+
+          initiate_observe_poll(core,
+                                std::move(id),
+                                resp.token,
+                                options.timeout,
+                                options.persist_to,
+                                options.replicate_to,
+                                [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
+                                    if (ec) {
+                                        return;
+                                    }
+                                    return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                                });
       });
 }
 } // namespace couchbase::core::impl

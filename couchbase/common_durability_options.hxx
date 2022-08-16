@@ -19,6 +19,8 @@
 
 #include <couchbase/common_options.hxx>
 #include <couchbase/durability_level.hxx>
+#include <couchbase/persist_to.hxx>
+#include <couchbase/replicate_to.hxx>
 
 #include <chrono>
 #include <optional>
@@ -44,14 +46,15 @@ class common_durability_options : public common_options<derived_class>
      */
     struct built : public common_options<derived_class>::built {
         const couchbase::durability_level durability_level;
+        const couchbase::persist_to persist_to;
+        const couchbase::replicate_to replicate_to;
     };
 
     /**
      * Allows to customize the enhanced durability requirements for this operation.
      *
-     * @note if a {@link #durability(PersistTo, ReplicateTo)} has been set beforehand it will be set
-     * back to {@link PersistTo#NONE} and {@link ReplicateTo#NONE}, since it is not allowed to use both mechanisms at
-     * the same time.</p>
+     * @note if a {@link #durability(persist_to, replicate_to)} has been set beforehand it will be set back to {@link persist_to::none} and
+     * {@link replicate_to::none}, since it is not allowed to use both mechanisms at the same time.</p>
      *
      * @param level the enhanced durability requirement.
      * @return this options builder for chaining purposes.
@@ -61,7 +64,27 @@ class common_durability_options : public common_options<derived_class>
      */
     auto durability(durability_level level) -> derived_class&
     {
+        replicate_to_ = replicate_to::none;
+        persist_to_ = persist_to::none;
         durability_level_ = level;
+        return common_options<derived_class>::self();
+    }
+
+    /**
+     * Allows to customize the poll-based durability requirements for this operation.
+     *
+     * @note if a {@link #durability(durability_level)} has been set beforehand it will be set back to
+     * {@link durability_level::none}, since it is not allowed to use both mechanisms at the same time.
+     *
+     * @param persist_to_nodes the durability persistence requirement.
+     * @param replicate_to_nodes the durability replication requirement.
+     * @return this options builder for chaining purposes.
+     */
+    auto durability(persist_to persist_to_nodes, replicate_to replicate_to_nodes) -> derived_class&
+    {
+        durability_level_ = durability_level::none;
+        replicate_to_ = replicate_to_nodes;
+        persist_to_ = persist_to_nodes;
         return common_options<derived_class>::self();
     }
 
@@ -73,11 +96,13 @@ class common_durability_options : public common_options<derived_class>
      */
     [[nodiscard]] auto build_common_durability_options() const -> built
     {
-        return { common_options<derived_class>::build_common_options(), durability_level_ };
+        return { common_options<derived_class>::build_common_options(), durability_level_, persist_to_, replicate_to_ };
     }
 
   private:
     durability_level durability_level_{ durability_level::none };
+    persist_to persist_to_{ persist_to::none };
+    replicate_to replicate_to_{ replicate_to::none };
 };
 
 } // namespace couchbase

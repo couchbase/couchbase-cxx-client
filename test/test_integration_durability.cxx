@@ -17,6 +17,10 @@
 
 #include "test_helper_integration.hxx"
 
+#include "profile.hxx"
+
+#include <couchbase/cluster.hxx>
+
 TEST_CASE("integration: durable operations", "[integration]")
 {
     test::utils::integration_test_guard integration;
@@ -78,5 +82,42 @@ TEST_CASE("integration: durable operations", "[integration]")
         REQUIRE_FALSE(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number() != 0);
+    }
+}
+
+TEST_CASE("integration: legacy durability persist to active and replicate to one", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+    if (integration.number_of_replicas() == 0 || integration.number_of_nodes() <= integration.number_of_replicas()) {
+        return;
+    }
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    std::string key = test::utils::uniq_id("upsert_legacy");
+
+    auto collection = couchbase::cluster(integration.cluster)
+                        .bucket(integration.ctx.bucket)
+                        .scope(couchbase::scope::default_name)
+                        .collection(couchbase::collection::default_name);
+
+    couchbase::cas cas{};
+
+    {
+        profile fry{ "fry", "Philip J. Fry", 1974 };
+        auto options = couchbase::upsert_options{}.durability(couchbase::persist_to::active, couchbase::replicate_to::one);
+        auto [ctx, result] = collection.upsert(key, fry, options).get();
+        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_FALSE(result.cas().empty());
+        REQUIRE(result.mutation_token().has_value());
+        cas = result.cas();
+    }
+
+    {
+        auto [ctx, result] = collection.get(key, {}).get();
+        REQUIRE_FALSE(ctx.ec());
+        REQUIRE(result.cas() == cas);
+        auto fry = result.content_as<profile>();
+        REQUIRE(fry.username == "fry");
     }
 }

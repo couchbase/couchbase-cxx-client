@@ -22,8 +22,9 @@
 #include "core/utils/unsigned_leb128.hxx"
 #include "frame_info_utils.hxx"
 
-#include <cstring>
 #include <gsl/assert>
+
+#include <cstring>
 
 namespace couchbase::core::protocol
 {

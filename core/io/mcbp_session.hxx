@@ -486,7 +486,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                         case protocol::client_opcode::append:
                         case protocol::client_opcode::prepend:
                         case protocol::client_opcode::remove:
-                        case protocol::client_opcode::observe:
+                        case protocol::client_opcode::observe_seqno:
                         case protocol::client_opcode::unlock:
                         case protocol::client_opcode::increment:
                         case protocol::client_opcode::decrement:

@@ -44,6 +44,11 @@ namespace couchbase::core
 class cluster : public std::enable_shared_from_this<cluster>
 {
   public:
+    [[nodiscard]] auto io_context() -> asio::io_context&
+    {
+        return ctx_;
+    }
+
     [[nodiscard]] static std::shared_ptr<cluster> create(asio::io_context& ctx)
     {
         return std::shared_ptr<cluster>(new cluster(ctx));

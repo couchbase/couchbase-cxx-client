@@ -17,6 +17,8 @@
 
 #include "core/cluster.hxx"
 #include "core/error_context/key_value.hxx"
+#include "core/impl/observe_poll.hxx"
+#include "core/impl/observe_seqno.hxx"
 #include "core/operations/document_mutate_in.hxx"
 
 #include <couchbase/mutate_in_options.hxx>
@@ -33,9 +35,39 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
                              mutate_in_options::built options,
                              mutate_in_handler&& handler)
 {
-    core->execute(
-      operations::mutate_in_request{
-        document_id{ std::move(bucket_name), std::move(scope_name), std::move(collection_name), std::move(document_key) },
+    auto id = document_id{
+        std::move(bucket_name),
+        std::move(scope_name),
+        std::move(collection_name),
+        std::move(document_key),
+    };
+    if (options.persist_to == persist_to::none && options.replicate_to == replicate_to::none) {
+        return core->execute(
+          operations::mutate_in_request{
+            std::move(id),
+            {},
+            {},
+            options.cas,
+            options.access_deleted,
+            options.create_as_deleted,
+            options.expiry,
+            options.store_semantics,
+            std::move(specs),
+            options.durability_level,
+            options.timeout,
+            {},
+            options.preserve_expiry,
+          },
+          [handler = std::move(handler)](operations::mutate_in_response&& resp) mutable {
+              if (resp.ctx.ec()) {
+                  return handler(std::move(resp.ctx), mutate_in_result{});
+              }
+              return handler(std::move(resp.ctx), mutate_in_result{ resp.cas, std::move(resp.token), std::move(resp.fields) });
+          });
+    }
+
+    operations::mutate_in_request request{
+        id,
         {},
         {},
         options.cas,
@@ -44,13 +76,30 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
         options.expiry,
         options.store_semantics,
         std::move(specs),
-        options.durability_level,
-        options.timeout },
-      [handler = std::move(handler)](operations::mutate_in_response&& resp) mutable {
+        durability_level::none,
+        options.timeout,
+        {},
+        options.preserve_expiry,
+    };
+    return core->execute(
+      std::move(request), [core, id = std::move(id), options, handler = std::move(handler)](operations::mutate_in_response&& resp) mutable {
           if (resp.ctx.ec()) {
-              return handler(std::move(resp.ctx), mutate_in_result{});
+              return handler(std::move(resp.ctx), mutate_in_result{ resp.cas, std::move(resp.token), std::move(resp.fields) });
           }
-          return handler(std::move(resp.ctx), mutate_in_result{ resp.cas, std::move(resp.token), std::move(resp.fields) });
+
+          initiate_observe_poll(
+            core,
+            std::move(id),
+            resp.token,
+            options.timeout,
+            options.persist_to,
+            options.replicate_to,
+            [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
+                if (ec) {
+                    return;
+                }
+                return handler(std::move(resp.ctx), mutate_in_result{ resp.cas, std::move(resp.token), std::move(resp.fields) });
+            });
       });
 }
 } // namespace couchbase::core::impl
