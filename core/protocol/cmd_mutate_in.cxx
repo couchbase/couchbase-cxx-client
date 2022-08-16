@@ -171,9 +171,9 @@ mutate_in_request_body::fill_value()
     value_.resize(value_size);
     std::vector<std::byte>::size_type offset = 0;
     for (const auto& spec : specs_) {
-        value_[offset] = std::byte{ spec.opcode_ };
+        value_[offset] = static_cast<std::byte>(spec.opcode_);
         ++offset;
-        value_[offset] = std::byte{ build_path_flags(spec) };
+        value_[offset] = static_cast<std::byte>(build_path_flags(spec));
         ++offset;
 
         std::uint16_t path_size = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(spec.path_.size()));
