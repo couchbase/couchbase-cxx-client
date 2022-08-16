@@ -29,6 +29,8 @@ namespace couchbase::core::operations::management
 struct search_index_upsert_response {
     error_context::http ctx;
     std::string status{};
+    std::string name{};
+    std::string uuid{};
     std::string error{};
 };
 
