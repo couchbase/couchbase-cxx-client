@@ -23,6 +23,9 @@ namespace couchbase
 {
 /**
  * Describes how the outer document store semantics on subdoc should act.
+ *
+ * @since 1.0.0
+ * @committed
  */
 enum class store_semantics {
     /**

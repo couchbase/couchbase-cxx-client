@@ -77,11 +77,11 @@ struct mutate_in_options : public common_durability_options<mutate_in_options> {
      * Specifies whether an existing document's expiry should be preserved. Defaults to false.
      *
      * If true, and the document exists, its expiry will not be modified. Otherwise the document's expiry is determined by
-     * {@link #expiry(Duration)} or {@link #expiry(Instant)}.
+     * {@link #expiry(std::chrono::seconds)} or {@link #expiry(std::chrono::system_clock::time_point)}.
      *
      * Requires Couchbase Server 7.0 or later.
      *
-     * @param reserve `true` to preserve expiry, `false` to set new expiry
+     * @param preserve `true` to preserve expiry, `false` to set new expiry
      * @return this options class for chaining purposes.
      *
      * @since 1.0.0
@@ -96,7 +96,8 @@ struct mutate_in_options : public common_durability_options<mutate_in_options> {
     /**
      * Sets the expiry for the document. By default the document will never expire.
      *
-     * The duration must be less than 50 years. For expiry further in the future, use {@link #expiry(time_point)}.
+     * The duration must be less than 50 years. For expiry further in the future, use
+     * {@link #expiry(std::chrono::system_clock::time_point)}.
      *
      * @param duration the duration after which the document will expire (zero duration means never expire).
      * @return this options class for chaining purposes.
@@ -153,7 +154,7 @@ struct mutate_in_options : public common_durability_options<mutate_in_options> {
      * While each individual {@link mutate_in_specs} describes the semantics of the respective sub-document section, the
      * {@link store_semantics} are applied to the outer enclosing document as a whole. You can think of using the same
      * verb for a {@link couchbase::store_semantics store_semantics} aligns with the corresponding full document. So for example a
-     * {@link store_semantics::insert} works semantically similar to a {@link collection#insert(} and will fail if the document as a whole
+     * {@link store_semantics::insert} works semantically similar to a {@link collection#insert()} and will fail if the document as a whole
      * already exists.
      *
      * @param semantics the store semantics to apply to the document.

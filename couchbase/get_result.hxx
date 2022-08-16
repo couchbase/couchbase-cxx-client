@@ -93,7 +93,19 @@ class get_result : public result
     {
         return Transcoder::decode(value_);
     }
-
+    /**
+     * If the document has an expiry, returns the point in time when the loaded
+     * document expires.
+     *
+     * @note This method always returns an empty `std::optional` unless
+     * the {@link collection#get()} request was made using {@link get_options#with_expiry()}
+     * set to true.
+     *
+     * @return expiry time if present
+     *
+     * @since 1.0.0
+     * @committed
+     */
     [[nodiscard]] auto expiry_time() const -> const std::optional<std::chrono::system_clock::time_point>&
     {
         return expiry_time_;

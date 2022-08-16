@@ -67,7 +67,8 @@ struct insert_options : public common_durability_options<insert_options> {
     /**
      * Sets the expiry for the document. By default the document will never expire.
      *
-     * The duration must be less than 50 years. For expiry further in the future, use {@link #expiry(time_point)}.
+     * The duration must be less than 50 years. For expiry further in the future, use
+     * {@link #expiry(std::chrono::system_clock::time_point)}.
      *
      * @param duration the duration after which the document will expire (zero duration means never expire).
      * @return this options class for chaining purposes.

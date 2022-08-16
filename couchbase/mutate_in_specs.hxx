@@ -467,8 +467,9 @@ class mutate_in_specs
      * Add subdocument operations to list of specs
      *
      * @tparam Operation type of the subdocument operation
-     * @tparam Rest rest of the operations
+     * @tparam Rest types of the rest of the operations
      * @param operation operation to execute
+     * @param args the rest of the arguments
      *
      * @since 1.0.0
      * @committed

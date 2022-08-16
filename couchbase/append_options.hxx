@@ -33,7 +33,7 @@ namespace couchbase
 {
 
 /**
- * Options for @ref collection#append().
+ * Options for @ref binary_collection#append().
  *
  * @since 1.0.0
  * @committed
@@ -90,7 +90,7 @@ struct append_options : public common_durability_options<append_options> {
 };
 
 /**
- * The signature for the handler of the @ref collection#append() operation
+ * The signature for the handler of the @ref binary_collection#append() operation
  *
  * @since 1.0.0
  * @uncommitted

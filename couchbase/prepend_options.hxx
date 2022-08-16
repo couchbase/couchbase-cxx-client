@@ -33,7 +33,7 @@ namespace couchbase
 {
 
 /**
- * Options for @ref collection#prepend().
+ * Options for @ref binary_collection#prepend().
  *
  * @since 1.0.0
  * @committed
@@ -90,7 +90,7 @@ struct prepend_options : public common_durability_options<prepend_options> {
 };
 
 /**
- * The signature for the handler of the @ref collection#prepend() operation
+ * The signature for the handler of the @ref binary_collection#prepend() operation
  *
  * @since 1.0.0
  * @uncommitted

@@ -55,6 +55,9 @@ class subdocument_error_context : public key_value_error_context
      * @param cas
      * @param error_map_info
      * @param extended_error_info
+     * @param first_error_path
+     * @param first_error_index
+     * @param deleted
      *
      * @since 1.0.0
      * @internal

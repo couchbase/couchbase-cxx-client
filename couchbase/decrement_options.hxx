@@ -66,7 +66,8 @@ struct decrement_options : public common_durability_options<decrement_options> {
     /**
      * Sets the expiry for the document. By default the document will never expire.
      *
-     * The duration must be less than 50 years. For expiry further in the future, use {@link #expiry(time_point)}.
+     * The duration must be less than 50 years. For expiry further in the future, use
+     * {@link #expiry(std::chrono::system_clock::time_point)}.
      *
      * @param duration the duration after which the document will expire (zero duration means never expire).
      * @return this options class for chaining purposes.
@@ -95,12 +96,30 @@ struct decrement_options : public common_durability_options<decrement_options> {
         return self();
     }
 
+    /**
+     * The amount of which the document value should be decremented.
+     *
+     * @param delta the amount to decrement.
+     * @return this options class for chaining purposes.
+     *
+     * @since 1.0.0
+     * @committed
+     */
     auto delta(std::uint64_t delta) -> decrement_options&
     {
         delta_ = delta;
         return self();
     }
 
+    /**
+     * The initial value that should be used if the document has not been created yet.
+     *
+     * @param value the initial value to use.
+     * @return this options class for chaining purposes.
+     *
+     * @since 1.0.0
+     * @committed
+     */
     auto initial(std::uint64_t value) -> decrement_options&
     {
         initial_value_ = value;
@@ -114,7 +133,7 @@ struct decrement_options : public common_durability_options<decrement_options> {
 };
 
 /**
- * The signature for the handler of the @ref collection#decrement() operation
+ * The signature for the handler of the @ref binary_collection#decrement() operation
  *
  * @since 1.0.0
  * @uncommitted

@@ -84,6 +84,24 @@ class binary_collection
         return name_;
     }
 
+    /**
+     * Appends binary content to the document.
+     *
+     * @tparam Handler type of the handler that implements @ref append_handler
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param data the document content to append.
+     * @param options custom options to customize the append behavior.
+     * @param handler callable that implements @ref append_handler
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::cas_mismatch if the document has been concurrently modified on the server.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
     template<typename Handler>
     void append(std::string document_id, std::vector<std::byte> data, const append_options& options, Handler&& handler) const
     {
@@ -97,6 +115,22 @@ class binary_collection
                                                      std::forward<Handler>(handler));
     }
 
+    /**
+     * Appends binary content to the document.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param data the document content to append.
+     * @param options custom options to customize the append behavior.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::cas_mismatch if the document has been concurrently modified on the server.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
     [[nodiscard]] auto append(std::string document_id, std::vector<std::byte> data, const append_options& options) const
       -> std::future<std::pair<key_value_error_context, mutation_result>>
     {
@@ -108,6 +142,24 @@ class binary_collection
         return future;
     }
 
+    /**
+     * Prepends binary content to the document.
+     *
+     * @tparam Handler type of the handler that implements @ref prepend_handler
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param data the document content to prepend.
+     * @param options custom options to customize the prepend behavior.
+     * @param handler callable that implements @ref prepend_handler
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::cas_mismatch if the document has been concurrently modified on the server.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
     template<typename Handler>
     void prepend(std::string document_id, std::vector<std::byte> data, const prepend_options& options, Handler&& handler) const
     {
@@ -121,6 +173,22 @@ class binary_collection
                                                       std::forward<Handler>(handler));
     }
 
+    /**
+     * Prepends binary content to the document.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param data the document content to prepend.
+     * @param options custom options to customize the prepend behavior.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::cas_mismatch if the document has been concurrently modified on the server.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
     [[nodiscard]] auto prepend(std::string document_id, std::vector<std::byte> data, const prepend_options& options) const
       -> std::future<std::pair<key_value_error_context, mutation_result>>
     {
@@ -132,6 +200,22 @@ class binary_collection
         return future;
     }
 
+    /**
+     * Increments the counter document by one or the number defined in the options.
+     *
+     * @tparam Handler type of the handler that implements @ref increment_handler
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param options custom options to customize the increment behavior.
+     * @param handler callable that implements @ref increment_handler
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
     template<typename Handler>
     void increment(std::string document_id, const increment_options& options, Handler&& handler) const
     {
@@ -139,6 +223,20 @@ class binary_collection
           core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
     }
 
+    /**
+     * Increments the counter document by one or the number defined in the options.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param options custom options to customize the increment behavior.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
     [[nodiscard]] auto increment(std::string document_id, const increment_options& options) const
       -> std::future<std::pair<key_value_error_context, counter_result>>
     {
@@ -150,6 +248,22 @@ class binary_collection
         return future;
     }
 
+    /**
+     * Decrements the counter document by one or the number defined in the options.
+     *
+     * @tparam Handler type of the handler that implements @ref decrement_handler
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param options custom options to customize the decrement behavior.
+     * @param handler callable that implements @ref decrement_handler
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
     template<typename Handler>
     void decrement(std::string document_id, const decrement_options& options, Handler&& handler) const
     {
@@ -157,6 +271,20 @@ class binary_collection
           core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
     }
 
+    /**
+     * Decrements the counter document by one or the number defined in the options.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param options custom options to customize the decrement behavior.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
     [[nodiscard]] auto decrement(std::string document_id, const decrement_options& options) const
       -> std::future<std::pair<key_value_error_context, counter_result>>
     {

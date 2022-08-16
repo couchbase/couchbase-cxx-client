@@ -69,11 +69,11 @@ struct upsert_options : public common_durability_options<upsert_options> {
      * Specifies whether an existing document's expiry should be preserved. Defaults to false.
      *
      * If true, and the document exists, its expiry will not be modified. Otherwise the document's expiry is determined by
-     * {@link #expiry(Duration)} or {@link #expiry(Instant)}.
+     * {@link #expiry(std::chrono::seconds)} or {@link #expiry(std::chrono::system_clock::time_point)}.
      *
      * Requires Couchbase Server 7.0 or later.
      *
-     * @param reserve `true` to preserve expiry, `false` to set new expiry
+     * @param preserve `true` to preserve expiry, `false` to set new expiry
      * @return this options class for chaining purposes.
      *
      * @since 1.0.0
@@ -88,7 +88,8 @@ struct upsert_options : public common_durability_options<upsert_options> {
     /**
      * Sets the expiry for the document. By default the document will never expire.
      *
-     * The duration must be less than 50 years. For expiry further in the future, use {@link #expiry(time_point)}.
+     * The duration must be less than 50 years. For expiry further in the future, use
+     * {@link #expiry(std::chrono::system_clock::time_point)}.
      *
      * @param duration the duration after which the document will expire (zero duration means never expire).
      * @return this options class for chaining purposes.
