@@ -25,6 +25,8 @@
 
 #include <couchbase/error_codes.hxx>
 
+#include "third_party/snappy/snappy.h"
+
 #include <tao/json.hpp>
 
 TEST_CASE("unit: transformer to deduplicate JSON keys", "[unit]")
@@ -126,4 +128,49 @@ TEST_CASE("unit: user_agent string", "[unit]")
 
     REQUIRE(fmt::format("{}; client/0xDEADBEEF; session/0xCAFEBEBE; {}; hello world", core_version, couchbase::core::meta::os()) ==
             couchbase::core::meta::user_agent_for_http("0xDEADBEEF", "0xCAFEBEBE", "hello\nworld"));
+}
+
+TEST_CASE("unit: snappy can decompress Brett's payload", "[unit]")
+{
+    std::vector payload{
+        std::byte{ 0x95 }, std::byte{ 0x02 }, std::byte{ 0xf0 }, std::byte{ 0x4c }, std::byte{ 0x7b }, std::byte{ 0x22 }, std::byte{ 0x63 },
+        std::byte{ 0x75 }, std::byte{ 0x73 }, std::byte{ 0x74 }, std::byte{ 0x6f }, std::byte{ 0x6d }, std::byte{ 0x65 }, std::byte{ 0x72 },
+        std::byte{ 0x49 }, std::byte{ 0x44 }, std::byte{ 0x22 }, std::byte{ 0x3a }, std::byte{ 0x20 }, std::byte{ 0x22 }, std::byte{ 0x37 },
+        std::byte{ 0x35 }, std::byte{ 0x39 }, std::byte{ 0x30 }, std::byte{ 0x2d }, std::byte{ 0x56 }, std::byte{ 0x48 }, std::byte{ 0x56 },
+        std::byte{ 0x45 }, std::byte{ 0x47 }, std::byte{ 0x22 }, std::byte{ 0x2c }, std::byte{ 0x20 }, std::byte{ 0x22 }, std::byte{ 0x67 },
+        std::byte{ 0x65 }, std::byte{ 0x6e }, std::byte{ 0x64 }, std::byte{ 0x65 }, std::byte{ 0x72 }, std::byte{ 0x22 }, std::byte{ 0x3a },
+        std::byte{ 0x20 }, std::byte{ 0x22 }, std::byte{ 0x46 }, std::byte{ 0x65 }, std::byte{ 0x6d }, std::byte{ 0x61 }, std::byte{ 0x6c },
+        std::byte{ 0x65 }, std::byte{ 0x22 }, std::byte{ 0x2c }, std::byte{ 0x20 }, std::byte{ 0x22 }, std::byte{ 0x53 }, std::byte{ 0x65 },
+        std::byte{ 0x6e }, std::byte{ 0x69 }, std::byte{ 0x6f }, std::byte{ 0x72 }, std::byte{ 0x43 }, std::byte{ 0x69 }, std::byte{ 0x74 },
+        std::byte{ 0x69 }, std::byte{ 0x7a }, std::byte{ 0x65 }, std::byte{ 0x6e }, std::byte{ 0x22 }, std::byte{ 0x3a }, std::byte{ 0x20 },
+        std::byte{ 0x30 }, std::byte{ 0x2c }, std::byte{ 0x20 }, std::byte{ 0x22 }, std::byte{ 0x50 }, std::byte{ 0x61 }, std::byte{ 0x72 },
+        std::byte{ 0x74 }, std::byte{ 0x6e }, std::byte{ 0x65 }, std::byte{ 0x72 }, std::byte{ 0x01 }, std::byte{ 0x41 }, std::byte{ 0x08 },
+        std::byte{ 0x59 }, std::byte{ 0x65 }, std::byte{ 0x73 }, std::byte{ 0x01 }, std::byte{ 0x3a }, std::byte{ 0x08 }, std::byte{ 0x44 },
+        std::byte{ 0x65 }, std::byte{ 0x70 }, std::byte{ 0x01 }, std::byte{ 0x3c }, std::byte{ 0x08 }, std::byte{ 0x6e }, std::byte{ 0x74 },
+        std::byte{ 0x73 }, std::byte{ 0x01 }, std::byte{ 0x15 }, std::byte{ 0x04 }, std::byte{ 0x4e }, std::byte{ 0x6f }, std::byte{ 0x01 },
+        std::byte{ 0x14 }, std::byte{ 0x5c }, std::byte{ 0x74 }, std::byte{ 0x65 }, std::byte{ 0x6e }, std::byte{ 0x75 }, std::byte{ 0x72 },
+        std::byte{ 0x65 }, std::byte{ 0x22 }, std::byte{ 0x3a }, std::byte{ 0x20 }, std::byte{ 0x31 }, std::byte{ 0x2c }, std::byte{ 0x20 },
+        std::byte{ 0x22 }, std::byte{ 0x50 }, std::byte{ 0x68 }, std::byte{ 0x6f }, std::byte{ 0x6e }, std::byte{ 0x65 }, std::byte{ 0x53 },
+        std::byte{ 0x65 }, std::byte{ 0x72 }, std::byte{ 0x76 }, std::byte{ 0x69 }, std::byte{ 0x63 }, std::byte{ 0x01 }, std::byte{ 0x13 },
+        std::byte{ 0x0d }, std::byte{ 0x23 }, std::byte{ 0x2c }, std::byte{ 0x4d }, std::byte{ 0x75 }, std::byte{ 0x6c }, std::byte{ 0x74 },
+        std::byte{ 0x69 }, std::byte{ 0x70 }, std::byte{ 0x6c }, std::byte{ 0x65 }, std::byte{ 0x4c }, std::byte{ 0x69 }, std::byte{ 0x6e },
+        std::byte{ 0x65 }, std::byte{ 0x0d }, std::byte{ 0x3a }, std::byte{ 0x04 }, std::byte{ 0x20 }, std::byte{ 0x70 }, std::byte{ 0x01 },
+        std::byte{ 0x2a }, std::byte{ 0x04 }, std::byte{ 0x20 }, std::byte{ 0x73 }, std::byte{ 0x0d }, std::byte{ 0x2b }, std::byte{ 0x28 },
+        std::byte{ 0x2c }, std::byte{ 0x20 }, std::byte{ 0x22 }, std::byte{ 0x49 }, std::byte{ 0x6e }, std::byte{ 0x74 }, std::byte{ 0x65 },
+        std::byte{ 0x72 }, std::byte{ 0x6e }, std::byte{ 0x65 }, std::byte{ 0x74 }, std::byte{ 0x1d }, std::byte{ 0x3e }, std::byte{ 0x08 },
+        std::byte{ 0x44 }, std::byte{ 0x53 }, std::byte{ 0x4c }, std::byte{ 0x01 }, std::byte{ 0x1a }, std::byte{ 0x0c }, std::byte{ 0x4f },
+        std::byte{ 0x6e }, std::byte{ 0x6c }, std::byte{ 0x69 }, std::byte{ 0x01 }, std::byte{ 0x56 }, std::byte{ 0x14 }, std::byte{ 0x63 },
+        std::byte{ 0x75 }, std::byte{ 0x72 }, std::byte{ 0x69 }, std::byte{ 0x74 }, std::byte{ 0x79 }, std::byte{ 0x19 }, std::byte{ 0x7a },
+        std::byte{ 0x09 }, std::byte{ 0x18 }, std::byte{ 0x14 }, std::byte{ 0x42 }, std::byte{ 0x61 }, std::byte{ 0x63 }, std::byte{ 0x6b },
+        std::byte{ 0x75 }, std::byte{ 0x70 }, std::byte{ 0x01 }, std::byte{ 0x16 }, std::byte{ 0x15 }, std::byte{ 0xa5 }, std::byte{ 0x01 },
+        std::byte{ 0x7e }, std::byte{ 0x44 }, std::byte{ 0x50 }, std::byte{ 0x72 }, std::byte{ 0x6f }, std::byte{ 0x74 }, std::byte{ 0x65 },
+        std::byte{ 0x63 }, std::byte{ 0x74 }, std::byte{ 0x69 }, std::byte{ 0x6f }, std::byte{ 0x6e }, std::byte{ 0x22 }, std::byte{ 0x3a },
+        std::byte{ 0x20 }, std::byte{ 0x22 }, std::byte{ 0x4e }, std::byte{ 0x6f }, std::byte{ 0x22 }, std::byte{ 0x7d }
+    };
+
+    std::string uncompressed;
+    REQUIRE(snappy::Uncompress(reinterpret_cast<const char*>(payload.data()), payload.size(), &uncompressed));
+    REQUIRE(
+      uncompressed ==
+      R"({"customerID": "7590-VHVEG", "gender": "Female", "SeniorCitizen": 0, "Partner": "Yes", "Dependents": "No", "tenure": 1, "PhoneService": "No", "MultipleLines": "No phone service", "InternetService": "DSL", "OnlineSecurity": "No", "OnlineBackup": "Yes", "DeviceProtection": "No"})");
 }
