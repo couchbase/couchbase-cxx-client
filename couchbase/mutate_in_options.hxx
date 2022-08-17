@@ -20,10 +20,10 @@
 #include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/common_durability_options.hxx>
 #include <couchbase/expiry.hxx>
-#include <couchbase/key_value_error_context.hxx>
 #include <couchbase/mutate_in_result.hxx>
 #include <couchbase/store_semantics.hxx>
 #include <couchbase/subdoc/command.hxx>
+#include <couchbase/subdocument_error_context.hxx>
 
 #include <chrono>
 #include <functional>

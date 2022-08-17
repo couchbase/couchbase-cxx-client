@@ -22,44 +22,7 @@
 
 #include <tao/json/contrib/vector_traits.hpp>
 
-struct profile {
-    std::string username{};
-    std::string full_name{};
-    std::uint32_t birth_year{};
-
-    bool operator==(const profile& other) const
-    {
-        return username == other.username && full_name == other.full_name && birth_year == other.birth_year;
-    }
-};
-
-template<>
-struct tao::json::traits<profile> {
-    template<template<typename...> class Traits>
-    static void assign(tao::json::basic_value<Traits>& v, const profile& p)
-    {
-        v = {
-            { "username", p.username },
-            { "full_name", p.full_name },
-            { "birth_year", p.birth_year },
-        };
-    }
-
-    template<template<typename...> class Traits>
-    static profile as(const tao::json::basic_value<Traits>& v)
-    {
-        profile result;
-        const auto& object = v.get_object();
-        result.username = object.at("username").template as<std::string>();
-        result.full_name = object.at("full_name").template as<std::string>();
-        if (object.count("birth_year") != 0) {
-            // expect incomplete JSON here, as we might use projections to fetch reduced document
-            // as an alternative we might use std::optional<> here
-            result.birth_year = object.at("birth_year").template as<std::uint32_t>();
-        }
-        return result;
-    }
-};
+#include "profile.hxx"
 
 TEST_CASE("integration: upsert/get with json transcoder", "[integration]")
 {
@@ -327,5 +290,119 @@ TEST_CASE("integration: get with projections and json transcoder", "[integration
         REQUIRE(light_albert.full_name == albert.full_name);
         REQUIRE(light_albert.birth_year != albert.birth_year);
         REQUIRE(light_albert.birth_year == 0);
+    }
+}
+
+TEST_CASE("integration: get_and_touch and json transcoder", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    auto collection = couchbase::cluster(integration.cluster)
+                        .bucket(integration.ctx.bucket)
+                        .scope(couchbase::scope::default_name)
+                        .collection(couchbase::collection::default_name);
+
+    const auto skynet_birthday = std::chrono::system_clock::time_point{ std::chrono::seconds{ 1807056000 } };
+
+    auto id = test::utils::uniq_id("cecilia");
+    profile cecilia{ "cecilia", "Cecilia Payne-Gaposchkin", 1900 };
+
+    {
+        auto [ctx, resp] = collection.upsert(id, cecilia, couchbase::upsert_options{}.expiry(skynet_birthday)).get();
+        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.mutation_token().has_value());
+    }
+
+    {
+        auto [ctx, resp] = collection.get(id, couchbase::get_options{}.with_expiry(true)).get();
+        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.content_as<profile>() == cecilia);
+        REQUIRE(resp.expiry_time().has_value());
+        REQUIRE(resp.expiry_time().value() == skynet_birthday);
+    }
+
+    const auto asteroid_99942_apophis_passage = std::chrono::system_clock::time_point{ std::chrono::seconds{ 1870722000 } };
+
+    {
+        auto [ctx, resp] = collection.get_and_touch(id, asteroid_99942_apophis_passage, {}).get();
+        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.content_as<profile>() == cecilia);
+        REQUIRE_FALSE(resp.expiry_time().has_value());
+    }
+
+    {
+        auto [ctx, resp] = collection.get(id, couchbase::get_options{}.with_expiry(true)).get();
+        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.content_as<profile>() == cecilia);
+        REQUIRE(resp.expiry_time().has_value());
+        REQUIRE(resp.expiry_time().value() == asteroid_99942_apophis_passage);
+    }
+
+    {
+        auto [ctx, resp] = collection.get_and_touch(test::utils::uniq_id("unknown_profile"), asteroid_99942_apophis_passage, {}).get();
+        REQUIRE(ctx.ec() == couchbase::errc::key_value::document_not_found);
+        REQUIRE(resp.cas().empty());
+    }
+}
+
+TEST_CASE("integration: touch with public API", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    auto collection = couchbase::cluster(integration.cluster)
+                        .bucket(integration.ctx.bucket)
+                        .scope(couchbase::scope::default_name)
+                        .collection(couchbase::collection::default_name);
+
+    const auto skynet_birthday = std::chrono::system_clock::time_point{ std::chrono::seconds{ 1807056000 } };
+
+    auto id = test::utils::uniq_id("cecilia");
+    profile cecilia{ "cecilia", "Cecilia Payne-Gaposchkin", 1900 };
+
+    {
+        auto [ctx, resp] = collection.upsert(id, cecilia, couchbase::upsert_options{}.expiry(skynet_birthday)).get();
+        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.mutation_token().has_value());
+    }
+
+    {
+        auto [ctx, resp] = collection.get(id, couchbase::get_options{}.with_expiry(true)).get();
+        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.content_as<profile>() == cecilia);
+        REQUIRE(resp.expiry_time().has_value());
+        REQUIRE(resp.expiry_time().value() == skynet_birthday);
+    }
+
+    const auto asteroid_99942_apophis_passage = std::chrono::system_clock::time_point{ std::chrono::seconds{ 1870722000 } };
+
+    {
+        auto [ctx, resp] = collection.touch(id, asteroid_99942_apophis_passage, {}).get();
+        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+    }
+
+    {
+        auto [ctx, resp] = collection.get(id, couchbase::get_options{}.with_expiry(true)).get();
+        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.content_as<profile>() == cecilia);
+        REQUIRE(resp.expiry_time().has_value());
+        REQUIRE(resp.expiry_time().value() == asteroid_99942_apophis_passage);
+    }
+
+    {
+        auto [ctx, resp] = collection.touch(test::utils::uniq_id("unknown_profile"), asteroid_99942_apophis_passage, {}).get();
+        REQUIRE(ctx.ec() == couchbase::errc::key_value::document_not_found);
+        REQUIRE(resp.cas().empty());
     }
 }

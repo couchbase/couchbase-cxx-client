@@ -228,6 +228,7 @@ set(couchbase_cxx_client_FILES
     core/impl/field_level_encryption_error_category.cxx
     core/impl/get.cxx
     core/impl/get_all_replicas.cxx
+    core/impl/get_and_touch.cxx
     core/impl/get_any_replica.cxx
     core/impl/get_replica.cxx
     core/impl/increment.cxx
@@ -246,6 +247,7 @@ set(couchbase_cxx_client_FILES
     core/impl/streaming_json_lexter_error_category.cxx
     core/impl/subdoc/join_values.cxx
     core/impl/subdoc/mutate_in_macro.cxx
+    core/impl/touch.cxx
     core/impl/upsert.cxx
     core/impl/view_error_category.cxx)
 
