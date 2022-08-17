@@ -114,6 +114,27 @@ class mutate_in_specs
     }
 
     /**
+     * Creates a spec with the intention of replacing an existing value in a JSON document.
+     *
+     * If the path is empty (""), then the value will be used for the document's full body. Will
+     * error if the last element of the path does not exist.
+     *
+     * @note this is low-level method that expect pre-formatted value.
+     *
+     * @param path the path identifying where to insert the value.
+     * @param value the value to insert
+     * @param expand_macro true if the value encodes macro
+     * @return the created spec
+     *
+     * @since 1.0.0
+     * @internal
+     */
+    static auto replace_raw(std::string path, std::vector<std::byte> value, bool expand_macro = false) -> subdoc::replace
+    {
+        return { std::move(path), std::move(value), expand_macro };
+    }
+
+    /**
      * Creates a command with the intention of inserting a new value in a JSON object.
      *
      * Will error if the last element of the path already exists.
@@ -158,14 +179,15 @@ class mutate_in_specs
      *
      * @param path the path identifying where to insert the value.
      * @param value the value to insert
+     * @param expand_macro true if the value encodes macro
      * @return the created spec
      *
      * @since 1.0.0
      * @internal
      */
-    static auto insert_raw(std::string path, std::vector<std::byte> value) -> subdoc::insert
+    static auto insert_raw(std::string path, std::vector<std::byte> value, bool expand_macro = false) -> subdoc::insert
     {
-        return { std::move(path), std::move(value) };
+        return { std::move(path), std::move(value), expand_macro };
     }
 
     /**
@@ -229,14 +251,15 @@ class mutate_in_specs
      *
      * @param path the path identifying where to upsert the value.
      * @param value the value to upsert.
+     * @param expand_macro true if the value encodes macro
      * @return the created spec
      *
      * @since 1.0.0
      * @internal
      */
-    static auto upsert_raw(std::string path, std::vector<std::byte> value) -> subdoc::upsert
+    static auto upsert_raw(std::string path, std::vector<std::byte> value, bool expand_macro = false) -> subdoc::upsert
     {
-        return { std::move(path), std::move(value) };
+        return { std::move(path), std::move(value), expand_macro };
     }
 
     /**
@@ -438,14 +461,15 @@ class mutate_in_specs
      *
      * @param path the path identifying an array to which to append the value, and an index.  E.g. "foo.bar[3]"
      * @param value the value to insert.
+     * @param expand_macro true if the value encodes macro
      * @return the created spec
      *
      * @since 1.0.0
      * @committed
      */
-    static auto array_add_unique(std::string path, std::vector<std::byte> value) -> subdoc::array_add_unique
+    static auto array_add_unique_raw(std::string path, std::vector<std::byte> value, bool expand_macro = false) -> subdoc::array_add_unique
     {
-        return { std::move(path), std::move(value) };
+        return { std::move(path), std::move(value), expand_macro };
     }
 
     /**

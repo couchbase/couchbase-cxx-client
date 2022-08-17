@@ -46,27 +46,30 @@ class array_prepend
     /**
      * Sets that this is an extended attribute (xattr) field.
      *
+     * @param value new value for the option
      * @return this, for chaining
      *
      * @since 1.0.0
      * @committed
      */
-    auto xattr() -> array_prepend&
+    auto xattr(bool value = true) -> array_prepend&
     {
-        xattr_ = true;
+        xattr_ = value;
         return *this;
     }
 
     /**
      * Sets that this parent fields should be created automatically.
+     *
+     * @param value new value for the option
      * @return this, for chaining
      *
      * @since 1.0.0
      * @committed
      */
-    auto create_path() -> array_prepend&
+    auto create_path(bool value = true) -> array_prepend&
     {
-        create_path_ = true;
+        create_path_ = value;
         return *this;
     }
 
