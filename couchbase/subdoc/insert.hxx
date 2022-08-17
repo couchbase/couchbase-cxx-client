@@ -41,27 +41,30 @@ class insert
     /**
      * Sets that this is an extended attribute (xattr) field.
      *
+     * @param value new value for the option
      * @return this, for chaining
      *
      * @since 1.0.0
      * @committed
      */
-    auto xattr() -> insert&
+    auto xattr(bool value = true) -> insert&
     {
-        xattr_ = true;
+        xattr_ = value;
         return *this;
     }
 
     /**
      * Sets that this parent fields should be created automatically.
+     *
+     * @param value new value for the option
      * @return this, for chaining
      *
      * @since 1.0.0
      * @committed
      */
-    auto create_path() -> insert&
+    auto create_path(bool value = true) -> insert&
     {
-        create_path_ = true;
+        create_path_ = value;
         return *this;
     }
 
@@ -71,6 +74,13 @@ class insert
     insert(std::string path, std::vector<std::byte> value)
       : path_(std::move(path))
       , value_(std::move(value))
+    {
+    }
+
+    insert(std::string path, std::vector<std::byte> value, bool expand_macro)
+      : path_(std::move(path))
+      , value_(std::move(value))
+      , expand_macro_(expand_macro)
     {
     }
 

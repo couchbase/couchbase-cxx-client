@@ -41,27 +41,30 @@ class upsert
     /**
      * Sets that this is an extended attribute (xattr) field.
      *
+     * @param value new value for the option
      * @return this, for chaining
      *
      * @since 1.0.0
      * @committed
      */
-    auto xattr() -> upsert&
+    auto xattr(bool value = true) -> upsert&
     {
-        xattr_ = true;
+        xattr_ = value;
         return *this;
     }
 
     /**
      * Sets that this parent fields should be created automatically.
+     *
+     * @param value new value for the option
      * @return this, for chaining
      *
      * @since 1.0.0
      * @committed
      */
-    auto create_path() -> upsert&
+    auto create_path(bool value = true) -> upsert&
     {
-        create_path_ = true;
+        create_path_ = value;
         return *this;
     }
 
@@ -71,6 +74,13 @@ class upsert
     upsert(std::string path, std::vector<std::byte> value)
       : path_(std::move(path))
       , value_(std::move(value))
+    {
+    }
+
+    upsert(std::string path, std::vector<std::byte> value, bool expand_macro)
+      : path_(std::move(path))
+      , value_(std::move(value))
+      , expand_macro_{ expand_macro }
     {
     }
 

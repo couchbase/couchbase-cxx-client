@@ -44,29 +44,31 @@ class array_append
 {
   public:
     /**
-     * Sets that this is an extended attribute (xattr) field.
+     * Sets that this is an extended attribute (XATTR) field.
      *
      * @return this, for chaining
      *
      * @since 1.0.0
      * @committed
      */
-    auto xattr() -> array_append&
+    auto xattr(bool value = true) -> array_append&
     {
-        xattr_ = true;
+        xattr_ = value;
         return *this;
     }
 
     /**
      * Sets that this parent fields should be created automatically.
+     *
+     * @param value new value for the option
      * @return this, for chaining
      *
      * @since 1.0.0
      * @committed
      */
-    auto create_path() -> array_append&
+    auto create_path(bool value = true) -> array_append&
     {
-        create_path_ = true;
+        create_path_ = value;
         return *this;
     }
 

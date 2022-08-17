@@ -40,14 +40,15 @@ class remove
     /**
      * Sets that this is an extended attribute (xattr) field.
      *
+     * @param value new value for the option
      * @return this, for chaining
      *
      * @since 1.0.0
      * @committed
      */
-    auto xattr() -> remove&
+    auto xattr(bool value = true) -> remove&
     {
-        xattr_ = true;
+        xattr_ = value;
         return *this;
     }
 

@@ -21,6 +21,21 @@
 namespace couchbase::core::impl::subdoc
 {
 auto
+to_mutate_in_macro(std::string_view input) -> std::optional<couchbase::subdoc::mutate_in_macro>
+{
+    if (input == "${Mutation.CAS}") {
+        return couchbase::subdoc::mutate_in_macro::cas;
+    }
+    if (input == "${Mutation.seqno}") {
+        return couchbase::subdoc::mutate_in_macro::sequence_number;
+    }
+    if (input == "${Mutation.value_crc32c}") {
+        return couchbase::subdoc::mutate_in_macro::value_crc32c;
+    }
+    return {};
+}
+
+auto
 to_binary(couchbase::subdoc::mutate_in_macro value) -> std::vector<std::byte>&
 {
     // echo -n '${Mutation.CAS}' | ruby -e 'puts ARGF.read.chars.map{|c| format("std::byte{0x%02x}", c.ord)}.join(", ")'
