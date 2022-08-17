@@ -2098,8 +2098,8 @@ TEST_CASE("integration: search index management", "[integration]")
 
     SECTION("search indexes crud")
     {
-        auto index1_name = test::utils::uniq_id("index");
-        auto index2_name = test::utils::uniq_id("index");
+        auto index1_name = test::utils::uniq_id("index1");
+        auto index2_name = test::utils::uniq_id("index2");
         auto alias_name = test::utils::uniq_id("alias");
 
         {
@@ -2138,6 +2138,11 @@ TEST_CASE("integration: search index management", "[integration]")
             req.index = index;
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
+            if (resp.name != index2_name) {
+                // FIXME: server 7.2 might automatically prepend "{scope}.{collection}." in front of the index name
+                // to workaround it, we "patch" our variable with the name returned by the server
+                index2_name = resp.name;
+            }
         }
 
         {
@@ -2164,6 +2169,24 @@ TEST_CASE("integration: search index management", "[integration]")
 
         {
             couchbase::core::operations::management::search_index_get_request req{};
+            req.index_name = index2_name;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE(resp.index.name == index2_name);
+            REQUIRE(resp.index.type == "fulltext-index");
+        }
+
+        {
+            couchbase::core::operations::management::search_index_get_request req{};
+            req.index_name = alias_name;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE(resp.index.name == alias_name);
+            REQUIRE(resp.index.type == "fulltext-alias");
+        }
+
+        {
+            couchbase::core::operations::management::search_index_get_request req{};
             req.index_name = "missing_index";
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE(resp.ctx.ec == couchbase::errc::common::index_not_found);
@@ -2174,6 +2197,13 @@ TEST_CASE("integration: search index management", "[integration]")
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_FALSE(resp.ctx.ec);
             REQUIRE_FALSE(resp.indexes.empty());
+
+            REQUIRE(1 == std::count_if(
+                           resp.indexes.begin(), resp.indexes.end(), [&index1_name](const auto& i) { return i.name == index1_name; }));
+            REQUIRE(1 == std::count_if(
+                           resp.indexes.begin(), resp.indexes.end(), [&index2_name](const auto& i) { return i.name == index2_name; }));
+            REQUIRE(1 ==
+                    std::count_if(resp.indexes.begin(), resp.indexes.end(), [&alias_name](const auto& i) { return i.name == alias_name; }));
         }
 
         {

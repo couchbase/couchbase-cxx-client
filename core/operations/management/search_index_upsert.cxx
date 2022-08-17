@@ -75,6 +75,13 @@ search_index_upsert_request::make_response(error_context::http&& ctx, const enco
             }
             response.status = payload.at("status").get_string();
             if (response.status == "ok") {
+                response.name = index.name;
+                if (auto* name = payload.find("name"); name != nullptr && name->is_string()) {
+                    response.name = name->get_string();
+                }
+                if (auto* uuid = payload.find("uuid"); uuid != nullptr && uuid->is_string()) {
+                    response.uuid = uuid->get_string();
+                }
                 return response;
             }
         } else if (encoded.status_code == 400) {
