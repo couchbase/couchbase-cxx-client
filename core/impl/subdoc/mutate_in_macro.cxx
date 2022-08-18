@@ -18,7 +18,7 @@
 #include <couchbase/error_codes.hxx>
 #include <couchbase/subdoc/mutate_in_macro.hxx>
 
-namespace couchbase::core::impl::subdoc
+namespace couchbase::subdoc
 {
 auto
 to_mutate_in_macro(std::string_view input) -> std::optional<couchbase::subdoc::mutate_in_macro>
@@ -36,7 +36,7 @@ to_mutate_in_macro(std::string_view input) -> std::optional<couchbase::subdoc::m
 }
 
 auto
-to_binary(couchbase::subdoc::mutate_in_macro value) -> std::vector<std::byte>&
+to_binary(couchbase::subdoc::mutate_in_macro value) -> std::vector<std::byte>
 {
     // echo -n '${Mutation.CAS}' | ruby -e 'puts ARGF.read.chars.map{|c| format("std::byte{0x%02x}", c.ord)}.join(", ")'
     static std::vector cas_bytes{
@@ -71,4 +71,4 @@ to_binary(couchbase::subdoc::mutate_in_macro value) -> std::vector<std::byte>&
     throw std::system_error(errc::common::invalid_argument,
                             "Unexpected mutate_in macro: " + std::to_string(static_cast<std::uint32_t>(value)));
 }
-} // namespace couchbase::core::impl::subdoc
+} // namespace couchbase::subdoc

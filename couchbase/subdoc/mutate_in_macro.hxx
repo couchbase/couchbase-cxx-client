@@ -53,5 +53,5 @@ to_mutate_in_macro(std::string_view input) -> std::optional<mutate_in_macro>;
  * @volatile
  */
 auto
-to_binary(mutate_in_macro value) -> std::vector<std::byte>&;
+to_binary(mutate_in_macro value) -> std::vector<std::byte>;
 } // namespace couchbase::subdoc
