@@ -37,6 +37,7 @@ enum class lookup_in_macro {
     value_size_bytes,
     revision_id,
     flags,
+    vbucket,
 };
 
 /**

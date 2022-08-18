@@ -219,6 +219,7 @@ set(couchbase_cxx_client_FILES
     core/utils/json.cxx
     core/utils/json_streaming_lexer.cxx
     core/utils/mutation_token.cxx
+    core/utils/split_string.cxx
     core/utils/url_codec.cxx
     core/impl/analytics_error_category.cxx
     core/impl/append.cxx
@@ -266,7 +267,27 @@ set(couchbase_cxx_client_FILES
     core/impl/subdoc/upsert.cxx
     core/impl/touch.cxx
     core/impl/upsert.cxx
-    core/impl/view_error_category.cxx)
+    core/impl/view_error_category.cxx
+    transactions/active_transaction_record.cxx
+    transactions/atr_cleanup_entry.cxx
+    transactions/atr_ids.cxx
+    transactions/attempt_context_impl.cxx
+    transactions/binary.cxx
+    transactions/exceptions.cxx
+    transactions/logging.cxx
+    transactions/result.cxx
+    transactions/staged_mutation.cxx
+    transactions/internal/get_and_open_buckets.cxx
+    transactions/internal/utils.cxx
+    transactions/transaction_attempt.cxx
+    transactions/transaction_config.cxx
+    transactions/transaction_context.cxx
+    transactions/transaction_get_result.cxx
+    transactions/transaction_links.cxx
+    transactions/transaction_query_options.cxx
+    transactions/transactions.cxx
+    transactions/transactions_cleanup.cxx
+    transactions/uid_generator.cxx)
 
 if(COUCHBASE_CXX_CLIENT_BUILD_SHARED)
   add_library(couchbase_cxx_client SHARED ${couchbase_cxx_client_FILES})
@@ -274,7 +295,7 @@ else()
   add_library(couchbase_cxx_client STATIC ${couchbase_cxx_client_FILES})
 endif()
 set_target_properties(couchbase_cxx_client PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(couchbase_cxx_client PUBLIC ${PROJECT_SOURCE_DIR})
+target_include_directories(couchbase_cxx_client PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/private)
 target_include_directories(
   couchbase_cxx_client SYSTEM
   PUBLIC ${PROJECT_SOURCE_DIR}/third_party/asio/asio/include
@@ -327,4 +348,9 @@ endif()
 option(COUCHBASE_CXX_CLIENT_BUILD_DOCS "Build API documentation" TRUE)
 if(COUCHBASE_CXX_CLIENT_BUILD_DOCS)
   include(cmake/Documentation.cmake)
+endif()
+
+option(COUCHBASE_CXX_CLIENT_BUILD_EXAMPLES "Build example programs" TRUE)
+if(COUCHBASE_CXX_CLIENT_BUILD_EXAMPLES)
+  add_subdirectory(examples)
 endif()

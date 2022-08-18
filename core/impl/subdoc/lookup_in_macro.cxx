@@ -32,6 +32,7 @@ static const std::string macro_is_deleted{ "$document.deleted" };
 static const std::string macro_value_size_bytes{ "$document.value_bytes" };
 static const std::string macro_revision_id{ "$document.revision_id" };
 static const std::string macro_flags{ "$document.flags" };
+static const std::string macro_vbucket{ "$vbucket" };
 
 auto
 to_lookup_in_macro(std::string_view input) -> std::optional<couchbase::subdoc::lookup_in_macro>
@@ -65,6 +66,9 @@ to_lookup_in_macro(std::string_view input) -> std::optional<couchbase::subdoc::l
     }
     if (input == macro_flags) {
         return lookup_in_macro::flags;
+    }
+    if (input == macro_vbucket) {
+        return lookup_in_macro::vbucket;
     }
     return {};
 }
@@ -102,6 +106,9 @@ to_string(lookup_in_macro value) -> const std::string&
 
         case lookup_in_macro::flags:
             return macro_flags;
+
+        case lookup_in_macro::vbucket:
+            return macro_vbucket;
     }
     throw std::system_error(errc::common::invalid_argument,
                             "Unexpected lookup_in macro: " + std::to_string(static_cast<std::uint32_t>(value)));
