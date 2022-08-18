@@ -24,6 +24,7 @@
 #include <couchbase/subdoc/array_prepend.hxx>
 #include <couchbase/subdoc/counter.hxx>
 #include <couchbase/subdoc/insert.hxx>
+#include <couchbase/subdoc/mutate_in_macro.hxx>
 #include <couchbase/subdoc/remove.hxx>
 #include <couchbase/subdoc/replace.hxx>
 #include <couchbase/subdoc/upsert.hxx>

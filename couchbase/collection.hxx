@@ -19,7 +19,9 @@
 
 #include <couchbase/binary_collection.hxx>
 #include <couchbase/codec/json_transcoder.hxx>
+#include <couchbase/expiry.hxx>
 #include <couchbase/get_all_replicas_options.hxx>
+#include <couchbase/get_and_touch_options.hxx>
 #include <couchbase/get_any_replica_options.hxx>
 #include <couchbase/get_options.hxx>
 #include <couchbase/insert_options.hxx>
@@ -27,6 +29,7 @@
 #include <couchbase/mutate_in_specs.hxx>
 #include <couchbase/remove_options.hxx>
 #include <couchbase/replace_options.hxx>
+#include <couchbase/touch_options.hxx>
 #include <couchbase/upsert_options.hxx>
 
 #include <future>
@@ -141,7 +144,7 @@ class collection
      *
      * @param document_id the document id which is used to uniquely identify it.
      * @param options options to customize the get request.
-     * @return the future object with first available result, might be the active or a replica.
+     * @return future object that carries result of the operation
      *
      * @exception errc::key_value::document_not_found the given document id is not found in the collection.
      * @exception errc::common::ambiguous_timeout
@@ -156,6 +159,241 @@ class collection
         auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
         auto future = barrier->get_future();
         get(std::move(document_id), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    /**
+     * Fetches a full document and resets its expiration time to the value provided.
+     *
+     * @tparam Handler callable type that implements @ref get_and_touch_handler signature
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param duration the new expiration time for the document.
+     * @param options custom options to change the default behavior.
+     * @param handler the handler that implements @ref get_and_touch_handler
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Handler>
+    void get_and_touch(std::string document_id,
+                       std::chrono::seconds duration,
+                       const get_and_touch_options& options,
+                       Handler&& handler) const
+    {
+        return core::impl::initiate_get_and_touch_operation(core_,
+                                                            bucket_name_,
+                                                            scope_name_,
+                                                            name_,
+                                                            std::move(document_id),
+                                                            core::impl::expiry_relative(duration),
+                                                            options.build(),
+                                                            std::forward<Handler>(handler));
+    }
+
+    /**
+     * Fetches a full document and resets its expiration time to the value provided.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param duration the new expiration time for the document.
+     * @param options custom options to change the default behavior.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto get_and_touch(std::string document_id, std::chrono::seconds duration, const get_and_touch_options& options) const
+      -> std::future<std::pair<key_value_error_context, get_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
+        auto future = barrier->get_future();
+        get_and_touch(std::move(document_id), duration, options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    /**
+     * Fetches a full document and resets its expiration time to the absolute value provided.
+     *
+     * @tparam Handler callable type that implements @ref get_and_touch_handler signature
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param time_point the new expiration time point for the document.
+     * @param options custom options to change the default behavior.
+     * @param handler the handler that implements @ref get_and_touch_handler
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Handler>
+    void get_and_touch(std::string document_id,
+                       std::chrono::system_clock::time_point time_point,
+                       const get_and_touch_options& options,
+                       Handler&& handler) const
+    {
+        return core::impl::initiate_get_and_touch_operation(core_,
+                                                            bucket_name_,
+                                                            scope_name_,
+                                                            name_,
+                                                            std::move(document_id),
+                                                            core::impl::expiry_absolute(time_point),
+                                                            options.build(),
+                                                            std::forward<Handler>(handler));
+    }
+
+    /**
+     * Fetches a full document and resets its expiration time to the absolute value provided.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param time_point the new expiration time point for the document.
+     * @param options custom options to change the default behavior.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto get_and_touch(std::string document_id,
+                                     std::chrono::system_clock::time_point time_point,
+                                     const get_and_touch_options& options) const
+      -> std::future<std::pair<key_value_error_context, get_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
+        auto future = barrier->get_future();
+        get_and_touch(std::move(document_id), time_point, options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    /**
+     * Updates the expiration a document given an id, without modifying or returning its value.
+     *
+     * @tparam Handler callable type that implements @ref touch_handler signature
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param duration the new expiration time for the document.
+     * @param options custom options to change the default behavior.
+     * @param handler the handler that implements @ref touch_handler
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Handler>
+    void touch(std::string document_id, std::chrono::seconds duration, const touch_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_touch_operation(core_,
+                                                    bucket_name_,
+                                                    scope_name_,
+                                                    name_,
+                                                    std::move(document_id),
+                                                    core::impl::expiry_relative(duration),
+                                                    options.build(),
+                                                    std::forward<Handler>(handler));
+    }
+
+    /**
+     * Updates the expiration a document given an id, without modifying or returning its value.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param duration the new expiration time for the document.
+     * @param options custom options to change the default behavior.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto touch(std::string document_id, std::chrono::seconds duration, const touch_options& options) const
+      -> std::future<std::pair<key_value_error_context, result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, result>>>();
+        auto future = barrier->get_future();
+        touch(std::move(document_id), duration, options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    /**
+     * Updates the expiration a document given an id, without modifying or returning its value.
+     *
+     * @tparam Handler callable type that implements @ref touch_handler signature
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param time_point the new expiration time point for the document.
+     * @param options custom options to change the default behavior.
+     * @param handler the handler that implements @ref touch_handler
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Handler>
+    void touch(std::string document_id,
+               std::chrono::system_clock::time_point time_point,
+               const touch_options& options,
+               Handler&& handler) const
+    {
+        return core::impl::initiate_touch_operation(core_,
+                                                    bucket_name_,
+                                                    scope_name_,
+                                                    name_,
+                                                    std::move(document_id),
+                                                    core::impl::expiry_absolute(time_point),
+                                                    options.build(),
+                                                    std::forward<Handler>(handler));
+    }
+
+    /**
+     * Updates the expiration a document given an id, without modifying or returning its value.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param time_point the new expiration time point for the document.
+     * @param options custom options to change the default behavior.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto touch(std::string document_id, std::chrono::system_clock::time_point time_point, const touch_options& options) const
+      -> std::future<std::pair<key_value_error_context, result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, result>>>();
+        auto future = barrier->get_future();
+        touch(std::move(document_id), time_point, options, [barrier](auto ctx, auto result) {
             barrier->set_value({ std::move(ctx), std::move(result) });
         });
         return future;
