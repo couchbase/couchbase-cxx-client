@@ -118,7 +118,7 @@ class to_byte_vector
                 l = ++p;
                 buffer_.emplace_back(std::byte{ '\\' });
                 buffer_.emplace_back(static_cast<std::byte>(c));
-            } else if (c < 32 || c == 127) {
+            } else if (static_cast<std::uint8_t>(c) < 32 || c == 127) {
                 write({ l, static_cast<std::size_t>(p - l) });
                 l = ++p;
                 switch (c) {
@@ -146,7 +146,6 @@ class to_byte_vector
                           std::byte{ h[(c & 0xf0) >> 4] },
                           std::byte{ h[c & 0x0f] },
                         });
-                        write("\\u00");
                 }
             } else {
                 ++p;

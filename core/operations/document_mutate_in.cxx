@@ -112,7 +112,6 @@ mutate_in_request::make_response(key_value_error_context&& ctx, const encoded_re
         std::move(response_token),
         std::move(fields),
         fields_meta,
-        first_error_index,
         deleted,
     };
 }

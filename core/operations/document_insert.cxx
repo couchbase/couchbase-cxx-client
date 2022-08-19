@@ -18,6 +18,7 @@
 #include "document_insert.hxx"
 #include "core/utils/mutation_token.hxx"
 
+#include <couchbase/codec/codec_flags.hxx>
 #include <couchbase/error_codes.hxx>
 
 namespace couchbase::core::operations
@@ -31,6 +32,9 @@ insert_request::encode_to(insert_request::encoded_request_type& encoded, mcbp_co
     encoded.body().expiry(expiry);
     encoded.body().flags(flags);
     encoded.body().content(value);
+    if (codec::codec_flags::has_common_flags(flags, codec::codec_flags::common_flags::json)) {
+        encoded.datatype(protocol::datatype::json);
+    }
     return {};
 }
 

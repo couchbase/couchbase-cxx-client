@@ -234,6 +234,7 @@ set(couchbase_cxx_client_FILES
     core/impl/increment.cxx
     core/impl/insert.cxx
     core/impl/key_value_error_category.cxx
+    core/impl/lookup_in.cxx
     core/impl/management_error_category.cxx
     core/impl/mutate_in.cxx
     core/impl/network_error_category.cxx
@@ -246,6 +247,7 @@ set(couchbase_cxx_client_FILES
     core/impl/search_error_category.cxx
     core/impl/streaming_json_lexter_error_category.cxx
     core/impl/subdoc/join_values.cxx
+    core/impl/subdoc/lookup_in_macro.cxx
     core/impl/subdoc/mutate_in_macro.cxx
     core/impl/touch.cxx
     core/impl/upsert.cxx

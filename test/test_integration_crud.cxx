@@ -465,7 +465,6 @@ TEST_CASE("integration: upsert preserve expiry", "[integration]")
 
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("preserve_expiry") };
     uint32_t expiry = std::numeric_limits<uint32_t>::max();
-    const auto* expiry_path = "$document.exptime";
 
     {
         couchbase::core::operations::upsert_request req{ id, basic_doc_json };
@@ -476,9 +475,13 @@ TEST_CASE("integration: upsert preserve expiry", "[integration]")
 
     {
         couchbase::core::operations::lookup_in_request req{ id };
-        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::get, true, expiry_path);
+        req.specs =
+          couchbase::lookup_in_specs{
+              couchbase::lookup_in_specs::get(couchbase::subdoc::lookup_in_macro::expiry_time).xattr(),
+          }
+            .specs();
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(expiry == std::stoul(resp.fields[0].value));
+        REQUIRE(expiry == std::stoul(test::utils::to_string(resp.fields[0].value)));
     }
 
     {
@@ -490,9 +493,13 @@ TEST_CASE("integration: upsert preserve expiry", "[integration]")
 
     {
         couchbase::core::operations::lookup_in_request req{ id };
-        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::get, true, expiry_path);
+        req.specs =
+          couchbase::lookup_in_specs{
+              couchbase::lookup_in_specs::get(couchbase::subdoc::lookup_in_macro::expiry_time).xattr(),
+          }
+            .specs();
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(expiry == std::stoul(resp.fields[0].value));
+        REQUIRE(expiry == std::stoul(test::utils::to_string(resp.fields[0].value)));
     }
 
     {
@@ -503,9 +510,13 @@ TEST_CASE("integration: upsert preserve expiry", "[integration]")
 
     {
         couchbase::core::operations::lookup_in_request req{ id };
-        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::get, true, expiry_path);
+        req.specs =
+          couchbase::lookup_in_specs{
+              couchbase::lookup_in_specs::get(couchbase::subdoc::lookup_in_macro::expiry_time).xattr(),
+          }
+            .specs();
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(0 == std::stoul(resp.fields[0].value));
+        REQUIRE(0 == std::stoul(test::utils::to_string(resp.fields[0].value)));
     }
 }
 
@@ -656,14 +667,20 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
     }
     {
         couchbase::core::operations::lookup_in_request req{ id };
-        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::get, true, "$document.vbucket_uuid");
-        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::get, true, "$document.seqno");
+        req.specs =
+          couchbase::lookup_in_specs{
+              couchbase::lookup_in_specs::get(couchbase::subdoc::lookup_in_macro::vbucket_uuid).xattr(),
+              couchbase::lookup_in_specs::get(couchbase::subdoc::lookup_in_macro::sequence_number).xattr(),
+          }
+            .specs();
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.ctx.ec());
-        REQUIRE(resp.fields[0].value.find("\"0x") == 0);
-        REQUIRE(std::strtoull(resp.fields[0].value.data() + 3, nullptr, 16) == token.partition_uuid());
-        REQUIRE(resp.fields[1].value.find("\"0x") == 0);
-        REQUIRE(std::strtoull(resp.fields[1].value.data() + 3, nullptr, 16) == token.sequence_number());
+        auto vbucket_uuid = test::utils::to_string(resp.fields[0].value);
+        REQUIRE(vbucket_uuid.find("\"0x") == 0);
+        REQUIRE(std::strtoull(vbucket_uuid.data() + 3, nullptr, 16) == token.partition_uuid());
+        auto sequence_number = test::utils::to_string(resp.fields[1].value);
+        REQUIRE(sequence_number.find("\"0x") == 0);
+        REQUIRE(std::strtoull(sequence_number.data() + 3, nullptr, 16) == token.sequence_number());
     }
     {
         couchbase::core::operations::insert_request req{ id, basic_doc_json };
@@ -695,7 +712,7 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
         REQUIRE(resp.token.partition_id() == 0);
         REQUIRE(resp.token.partition_uuid() == 0);
         REQUIRE(resp.token.sequence_number() == 0);
-        REQUIRE(resp.first_error_index == 0);
+        REQUIRE(resp.ctx.first_error_index() == 0);
         REQUIRE(resp.fields.size() == 1);
         REQUIRE(resp.fields[0].path == "a");
         REQUIRE(resp.fields_meta[0].status == couchbase::key_value_status_code::subdoc_path_exists);

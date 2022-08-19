@@ -18,7 +18,7 @@
 #pragma once
 
 #include <couchbase/codec/json_transcoder.hxx>
-#include <couchbase/mutation_result.hxx>
+#include <couchbase/result.hxx>
 
 #include <optional>
 
@@ -26,12 +26,12 @@ namespace couchbase
 {
 
 /**
- * Represents result of mutate_in operations.
+ * Represents result of lookup_in operations.
  *
  * @since 1.0.0
  * @committed
  */
-class mutate_in_result : public mutation_result
+class lookup_in_result : public result
 {
   public:
     /**
@@ -42,29 +42,28 @@ class mutate_in_result : public mutation_result
         std::string path;
         codec::binary value;
         std::size_t original_index;
+        bool exists;
     };
 
     /**
      * @since 1.0.0
      * @internal
      */
-    mutate_in_result() = default;
+    lookup_in_result() = default;
 
     /**
-     * Constructs result for mutate_in_result operation
+     * Constructs result for lookup_in_result operation
      *
      * @param cas
-     * @param token mutate_in token returned by the server
      * @param entries list of the fields returned by the server
-     * @param is_deleted true if the document is a tombstone
      *
      * @since 1.0.0
      * @committed
      */
-    mutate_in_result(couchbase::cas cas, couchbase::mutation_token token, std::vector<entry> entries, bool is_deleted)
-      : mutation_result{ cas, std::move(token) }
-      , entries_(std::move(entries))
-      , is_deleted_(is_deleted)
+    lookup_in_result(couchbase::cas cas, std::vector<entry> entries, bool is_deleted)
+      : result{ cas }
+      , entries_{ std::move(entries) }
+      , is_deleted_{ is_deleted }
     {
     }
 
@@ -86,7 +85,7 @@ class mutate_in_result : public mutation_result
                 return codec::json_transcoder::template decode<Document>(e.value);
             }
         }
-        throw std::system_error(errc::key_value::path_invalid, "invalid index for mutate_in result: " + std::to_string(index));
+        throw std::system_error(errc::key_value::path_invalid, "invalid index for lookup_in result: {}" + std::to_string(index));
     }
 
     /**
@@ -107,7 +106,88 @@ class mutate_in_result : public mutation_result
                 return codec::json_transcoder::template decode<Document>(e.value);
             }
         }
-        throw std::system_error(errc::key_value::path_invalid, "invalid path for mutate_in result: " + path);
+        throw std::system_error(errc::key_value::path_invalid, "invalid path for lookup_in result: " + path);
+    }
+
+    /**
+     * Decodes field of the document into type.
+     *
+     * @tparam Document custom type that codec::json_transcoder should use to decode the field
+     * @param macro the path of the result field
+     * @return decoded document content
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Document, std::enable_if_t<!codec::is_transcoder_v<Document>, bool> = true>
+    [[nodiscard]] auto content_as(subdoc::lookup_in_macro macro) const -> Document
+    {
+        const auto& macro_string = subdoc::to_string(macro);
+        for (const entry& e : entries_) {
+            if (e.path == macro_string) {
+                return codec::json_transcoder::template decode<Document>(e.value);
+            }
+        }
+        throw std::system_error(errc::key_value::path_invalid,
+                                "invalid path for lookup_in result: macro#" + std::to_string(static_cast<std::uint32_t>(macro)));
+    }
+
+    /**
+     * Allows to check if a value at the given index exists.
+     *
+     * @param index the index at which to check.
+     * @return true if a value is present at the index, false otherwise.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto exists(std::size_t index) const -> bool
+    {
+        for (const entry& e : entries_) {
+            if (e.original_index == index) {
+                return e.exists;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Allows to check if a value at the given index exists.
+     *
+     * @param macro the path of the result field
+     * @return true if a value is present at the index, false otherwise.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto exists(subdoc::lookup_in_macro macro) const -> bool
+    {
+        const auto& macro_string = subdoc::to_string(macro);
+        for (const entry& e : entries_) {
+            if (e.path == macro_string) {
+                return e.exists;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Allows to check if a value at the given index exists.
+     *
+     * @param path the path of the result field
+     * @return true if a value is present at the index, false otherwise.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto exists(const std::string& path) const -> bool
+    {
+        for (const entry& e : entries_) {
+            if (e.path == path) {
+                return e.exists;
+            }
+        }
+        return false;
     }
 
     /**

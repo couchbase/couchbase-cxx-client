@@ -17,10 +17,11 @@
 
 #pragma once
 
-#define CATCH_CONFIG_MAIN
+#include <string>
+#include <vector>
 
-#include "utils/binary.hxx"
-#include "utils/test_context.hxx"
-#include "utils/uniq_id.hxx"
-
-#include <catch2/catch.hpp>
+namespace test::utils
+{
+[[nodiscard]] std::string
+to_string(const std::vector<std::byte>& input);
+}

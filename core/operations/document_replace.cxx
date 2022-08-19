@@ -18,6 +18,7 @@
 #include "document_replace.hxx"
 #include "core/utils/mutation_token.hxx"
 
+#include <couchbase/codec/codec_flags.hxx>
 #include <couchbase/error_codes.hxx>
 
 namespace couchbase::core::operations
@@ -34,6 +35,9 @@ replace_request::encode_to(replace_request::encoded_request_type& encoded, mcbp_
     encoded.body().content(value);
     if (preserve_expiry) {
         encoded.body().preserve_expiry();
+    }
+    if (codec::codec_flags::has_common_flags(flags, codec::codec_flags::common_flags::json)) {
+        encoded.datatype(protocol::datatype::json);
     }
     return {};
 }

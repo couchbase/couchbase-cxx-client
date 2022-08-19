@@ -406,3 +406,124 @@ TEST_CASE("integration: touch with public API", "[integration]")
         REQUIRE(resp.cas().empty());
     }
 }
+
+TEST_CASE("integration: subdoc with public API", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    auto collection = couchbase::cluster(integration.cluster)
+                        .bucket(integration.ctx.bucket)
+                        .scope(couchbase::scope::default_name)
+                        .collection(couchbase::collection::default_name);
+
+    auto id = test::utils::uniq_id("liu_cixin");
+    profile cixin{ "liu_cixin", "刘慈欣", 1963 };
+
+    couchbase::mutation_token token{};
+    {
+        auto [ctx, resp] = collection.upsert(id, cixin, {}).get();
+        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.mutation_token().has_value());
+        token = resp.mutation_token().value();
+    }
+
+    {
+        auto [ctx, resp] = collection
+                             .lookup_in(id,
+                                        couchbase::lookup_in_specs{
+                                          couchbase::lookup_in_specs::get("full_name"),
+                                          couchbase::lookup_in_specs::exists("birth_year"),
+                                          couchbase::lookup_in_specs::get(couchbase::subdoc::lookup_in_macro::sequence_number),
+                                          couchbase::lookup_in_specs::get(couchbase::subdoc::lookup_in_macro::value_size_bytes),
+                                        },
+                                        {})
+                             .get();
+        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+
+        REQUIRE_FALSE(resp.is_deleted());
+
+        REQUIRE(resp.exists(0));
+        REQUIRE(resp.exists("full_name"));
+        REQUIRE(resp.content_as<std::string>(0) == "刘慈欣");
+        REQUIRE(resp.content_as<std::string>("full_name") == "刘慈欣");
+
+        REQUIRE(resp.exists(1));
+        REQUIRE(resp.exists("birth_year"));
+
+        REQUIRE(resp.exists(2));
+        REQUIRE(resp.exists(couchbase::subdoc::lookup_in_macro::sequence_number));
+        REQUIRE(resp.content_as<std::string>(2) == fmt::format("0x{:016x}", token.sequence_number()));
+        REQUIRE(resp.content_as<std::string>(couchbase::subdoc::lookup_in_macro::sequence_number) ==
+                fmt::format("0x{:016x}", token.sequence_number()));
+
+        REQUIRE(resp.exists(3));
+        REQUIRE(resp.exists(couchbase::subdoc::lookup_in_macro::value_size_bytes));
+        REQUIRE(resp.content_as<std::uint32_t>(3) == 66);
+        REQUIRE(resp.content_as<std::uint32_t>(couchbase::subdoc::lookup_in_macro::value_size_bytes) == 66);
+    }
+
+    couchbase::cas cas{};
+    {
+        auto [ctx, resp] = collection
+                             .mutate_in(id,
+                                        couchbase::mutate_in_specs{
+                                          couchbase::mutate_in_specs::remove("birth_year"),
+                                          couchbase::mutate_in_specs::upsert("my_cas", couchbase::subdoc::mutate_in_macro::cas).xattr(),
+                                        },
+                                        {})
+                             .get();
+        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        cas = resp.cas();
+    }
+
+    {
+        auto [ctx, resp] = collection
+                             .lookup_in(id,
+                                        couchbase::lookup_in_specs{
+                                          couchbase::lookup_in_specs::get("my_cas").xattr(),
+                                          couchbase::lookup_in_specs::exists("birth_year"),
+                                        },
+                                        {})
+                             .get();
+        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+
+        REQUIRE(resp.exists(0));
+        REQUIRE(resp.exists("my_cas"));
+        REQUIRE(resp.content_as<std::string>(0) == fmt::format("0x{:016x}", couchbase::core::utils::byte_swap(cas.value())));
+        REQUIRE(resp.content_as<std::string>("my_cas") == fmt::format("0x{:016x}", couchbase::core::utils::byte_swap(cas.value())));
+
+        REQUIRE_FALSE(resp.exists(1));
+        REQUIRE_FALSE(resp.exists("birth_year"));
+    }
+
+    {
+        auto [ctx, resp] = collection.remove(id, {}).get();
+        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        cas = resp.cas();
+    }
+
+    {
+        auto [ctx, resp] = collection
+                             .lookup_in(id,
+                                        couchbase::lookup_in_specs{
+                                          couchbase::lookup_in_specs::get(couchbase::subdoc::lookup_in_macro::cas).xattr(),
+                                        },
+                                        couchbase::lookup_in_options{}.access_deleted(true))
+                             .get();
+        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+
+        REQUIRE(resp.is_deleted());
+        REQUIRE(resp.exists(0));
+        REQUIRE(resp.exists(couchbase::subdoc::lookup_in_macro::cas));
+        REQUIRE(resp.content_as<std::string>(0) == fmt::format("0x{:016x}", cas.value()));
+        REQUIRE(resp.content_as<std::string>(couchbase::subdoc::lookup_in_macro::cas) == fmt::format("0x{:016x}", cas.value()));
+    }
+}

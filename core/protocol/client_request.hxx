@@ -49,6 +49,8 @@ class client_request
     std::uint16_t partition_{ 0 };
     std::uint32_t opaque_{ 0 };
     std::uint64_t cas_{ 0 };
+    protocol::datatype datatype_{ protocol::datatype::raw };
+
     Body body_;
 
   public:
@@ -60,6 +62,11 @@ class client_request
     void opaque(std::uint32_t val)
     {
         opaque_ = val;
+    }
+
+    void datatype(protocol::datatype val)
+    {
+        datatype_ = val;
     }
 
     void cas(couchbase::cas val)
@@ -123,6 +130,8 @@ class client_request
 
         std::uint8_t ext_size = gsl::narrow_cast<std::uint8_t>(body_.extras().size());
         memcpy(payload.data() + 4, &ext_size, sizeof(ext_size));
+
+        payload[5] = static_cast<std::byte>(datatype_);
 
         std::uint16_t vbucket = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(partition_));
         memcpy(payload.data() + 6, &vbucket, sizeof(vbucket));

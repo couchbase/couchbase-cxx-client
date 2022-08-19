@@ -153,19 +153,20 @@ get_projected_request::encode_to(get_projected_request::encoded_request_type& en
         effective_projections.clear();
     }
 
-    protocol::lookup_in_request_body::lookup_in_specs specs{};
-    specs.add_spec(protocol::subdoc_opcode::get, true, "$document.flags");
+    couchbase::lookup_in_specs specs{
+        couchbase::lookup_in_specs::get(subdoc::lookup_in_macro::flags).xattr(),
+    };
     if (with_expiry) {
-        specs.add_spec(protocol::subdoc_opcode::get, true, "$document.exptime");
+        specs.push_back(couchbase::lookup_in_specs::get(subdoc::lookup_in_macro::expiry_time).xattr());
     }
     if (effective_projections.empty()) {
-        specs.add_spec(protocol::subdoc_opcode::get_doc, false, "");
+        specs.push_back(couchbase::lookup_in_specs::get(""));
     } else {
         for (const auto& path : effective_projections) {
-            specs.add_spec(protocol::subdoc_opcode::get, false, path);
+            specs.push_back(couchbase::lookup_in_specs::get(path));
         }
     }
-    encoded.body().specs(specs);
+    encoded.body().specs(specs.specs());
     return {};
 }
 

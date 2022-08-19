@@ -83,26 +83,42 @@ lookup_in_request_body::fill_extras()
     }
 }
 
+/**
+ * If set, the path refers to an Extended Attribute (XATTR).
+ * If clear, the path refers to a path inside the document body.
+ */
+static constexpr std::byte path_flag_xattr{ 0b0000'0100U };
+
+static constexpr std::byte
+build_path_flags(const couchbase::subdoc::command& spec)
+{
+    std::byte flags{ 0U };
+    if (spec.xattr_) {
+        flags |= path_flag_xattr;
+    }
+    return flags;
+}
+
 void
 lookup_in_request_body::fill_value()
 {
     size_t value_size = 0;
-    for (const auto& spec : specs_.entries) {
-        value_size += sizeof(spec.opcode) + sizeof(spec.flags) + sizeof(std::uint16_t) + spec.path.size();
+    for (const auto& spec : specs_) {
+        value_size += sizeof(spec.opcode_) + sizeof(std::uint8_t) + sizeof(std::uint16_t) + spec.path_.size();
     }
     Expects(value_size > 0);
     value_.resize(value_size);
     std::vector<std::byte>::size_type offset = 0;
-    for (const auto& spec : specs_.entries) {
-        value_[offset] = std::byte{ spec.opcode };
+    for (const auto& spec : specs_) {
+        value_[offset] = static_cast<std::byte>(spec.opcode_);
         ++offset;
-        value_[offset] = std::byte{ spec.flags };
+        value_[offset] = build_path_flags(spec);
         ++offset;
-        std::uint16_t path_size = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(spec.path.size()));
+        std::uint16_t path_size = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(spec.path_.size()));
         std::memcpy(value_.data() + offset, &path_size, sizeof(path_size));
         offset += sizeof(path_size);
-        std::memcpy(value_.data() + offset, spec.path.data(), spec.path.size());
-        offset += spec.path.size();
+        std::memcpy(value_.data() + offset, spec.path_.data(), spec.path_.size());
+        offset += spec.path_.size();
     }
 }
 } // namespace couchbase::core::protocol

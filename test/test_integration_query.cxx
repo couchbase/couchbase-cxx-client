@@ -218,7 +218,6 @@ TEST_CASE("integration: preserve expiry for mutatation query", "[integration]")
     };
 
     uint32_t expiry = std::numeric_limits<uint32_t>::max();
-    const char* expiry_path = "$document.exptime";
 
     {
         couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary(R"({"foo":42})") };
@@ -229,11 +228,15 @@ TEST_CASE("integration: preserve expiry for mutatation query", "[integration]")
 
     {
         couchbase::core::operations::lookup_in_request req{ id };
-        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::get, true, expiry_path);
-        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::get, false, "foo");
+        req.specs =
+          couchbase::lookup_in_specs{
+              couchbase::lookup_in_specs::get(couchbase::subdoc::lookup_in_macro::expiry_time).xattr(),
+              couchbase::lookup_in_specs::get("foo"),
+          }
+            .specs();
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(expiry == std::stoul(resp.fields[0].value));
-        REQUIRE("42" == resp.fields[1].value);
+        REQUIRE(expiry == std::stoul(test::utils::to_string(resp.fields[0].value)));
+        REQUIRE(couchbase::core::utils::to_binary("42") == resp.fields[1].value);
     }
 
     {
@@ -246,11 +249,15 @@ TEST_CASE("integration: preserve expiry for mutatation query", "[integration]")
 
     {
         couchbase::core::operations::lookup_in_request req{ id };
-        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::get, true, expiry_path);
-        req.specs.add_spec(couchbase::core::protocol::subdoc_opcode::get, false, "foo");
+        req.specs =
+          couchbase::lookup_in_specs{
+              couchbase::lookup_in_specs::get(couchbase::subdoc::lookup_in_macro::expiry_time).xattr(),
+              couchbase::lookup_in_specs::get("foo"),
+          }
+            .specs();
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(expiry == std::stoul(resp.fields[0].value));
-        REQUIRE("43" == resp.fields[1].value);
+        REQUIRE(expiry == std::stoul(test::utils::to_string(resp.fields[0].value)));
+        REQUIRE(couchbase::core::utils::to_binary("43") == resp.fields[1].value);
     }
 }
 
