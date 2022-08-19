@@ -24,12 +24,12 @@ namespace couchbase::core::operations
 std::error_code
 lookup_in_request::encode_to(lookup_in_request::encoded_request_type& encoded, mcbp_context&& /* context */)
 {
-    for (std::size_t i = 0; i < specs.entries.size(); ++i) {
-        specs.entries[i].original_index = i;
+    for (std::size_t i = 0; i < specs.size(); ++i) {
+        specs[i].original_index_ = i;
     }
-    std::stable_sort(specs.entries.begin(), specs.entries.end(), [](const auto& lhs, const auto& rhs) {
-        return (lhs.flags & protocol::lookup_in_request_body::lookup_in_specs::path_flag_xattr) >
-               (rhs.flags & protocol::lookup_in_request_body::lookup_in_specs::path_flag_xattr);
+    std::stable_sort(specs.begin(), specs.end(), [](const auto& lhs, const auto& rhs) {
+        /* move XATTRs to the beginning of the vector */
+        return lhs.xattr_ && !rhs.xattr_;
     });
 
     encoded.opaque(opaque);
@@ -43,39 +43,53 @@ lookup_in_request::encode_to(lookup_in_request::encoded_request_type& encoded, m
 lookup_in_response
 lookup_in_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
 {
-    lookup_in_response response{ std::move(ctx) };
+
+    bool deleted = false;
+    couchbase::cas cas{};
+    std::vector<couchbase::lookup_in_result::entry> fields{};
+    std::vector<lookup_in_response::entry_meta> fields_meta{};
+    std::error_code ec = ctx.ec();
+    std::optional<std::size_t> first_error_index{};
+    std::optional<std::string> first_error_path{};
+
     if (encoded.status() == key_value_status_code::subdoc_success_deleted ||
         encoded.status() == key_value_status_code::subdoc_multi_path_failure_deleted) {
-        response.deleted = true;
+        deleted = true;
     }
-    if (!response.ctx.ec()) {
-        response.fields.resize(specs.entries.size());
-        for (size_t i = 0; i < specs.entries.size(); ++i) {
-            const auto& req_entry = specs.entries[i];
-            response.fields[i].original_index = req_entry.original_index;
-            response.fields[i].opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode);
-            response.fields[i].path = req_entry.path;
-            response.fields[i].status = key_value_status_code::success;
+    if (!ctx.ec()) {
+        fields.resize(specs.size());
+        fields_meta.resize(specs.size());
+        for (size_t i = 0; i < specs.size(); ++i) {
+            const auto& req_entry = specs[i];
+            fields[i].original_index = req_entry.original_index_;
+            fields[i].path = req_entry.path_;
+            fields_meta[i].opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode_);
+            fields_meta[i].status = key_value_status_code::success;
         }
         for (size_t i = 0; i < encoded.body().fields().size(); ++i) {
             const auto& res_entry = encoded.body().fields()[i];
-            response.fields[i].status = res_entry.status;
-            response.fields[i].ec =
+            fields_meta[i].status = res_entry.status;
+            fields_meta[i].ec =
               protocol::map_status_code(protocol::client_opcode::subdoc_multi_mutation, static_cast<std::uint16_t>(res_entry.status));
-            response.fields[i].exists =
-              res_entry.status == key_value_status_code::success || res_entry.status == key_value_status_code::subdoc_success_deleted;
-            response.fields[i].value = res_entry.value;
-            if (!response.fields[i].ec && !response.ctx.ec()) {
-                response.ctx.override_ec(response.fields[i].ec);
+            if (!fields_meta[i].ec && !ctx.ec()) {
+                ec = fields_meta[i].ec;
             }
+            if (!first_error_index && !fields_meta[i].ec) {
+                first_error_index = i;
+                first_error_path = fields[i].path;
+            }
+            fields[i].exists =
+              res_entry.status == key_value_status_code::success || res_entry.status == key_value_status_code::subdoc_success_deleted;
+            fields[i].value = utils::to_binary(res_entry.value);
         }
-        if (!response.ctx.ec()) {
-            response.cas = encoded.cas();
+        if (!ec) {
+            cas = encoded.cas();
         }
-        std::sort(response.fields.begin(), response.fields.end(), [](const auto& lhs, const auto& rhs) {
-            return lhs.original_index < rhs.original_index;
-        });
+        std::sort(fields.begin(), fields.end(), [](const auto& lhs, const auto& rhs) { return lhs.original_index < rhs.original_index; });
     }
-    return response;
+
+    return lookup_in_response{
+        make_subdocument_error_context(ctx, ec, first_error_path, first_error_index, deleted), cas, std::move(fields), fields_meta, deleted,
+    };
 }
 } // namespace couchbase::core::operations

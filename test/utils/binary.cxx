@@ -15,12 +15,13 @@
  *   limitations under the License.
  */
 
-#pragma once
+#include "binary.hxx"
 
-#define CATCH_CONFIG_MAIN
-
-#include "utils/binary.hxx"
-#include "utils/test_context.hxx"
-#include "utils/uniq_id.hxx"
-
-#include <catch2/catch.hpp>
+namespace test::utils
+{
+[[nodiscard]] std::string
+to_string(const std::vector<std::byte>& input)
+{
+    return { reinterpret_cast<const char*>(input.data()), input.size() };
+}
+} // namespace test::utils

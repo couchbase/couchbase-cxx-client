@@ -143,7 +143,7 @@ static constexpr std::byte path_flag_xattr{ 0b0000'0100U };
  */
 static constexpr std::byte path_flag_expand_macros{ 0b0001'0000U };
 
-static constexpr std::uint8_t
+static constexpr std::byte
 build_path_flags(const couchbase::subdoc::command& spec)
 {
     std::byte flags{ 0 };
@@ -156,7 +156,7 @@ build_path_flags(const couchbase::subdoc::command& spec)
     if (spec.expand_macro_) {
         flags |= path_flag_expand_macros;
     }
-    return std::to_integer<std::uint8_t>(flags);
+    return flags;
 }
 
 void
@@ -173,7 +173,7 @@ mutate_in_request_body::fill_value()
     for (const auto& spec : specs_) {
         value_[offset] = static_cast<std::byte>(spec.opcode_);
         ++offset;
-        value_[offset] = static_cast<std::byte>(build_path_flags(spec));
+        value_[offset] = build_path_flags(spec);
         ++offset;
 
         std::uint16_t path_size = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(spec.path_.size()));

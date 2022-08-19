@@ -23,6 +23,8 @@
 #include "core/io/mcbp_message.hxx"
 #include "status.hxx"
 
+#include <couchbase/lookup_in_specs.hxx>
+
 #include <gsl/assert>
 
 namespace couchbase::core::protocol
@@ -67,40 +69,13 @@ class lookup_in_request_body
      */
     static const inline std::uint8_t doc_flag_access_deleted = 0b0000'0100;
 
-    struct lookup_in_specs {
-        /**
-         * If set, the path refers to an Extended Attribute (XATTR).
-         * If clear, the path refers to a path inside the document body.
-         */
-        static const inline std::uint8_t path_flag_xattr = 0b0000'0100;
-
-        struct entry {
-            std::uint8_t opcode;
-            std::uint8_t flags;
-            std::string path;
-            std::size_t original_index{};
-        };
-        std::vector<entry> entries;
-
-        void add_spec(subdoc_opcode operation, bool xattr, const std::string& path)
-        {
-            add_spec(static_cast<std::uint8_t>(operation), xattr ? path_flag_xattr : 0, path);
-        }
-
-        void add_spec(std::uint8_t operation, std::uint8_t flags, const std::string& path)
-        {
-            Expects(is_valid_subdoc_opcode(operation));
-            entries.emplace_back(entry{ operation, flags, path });
-        }
-    };
-
   private:
     std::vector<std::byte> key_;
     std::vector<std::byte> extras_{};
     std::vector<std::byte> value_{};
 
     std::uint8_t flags_{ 0 };
-    lookup_in_specs specs_;
+    std::vector<couchbase::subdoc::command> specs_;
 
   public:
     void id(const document_id& id);
@@ -114,7 +89,7 @@ class lookup_in_request_body
         }
     }
 
-    void specs(const lookup_in_specs& specs)
+    void specs(const std::vector<couchbase::subdoc::command>& specs)
     {
         specs_ = specs;
     }

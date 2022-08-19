@@ -62,7 +62,8 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
               if (resp.ctx.ec()) {
                   return handler(std::move(resp.ctx), mutate_in_result{});
               }
-              return handler(std::move(resp.ctx), mutate_in_result{ resp.cas, std::move(resp.token), std::move(resp.fields) });
+              return handler(std::move(resp.ctx),
+                             mutate_in_result{ resp.cas, std::move(resp.token), std::move(resp.fields), resp.deleted });
           });
     }
 
@@ -84,7 +85,8 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
     return core->execute(
       std::move(request), [core, id = std::move(id), options, handler = std::move(handler)](operations::mutate_in_response&& resp) mutable {
           if (resp.ctx.ec()) {
-              return handler(std::move(resp.ctx), mutate_in_result{ resp.cas, std::move(resp.token), std::move(resp.fields) });
+              return handler(std::move(resp.ctx),
+                             mutate_in_result{ resp.cas, std::move(resp.token), std::move(resp.fields), resp.deleted });
           }
 
           initiate_observe_poll(
@@ -98,7 +100,8 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
                 if (ec) {
                     return;
                 }
-                return handler(std::move(resp.ctx), mutate_in_result{ resp.cas, std::move(resp.token), std::move(resp.fields) });
+                return handler(std::move(resp.ctx),
+                               mutate_in_result{ resp.cas, std::move(resp.token), std::move(resp.fields), resp.deleted });
             });
       });
 }

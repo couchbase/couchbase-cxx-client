@@ -112,6 +112,19 @@ has_common_flags(std::uint32_t flags, std::uint32_t expected_common_flag)
 }
 
 /**
+ * Checks that flags has common flags bits set and that they correspond to expected common flags value.
+ *
+ * @param flags the 32 bits flags to check
+ * @param expected_common_flag the expected common flags enum value
+ * @return true if common flags bits are set and correspond to expected_common_flag format
+ */
+constexpr bool
+has_common_flags(std::uint32_t flags, common_flags expected_common_flag)
+{
+    return has_common_flags(flags) && (flags & common_format_mask) == create_common_flags(expected_common_flag);
+}
+
+/**
  * Checks whether the upper 3 bits are set, indicating compression presence.
  *
  * It does this by shifting bits to the right until only the most significant bits are remaining and then checks if one of them is set.

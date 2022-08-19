@@ -26,22 +26,22 @@
 #include "core/timeout_defaults.hxx"
 #include "core/tracing/request_tracer.hxx"
 
+#include <couchbase/lookup_in_result.hxx>
+#include <couchbase/subdoc/command.hxx>
+
 namespace couchbase::core::operations
 {
 
 struct lookup_in_response {
-    struct field {
+    struct entry_meta {
         protocol::subdoc_opcode opcode;
-        bool exists;
         key_value_status_code status;
-        std::string path;
-        std::string value;
-        std::size_t original_index;
         std::error_code ec{};
     };
-    key_value_error_context ctx;
+    subdocument_error_context ctx;
     couchbase::cas cas{};
-    std::vector<field> fields{};
+    std::vector<couchbase::lookup_in_result::entry> fields{};
+    std::vector<entry_meta> fields_meta{};
     bool deleted{ false };
 };
 
@@ -54,7 +54,7 @@ struct lookup_in_request {
     std::uint16_t partition{};
     std::uint32_t opaque{};
     bool access_deleted{ false };
-    protocol::lookup_in_request_body::lookup_in_specs specs{};
+    std::vector<couchbase::subdoc::command> specs{};
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
     std::shared_ptr<tracing::request_span> parent_span{ nullptr };

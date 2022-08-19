@@ -1,5 +1,6 @@
 add_library(
   test_utils OBJECT
+  binary.cxx
   integration_shortcuts.cxx
   integration_test_guard.cxx
   logger.cxx

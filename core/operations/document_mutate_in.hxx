@@ -43,7 +43,6 @@ struct mutate_in_response {
     mutation_token token{};
     std::vector<couchbase::mutate_in_result::entry> fields{};
     std::vector<entry_meta> fields_meta{};
-    std::optional<std::size_t> first_error_index{};
     bool deleted{ false };
 };
 
