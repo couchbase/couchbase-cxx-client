@@ -74,7 +74,8 @@ initiate_get_all_replicas_operation(std::shared_ptr<cluster> core,
                               return;
                           }
                       } else {
-                          ctx->result_.emplace_back(resp.cas, true /* replica */, std::move(resp.value), resp.flags);
+                          ctx->result_.emplace_back(
+                            get_replica_result{ resp.cas, true /* replica */, { std::move(resp.value), resp.flags } });
                       }
                       if (ctx->expected_responses_ == 0) {
                           ctx->done_ = true;
@@ -103,7 +104,7 @@ initiate_get_all_replicas_operation(std::shared_ptr<cluster> core,
                           return;
                       }
                   } else {
-                      ctx->result_.emplace_back(resp.cas, false /* active */, std::move(resp.value), resp.flags);
+                      ctx->result_.emplace_back(get_replica_result{ resp.cas, false /* active */, { std::move(resp.value), resp.flags } });
                   }
                   if (ctx->expected_responses_ == 0) {
                       ctx->done_ = true;

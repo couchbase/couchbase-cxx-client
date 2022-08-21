@@ -64,7 +64,7 @@ class get_result : public result
      * Decodes content of the document using given codec.
      *
      * @tparam Document custom type that `Transcoder` returns
-     * @tparam Transcoder type that has static function `decode` that takes codec::encoded_value and returns Document
+     * @tparam Transcoder type that has static function `decode` that takes codec::encoded_value and returns `Document`
      * @return decoded document content
      *
      * @since 1.0.0
@@ -84,6 +84,12 @@ class get_result : public result
      *
      * @tparam Transcoder type that has static function `decode` that takes codec::encoded_value and returns `Transcoder::value_type`
      * @return decoded document content
+     *
+     * @par Get flags and value as they are stored in the result
+     *  Here is an example of custom transcoder, that just extracts value and flags as they are stored in the result.
+     * @snippet test_integration_read_replica.cxx smuggling-transcoder
+     *  Usage
+     * @snippet test_integration_read_replica.cxx smuggling-transcoder-usage
      *
      * @since 1.0.0
      * @committed

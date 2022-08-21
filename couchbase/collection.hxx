@@ -445,9 +445,9 @@ class collection
      * @committed
      */
     [[nodiscard]] auto get_any_replica(std::string document_id, const get_any_replica_options& options) const
-      -> std::future<std::pair<key_value_error_context, get_any_replica_result>>
+      -> std::future<std::pair<key_value_error_context, get_replica_result>>
     {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_any_replica_result>>>();
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_replica_result>>>();
         auto future = barrier->get_future();
         get_any_replica(std::move(document_id), options, [barrier](auto ctx, auto result) {
             barrier->set_value({ std::move(ctx), std::move(result) });

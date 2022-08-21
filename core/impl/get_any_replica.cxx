@@ -40,7 +40,7 @@ initiate_get_any_replica_operation(std::shared_ptr<cluster> core,
       bucket_name,
       [core, r = std::move(request), h = std::move(handler)](std::error_code ec, const core::topology::configuration& config) mutable {
           if (ec) {
-              return h(make_key_value_error_context(ec, r->id()), get_any_replica_result{});
+              return h(make_key_value_error_context(ec, r->id()), get_replica_result{});
           }
           struct replica_context {
               replica_context(get_any_replica_handler&& handler, std::uint32_t expected_responses)
@@ -80,7 +80,7 @@ initiate_get_any_replica_operation(std::shared_ptr<cluster> core,
                   }
                   if (local_handler) {
                       return local_handler(std::move(resp.ctx),
-                                           get_any_replica_result{ resp.cas, true /* replica */, std::move(resp.value), resp.flags });
+                                           get_replica_result{ resp.cas, true /* replica */, { std::move(resp.value), resp.flags } });
                   }
               });
           }
@@ -108,7 +108,7 @@ initiate_get_any_replica_operation(std::shared_ptr<cluster> core,
               }
               if (local_handler) {
                   return local_handler(std::move(resp.ctx),
-                                       get_any_replica_result{ resp.cas, false /* active */, std::move(resp.value), resp.flags });
+                                       get_replica_result{ resp.cas, false /* active */, { std::move(resp.value), resp.flags } });
               }
           });
       });
