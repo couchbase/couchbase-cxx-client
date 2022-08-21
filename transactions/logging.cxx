@@ -32,20 +32,20 @@ namespace couchbase::transactions
 std::shared_ptr<spdlog::logger>
 init_txn_log()
 {
-    static auto txnlogger = spdlog::stdout_logger_mt(TXN_LOG);
+    static auto txnlogger = spdlog::stderr_logger_mt(TXN_LOG);
     return txnlogger;
 }
 
 std::shared_ptr<spdlog::logger>
 init_attempt_cleanup_log()
 {
-    static auto txnlogger = spdlog::stdout_logger_mt(ATTEMPT_CLEANUP_LOG);
+    static auto txnlogger = spdlog::stderr_logger_mt(ATTEMPT_CLEANUP_LOG);
     return txnlogger;
 }
 std::shared_ptr<spdlog::logger>
 init_lost_attempts_log()
 {
-    static auto txnlogger = spdlog::stdout_logger_mt(LOST_ATTEMPT_CLEANUP_LOG);
+    static auto txnlogger = spdlog::stderr_logger_mt(LOST_ATTEMPT_CLEANUP_LOG);
     return txnlogger;
 }
 

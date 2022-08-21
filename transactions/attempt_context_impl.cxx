@@ -141,7 +141,7 @@ attempt_context_impl::get(const core::document_id& id, Callback&& cb)
                             std::move(cb),
                             transaction_operation_failed(*ec, fmt::format("fail hard in get {}", err_message.value_or(""))).no_rollback());
                       default: {
-                          auto msg = fmt::format("got error {} while getting doc {}", err_message.value_or(""), id.key());
+                          auto msg = fmt::format("got error \"{}\" while getting doc {}", err_message.value_or(""), id.key());
                           return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_OTHER, msg));
                       }
                   }
@@ -1505,7 +1505,7 @@ attempt_context_impl::atr_abort()
         auto ec = e.ec();
         trace("atr_abort got {} {}", ec, e.what());
         if (expiry_overtime_mode_.load()) {
-            debug("atr_abort got error {} while in overtime mode", e.what());
+            debug("atr_abort got error \"{}\" while in overtime mode", e.what());
             throw transaction_operation_failed(FAIL_EXPIRY, std::string("expired in atr_abort with {} ") + e.what())
               .no_rollback()
               .expired();
@@ -1909,7 +1909,7 @@ attempt_context_impl::do_get(const core::document_id& id, const std::optional<st
                                           }
                                       }
                                       bool ignore_doc = false;
-                                      auto content = doc->content<std::vector<std::byte>>();
+                                      auto content = doc->content();
                                       if (entry) {
                                           if (doc->links().staged_attempt_id() && entry->attempt_id() == this->id()) {
                                               // Attempt is reading its own writes

@@ -260,6 +260,7 @@ struct result : result_base {
     {
         return codec::json_transcoder::decode<T>(raw_value);
     }
+
     [[nodiscard]] subdoc_result::status_type subdoc_status() const;
 };
 } // namespace transactions

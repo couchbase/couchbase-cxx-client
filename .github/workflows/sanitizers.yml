@@ -42,7 +42,7 @@ jobs:
       - name: Check couchbase
         run: ./bin/check-cluster
       - name: Run tests
-        timeout-minutes: 15
+        timeout-minutes: 30
         env:
           CB_SANITIZER: asan
           TEST_SERVER_VERSION: 7.0.3
@@ -85,7 +85,7 @@ jobs:
       - name: Check couchbase
         run: ./bin/check-cluster
       - name: Run tests
-        timeout-minutes: 15
+        timeout-minutes: 30
         env:
           CB_SANITIZER: lsan
           TEST_SERVER_VERSION: 7.0.3
@@ -128,7 +128,7 @@ jobs:
       - name: Check couchbase
         run: ./bin/check-cluster
       - name: Run tests
-        timeout-minutes: 15
+        timeout-minutes: 30
         env:
           CB_SANITIZER: ubsan
           TEST_SERVER_VERSION: 7.0.3
@@ -171,7 +171,7 @@ jobs:
       - name: Check couchbase
         run: ./bin/check-cluster
       - name: Run tests
-        timeout-minutes: 15
+        timeout-minutes: 30
         env:
           CB_SANITIZER: tsan
           TSAN_OPTIONS: second_deadlock_stack=1

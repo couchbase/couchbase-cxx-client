@@ -84,7 +84,11 @@ class attempt_context
     template<typename Content>
     transaction_get_result replace(const transaction_get_result& document, const Content& content)
     {
-        return replace_raw(document, codec::json_transcoder::encode(content).data);
+        if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
+            return replace_raw(document, content);
+        } else {
+            return replace_raw(document, codec::json_transcoder::encode(content).data);
+        }
     }
     /**
      * Inserts a new document into the specified Couchbase collection.
@@ -106,7 +110,11 @@ class attempt_context
     template<typename Content>
     transaction_get_result insert(const core::document_id& id, const Content& content)
     {
-        return insert_raw(id, codec::json_transcoder::encode(content).data);
+        if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
+            return insert_raw(id, content);
+        } else {
+            return insert_raw(id, codec::json_transcoder::encode(content).data);
+        }
     }
     /**
      * Removes the specified document, using the document's last TransactionDocument#cas

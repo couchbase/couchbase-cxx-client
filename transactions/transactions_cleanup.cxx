@@ -548,7 +548,7 @@ transactions_cleanup::attempts_loop()
         }
         attempt_cleanup_log->info("stopping - {} entries on queue", atr_queue_.size());
     } catch (const std::runtime_error& e) {
-        attempt_cleanup_log->error("got error {} in attempts_loop", e.what());
+        attempt_cleanup_log->error("got error \"{}\" in attempts_loop", e.what());
     }
 }
 

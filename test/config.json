@@ -1,0 +1,8 @@
+{
+    "connection_string": "couchbase://127.0.0.1",
+    "username": "Administrator",
+    "password": "password",
+    "io_threads": 4,
+    "bucket": "default",
+    "metadata_bucket": "secBucket"
+}

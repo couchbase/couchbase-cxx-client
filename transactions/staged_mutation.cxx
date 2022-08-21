@@ -47,9 +47,9 @@ void
 staged_mutation_queue::extract_to(const std::string& prefix, core::operations::mutate_in_request& req)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    tao::json::value inserts;
-    tao::json::value replaces;
-    tao::json::value removes;
+    tao::json::value inserts = tao::json::empty_array;
+    tao::json::value replaces = tao::json::empty_array;
+    tao::json::value removes = tao::json::empty_array;
 
     for (const auto& mutation : queue_) {
         tao::json::value doc{ { ATR_FIELD_PER_DOC_ID, mutation.doc().id().key() },
@@ -311,7 +311,7 @@ staged_mutation_queue::commit_doc(attempt_context_impl& ctx, staged_mutation& it
 
             result res;
             if (item.type() == staged_mutation_type::INSERT && !cas_zero_mode) {
-                core::operations::insert_request req{ item.doc().id(), item.doc().content<std::vector<std::byte>>() };
+                core::operations::insert_request req{ item.doc().id(), item.doc().content() };
                 wrap_durable_request(req, ctx.overall_.config());
                 auto barrier = std::make_shared<std::promise<result>>();
                 auto f = barrier->get_future();

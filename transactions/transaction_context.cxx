@@ -204,7 +204,7 @@ transaction_context::handle_error(std::exception_ptr err, txn_complete_callback&
                 current_attempt_context_->rollback();
             } catch (const std::exception& er_rollback) {
                 cleanup().add_attempt(*current_attempt_context_);
-                txn_log->trace("got error {} while auto rolling back, throwing original error", er_rollback.what(), er.what());
+                txn_log->trace("got error \"{}\" while auto rolling back, throwing original error", er_rollback.what(), er.what());
                 auto final = er.get_final_exception(*this);
                 // if you get here, we didn't throw, yet we had an error.  Fall through in
                 // this case.  Note the current logic is such that rollback will not have a
@@ -235,11 +235,11 @@ transaction_context::handle_error(std::exception_ptr err, txn_complete_callback&
         }
         return callback(final, res);
     } catch (const std::exception& ex) {
-        txn_log->error("got runtime error {}", ex.what());
+        txn_log->error("got runtime error \"{}\"", ex.what());
         try {
             current_attempt_context_->rollback();
         } catch (...) {
-            txn_log->error("got error rolling back {}", ex.what());
+            txn_log->error("got error rolling back \"{}\"", ex.what());
         }
         cleanup().add_attempt(*current_attempt_context_);
         // the assumption here is this must come from the logic, not

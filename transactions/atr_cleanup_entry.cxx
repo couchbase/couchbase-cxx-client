@@ -236,7 +236,7 @@ atr_cleanup_entry::do_per_doc(std::shared_ptr<spdlog::logger> logger,
                     logger->error("document {} not found - ignoring ", dr);
                     break;
                 default:
-                    logger->error("got error {}, not ignoring this", e.what());
+                    logger->error("got error \"{}\", not ignoring this", e.what());
                     throw;
             }
         }
