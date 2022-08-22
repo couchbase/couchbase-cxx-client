@@ -33,14 +33,14 @@ add_durability_frame_info(std::vector<std::byte>& framing_extras, durability_lev
     const auto extras_old_size = framing_extras.size();
     if (timeout) {
         const std::byte frame_size{ 3 };
-        framing_extras.resize(+1 + static_cast<std::size_t>(frame_size));
+        framing_extras.resize(extras_old_size + 1 + static_cast<std::size_t>(frame_size));
         framing_extras[extras_old_size + 0] = (frame_id << 4U) | frame_size;
         framing_extras[extras_old_size + 1] = static_cast<std::byte>(level);
         std::uint16_t val = utils::byte_swap(*timeout);
         memcpy(framing_extras.data() + extras_old_size + 2, &val, sizeof(val));
     } else {
         const std::byte frame_size{ 3 };
-        framing_extras.resize(framing_extras.size() + 1 + static_cast<std::size_t>(frame_size));
+        framing_extras.resize(extras_old_size + 1 + static_cast<std::size_t>(frame_size));
         framing_extras[extras_old_size + 0] = (frame_id << 4U) | frame_size;
         framing_extras[extras_old_size + 1] = static_cast<std::byte>(level);
     }
