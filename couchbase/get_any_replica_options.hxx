@@ -61,28 +61,12 @@ struct get_any_replica_options : public common_options<get_any_replica_options> 
 };
 
 /**
- * The error context for the @ref collection#get_any_replica() operation
- *
- * @since 1.0.0
- * @committed
- */
-using get_any_replica_error_context = couchbase::key_value_error_context;
-
-/**
- * The result for the @ref collection#get_any_replica() operation
- *
- * @since 1.0.0
- * @uncommitted
- */
-using get_any_replica_result = get_replica_result;
-
-/**
  * The signature for the handler of the @ref collection#get_any_replica() operation
  *
  * @since 1.0.0
  * @uncommitted
  */
-using get_any_replica_handler = std::function<void(get_any_replica_error_context, get_any_replica_result)>;
+using get_any_replica_handler = std::function<void(key_value_error_context, get_replica_result)>;
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace core

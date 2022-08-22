@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <couchbase/codec/json_transcoder.hxx>
 #include <couchbase/result.hxx>
 
 #include <vector>
@@ -44,17 +45,15 @@ class get_replica_result : public result
      *
      * @param cas
      * @param is_replica true if the document originates from replica node
-     * @param value raw document contents
-     * @param flags flags stored on the server, that describes document encoding
+     * @param value raw document contents along with flags describing its structure
      *
      * @since 1.0.0
      * @committed
      */
-    get_replica_result(couchbase::cas cas, bool is_replica, std::vector<std::byte> value, std::uint32_t flags)
+    get_replica_result(couchbase::cas cas, bool is_replica, codec::encoded_value value)
       : result{ cas }
       , is_replica_{ is_replica }
       , value_{ std::move(value) }
-      , flags_{ flags }
     {
     }
 
@@ -71,56 +70,48 @@ class get_replica_result : public result
     }
 
     /**
-     * Returns raw content of the document.
-     *
-     * @return
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto content() const -> const std::vector<std::byte>&
-    {
-        return value_;
-    }
-
-    /**
-     * Returns flags associated with the document.
-     *
-     * @return
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto flags() const -> std::uint32_t
-    {
-        return flags_;
-    }
-
-    /**
      * Decodes content of the document using given transcoder.
      *
-     * @tparam Transcoder type that has static function `decode` that takes `std::vector<std::byte>` with `flags` and returns
-     * `value_type`
-     * @tparam value_type type that `Transcoder` returns
+     * @tparam Transcoder type that has static function `decode` that takes codec::encoded_value and returns `Transcoder::document_type`
      * @return decoded document content
      *
      * @par Get flags and value as they are stored in the result
      *  Here is an example of custom transcoder, that just extracts value and flags as they are stored in the result.
      * @snippet test_integration_read_replica.cxx smuggling-transcoder
+     *  Usage
+     * @snippet test_integration_read_replica.cxx smuggling-transcoder-usage
      *
      * @since 1.0.0
      * @committed
      */
-    template<typename Transcoder, typename value_type = typename Transcoder::value_type>
-    [[nodiscard]] auto content_as() const -> value_type
+    template<typename Transcoder, std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
+    [[nodiscard]] auto content_as() const -> typename Transcoder::document_type
     {
-        return Transcoder::decode(value_, flags_);
+        return Transcoder::decode(value_);
+    }
+
+    /**
+     * Decodes content of the document using given codec.
+     *
+     * @tparam Document custom type that `Transcoder` returns
+     * @tparam Transcoder type that has static function `decode` that takes codec::encoded_value and returns `Document`
+     * @return decoded document content
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Document,
+             typename Transcoder = codec::json_transcoder,
+             std::enable_if_t<!codec::is_transcoder_v<Document>, bool> = true,
+             std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
+    [[nodiscard]] auto content_as() const -> Document
+    {
+        return Transcoder::template decode<Document>(value_);
     }
 
   private:
     bool is_replica_{ false };
-    std::vector<std::byte> value_{};
-    std::uint32_t flags_{ 0 };
+    codec::encoded_value value_{};
 };
 
 } // namespace couchbase

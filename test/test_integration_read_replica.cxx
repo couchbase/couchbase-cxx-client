@@ -27,6 +27,38 @@ static const tao::json::value basic_doc = {
 };
 static const std::vector<std::byte> basic_doc_json = couchbase::core::utils::json::generate_binary(basic_doc);
 
+//! [smuggling-transcoder]
+struct smuggling_transcoder {
+    using document_type = std::pair<std::vector<std::byte>, std::uint32_t>;
+
+    static auto decode(const couchbase::codec::encoded_value& encoded) -> document_type
+    {
+        return { encoded.data, encoded.flags };
+    }
+};
+template<>
+struct couchbase::codec::is_transcoder<smuggling_transcoder> : public std::true_type {
+};
+//! [smuggling-transcoder]
+
+TEST_CASE("unit: get any replica result with custom coder", "[integration]")
+{
+    couchbase::get_replica_result result{
+        couchbase::cas{ 0 },
+        true,
+        { { std::byte{ 0xde }, std::byte{ 0xad }, std::byte{ 0xbe }, std::byte{ 0xaf } }, 0xcafebebe },
+    };
+
+    // clang-format off
+    //! [smuggling-transcoder-usage]
+    auto [data, flags] = result.content_as<smuggling_transcoder>();
+    //! [smuggling-transcoder-usage]
+    // clang-format on
+
+    REQUIRE(flags == 0xcafebebe);
+    REQUIRE(data == std::vector{ std::byte{ 0xde }, std::byte{ 0xad }, std::byte{ 0xbe }, std::byte{ 0xaf } });
+}
+
 TEST_CASE("integration: get any replica", "[integration]")
 {
     test::utils::integration_test_guard integration;
@@ -54,7 +86,7 @@ TEST_CASE("integration: get any replica", "[integration]")
           couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
         auto [ctx, result] = collection.get_any_replica(key, {}).get();
         REQUIRE_FALSE(ctx.ec());
-        REQUIRE(result.content() == basic_doc_json);
+        REQUIRE(result.content_as<smuggling_transcoder>().first == basic_doc_json);
     }
 }
 
@@ -135,29 +167,4 @@ TEST_CASE("integration: get any replica with missing key", "[integration]")
         auto [ctx, result] = collection.get_any_replica(key, {}).get();
         REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
     }
-}
-
-TEST_CASE("unit: get any replica result with custom coder", "[integration]")
-{
-    couchbase::get_replica_result result{
-        couchbase::cas{ 0 }, true, { std::byte{ 0xde }, std::byte{ 0xad }, std::byte{ 0xbe }, std::byte{ 0xaf } }, 0xcafebebe
-    };
-
-    // clang-format off
-    //! [smuggling-transcoder]
-struct smuggling_transcoder {
-    using value_type = std::pair<std::vector<std::byte>, std::uint32_t>;
-
-    static auto decode(const std::vector<std::byte>& data, std::uint32_t flags) -> value_type
-    {
-        return { data, flags };
-    }
-};
-
-auto [data, flags] = result.content_as<smuggling_transcoder>();
-    //! [smuggling-transcoder]
-    // clang-format on
-
-    REQUIRE(flags == 0xcafebebe);
-    REQUIRE(data == std::vector{ std::byte{ 0xde }, std::byte{ 0xad }, std::byte{ 0xbe }, std::byte{ 0xaf } });
 }
