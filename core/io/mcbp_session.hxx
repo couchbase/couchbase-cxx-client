@@ -1222,6 +1222,9 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                   mcbp_message msg{};
                   switch (self->parser_.next(msg)) {
                       case mcbp_parser::result::ok:
+                          if (self->handler_ == nullptr || self->stopped_) {
+                              return;
+                          }
                           LOG_TRACE(
                             "{} MCBP recv, opaque={}, {:n}", self->log_prefix_, msg.header.opaque, spdlog::to_hex(msg.header_data()));
                           self->handler_->handle(std::move(msg));

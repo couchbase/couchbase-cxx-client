@@ -77,7 +77,7 @@ auto one_ms = chrono::milliseconds(1);
 auto ten_ms = chrono::milliseconds(10);
 auto hundred_ms = chrono::milliseconds(100);
 
-TEST_CASE("exponential backoff with timeout: will timeout", "[transactions]")
+TEST_CASE("exponential backoff with timeout: will timeout", "[unit]")
 {
     retry_state state;
     auto start = chrono::steady_clock::now();
@@ -94,7 +94,7 @@ TEST_CASE("exponential backoff with timeout: will timeout", "[transactions]")
     REQUIRE(state.elapsed_ms() + extra >= hundred_ms);
 }
 
-TEST_CASE("exponential backoff with timeout: retry count in range", "[transactions]")
+TEST_CASE("exponential backoff with timeout: retry count in range", "[unit]")
 {
     retry_state state;
     REQUIRE_THROWS_AS(retry_op_exponential_backoff_timeout<void>(one_ms, ten_ms, hundred_ms, [&state] { state.function(); }),
@@ -110,7 +110,7 @@ TEST_CASE("exponential backoff with timeout: retry count in range", "[transactio
     REQUIRE(state.timings.size() < 15);
 }
 
-TEST_CASE("exponential backoff with timeout: retry timing reasonable", "[transactions]")
+TEST_CASE("exponential backoff with timeout: retry timing reasonable", "[unit]")
 {
     retry_state state;
     REQUIRE_THROWS_AS(retry_op_exponential_backoff_timeout<void>(one_ms, ten_ms, hundred_ms, [&state] { state.function(); }),
@@ -134,7 +134,7 @@ TEST_CASE("exponential backoff with timeout: retry timing reasonable", "[transac
     }
 }
 
-TEST_CASE("exponential backoff with timeout: always retries at least once", "[transactions]")
+TEST_CASE("exponential backoff with timeout: always retries at least once", "[unit]")
 {
     retry_state state;
     REQUIRE_THROWS_AS(retry_op_exponential_backoff_timeout<void>(ten_ms, ten_ms, ten_ms, [&state] { state.function(); }),
@@ -143,7 +143,7 @@ TEST_CASE("exponential backoff with timeout: always retries at least once", "[tr
     REQUIRE(2 <= state.timings.size());
 }
 
-TEST_CASE("exponential backoff with max attempts: will stop at max", "[transactions]")
+TEST_CASE("exponential backoff with max attempts: will stop at max", "[unit]")
 {
     retry_state state;
     REQUIRE_THROWS_AS(retry_op_exponential_backoff<void>(one_ms, 20, [&state] { state.function(); }), retry_operation_retries_exhausted);
@@ -151,7 +151,7 @@ TEST_CASE("exponential backoff with max attempts: will stop at max", "[transacti
     REQUIRE(21 == state.timings.size());
 }
 
-TEST_CASE("exponential backoff with max attempts: zero retries", "[transactions]")
+TEST_CASE("exponential backoff with max attempts: zero retries", "[unit]")
 {
     retry_state state;
     REQUIRE_THROWS_AS(retry_op_exponential_backoff<void>(one_ms, 0, [&state] { state.function(); }), retry_operation_retries_exhausted);
@@ -159,7 +159,7 @@ TEST_CASE("exponential backoff with max attempts: zero retries", "[transactions]
     REQUIRE(1 == state.timings.size());
 }
 
-TEST_CASE("exponential backoff with max attempts: retry timing reasonable", "[transactions]")
+TEST_CASE("exponential backoff with max attempts: retry timing reasonable", "[unit]")
 {
     retry_state state;
     REQUIRE_THROWS_AS(retry_op_exponential_backoff<void>(one_ms, 10, [&state] { state.function(); }), retry_operation_retries_exhausted);
@@ -177,7 +177,7 @@ TEST_CASE("exponential backoff with max attempts: retry timing reasonable", "[tr
     }
 }
 
-TEST_CASE("exp_delay: can call till timeout", "[transactions]")
+TEST_CASE("exp_delay: can call till timeout", "[unit]")
 {
     retry_state state;
     exp_delay op(one_ms, ten_ms, hundred_ms);
@@ -197,7 +197,7 @@ TEST_CASE("exp_delay: can call till timeout", "[transactions]")
     }
 }
 
-TEST_CASE("retryable op: can have constant delay", "[transactions]")
+TEST_CASE("retryable op: can have constant delay", "[unit]")
 {
     retry_state state;
     auto op = constant_delay(ten_ms, 10);
@@ -215,7 +215,7 @@ TEST_CASE("retryable op: can have constant delay", "[transactions]")
     }
 }
 
-TEST_CASE("get_and_open_buckets: can get buckets", "[transactions]")
+TEST_CASE("get_and_open_buckets: can get buckets", "[unit]")
 {
     auto c = TransactionsTestEnvironment::get_cluster();
     std::list<std::string> buckets = get_and_open_buckets(c);
@@ -223,7 +223,7 @@ TEST_CASE("get_and_open_buckets: can get buckets", "[transactions]")
     REQUIRE(buckets.end() != std::find(buckets.begin(), buckets.end(), std::string("secBucket")));
 }
 
-TEST_CASE("get_and_open_buckets: can race to get and open buckets", "[transactions]")
+TEST_CASE("get_and_open_buckets: can race to get and open buckets", "[unit]")
 {
     std::list<std::future<std::list<std::string>>> futures;
     std::size_t num_futures = 20;
@@ -235,7 +235,7 @@ TEST_CASE("get_and_open_buckets: can race to get and open buckets", "[transactio
         CHECK_NOTHROW(f.get());
     }
 }
-TEST_CASE("get_and_open_buckets: can race to get and open buckets in multiple threads", "[transactions]")
+TEST_CASE("get_and_open_buckets: can race to get and open buckets in multiple threads", "[unit]")
 {
     std::list<std::future<std::list<std::string>>> futures;
     std::size_t num_futures = 20;

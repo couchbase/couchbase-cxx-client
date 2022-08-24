@@ -28,9 +28,10 @@ integration_benchmark(get)
 
 add_subdirectory(tools)
 
-integration_test(transaction_logging)
-integration_test(transaction_context)
-integration_test(transaction_simple)
-integration_test(transaction_simple_async)
-integration_test(transaction_utils)
-integration_test(waitable_op_list)
+transaction_test(transaction_context)
+transaction_test(transaction_simple)
+transaction_test(transaction_simple_async)
+
+unit_test(transaction_logging)
+unit_test(transaction_utils)
+unit_test(waitable_op_list)

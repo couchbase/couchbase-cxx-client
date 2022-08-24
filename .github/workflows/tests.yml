@@ -14,6 +14,9 @@ jobs:
           - 7.1.1
           - 7.0.3
           - 6.6.5
+        suite:
+          - unit
+          - transactions
     runs-on: ubuntu-20.04
     services:
       couchbase:
@@ -36,13 +39,15 @@ jobs:
         with:
           key: ${{ github.job }}
       - name: Build tests
+        env:
+          CB_CMAKE_TARGET: build_${{ matrix.suite }}
         run: ./bin/build-tests
       - name: Check couchbase
         run: ./bin/check-cluster
       - name: Run tests
-        timeout-minutes: 30
+        timeout-minutes: 40
         env:
           TEST_SERVER_VERSION: ${{ matrix.server }}
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
           TEST_LOG_LEVEL: trace
-        run: ./bin/run-tests
+        run: ./bin/run-{{ matrix.suite }}-tests

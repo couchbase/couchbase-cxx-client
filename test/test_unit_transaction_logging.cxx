@@ -56,7 +56,7 @@ class TrivialFileSink : public spdlog::sinks::base_sink<std::mutex>
     std::stringstream out_;
 };
 
-TEST_CASE("transactions: can use custom sink", "[transactions]")
+TEST_CASE("transactions: can use custom sink", "[unit]")
 {
     std::string log_message = "I am a log";
     auto sink = std::make_shared<TrivialFileSink>();
@@ -67,7 +67,7 @@ TEST_CASE("transactions: can use custom sink", "[transactions]")
     REQUIRE(std::string::npos != sink->output().find(log_message));
 }
 
-TEST_CASE("transactions: custom sink respects log levels", "[transactions]")
+TEST_CASE("transactions: custom sink respects log levels", "[unit]")
 {
     couchbase::core::logger::create_blackhole_logger();
     std::string log_message = "I am a log";
@@ -79,7 +79,7 @@ TEST_CASE("transactions: custom sink respects log levels", "[transactions]")
     couchbase::core::logger::create_console_logger();
 }
 
-TEST_CASE("transactions: custom sink respects log level changes", "[transactions]")
+TEST_CASE("transactions: custom sink respects log level changes", "[unit]")
 {
     couchbase::core::logger::create_blackhole_logger();
     std::string log_message = "I am a log";
