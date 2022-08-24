@@ -77,7 +77,8 @@ initiate_decrement_operation(std::shared_ptr<couchbase::core::cluster> core,
                                 options.replicate_to,
                                 [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
                                     if (ec) {
-                                        return;
+                                        resp.ctx.override_ec(ec);
+                                        return handler(std::move(resp.ctx), counter_result{});
                                     }
                                     return handler(std::move(resp.ctx), counter_result{ resp.cas, std::move(resp.token), resp.content });
                                 });
