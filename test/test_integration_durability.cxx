@@ -121,3 +121,117 @@ TEST_CASE("integration: legacy durability persist to active and replicate to one
         REQUIRE(fry.username == "fry");
     }
 }
+
+TEST_CASE("integration: low level legacy durability impossible if number of nodes too high", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    if (integration.number_of_replicas() == 3) {
+        return;
+    }
+
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
+    const tao::json::value value = {
+        { "a", 1.0 },
+        { "b", 2.0 },
+    };
+    {
+        couchbase::core::operations::upsert_request_with_legacy_durability req{
+            { id, couchbase::core::utils::json::generate_binary(value) },
+            couchbase::persist_to::four,
+            couchbase::replicate_to::one,
+        };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::durability_impossible);
+    }
+    {
+        couchbase::core::operations::upsert_request_with_legacy_durability req{
+            { id, couchbase::core::utils::json::generate_binary(value) },
+            couchbase::persist_to::active,
+            couchbase::replicate_to::three,
+        };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::durability_impossible);
+    }
+}
+
+TEST_CASE("integration: low level legacy durability persist to active and replicate to one", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    if (integration.number_of_replicas() < 1) {
+        return;
+    }
+
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
+    {
+        const tao::json::value value = {
+            { "a", 1.0 },
+            { "b", 2.0 },
+        };
+        couchbase::core::operations::upsert_request_with_legacy_durability req{
+            { id, couchbase::core::utils::json::generate_binary(value) },
+            couchbase::persist_to::active,
+            couchbase::replicate_to::one,
+        };
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec().message())
+        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE(!resp.cas.empty());
+        REQUIRE(resp.token.sequence_number() != 0);
+    }
+
+    {
+        const tao::json::value value = {
+            { "foo", "bar" },
+        };
+        couchbase::core::operations::replace_request_with_legacy_durability req{
+            { id, couchbase::core::utils::json::generate_binary(value) },
+            couchbase::persist_to::active,
+            couchbase::replicate_to::one,
+        };
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec().message())
+        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE(!resp.cas.empty());
+        REQUIRE(resp.token.sequence_number() != 0);
+    }
+    {
+        couchbase::core::operations::mutate_in_request_with_legacy_durability req{
+            { id },
+            couchbase::persist_to::active,
+            couchbase::replicate_to::one,
+        };
+        req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert("baz", 42) }.specs();
+
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec().message())
+        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE(!resp.cas.empty());
+        REQUIRE(resp.token.sequence_number() != 0);
+    }
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec().message())
+        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE(!resp.cas.empty());
+        REQUIRE(resp.value == couchbase::core::utils::to_binary(R"({"foo":"bar","baz":42})"));
+    }
+    {
+        couchbase::core::operations::remove_request_with_legacy_durability req{
+            { id },
+            couchbase::persist_to::active,
+            couchbase::replicate_to::one,
+        };
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec().message())
+        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE(!resp.cas.empty());
+        REQUIRE(resp.token.sequence_number() != 0);
+    }
+}

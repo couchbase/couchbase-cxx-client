@@ -18,9 +18,11 @@
 #pragma once
 
 #include "core/error_context/key_value.hxx"
+#include "core/impl/with_legacy_durability.hxx"
 #include "core/io/mcbp_context.hxx"
 #include "core/io/mcbp_traits.hxx"
 #include "core/io/retry_context.hxx"
+#include "core/operations/operation_traits.hxx"
 #include "core/protocol/client_request.hxx"
 #include "core/protocol/cmd_append.hxx"
 #include "core/timeout_defaults.hxx"
@@ -54,6 +56,12 @@ struct append_request {
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 
     [[nodiscard]] append_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+};
+
+using append_request_with_legacy_durability = impl::with_legacy_durability<append_request>;
+
+template<>
+struct is_compound_operation<append_request_with_legacy_durability> : public std::true_type {
 };
 
 } // namespace couchbase::core::operations

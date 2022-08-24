@@ -201,14 +201,20 @@ class cluster : public std::enable_shared_from_this<cluster>
              typename std::enable_if_t<!std::is_same_v<typename Request::encoded_request_type, io::http_request>, int> = 0>
     void execute(Request request, Handler&& handler)
     {
-        using response_type = typename Request::encoded_response_type;
-        if (stopped_) {
-            return handler(request.make_response(make_key_value_error_context(errc::network::cluster_closed, request.id), response_type{}));
+        if constexpr (operations::is_compound_operation_v<Request>) {
+            return request.execute(shared_from_this(), std::forward<Handler>(handler));
+        } else {
+            using response_type = typename Request::encoded_response_type;
+            if (stopped_) {
+                return handler(
+                  request.make_response(make_key_value_error_context(errc::network::cluster_closed, request.id), response_type{}));
+            }
+            if (auto bucket = find_bucket_by_name(request.id.bucket()); bucket != nullptr) {
+                return bucket->execute(request, std::forward<Handler>(handler));
+            }
+            return handler(
+              request.make_response(make_key_value_error_context(errc::common::bucket_not_found, request.id), response_type{}));
         }
-        if (auto bucket = find_bucket_by_name(request.id.bucket()); bucket != nullptr) {
-            return bucket->execute(request, std::forward<Handler>(handler));
-        }
-        return handler(request.make_response(make_key_value_error_context(errc::common::bucket_not_found, request.id), response_type{}));
     }
 
     template<class Request,

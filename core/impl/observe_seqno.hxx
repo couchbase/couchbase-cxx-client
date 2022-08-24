@@ -15,6 +15,8 @@
  *   limitations under the License.
  */
 
+#pragma once
+
 #include <couchbase/key_value_error_context.hxx>
 
 #include "core/io/mcbp_context.hxx"

@@ -95,10 +95,6 @@ validate_replicas(const topology::configuration& config, couchbase::persist_to p
         return { errc::common::feature_not_available, {} };
     }
 
-    if (config.ephemeral() && persist_to != couchbase::persist_to::none) {
-        return { errc::common::feature_not_available, {} };
-    }
-
     if (touches_replica(persist_to, replicate_to)) {
         if (!config.num_replicas) {
             return { errc::key_value::durability_impossible, {} };
@@ -324,7 +320,7 @@ observe_poll(std::shared_ptr<couchbase::core::cluster> core, std::shared_ptr<obs
           }
           auto [err, number_of_replicas] = validate_replicas(config, ctx->persist_to(), ctx->replicate_to());
           if (err) {
-              return ctx->finish(ec);
+              return ctx->finish(err);
           }
 
           if (ctx->persist_to() != persist_to::none) {
