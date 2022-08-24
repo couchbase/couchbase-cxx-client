@@ -63,7 +63,7 @@ TEST_CASE("integration: get any replica", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (integration.number_of_nodes() <= integration.number_of_replicas()) {
+    if (integration.number_of_replicas() == 0 && integration.number_of_nodes() <= integration.number_of_replicas()) {
         return;
     }
 
@@ -95,7 +95,7 @@ TEST_CASE("integration: get all replicas", "[integration]")
     test::utils::integration_test_guard integration;
 
     auto number_of_replicas = integration.number_of_replicas();
-    if (integration.number_of_nodes() <= number_of_replicas) {
+    if (number_of_replicas == 0 && integration.number_of_nodes() <= number_of_replicas) {
         return;
     }
 
@@ -128,7 +128,7 @@ TEST_CASE("integration: get all replicas with missing key", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (integration.number_of_nodes() <= integration.number_of_replicas()) {
+    if (integration.number_of_replicas() == 0 && integration.number_of_nodes() <= integration.number_of_replicas()) {
         return;
     }
 
@@ -166,5 +166,69 @@ TEST_CASE("integration: get any replica with missing key", "[integration]")
           couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
         auto [ctx, result] = collection.get_any_replica(key, {}).get();
         REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+    }
+}
+
+TEST_CASE("integration: get any replica low-level version", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (integration.number_of_replicas() == 0 && integration.number_of_nodes() <= integration.number_of_replicas()) {
+        return;
+    }
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
+    {
+        const tao::json::value value = {
+            { "a", 1.0 },
+            { "b", 2.0 },
+        };
+        couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::json::generate_binary(value) };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec());
+    }
+
+    {
+        couchbase::core::operations::get_any_replica_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec().message())
+        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE(!resp.cas.empty());
+        REQUIRE(resp.value == couchbase::core::utils::to_binary(R"({"a":1.0,"b":2.0})"));
+    }
+}
+
+TEST_CASE("integration: get all replicas low-level version", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    auto number_of_replicas = integration.number_of_replicas();
+    if (number_of_replicas == 0 && integration.number_of_nodes() <= integration.number_of_replicas()) {
+        return;
+    }
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
+    {
+        const tao::json::value value = {
+            { "a", 1.0 },
+            { "b", 2.0 },
+        };
+        couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::json::generate_binary(value) };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec());
+    }
+
+    {
+        couchbase::core::operations::get_all_replicas_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.ec().message())
+        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE(resp.entries.size() == number_of_replicas + 1);
+        auto responses_from_active = std::count_if(resp.entries.begin(), resp.entries.end(), [](const auto& r) { return !r.replica; });
+        REQUIRE(responses_from_active == 1);
     }
 }
