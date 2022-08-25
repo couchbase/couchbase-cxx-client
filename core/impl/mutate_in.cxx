@@ -89,20 +89,21 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
                              mutate_in_result{ resp.cas, std::move(resp.token), std::move(resp.fields), resp.deleted });
           }
 
-          initiate_observe_poll(
-            core,
-            std::move(id),
-            resp.token,
-            options.timeout,
-            options.persist_to,
-            options.replicate_to,
-            [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
-                if (ec) {
-                    return;
-                }
-                return handler(std::move(resp.ctx),
-                               mutate_in_result{ resp.cas, std::move(resp.token), std::move(resp.fields), resp.deleted });
-            });
+          initiate_observe_poll(core,
+                                std::move(id),
+                                resp.token,
+                                options.timeout,
+                                options.persist_to,
+                                options.replicate_to,
+                                [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
+                                    if (ec) {
+                                        resp.ctx.override_ec(ec);
+                                        return handler(std::move(resp.ctx), mutate_in_result{});
+                                    }
+                                    return handler(
+                                      std::move(resp.ctx),
+                                      mutate_in_result{ resp.cas, std::move(resp.token), std::move(resp.fields), resp.deleted });
+                                });
       });
 }
 } // namespace couchbase::core::impl
