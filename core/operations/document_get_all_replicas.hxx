@@ -19,7 +19,9 @@
 
 #include "core/error_context/key_value.hxx"
 #include "core/impl/get_replica.hxx"
+#include "core/operations/document_get.hxx"
 #include "core/operations/operation_traits.hxx"
+#include "couchbase/error_codes.hxx"
 
 #include <functional>
 #include <memory>
