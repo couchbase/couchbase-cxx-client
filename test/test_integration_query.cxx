@@ -106,6 +106,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
         req.index_name = index_name;
         req.is_primary = true;
         auto resp = test::utils::execute(integration.cluster, req);
+        INFO(resp.ctx.http_body)
         REQUIRE_FALSE(resp.ctx.ec);
     }
 
