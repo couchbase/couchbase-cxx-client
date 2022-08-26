@@ -19,6 +19,7 @@
 
 #include <couchbase/codec/json_transcoder.hxx>
 #include <couchbase/result.hxx>
+#include <couchbase/subdoc/lookup_in_macro.hxx>
 
 #include <optional>
 
