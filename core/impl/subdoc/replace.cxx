@@ -15,29 +15,22 @@
  *   limitations under the License.
  */
 
-#pragma once
+#include "command_bundle.hxx"
+#include "opcode.hxx"
+#include "path_flags.hxx"
 
-#include <couchbase/subdoc/opcode.hxx>
+#include <couchbase/subdoc/replace.hxx>
 
-#include <cinttypes>
-#include <string>
-#include <vector>
-
-namespace couchbase::subdoc
+namespace couchbase
 {
-/**
- * Internal structure to represent subdocument operations.
- *
- * @since 1.0.0
- * @internal
- */
-struct command {
-    opcode opcode_;
-    std::string path_;
-    std::vector<std::byte> value_;
-    bool create_path_{ false };
-    bool xattr_{ false };
-    bool expand_macro_{ false };
-    std::size_t original_index_{};
-};
-} // namespace couchbase::subdoc
+void
+subdoc::replace::encode(core::impl::subdoc::command_bundle& bundle) const
+{
+    bundle.emplace_back({
+      path_.empty() ? core::impl::subdoc::opcode::set_doc : core::impl::subdoc::opcode::replace,
+      path_,
+      value_,
+      core::impl::subdoc::build_mutate_in_path_flags(xattr_, false, expand_macro_),
+    });
+}
+} // namespace couchbase

@@ -17,7 +17,9 @@
 
 #pragma once
 
-#include <couchbase/subdoc/command.hxx>
+#include <couchbase/subdoc/fwd/command.hxx>
+#include <couchbase/subdoc/fwd/command_bundle.hxx>
+
 #include <couchbase/subdoc/lookup_in_macro.hxx>
 
 #include <string>
@@ -67,10 +69,7 @@ class get
     {
     }
 
-    [[nodiscard]] auto encode(std::size_t original_index) const -> command
-    {
-        return { path_.empty() ? opcode::get_doc : opcode::get, path_, {}, false, xattr_, false, original_index };
-    }
+    void encode(core::impl::subdoc::command_bundle& bundle) const;
 
     std::string path_;
     bool xattr_{ false };

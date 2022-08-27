@@ -17,6 +17,9 @@
 
 #include "test_helper_integration.hxx"
 
+#include <couchbase/lookup_in_specs.hxx>
+#include <couchbase/mutate_in_specs.hxx>
+
 template<typename SubdocumentOperation>
 void
 assert_single_lookup_success(test::utils::integration_test_guard& integration,

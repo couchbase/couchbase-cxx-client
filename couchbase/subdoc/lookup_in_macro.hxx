@@ -17,9 +17,6 @@
 
 #pragma once
 
-#include <couchbase/subdoc/opcode.hxx>
-
-#include <cinttypes>
 #include <optional>
 #include <vector>
 

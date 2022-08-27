@@ -20,10 +20,9 @@
 #include "client_opcode.hxx"
 #include "cmd_info.hxx"
 #include "core/document_id.hxx"
+#include "core/impl/subdoc/command.hxx"
 #include "core/io/mcbp_message.hxx"
 #include "status.hxx"
-
-#include <couchbase/lookup_in_specs.hxx>
 
 #include <gsl/assert>
 
@@ -75,7 +74,7 @@ class lookup_in_request_body
     std::vector<std::byte> value_{};
 
     std::uint8_t flags_{ 0 };
-    std::vector<couchbase::subdoc::command> specs_;
+    std::vector<couchbase::core::impl::subdoc::command> specs_;
 
   public:
     void id(const document_id& id);
@@ -89,7 +88,7 @@ class lookup_in_request_body
         }
     }
 
-    void specs(const std::vector<couchbase::subdoc::command>& specs)
+    void specs(const std::vector<couchbase::core::impl::subdoc::command>& specs)
     {
         specs_ = specs;
     }

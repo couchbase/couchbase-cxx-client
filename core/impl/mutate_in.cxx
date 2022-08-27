@@ -20,6 +20,7 @@
 #include "core/impl/observe_poll.hxx"
 #include "core/impl/observe_seqno.hxx"
 #include "core/operations/document_mutate_in.hxx"
+#include "subdoc/command_bundle.hxx"
 
 #include <couchbase/mutate_in_options.hxx>
 
@@ -31,7 +32,7 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
                              std::string scope_name,
                              std::string collection_name,
                              std::string document_key,
-                             std::vector<couchbase::subdoc::command> specs,
+                             const std::vector<couchbase::core::impl::subdoc::command>& specs,
                              mutate_in_options::built options,
                              mutate_in_handler&& handler)
 {
@@ -52,7 +53,7 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
             options.create_as_deleted,
             options.expiry,
             options.store_semantics,
-            std::move(specs),
+            specs,
             options.durability_level,
             options.timeout,
             {},
@@ -76,7 +77,7 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
         options.create_as_deleted,
         options.expiry,
         options.store_semantics,
-        std::move(specs),
+        specs,
         durability_level::none,
         options.timeout,
         {},

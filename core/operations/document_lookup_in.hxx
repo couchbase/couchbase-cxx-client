@@ -18,6 +18,7 @@
 #pragma once
 
 #include "core/error_context/key_value.hxx"
+#include "core/impl/subdoc/command.hxx"
 #include "core/io/mcbp_context.hxx"
 #include "core/io/mcbp_traits.hxx"
 #include "core/io/retry_context.hxx"
@@ -27,7 +28,6 @@
 #include "core/tracing/request_tracer.hxx"
 
 #include <couchbase/lookup_in_result.hxx>
-#include <couchbase/subdoc/command.hxx>
 
 namespace couchbase::core::operations
 {
@@ -54,7 +54,7 @@ struct lookup_in_request {
     std::uint16_t partition{};
     std::uint32_t opaque{};
     bool access_deleted{ false };
-    std::vector<couchbase::subdoc::command> specs{};
+    std::vector<couchbase::core::impl::subdoc::command> specs{};
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
     std::shared_ptr<tracing::request_span> parent_span{ nullptr };

@@ -246,9 +246,23 @@ set(couchbase_cxx_client_FILES
     core/impl/replace.cxx
     core/impl/search_error_category.cxx
     core/impl/streaming_json_lexter_error_category.cxx
+    core/impl/subdoc/array_add_unique.cxx
+    core/impl/subdoc/array_append.cxx
+    core/impl/subdoc/array_insert.cxx
+    core/impl/subdoc/array_prepend.cxx
+    core/impl/subdoc/count.cxx
+    core/impl/subdoc/counter.cxx
+    core/impl/subdoc/exists.cxx
+    core/impl/subdoc/get.cxx
+    core/impl/subdoc/insert.cxx
     core/impl/subdoc/join_values.cxx
     core/impl/subdoc/lookup_in_macro.cxx
+    core/impl/subdoc/lookup_in_specs.cxx
     core/impl/subdoc/mutate_in_macro.cxx
+    core/impl/subdoc/mutate_in_specs.cxx
+    core/impl/subdoc/remove.cxx
+    core/impl/subdoc/replace.cxx
+    core/impl/subdoc/upsert.cxx
     core/impl/touch.cxx
     core/impl/upsert.cxx
     core/impl/view_error_category.cxx)

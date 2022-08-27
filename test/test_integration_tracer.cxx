@@ -19,6 +19,9 @@
 
 #include "core/platform/uuid.h"
 
+#include <couchbase/lookup_in_specs.hxx>
+#include <couchbase/mutate_in_specs.hxx>
+
 class test_span : public couchbase::core::tracing::request_span
 {
   public:

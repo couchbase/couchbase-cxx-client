@@ -16,6 +16,7 @@
  */
 
 #include "document_lookup_in.hxx"
+#include "core/impl/subdoc/path_flags.hxx"
 
 #include <couchbase/error_codes.hxx>
 
@@ -29,7 +30,7 @@ lookup_in_request::encode_to(lookup_in_request::encoded_request_type& encoded, m
     }
     std::stable_sort(specs.begin(), specs.end(), [](const auto& lhs, const auto& rhs) {
         /* move XATTRs to the beginning of the vector */
-        return lhs.xattr_ && !rhs.xattr_;
+        return core::impl::subdoc::has_xattr_path_flag(lhs.flags_) && !core::impl::subdoc::has_xattr_path_flag(rhs.flags_);
     });
 
     encoded.opaque(opaque);

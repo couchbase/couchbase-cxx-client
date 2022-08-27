@@ -19,6 +19,9 @@
 
 #include "utils/move_only_context.hxx"
 
+#include <couchbase/lookup_in_specs.hxx>
+#include <couchbase/mutate_in_specs.hxx>
+
 static const tao::json::value basic_doc = {
     { "a", 1.0 },
     { "b", 2.0 },

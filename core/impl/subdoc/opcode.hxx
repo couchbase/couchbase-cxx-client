@@ -20,7 +20,7 @@
 #include <cinttypes>
 #include <string>
 
-namespace couchbase::subdoc
+namespace couchbase::core::impl::subdoc
 {
 /**
  * @since 1.0.0
@@ -44,4 +44,4 @@ enum class opcode : std::uint8_t {
     get_count = 0xd2,
     replace_body_with_xattr = 0xd3,
 };
-} // namespace couchbase::subdoc
+} // namespace couchbase::core::impl::subdoc

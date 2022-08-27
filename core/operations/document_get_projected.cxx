@@ -17,9 +17,11 @@
 
 #include "document_get_projected.hxx"
 
+#include "core/impl/subdoc/command_bundle.hxx"
 #include "core/utils/json.hxx"
 
 #include <couchbase/error_codes.hxx>
+#include <couchbase/lookup_in_specs.hxx>
 
 namespace couchbase::core::operations
 {

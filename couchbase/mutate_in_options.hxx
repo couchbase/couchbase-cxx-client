@@ -17,12 +17,13 @@
 
 #pragma once
 
+#include <couchbase/subdoc/fwd/command_bundle.hxx>
+
 #include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/common_durability_options.hxx>
 #include <couchbase/expiry.hxx>
 #include <couchbase/mutate_in_result.hxx>
 #include <couchbase/store_semantics.hxx>
-#include <couchbase/subdoc/command.hxx>
 #include <couchbase/subdocument_error_context.hxx>
 
 #include <chrono>
@@ -224,7 +225,7 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
                              std::string scope_name,
                              std::string collection_name,
                              std::string document_key,
-                             std::vector<couchbase::subdoc::command> specs,
+                             const std::vector<couchbase::core::impl::subdoc::command>& specs,
                              mutate_in_options::built options,
                              mutate_in_handler&& handler);
 #endif

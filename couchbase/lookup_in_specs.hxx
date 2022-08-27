@@ -17,6 +17,9 @@
 
 #pragma once
 
+#include <couchbase/subdoc/fwd/command.hxx>
+#include <couchbase/subdoc/fwd/command_bundle.hxx>
+
 #include <couchbase/codec/json_transcoder.hxx>
 #include <couchbase/subdoc/count.hxx>
 #include <couchbase/subdoc/exists.hxx>
@@ -105,7 +108,7 @@ class lookup_in_specs
     template<typename Operation>
     void push_back(const Operation& operation)
     {
-        specs_.emplace_back(operation.encode(specs_.size()));
+        operation.encode(bundle());
     }
 
     /**
@@ -133,12 +136,11 @@ class lookup_in_specs
      * @since 1.0.0
      * @internal
      */
-    [[nodiscard]] auto specs() const -> const std::vector<subdoc::command>&
-    {
-        return specs_;
-    }
+    [[nodiscard]] auto specs() const -> const std::vector<core::impl::subdoc::command>&;
 
   private:
-    std::vector<subdoc::command> specs_{};
+    [[nodiscard]] auto bundle() -> core::impl::subdoc::command_bundle&;
+
+    std::shared_ptr<core::impl::subdoc::command_bundle> specs_{};
 };
 } // namespace couchbase

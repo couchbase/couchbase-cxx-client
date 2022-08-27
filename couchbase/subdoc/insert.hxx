@@ -17,7 +17,9 @@
 
 #pragma once
 
-#include <couchbase/subdoc/command.hxx>
+#include <couchbase/subdoc/fwd/command.hxx>
+#include <couchbase/subdoc/fwd/command_bundle.hxx>
+
 #include <couchbase/subdoc/mutate_in_macro.hxx>
 
 #include <string>
@@ -91,10 +93,7 @@ class insert
     {
     }
 
-    [[nodiscard]] auto encode(std::size_t original_index) const -> command
-    {
-        return { opcode::dict_add, path_, value_, create_path_, xattr_, expand_macro_, original_index };
-    }
+    void encode(core::impl::subdoc::command_bundle& bundle) const;
 
     std::string path_;
     std::vector<std::byte> value_;

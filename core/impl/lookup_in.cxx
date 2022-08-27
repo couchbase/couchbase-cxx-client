@@ -16,6 +16,7 @@
  */
 
 #include "core/cluster.hxx"
+#include "subdoc/command_bundle.hxx"
 
 #include <couchbase/lookup_in_options.hxx>
 
@@ -27,7 +28,7 @@ initiate_lookup_in_operation(std::shared_ptr<couchbase::core::cluster> core,
                              std::string scope_name,
                              std::string collection_name,
                              std::string document_key,
-                             std::vector<couchbase::subdoc::command> specs,
+                             const std::vector<couchbase::core::impl::subdoc::command>& specs,
                              lookup_in_options::built options,
                              lookup_in_handler&& handler)
 {
@@ -42,7 +43,7 @@ initiate_lookup_in_operation(std::shared_ptr<couchbase::core::cluster> core,
         {},
         {},
         options.access_deleted,
-        std::move(specs),
+        specs,
         options.timeout,
       },
       [handler = std::move(handler)](operations::lookup_in_response&& resp) mutable {
