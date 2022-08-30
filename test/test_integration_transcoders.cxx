@@ -477,6 +477,8 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
                                         {})
                              .get();
         REQUIRE_FALSE(ctx.ec());
+        REQUIRE_FALSE(ctx.first_error_index());
+        REQUIRE_FALSE(ctx.first_error_path());
         REQUIRE_FALSE(resp.cas().empty());
         cas = resp.cas();
     }
