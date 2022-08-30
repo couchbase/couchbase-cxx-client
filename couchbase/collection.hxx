@@ -787,9 +787,9 @@ class collection
      * @committed
      */
     [[nodiscard]] auto mutate_in(std::string document_id, mutate_in_specs specs, const mutate_in_options& options) const
-      -> std::future<std::pair<key_value_error_context, mutate_in_result>>
+      -> std::future<std::pair<subdocument_error_context, mutate_in_result>>
     {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutate_in_result>>>();
+        auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, mutate_in_result>>>();
         auto future = barrier->get_future();
         mutate_in(std::move(document_id), std::move(specs), options, [barrier](auto ctx, auto result) {
             barrier->set_value({ std::move(ctx), std::move(result) });
@@ -805,9 +805,9 @@ class collection
     }
 
     [[nodiscard]] auto lookup_in(std::string document_id, lookup_in_specs specs, const lookup_in_options& options) const
-      -> std::future<std::pair<key_value_error_context, lookup_in_result>>
+      -> std::future<std::pair<subdocument_error_context, lookup_in_result>>
     {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, lookup_in_result>>>();
+        auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, lookup_in_result>>>();
         auto future = barrier->get_future();
         lookup_in(std::move(document_id), std::move(specs), options, [barrier](auto ctx, auto result) {
             barrier->set_value({ std::move(ctx), std::move(result) });
