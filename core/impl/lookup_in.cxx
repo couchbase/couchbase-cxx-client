@@ -50,7 +50,18 @@ initiate_lookup_in_operation(std::shared_ptr<couchbase::core::cluster> core,
           if (resp.ctx.ec()) {
               return handler(std::move(resp.ctx), lookup_in_result{});
           }
-          return handler(std::move(resp.ctx), lookup_in_result{ resp.cas, std::move(resp.fields), resp.deleted });
+
+          std::vector<lookup_in_result::entry> entries{};
+          entries.reserve(resp.fields.size());
+          for (auto& entry : resp.fields) {
+              entries.emplace_back(lookup_in_result::entry{
+                std::move(entry.path),
+                std::move(entry.value),
+                entry.original_index,
+                entry.exists,
+              });
+          }
+          return handler(std::move(resp.ctx), lookup_in_result{ resp.cas, std::move(entries), resp.deleted });
       });
 }
 } // namespace couchbase::core::impl

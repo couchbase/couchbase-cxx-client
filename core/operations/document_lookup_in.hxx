@@ -33,15 +33,18 @@ namespace couchbase::core::operations
 {
 
 struct lookup_in_response {
-    struct entry_meta {
+    struct entry {
+        std::string path;
+        codec::binary value;
+        std::size_t original_index;
+        bool exists;
         protocol::subdoc_opcode opcode;
         key_value_status_code status;
         std::error_code ec{};
     };
     subdocument_error_context ctx;
     couchbase::cas cas{};
-    std::vector<couchbase::lookup_in_result::entry> fields{};
-    std::vector<entry_meta> fields_meta{};
+    std::vector<entry> fields{};
     bool deleted{ false };
 };
 
