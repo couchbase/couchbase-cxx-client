@@ -435,3 +435,36 @@ TEST_CASE("analytics create dataset")
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_FALSE(resp.ctx.ec);
 }
+
+TEST_CASE("integration: prepared query", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    auto key = test::utils::uniq_id("foo");
+    tao::json::value value = {
+        { "a", 1.0 },
+        { "b", 2.0 },
+    };
+    auto json = couchbase::core::utils::json::generate_binary(value);
+
+    couchbase::mutation_token mutation_token;
+    {
+        couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", key };
+        couchbase::core::operations::insert_request req{ id, json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec());
+        mutation_token = resp.token;
+    }
+
+    {
+        couchbase::core::operations::query_request req{ fmt::format(
+          R"(SELECT a, b FROM {} WHERE META().id = "{}")", integration.ctx.bucket, key) };
+
+        req.mutation_state = { mutation_token };
+        req.adhoc = false;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE(resp.rows.size() == 1);
+        REQUIRE(value == couchbase::core::utils::json::parse(resp.rows[0]));
+    }
+}

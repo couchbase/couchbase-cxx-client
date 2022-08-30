@@ -320,8 +320,10 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                         break;
                     case 4040: /* IKey: "plan.build_prepared.no_such_name" */
                     case 4050: /* IKey: "plan.build_prepared.unrecognized_prepared" */
-                    case 4060: /* IKey: "plan.build_prepared.no_such_name" */
                     case 4070: /* IKey: "plan.build_prepared.decoding" */
+                        ctx_->cache.erase(statement);
+                        throw couchbase::core::priv::retry_http_request{};
+                    case 4060: /* IKey: "plan.build_prepared.no_such_name" */
                     case 4080: /* IKey: "plan.build_prepared.name_encoded_plan_mismatch" */
                     case 4090: /* IKey: "plan.build_prepared.name_not_in_encoded_plan" */
                         response.ctx.ec = errc::query::prepared_statement_failure;
