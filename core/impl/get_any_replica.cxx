@@ -34,8 +34,26 @@ initiate_get_any_replica_operation(std::shared_ptr<cluster> core,
                                    get_any_replica_options::built options,
                                    get_any_replica_handler&& handler)
 {
+    return initiate_get_any_replica_operation(std::move(core),
+                                              bucket_name,
+                                              scope_name,
+                                              collection_name,
+                                              std::move(document_key),
+                                              options.timeout,
+                                              movable_get_any_replica_handler{ std::move(handler) });
+}
+
+void
+initiate_get_any_replica_operation(std::shared_ptr<cluster> core,
+                                   const std::string& bucket_name,
+                                   const std::string& scope_name,
+                                   const std::string& collection_name,
+                                   std::string document_key,
+                                   std::optional<std::chrono::milliseconds> timeout,
+                                   movable_get_any_replica_handler&& handler)
+{
     auto request =
-      std::make_shared<impl::get_any_replica_request>(bucket_name, scope_name, collection_name, std::move(document_key), options.timeout);
+      std::make_shared<impl::get_any_replica_request>(bucket_name, scope_name, collection_name, std::move(document_key), timeout);
     core->with_bucket_configuration(
       bucket_name,
       [core, r = std::move(request), h = std::move(handler)](std::error_code ec, const core::topology::configuration& config) mutable {
@@ -43,13 +61,13 @@ initiate_get_any_replica_operation(std::shared_ptr<cluster> core,
               return h(make_key_value_error_context(ec, r->id()), get_replica_result{});
           }
           struct replica_context {
-              replica_context(get_any_replica_handler&& handler, std::uint32_t expected_responses)
+              replica_context(movable_get_any_replica_handler&& handler, std::uint32_t expected_responses)
                 : handler_(std::move(handler))
                 , expected_responses_(expected_responses)
               {
               }
 
-              get_any_replica_handler handler_;
+              movable_get_any_replica_handler handler_;
               std::uint32_t expected_responses_;
               bool done_{ false };
               std::mutex mutex_{};
@@ -60,7 +78,7 @@ initiate_get_any_replica_operation(std::shared_ptr<cluster> core,
               document_id replica_id{ r->id() };
               replica_id.node_index(idx);
               core->execute(impl::get_replica_request{ std::move(replica_id), r->timeout() }, [ctx](impl::get_replica_response&& resp) {
-                  get_any_replica_handler local_handler;
+                  movable_get_any_replica_handler local_handler;
                   {
                       std::scoped_lock lock(ctx->mutex_);
                       if (ctx->done_) {
@@ -88,7 +106,7 @@ initiate_get_any_replica_operation(std::shared_ptr<cluster> core,
           core::operations::get_request active{ document_id{ r->id() } };
           active.timeout = r->timeout();
           core->execute(active, [ctx](core::operations::get_response&& resp) {
-              get_any_replica_handler local_handler{};
+              movable_get_any_replica_handler local_handler{};
               {
                   std::scoped_lock lock(ctx->mutex_);
                   if (ctx->done_) {

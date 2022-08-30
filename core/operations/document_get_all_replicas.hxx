@@ -21,6 +21,7 @@
 #include "core/impl/get_replica.hxx"
 #include "core/operations/document_get.hxx"
 #include "core/operations/operation_traits.hxx"
+#include "core/utils/movable_function.hxx"
 #include "couchbase/error_codes.hxx"
 
 #include <functional>
@@ -58,7 +59,7 @@ struct get_all_replicas_request {
               if (ec) {
                   return h(response_type{ make_key_value_error_context(ec, id) });
               }
-              using handler_type = std::function<void(response_type)>;
+              using handler_type = utils::movable_function<void(response_type)>;
 
               struct replica_context {
                   replica_context(handler_type handler, std::uint32_t expected_responses)

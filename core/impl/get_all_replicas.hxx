@@ -22,6 +22,7 @@
 
 #include "core/document_id.hxx"
 #include "core/error_context/key_value.hxx"
+#include "core/utils/movable_function.hxx"
 
 #include <vector>
 
@@ -65,4 +66,14 @@ class get_all_replicas_request
     std::optional<std::chrono::milliseconds> timeout_{};
 };
 
+using movable_get_all_replicas_handler = utils::movable_function<void(couchbase::key_value_error_context, get_all_replicas_result)>;
+
+void
+initiate_get_all_replicas_operation(std::shared_ptr<cluster> core,
+                                    const std::string& bucket_name,
+                                    const std::string& scope_name,
+                                    const std::string& collection_name,
+                                    std::string document_key,
+                                    std::optional<std::chrono::milliseconds> timeout,
+                                    movable_get_all_replicas_handler&& handler);
 } // namespace couchbase::core::impl
