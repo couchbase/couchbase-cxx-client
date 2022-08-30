@@ -32,6 +32,16 @@ class query_cache
         std::optional<std::string> plan{};
     };
 
+    void erase(const std::string& statement)
+    {
+        std::scoped_lock lock(store_mutex_);
+        auto it = store_.find(statement);
+        if (it == store_.end()) {
+            return;
+        }
+        store_.erase(it);
+    }
+
     void put(const std::string& statement, const std::string& prepared)
     {
         std::scoped_lock lock(store_mutex_);
