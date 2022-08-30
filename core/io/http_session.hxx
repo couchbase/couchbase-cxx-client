@@ -454,8 +454,11 @@ class http_session : public std::enable_shared_from_this<http_session>
                   return self->stop();
               }
               if (res.complete) {
-                  std::scoped_lock lock(self->current_response_mutex_);
-                  auto ctx = std::move(self->current_response_);
+                  response_context ctx{};
+                  {
+                      std::scoped_lock lock(self->current_response_mutex_);
+                      std::swap(self->current_response_, ctx);
+                  }
                   if (ctx.parser.response.must_close_connection()) {
                       self->keep_alive_ = false;
                   }
