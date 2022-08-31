@@ -22,6 +22,8 @@
 #include "core/operations/management/collections.hxx"
 #include "core/operations/management/query.hxx"
 
+#include <couchbase/lookup_in_specs.hxx>
+
 TEST_CASE("integration: trivial non-data query", "[integration]")
 {
     test::utils::integration_test_guard integration;

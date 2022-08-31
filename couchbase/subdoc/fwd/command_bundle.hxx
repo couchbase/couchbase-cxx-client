@@ -17,38 +17,9 @@
 
 #pragma once
 
-#include <optional>
-#include <vector>
-
-namespace couchbase::subdoc
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+namespace couchbase::core::impl::subdoc
 {
-/**
- * @since 1.0.0
- * @volatile
- */
-enum class mutate_in_macro { cas, sequence_number, value_crc32c };
-
-/**
- * Parses string as mutate_in macro.
- *
- * @param input string
- * @return empty `optional` if the string does not contain macro, corresponding enum value otherwise.
- *
- * @since 1.0.0
- * @volatile
- */
-auto
-to_mutate_in_macro(std::string_view input) -> std::optional<mutate_in_macro>;
-
-/**
- * Converts macro into binary array suitable for sending to the server.
- *
- * @param value macro
- * @return binary string
- *
- * @since 1.0.0
- * @volatile
- */
-auto
-to_binary(mutate_in_macro value) -> std::vector<std::byte>;
-} // namespace couchbase::subdoc
+class command_bundle;
+} // namespace couchbase::core::impl::subdoc
+#endif

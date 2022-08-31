@@ -17,6 +17,9 @@
 
 #include "test_helper_integration.hxx"
 
+#include <couchbase/lookup_in_specs.hxx>
+#include <couchbase/mutate_in_specs.hxx>
+
 template<typename SubdocumentOperation>
 void
 assert_single_lookup_success(test::utils::integration_test_guard& integration,
@@ -33,8 +36,8 @@ assert_single_lookup_success(test::utils::integration_test_guard& integration,
     REQUIRE(resp.fields.size() == 1);
     REQUIRE(resp.fields[0].exists);
     REQUIRE(resp.fields[0].path == req.specs[0].path_);
-    REQUIRE(resp.fields_meta[0].status == couchbase::key_value_status_code::success);
-    REQUIRE_FALSE(resp.fields_meta[0].ec);
+    REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::success);
+    REQUIRE_FALSE(resp.fields[0].ec);
     if (expected_value.has_value()) {
         REQUIRE(couchbase::core::utils::to_binary(expected_value.value()) == resp.fields[0].value);
     }
@@ -58,8 +61,8 @@ assert_single_lookup_error(test::utils::integration_test_guard& integration,
     REQUIRE_FALSE(resp.fields[0].exists);
     REQUIRE(resp.fields[0].path == req.specs[0].path_);
     REQUIRE(resp.fields[0].value.empty());
-    REQUIRE(resp.fields_meta[0].status == expected_status);
-    REQUIRE(resp.fields_meta[0].ec == expected_ec);
+    REQUIRE(resp.fields[0].status == expected_status);
+    REQUIRE(resp.fields[0].ec == expected_ec);
 }
 
 void
@@ -69,8 +72,8 @@ assert_single_mutate_success(couchbase::core::operations::mutate_in_response res
     REQUIRE_FALSE(resp.cas.empty());
     REQUIRE(resp.fields.size() == 1);
     REQUIRE(resp.fields[0].path == path);
-    REQUIRE(resp.fields_meta[0].status == couchbase::key_value_status_code::success);
-    REQUIRE_FALSE(resp.fields_meta[0].ec);
+    REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::success);
+    REQUIRE_FALSE(resp.fields[0].ec);
     REQUIRE(resp.fields[0].value == couchbase::core::utils::to_binary(value));
 }
 
@@ -85,8 +88,8 @@ assert_single_mutate_error(couchbase::core::operations::mutate_in_response resp,
     REQUIRE(resp.fields.size() == 1);
     REQUIRE(resp.fields[0].path == path);
     REQUIRE(resp.fields[0].value.empty());
-    REQUIRE(resp.fields_meta[0].status == expected_status);
-    REQUIRE(resp.fields_meta[0].ec == expected_ec);
+    REQUIRE(resp.fields[0].status == expected_status);
+    REQUIRE(resp.fields[0].ec == expected_ec);
 }
 
 TEST_CASE("integration: subdoc get & exists", "[integration]")
@@ -595,17 +598,17 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
         REQUIRE(resp.fields.size() == 4);
 
         REQUIRE(resp.fields[0].value == couchbase::core::utils::to_binary(R"("dictval")"));
-        REQUIRE(resp.fields_meta[0].status == couchbase::key_value_status_code::success);
+        REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::success);
 
         REQUIRE(resp.fields[1].value.empty());
-        REQUIRE(resp.fields_meta[1].status == couchbase::key_value_status_code::success);
+        REQUIRE(resp.fields[1].status == couchbase::key_value_status_code::success);
         REQUIRE(resp.fields[1].exists);
 
         REQUIRE(resp.fields[2].value.empty());
-        REQUIRE(resp.fields_meta[2].status == couchbase::key_value_status_code::subdoc_path_not_found);
+        REQUIRE(resp.fields[2].status == couchbase::key_value_status_code::subdoc_path_not_found);
 
         REQUIRE(resp.fields[3].value == couchbase::core::utils::to_binary("2"));
-        REQUIRE(resp.fields_meta[3].status == couchbase::key_value_status_code::success);
+        REQUIRE(resp.fields[3].status == couchbase::key_value_status_code::success);
     }
 
     SECTION("mismatched type and opcode")
@@ -665,7 +668,7 @@ TEST_CASE("integration: subdoc multi mutation", "[integration]")
         REQUIRE(resp.fields.size() == 2);
 
         REQUIRE(resp.fields[1].value == couchbase::core::utils::to_binary("42"));
-        REQUIRE(resp.fields_meta[1].status == couchbase::key_value_status_code::success);
+        REQUIRE(resp.fields[1].status == couchbase::key_value_status_code::success);
 
         assert_single_lookup_success(integration, id, couchbase::lookup_in_specs::get("newpath"), "true");
         assert_single_lookup_success(integration, id, couchbase::lookup_in_specs::get("counter"), "42");
@@ -685,7 +688,7 @@ TEST_CASE("integration: subdoc multi mutation", "[integration]")
         REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::path_not_found);
         REQUIRE(resp.fields.size() == 3);
         REQUIRE(resp.ctx.first_error_index() == 1);
-        REQUIRE(resp.fields_meta[1].status == couchbase::key_value_status_code::subdoc_path_not_found);
+        REQUIRE(resp.fields[1].status == couchbase::key_value_status_code::subdoc_path_not_found);
     }
 }
 
@@ -743,10 +746,10 @@ TEST_CASE("integration: subdoc get count", "[integration]")
         REQUIRE(resp.fields.size() == 2);
 
         REQUIRE(resp.fields[0].value.empty());
-        REQUIRE(resp.fields_meta[0].status == couchbase::key_value_status_code::subdoc_path_not_found);
+        REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::subdoc_path_not_found);
 
         REQUIRE(resp.fields[1].value == couchbase::core::utils::to_binary("5"));
-        REQUIRE(resp.fields_meta[1].status == couchbase::key_value_status_code::success);
+        REQUIRE(resp.fields[1].status == couchbase::key_value_status_code::success);
     }
 }
 

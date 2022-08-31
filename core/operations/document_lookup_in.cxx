@@ -16,6 +16,7 @@
  */
 
 #include "document_lookup_in.hxx"
+#include "core/impl/subdoc/path_flags.hxx"
 
 #include <couchbase/error_codes.hxx>
 
@@ -29,7 +30,7 @@ lookup_in_request::encode_to(lookup_in_request::encoded_request_type& encoded, m
     }
     std::stable_sort(specs.begin(), specs.end(), [](const auto& lhs, const auto& rhs) {
         /* move XATTRs to the beginning of the vector */
-        return lhs.xattr_ && !rhs.xattr_;
+        return core::impl::subdoc::has_xattr_path_flag(lhs.flags_) && !core::impl::subdoc::has_xattr_path_flag(rhs.flags_);
     });
 
     encoded.opaque(opaque);
@@ -46,8 +47,7 @@ lookup_in_request::make_response(key_value_error_context&& ctx, const encoded_re
 
     bool deleted = false;
     couchbase::cas cas{};
-    std::vector<couchbase::lookup_in_result::entry> fields{};
-    std::vector<lookup_in_response::entry_meta> fields_meta{};
+    std::vector<lookup_in_response::entry> fields{};
     std::error_code ec = ctx.ec();
     std::optional<std::size_t> first_error_index{};
     std::optional<std::string> first_error_path{};
@@ -58,23 +58,22 @@ lookup_in_request::make_response(key_value_error_context&& ctx, const encoded_re
     }
     if (!ctx.ec()) {
         fields.resize(specs.size());
-        fields_meta.resize(specs.size());
         for (size_t i = 0; i < specs.size(); ++i) {
             const auto& req_entry = specs[i];
             fields[i].original_index = req_entry.original_index_;
             fields[i].path = req_entry.path_;
-            fields_meta[i].opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode_);
-            fields_meta[i].status = key_value_status_code::success;
+            fields[i].opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode_);
+            fields[i].status = key_value_status_code::success;
         }
         for (size_t i = 0; i < encoded.body().fields().size(); ++i) {
             const auto& res_entry = encoded.body().fields()[i];
-            fields_meta[i].status = res_entry.status;
-            fields_meta[i].ec =
+            fields[i].status = res_entry.status;
+            fields[i].ec =
               protocol::map_status_code(protocol::client_opcode::subdoc_multi_mutation, static_cast<std::uint16_t>(res_entry.status));
-            if (!fields_meta[i].ec && !ctx.ec()) {
-                ec = fields_meta[i].ec;
+            if (!fields[i].ec && !ctx.ec()) {
+                ec = fields[i].ec;
             }
-            if (!first_error_index && !fields_meta[i].ec) {
+            if (!first_error_index && !fields[i].ec) {
                 first_error_index = i;
                 first_error_path = fields[i].path;
             }
@@ -89,7 +88,10 @@ lookup_in_request::make_response(key_value_error_context&& ctx, const encoded_re
     }
 
     return lookup_in_response{
-        make_subdocument_error_context(ctx, ec, first_error_path, first_error_index, deleted), cas, std::move(fields), fields_meta, deleted,
+        make_subdocument_error_context(ctx, ec, first_error_path, first_error_index, deleted),
+        cas,
+        std::move(fields),
+        deleted,
     };
 }
 } // namespace couchbase::core::operations

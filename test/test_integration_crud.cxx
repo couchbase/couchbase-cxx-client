@@ -19,6 +19,9 @@
 
 #include "utils/move_only_context.hxx"
 
+#include <couchbase/lookup_in_specs.hxx>
+#include <couchbase/mutate_in_specs.hxx>
+
 static const tao::json::value basic_doc = {
     { "a", 1.0 },
     { "b", 2.0 },
@@ -715,7 +718,7 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
         REQUIRE(resp.ctx.first_error_index() == 0);
         REQUIRE(resp.fields.size() == 1);
         REQUIRE(resp.fields[0].path == "a");
-        REQUIRE(resp.fields_meta[0].status == couchbase::key_value_status_code::subdoc_path_exists);
+        REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::subdoc_path_exists);
     }
 }
 

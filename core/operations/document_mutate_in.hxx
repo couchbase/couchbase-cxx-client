@@ -18,6 +18,7 @@
 #pragma once
 
 #include "core/error_context/key_value.hxx"
+#include "core/impl/subdoc/command.hxx"
 #include "core/impl/with_legacy_durability.hxx"
 #include "core/io/mcbp_context.hxx"
 #include "core/io/mcbp_traits.hxx"
@@ -30,12 +31,14 @@
 
 #include <couchbase/durability_level.hxx>
 #include <couchbase/mutate_in_result.hxx>
-#include <couchbase/subdoc/command.hxx>
 
 namespace couchbase::core::operations
 {
 struct mutate_in_response {
-    struct entry_meta {
+    struct entry {
+        std::string path;
+        codec::binary value;
+        std::size_t original_index;
         protocol::subdoc_opcode opcode;
         key_value_status_code status;
         std::error_code ec{};
@@ -43,8 +46,7 @@ struct mutate_in_response {
     subdocument_error_context ctx;
     couchbase::cas cas{};
     mutation_token token{};
-    std::vector<couchbase::mutate_in_result::entry> fields{};
-    std::vector<entry_meta> fields_meta{};
+    std::vector<entry> fields{};
     bool deleted{ false };
 };
 
@@ -61,7 +63,7 @@ struct mutate_in_request {
     bool create_as_deleted{ false };
     std::optional<std::uint32_t> expiry{};
     couchbase::store_semantics store_semantics{ couchbase::store_semantics::replace };
-    std::vector<couchbase::subdoc::command> specs{};
+    std::vector<couchbase::core::impl::subdoc::command> specs{};
     couchbase::durability_level durability_level{ durability_level::none };
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };

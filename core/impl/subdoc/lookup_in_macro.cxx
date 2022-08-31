@@ -18,6 +18,8 @@
 #include <couchbase/error_codes.hxx>
 #include <couchbase/subdoc/lookup_in_macro.hxx>
 
+#include <string>
+
 namespace couchbase::subdoc
 {
 static const std::string macro_document{ "$document" };

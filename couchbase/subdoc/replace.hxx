@@ -17,7 +17,9 @@
 
 #pragma once
 
-#include <couchbase/subdoc/command.hxx>
+#include <couchbase/subdoc/fwd/command.hxx>
+#include <couchbase/subdoc/fwd/command_bundle.hxx>
+
 #include <couchbase/subdoc/mutate_in_macro.hxx>
 
 #include <string>
@@ -76,10 +78,7 @@ class replace
     {
     }
 
-    [[nodiscard]] auto encode(std::size_t original_index) const -> command
-    {
-        return { path_.empty() ? opcode::set_doc : opcode::replace, path_, value_, false, xattr_, expand_macro_, original_index };
-    }
+    void encode(core::impl::subdoc::command_bundle& bundle) const;
 
     std::string path_;
     std::vector<std::byte> value_;

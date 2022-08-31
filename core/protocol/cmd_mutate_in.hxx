@@ -20,15 +20,17 @@
 #include "client_opcode.hxx"
 #include "cmd_info.hxx"
 #include "core/document_id.hxx"
+#include "core/impl/subdoc/command.hxx"
 #include "core/io/mcbp_message.hxx"
 #include "status.hxx"
 
 #include <couchbase/durability_level.hxx>
-#include <couchbase/mutate_in_specs.hxx>
 #include <couchbase/mutation_token.hxx>
 #include <couchbase/store_semantics.hxx>
 
 #include <gsl/assert>
+
+#include <cstddef>
 
 namespace couchbase::core::protocol
 {
@@ -112,7 +114,7 @@ class mutate_in_request_body
 
     std::uint32_t expiry_{ 0 };
     std::byte flags_{ 0 };
-    std::vector<couchbase::subdoc::command> specs_;
+    std::vector<couchbase::core::impl::subdoc::command> specs_;
     std::vector<std::byte> framing_extras_{};
 
   public:
@@ -159,7 +161,7 @@ class mutate_in_request_body
         }
     }
 
-    void specs(std::vector<couchbase::subdoc::command> specs)
+    void specs(std::vector<couchbase::core::impl::subdoc::command> specs)
     {
         specs_ = std::move(specs);
     }

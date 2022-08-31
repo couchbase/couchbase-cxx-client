@@ -17,38 +17,26 @@
 
 #pragma once
 
-#include <optional>
+#include "command.hxx"
+
 #include <vector>
 
-namespace couchbase::subdoc
+namespace couchbase::core::impl::subdoc
 {
-/**
- * @since 1.0.0
- * @volatile
- */
-enum class mutate_in_macro { cas, sequence_number, value_crc32c };
+class command_bundle
+{
+  public:
+    void emplace_back(command&& cmd)
+    {
+        store_.emplace_back(std::move(cmd));
+    }
 
-/**
- * Parses string as mutate_in macro.
- *
- * @param input string
- * @return empty `optional` if the string does not contain macro, corresponding enum value otherwise.
- *
- * @since 1.0.0
- * @volatile
- */
-auto
-to_mutate_in_macro(std::string_view input) -> std::optional<mutate_in_macro>;
+    [[nodiscard]] auto specs() const -> const std::vector<command>&
+    {
+        return store_;
+    }
 
-/**
- * Converts macro into binary array suitable for sending to the server.
- *
- * @param value macro
- * @return binary string
- *
- * @since 1.0.0
- * @volatile
- */
-auto
-to_binary(mutate_in_macro value) -> std::vector<std::byte>;
-} // namespace couchbase::subdoc
+  private:
+    std::vector<command> store_{};
+};
+} // namespace couchbase::core::impl::subdoc

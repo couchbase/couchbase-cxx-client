@@ -126,39 +126,6 @@ mutate_in_request_body::fill_extras()
     }
 }
 
-/**
- * Should non-existent intermediate paths be created
- */
-static constexpr std::byte path_flag_create_parents{ 0b0000'0001U };
-
-/**
- * If set, the path refers to an Extended Attribute (XATTR).
- * If clear, the path refers to a path inside the document body.
- */
-static constexpr std::byte path_flag_xattr{ 0b0000'0100U };
-
-/**
- * Expand macro values inside extended attributes. The request is
- * invalid if this flag is set without `path_flag_create_parents` being set.
- */
-static constexpr std::byte path_flag_expand_macros{ 0b0001'0000U };
-
-static constexpr std::byte
-build_path_flags(const couchbase::subdoc::command& spec)
-{
-    std::byte flags{ 0 };
-    if (spec.xattr_) {
-        flags |= path_flag_xattr;
-    }
-    if (spec.create_path_) {
-        flags |= path_flag_create_parents;
-    }
-    if (spec.expand_macro_) {
-        flags |= path_flag_expand_macros;
-    }
-    return flags;
-}
-
 void
 mutate_in_request_body::fill_value()
 {
@@ -173,7 +140,7 @@ mutate_in_request_body::fill_value()
     for (const auto& spec : specs_) {
         value_[offset] = static_cast<std::byte>(spec.opcode_);
         ++offset;
-        value_[offset] = build_path_flags(spec);
+        value_[offset] = spec.flags_;
         ++offset;
 
         std::uint16_t path_size = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(spec.path_.size()));

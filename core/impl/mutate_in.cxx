@@ -20,6 +20,7 @@
 #include "core/impl/observe_poll.hxx"
 #include "core/impl/observe_seqno.hxx"
 #include "core/operations/document_mutate_in.hxx"
+#include "subdoc/command_bundle.hxx"
 
 #include <couchbase/mutate_in_options.hxx>
 
@@ -31,7 +32,7 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
                              std::string scope_name,
                              std::string collection_name,
                              std::string document_key,
-                             std::vector<couchbase::subdoc::command> specs,
+                             const std::vector<couchbase::core::impl::subdoc::command>& specs,
                              mutate_in_options::built options,
                              mutate_in_handler&& handler)
 {
@@ -52,7 +53,7 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
             options.create_as_deleted,
             options.expiry,
             options.store_semantics,
-            std::move(specs),
+            specs,
             options.durability_level,
             options.timeout,
             {},
@@ -62,8 +63,16 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
               if (resp.ctx.ec()) {
                   return handler(std::move(resp.ctx), mutate_in_result{});
               }
-              return handler(std::move(resp.ctx),
-                             mutate_in_result{ resp.cas, std::move(resp.token), std::move(resp.fields), resp.deleted });
+              std::vector<mutate_in_result::entry> entries{};
+              entries.reserve(resp.fields.size());
+              for (auto& entry : resp.fields) {
+                  entries.emplace_back(mutate_in_result::entry{
+                    std::move(entry.path),
+                    std::move(entry.value),
+                    entry.original_index,
+                  });
+              }
+              return handler(std::move(resp.ctx), mutate_in_result{ resp.cas, std::move(resp.token), std::move(entries), resp.deleted });
           });
     }
 
@@ -76,7 +85,7 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
         options.create_as_deleted,
         options.expiry,
         options.store_semantics,
-        std::move(specs),
+        specs,
         durability_level::none,
         options.timeout,
         {},
@@ -85,25 +94,32 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
     return core->execute(
       std::move(request), [core, id = std::move(id), options, handler = std::move(handler)](operations::mutate_in_response&& resp) mutable {
           if (resp.ctx.ec()) {
-              return handler(std::move(resp.ctx),
-                             mutate_in_result{ resp.cas, std::move(resp.token), std::move(resp.fields), resp.deleted });
+              return handler(std::move(resp.ctx), mutate_in_result{});
           }
 
-          initiate_observe_poll(core,
-                                std::move(id),
-                                resp.token,
-                                options.timeout,
-                                options.persist_to,
-                                options.replicate_to,
-                                [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
-                                    if (ec) {
-                                        resp.ctx.override_ec(ec);
-                                        return handler(std::move(resp.ctx), mutate_in_result{});
-                                    }
-                                    return handler(
-                                      std::move(resp.ctx),
-                                      mutate_in_result{ resp.cas, std::move(resp.token), std::move(resp.fields), resp.deleted });
-                                });
+          initiate_observe_poll(
+            core,
+            std::move(id),
+            resp.token,
+            options.timeout,
+            options.persist_to,
+            options.replicate_to,
+            [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
+                if (ec) {
+                    resp.ctx.override_ec(ec);
+                    return handler(std::move(resp.ctx), mutate_in_result{});
+                }
+                std::vector<mutate_in_result::entry> entries{};
+                entries.reserve(resp.fields.size());
+                for (auto& entry : resp.fields) {
+                    entries.emplace_back(mutate_in_result::entry{
+                      std::move(entry.path),
+                      std::move(entry.value),
+                      entry.original_index,
+                    });
+                }
+                return handler(std::move(resp.ctx), mutate_in_result{ resp.cas, std::move(resp.token), std::move(entries), resp.deleted });
+            });
       });
 }
 } // namespace couchbase::core::impl

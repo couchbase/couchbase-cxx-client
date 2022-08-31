@@ -15,40 +15,28 @@
  *   limitations under the License.
  */
 
-#pragma once
+#include "command_bundle.hxx"
 
-#include <optional>
-#include <vector>
+#include <couchbase/mutate_in_specs.hxx>
 
-namespace couchbase::subdoc
+namespace couchbase
 {
-/**
- * @since 1.0.0
- * @volatile
- */
-enum class mutate_in_macro { cas, sequence_number, value_crc32c };
-
-/**
- * Parses string as mutate_in macro.
- *
- * @param input string
- * @return empty `optional` if the string does not contain macro, corresponding enum value otherwise.
- *
- * @since 1.0.0
- * @volatile
- */
 auto
-to_mutate_in_macro(std::string_view input) -> std::optional<mutate_in_macro>;
+mutate_in_specs::specs() const -> const std::vector<core::impl::subdoc::command>&
+{
+    static std::vector<core::impl::subdoc::command> empty{};
+    if (specs_ == nullptr) {
+        return empty;
+    }
+    return specs_->specs();
+}
 
-/**
- * Converts macro into binary array suitable for sending to the server.
- *
- * @param value macro
- * @return binary string
- *
- * @since 1.0.0
- * @volatile
- */
 auto
-to_binary(mutate_in_macro value) -> std::vector<std::byte>;
-} // namespace couchbase::subdoc
+mutate_in_specs::bundle() -> core::impl::subdoc::command_bundle&
+{
+    if (specs_ == nullptr) {
+        specs_ = std::make_shared<core::impl::subdoc::command_bundle>();
+    }
+    return *specs_;
+}
+} // namespace couchbase

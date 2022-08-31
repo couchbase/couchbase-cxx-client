@@ -16,6 +16,7 @@
  */
 
 #include "document_mutate_in.hxx"
+#include "core/impl/subdoc/path_flags.hxx"
 #include "core/utils/mutation_token.hxx"
 
 #include <couchbase/error_codes.hxx>
@@ -39,7 +40,7 @@ mutate_in_request::encode_to(mutate_in_request::encoded_request_type& encoded, m
     }
     std::stable_sort(specs.begin(), specs.end(), [](const auto& lhs, const auto& rhs) {
         /* move XATTRs to the beginning of the vector */
-        return lhs.xattr_ && !rhs.xattr_;
+        return core::impl::subdoc::has_xattr_path_flag(lhs.flags_) && !core::impl::subdoc::has_xattr_path_flag(rhs.flags_);
     });
 
     encoded.opaque(opaque);
@@ -65,8 +66,7 @@ mutate_in_request::make_response(key_value_error_context&& ctx, const encoded_re
     bool deleted = false;
     couchbase::cas response_cas{};
     couchbase::mutation_token response_token{};
-    std::vector<couchbase::mutate_in_result::entry> fields{};
-    std::vector<mutate_in_response::entry_meta> fields_meta{};
+    std::vector<mutate_in_response::entry> fields{};
     std::error_code ec = ctx.ec();
     std::optional<std::size_t> first_error_index{};
     std::optional<std::string> first_error_path{};
@@ -77,13 +77,13 @@ mutate_in_request::make_response(key_value_error_context&& ctx, const encoded_re
     }
     if (!ctx.ec()) {
         fields.resize(specs.size());
-        fields_meta.resize(specs.size());
+        fields.resize(specs.size());
         for (size_t i = 0; i < specs.size(); ++i) {
             const auto& req_entry = specs[i];
             fields[i].original_index = req_entry.original_index_;
             fields[i].path = req_entry.path_;
-            fields_meta[i].opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode_);
-            fields_meta[i].status = key_value_status_code::success;
+            fields[i].opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode_);
+            fields[i].status = key_value_status_code::success;
         }
         for (const auto& entry : encoded.body().fields()) {
             if (entry.status == key_value_status_code::success) {
@@ -91,10 +91,10 @@ mutate_in_request::make_response(key_value_error_context&& ctx, const encoded_re
             } else {
                 first_error_index = entry.index;
                 first_error_path = fields[entry.index].path;
-                fields_meta[entry.index].status = entry.status;
-                fields_meta[entry.index].ec =
+                fields[entry.index].status = entry.status;
+                fields[entry.index].ec =
                   protocol::map_status_code(protocol::client_opcode::subdoc_multi_mutation, static_cast<std::uint16_t>(entry.status));
-                ec = fields_meta[entry.index].ec;
+                ec = fields[entry.index].ec;
                 break;
             }
         }
@@ -111,7 +111,6 @@ mutate_in_request::make_response(key_value_error_context&& ctx, const encoded_re
         response_cas,
         std::move(response_token),
         std::move(fields),
-        fields_meta,
         deleted,
     };
 }

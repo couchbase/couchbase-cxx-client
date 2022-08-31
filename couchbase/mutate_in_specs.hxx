@@ -17,6 +17,9 @@
 
 #pragma once
 
+#include <couchbase/subdoc/fwd/command.hxx>
+#include <couchbase/subdoc/fwd/command_bundle.hxx>
+
 #include <couchbase/codec/json_transcoder.hxx>
 #include <couchbase/subdoc/array_add_unique.hxx>
 #include <couchbase/subdoc/array_append.hxx>
@@ -33,6 +36,7 @@
 
 namespace couchbase
 {
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace
 {
 template<typename Value>
@@ -66,6 +70,7 @@ encode_array(const Value& value, Rest... args)
 }
 
 } // namespace
+#endif
 
 class mutate_in_specs
 {
@@ -485,7 +490,7 @@ class mutate_in_specs
     template<typename Operation>
     void push_back(const Operation& operation)
     {
-        specs_.emplace_back(operation.encode(specs_.size()));
+        operation.encode(bundle());
     }
 
     /**
@@ -513,12 +518,11 @@ class mutate_in_specs
      * @since 1.0.0
      * @internal
      */
-    [[nodiscard]] auto specs() const -> const std::vector<subdoc::command>&
-    {
-        return specs_;
-    }
+    [[nodiscard]] auto specs() const -> const std::vector<core::impl::subdoc::command>&;
 
   private:
-    std::vector<subdoc::command> specs_{};
+    [[nodiscard]] auto bundle() -> core::impl::subdoc::command_bundle&;
+
+    std::shared_ptr<core::impl::subdoc::command_bundle> specs_{};
 };
 } // namespace couchbase

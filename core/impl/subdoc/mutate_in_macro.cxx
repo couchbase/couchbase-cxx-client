@@ -18,6 +18,8 @@
 #include <couchbase/error_codes.hxx>
 #include <couchbase/subdoc/mutate_in_macro.hxx>
 
+#include <string>
+
 namespace couchbase::subdoc
 {
 auto

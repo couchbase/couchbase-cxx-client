@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include <couchbase/codec/json_transcoder.hxx>
-#include <couchbase/subdoc/command.hxx>
+#include <couchbase/subdoc/fwd/command.hxx>
+#include <couchbase/subdoc/fwd/command_bundle.hxx>
 
 #include <string>
 #include <vector>
@@ -77,12 +77,7 @@ class counter
     {
     }
 
-    [[nodiscard]] auto encode(std::size_t original_index) const -> command
-    {
-        return {
-            opcode::counter, path_, std::move(codec::json_transcoder::encode(delta_).data), create_path_, xattr_, false, original_index
-        };
-    }
+    void encode(core::impl::subdoc::command_bundle& bundle) const;
 
     std::string path_;
     std::int64_t delta_;

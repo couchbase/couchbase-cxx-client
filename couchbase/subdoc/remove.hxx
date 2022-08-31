@@ -17,7 +17,8 @@
 
 #pragma once
 
-#include <couchbase/subdoc/command.hxx>
+#include <couchbase/subdoc/fwd/command.hxx>
+#include <couchbase/subdoc/fwd/command_bundle.hxx>
 
 #include <string>
 #include <vector>
@@ -60,10 +61,7 @@ class remove
     {
     }
 
-    [[nodiscard]] auto encode(std::size_t original_index) const -> command
-    {
-        return { path_.empty() ? opcode::remove_doc : opcode::remove, path_, {}, false, xattr_, false, original_index };
-    }
+    void encode(core::impl::subdoc::command_bundle& bundle) const;
 
     std::string path_;
     bool xattr_{ false };

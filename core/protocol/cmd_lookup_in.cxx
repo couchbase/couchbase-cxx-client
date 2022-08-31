@@ -83,22 +83,6 @@ lookup_in_request_body::fill_extras()
     }
 }
 
-/**
- * If set, the path refers to an Extended Attribute (XATTR).
- * If clear, the path refers to a path inside the document body.
- */
-static constexpr std::byte path_flag_xattr{ 0b0000'0100U };
-
-static constexpr std::byte
-build_path_flags(const couchbase::subdoc::command& spec)
-{
-    std::byte flags{ 0U };
-    if (spec.xattr_) {
-        flags |= path_flag_xattr;
-    }
-    return flags;
-}
-
 void
 lookup_in_request_body::fill_value()
 {
@@ -112,7 +96,7 @@ lookup_in_request_body::fill_value()
     for (const auto& spec : specs_) {
         value_[offset] = static_cast<std::byte>(spec.opcode_);
         ++offset;
-        value_[offset] = build_path_flags(spec);
+        value_[offset] = spec.flags_;
         ++offset;
         std::uint16_t path_size = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(spec.path_.size()));
         std::memcpy(value_.data() + offset, &path_size, sizeof(path_size));

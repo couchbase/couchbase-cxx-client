@@ -17,7 +17,9 @@
 
 #pragma once
 
-#include <couchbase/subdoc/command.hxx>
+#include <couchbase/subdoc/fwd/command.hxx>
+#include <couchbase/subdoc/fwd/command_bundle.hxx>
+
 #include <couchbase/subdoc/mutate_in_macro.hxx>
 
 #include <string>
@@ -26,11 +28,6 @@
 namespace couchbase
 {
 class mutate_in_specs;
-namespace core::impl::subdoc
-{
-std::vector<std::byte>
-join_values(const std::vector<std::vector<std::byte>>& values);
-} // namespace core::impl::subdoc
 
 namespace subdoc
 {
@@ -82,10 +79,7 @@ class array_prepend
     {
     }
 
-    [[nodiscard]] auto encode(std::size_t original_index) const -> command
-    {
-        return { opcode::array_push_first, path_, core::impl::subdoc::join_values(values_), create_path_, xattr_, false, original_index };
-    }
+    void encode(core::impl::subdoc::command_bundle& bundle) const;
 
     std::string path_;
     std::vector<std::vector<std::byte>> values_;
