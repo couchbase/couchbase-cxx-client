@@ -62,7 +62,7 @@ TEST_CASE("integration: connecting with unresponsive first node in bootstrap nod
     auto f = barrier->get_future();
     cluster->open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
-    REQUIRE_FALSE(rc);
+    REQUIRE_SUCCESS(rc);
     test::utils::close_cluster(cluster);
     io_thread.join();
 }
@@ -133,14 +133,14 @@ TEST_CASE("integration: destroy cluster without waiting for close completion", "
         couchbase::core::document_id id{ ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
         couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary("{{}}") };
         auto resp = test::utils::execute(cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     // hit Query
     {
         couchbase::core::operations::query_request req{ R"(SELECT 42 AS the_answer)" };
         auto resp = test::utils::execute(cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
     // close but do not explicitly wait for callback

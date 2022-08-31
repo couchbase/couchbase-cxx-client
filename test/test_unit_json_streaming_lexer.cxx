@@ -58,7 +58,7 @@ null,1,false
         result.meta = std::move(meta);
     });
     lexer.feed(chunk);
-    REQUIRE_FALSE(result.ec);
+    REQUIRE_SUCCESS(result.ec);
     REQUIRE(result.number_of_rows == 5);
     REQUIRE(result.rows.size() == 5);
     REQUIRE(result.meta == R"(
@@ -109,7 +109,7 @@ TEST_CASE("unit: json_streaming_lexer parse query result", "[unit]")
     for (const auto& chunk : chunks) {
         lexer.feed(chunk);
     }
-    REQUIRE_FALSE(result.ec);
+    REQUIRE_SUCCESS(result.ec);
     REQUIRE(result.number_of_rows == 3);
     REQUIRE(result.rows.size() == 3);
     REQUIRE(result.meta == chunks[0] + chunks[4]);
@@ -140,7 +140,7 @@ TEST_CASE("unit: json_streaming_lexer parse query result in multiple chunks", "[
     for (const auto& chunk : chunks) {
         lexer.feed(chunk);
     }
-    REQUIRE_FALSE(result.ec);
+    REQUIRE_SUCCESS(result.ec);
     REQUIRE(result.number_of_rows == 1);
     REQUIRE(result.rows.size() == 1);
 
@@ -178,7 +178,7 @@ TEST_CASE("unit: json_streaming_lexer parse chunked metadata trailer", "[unit]")
     for (const auto& chunk : chunks) {
         lexer.feed(chunk);
     }
-    REQUIRE_FALSE(result.ec);
+    REQUIRE_SUCCESS(result.ec);
     REQUIRE(result.number_of_rows == 1);
     REQUIRE(result.rows.size() == 1);
     const auto* expected_meta =
@@ -228,7 +228,7 @@ TEST_CASE("unit: json_streaming_lexer parse payload with missing results", "[uni
     lexer.feed(chunk);
     REQUIRE_FALSE(on_row_handler_executed);
     REQUIRE(on_complete_handler_excecuted);
-    REQUIRE_FALSE(result.ec);
+    REQUIRE_SUCCESS(result.ec);
     REQUIRE(result.number_of_rows == 0);
     REQUIRE(result.rows.empty());
     REQUIRE(result.meta == chunk);

@@ -32,14 +32,14 @@ TEST_CASE("integration: increment", "[integration]")
         {
             couchbase::core::operations::insert_request req{ id, couchbase::core::utils::to_binary("0") };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
         }
 
         for (uint64_t expected = 2; expected <= 20; expected += 2) {
             couchbase::core::operations::increment_request req{ id };
             req.delta = 2;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
             REQUIRE(resp.content == expected);
         }
     }
@@ -50,7 +50,7 @@ TEST_CASE("integration: increment", "[integration]")
         req.delta = 2;
         req.initial_value = 10;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.content == 10);
     }
 
@@ -61,7 +61,7 @@ TEST_CASE("integration: increment", "[integration]")
             req.initial_value = 2;
             req.durability_level = couchbase::durability_level::persist_to_majority;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
             REQUIRE(resp.content == 2);
         }
     }
@@ -84,13 +84,13 @@ TEST_CASE("integration: increment with public API", "[integration]")
         {
             const auto ascii_zero = couchbase::core::utils::to_binary("0");
             auto [ctx, resp] = collection.insert<couchbase::codec::raw_binary_transcoder>(id, ascii_zero, {}).get();
-            REQUIRE_FALSE(ctx.ec());
+            REQUIRE_SUCCESS(ctx.ec());
             REQUIRE_FALSE(resp.cas().empty());
         }
 
         for (uint64_t expected = 2; expected <= 20; expected += 2) {
             auto [ctx, resp] = collection.binary().increment(id, couchbase::increment_options{}.delta(2)).get();
-            REQUIRE_FALSE(ctx.ec());
+            REQUIRE_SUCCESS(ctx.ec());
             REQUIRE(resp.content() == expected);
         }
     }
@@ -98,7 +98,7 @@ TEST_CASE("integration: increment with public API", "[integration]")
     SECTION("initial value")
     {
         auto [ctx, resp] = collection.binary().increment(id, couchbase::increment_options{}.delta(2).initial(10)).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE(resp.content() == 10);
     }
 
@@ -109,7 +109,7 @@ TEST_CASE("integration: increment with public API", "[integration]")
               collection.binary()
                 .increment(id, couchbase::increment_options{}.initial(2).durability(couchbase::durability_level::persist_to_majority))
                 .get();
-            REQUIRE_FALSE(ctx.ec());
+            REQUIRE_SUCCESS(ctx.ec());
             REQUIRE(resp.content() == 2);
         }
     }
@@ -127,14 +127,14 @@ TEST_CASE("integration: decrement", "[integration]")
         {
             couchbase::core::operations::insert_request req{ id, couchbase::core::utils::to_binary("20") };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
         }
 
         for (uint64_t expected = 18; expected > 0; expected -= 2) {
             couchbase::core::operations::decrement_request req{ id };
             req.delta = 2;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
             REQUIRE(resp.content == expected);
         }
     }
@@ -145,7 +145,7 @@ TEST_CASE("integration: decrement", "[integration]")
         req.delta = 2;
         req.initial_value = 10;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.content == 10);
     }
 
@@ -156,7 +156,7 @@ TEST_CASE("integration: decrement", "[integration]")
             req.initial_value = 2;
             req.durability_level = couchbase::durability_level::persist_to_majority;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
             REQUIRE(resp.content == 2);
         }
     }
@@ -179,13 +179,13 @@ TEST_CASE("integration: decrement with public API", "[integration]")
         {
             const auto ascii_twenty = couchbase::core::utils::to_binary("20");
             auto [ctx, resp] = collection.insert<couchbase::codec::raw_binary_transcoder>(id, ascii_twenty, {}).get();
-            REQUIRE_FALSE(ctx.ec());
+            REQUIRE_SUCCESS(ctx.ec());
             REQUIRE_FALSE(resp.cas().empty());
         }
 
         for (uint64_t expected = 18; expected > 0; expected -= 2) {
             auto [ctx, resp] = collection.binary().decrement(id, couchbase::decrement_options{}.delta(2)).get();
-            REQUIRE_FALSE(ctx.ec());
+            REQUIRE_SUCCESS(ctx.ec());
             REQUIRE(resp.content() == expected);
         }
     }
@@ -193,7 +193,7 @@ TEST_CASE("integration: decrement with public API", "[integration]")
     SECTION("initial value")
     {
         auto [ctx, resp] = collection.binary().decrement(id, couchbase::decrement_options{}.delta(2).initial(10)).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE(resp.content() == 10);
     }
 
@@ -204,7 +204,7 @@ TEST_CASE("integration: decrement with public API", "[integration]")
               collection.binary()
                 .decrement(id, couchbase::decrement_options{}.initial(2).durability(couchbase::durability_level::persist_to_majority))
                 .get();
-            REQUIRE_FALSE(ctx.ec());
+            REQUIRE_SUCCESS(ctx.ec());
             REQUIRE(resp.content() == 2);
         }
     }

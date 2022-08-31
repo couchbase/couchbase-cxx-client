@@ -174,7 +174,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
                 couchbase::core::operations::upsert_request req{ make_id(guard.ctx), value };
                 req.parent_span = parent_span;
                 auto resp = test::utils::execute(guard.cluster, req);
-                REQUIRE_FALSE(resp.ctx.ec());
+                REQUIRE_SUCCESS(resp.ctx.ec());
                 auto spans = tracer->spans();
                 REQUIRE_FALSE(spans.empty());
                 assert_kv_op_span_ok(guard, spans.front(), "cb.upsert", parent_span);
@@ -185,7 +185,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
                 couchbase::core::operations::insert_request req{ make_id(guard.ctx), value };
                 req.parent_span = parent_span;
                 auto resp = test::utils::execute(guard.cluster, req);
-                REQUIRE_FALSE(resp.ctx.ec());
+                REQUIRE_SUCCESS(resp.ctx.ec());
                 auto spans = tracer->spans();
                 REQUIRE_FALSE(spans.empty());
                 assert_kv_op_span_ok(guard, spans.front(), "cb.insert", parent_span);
@@ -197,7 +197,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
                 couchbase::core::operations::get_request req{ existing_id };
                 req.parent_span = parent_span;
                 auto resp = test::utils::execute(guard.cluster, req);
-                REQUIRE_FALSE(resp.ctx.ec());
+                REQUIRE_SUCCESS(resp.ctx.ec());
                 auto spans = tracer->spans();
                 REQUIRE_FALSE(spans.empty());
                 assert_kv_op_span_ok(guard, spans.front(), "cb.get", parent_span);
@@ -209,7 +209,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
                 couchbase::core::operations::replace_request req{ existing_id, new_value };
                 req.parent_span = parent_span;
                 auto resp = test::utils::execute(guard.cluster, req);
-                REQUIRE_FALSE(resp.ctx.ec());
+                REQUIRE_SUCCESS(resp.ctx.ec());
                 auto spans = tracer->spans();
                 REQUIRE_FALSE(spans.empty());
                 assert_kv_op_span_ok(guard, spans.front(), "cb.replace", parent_span);
@@ -222,7 +222,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
                 req.id = existing_id;
                 req.specs = couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("some") }.specs();
                 auto resp = test::utils::execute(guard.cluster, req);
-                REQUIRE_FALSE(resp.ctx.ec());
+                REQUIRE_SUCCESS(resp.ctx.ec());
                 auto spans = tracer->spans();
                 REQUIRE_FALSE(spans.empty());
                 assert_kv_op_span_ok(guard, spans.front(), "cb.lookup_in", parent_span);
@@ -235,7 +235,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
                 req.id = existing_id;
                 req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert("another", "field") }.specs();
                 auto resp = test::utils::execute(guard.cluster, req);
-                REQUIRE_FALSE(resp.ctx.ec());
+                REQUIRE_SUCCESS(resp.ctx.ec());
                 auto spans = tracer->spans();
                 REQUIRE_FALSE(spans.empty());
                 assert_kv_op_span_ok(guard, spans.front(), "cb.mutate_in", parent_span);
@@ -250,7 +250,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
             couchbase::core::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
             req.parent_span = parent_span;
             auto resp = test::utils::execute(guard.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE_SUCCESS(resp.ctx.ec);
             auto spans = tracer->spans();
             REQUIRE_FALSE(spans.empty());
             assert_http_op_span_ok(spans.front(), "query", parent_span);
@@ -280,7 +280,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
             req.bucket_name = guard.ctx.bucket;
             req.statement = R"(SELECT "ruby rules" AS greeting)";
             auto resp = test::utils::execute(guard.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE_SUCCESS(resp.ctx.ec);
             auto spans = tracer->spans();
             REQUIRE_FALSE(spans.empty());
             assert_http_op_span_ok(spans.front(), "analytics", parent_span);

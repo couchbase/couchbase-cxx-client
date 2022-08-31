@@ -325,8 +325,7 @@ TEST_CASE("integration: fetch diagnostics after N1QL query", "[integration]")
     {
         couchbase::core::operations::query_request req{ "SELECT 'hello, couchbase' AS greetings" };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec.message())
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         INFO("rows.size() =" << resp.rows.size())
         REQUIRE(resp.rows.size() == 1);
         INFO("row=" << resp.rows[0])
