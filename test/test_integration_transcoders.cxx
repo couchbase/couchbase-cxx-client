@@ -24,6 +24,8 @@
 
 #include "profile.hxx"
 
+using Catch::Contains;
+
 TEST_CASE("integration: upsert/get with json transcoder", "[integration]")
 {
     test::utils::integration_test_guard integration;
@@ -464,6 +466,47 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
         REQUIRE(resp.exists(couchbase::subdoc::lookup_in_macro::value_size_bytes));
         REQUIRE(resp.content_as<std::uint32_t>(3) == 66);
         REQUIRE(resp.content_as<std::uint32_t>(couchbase::subdoc::lookup_in_macro::value_size_bytes) == 66);
+    }
+
+    {
+        auto [ctx, resp] = collection
+                             .mutate_in(id,
+                                        couchbase::mutate_in_specs{
+                                          couchbase::mutate_in_specs::increment("views", 1).create_path(),
+                                          couchbase::mutate_in_specs::remove("missing_field"),
+                                        },
+                                        {})
+                             .get();
+        REQUIRE(ctx.ec() == couchbase::errc::key_value::path_not_found);
+        REQUIRE(ctx.first_error_index().has_value());
+        REQUIRE(ctx.first_error_index().value() == 1);
+        REQUIRE(ctx.first_error_path().has_value());
+        REQUIRE(ctx.first_error_path() == "missing_field");
+        REQUIRE(resp.cas().empty());
+        REQUIRE_THROWS_WITH(resp.has_value(0), Contains("path_invalid"));
+        REQUIRE_THROWS_WITH(resp.has_value("views"), Contains("path_invalid"));
+        REQUIRE_THROWS_WITH(resp.content_as<std::uint32_t>(0), Contains("path_invalid"));
+        REQUIRE_THROWS_WITH(resp.content_as<std::uint32_t>("views"), Contains("path_invalid"));
+    }
+
+    {
+        auto [ctx, resp] = collection
+                             .mutate_in(id,
+                                        couchbase::mutate_in_specs{
+                                          couchbase::mutate_in_specs::increment("views", 1).create_path(),
+                                          couchbase::mutate_in_specs::upsert("references", 100'500).create_path(),
+                                        },
+                                        {})
+                             .get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_FALSE(ctx.first_error_index().has_value());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.has_value(0));
+        REQUIRE(resp.has_value("views"));
+        REQUIRE(resp.content_as<std::uint32_t>(0) == 1);
+        REQUIRE(resp.content_as<std::uint32_t>("views") == 1);
+        REQUIRE_FALSE(resp.has_value(1));
+        REQUIRE_FALSE(resp.has_value("references"));
     }
 
     couchbase::cas cas{};
