@@ -127,6 +127,44 @@ class mutate_in_result : public mutation_result
         return is_deleted_;
     }
 
+    /**
+     * Returns whether the field has value
+     *
+     * @param index the index of the result field
+     * @return true if the server returned value for the field
+     *
+     * @since 1.0.0
+     * @internal
+     */
+    [[nodiscard]] auto has_value(std::size_t index) const -> bool
+    {
+        for (const entry& e : entries_) {
+            if (e.original_index == index) {
+                return !e.value.empty();
+            }
+        }
+        throw std::system_error(errc::key_value::path_invalid, "invalid index for mutate_in result: " + std::to_string(index));
+    }
+
+    /**
+     * Returns whether the field has value
+     *
+     * @param path the path of the result field
+     * @return true if the server returned value for the field
+     *
+     * @since 1.0.0
+     * @internal
+     */
+    [[nodiscard]] auto has_value(const std::string& path) const -> bool
+    {
+        for (const entry& e : entries_) {
+            if (e.path == path) {
+                return !e.value.empty();
+            }
+        }
+        throw std::system_error(errc::key_value::path_invalid, "invalid path for mutate_in result: " + path);
+    }
+
   private:
     std::vector<entry> entries_{};
     bool is_deleted_{ false };
