@@ -35,8 +35,7 @@ TEST_CASE("integration: trivial non-data query", "[integration]")
     {
         couchbase::core::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec.message())
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
     }
 }
 
@@ -61,8 +60,7 @@ TEST_CASE("integration: query with handler capturing non-copyable object", "[int
         };
         integration.cluster->execute(req, std::move(handler));
         auto resp = f.get();
-        INFO(resp.ctx.ec.message())
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
     }
 }
 
@@ -87,7 +85,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
     {
         couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
         REQUIRE(created);
     }
@@ -95,7 +93,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
     {
         couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
         REQUIRE(created);
     }
@@ -109,7 +107,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
         req.is_primary = true;
         auto resp = test::utils::execute(integration.cluster, req);
         INFO(resp.ctx.http_body)
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
     couchbase::mutation_token mutation_token;
@@ -118,7 +116,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
         couchbase::core::document_id id{ integration.ctx.bucket, scope_name, collection_name, key };
         couchbase::core::operations::insert_request req{ id, json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         mutation_token = resp.token;
     }
 
@@ -130,7 +128,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
         req.scope_name = scope_name;
         req.mutation_state = { mutation_token };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 1);
         REQUIRE(value == couchbase::core::utils::json::parse(resp.rows[0]));
     }
@@ -165,7 +163,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
         req.mutation_state = { mutation_token };
         req.adhoc = false;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 1);
         REQUIRE(value == couchbase::core::utils::json::parse(resp.rows[0]));
     }
@@ -182,7 +180,7 @@ TEST_CASE("integration: read only with no results", "[integration]")
     {
         couchbase::core::operations::query_request req{ fmt::format("SELECT * FROM {} LIMIT 0", integration.ctx.bucket) };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.empty());
     }
 }
@@ -198,7 +196,6 @@ TEST_CASE("integration: invalid query", "[integration]")
     {
         couchbase::core::operations::query_request req{ "I'm not n1ql" };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec.message());
         REQUIRE(resp.ctx.ec == couchbase::errc::common::parsing_failure);
     }
 }
@@ -226,7 +223,7 @@ TEST_CASE("integration: preserve expiry for mutatation query", "[integration]")
         couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary(R"({"foo":42})") };
         req.expiry = expiry;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     {
@@ -247,7 +244,7 @@ TEST_CASE("integration: preserve expiry for mutatation query", "[integration]")
         couchbase::core::operations::query_request req{ statement };
         req.preserve_expiry = true;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
     {
@@ -280,8 +277,7 @@ TEST_CASE("integration: streaming query results", "[integration]")
             return couchbase::core::utils::json::stream_control::next_row;
         };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec.message())
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(rows.size() == 1);
         REQUIRE(rows[0] == R"({"greeting":"ruby rules"})");
     }
@@ -309,8 +305,7 @@ TEST_CASE("integration: streaming query results with stop in the middle", "[inte
             return couchbase::core::utils::json::stream_control::next_row;
         };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec.message())
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(rows.size() == 2);
         REQUIRE(rows[0] == R"({"data":{"tech":"C++"}})");
         REQUIRE(rows[1] == R"({"data":{"tech":"Ruby"}})");
@@ -339,8 +334,7 @@ TEST_CASE("integration: streaming analytics results", "[integration]")
             return couchbase::core::utils::json::stream_control::next_row;
         };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec.message())
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(rows.size() == 3);
         REQUIRE(rows[0] == R"({ "data": { "tech": "C++" } })");
         REQUIRE(rows[1] == R"({ "data": { "tech": "Ruby" } })");
@@ -360,7 +354,7 @@ TEST_CASE("integration: sticking query to the service node", "[integration]")
     {
         couchbase::core::operations::query_request req{ R"(SELECT 42 AS answer)" };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 1);
         REQUIRE(resp.rows[0] == R"({"answer":42})");
         REQUIRE_FALSE(resp.served_by_node.empty());
@@ -435,7 +429,7 @@ TEST_CASE("analytics create dataset")
     };
 
     auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE_FALSE(resp.ctx.ec);
+    REQUIRE_SUCCESS(resp.ctx.ec);
 }
 
 TEST_CASE("integration: prepared query", "[integration]")
@@ -454,7 +448,7 @@ TEST_CASE("integration: prepared query", "[integration]")
         couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", key };
         couchbase::core::operations::insert_request req{ id, json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         mutation_token = resp.token;
     }
 
@@ -465,7 +459,7 @@ TEST_CASE("integration: prepared query", "[integration]")
         req.mutation_state = { mutation_token };
         req.adhoc = false;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 1);
         REQUIRE(value == couchbase::core::utils::json::parse(resp.rows[0]));
     }
