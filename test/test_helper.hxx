@@ -24,3 +24,5 @@
 #include "utils/uniq_id.hxx"
 
 #include <catch2/catch.hpp>
+
+#define REQUIRE_SUCCESS(ec) INFO((ec).message()) REQUIRE_FALSE(ec)

@@ -37,13 +37,13 @@ TEST_CASE("integration: analytics query")
         req.dataset_name = dataset_name;
         req.bucket_name = integration.ctx.bucket;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
     {
         couchbase::core::operations::management::analytics_link_connect_request req{};
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
     auto key = test::utils::uniq_id("key");
@@ -53,7 +53,7 @@ TEST_CASE("integration: analytics query")
         auto id = couchbase::core::document_id(integration.ctx.bucket, "_default", "_default", key);
         couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary(value) };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     SECTION("simple query")
@@ -65,7 +65,7 @@ TEST_CASE("integration: analytics query")
             resp = test::utils::execute(integration.cluster, req);
             return resp.rows.size() == 1;
         }));
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows[0] == value);
         REQUIRE_FALSE(resp.meta.request_id.empty());
         REQUIRE_FALSE(resp.meta.client_context_id.empty());
@@ -82,7 +82,7 @@ TEST_CASE("integration: analytics query")
             resp = test::utils::execute(integration.cluster, req);
             return resp.rows.size() == 1;
         }));
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows[0] == value);
     }
 
@@ -96,7 +96,7 @@ TEST_CASE("integration: analytics query")
             resp = test::utils::execute(integration.cluster, req);
             return resp.rows.size() == 1;
         }));
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows[0] == value);
     }
 
@@ -110,7 +110,7 @@ TEST_CASE("integration: analytics query")
             resp = test::utils::execute(integration.cluster, req);
             return resp.rows.size() == 1;
         }));
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows[0] == value);
     }
 
@@ -124,7 +124,7 @@ TEST_CASE("integration: analytics query")
             resp = test::utils::execute(integration.cluster, req);
             return resp.rows.size() == 1;
         }));
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows[0] == value);
     }
 
@@ -134,7 +134,7 @@ TEST_CASE("integration: analytics query")
         req.statement = fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = "{}")", dataset_name, test_value);
         req.scan_consistency = couchbase::core::analytics_scan_consistency::request_plus;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 1);
         REQUIRE(resp.rows[0] == value);
     }
@@ -172,7 +172,7 @@ TEST_CASE("integration: analytics scope query")
     {
         couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
         REQUIRE(created);
     }
@@ -180,7 +180,7 @@ TEST_CASE("integration: analytics scope query")
     {
         couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
         REQUIRE(created);
     }
@@ -190,7 +190,7 @@ TEST_CASE("integration: analytics scope query")
         req.statement =
           fmt::format("ALTER COLLECTION `{}`.`{}`.`{}` ENABLE ANALYTICS", integration.ctx.bucket, scope_name, collection_name);
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
     auto key = test::utils::uniq_id("key");
@@ -200,7 +200,7 @@ TEST_CASE("integration: analytics scope query")
         auto id = couchbase::core::document_id(integration.ctx.bucket, scope_name, collection_name, key);
         couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary(value) };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     couchbase::core::operations::analytics_response resp{};
@@ -212,7 +212,7 @@ TEST_CASE("integration: analytics scope query")
         resp = test::utils::execute(integration.cluster, req);
         return resp.rows.size() == 1;
     }));
-    REQUIRE_FALSE(resp.ctx.ec);
+    REQUIRE_SUCCESS(resp.ctx.ec);
     REQUIRE(resp.rows[0] == value);
 
     {
@@ -242,7 +242,7 @@ TEST_CASE("unit: analytics query")
         couchbase::core::operations::analytics_request req{};
         req.priority = true;
         auto ec = req.encode_to(http_req, ctx);
-        REQUIRE_FALSE(ec);
+        REQUIRE_SUCCESS(ec);
         auto priority_header = http_req.headers.find("analytics-priority");
         REQUIRE(priority_header != http_req.headers.end());
         REQUIRE(priority_header->second == "-1");
@@ -255,7 +255,7 @@ TEST_CASE("unit: analytics query")
         couchbase::core::operations::analytics_request req{};
         req.priority = false;
         auto ec = req.encode_to(http_req, ctx);
-        REQUIRE_FALSE(ec);
+        REQUIRE_SUCCESS(ec);
         REQUIRE(http_req.headers.find("analytics-priority") == http_req.headers.end());
     }
 }

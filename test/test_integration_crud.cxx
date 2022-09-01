@@ -39,8 +39,7 @@ TEST_CASE("integration: crud on default collection", "[integration]")
     {
         couchbase::core::operations::insert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number() != 0);
     }
@@ -61,7 +60,7 @@ TEST_CASE("integration: crud on default collection", "[integration]")
         {
             couchbase::core::operations::replace_request req{ id, json };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
         }
 
         {
@@ -73,7 +72,7 @@ TEST_CASE("integration: crud on default collection", "[integration]")
         {
             couchbase::core::operations::upsert_request req{ id, basic_doc_json };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
         }
 
         {
@@ -88,7 +87,7 @@ TEST_CASE("integration: crud on default collection", "[integration]")
         {
             couchbase::core::operations::remove_request req{ id };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
         }
 
         {
@@ -110,7 +109,6 @@ TEST_CASE("integration: get", "[integration]")
     {
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message());
         REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
     }
 
@@ -121,12 +119,12 @@ TEST_CASE("integration: get", "[integration]")
             couchbase::core::operations::insert_request req{ id, basic_doc_json };
             req.flags = flags;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
         }
         {
             couchbase::core::operations::get_request req{ id };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
             REQUIRE(resp.value == basic_doc_json);
             REQUIRE(resp.flags == flags);
         }
@@ -153,13 +151,13 @@ TEST_CASE("integration: touch", "[integration]")
         {
             couchbase::core::operations::insert_request req{ id, basic_doc_json };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
         }
         {
             couchbase::core::operations::touch_request req{ id };
             req.expiry = 666;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
         }
     }
 }
@@ -177,7 +175,7 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
     {
         couchbase::core::operations::insert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         cas = resp.cas;
     }
 
@@ -186,7 +184,7 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
         couchbase::core::operations::get_and_lock_request req{ id };
         req.lock_time = lock_time;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(cas != resp.cas);
         cas = resp.cas;
     }
@@ -195,7 +193,7 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
     {
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(cas != resp.cas);
     }
 
@@ -222,14 +220,14 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
         couchbase::core::operations::replace_request req{ id, basic_doc_json };
         req.cas = cas;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     {
         couchbase::core::operations::get_and_lock_request req{ id };
         req.lock_time = lock_time;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         cas = resp.cas;
     }
 
@@ -238,14 +236,14 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
         couchbase::core::operations::unlock_request req{ id };
         req.cas = cas;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     // now the key is not locked
     {
         couchbase::core::operations::upsert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 }
 
@@ -259,7 +257,7 @@ TEST_CASE("integration: lock/unlock without lock time", "[integration]")
     {
         couchbase::core::operations::insert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     couchbase::cas cas{};
@@ -267,7 +265,7 @@ TEST_CASE("integration: lock/unlock without lock time", "[integration]")
     {
         couchbase::core::operations::get_and_lock_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         cas = resp.cas;
     }
 
@@ -275,7 +273,7 @@ TEST_CASE("integration: lock/unlock without lock time", "[integration]")
         couchbase::core::operations::unlock_request req{ id };
         req.cas = cas;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 }
 
@@ -289,7 +287,7 @@ TEST_CASE("integration: touch with zero expiry resets expiry", "[integration]")
     {
         couchbase::core::operations::insert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     // set expiry with touch
@@ -297,7 +295,7 @@ TEST_CASE("integration: touch with zero expiry resets expiry", "[integration]")
         couchbase::core::operations::touch_request req{ id };
         req.expiry = 1;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     // reset expiry
@@ -305,7 +303,7 @@ TEST_CASE("integration: touch with zero expiry resets expiry", "[integration]")
         couchbase::core::operations::get_and_touch_request req{ id };
         req.expiry = 0;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     // wait for original expiry to pass
@@ -315,7 +313,7 @@ TEST_CASE("integration: touch with zero expiry resets expiry", "[integration]")
     {
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.value == basic_doc_json);
     }
 }
@@ -331,7 +329,7 @@ TEST_CASE("integration: exists", "[integration]")
         couchbase::core::operations::exists_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.exists());
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE_FALSE(resp.deleted);
         REQUIRE(resp.cas.empty());
         REQUIRE(resp.sequence_number == 0);
@@ -341,7 +339,7 @@ TEST_CASE("integration: exists", "[integration]")
         couchbase::core::operations::insert_request req{ id, basic_doc_json };
         req.expiry = 1878422400;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE_FALSE(resp.cas.empty());
     }
 
@@ -349,7 +347,7 @@ TEST_CASE("integration: exists", "[integration]")
         couchbase::core::operations::exists_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.exists());
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE_FALSE(resp.deleted);
         REQUIRE_FALSE(resp.cas.empty());
         REQUIRE(resp.sequence_number != 0);
@@ -359,14 +357,14 @@ TEST_CASE("integration: exists", "[integration]")
     {
         couchbase::core::operations::remove_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     {
         couchbase::core::operations::exists_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_FALSE(resp.exists());
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.deleted);
         REQUIRE_FALSE(resp.cas.empty());
         REQUIRE(resp.sequence_number != 0);
@@ -384,13 +382,13 @@ TEST_CASE("integration: zero length value", "[integration]")
     {
         couchbase::core::operations::insert_request req{ id, couchbase::core::utils::to_binary("") };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     {
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.value == couchbase::core::utils::to_binary(""));
     }
 }
@@ -435,7 +433,7 @@ TEST_CASE("integration: cas replace", "[integration]")
     {
         couchbase::core::operations::insert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         cas = resp.cas;
     }
 
@@ -452,7 +450,7 @@ TEST_CASE("integration: cas replace", "[integration]")
         couchbase::core::operations::replace_request req{ id, couchbase::core::utils::to_binary("") };
         req.cas = cas;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 }
 
@@ -473,7 +471,7 @@ TEST_CASE("integration: upsert preserve expiry", "[integration]")
         couchbase::core::operations::upsert_request req{ id, basic_doc_json };
         req.expiry = expiry;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     {
@@ -491,7 +489,7 @@ TEST_CASE("integration: upsert preserve expiry", "[integration]")
         couchbase::core::operations::upsert_request req{ id, basic_doc_json };
         req.preserve_expiry = true;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     {
@@ -508,7 +506,7 @@ TEST_CASE("integration: upsert preserve expiry", "[integration]")
     {
         couchbase::core::operations::upsert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     {
@@ -541,8 +539,7 @@ TEST_CASE("integration: upsert with handler capturing non-copyable object", "[in
         };
         integration.cluster->execute(req, std::move(handler));
         auto resp = f.get();
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 }
 
@@ -588,8 +585,7 @@ TEST_CASE("integration: upsert may trigger snappy compression", "[integration]")
     {
         couchbase::core::operations::insert_request req{ id, compressible_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     // read
@@ -663,7 +659,7 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
         couchbase::core::operations::upsert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
         token = resp.token;
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(token.bucket_name() == integration.ctx.bucket);
         REQUIRE(token.partition_uuid() > 0);
         REQUIRE(token.sequence_number() > 0);
@@ -677,7 +673,7 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
           }
             .specs();
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         auto vbucket_uuid = test::utils::to_string(resp.fields[0].value);
         REQUIRE(vbucket_uuid.find("\"0x") == 0);
         REQUIRE(std::strtoull(vbucket_uuid.data() + 3, nullptr, 16) == token.partition_uuid());
@@ -732,7 +728,7 @@ TEST_CASE("integration: upsert is cancelled immediately if the cluster was close
     {
         couchbase::core::operations::upsert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     test::utils::close_cluster(integration.cluster);

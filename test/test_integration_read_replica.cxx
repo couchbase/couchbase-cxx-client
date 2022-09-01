@@ -78,14 +78,14 @@ TEST_CASE("integration: get any replica", "[integration]")
 
         couchbase::core::operations::insert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     {
         auto collection =
           couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
         auto [ctx, result] = collection.get_any_replica(key, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE(result.content_as<smuggling_transcoder>().first == basic_doc_json);
     }
 }
@@ -110,14 +110,14 @@ TEST_CASE("integration: get all replicas", "[integration]")
 
         couchbase::core::operations::insert_request req{ id, basic_doc_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     {
         auto collection =
           couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
         auto [ctx, result] = collection.get_all_replicas(key, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE(result.size() == number_of_replicas + 1);
         auto responses_from_active = std::count_if(result.begin(), result.end(), [](const auto& r) { return !r.is_replica(); });
         REQUIRE(responses_from_active == 1);
@@ -187,14 +187,13 @@ TEST_CASE("integration: get any replica low-level version", "[integration]")
         };
         couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::json::generate_binary(value) };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     {
         couchbase::core::operations::get_any_replica_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.value == couchbase::core::utils::to_binary(R"({"a":1.0,"b":2.0})"));
     }
@@ -219,14 +218,13 @@ TEST_CASE("integration: get all replicas low-level version", "[integration]")
         };
         couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::json::generate_binary(value) };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     {
         couchbase::core::operations::get_all_replicas_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.entries.size() == number_of_replicas + 1);
         auto responses_from_active = std::count_if(resp.entries.begin(), resp.entries.end(), [](const auto& r) { return !r.replica; });
         REQUIRE(responses_from_active == 1);

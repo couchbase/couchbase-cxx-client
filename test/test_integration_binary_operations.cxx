@@ -29,24 +29,21 @@ TEST_CASE("integration: append", "[integration]")
     {
         couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary("world") };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number() != 0);
     }
     {
         couchbase::core::operations::append_request req{ id, couchbase::core::utils::to_binary("!") };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number() != 0);
     }
     {
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.value == couchbase::core::utils::to_binary("world!"));
     }
@@ -62,24 +59,21 @@ TEST_CASE("integration: prepend", "[integration]")
     {
         couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary("world") };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number() != 0);
     }
     {
         couchbase::core::operations::prepend_request req{ id, couchbase::core::utils::to_binary("Hello, ") };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number() != 0);
     }
     {
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.value == couchbase::core::utils::to_binary("Hello, world"));
     }

@@ -32,14 +32,13 @@ TEST_CASE("benchmark: get a document", "[benchmark]")
         };
         couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::json::generate_binary(value) };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     BENCHMARK("get")
     {
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     };
 }

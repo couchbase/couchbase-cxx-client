@@ -39,14 +39,14 @@ TEST_CASE("integration: upsert/get with json transcoder", "[integration]")
 
     {
         auto [ctx, resp] = collection.upsert(id, albert, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.mutation_token().has_value());
     }
 
     {
         auto [ctx, resp] = collection.get(id, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.content_as<profile>() == albert);
     }
@@ -67,14 +67,14 @@ TEST_CASE("integration: insert/get with json transcoder", "[integration]")
 
     {
         auto [ctx, resp] = collection.insert(id, albert, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.mutation_token().has_value());
     }
 
     {
         auto [ctx, resp] = collection.get(id, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.content_as<profile>() == albert);
     }
@@ -96,7 +96,7 @@ TEST_CASE("integration: insert/replace with json transcoder", "[integration]")
     couchbase::cas original_cas;
     {
         auto [ctx, resp] = collection.insert(id, albert, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.mutation_token().has_value());
         original_cas = resp.cas();
@@ -104,7 +104,7 @@ TEST_CASE("integration: insert/replace with json transcoder", "[integration]")
 
     {
         auto [ctx, resp] = collection.get(id, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.cas() == original_cas);
         REQUIRE(resp.content_as<profile>() == albert);
@@ -113,14 +113,14 @@ TEST_CASE("integration: insert/replace with json transcoder", "[integration]")
     {
         albert.username += " (clone)";
         auto [ctx, resp] = collection.replace(id, albert, couchbase::replace_options{}.cas(original_cas)).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.mutation_token().has_value());
     }
 
     {
         auto [ctx, resp] = collection.get(id, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.cas() != original_cas);
         REQUIRE(resp.content_as<profile>() == albert);
@@ -151,7 +151,7 @@ TEST_CASE("integration: upsert/remove with json transcoder", "[integration]")
     couchbase::cas original_cas;
     {
         auto [ctx, resp] = collection.upsert(id, albert, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.mutation_token().has_value());
         original_cas = resp.cas();
@@ -159,7 +159,7 @@ TEST_CASE("integration: upsert/remove with json transcoder", "[integration]")
 
     {
         auto [ctx, resp] = collection.remove(id, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.mutation_token().has_value());
         REQUIRE(resp.cas() != original_cas);
@@ -186,28 +186,28 @@ TEST_CASE("integration: upsert/append/prepend with raw binary transcoder", "[int
 
     {
         auto [ctx, resp] = collection.upsert<couchbase::codec::raw_binary_transcoder>(id, data, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.mutation_token().has_value());
     }
 
     {
         auto [ctx, resp] = collection.get(id, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.content_as<couchbase::codec::raw_binary_transcoder>() == std::vector{ std::byte{ 20 }, std::byte{ 21 } });
     }
 
     {
         auto [ctx, resp] = collection.binary().prepend(id, std::vector{ std::byte{ 10 }, std::byte{ 11 } }, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.mutation_token().has_value());
     }
 
     {
         auto [ctx, resp] = collection.get(id, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.content_as<couchbase::codec::raw_binary_transcoder>() ==
                 std::vector{ std::byte{ 10 }, std::byte{ 11 }, std::byte{ 20 }, std::byte{ 21 } });
@@ -215,14 +215,14 @@ TEST_CASE("integration: upsert/append/prepend with raw binary transcoder", "[int
 
     {
         auto [ctx, resp] = collection.binary().append(id, std::vector{ std::byte{ 30 }, std::byte{ 31 } }, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.mutation_token().has_value());
     }
 
     {
         auto [ctx, resp] = collection.get(id, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.content_as<couchbase::codec::raw_binary_transcoder>() ==
                 std::vector{ std::byte{ 10 }, std::byte{ 11 }, std::byte{ 20 }, std::byte{ 21 }, std::byte{ 30 }, std::byte{ 31 } });
@@ -245,14 +245,14 @@ TEST_CASE("integration: get with expiry and json transcoder", "[integration]")
 
     {
         auto [ctx, resp] = collection.upsert(id, albert, couchbase::upsert_options{}.expiry(skynet_birthday)).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.mutation_token().has_value());
     }
 
     {
         auto [ctx, resp] = collection.get(id, couchbase::get_options{}.with_expiry(true)).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.content_as<profile>() == albert);
         REQUIRE(resp.expiry_time().has_value());
@@ -275,14 +275,14 @@ TEST_CASE("integration: get with projections and json transcoder", "[integration
 
     {
         auto [ctx, resp] = collection.upsert(id, albert, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.mutation_token().has_value());
     }
 
     {
         auto [ctx, resp] = collection.get(id, couchbase::get_options{}.project({ "username", "full_name" })).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         auto light_albert = resp.content_as<profile>();
         REQUIRE_FALSE(light_albert == albert);
@@ -311,14 +311,14 @@ TEST_CASE("integration: get_and_touch and json transcoder", "[integration]")
 
     {
         auto [ctx, resp] = collection.upsert(id, cecilia, couchbase::upsert_options{}.expiry(skynet_birthday)).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.mutation_token().has_value());
     }
 
     {
         auto [ctx, resp] = collection.get(id, couchbase::get_options{}.with_expiry(true)).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.content_as<profile>() == cecilia);
         REQUIRE(resp.expiry_time().has_value());
@@ -329,7 +329,7 @@ TEST_CASE("integration: get_and_touch and json transcoder", "[integration]")
 
     {
         auto [ctx, resp] = collection.get_and_touch(id, asteroid_99942_apophis_passage, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.content_as<profile>() == cecilia);
         REQUIRE_FALSE(resp.expiry_time().has_value());
@@ -337,7 +337,7 @@ TEST_CASE("integration: get_and_touch and json transcoder", "[integration]")
 
     {
         auto [ctx, resp] = collection.get(id, couchbase::get_options{}.with_expiry(true)).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.content_as<profile>() == cecilia);
         REQUIRE(resp.expiry_time().has_value());
@@ -369,14 +369,14 @@ TEST_CASE("integration: touch with public API", "[integration]")
 
     {
         auto [ctx, resp] = collection.upsert(id, cecilia, couchbase::upsert_options{}.expiry(skynet_birthday)).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.mutation_token().has_value());
     }
 
     {
         auto [ctx, resp] = collection.get(id, couchbase::get_options{}.with_expiry(true)).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.content_as<profile>() == cecilia);
         REQUIRE(resp.expiry_time().has_value());
@@ -387,13 +387,13 @@ TEST_CASE("integration: touch with public API", "[integration]")
 
     {
         auto [ctx, resp] = collection.touch(id, asteroid_99942_apophis_passage, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
     }
 
     {
         auto [ctx, resp] = collection.get(id, couchbase::get_options{}.with_expiry(true)).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.content_as<profile>() == cecilia);
         REQUIRE(resp.expiry_time().has_value());
@@ -424,7 +424,7 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
     couchbase::mutation_token token{};
     {
         auto [ctx, resp] = collection.upsert(id, cixin, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(resp.mutation_token().has_value());
         token = resp.mutation_token().value();
@@ -441,7 +441,7 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
                                         },
                                         {})
                              .get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
 
         REQUIRE_FALSE(resp.is_deleted());
@@ -476,7 +476,7 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
                                         },
                                         {})
                              .get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(ctx.first_error_index());
         REQUIRE_FALSE(ctx.first_error_path());
         REQUIRE_FALSE(resp.cas().empty());
@@ -492,7 +492,7 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
                                         },
                                         {})
                              .get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
 
         REQUIRE(resp.exists(0));
@@ -506,7 +506,7 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
 
     {
         auto [ctx, resp] = collection.remove(id, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         cas = resp.cas();
     }
@@ -519,7 +519,7 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
                                         },
                                         couchbase::lookup_in_options{}.access_deleted(true))
                              .get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
 
         REQUIRE(resp.is_deleted());

@@ -39,8 +39,7 @@ TEST_CASE("integration: durable operations", "[integration]")
         couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::json::generate_binary(value) };
         req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number() != 0);
     }
@@ -51,8 +50,7 @@ TEST_CASE("integration: durable operations", "[integration]")
         couchbase::core::operations::replace_request req{ id, couchbase::core::utils::json::generate_binary(value) };
         req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number() != 0);
     }
@@ -61,16 +59,14 @@ TEST_CASE("integration: durable operations", "[integration]")
         req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert("baz", 42) }.specs();
         req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number() != 0);
     }
     {
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.value == couchbase::core::utils::to_binary(R"({"foo":"bar","baz":42})"));
     }
@@ -78,8 +74,7 @@ TEST_CASE("integration: durable operations", "[integration]")
         couchbase::core::operations::remove_request req{ id };
         req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number() != 0);
     }
@@ -107,7 +102,7 @@ TEST_CASE("integration: legacy durability persist to active and replicate to one
         profile fry{ "fry", "Philip J. Fry", 1974 };
         auto options = couchbase::upsert_options{}.durability(couchbase::persist_to::active, couchbase::replicate_to::one);
         auto [ctx, result] = collection.upsert(key, fry, options).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(result.cas().empty());
         REQUIRE(result.mutation_token().has_value());
         cas = result.cas();
@@ -115,7 +110,7 @@ TEST_CASE("integration: legacy durability persist to active and replicate to one
 
     {
         auto [ctx, result] = collection.get(key, {}).get();
-        REQUIRE_FALSE(ctx.ec());
+        REQUIRE_SUCCESS(ctx.ec());
         REQUIRE(result.cas() == cas);
         auto fry = result.content_as<profile>();
         REQUIRE(fry.username == "fry");
@@ -179,8 +174,7 @@ TEST_CASE("integration: low level legacy durability persist to active and replic
             couchbase::replicate_to::one,
         };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number() != 0);
     }
@@ -195,8 +189,7 @@ TEST_CASE("integration: low level legacy durability persist to active and replic
             couchbase::replicate_to::one,
         };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number() != 0);
     }
@@ -209,16 +202,14 @@ TEST_CASE("integration: low level legacy durability persist to active and replic
         req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert("baz", 42) }.specs();
 
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number() != 0);
     }
     {
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.value == couchbase::core::utils::to_binary(R"({"foo":"bar","baz":42})"));
     }
@@ -229,8 +220,7 @@ TEST_CASE("integration: low level legacy durability persist to active and replic
             couchbase::replicate_to::one,
         };
         auto resp = test::utils::execute(integration.cluster, req);
-        INFO(resp.ctx.ec().message())
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
         REQUIRE(resp.token.sequence_number() != 0);
     }

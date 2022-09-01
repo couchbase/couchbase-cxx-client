@@ -31,13 +31,13 @@ assert_single_lookup_success(test::utils::integration_test_guard& integration,
     req.specs = couchbase::lookup_in_specs{ spec }.specs();
     auto resp = test::utils::execute(integration.cluster, req);
     INFO(fmt::format("assert_single_lookup_success(\"{}\", \"{}\")", id, req.specs[0].path_))
-    REQUIRE_FALSE(resp.ctx.ec());
+    REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE_FALSE(resp.cas.empty());
     REQUIRE(resp.fields.size() == 1);
     REQUIRE(resp.fields[0].exists);
     REQUIRE(resp.fields[0].path == req.specs[0].path_);
     REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::success);
-    REQUIRE_FALSE(resp.fields[0].ec);
+    REQUIRE_SUCCESS(resp.fields[0].ec);
     if (expected_value.has_value()) {
         REQUIRE(couchbase::core::utils::to_binary(expected_value.value()) == resp.fields[0].value);
     }
@@ -55,7 +55,7 @@ assert_single_lookup_error(test::utils::integration_test_guard& integration,
     req.specs = couchbase::lookup_in_specs{ spec }.specs();
     auto resp = test::utils::execute(integration.cluster, req);
     INFO(fmt::format("assert_single_lookup_error(\"{}\", \"{}\")", id, req.specs[0].path_))
-    REQUIRE_FALSE(resp.ctx.ec());
+    REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE_FALSE(resp.cas.empty());
     REQUIRE(resp.fields.size() == 1);
     REQUIRE_FALSE(resp.fields[0].exists);
@@ -68,12 +68,12 @@ assert_single_lookup_error(test::utils::integration_test_guard& integration,
 void
 assert_single_mutate_success(couchbase::core::operations::mutate_in_response resp, const std::string& path, const std::string& value = "")
 {
-    REQUIRE_FALSE(resp.ctx.ec());
+    REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE_FALSE(resp.cas.empty());
     REQUIRE(resp.fields.size() == 1);
     REQUIRE(resp.fields[0].path == path);
     REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::success);
-    REQUIRE_FALSE(resp.fields[0].ec);
+    REQUIRE_SUCCESS(resp.fields[0].ec);
     REQUIRE(resp.fields[0].value == couchbase::core::utils::to_binary(value));
 }
 
@@ -102,7 +102,7 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
         auto value_json = couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::core::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     SECTION("dict get")
@@ -192,7 +192,7 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
         {
             couchbase::core::operations::insert_request req{ non_json_id, non_json_doc };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
         }
 
         SECTION("non json get")
@@ -258,7 +258,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
         auto value_json = couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::core::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         cas = resp.cas;
     }
 
@@ -389,7 +389,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
             couchbase::core::operations::mutate_in_request req{ id };
             req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::replace(path, value) }.specs();
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
         }
     }
 }
@@ -418,7 +418,7 @@ TEST_CASE("integration: subdoc unique", "[integration]")
         auto value_json = couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::core::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     // Push to a non-existent array (without parent)
@@ -475,7 +475,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
         auto value_json = couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::core::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     SECTION("simple increment")
@@ -530,7 +530,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
             auto value_json = couchbase::core::utils::to_binary(big_value);
             couchbase::core::operations::upsert_request req{ id, value_json };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
         }
 
         {
@@ -579,7 +579,7 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
         auto value_json = couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::core::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     SECTION("simple multi lookup")
@@ -594,7 +594,7 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
           }
             .specs();
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.fields.size() == 4);
 
         REQUIRE(resp.fields[0].value == couchbase::core::utils::to_binary(R"("dictval")"));
@@ -650,7 +650,7 @@ TEST_CASE("integration: subdoc multi mutation", "[integration]")
         auto value_json = couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::core::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     SECTION("simple multi mutation")
@@ -664,7 +664,7 @@ TEST_CASE("integration: subdoc multi mutation", "[integration]")
           }
             .specs();
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.fields.size() == 2);
 
         REQUIRE(resp.fields[1].value == couchbase::core::utils::to_binary("42"));
@@ -702,7 +702,7 @@ TEST_CASE("integration: subdoc expiry")
         auto value_json = couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::core::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     {
@@ -724,7 +724,7 @@ TEST_CASE("integration: subdoc get count", "[integration]")
         auto value_json = couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::core::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     SECTION("top level get count")
@@ -742,7 +742,7 @@ TEST_CASE("integration: subdoc get count", "[integration]")
           }
             .specs();
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.fields.size() == 2);
 
         REQUIRE(resp.fields[0].value.empty());
@@ -763,7 +763,7 @@ TEST_CASE("integration: subdoc insert error consistency", "[integration]")
     {
         couchbase::core::operations::insert_request req{ id, couchbase::core::utils::to_binary("{}") };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         cas = resp.cas;
     }
 
@@ -814,7 +814,7 @@ TEST_CASE("integration: subdoc remove with empty path", "[integration]")
         auto initial_value = couchbase::core::utils::to_binary(R"({"bar":"foo"})");
         couchbase::core::operations::insert_request req{ id, initial_value };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     // replace with empty path sets root value
@@ -822,13 +822,13 @@ TEST_CASE("integration: subdoc remove with empty path", "[integration]")
         couchbase::core::operations::mutate_in_request req{ id };
         req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::replace(empty_path, value) }.specs();
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     {
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.value == couchbase::core::utils::json::generate_binary(value));
     }
 
@@ -837,7 +837,7 @@ TEST_CASE("integration: subdoc remove with empty path", "[integration]")
         couchbase::core::operations::mutate_in_request req{ id };
         req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::remove(empty_path) }.specs();
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     {
@@ -861,12 +861,12 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
         req.store_semantics = couchbase::store_semantics::upsert;
         req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::array_prepend(empty_path, 1) }.specs();
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
     {
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.value == couchbase::core::utils::to_binary("[1]"));
     }
 
@@ -882,13 +882,13 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
         couchbase::core::operations::mutate_in_request req{ id };
         req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::array_add_unique(empty_path, 42) }.specs();
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     {
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.value == couchbase::core::utils::to_binary("[1,42]"));
     }
 
@@ -898,13 +898,13 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
         couchbase::core::operations::mutate_in_request req{ id };
         req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::array_append(empty_path, 2) }.specs();
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     {
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.value == couchbase::core::utils::to_binary("[1,42,2]"));
     }
 
@@ -917,7 +917,7 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
           }
             .specs();
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.fields.size() == 1);
         REQUIRE(resp.fields[0].value == couchbase::core::utils::to_binary("3"));
     }
