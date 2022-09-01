@@ -52,7 +52,11 @@ class json_transcoder
     static auto decode(const binary& data) -> Document
     {
         try {
-            return core::utils::json::parse_binary(data).as<Document>();
+            if constexpr (std::is_same_v<Document, tao::json::value>) {
+                return core::utils::json::parse_binary(data);
+            } else {
+                return core::utils::json::parse_binary(data).as<Document>();
+            }
         } catch (const tao::pegtl::parse_error& e) {
             throw std::system_error(errc::common::decoding_failure,
                                     std::string("json_transcoder cannot parse document as JSON: ").append(e.message()));

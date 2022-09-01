@@ -201,4 +201,10 @@ TEST_CASE("unit: json_transcoder decodes user data", "[unit]")
     REQUIRE(decoded.username == "this_guy_again");
     REQUIRE(decoded.full_name == "Albert Einstein");
     REQUIRE(decoded.birth_year == 1879);
+
+    auto value =
+      couchbase::codec::json_transcoder::decode<tao::json::value>({ encoded_data, couchbase::codec::codec_flags::json_common_flags });
+    REQUIRE(value.at("username").get_string() == "this_guy_again");
+    REQUIRE(value.at("full_name").get_string() == "Albert Einstein");
+    REQUIRE(value.at("birth_year").get_unsigned() == 1879);
 }
