@@ -18,6 +18,7 @@
 #pragma once
 
 #include "query_index_build.hxx"
+#include "query_index_build_deferred.hxx"
 #include "query_index_create.hxx"
 #include "query_index_drop.hxx"
 #include "query_index_get_all.hxx"
