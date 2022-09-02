@@ -226,7 +226,11 @@ class cluster : public std::enable_shared_from_this<cluster>
         if (stopped_) {
             return handler(request.make_response({ errc::network::cluster_closed }, response_type{}));
         }
-        return session_manager_->execute(request, std::forward<Handler>(handler), origin_.credentials());
+        if constexpr (operations::is_compound_operation_v<Request>) {
+            return request.execute(shared_from_this(), std::forward<Handler>(handler));
+        } else {
+            return session_manager_->execute(request, std::forward<Handler>(handler), origin_.credentials());
+        }
     }
 
     template<typename Handler>
