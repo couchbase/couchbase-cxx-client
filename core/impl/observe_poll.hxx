@@ -23,6 +23,7 @@
 #include <couchbase/replicate_to.hxx>
 
 #include "core/document_id.hxx"
+#include "core/utils/movable_function.hxx"
 
 #include <chrono>
 #include <functional>
@@ -34,7 +35,7 @@ class cluster;
 
 namespace impl
 {
-using observe_handler = std::function<void(std::error_code)>;
+using observe_handler = utils::movable_function<void(std::error_code)>;
 
 void
 initiate_observe_poll(std::shared_ptr<couchbase::core::cluster> core,
