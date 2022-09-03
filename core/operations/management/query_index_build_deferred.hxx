@@ -44,8 +44,8 @@ struct query_index_build_deferred_request {
     using error_context_type = error_context::http;
 
     std::string bucket_name;
-    std::string scope_name;
-    std::string collection_name;
+    std::optional<std::string> scope_name;
+    std::optional<std::string> collection_name;
 
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
@@ -76,8 +76,15 @@ struct query_index_build_deferred_request {
     void execute(Core core, Handler handler)
     {
         core->execute(
-          query_index_get_all_deferred_request{ bucket_name, scope_name, collection_name, client_context_id, timeout },
-          [core, this, handler = std::move(handler)](query_index_get_all_deferred_response resp1) mutable {
+          query_index_get_all_deferred_request{
+            bucket_name, scope_name.value_or(""), collection_name.value_or(""), client_context_id, timeout },
+          [core,
+           handler = std::move(handler),
+           bucket_name = bucket_name,
+           scope_name = scope_name.value_or(""),
+           collection_name = collection_name.value_or(""),
+           client_context_id = client_context_id,
+           timeout = timeout](query_index_get_all_deferred_response resp1) mutable {
               auto list_resp = std::move(resp1);
               if (list_resp.ctx.ec || list_resp.index_names.empty()) {
                   return handler(convert_response(std::move(list_resp)));

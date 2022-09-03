@@ -34,7 +34,7 @@ quote_and_join_strings(const Range& values, const std::string& sep)
         stream << '`' << *it << '`';
         ++it;
         while (it != sentinel) {
-            stream << sep << *it;
+            stream << sep << '`' << *it << '`';
             ++it;
         }
     }

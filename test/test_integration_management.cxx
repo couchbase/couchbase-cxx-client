@@ -1125,6 +1125,7 @@ TEST_CASE("integration: query index management", "[integration]")
         SECTION("core API")
         {
             couchbase::core::operations::management::query_index_build_deferred_request req{};
+            req.bucket_name = integration.ctx.bucket;
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_SUCCESS(resp.ctx.ec);
         }
@@ -1388,10 +1389,21 @@ TEST_CASE("integration: collections query index management", "[integration]")
             REQUIRE(resp.indexes[0].state == "deferred");
         }
 
+        SECTION("public API")
         {
             auto manager = couchbase::cluster(integration.cluster).query_indexes();
             auto ctx = manager.build_deferred_indexes(integration.ctx.bucket, {}).get();
             REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        SECTION("core API")
+        {
+            couchbase::core::operations::management::query_index_build_deferred_request req{};
+            req.bucket_name = integration.ctx.bucket;
+            req.scope_name = scope_name;
+            req.collection_name = collection_name;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_SUCCESS(resp.ctx.ec);
         }
 
         test::utils::wait_until([&integration, scope_name, collection_name]() {
