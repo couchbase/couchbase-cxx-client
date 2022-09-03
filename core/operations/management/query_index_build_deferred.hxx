@@ -19,7 +19,9 @@
 
 #include "core/error_context/http.hxx"
 #include "core/management/query_index.hxx"
+#include "core/operations/management/query_index_build.hxx"
 #include "core/operations/management/query_index_get_all_deferred.hxx"
+#include "core/operations/operation_traits.hxx"
 
 namespace couchbase::core::operations
 {
@@ -83,7 +85,7 @@ struct query_index_build_deferred_request {
               core->execute(
                 query_index_build_request{
                   std::move(bucket_name), scope_name, collection_name, std::move(list_resp.index_names), client_context_id, timeout },
-                [handler = std::move(handler)](query_index_build_response build_resp) {
+                [handler = std::move(handler)](query_index_build_response build_resp) mutable {
                     return handler(convert_response(std::move(build_resp)));
                 });
           });
