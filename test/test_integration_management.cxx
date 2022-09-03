@@ -1388,7 +1388,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
             REQUIRE(resp.indexes[0].state == "deferred");
         }
 
-        SECTION("core API")
+        SECTION("public API")
         {
             auto manager = couchbase::cluster(integration.cluster).query_indexes();
             auto ctx = manager.build_deferred_indexes(integration.ctx.bucket, {}).get();
