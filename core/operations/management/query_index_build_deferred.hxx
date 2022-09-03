@@ -75,25 +75,27 @@ struct query_index_build_deferred_request {
     template<typename Core, typename Handler>
     void execute(Core core, Handler handler)
     {
-        auto req = query_index_get_all_deferred_request{
-            bucket_name, scope_name.value_or(""), collection_name.value_or(""), client_context_id, timeout
-        };
-        core->execute(req,
-                      [core, req1 = std::move(req), handler = std::move(handler)](query_index_get_all_deferred_response resp1) mutable {
-                          auto list_resp = std::move(resp1);
-                          if (list_resp.ctx.ec || list_resp.index_names.empty()) {
-                              return handler(convert_response(std::move(list_resp)));
-                          }
-                          core->execute(query_index_build_request{ std::move(req1.bucket_name),
-                                                                   req1.scope_name,
-                                                                   req1.collection_name,
-                                                                   std::move(list_resp.index_names),
-                                                                   req1.client_context_id,
-                                                                   req1.timeout },
-                                        [handler = std::move(handler)](query_index_build_response build_resp) mutable {
-                                            return handler(convert_response(std::move(build_resp)));
-                                        });
-                      });
+        core->execute(
+          query_index_get_all_deferred_request{
+            bucket_name, scope_name.value_or(""), collection_name.value_or(""), client_context_id, timeout },
+          [core,
+           handler = std::move(handler),
+           bucket_name = bucket_name,
+           scope_name = scope_name.value_or(""),
+           collection_name = collection_name.value_or(""),
+           client_context_id = client_context_id,
+           timeout = timeout](query_index_get_all_deferred_response resp1) mutable {
+              auto list_resp = std::move(resp1);
+              if (list_resp.ctx.ec || list_resp.index_names.empty()) {
+                  return handler(convert_response(std::move(list_resp)));
+              }
+              core->execute(
+                query_index_build_request{
+                  std::move(bucket_name), scope_name, collection_name, std::move(list_resp.index_names), client_context_id, timeout },
+                [handler = std::move(handler)](query_index_build_response build_resp) mutable {
+                    return handler(convert_response(std::move(build_resp)));
+                });
+          });
     }
 };
 } // namespace management

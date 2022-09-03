@@ -1125,6 +1125,7 @@ TEST_CASE("integration: query index management", "[integration]")
         SECTION("core API")
         {
             couchbase::core::operations::management::query_index_build_deferred_request req{};
+            req.bucket_name = integration.ctx.bucket;
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_SUCCESS(resp.ctx.ec);
         }
