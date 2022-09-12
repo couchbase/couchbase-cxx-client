@@ -26,6 +26,7 @@
 #include "timeout_defaults.hxx"
 
 #include <chrono>
+#include <list>
 #include <string>
 
 namespace couchbase::core
@@ -77,6 +78,7 @@ struct cluster_options {
     std::string user_agent_extra{};
 
     [[nodiscard]] std::chrono::milliseconds default_timeout_for(service_type type) const;
+    void apply_profile(std::string profile_name);
 };
 
 } // namespace couchbase::core

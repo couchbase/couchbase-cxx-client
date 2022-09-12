@@ -80,6 +80,7 @@ add_subdirectory(core/metrics)
 set(couchbase_cxx_client_FILES
     core/cluster.cxx
     core/cluster_options.cxx
+    core/config_profile.cxx
     core/document_id.cxx
     core/error_context/key_value.cxx
     core/management/analytics_link_azure_blob_external.cxx
