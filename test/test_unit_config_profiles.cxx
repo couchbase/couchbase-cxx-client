@@ -30,6 +30,22 @@ class test_profile : public couchbase::core::config_profile
     }
 };
 
+class test_profile_with_args : public couchbase::core::config_profile
+{
+  public:
+    test_profile_with_args(const std::string& extra)
+      : extra_(extra)
+    {
+    }
+    void apply(couchbase::core::cluster_options& opts) override
+    {
+        opts.user_agent_extra = extra_;
+    }
+
+  protected:
+    std::string extra_;
+};
+
 TEST_CASE("unit: can apply wan_development profile", "[unit]")
 {
     couchbase::core::cluster_options opts{};
@@ -101,4 +117,13 @@ TEST_CASE("unit: can apply multiple profiles", "[unit]")
     CHECK(opts.connect_timeout.count() == 5000);
     // set in both, so should be overwritten by "test"
     CHECK(opts.key_value_timeout.count() == 10);
+}
+
+TEST_CASE("unit: can have profile with constructor args", "[unit]")
+{
+    couchbase::core::cluster_options opts{};
+    couchbase::core::known_profiles().register_profile<test_profile_with_args>(std::string("test_with_args"),
+                                                                               std::string("something_extra"));
+    opts.apply_profile("test_with_args");
+    CHECK(opts.user_agent_extra == "something_extra");
 }

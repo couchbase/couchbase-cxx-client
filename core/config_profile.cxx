@@ -20,7 +20,6 @@
 couchbase::core::config_profiles&
 couchbase::core::known_profiles()
 {
-    // NOTE: this is definitely not threadsafe.
     static couchbase::core::config_profiles profiles{};
     return profiles;
 }
