@@ -16,7 +16,7 @@
  */
 
 #include "cluster_options.hxx"
-
+#include "config_profile.hxx"
 #include <stdexcept>
 
 namespace couchbase::core
@@ -41,5 +41,10 @@ cluster_options::default_timeout_for(service_type type) const
             return management_timeout;
     }
     throw std::runtime_error("unexpected service type");
+}
+void
+cluster_options::apply_profile(std::string profile_name)
+{
+    couchbase::core::known_profiles().apply(profile_name, *this);
 }
 } // namespace couchbase::core

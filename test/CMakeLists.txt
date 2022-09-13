@@ -21,6 +21,7 @@ unit_test(utils)
 unit_test(json_transcoder)
 unit_test(json_streaming_lexer)
 unit_test(jsonsl)
+unit_test(config_profiles)
 target_link_libraries(test_unit_jsonsl jsonsl)
 
 integration_benchmark(get)
