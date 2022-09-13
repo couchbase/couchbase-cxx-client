@@ -20,9 +20,9 @@
 #include <chrono>
 #include <fmt/core.h>
 #include <map>
+#include <mutex>
 #include <stdexcept>
 #include <string>
-#include <thread>
 
 namespace couchbase::core
 {
