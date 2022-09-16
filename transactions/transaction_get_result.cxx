@@ -46,39 +46,39 @@ transaction_get_result::create_from(const core::operations::lookup_in_response& 
     std::optional<std::string> op;
     std::vector<std::byte> content;
 
-    if (resp.fields_meta[0].status == key_value_status_code::success) {
+    if (resp.fields[0].status == key_value_status_code::success) {
         atr_id = codec::json_transcoder::decode<std::string>(resp.fields[0].value);
     }
-    if (resp.fields_meta[1].status == key_value_status_code::success) {
+    if (resp.fields[1].status == key_value_status_code::success) {
         transaction_id = codec::json_transcoder::decode<std::string>(resp.fields[1].value);
     }
-    if (resp.fields_meta[2].status == key_value_status_code::success) {
+    if (resp.fields[2].status == key_value_status_code::success) {
         attempt_id = codec::json_transcoder::decode<std::string>(resp.fields[2].value);
     }
-    if (resp.fields_meta[3].status == key_value_status_code::success) {
+    if (resp.fields[3].status == key_value_status_code::success) {
         staged_content = resp.fields[3].value;
     }
-    if (resp.fields_meta[4].status == key_value_status_code::success) {
+    if (resp.fields[4].status == key_value_status_code::success) {
         atr_bucket_name = codec::json_transcoder::decode<std::string>(resp.fields[4].value);
     }
-    if (resp.fields_meta[5].status == key_value_status_code::success) {
+    if (resp.fields[5].status == key_value_status_code::success) {
         atr_scope_name = codec::json_transcoder::decode<std::string>(resp.fields[5].value);
     }
-    if (resp.fields_meta[6].status == key_value_status_code::success) {
+    if (resp.fields[6].status == key_value_status_code::success) {
         atr_collection_name = codec::json_transcoder::decode<std::string>(resp.fields[6].value);
     }
 
-    if (resp.fields_meta[7].status == key_value_status_code::success) {
+    if (resp.fields[7].status == key_value_status_code::success) {
         auto restore = core::utils::json::parse_binary(resp.fields[7].value);
         cas_pre_txn = restore["CAS"].as<std::string>();
         // only present in 6.5+
         revid_pre_txn = restore["revid"].as<std::string>();
         exptime_pre_txn = restore["exptime"].as<std::uint32_t>();
     }
-    if (resp.fields_meta[8].status == key_value_status_code::success) {
+    if (resp.fields[8].status == key_value_status_code::success) {
         op = codec::json_transcoder::decode<std::string>(resp.fields[8].value);
     }
-    if (resp.fields_meta[9].status == key_value_status_code::success) {
+    if (resp.fields[9].status == key_value_status_code::success) {
         auto doc = core::utils::json::parse_binary(resp.fields[9].value);
         cas_from_doc = doc["CAS"].as<std::string>();
         // only present in 6.5+
@@ -86,15 +86,15 @@ transaction_get_result::create_from(const core::operations::lookup_in_response& 
         exptime_from_doc = doc["exptime"].as<std::uint32_t>();
         crc32_from_doc = doc["value_crc32c"].as<std::string>();
     }
-    if (resp.fields_meta[10].status == key_value_status_code::success) {
+    if (resp.fields[10].status == key_value_status_code::success) {
         crc32_of_staging = codec::json_transcoder::decode<std::string>(resp.fields[10].value);
     }
-    if (resp.fields_meta[11].status == key_value_status_code::success) {
+    if (resp.fields[11].status == key_value_status_code::success) {
         forward_compat = core::utils::json::parse_binary(resp.fields[11].value);
     } else {
         forward_compat = tao::json::empty_object;
     }
-    if (resp.fields_meta[12].status == key_value_status_code::success) {
+    if (resp.fields[12].status == key_value_status_code::success) {
         content = resp.fields[12].value;
     }
 

@@ -25,7 +25,7 @@
 #include <couchbase/lookup_in_result.hxx>
 #include <couchbase/store_semantics.hxx>
 #include <couchbase/subdocument_error_context.hxx>
-
+#include <core/impl/subdoc/command.hxx>
 #include <chrono>
 #include <functional>
 #include <memory>

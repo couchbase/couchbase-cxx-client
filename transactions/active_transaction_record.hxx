@@ -143,7 +143,7 @@ class active_transaction_record
     static inline active_transaction_record map_to_atr(const core::operations::lookup_in_response& resp)
     {
         std::vector<atr_entry> entries;
-        if (resp.fields_meta[0].status == key_value_status_code::success) {
+        if (resp.fields[0].status == key_value_status_code::success) {
             auto attempts = core::utils::json::parse_binary(resp.fields[0].value);
             auto vbucket = core::utils::json::parse_binary(resp.fields[1].value);
             auto now_ns = now_ns_from_vbucket(vbucket);
