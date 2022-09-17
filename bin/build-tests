@@ -103,4 +103,4 @@ ${CB_CMAKE}  \
     -B "${BUILD_DIR}" \
     -S "${PROJECT_ROOT}"
 
-${CB_CMAKE} --build "${BUILD_DIR}" --parallel ${CB_NUMBER_OF_JOBS} --verbose ${CB_CMAK_BUILD_EXTRAS}
+${CB_CMAKE} --build "${BUILD_DIR}" --parallel ${CB_NUMBER_OF_JOBS} --verbose ${CB_CMAKE_BUILD_EXTRAS}
