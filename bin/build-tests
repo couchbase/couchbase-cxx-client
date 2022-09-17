@@ -87,7 +87,7 @@ CB_CMAKE_BUILD_EXTRAS=
 if [ "x${CB_CMAKE_TARGET}" != "x" ] ; then
     CB_CMAKE_BUILD_EXTRAS="--target ${CB_CMAKE_TARGET}"
     if [ "x${CB_CMAKE_TARGET}" != "xbuild_unit_tests" ]; then
-        CB_CMAKE_BUILD_EXTRAS="--target build_integration"
+        CB_CMAKE_BUILD_EXTRAS="--target build_integration_tests"
     fi
 fi
 
