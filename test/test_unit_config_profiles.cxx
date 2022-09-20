@@ -48,22 +48,29 @@ class test_profile_with_args : public couchbase::core::config_profile
 
 TEST_CASE("unit: can apply wan_development profile", "[unit]")
 {
+    // see https://docs.google.com/document/d/1LNCYgV2Eqymp3pGmA8WKPQOLSpcRyv0P7NpMYHVcUM0
+    // for details and latest info on expectations.
     couchbase::core::cluster_options opts{};
     opts.apply_profile("wan_development");
     CHECK(opts.key_value_timeout.count() == 20000);
-    CHECK(opts.connect_timeout.count() == 5000);
+    CHECK(opts.key_value_durable_timeout.count() == 20000);
+    CHECK(opts.connect_timeout.count() == 20000);
+    CHECK(opts.view_timeout.count() == 120000);
+    CHECK(opts.query_timeout.count() == 120000);
+    CHECK(opts.analytics_timeout.count() == 120000);
+    CHECK(opts.search_timeout.count() == 120000);
+    CHECK(opts.management_timeout.count() == 120000);
 }
+
 TEST_CASE("unit: all other options remain unchanged", "[unit]")
 {
     couchbase::core::cluster_options default_opts{};
     couchbase::core::cluster_options opts{};
     opts.apply_profile("wan_development");
-    // other than key_value_timeout and connect_timeout,
+    // other than values checked in wan_development above,
     // we'd expect default_opts to be equal to opts:
-    CHECK(opts.key_value_durable_timeout == default_opts.key_value_durable_timeout);
     CHECK(opts.tracer == default_opts.tracer);
     CHECK(opts.meter == default_opts.meter);
-    CHECK(opts.analytics_timeout == default_opts.analytics_timeout);
     CHECK(opts.bootstrap_timeout == default_opts.bootstrap_timeout);
     CHECK(opts.config_idle_redial_timeout == default_opts.config_idle_redial_timeout);
     CHECK(opts.config_poll_floor == default_opts.config_poll_floor);
@@ -79,19 +86,15 @@ TEST_CASE("unit: all other options remain unchanged", "[unit]")
     CHECK(opts.enable_tracing == default_opts.enable_tracing);
     CHECK(opts.enable_unordered_execution == default_opts.enable_unordered_execution);
     CHECK(opts.idle_http_connection_timeout == default_opts.idle_http_connection_timeout);
-    CHECK(opts.management_timeout == default_opts.management_timeout);
     CHECK(opts.max_http_connections == default_opts.max_http_connections);
     CHECK(opts.network == default_opts.network);
-    CHECK(opts.query_timeout == default_opts.query_timeout);
     CHECK(opts.resolve_timeout == default_opts.resolve_timeout);
-    CHECK(opts.search_timeout == default_opts.search_timeout);
     CHECK(opts.show_queries == default_opts.show_queries);
     CHECK(opts.tcp_keep_alive_interval == default_opts.tcp_keep_alive_interval);
     CHECK(opts.tls_verify == default_opts.tls_verify);
     CHECK(opts.trust_certificate == default_opts.trust_certificate);
     CHECK(opts.use_ip_protocol == default_opts.use_ip_protocol);
     CHECK(opts.user_agent_extra == default_opts.user_agent_extra);
-    CHECK(opts.view_timeout == default_opts.view_timeout);
 }
 
 TEST_CASE("unit: can register and use new profile", "[unit]")
@@ -114,7 +117,7 @@ TEST_CASE("unit: can apply multiple profiles", "[unit]")
     opts.apply_profile("wan_development");
     opts.apply_profile("test");
     // set only in wan_development
-    CHECK(opts.connect_timeout.count() == 5000);
+    CHECK(opts.connect_timeout.count() == 20000);
     // set in both, so should be overwritten by "test"
     CHECK(opts.key_value_timeout.count() == 10);
 }
