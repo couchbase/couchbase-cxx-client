@@ -57,7 +57,7 @@ class staged_mutation
         return *this;
     }
 
-    [[nodiscard]] const core::document_id& id() const
+    const core::document_id& id() const
     {
         return doc_.id();
     }
