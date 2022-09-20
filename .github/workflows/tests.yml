@@ -33,6 +33,9 @@ jobs:
         with:
           submodules: recursive
       - name: Initialize couchbase
+        env:
+          if: matrix.suite == 'transactions'
+          CB_SEC_BUCKET: 'secBucket'
         run: ./bin/init-cluster
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
