@@ -195,7 +195,7 @@ class transaction_get_result
      *
      * @return the id of this document.
      */
-    [[nodiscard]] const core::document_id& id() const
+    const core::document_id& id() const
     {
         return id_;
     }

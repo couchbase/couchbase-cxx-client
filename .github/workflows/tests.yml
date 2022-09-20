@@ -32,10 +32,13 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: recursive
-      - name: Initialize couchbase
-        env:
-          if: matrix.suite == 'transactions'
+      - name: Initialize couchbase for transactions testing
+        if: ${{ matrix.suite  == 'transactions' }}
+        env: 
           CB_SEC_BUCKET: 'secBucket'
+        run: ./bin/init-cluster
+      - name: Initialize couchbase for non-transactions testing
+        if: ${{ matrix.suite != 'transactions' }}
         run: ./bin/init-cluster
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2

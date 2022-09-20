@@ -84,8 +84,7 @@ class attempt_context_impl
     void commit_with_query(VoidCallback&& cb);
     void rollback_with_query(VoidCallback&& cb);
 
-    template<typename Handler>
-    void query_begin_work(Handler&& cb);
+    void query_begin_work(std::function<void(std::exception_ptr)>&& cb);
 
     void do_query(const std::string& statement, const transaction_query_options& opts, QueryCallback&& cb);
     std::exception_ptr handle_query_error(const core::operations::query_response& resp);

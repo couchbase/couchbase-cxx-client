@@ -675,9 +675,8 @@ attempt_context_impl::remove(const transaction_get_result& document)
     f.get();
 }
 
-template<typename Handler>
 void
-attempt_context_impl::query_begin_work(Handler&& cb)
+attempt_context_impl::query_begin_work(std::function<void(std::exception_ptr)>&& cb)
 {
     // check for expiry
 
