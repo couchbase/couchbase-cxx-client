@@ -37,8 +37,8 @@ staged_mutation_queue::add(const staged_mutation& mutation)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     // Can only have one staged mutation per document.
-    std::remove_if(
-      queue_.begin(), queue_.end(), [&mutation](const staged_mutation& item) { return document_ids_equal(item.id(), mutation.id()); });
+    queue_.erase(std::remove_if(
+      queue_.begin(), queue_.end(), [&mutation](const staged_mutation& item) { return document_ids_equal(item.id(), mutation.id()); }));
     queue_.push_back(mutation);
 }
 
