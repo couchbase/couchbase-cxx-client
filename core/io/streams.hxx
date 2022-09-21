@@ -146,8 +146,9 @@ class plain_stream_impl : public stream_impl
         if (!open_ || !stream_) {
             return;
         }
-        stream_->set_option(asio::ip::tcp::no_delay{ true });
-        stream_->set_option(asio::socket_base::keep_alive{ true });
+        std::error_code ec{};
+        stream_->set_option(asio::ip::tcp::no_delay{ true }, ec);
+        stream_->set_option(asio::socket_base::keep_alive{ true }, ec);
     }
 
     void async_connect(const asio::ip::tcp::resolver::results_type::endpoint_type& endpoint,
@@ -215,8 +216,12 @@ class tls_stream_impl : public stream_impl
 
     void set_options() override
     {
-        stream_->lowest_layer().set_option(asio::ip::tcp::no_delay{ true });
-        stream_->lowest_layer().set_option(asio::socket_base::keep_alive{ true });
+        if (!open_ || !stream_) {
+            return;
+        }
+        std::error_code ec{};
+        stream_->lowest_layer().set_option(asio::ip::tcp::no_delay{ true }, ec);
+        stream_->lowest_layer().set_option(asio::socket_base::keep_alive{ true }, ec);
     }
 
     void async_connect(const asio::ip::tcp::resolver::results_type::endpoint_type& endpoint,
