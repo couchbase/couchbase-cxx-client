@@ -912,7 +912,7 @@ attempt_context_impl::query(const std::string& statement, const transaction_quer
         check_if_done(cb);
         // decrement in_flight, as we just incremented it in cache_error_async.
         op_list_.set_query_mode(
-          [this, statement, options, cb] {
+          [this, statement, options, cb]() {
               query_begin_work([this, statement, options, cb = std::move(cb)](std::exception_ptr err) mutable {
                   if (err) {
                       return op_completed_with_error(std::move(cb), err);
