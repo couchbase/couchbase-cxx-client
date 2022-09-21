@@ -214,38 +214,3 @@ TEST_CASE("retryable op: can have constant delay", "[unit]")
         REQUIRE(state.timings.size() == 10);
     }
 }
-
-TEST_CASE("get_and_open_buckets: can get buckets", "[unit]")
-{
-    auto c = TransactionsTestEnvironment::get_cluster();
-    std::list<std::string> buckets = get_and_open_buckets(c);
-    REQUIRE(buckets.end() != std::find(buckets.begin(), buckets.end(), std::string("default")));
-    REQUIRE(buckets.end() != std::find(buckets.begin(), buckets.end(), std::string("secBucket")));
-}
-
-TEST_CASE("get_and_open_buckets: can race to get and open buckets", "[unit]")
-{
-    std::list<std::future<std::list<std::string>>> futures;
-    std::size_t num_futures = 20;
-    auto c = TransactionsTestEnvironment::get_cluster();
-    for (std::size_t i = 0; i < num_futures; i++) {
-        futures.push_back(std::async(std::launch::async, [&c] { return get_and_open_buckets(c); }));
-    }
-    for (auto& f : futures) {
-        CHECK_NOTHROW(f.get());
-    }
-}
-TEST_CASE("get_and_open_buckets: can race to get and open buckets in multiple threads", "[unit]")
-{
-    std::list<std::future<std::list<std::string>>> futures;
-    std::size_t num_futures = 20;
-    for (std::size_t i = 0; i < num_futures; i++) {
-        futures.push_back(std::async(std::launch::async, [] {
-            auto c = TransactionsTestEnvironment::get_cluster();
-            return get_and_open_buckets(c);
-        }));
-    }
-    for (auto& f : futures) {
-        CHECK_NOTHROW(f.get());
-    }
-}

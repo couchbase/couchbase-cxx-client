@@ -129,4 +129,5 @@ TEST_CASE("transactions: get mode waits", "[unit]")
     auto mode = op_list.get_mode();
     REQUIRE(mode.query_node == NODE);
     REQUIRE(mode.mode == couchbase::transactions::attempt_mode::modes::QUERY);
+    f.get();
 }
