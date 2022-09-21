@@ -20,7 +20,9 @@
 #include "core/meta/version.hxx"
 #include "core/utils/join_strings.hxx"
 #include "core/utils/json.hxx"
+#include "core/utils/movable_function.hxx"
 #include "core/utils/url_codec.hxx"
+
 #include <couchbase/build_version.hxx>
 
 #include <couchbase/error_codes.hxx>
@@ -126,4 +128,21 @@ TEST_CASE("unit: user_agent string", "[unit]")
 
     REQUIRE(fmt::format("{}; client/0xDEADBEEF; session/0xCAFEBEBE; {}; hello world", core_version, couchbase::core::meta::os()) ==
             couchbase::core::meta::user_agent_for_http("0xDEADBEEF", "0xCAFEBEBE", "hello\nworld"));
+}
+
+TEST_CASE("unit: utils::movable_function should be false after moving value out", "[unit]")
+{
+    auto ptr = std::make_unique<int>(42);
+    couchbase::core::utils::movable_function<bool(int)> src_handler = [ptr = std::move(ptr)](int val) {
+        return ptr != nullptr && *ptr == val;
+    };
+    REQUIRE(src_handler);
+    REQUIRE(src_handler(42));
+    REQUIRE_FALSE(src_handler(43));
+
+    couchbase::core::utils::movable_function<bool(int)> dst_handler = std::move(src_handler);
+    REQUIRE(dst_handler);
+    REQUIRE(dst_handler(42));
+    REQUIRE_FALSE(dst_handler(43));
+    REQUIRE_FALSE(src_handler);
 }
