@@ -88,8 +88,18 @@ class movable_function : public std::function<Signature>
     {
     }
 
-    movable_function(movable_function&& /* other */) noexcept = default;
-    movable_function& operator=(movable_function&& /* other */) noexcept = default;
+    movable_function(movable_function&& other) noexcept
+      : base(std::move(static_cast<base&&>(other)))
+    {
+        other = nullptr;
+    }
+
+    movable_function& operator=(movable_function&& other) noexcept
+    {
+        base::operator=(std::move(static_cast<base&&>(other)));
+        other = nullptr;
+        return *this;
+    }
 
     movable_function& operator=(std::nullptr_t /* other */)
     {
@@ -104,6 +114,7 @@ class movable_function : public std::function<Signature>
         return *this;
     }
 
+    using base::operator bool;
     using base::operator();
 };
 
