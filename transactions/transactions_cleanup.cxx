@@ -114,7 +114,7 @@ transactions_cleanup::interruptable_wait(std::chrono::duration<R, P> delay)
     if (!running_.load()) {
         return false;
     }
-    cv_.wait_for(lock, delay, [&] { return !running_.load(); });
+    cv_.wait_for(lock, delay, [&]() { return !running_.load(); });
     return running_.load();
 }
 

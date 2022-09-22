@@ -126,7 +126,7 @@ transactions::run(const per_transaction_config& config, logic&& code)
 void
 transactions::run(const per_transaction_config& config, async_logic&& code, txn_complete_callback&& cb)
 {
-    std::thread([this, config, code = std::move(code), cb = std::move(cb)] {
+    std::thread([this, config, code = std::move(code), cb = std::move(cb)]() {
         try {
             auto result = wrap_run(*this, config, max_attempts_, std::move(code));
             return cb({}, result);

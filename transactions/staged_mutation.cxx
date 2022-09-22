@@ -295,7 +295,7 @@ staged_mutation_queue::rollback_remove_or_replace(attempt_context_impl& ctx, con
 void
 staged_mutation_queue::commit_doc(attempt_context_impl& ctx, staged_mutation& item, bool ambiguity_resolution_mode, bool cas_zero_mode)
 {
-    retry_op<void>([&] {
+    retry_op<void>([&]() {
         ctx.trace(
           "commit doc {}, cas_zero_mode {}, ambiguity_resolution_mode {}", item.doc().id(), cas_zero_mode, ambiguity_resolution_mode);
         try {

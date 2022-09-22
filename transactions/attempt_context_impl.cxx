@@ -968,7 +968,7 @@ make_kv_txdata(std::optional<transaction_get_result> doc = std::nullopt)
 void
 attempt_context_impl::get_with_query(const core::document_id& id, bool optional, Callback&& cb)
 {
-    cache_error_async(std::move(cb), [&] {
+    cache_error_async(std::move(cb), [&]() {
         auto params = make_params(id, {});
         transaction_query_options opts;
         opts.readonly(true);
@@ -1015,7 +1015,7 @@ attempt_context_impl::get_with_query(const core::document_id& id, bool optional,
 void
 attempt_context_impl::insert_raw_with_query(const core::document_id& id, const std::vector<std::byte>& content, Callback&& cb)
 {
-    cache_error_async(std::move(cb), [&] {
+    cache_error_async(std::move(cb), [&]() {
         std::vector<std::byte> content_copy = content;
         auto params = make_params(id, std::move(content_copy));
         transaction_query_options opts;
@@ -1056,7 +1056,7 @@ attempt_context_impl::insert_raw_with_query(const core::document_id& id, const s
 void
 attempt_context_impl::replace_raw_with_query(const transaction_get_result& document, const std::vector<std::byte>& content, Callback&& cb)
 {
-    cache_error_async(std::move(cb), [&] {
+    cache_error_async(std::move(cb), [&]() {
         std::vector<std::byte> content_copy = content;
         auto params = make_params(document.id(), std::move(content_copy));
         transaction_query_options opts;
@@ -1099,7 +1099,7 @@ attempt_context_impl::replace_raw_with_query(const transaction_get_result& docum
 void
 attempt_context_impl::remove_with_query(const transaction_get_result& document, VoidCallback&& cb)
 {
-    cache_error_async(std::move(cb), [&] {
+    cache_error_async(std::move(cb), [&]() {
         auto params = make_params(document.id(), {});
         transaction_query_options opts;
         return wrap_query(
@@ -1643,13 +1643,13 @@ attempt_context_impl::rollback()
     }
     try {
         // (1) atr_abort
-        retry_op_exp<void>([&] { atr_abort(); });
+        retry_op_exp<void>([&]() { atr_abort(); });
         // (2) rollback staged mutations
         staged_mutations_->rollback(*this);
         debug("rollback completed unstaging docs");
 
         // (3) atr_rollback
-        retry_op_exp<void>([&] { atr_rollback_complete(); });
+        retry_op_exp<void>([&]() { atr_rollback_complete(); });
     } catch (const client_error& e) {
         error_class ec = e.ec();
         error("rollback transaction {}, attempt {} fail with error {}", transaction_id(), id(), e.what());

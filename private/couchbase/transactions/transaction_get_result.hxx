@@ -53,6 +53,7 @@ class transaction_get_result
 
     /** @internal */
     transaction_get_result(const transaction_get_result& doc) = default;
+    transaction_get_result(transaction_get_result&& doc) = default;
 
     /** @internal */
     template<typename Content>

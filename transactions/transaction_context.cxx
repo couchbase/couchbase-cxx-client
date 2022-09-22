@@ -85,7 +85,7 @@ void
 transaction_context::new_attempt_context(async_attempt_context::VoidCallback&& cb)
 {
     // thread.detach hack for async - move the delay to an asio timer
-    std::thread([this, cb = std::move(cb)] {
+    std::thread([this, cb = std::move(cb)]() {
         // the first time we call the delay, it just records an end time.  After that, it
         // actually delays.
         try {

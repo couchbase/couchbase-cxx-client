@@ -48,14 +48,9 @@ class staged_mutation
     }
 
     staged_mutation(const staged_mutation& o) = default;
-
-    [[nodiscard]] staged_mutation& operator=(const staged_mutation& o)
-    {
-        doc_ = o.doc_;
-        type_ = o.type_;
-        content_ = o.content_;
-        return *this;
-    }
+    staged_mutation(staged_mutation&& o) = default;
+    staged_mutation& operator=(const staged_mutation& o) = default;
+    staged_mutation& operator=(staged_mutation&& o) = default;
 
     const core::document_id& id() const
     {

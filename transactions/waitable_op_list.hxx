@@ -85,7 +85,7 @@ class waitable_op_list
         }
         // Another op has set the query_mode_, and hasn't set the
         // query_node_ yet.   So we wait.
-        cv_query_.wait(lock, [this] { return !mode_.query_node.empty(); });
+        cv_query_.wait(lock, [this]() { return !mode_.query_node.empty(); });
         return mode_;
     }
 
