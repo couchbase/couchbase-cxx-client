@@ -17,7 +17,10 @@
 
 #include "test_context.hxx"
 
+#include <spdlog/details/os.h>
+
 #include <cstring>
+
 namespace test::utils
 {
 test_context
@@ -25,53 +28,50 @@ test_context::load_from_environment()
 {
     test_context ctx{};
 
-    const char* var = nullptr;
-
-    var = getenv("TEST_CONNECTION_STRING");
-    if (var != nullptr) {
+    if (auto var = spdlog::details::os::getenv("TEST_CONNECTION_STRING"); !var.empty()) {
         ctx.connection_string = var;
     }
-    var = getenv("TEST_USERNAME");
-    if (var != nullptr) {
+
+    if (auto var = spdlog::details::os::getenv("TEST_USERNAME"); !var.empty()) {
         ctx.username = var;
     }
-    var = getenv("TEST_PASSWORD");
-    if (var != nullptr) {
+
+    if (auto var = spdlog::details::os::getenv("TEST_PASSWORD"); !var.empty()) {
         ctx.password = var;
     }
-    var = getenv("TEST_CERTIFICATE_PATH");
-    if (var != nullptr) {
+
+    if (auto var = spdlog::details::os::getenv("TEST_CERTIFICATE_PATH"); !var.empty()) {
         ctx.certificate_path = var;
     }
-    var = getenv("TEST_KEY_PATH");
-    if (var != nullptr) {
+
+    if (auto var = spdlog::details::os::getenv("TEST_KEY_PATH"); !var.empty()) {
         ctx.key_path = var;
     }
-    var = getenv("TEST_BUCKET");
-    if (var != nullptr) {
+
+    if (auto var = spdlog::details::os::getenv("TEST_BUCKET"); !var.empty()) {
         ctx.bucket = var;
     }
-    var = getenv("TEST_DEPLOYMENT_TYPE");
-    if (var != nullptr) {
-        if (strcmp(var, "on_prem") == 0) {
+
+    if (auto var = spdlog::details::os::getenv("TEST_DEPLOYMENT_TYPE"); !var.empty()) {
+        if (var == "on_prem") {
             ctx.deployment = deployment_type::on_prem;
-        } else if (strcmp(var, "capella") == 0) {
+        } else if (var == "capella") {
             ctx.deployment = deployment_type::capella;
-        } else if (strcmp(var, "elixir") == 0) {
+        } else if (var == "elixir") {
             ctx.deployment = deployment_type::elixir;
         }
     }
 
     // TODO: I believe this + TEST_DEVELOPER_PREVIEW will conflict
-    var = getenv("TEST_SERVER_VERSION");
-    if (var != nullptr) {
+
+    if (auto var = spdlog::details::os::getenv("TEST_SERVER_VERSION"); !var.empty()) {
         ctx.version = server_version::parse(var, ctx.deployment);
     }
-    var = getenv("TEST_DEVELOPER_PREVIEW");
-    if (var != nullptr) {
-        if (strcmp(var, "true") == 0 || strcmp(var, "yes") == 0 || strcmp(var, "1") == 0) {
+
+    if (auto var = spdlog::details::os::getenv("TEST_DEVELOPER_PREVIEW"); !var.empty()) {
+        if (var == "true" || var == "yes" || var == "1") {
             ctx.version.developer_preview = true;
-        } else if (strcmp(var, "false") == 0 || strcmp(var, "no") == 0 || strcmp(var, "0") == 0) {
+        } else if (var == "false" || var == "no" || var == "0") {
             ctx.version.developer_preview = false;
         }
     }

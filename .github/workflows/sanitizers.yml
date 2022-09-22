@@ -42,13 +42,13 @@ jobs:
       - name: Check couchbase
         run: ./bin/check-cluster
       - name: Run tests
-        timeout-minutes: 15
+        timeout-minutes: 30
         env:
           CB_SANITIZER: asan
           TEST_SERVER_VERSION: 7.0.3
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
           TEST_LOG_LEVEL: trace
-        run: ./bin/run-tests
+        run: ./bin/run-unit-tests
 
   leak:
     runs-on: ubuntu-20.04
@@ -85,13 +85,13 @@ jobs:
       - name: Check couchbase
         run: ./bin/check-cluster
       - name: Run tests
-        timeout-minutes: 15
+        timeout-minutes: 30
         env:
           CB_SANITIZER: lsan
           TEST_SERVER_VERSION: 7.0.3
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
           TEST_LOG_LEVEL: trace
-        run: ./bin/run-tests
+        run: ./bin/run-unit-tests
 
   undefined_behaviour:
     runs-on: ubuntu-20.04
@@ -128,13 +128,13 @@ jobs:
       - name: Check couchbase
         run: ./bin/check-cluster
       - name: Run tests
-        timeout-minutes: 15
+        timeout-minutes: 30
         env:
           CB_SANITIZER: ubsan
           TEST_SERVER_VERSION: 7.0.3
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
           TEST_LOG_LEVEL: trace
-        run: ./bin/run-tests
+        run: ./bin/run-unit-tests
 
   thread:
     runs-on: ubuntu-20.04
@@ -171,11 +171,11 @@ jobs:
       - name: Check couchbase
         run: ./bin/check-cluster
       - name: Run tests
-        timeout-minutes: 15
+        timeout-minutes: 30
         env:
           CB_SANITIZER: tsan
           TSAN_OPTIONS: second_deadlock_stack=1
           TEST_SERVER_VERSION: 7.0.3
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
           TEST_LOG_LEVEL: trace
-        run: ./bin/run-tests
+        run: ./bin/run-unit-tests

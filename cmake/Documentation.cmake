@@ -29,7 +29,7 @@ if(DOXYGEN_FOUND AND DOT)
     MAIN_DEPENDENCY ${DOXYGEN_CONFIG}
     ${DOXYGEN_CONFIG_TEMPLATE}
     COMMENT "Generating documentation with Doxygen: ${DOXYGEN_INDEX_FILE}")
-  add_custom_target(doxygen ALL DEPENDS ${DOXYGEN_INDEX_FILE} ${COUCHBASE_CXX_CLIENT_PUBLIC_HEADERS})
+  add_custom_target(doxygen DEPENDS ${DOXYGEN_INDEX_FILE} ${COUCHBASE_CXX_CLIENT_PUBLIC_HEADERS})
 else()
   message(STATUS "Could not find doxygen executable. Documentation generation will be disabled.")
 endif()

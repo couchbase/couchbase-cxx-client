@@ -27,3 +27,11 @@ target_link_libraries(test_unit_jsonsl jsonsl)
 integration_benchmark(get)
 
 add_subdirectory(tools)
+
+transaction_test(transaction_context)
+transaction_test(transaction_simple)
+transaction_test(transaction_simple_async)
+
+unit_test(transaction_logging)
+unit_test(transaction_utils)
+unit_test(waitable_op_list)

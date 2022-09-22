@@ -5,6 +5,9 @@
     <sourceRoots>
       <file path="$PROJECT_DIR$/core" />
       <file path="$PROJECT_DIR$/couchbase" />
+      <file path="$PROJECT_DIR$/examples" />
+      <file path="$PROJECT_DIR$/private" />
+      <file path="$PROJECT_DIR$/transactions" />
     </sourceRoots>
     <libraryRoots>
       <file path="$PROJECT_DIR$/third_party" />

@@ -19,6 +19,7 @@
 
 #include <couchbase/subdoc/fwd/command_bundle.hxx>
 
+#include <core/impl/subdoc/command.hxx>
 #include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/common_durability_options.hxx>
 #include <couchbase/expiry.hxx>

@@ -30,6 +30,7 @@ options = {
   username: ENV.fetch("CB_USERNAME", "Administrator"),
   password: ENV.fetch("CB_PASSWORD", "password"),
   bucket: ENV.fetch("CB_BUCKET", "default"),
+  sec_bucket: ENV.fetch("CB_SEC_BUCKET", ""),
   server_quota: ENV.fetch("CB_SERVER_QUOTA", 2048).to_i,
   index_quota: ENV.fetch("CB_INDEX_QUOTA", 256).to_i,
   bucket_quota: ENV.fetch("CB_BUCKET_QUOTA", 256).to_i,
@@ -182,6 +183,18 @@ api.post_form("/pools/default/buckets",
               ramQuotaMB: options[:bucket_quota],
               bucketType: "membase",
               name: options[:bucket])
+
+if options[:sec_bucket].to_b 
+    api.post_form("/pools/default/buckets",
+              flushEnabled: 1,
+              threadsNumber: 3,
+              replicaIndex: 0,
+              replicaNumber: number_of_replicas,
+              evictionPolicy: "valueOnly",
+              ramQuotaMB: options[:bucket_quota],
+              bucketType: "membase",
+              name: options[:sec_bucket])
+end
 
 api.post_json("/sampleBuckets/install", options[:sample_buckets].to_a) if options[:sample_buckets].any?
 
