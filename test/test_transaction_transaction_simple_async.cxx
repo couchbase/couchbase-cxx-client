@@ -788,7 +788,7 @@ TEST_CASE("transactions: rollback async KV remove", "[transactions]")
 
 TEST_CASE("transactions: async get replace", "[transactions]")
 {
-    const size_t NUM_TXNS{ 2 };
+    static constexpr std::size_t NUM_TXNS{ 2 };
     tao::json::value doc1_content{
         { "number", 0 },
     };

@@ -385,7 +385,7 @@ TEST_CASE("transactions: can see some query errors but no transactions failed", 
     try {
         f.get();
         FAIL("expected future to throw exception");
-    } catch (const query_exception& e) {
+    } catch (const query_exception&) {
 
     } catch (...) {
         auto e = std::current_exception();
