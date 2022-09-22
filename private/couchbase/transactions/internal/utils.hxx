@@ -152,13 +152,16 @@ static constexpr std::chrono::milliseconds DEFAULT_RETRY_OP_EXP_DELAY{ 1 };
 static constexpr std::size_t DEFAULT_RETRY_OP_MAX_RETRIES{ 100 };
 static constexpr double RETRY_OP_JITTER{ 0.1 }; // means +/- 10% for jitter.
 static constexpr std::size_t DEFAULT_RETRY_OP_EXPONENT_CAP{ 8 };
+
 static inline double
 jitter()
 {
+    static std::mutex mtx;
     static std::random_device rd;
     static std::mt19937 gen(rd());
     static std::uniform_real_distribution<> dist(1 - RETRY_OP_JITTER, 1 + RETRY_OP_JITTER);
 
+    std::lock_guard<std::mutex> lock(mtx);
     return dist(gen);
 }
 

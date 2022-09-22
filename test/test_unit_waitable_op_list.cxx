@@ -65,9 +65,10 @@ TEST_CASE("transactions: set mode waits on in flight ops", "[unit]")
         std::this_thread::sleep_for(std::chrono::seconds(1));
         op_list.decrement_in_flight();
     });
-    REQUIRE(std::future_status::timeout == f.wait_for(std::chrono::milliseconds(100)));
+    CHECK(std::future_status::timeout == f.wait_for(std::chrono::milliseconds(100)));
     f2.get();
-    REQUIRE(std::future_status::ready == f.wait_for(std::chrono::milliseconds(100)));
+    CHECK(std::future_status::ready == f.wait_for(std::chrono::milliseconds(100)));
+    f.get();
     auto mode = op_list.get_mode();
     REQUIRE(mode.mode == couchbase::transactions::attempt_mode::modes::QUERY);
     REQUIRE_FALSE(do_work_called.load());
@@ -115,19 +116,17 @@ TEST_CASE("transactions: get mode waits", "[unit]")
     op_list.set_query_mode([&begin_work_called]() { begin_work_called = true; }, [&do_work_called]() { do_work_called = true; });
     auto f = std::async(std::launch::async, [&op_list] {
         auto mode = op_list.get_mode();
-        REQUIRE(mode.query_node == NODE);
-        REQUIRE(mode.mode == couchbase::transactions::attempt_mode::modes::QUERY);
-        return;
+        return (mode.query_node == NODE && mode.mode == couchbase::transactions::attempt_mode::modes::QUERY);
     });
     auto f2 = std::async(std::launch::async, [&op_list] {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         op_list.set_query_node(NODE);
         return;
     });
-    REQUIRE(std::future_status::timeout == f.wait_for(std::chrono::milliseconds(100)));
+    CHECK(std::future_status::timeout == f.wait_for(std::chrono::milliseconds(100)));
     f2.get();
+    CHECK(f.get());
     auto mode = op_list.get_mode();
-    REQUIRE(mode.query_node == NODE);
-    REQUIRE(mode.mode == couchbase::transactions::attempt_mode::modes::QUERY);
-    f.get();
+    CHECK(mode.query_node == NODE);
+    CHECK(mode.mode == couchbase::transactions::attempt_mode::modes::QUERY);
 }

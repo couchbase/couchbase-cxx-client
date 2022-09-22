@@ -95,8 +95,8 @@ struct conn {
         if (!couchbase::core::logger::is_initialized()) {
             couchbase::core::logger::create_console_logger();
         }
-        couchbase::core::logger::set_log_levels(couchbase::core::logger::level::trace);
-        couchbase::transactions::set_transactions_log_level(couchbase::core::logger::level::trace);
+        couchbase::core::logger::set_log_levels(couchbase::core::logger::level::info);
+        couchbase::transactions::set_transactions_log_level(couchbase::core::logger::level::info);
         couchbase::transactions::txn_log->trace("using {} io completion threads", conf.io_threads);
         for (std::size_t i = 0; i < conf.io_threads; i++) {
             io_threads.emplace_back([this]() { io.run(); });
@@ -111,11 +111,10 @@ struct conn {
         auto f = barrier->get_future();
         c->close([barrier]() { barrier->set_value(); });
         f.get();
+        io.stop();
         for (auto& t : io_threads) {
             if (t.joinable()) {
                 t.join();
-            } else {
-                couchbase::transactions::txn_log->warn("io completion thread not joinable");
             }
         }
     }

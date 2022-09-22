@@ -81,13 +81,13 @@ TEST_CASE("transactions: can do simple transaction with transaction wrapper", "[
     transaction_context tx(txns);
     auto txn_logic = [&id, &tx, &new_content]() {
         tx.get(id, [&tx, &new_content](std::exception_ptr err, std::optional<transaction_get_result> res) {
-            REQUIRE(res);
-            REQUIRE_FALSE(err);
+            CHECK(res);
+            CHECK_FALSE(err);
             tx.replace(*res,
                        couchbase::core::utils::json::generate_binary(new_content),
                        [](std::exception_ptr err, std::optional<transaction_get_result> replaced) {
-                           REQUIRE(replaced);
-                           REQUIRE_FALSE(err);
+                           CHECK(replaced);
+                           CHECK_FALSE(err);
                        });
         });
     };
