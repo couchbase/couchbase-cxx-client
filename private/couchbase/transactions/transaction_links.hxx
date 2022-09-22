@@ -44,7 +44,7 @@ class transaction_links
     std::optional<std::string> crc32_of_staging_;
     std::optional<std::string> op_;
     std::optional<tao::json::value> forward_compat_;
-    bool is_deleted_;
+    bool is_deleted_{ false };
 
   public:
     transaction_links() = default;

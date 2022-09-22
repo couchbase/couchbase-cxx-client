@@ -255,8 +255,7 @@ class bucket : public std::enable_shared_from_this<bucket>
           [self = shared_from_this(), session, this_index = index, hostname, port](std::error_code ec,
                                                                                    const topology::configuration& config) {
               if (self->closed_) {
-                  asio::post(asio::bind_executor(self->ctx_,
-                                                 [session = std::move(session)]() { return session->stop(retry_reason::do_not_retry); }));
+                  asio::post(asio::bind_executor(self->ctx_, [session]() { return session->stop(retry_reason::do_not_retry); }));
                   return;
               }
               if (ec) {

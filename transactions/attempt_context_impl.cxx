@@ -49,7 +49,7 @@ attempt_context_impl::cluster_ref()
 
 attempt_context_impl::attempt_context_impl(transaction_context& transaction_ctx)
   : overall_(transaction_ctx)
-  , staged_mutations_(std::make_unique< staged_mutation_queue>())
+  , staged_mutations_(std::make_unique<staged_mutation_queue>())
   , hooks_(overall_.config().attempt_context_hooks())
 {
     // put a new transaction_attempt in the context...
@@ -911,7 +911,7 @@ attempt_context_impl::query(const std::string& statement, const transaction_quer
         check_if_done(cb);
         // decrement in_flight, as we just incremented it in cache_error_async.
         op_list_.set_query_mode(
-          [this, statement, options, cb]() {
+          [this, statement, options, cb]() mutable {
               query_begin_work([this, statement, options, cb = std::move(cb)](std::exception_ptr err) mutable {
                   if (err) {
                       return op_completed_with_error(std::move(cb), err);

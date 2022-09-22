@@ -53,7 +53,7 @@ class attempt_context_impl
   private:
     transaction_context& overall_;
     std::optional<core::document_id> atr_id_;
-    bool is_done_{false};
+    bool is_done_{ false };
     std::unique_ptr<staged_mutation_queue> staged_mutations_;
     attempt_context_testing_hooks& hooks_;
     error_list errors_;
