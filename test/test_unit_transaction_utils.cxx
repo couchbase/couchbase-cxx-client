@@ -17,15 +17,15 @@
 #include "test_helper.hxx"
 #include "utils/transactions_env.h"
 
-#include "couchbase/transactions/internal/exceptions_internal.hxx"
-#include "couchbase/transactions/internal/utils.hxx"
+#include "core/transactions/internal/exceptions_internal.hxx"
+#include "core/transactions/internal/utils.hxx"
 
 #include <future>
 #include <iostream>
 #include <limits>
 #include <thread>
 
-using namespace couchbase::transactions;
+using namespace couchbase::core::transactions;
 using namespace std;
 
 double min_jitter_fraction = 1.0 - RETRY_OP_JITTER;

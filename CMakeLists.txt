@@ -225,6 +225,7 @@ set(couchbase_cxx_client_FILES
     core/impl/dns_srv_tracker.cxx
     core/impl/append.cxx
     core/impl/build_deferred_query_indexes.cxx
+    core/impl/cluster.cxx
     core/impl/common_error_category.cxx
     core/impl/decrement.cxx
     core/impl/expiry.cxx
@@ -269,26 +270,25 @@ set(couchbase_cxx_client_FILES
     core/impl/touch.cxx
     core/impl/upsert.cxx
     core/impl/view_error_category.cxx
-    transactions/active_transaction_record.cxx
-    transactions/atr_cleanup_entry.cxx
-    transactions/atr_ids.cxx
-    transactions/attempt_context_impl.cxx
-    transactions/binary.cxx
-    transactions/exceptions.cxx
-    transactions/logging.cxx
-    transactions/result.cxx
-    transactions/staged_mutation.cxx
-    transactions/internal/get_and_open_buckets.cxx
-    transactions/internal/utils.cxx
-    transactions/transaction_attempt.cxx
-    transactions/transaction_config.cxx
-    transactions/transaction_context.cxx
-    transactions/transaction_get_result.cxx
-    transactions/transaction_links.cxx
-    transactions/transaction_query_options.cxx
-    transactions/transactions.cxx
-    transactions/transactions_cleanup.cxx
-    transactions/uid_generator.cxx)
+    core/transactions/atr_cleanup_entry.cxx
+    core/transactions/atr_ids.cxx
+    core/transactions/attempt_context_impl.cxx
+    core/transactions/binary.cxx
+    core/transactions/exceptions.cxx
+    core/transactions/logging.cxx
+    core/transactions/result.cxx
+    core/transactions/staged_mutation.cxx
+    core/transactions/get_and_open_buckets.cxx
+    core/transactions/utils.cxx
+    core/transactions/transaction_attempt.cxx
+    core/transactions/transaction_config.cxx
+    core/transactions/transaction_context.cxx
+    core/transactions/transaction_get_result.cxx
+    core/transactions/transaction_links.cxx
+    core/transactions/transaction_query_options.cxx
+    core/transactions/transactions.cxx
+    core/transactions/transactions_cleanup.cxx
+    core/transactions/uid_generator.cxx)
 
 if(COUCHBASE_CXX_CLIENT_BUILD_SHARED)
   add_library(couchbase_cxx_client SHARED ${couchbase_cxx_client_FILES})

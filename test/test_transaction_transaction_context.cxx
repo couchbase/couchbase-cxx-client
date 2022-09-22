@@ -17,17 +17,17 @@
 #include "test_helper.hxx"
 #include "utils/transactions_env.h"
 
-#include "transactions/attempt_context_impl.hxx"
+#include "core/transactions/attempt_context_impl.hxx"
 
-#include <couchbase/transactions.hxx>
-#include <couchbase/transactions/internal/transaction_context.hxx>
+#include "core/transactions.hxx"
+#include "core/transactions/internal/transaction_context.hxx"
 
 #include <spdlog/spdlog.h>
 
 #include <future>
 #include <stdexcept>
 
-using namespace couchbase::transactions;
+using namespace couchbase::core::transactions;
 static const tao::json::value tx_content{
     { "some", "thing" },
 };
@@ -44,18 +44,18 @@ txn_completed(std::exception_ptr err, std::shared_ptr<std::promise<void>> barrie
 
 // blocking txn logic wrapper
 template<typename Handler>
-transaction_result
+couchbase::transactions::transaction_result
 simple_txn_wrapper(transaction_context& tx, Handler&& handler)
 {
     size_t attempts{ 0 };
     while (attempts++ < 1000) {
-        auto barrier = std::make_shared<std::promise<std::optional<transaction_result>>>();
+        auto barrier = std::make_shared<std::promise<std::optional<couchbase::transactions::transaction_result>>>();
         auto f = barrier->get_future();
         tx.new_attempt_context();
         // in transactions.run, we currently handle exceptions that may come back from the
         // txn logic as well (using tx::handle_error).
         handler();
-        tx.finalize([barrier](std::optional<transaction_exception> err, std::optional<transaction_result> result) {
+        tx.finalize([barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> result) {
             if (err) {
                 return barrier->set_exception(std::make_exception_ptr(*err));
             }
@@ -119,12 +119,13 @@ TEST_CASE("transactions: can do simple transaction with finalize", "[transaction
                        CHECK_FALSE(err);
                    });
     });
-    tx.finalize([&barrier](std::optional<transaction_exception> err, std::optional<transaction_result> /* result */) {
-        if (err) {
-            return barrier->set_exception(std::make_exception_ptr(*err));
-        }
-        return barrier->set_value();
-    });
+    tx.finalize(
+      [&barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> /* result */) {
+          if (err) {
+              return barrier->set_exception(std::make_exception_ptr(*err));
+          }
+          return barrier->set_value();
+      });
     f.get();
     REQUIRE(TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>() == new_content);
 }
@@ -400,7 +401,7 @@ TEST_CASE("transactions: can set per transaction config", "[transactions]")
     auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
-    per_transaction_config per_txn_cfg;
+    couchbase::transactions::per_transaction_config per_txn_cfg;
     per_txn_cfg.scan_consistency(couchbase::core::query_scan_consistency::not_bounded);
     per_txn_cfg.expiration_time(std::chrono::milliseconds(1)).kv_timeout(std::chrono::milliseconds(2));
     per_txn_cfg.durability_level(couchbase::durability_level::none);

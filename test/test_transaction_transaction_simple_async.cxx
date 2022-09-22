@@ -17,20 +17,20 @@
 #include "simple_object.hxx"
 #include "test_helper.hxx"
 
-#include "transactions/attempt_context_impl.hxx"
-#include "transactions/attempt_context_testing_hooks.hxx"
+#include "core/transactions/attempt_context_impl.hxx"
+#include "core/transactions/attempt_context_testing_hooks.hxx"
 
 #include "utils/transactions_env.h"
 
+#include "core/transactions.hxx"
 #include <couchbase/error_codes.hxx>
-#include <couchbase/transactions.hxx>
 #include <spdlog/spdlog.h>
 
 #include <future>
 #include <list>
 #include <stdexcept>
 
-using namespace couchbase::transactions;
+using namespace couchbase::core::transactions;
 
 static const tao::json::value async_content{
     { "some", "thing" },
@@ -38,7 +38,7 @@ static const tao::json::value async_content{
 
 void
 txn_completed(std::optional<transaction_exception> err,
-              std::optional<transaction_result> /* result */,
+              std::optional<couchbase::transactions::transaction_result> /* result */,
               std::shared_ptr<std::promise<void>> barrier)
 {
     if (err) {
@@ -68,7 +68,7 @@ TEST_CASE("transactions: async get", "[transactions]")
               }
           });
       },
-      [cb_called, barrier](std::optional<transaction_exception> err, std::optional<transaction_result> res) {
+      [cb_called, barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> res) {
           CHECK(cb_called->load());
           txn_completed(std::move(err), std::move(res), barrier);
       });
@@ -90,7 +90,7 @@ TEST_CASE("transactions: can't get from unknown bucket", "[transactions]")
               CHECK_FALSE(result);
           });
       },
-      [barrier, cb_called](std::optional<transaction_exception> err, std::optional<transaction_result> res) {
+      [barrier, cb_called](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> res) {
           CHECK(cb_called->load());
           txn_completed(std::move(err), std::move(res), barrier);
       });
@@ -115,7 +115,7 @@ TEST_CASE("transactions: async get fail", "[transactions]")
                   cb_called->store(true);
               });
           },
-          [barrier, cb_called](std::optional<transaction_exception> err, std::optional<transaction_result> res) {
+          [barrier, cb_called](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> res) {
               CHECK(cb_called->load());
               txn_completed(std::move(err), std::move(res), barrier);
           });
@@ -154,7 +154,7 @@ TEST_CASE("transactions: async remove fail", "[transactions]")
                   }
               });
           },
-          [barrier, cb_called](std::optional<transaction_exception> err, std::optional<transaction_result> res) {
+          [barrier, cb_called](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> res) {
               CHECK(cb_called->load());
               txn_completed(std::move(err), std::move(res), barrier);
           });
@@ -186,7 +186,7 @@ TEST_CASE("transactions: RYOW on insert", "[transactions]")
               });
           });
       },
-      [barrier, cb_called](std::optional<transaction_exception> err, std::optional<transaction_result> res) {
+      [barrier, cb_called](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> res) {
           CHECK_FALSE(err);
           CHECK(res);
           CHECK(cb_called->load());
@@ -216,7 +216,7 @@ TEST_CASE("transactions: async remove", "[transactions]")
               }
           });
       },
-      [barrier, cb_called](std::optional<transaction_exception> err, std::optional<transaction_result> res) {
+      [barrier, cb_called](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> res) {
           CHECK(cb_called->load());
           txn_completed(std::move(err), res, barrier);
       });
@@ -258,7 +258,7 @@ TEST_CASE("transactions: async replace", "[transactions]")
               }
           });
       },
-      [barrier, cb_called](std::optional<transaction_exception> err, std::optional<transaction_result> res) {
+      [barrier, cb_called](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> res) {
           CHECK(cb_called->load());
           txn_completed(std::move(err), res, barrier);
       });
@@ -295,7 +295,7 @@ TEST_CASE("transactions: async replace fail", "[transactions]")
                   }
               });
           },
-          [barrier, cb_called](std::optional<transaction_exception> err, std::optional<transaction_result> res) {
+          [barrier, cb_called](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> res) {
               CHECK(cb_called->load());
               txn_completed(std::move(err), res, barrier);
           });
@@ -321,12 +321,12 @@ TEST_CASE("transactions: async insert", "[transactions]")
       [cb_called, id](async_attempt_context& ctx) {
           ctx.insert(id, async_content, [cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
               if (!err) {
-                  CHECK(0 != res->cas());
+                  CHECK_FALSE(res->cas().empty());
                   cb_called->store(true);
               }
           });
       },
-      [barrier, cb_called](std::optional<transaction_exception> err, std::optional<transaction_result> res) {
+      [barrier, cb_called](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> res) {
           CHECK(cb_called->load());
           txn_completed(std::move(err), res, barrier);
       });
@@ -353,7 +353,7 @@ TEST_CASE("transactions: async insert fail", "[transactions]")
                   }
               });
           },
-          [barrier](std::optional<transaction_exception> err, std::optional<transaction_result> result) {
+          [barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> result) {
               CHECK(err);
               CHECK(err->type() == failure_type::FAIL);
               txn_completed(std::move(err), std::move(result), barrier);
@@ -390,7 +390,7 @@ TEST_CASE("transactions: async query", "[transactions]")
                         }
                     });
       },
-      [query_called, barrier](std::optional<transaction_exception> err, std::optional<transaction_result> result) {
+      [query_called, barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> result) {
           CHECK(query_called->load());
           CHECK_FALSE(err);
           txn_completed(std::move(err), std::move(result), barrier);
@@ -431,7 +431,7 @@ TEST_CASE("transactions: multiple racing queries", "[transactions]")
                         }
                     });
       },
-      [query_called, barrier](std::optional<transaction_exception> err, std::optional<transaction_result> result) {
+      [query_called, barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> result) {
           CHECK(3 == query_called->load());
           CHECK_FALSE(err);
           txn_completed(std::move(err), std::move(result), barrier);
@@ -462,7 +462,7 @@ TEST_CASE("transactions: rollback async query", "[transactions]")
                         }
                     });
       },
-      [query_called, barrier](std::optional<transaction_exception> err, std::optional<transaction_result> result) {
+      [query_called, barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> result) {
           CHECK(query_called->load());
           CHECK(err);
           txn_completed(std::move(err), std::move(result), barrier);
@@ -497,7 +497,7 @@ TEST_CASE("transactions: async KV get", "[transactions]")
                 });
           });
       },
-      [get_called, barrier](std::optional<transaction_exception> err, std::optional<transaction_result> result) {
+      [get_called, barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> result) {
           CHECK(get_called->load());
           CHECK_FALSE(err);
           txn_completed(std::move(err), std::move(result), barrier);
@@ -533,7 +533,7 @@ TEST_CASE("transactions: rollback async KV get", "[transactions]")
                 });
           });
       },
-      [&get_called, barrier](std::optional<transaction_exception> err, std::optional<transaction_result> result) {
+      [&get_called, barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> result) {
           CHECK(get_called->load());
           CHECK(err);
           txn_completed(std::move(err), std::move(result), barrier);
@@ -563,7 +563,7 @@ TEST_CASE("transactions: async KV insert", "[transactions]")
                         }
                     });
       },
-      [insert_called, barrier](std::optional<transaction_exception> err, std::optional<transaction_result> res) {
+      [insert_called, barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> res) {
           CHECK_FALSE(err);
           CHECK(insert_called->load());
           txn_completed(std::move(err), std::move(res), barrier);
@@ -595,7 +595,7 @@ TEST_CASE("transactions: rollback async KV insert", "[transactions]")
                         }
                     });
       },
-      [insert_called, barrier](std::optional<transaction_exception> err, std::optional<transaction_result> res) {
+      [insert_called, barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> res) {
           CHECK(err);
           CHECK(insert_called->load());
           txn_completed(std::move(err), std::move(res), barrier);
@@ -645,7 +645,8 @@ TEST_CASE("transactions: async KV replace", "[transactions]")
               }
           });
       },
-      [&replace_called, barrier](std::optional<transaction_exception> err, std::optional<transaction_result> result) {
+      [&replace_called, barrier](std::optional<transaction_exception> err,
+                                 std::optional<couchbase::transactions::transaction_result> result) {
           CHECK(replace_called->load());
           CHECK_FALSE(err);
           txn_completed(std::move(err), std::move(result), barrier);
@@ -691,7 +692,8 @@ TEST_CASE("transactions: rollback async KV replace", "[transactions]")
               }
           });
       },
-      [&replace_called, barrier](std::optional<transaction_exception> err, std::optional<transaction_result> result) {
+      [&replace_called, barrier](std::optional<transaction_exception> err,
+                                 std::optional<couchbase::transactions::transaction_result> result) {
           CHECK(replace_called->load());
           CHECK(err);
           txn_completed(std::move(err), std::move(result), barrier);
@@ -730,7 +732,8 @@ TEST_CASE("transactions: async KV remove", "[transactions]")
               }
           });
       },
-      [remove_called, barrier](std::optional<transaction_exception> err, std::optional<transaction_result> result) {
+      [remove_called, barrier](std::optional<transaction_exception> err,
+                               std::optional<couchbase::transactions::transaction_result> result) {
           CHECK(remove_called->load());
           CHECK_FALSE(err);
           txn_completed(std::move(err), std::move(result), barrier);
@@ -774,7 +777,8 @@ TEST_CASE("transactions: rollback async KV remove", "[transactions]")
               }
           });
       },
-      [&remove_called, barrier](std::optional<transaction_exception> err, std::optional<transaction_result> result) {
+      [&remove_called, barrier](std::optional<transaction_exception> err,
+                                std::optional<couchbase::transactions::transaction_result> result) {
           CHECK(remove_called->load());
           CHECK(err);
           txn_completed(std::move(err), std::move(result), barrier);
@@ -850,8 +854,8 @@ TEST_CASE("transactions: async get replace", "[transactions]")
                   });
               });
           },
-          [txns, done, errors, &in_flight, &cv_in_flight, &cv_txns_complete, &mut](std::optional<transaction_exception> err,
-                                                                                   std::optional<transaction_result> /* result */) {
+          [txns, done, errors, &in_flight, &cv_in_flight, &cv_txns_complete, &mut](
+            std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> /* result */) {
               ++(*txns);
               std::unique_lock<std::mutex> lock(mut);
               in_flight--;

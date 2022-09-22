@@ -17,7 +17,7 @@
 #include "test_helper.hxx"
 #include "utils/transactions_env.h"
 
-#include <couchbase/transactions/internal/logging.hxx>
+#include "core/transactions/internal/logging.hxx"
 
 #include <spdlog/fwd.h>
 #include <spdlog/sinks/base_sink.h>
@@ -27,7 +27,7 @@
 #include <iostream>
 #include <iterator>
 
-using namespace couchbase::transactions;
+using namespace couchbase::core::transactions;
 
 static const tao::json::value doc_content{
     { "some", "thing" },
@@ -60,7 +60,7 @@ TEST_CASE("transactions: can use custom sink", "[unit]")
 {
     std::string log_message = "I am a log";
     auto sink = std::make_shared<TrivialFileSink>();
-    couchbase::transactions::create_loggers(couchbase::core::logger::level::debug, sink);
+    create_loggers(couchbase::core::logger::level::debug, sink);
     txn_log->debug(log_message);
     txn_log->flush();
     REQUIRE_FALSE(sink->output().empty());
@@ -72,7 +72,7 @@ TEST_CASE("transactions: custom sink respects log levels", "[unit]")
     couchbase::core::logger::create_blackhole_logger();
     std::string log_message = "I am a log";
     auto sink = std::make_shared<TrivialFileSink>();
-    couchbase::transactions::create_loggers(couchbase::core::logger::level::info, sink);
+    create_loggers(couchbase::core::logger::level::info, sink);
     txn_log->debug(log_message);
     txn_log->flush();
     REQUIRE(sink->output().empty());
@@ -84,8 +84,8 @@ TEST_CASE("transactions: custom sink respects log level changes", "[unit]")
     couchbase::core::logger::create_blackhole_logger();
     std::string log_message = "I am a log";
     auto sink = std::make_shared<TrivialFileSink>();
-    couchbase::transactions::create_loggers(couchbase::core::logger::level::debug, sink);
-    couchbase::transactions::set_transactions_log_level(couchbase::core::logger::level::info);
+    create_loggers(couchbase::core::logger::level::debug, sink);
+    set_transactions_log_level(couchbase::core::logger::level::info);
     txn_log->debug(log_message);
     txn_log->flush();
     REQUIRE(sink->output().empty());

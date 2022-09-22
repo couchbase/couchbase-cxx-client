@@ -17,8 +17,8 @@
 
 #include "core/cluster.hxx"
 
-#include <couchbase/transactions.hxx>
-#include <couchbase/transactions/internal/get_and_open_buckets.hxx>
+#include "core/transactions.hxx"
+#include "core/transactions/internal/get_and_open_buckets.hxx"
 
 #include <spdlog/spdlog.h>
 
@@ -26,6 +26,8 @@
 #include <iostream>
 #include <random>
 #include <string>
+
+using namespace couchbase::core::transactions;
 
 std::string
 make_uuid()
@@ -120,10 +122,10 @@ struct tao::json::traits<Monster> {
 class GameServer
 {
   private:
-    couchbase::transactions::transactions& transactions_;
+    transactions& transactions_;
 
   public:
-    explicit GameServer(couchbase::transactions::transactions& transactions)
+    explicit GameServer(transactions& transactions)
       : transactions_(transactions)
     {
     }
@@ -141,7 +143,7 @@ class GameServer
     {
         try {
             couchbase::core::document_id the_monster{ collection.bucket_name(), collection.scope_name(), collection.name(), monster_id };
-            transactions_.run([&](couchbase::transactions::attempt_context& ctx) {
+            transactions_.run([&](attempt_context& ctx) {
                 auto monster = ctx.get_optional(the_monster);
                 if (!monster) {
                     exists = false;
@@ -185,7 +187,7 @@ class GameServer
                     ctx.replace(*monster, monster_new_body);
                 }
             });
-        } catch (const couchbase::transactions::transaction_exception& e) {
+        } catch (const transaction_exception& e) {
             std::cout << "got transaction exception {}" << e.what() << std::endl;
         }
     }
@@ -267,13 +269,13 @@ main()
         }
     }
 
-    couchbase::transactions::get_and_open_buckets(low_level_cluster);
+    get_and_open_buckets(low_level_cluster);
     couchbase::transactions::transaction_config configuration;
     configuration.durability_level(couchbase::durability_level::majority);
     configuration.cleanup_client_attempts(true);
     configuration.cleanup_lost_attempts(true);
     configuration.cleanup_window(std::chrono::seconds(5));
-    couchbase::transactions::transactions transactions(low_level_cluster, configuration);
+    transactions transactions(low_level_cluster, configuration);
     GameServer game_server(transactions);
     std::vector<std::thread> threads;
     for (int i = 0; i < NUM_THREADS; i++) {

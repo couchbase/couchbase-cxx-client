@@ -19,12 +19,18 @@
 
 #include <couchbase/bucket.hxx>
 #include <couchbase/query_index_manager.hxx>
+#include <couchbase/transactions.hxx>
 
 #include <memory>
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace couchbase::core
 {
+namespace transactions
+{
+class transactions;
+} // namespace transactions
+
 class cluster;
 } // namespace couchbase::core
 #endif
@@ -80,7 +86,10 @@ class cluster
         return query_index_manager{ core_ };
     }
 
+    [[nodiscard]] auto transactions() -> std::shared_ptr<couchbase::transactions::transactions>;
+
   private:
     std::shared_ptr<couchbase::core::cluster> core_;
+    std::shared_ptr<couchbase::core::transactions::transactions> transactions_;
 };
 } // namespace couchbase
