@@ -28,12 +28,14 @@
 
 #include <tao/json.hpp>
 
+#include <spdlog/details/os.h>
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <cstdlib>
 #include <fstream>
+#include <iostream>
 
 // hack, until I get gtest working a bit better and can execute
 // tests through make with proper working directory.
@@ -122,7 +124,7 @@ struct conn {
     {
         couchbase::core::cluster_credentials auth{};
         {
-            if (const auto* env_val = std::getenv("TEST_LOG_LEVEL")) {
+            if (auto env_val = spdlog::details::os::getenv("TEST_LOG_LEVEL"); !env_val.empty()) {
                 couchbase::core::logger::set_log_levels(couchbase::core::logger::level_from_str(env_val));
             }
             auto connstr = couchbase::core::utils::parse_connection_string(conf.connection_string);
@@ -225,7 +227,7 @@ class TransactionsTestEnvironment
   public:
     static bool supports_query()
     {
-        return nullptr != std::getenv("SUPPORTS_QUERY");
+        return spdlog::details::os::getenv("SUPPORTS_QUERY").empty();
     }
 
     static const test_config& get_conf()
@@ -238,13 +240,13 @@ class TransactionsTestEnvironment
                 spdlog::info("reading config file {}", CONFIG_FILE_NAME);
                 tao::json::from_stream(in, CONFIG_FILE_NAME).to(global_config);
             }
-            if (const char* var = std::getenv("TEST_CONNECTION_STRING"); var != nullptr) {
+            if (auto var = spdlog::details::os::getenv("TEST_CONNECTION_STRING"); !var.empty()) {
                 global_config.connection_string = var;
             }
-            if (const char* var = std::getenv("TEST_USERNAME"); var != nullptr) {
+            if (auto var = spdlog::details::os::getenv("TEST_USERNAME"); !var.empty()) {
                 global_config.username = var;
             }
-            if (const char* var = std::getenv("TEST_PASSWORD"); var != nullptr) {
+            if (auto var = spdlog::details::os::getenv("TEST_PASSWORD"); !var.empty()) {
                 global_config.password = var;
             }
             spdlog::info(R"(connection_string: "{}", username: "{}", bucket: "{}", metadata_bucket: "{}", io_threads: {})",

@@ -190,7 +190,7 @@ TEST_CASE("exp_delay: can call till timeout", "[unit]")
         };
         lambda();
         FAIL("expected exception");
-    } catch (retry_operation_timeout& e) {
+    } catch (retry_operation_timeout&) {
         cout << "elapsed: " << state.elapsed_ms().count() << endl;
         REQUIRE(state.elapsed_ms() >= hundred_ms);
         REQUIRE(state.timings.size() <= 15);
