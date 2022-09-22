@@ -56,4 +56,4 @@ jobs:
           TEST_SERVER_VERSION: ${{ matrix.server }}
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
           TEST_LOG_LEVEL: trace
-        run: ./bin/run-{{ matrix.suite }}-tests
+        run: ./bin/run-${{ matrix.suite }}-tests
