@@ -15,6 +15,7 @@
  */
 
 #include "attempt_context_impl.hxx"
+
 #include "active_transaction_record.hxx"
 #include "atr_ids.hxx"
 #include "attempt_context_testing_hooks.hxx"
@@ -48,8 +49,7 @@ attempt_context_impl::cluster_ref()
 
 attempt_context_impl::attempt_context_impl(transaction_context& transaction_ctx)
   : overall_(transaction_ctx)
-  , is_done_(false)
-  , staged_mutations_(new staged_mutation_queue())
+  , staged_mutations_(std::make_unique< staged_mutation_queue>())
   , hooks_(overall_.config().attempt_context_hooks())
 {
     // put a new transaction_attempt in the context...
@@ -282,7 +282,7 @@ attempt_context_impl::replace_raw(const transaction_get_result& document, const 
             trace("replacing {} with {}", document, to_string(content));
             check_if_done(cb);
             staged_mutation* existing_sm = staged_mutations_->find_any(document.id());
-            if (existing_sm != NULL && existing_sm->type() == staged_mutation_type::REMOVE) {
+            if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::REMOVE) {
                 debug("found existing REMOVE of {} while replacing", document);
                 return op_completed_with_error(
                   cb,
@@ -308,7 +308,7 @@ attempt_context_impl::replace_raw(const transaction_get_result& document, const 
                         if (e2) {
                             return op_completed_with_error(cb, *e2);
                         }
-                        if (existing_sm != NULL && existing_sm->type() == staged_mutation_type::INSERT) {
+                        if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::INSERT) {
                             debug("found existing INSERT of {} while replacing", document);
                             exp_delay delay(
                               std::chrono::milliseconds(5), std::chrono::milliseconds(300), overall_.config().expiration_time());
@@ -363,17 +363,16 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
                                       core::operations::mutate_in_response resp) {
                                         if (auto ec2 = error_class_from_response(resp); ec2) {
                                             return error_handler(*ec2, resp.ctx.ec().message());
-                                        } else {
-                                            auto err = hooks_.after_staged_replace_complete(this, document.id().key());
-                                            if (err) {
-                                                return error_handler(*err, "after_staged_replace_commit hook returned error");
-                                            }
-                                            transaction_get_result out = document;
-                                            out.cas(resp.cas.value());
-                                            trace("replace staged content, result {}", out);
-                                            staged_mutations_->add(staged_mutation(out, content, staged_mutation_type::REPLACE));
-                                            return op_completed_with_callback(std::move(cb), std::optional<transaction_get_result>(out));
                                         }
+                                        auto err = hooks_.after_staged_replace_complete(this, document.id().key());
+                                        if (err) {
+                                            return error_handler(*err, "after_staged_replace_commit hook returned error");
+                                        }
+                                        transaction_get_result out = document;
+                                        out.cas(resp.cas.value());
+                                        trace("replace staged content, result {}", out);
+                                        staged_mutations_->add(staged_mutation(out, content, staged_mutation_type::REPLACE));
+                                        return op_completed_with_callback(std::move(cb), std::optional<transaction_get_result>(out));
                                     });
 }
 
@@ -415,7 +414,7 @@ attempt_context_impl::insert_raw(const core::document_id& id, const std::vector<
         try {
             check_if_done(cb);
             staged_mutation* existing_sm = staged_mutations_->find_any(id);
-            if ((existing_sm != NULL) &&
+            if ((existing_sm != nullptr) &&
                 (existing_sm->type() == staged_mutation_type::INSERT || existing_sm->type() == staged_mutation_type::REPLACE)) {
                 debug("found existing insert or replace of {} while inserting", id);
                 return op_completed_with_error(
@@ -432,7 +431,7 @@ attempt_context_impl::insert_raw(const core::document_id& id, const std::vector<
                   if (err) {
                       return op_completed_with_error(cb, *err);
                   }
-                  if (existing_sm != NULL && existing_sm->type() == staged_mutation_type::REMOVE) {
+                  if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::REMOVE) {
                       debug("found existing remove of {} while inserting", id);
                       return create_staged_replace(existing_sm->doc(), content, cb);
                   }
@@ -468,7 +467,7 @@ attempt_context_impl::select_atr_if_needed_unlocked(const core::document_id& id,
         overall_.atr_collection(collection_spec_from_id(id));
         overall_.atr_id(atr_id_->key());
         state(attempt_state::NOT_STARTED);
-        trace("first mutated doc in transaction is \"{}\" on vbucket {}, so using atr \"{}\"", id, vbucket_id, atr_id_.value());
+        trace(R"(first mutated doc in transaction is "{}" on vbucket {}, so using atr "{}")", id, vbucket_id, atr_id_.value());
         set_atr_pending_locked(id, std::move(lock), cb);
     } catch (const std::exception& e) {
         error("unexpected error \"{}\" during select atr if needed", e.what());
@@ -511,10 +510,9 @@ attempt_context_impl::check_atr_entry_for_blocking_document(const transaction_ge
                               debug("existing atr entry found in state {}, retrying", attempt_state_name(it->state()));
                       }
                       return check_atr_entry_for_blocking_document(doc, delay, cb);
-                  } else {
-                      debug("no blocking atr entry");
-                      return cb(std::nullopt);
                   }
+                  debug("no blocking atr entry");
+                  return cb(std::nullopt);
               }
               // if we are here, there is still a write-write conflict
               return cb(transaction_operation_failed(FAIL_WRITE_WRITE_CONFLICT, "document is in another transaction").retry());
@@ -554,14 +552,15 @@ attempt_context_impl::remove(const transaction_get_result& document, VoidCallbac
             return error_handler(FAIL_EXPIRY, "transaction expired");
         }
         debug("removing {}", document);
-        if (existing_sm != NULL) {
+        if (existing_sm != nullptr) {
             if (existing_sm->type() == staged_mutation_type::REMOVE) {
                 debug("found existing REMOVE of {} while removing", document);
                 return op_completed_with_error(
                   cb,
                   transaction_operation_failed(FAIL_DOC_NOT_FOUND, "cannot remove a document that has been removed in the same transaction")
                     .cause(external_exception::DOCUMENT_NOT_FOUND_EXCEPTION));
-            } else if (existing_sm->type() == staged_mutation_type::INSERT) {
+            }
+            if (existing_sm->type() == staged_mutation_type::INSERT) {
                 remove_staged_insert(document.id(), std::move(cb));
                 return;
             }
@@ -1456,10 +1455,8 @@ attempt_context_impl::commit()
                 debug("calling commit on attempt that has got no mutations, skipping");
                 is_done_ = true;
                 return;
-            } else {
-                // do not rollback or retry
-                throw transaction_operation_failed(FAIL_OTHER, "calling commit on attempt that is already completed").no_rollback();
-            }
+            } // do not rollback or retry
+            throw transaction_operation_failed(FAIL_OTHER, "calling commit on attempt that is already completed").no_rollback();
         }
     }
 }
@@ -1768,8 +1765,8 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id, std::u
             std::chrono::nanoseconds remaining = overall_.remaining();
             // This bounds the value to [0-expirationTime].  It should always be in this range, this is just to protect
             // against the application clock changing.
-            long remaining_bounded_nanos =
-              std::max(std::min(remaining.count(), overall_.config().expiration_time().count()), std::chrono::nanoseconds::rep(0));
+            long remaining_bounded_nanos = std::max(std::min(remaining.count(), overall_.config().expiration_time().count()),
+                                                    static_cast<std::chrono::nanoseconds::rep>(0));
             long remaining_bounded_msecs = remaining_bounded_nanos / 1'000'000;
 
             core::operations::mutate_in_request req{ atr_id_.value() };
@@ -1821,11 +1818,11 @@ staged_mutation*
 attempt_context_impl::check_for_own_write(const core::document_id& id)
 {
     staged_mutation* own_replace = staged_mutations_->find_replace(id);
-    if (own_replace) {
+    if (own_replace != nullptr) {
         return own_replace;
     }
     staged_mutation* own_insert = staged_mutations_->find_insert(id);
-    if (own_insert) {
+    if (own_insert != nullptr) {
         return own_insert;
     }
     return nullptr;
@@ -1868,7 +1865,7 @@ attempt_context_impl::do_get(const core::document_id& id, const std::optional<st
         }
 
         get_doc(id,
-                [this, id, resolving_missing_atr_entry = std::move(resolving_missing_atr_entry), cb = std::move(cb)](
+                [this, id, resolving_missing_atr_entry = std::move(resolving_missing_atr_entry), cb = std::forward<Handler>(cb)](
                   std::optional<error_class> ec, std::optional<std::string> err_message, std::optional<transaction_get_result> doc) {
                     if (!ec && !doc) {
                         // it just isn't there.
@@ -1945,9 +1942,9 @@ attempt_context_impl::do_get(const core::document_id& id, const std::optional<st
                                       }
                                       if (ignore_doc) {
                                           return cb(std::nullopt, std::nullopt, std::nullopt);
-                                      } else {
-                                          return cb(std::nullopt, std::nullopt, transaction_get_result::create_from(*doc, content));
                                       }
+                                      return cb(std::nullopt, std::nullopt, transaction_get_result::create_from(*doc, content));
+
                                   } else {
                                       // failed to get the ATR
                                       debug("could not get ATR, checking again with {}", doc->links().staged_attempt_id().value_or("-"));
@@ -2150,48 +2147,51 @@ attempt_context_impl::create_staged_insert(const core::document_id& id,
 
     if (auto ec = error_if_expired_and_not_in_overtime(STAGE_CREATE_STAGED_INSERT, id.key()); ec) {
         return create_staged_insert_error_handler(
-          id, content, cas, std::move(delay), cb, *ec, "create_staged_insert expired and not in overtime");
+          id, content, cas, std::forward<Delay>(delay), cb, *ec, "create_staged_insert expired and not in overtime");
     }
 
     if (auto ec = hooks_.before_staged_insert(this, id.key()); ec) {
-        return create_staged_insert_error_handler(id, content, cas, std::move(delay), cb, *ec, "before_staged_insert hook threw error");
+        return create_staged_insert_error_handler(
+          id, content, cas, std::forward<Delay>(delay), cb, *ec, "before_staged_insert hook threw error");
     }
     debug("about to insert staged doc {} with cas {}", id, cas);
-    auto req = create_staging_request(id, NULL, "insert", content);
+    auto req = create_staging_request(id, nullptr, "insert", content);
     req.access_deleted = true;
     req.create_as_deleted = true;
     req.cas = couchbase::cas(cas);
     req.store_semantics = cas == 0 ? couchbase::store_semantics::insert : couchbase::store_semantics::replace;
     wrap_durable_request(req, overall_.config());
-    overall_.cluster_ref()->execute(req, [this, id, content, cas, cb, delay](core::operations::mutate_in_response resp) {
-        if (auto ec = hooks_.after_staged_insert_complete(this, id.key()); ec) {
-            return create_staged_insert_error_handler(id, content, cas, std::move(delay), cb, *ec, "after_staged_insert hook threw error");
-        }
-        if (!resp.ctx.ec()) {
-            debug("inserted doc {} CAS={}, {}", id, resp.cas.value(), resp.ctx.ec().message());
+    overall_.cluster_ref()->execute(
+      req, [this, id, content, cas, cb, delay = std::forward<Delay>(delay)](core::operations::mutate_in_response resp) mutable {
+          if (auto ec = hooks_.after_staged_insert_complete(this, id.key()); ec) {
+              return create_staged_insert_error_handler(
+                id, content, cas, std::forward<Delay>(delay), cb, *ec, "after_staged_insert hook threw error");
+          }
+          if (!resp.ctx.ec()) {
+              debug("inserted doc {} CAS={}, {}", id, resp.cas.value(), resp.ctx.ec().message());
 
-            // TODO: clean this up (do most of this in transactions_document(...))
-            transaction_links links(atr_id_->key(),
-                                    id.bucket(),
-                                    id.scope(),
-                                    id.collection(),
-                                    overall_.transaction_id(),
-                                    this->id(),
-                                    content,
-                                    std::nullopt,
-                                    std::nullopt,
-                                    std::nullopt,
-                                    std::nullopt,
-                                    std::string("insert"),
-                                    std::nullopt,
-                                    true);
-            transaction_get_result out(id, content, resp.cas.value(), links, std::nullopt);
-            staged_mutations_->add(staged_mutation(out, content, staged_mutation_type::INSERT));
-            return op_completed_with_callback(cb, std::optional<transaction_get_result>(out));
-        }
-        return create_staged_insert_error_handler(
-          id, content, cas, std::move(delay), cb, error_class_from_response(resp).value(), resp.ctx.ec().message());
-    });
+              // TODO: clean this up (do most of this in transactions_document(...))
+              transaction_links links(atr_id_->key(),
+                                      id.bucket(),
+                                      id.scope(),
+                                      id.collection(),
+                                      overall_.transaction_id(),
+                                      this->id(),
+                                      content,
+                                      std::nullopt,
+                                      std::nullopt,
+                                      std::nullopt,
+                                      std::nullopt,
+                                      std::string("insert"),
+                                      std::nullopt,
+                                      true);
+              transaction_get_result out(id, content, resp.cas.value(), links, std::nullopt);
+              staged_mutations_->add(staged_mutation(out, content, staged_mutation_type::INSERT));
+              return op_completed_with_callback(cb, std::optional<transaction_get_result>(out));
+          }
+          return create_staged_insert_error_handler(
+            id, content, cas, std::forward<Delay>(delay), cb, error_class_from_response(resp).value(), resp.ctx.ec().message());
+      });
 }
 
 } // namespace couchbase::transactions
