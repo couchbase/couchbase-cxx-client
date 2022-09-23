@@ -269,36 +269,37 @@ TEST_CASE("integration: enable external tracer", "[integration]")
             REQUIRE_FALSE(spans.empty());
             assert_http_op_span_ok(spans.front(), "search", parent_span);
         }
-        SECTION("analytics")
-        {
-            if (!guard.cluster_version().supports_analytics()) {
-                return;
+        if (guard.cluster_version().supports_analytics()) {
+            SECTION("analytics")
+            {
+                tracer->reset();
+                couchbase::core::operations::analytics_request req{};
+                req.parent_span = parent_span;
+                req.bucket_name = guard.ctx.bucket;
+                req.statement = R"(SELECT "ruby rules" AS greeting)";
+                auto resp = test::utils::execute(guard.cluster, req);
+                REQUIRE_SUCCESS(resp.ctx.ec);
+                auto spans = tracer->spans();
+                REQUIRE_FALSE(spans.empty());
+                assert_http_op_span_ok(spans.front(), "analytics", parent_span);
             }
-            tracer->reset();
-            couchbase::core::operations::analytics_request req{};
-            req.parent_span = parent_span;
-            req.bucket_name = guard.ctx.bucket;
-            req.statement = R"(SELECT "ruby rules" AS greeting)";
-            auto resp = test::utils::execute(guard.cluster, req);
-            REQUIRE_SUCCESS(resp.ctx.ec);
-            auto spans = tracer->spans();
-            REQUIRE_FALSE(spans.empty());
-            assert_http_op_span_ok(spans.front(), "analytics", parent_span);
         }
-        SECTION("view")
-        {
-            tracer->reset();
-            couchbase::core::operations::document_view_request req{};
-            req.parent_span = parent_span;
-            req.bucket_name = guard.ctx.bucket;
-            req.view_name = "idontexist";
-            req.document_name = "nordoi";
-            auto resp = test::utils::execute(guard.cluster, req);
-            // we didn't setup a view, so this will fail.
-            REQUIRE(resp.ctx.ec);
-            auto spans = tracer->spans();
-            REQUIRE_FALSE(spans.empty());
-            assert_http_op_span_ok(spans.front(), "views", parent_span);
+        if (guard.cluster_version().supports_views()) {
+            SECTION("view")
+            {
+                tracer->reset();
+                couchbase::core::operations::document_view_request req{};
+                req.parent_span = parent_span;
+                req.bucket_name = guard.ctx.bucket;
+                req.view_name = "idontexist";
+                req.document_name = "nordoi";
+                auto resp = test::utils::execute(guard.cluster, req);
+                // we didn't setup a view, so this will fail.
+                REQUIRE(resp.ctx.ec);
+                auto spans = tracer->spans();
+                REQUIRE_FALSE(spans.empty());
+                assert_http_op_span_ok(spans.front(), "views", parent_span);
+            }
         }
     }
 }

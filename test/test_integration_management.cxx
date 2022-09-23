@@ -240,22 +240,24 @@ TEST_CASE("integration: bucket management", "[integration]")
         }
     }
 
-    SECTION("memcached")
-    {
+    if (integration.cluster_version().supports_memcached_buckets()) {
+        SECTION("memcached")
         {
-            couchbase::core::management::cluster::bucket_settings bucket_settings;
-            bucket_settings.name = bucket_name;
-            bucket_settings.bucket_type = couchbase::core::management::cluster::bucket_type::memcached;
-            bucket_settings.num_replicas = 0;
-            couchbase::core::operations::management::bucket_create_request req{ bucket_settings };
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_SUCCESS(resp.ctx.ec);
-        }
+            {
+                couchbase::core::management::cluster::bucket_settings bucket_settings;
+                bucket_settings.name = bucket_name;
+                bucket_settings.bucket_type = couchbase::core::management::cluster::bucket_type::memcached;
+                bucket_settings.num_replicas = 0;
+                couchbase::core::operations::management::bucket_create_request req{ bucket_settings };
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_SUCCESS(resp.ctx.ec);
+            }
 
-        {
-            auto resp = wait_for_bucket_created(integration, bucket_name);
-            REQUIRE_SUCCESS(resp.ctx.ec);
-            REQUIRE(resp.bucket.bucket_type == couchbase::core::management::cluster::bucket_type::memcached);
+            {
+                auto resp = wait_for_bucket_created(integration, bucket_name);
+                REQUIRE_SUCCESS(resp.ctx.ec);
+                REQUIRE(resp.bucket.bucket_type == couchbase::core::management::cluster::bucket_type::memcached);
+            }
         }
     }
 
@@ -2105,6 +2107,9 @@ TEST_CASE("integration: analytics external link management", "[integration]")
     }
 }
 
+// serverless requires 1 partition and 1 replica
+const std::string serverless_plan_params = R"({ "indexPartition": 1, "numReplicas": 1 })";
+
 TEST_CASE("integration: search index management", "[integration]")
 {
     test::utils::integration_test_guard integration;
@@ -2125,6 +2130,9 @@ TEST_CASE("integration: search index management", "[integration]")
             index.type = "fulltext-index";
             index.source_type = "couchbase";
             index.source_name = integration.ctx.bucket;
+            if (integration.cluster_version().is_serverless_config_profile()) {
+                index.plan_params_json = serverless_plan_params;
+            }
             couchbase::core::operations::management::search_index_upsert_request req{};
             req.index = index;
             auto resp = test::utils::execute(integration.cluster, req);
@@ -2137,6 +2145,9 @@ TEST_CASE("integration: search index management", "[integration]")
             index.type = "fulltext-index";
             index.source_type = "couchbase";
             index.source_name = integration.ctx.bucket;
+            if (integration.cluster_version().is_serverless_config_profile()) {
+                index.plan_params_json = serverless_plan_params;
+            }
             couchbase::core::operations::management::search_index_upsert_request req{};
             req.index = index;
             auto resp = test::utils::execute(integration.cluster, req);
@@ -2150,6 +2161,9 @@ TEST_CASE("integration: search index management", "[integration]")
             index.source_type = "couchbase";
             index.source_name = integration.ctx.bucket;
             index.plan_params_json = R"({ "indexPartition": 3 })";
+            if (integration.cluster_version().is_serverless_config_profile()) {
+                index.plan_params_json = serverless_plan_params;
+            }
             index.params_json = R"({ "store": { "indexType": "upside_down", "kvStoreName": "moss" }})";
             couchbase::core::operations::management::search_index_upsert_request req{};
             req.index = index;
@@ -2169,6 +2183,9 @@ TEST_CASE("integration: search index management", "[integration]")
             index.source_type = "nil";
             index.params_json = couchbase::core::utils::json::generate(
               tao::json::value{ { "targets", { { index1_name, tao::json::empty_object }, { index2_name, tao::json::empty_object } } } });
+            if (integration.cluster_version().is_serverless_config_profile()) {
+                index.plan_params_json = serverless_plan_params;
+            }
             couchbase::core::operations::management::search_index_upsert_request req{};
             req.index = index;
             auto resp = test::utils::execute(integration.cluster, req);
@@ -2256,6 +2273,9 @@ TEST_CASE("integration: search index management", "[integration]")
         index.type = "fulltext-index";
         index.source_type = "couchbase";
         index.source_name = integration.ctx.bucket;
+        if (integration.cluster_version().is_serverless_config_profile()) {
+            index.plan_params_json = serverless_plan_params;
+        }
         couchbase::core::operations::management::search_index_upsert_request req{};
         req.index = index;
         auto resp = test::utils::execute(integration.cluster, req);
@@ -2272,6 +2292,9 @@ TEST_CASE("integration: search index management", "[integration]")
             index.type = "fulltext-index";
             index.source_type = "couchbase";
             index.source_name = integration.ctx.bucket;
+            if (integration.cluster_version().is_serverless_config_profile()) {
+                index.plan_params_json = serverless_plan_params;
+            }
             couchbase::core::operations::management::search_index_upsert_request req{};
             req.index = index;
             auto resp = test::utils::execute(integration.cluster, req);
@@ -2382,6 +2405,9 @@ TEST_CASE("integration: search index management analyze document", "[integration
         index.type = "fulltext-index";
         index.source_type = "couchbase";
         index.source_name = integration.ctx.bucket;
+        if (integration.cluster_version().is_serverless_config_profile()) {
+            index.plan_params_json = serverless_plan_params;
+        }
         couchbase::core::operations::management::search_index_upsert_request req{};
         req.index = index;
         auto resp = test::utils::execute(integration.cluster, req);

@@ -27,6 +27,8 @@ enum class server_edition { unknown, enterprise, community };
 
 enum class deployment_type { on_prem, capella, elixir };
 
+enum class server_config_profile { unknown, serverless };
+
 struct server_version {
     unsigned long major{ 0 };
     unsigned long minor{ 0 };
@@ -35,6 +37,7 @@ struct server_version {
     bool developer_preview{ false };
     server_edition edition{ server_edition::unknown };
     deployment_type deployment{ deployment_type::on_prem };
+    server_config_profile profile{ server_config_profile::unknown };
 
     static server_version parse(const std::string& str, const deployment_type deployment);
 
@@ -174,7 +177,17 @@ struct server_version {
 
     [[nodiscard]] bool supports_views() const
     {
-        return deployment == deployment_type::on_prem;
+        return deployment == deployment_type::on_prem && (major < 7 || (major == 7 && minor < 2));
+    }
+
+    [[nodiscard]] bool supports_memcached_buckets() const
+    {
+        return !is_serverless_config_profile();
+    }
+
+    [[nodiscard]] bool is_serverless_config_profile() const
+    {
+        return profile == server_config_profile::serverless;
     }
 };
 
