@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "config_listener.hxx"
 #include "core/io/mcbp_command.hxx"
 #include "core/metrics/meter.hxx"
 #include "core/tracing/request_tracer.hxx"
@@ -31,7 +32,9 @@
 
 namespace couchbase::core
 {
-class bucket : public std::enable_shared_from_this<bucket>
+class bucket
+  : public std::enable_shared_from_this<bucket>
+  , public config_listener
 {
   public:
     explicit bucket(const std::string& client_id,
@@ -41,7 +44,8 @@ class bucket : public std::enable_shared_from_this<bucket>
                     std::shared_ptr<metrics::meter> meter,
                     std::string name,
                     couchbase::core::origin origin,
-                    const std::vector<protocol::hello_feature>& known_features)
+                    const std::vector<protocol::hello_feature>& known_features,
+                    std::shared_ptr<impl::bootstrap_state_listener> state_listener)
 
       : client_id_(client_id)
       , ctx_(ctx)
@@ -51,6 +55,7 @@ class bucket : public std::enable_shared_from_this<bucket>
       , name_(std::move(name))
       , origin_(std::move(origin))
       , known_features_(known_features)
+      , state_listener_(std::move(state_listener))
     {
         log_prefix_ = fmt::format("[{}/{}]", client_id_, name_);
     }
@@ -86,7 +91,7 @@ class bucket : public std::enable_shared_from_this<bucket>
         }
     }
 
-    void update_config(topology::configuration config)
+    void update_config(topology::configuration config) override
     {
         std::vector<topology::configuration::node> added{};
         std::vector<topology::configuration::node> removed{};
@@ -118,7 +123,7 @@ class bucket : public std::enable_shared_from_this<bucket>
             {
                 std::scoped_lock listeners_lock(config_listeners_mutex_);
                 for (const auto& listener : config_listeners_) {
-                    listener(*config_);
+                    listener->update_config(*config_);
                 }
             }
         }
@@ -170,17 +175,16 @@ class bucket : public std::enable_shared_from_this<bucket>
                 couchbase::core::origin origin(origin_.credentials(), hostname, port, origin_.options());
                 std::shared_ptr<io::mcbp_session> session;
                 if (origin_.options().enable_tls) {
-                    session = std::make_shared<io::mcbp_session>(client_id_, ctx_, tls_, origin, name_, known_features_);
+                    session = std::make_shared<io::mcbp_session>(client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_);
                 } else {
-                    session = std::make_shared<io::mcbp_session>(client_id_, ctx_, origin, name_, known_features_);
+                    session = std::make_shared<io::mcbp_session>(client_id_, ctx_, origin, state_listener_, name_, known_features_);
                 }
                 LOG_DEBUG(R"({} rev={}, add session="{}", address="{}:{}")", log_prefix_, config.rev_str(), session->id(), hostname, port);
                 session->bootstrap(
                   [self = shared_from_this(), session](std::error_code err, topology::configuration cfg) {
                       if (!err) {
                           self->update_config(std::move(cfg));
-                          session->on_configuration_update(
-                            [self](topology::configuration new_config) { self->update_config(std::move(new_config)); });
+                          session->on_configuration_update(self);
                           session->on_stop(
                             [index = session->index(), hostname = session->bootstrap_hostname(), port = session->bootstrap_port(), self](
                               retry_reason reason) {
@@ -224,9 +228,9 @@ class bucket : public std::enable_shared_from_this<bucket>
 
         std::shared_ptr<io::mcbp_session> session{};
         if (origin_.options().enable_tls) {
-            session = std::make_shared<io::mcbp_session>(client_id_, ctx_, tls_, origin, name_, known_features_);
+            session = std::make_shared<io::mcbp_session>(client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_);
         } else {
-            session = std::make_shared<io::mcbp_session>(client_id_, ctx_, origin, name_, known_features_);
+            session = std::make_shared<io::mcbp_session>(client_id_, ctx_, origin, state_listener_, name_, known_features_);
         }
 
         std::scoped_lock lock(sessions_mutex_);
@@ -263,7 +267,7 @@ class bucket : public std::enable_shared_from_this<bucket>
                   self->restart_node(this_index, hostname, port);
                   return;
               }
-              session->on_configuration_update([self](topology::configuration new_config) { self->update_config(std::move(new_config)); });
+              session->on_configuration_update(self);
               session->on_stop([this_index, hostname, port, self](retry_reason reason) {
                   if (reason == retry_reason::socket_closed_while_in_flight) {
                       self->restart_node(this_index, hostname, port);
@@ -280,11 +284,14 @@ class bucket : public std::enable_shared_from_this<bucket>
     template<typename Handler>
     void bootstrap(Handler&& handler)
     {
+        if (state_listener_) {
+            state_listener_->register_config_listener(shared_from_this());
+        }
         std::shared_ptr<io::mcbp_session> new_session{};
         if (origin_.options().enable_tls) {
-            new_session = std::make_shared<io::mcbp_session>(client_id_, ctx_, tls_, origin_, name_, known_features_);
+            new_session = std::make_shared<io::mcbp_session>(client_id_, ctx_, tls_, origin_, state_listener_, name_, known_features_);
         } else {
-            new_session = std::make_shared<io::mcbp_session>(client_id_, ctx_, origin_, name_, known_features_);
+            new_session = std::make_shared<io::mcbp_session>(client_id_, ctx_, origin_, state_listener_, name_, known_features_);
         }
         new_session->bootstrap([self = shared_from_this(), new_session, h = std::forward<Handler>(handler)](
                                  std::error_code ec, const topology::configuration& cfg) mutable {
@@ -292,7 +299,7 @@ class bucket : public std::enable_shared_from_this<bucket>
                 LOG_WARNING(R"({} failed to bootstrap session ec={}, bucket="{}")", new_session->log_prefix(), ec.message(), self->name_);
             } else {
                 size_t this_index = new_session->index();
-                new_session->on_configuration_update([self](topology::configuration config) { self->update_config(std::move(config)); });
+                new_session->on_configuration_update(self);
                 new_session->on_stop([this_index, hostname = new_session->bootstrap_hostname(), port = new_session->bootstrap_port(), self](
                                        retry_reason reason) {
                     if (reason == retry_reason::socket_closed_while_in_flight) {
@@ -311,7 +318,7 @@ class bucket : public std::enable_shared_from_this<bucket>
         });
     }
 
-    void on_configuration_update(std::function<void(topology::configuration)> handler)
+    void on_configuration_update(std::shared_ptr<config_listener> handler)
     {
         std::scoped_lock lock(config_listeners_mutex_);
         config_listeners_.emplace_back(std::move(handler));
@@ -396,6 +403,10 @@ class bucket : public std::enable_shared_from_this<bucket>
         closed_ = true;
 
         drain_deferred_queue();
+
+        if (state_listener_ != nullptr) {
+            state_listener_->unregister_config_listener(shared_from_this());
+        }
 
         {
             std::scoped_lock lock(config_listeners_mutex_);
@@ -535,6 +546,8 @@ class bucket : public std::enable_shared_from_this<bucket>
     mutable std::mutex config_mutex_{};
     std::vector<protocol::hello_feature> known_features_;
 
+    std::shared_ptr<impl::bootstrap_state_listener> state_listener_{ nullptr };
+
     std::queue<utils::movable_function<void()>> deferred_commands_{};
     std::mutex deferred_commands_mutex_{};
 
@@ -544,7 +557,7 @@ class bucket : public std::enable_shared_from_this<bucket>
     mutable std::mutex sessions_mutex_{};
     std::atomic_int16_t round_robin_next_{ 0 };
 
-    std::vector<std::function<void(topology::configuration)>> config_listeners_{};
+    std::vector<std::shared_ptr<config_listener>> config_listeners_{};
     std::mutex config_listeners_mutex_{};
 
     std::string log_prefix_{};

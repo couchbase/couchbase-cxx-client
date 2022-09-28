@@ -25,6 +25,8 @@
 
 #include <asio/ip/tcp.hpp>
 #include <asio/read.hpp>
+#include <asio/write.hpp>
+
 #include <memory>
 #include <sstream>
 

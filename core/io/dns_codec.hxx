@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "core/utils/byteswap.hxx"
 #include "dns_message.hxx"
 
 #include <asio/ip/udp.hpp>

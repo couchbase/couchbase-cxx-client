@@ -17,7 +17,9 @@
 
 #pragma once
 
+#include "core/config_listener.hxx"
 #include "core/diagnostics.hxx"
+#include "core/impl/bootstrap_state_listener.hxx"
 #include "core/logger/logger.hxx"
 #include "core/meta/version.hxx"
 #include "core/origin.hxx"
@@ -586,6 +588,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     mcbp_session(const std::string& client_id,
                  asio::io_context& ctx,
                  const couchbase::core::origin& origin,
+                 std::shared_ptr<impl::bootstrap_state_listener> state_listener,
                  std::optional<std::string> bucket_name = {},
                  std::vector<protocol::hello_feature> known_features = {})
       : client_id_(client_id)
@@ -599,6 +602,8 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
       , origin_(origin)
       , bucket_name_(std::move(bucket_name))
       , supported_features_(std::move(known_features))
+      , is_tls_{ false }
+      , state_listener_{ state_listener }
     {
         log_prefix_ = fmt::format("[{}/{}/{}/{}]", client_id_, id_, stream_->log_prefix(), bucket_name_.value_or("-"));
     }
@@ -607,6 +612,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                  asio::io_context& ctx,
                  asio::ssl::context& tls,
                  const couchbase::core::origin& origin,
+                 std::shared_ptr<impl::bootstrap_state_listener> state_listener,
                  std::optional<std::string> bucket_name = {},
                  std::vector<protocol::hello_feature> known_features = {})
       : client_id_(client_id)
@@ -620,6 +626,8 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
       , origin_(origin)
       , bucket_name_(std::move(bucket_name))
       , supported_features_(std::move(known_features))
+      , is_tls_{ true }
+      , state_listener_{ state_listener }
     {
         log_prefix_ = fmt::format("[{}/{}/{}/{}]", client_id_, id_, stream_->log_prefix(), bucket_name_.value_or("-"));
     }
@@ -950,7 +958,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         return {};
     }
 
-    void on_configuration_update(std::function<void(topology::configuration)> handler)
+    void on_configuration_update(std::shared_ptr<config_listener> handler)
     {
         config_listeners_.emplace_back(std::move(handler));
     }
@@ -998,7 +1006,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
         configured_ = true;
         LOG_DEBUG("{} received new configuration: {}", log_prefix_, config_.value());
         for (const auto& listener : config_listeners_) {
-            listener(*config_);
+            listener->update_config(*config_);
         }
     }
 
@@ -1050,6 +1058,10 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
   private:
     void invoke_bootstrap_handler(std::error_code ec)
     {
+        if (ec && state_listener_) {
+            std::string endpoint = fmt::format("{}:{}", bootstrap_hostname_, endpoint_.port());
+            state_listener_->report_bootstrap_error(endpoint, ec);
+        }
         if (ec == errc::network::configuration_not_available) {
             return initiate_bootstrap();
         }
@@ -1060,6 +1072,16 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
 
         if (!bootstrapped_ && bootstrap_handler_) {
             bootstrap_deadline_.cancel();
+            if (config_ && state_listener_) {
+                std::vector<std::string> endpoints;
+                endpoints.reserve(config_.value().nodes.size());
+                for (const auto& node : config_.value().nodes) {
+                    if (auto endpoint = node.endpoint(origin_.options().network, service_type::key_value, is_tls_); endpoint) {
+                        endpoints.push_back(endpoint.value());
+                    }
+                }
+                state_listener_->report_bootstrap_success(endpoints);
+            }
             auto h = std::move(bootstrap_handler_);
             h(ec, config_.value_or(topology::configuration{}));
         }
@@ -1297,7 +1319,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     utils::movable_function<void(std::error_code, const topology::configuration&)> bootstrap_handler_{};
     std::mutex command_handlers_mutex_{};
     std::map<std::uint32_t, utils::movable_function<void(std::error_code, retry_reason, io::mcbp_message&&)>> command_handlers_{};
-    std::vector<std::function<void(const topology::configuration&)>> config_listeners_{};
+    std::vector<std::shared_ptr<config_listener>> config_listeners_{};
     std::function<void(retry_reason)> on_stop_handler_{};
 
     std::atomic_bool bootstrapped_{ false };
@@ -1329,6 +1351,9 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     std::atomic_bool configured_{ false };
     std::optional<error_map> error_map_;
     collection_cache collection_cache_;
+
+    const bool is_tls_;
+    std::shared_ptr<impl::bootstrap_state_listener> state_listener_{ nullptr };
 
     std::atomic_bool reading_{ false };
 

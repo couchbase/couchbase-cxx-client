@@ -68,6 +68,8 @@ struct configuration {
         [[nodiscard]] std::uint16_t port_or(const std::string& network, service_type type, bool is_tls, std::uint16_t default_value) const;
 
         [[nodiscard]] const std::string& hostname_for(const std::string& network) const;
+
+        [[nodiscard]] std::optional<std::string> endpoint(const std::string& network, service_type type, bool is_tls) const;
     };
 
     [[nodiscard]] std::string select_network(const std::string& bootstrap_hostname) const;
@@ -124,4 +126,7 @@ struct configuration {
 
 configuration
 make_blank_configuration(const std::string& hostname, std::uint16_t plain_port, std::uint16_t tls_port);
+
+configuration
+make_blank_configuration(const std::vector<std::pair<std::string, std::string>>& endpoints, bool use_tls);
 } // namespace couchbase::core::topology
