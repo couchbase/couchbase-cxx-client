@@ -222,6 +222,7 @@ set(couchbase_cxx_client_FILES
     core/utils/split_string.cxx
     core/utils/url_codec.cxx
     core/impl/analytics_error_category.cxx
+    core/impl/dns_srv_tracker.cxx
     core/impl/append.cxx
     core/impl/build_deferred_query_indexes.cxx
     core/impl/common_error_category.cxx

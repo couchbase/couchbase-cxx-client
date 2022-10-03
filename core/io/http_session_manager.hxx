@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "core/config_listener.hxx"
 #include "core/metrics/meter.hxx"
 #include "core/operations/http_noop.hxx"
 #include "core/service_type.hxx"
@@ -31,7 +32,9 @@
 namespace couchbase::core::io
 {
 
-class http_session_manager : public std::enable_shared_from_this<http_session_manager>
+class http_session_manager
+  : public std::enable_shared_from_this<http_session_manager>
+  , public config_listener
 {
   public:
     http_session_manager(std::string client_id, asio::io_context& ctx, asio::ssl::context& tls)
@@ -51,7 +54,7 @@ class http_session_manager : public std::enable_shared_from_this<http_session_ma
         meter_ = std::move(meter);
     }
 
-    void update_configuration(topology::configuration config)
+    void update_config(topology::configuration config) override
     {
         std::scoped_lock config_lock(config_mutex_, sessions_mutex_);
         config_ = std::move(config);

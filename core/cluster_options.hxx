@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "core/io/dns_config.hxx"
 #include "core/io/ip_protocol.hxx"
 #include "core/metrics/logging_meter_options.hxx"
 #include "core/metrics/meter.hxx"
@@ -55,6 +56,7 @@ struct cluster_options {
     bool enable_tcp_keep_alive{ true };
     io::ip_protocol use_ip_protocol{ io::ip_protocol::any };
     bool enable_dns_srv{ true };
+    io::dns::dns_config dns_config{ io::dns::dns_config::system_config() };
     bool show_queries{ false };
     bool enable_unordered_execution{ true };
     bool enable_clustermap_notification{ false };

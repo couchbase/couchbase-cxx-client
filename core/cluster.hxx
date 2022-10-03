@@ -19,7 +19,6 @@
 
 #include "bucket.hxx"
 #include "capella_ca.hxx"
-#include "core/io/dns_client.hxx"
 #include "core/io/http_command.hxx"
 #include "core/io/http_session_manager.hxx"
 #include "core/io/mcbp_command.hxx"
@@ -31,6 +30,7 @@
 #include "core/tracing/threshold_logging_tracer.hxx"
 #include "core/utils/join_strings.hxx"
 #include "diagnostics.hxx"
+#include "impl/dns_srv_tracker.hxx"
 #include "operations.hxx"
 #include "origin.hxx"
 
@@ -98,9 +98,26 @@ class cluster : public std::enable_shared_from_this<cluster>
         }
         session_manager_->set_tracer(tracer_);
         if (origin_.options().enable_dns_srv) {
-            return asio::post(asio::bind_executor(ctx_, [self = shared_from_this(), handler = std::forward<Handler>(handler)]() mutable {
-                return self->do_dns_srv(std::forward<Handler>(handler));
-            }));
+            auto [hostname, _] = origin_.next_address();
+            dns_srv_tracker_ =
+              std::make_shared<impl::dns_srv_tracker>(ctx_, hostname, origin_.options().dns_config, origin_.options().enable_tls);
+            return asio::post(asio::bind_executor(
+              ctx_, [self = shared_from_this(), hostname = std::move(hostname), handler = std::forward<Handler>(handler)]() mutable {
+                  return self->dns_srv_tracker_->get_srv_nodes(
+                    [self, hostname = std::move(hostname), handler = std::forward<Handler>(handler)](origin::node_list nodes,
+                                                                                                     std::error_code ec) mutable {
+                        if (ec) {
+                            return handler(ec);
+                        }
+                        if (!nodes.empty()) {
+                            self->origin_.set_nodes(std::move(nodes));
+                            LOG_INFO("replace list of bootstrap nodes with addresses from DNS SRV of \"{}\": [{}]",
+                                     hostname,
+                                     utils::join_strings(self->origin_.get_nodes(), ", "));
+                        }
+                        return self->do_open(std::forward<Handler>(handler));
+                    });
+              }));
         }
         do_open(std::forward<Handler>(handler));
     }
@@ -140,7 +157,7 @@ class cluster : public std::enable_shared_from_this<cluster>
                 if (session_ && session_->has_config()) {
                     known_features = session_->supported_features();
                 }
-                b = std::make_shared<bucket>(id_, ctx_, tls_, tracer_, meter_, bucket_name, origin_, known_features);
+                b = std::make_shared<bucket>(id_, ctx_, tls_, tracer_, meter_, bucket_name, origin_, known_features, dns_srv_tracker_);
                 buckets_.try_emplace(bucket_name, b);
             }
         }
@@ -158,9 +175,7 @@ class cluster : public std::enable_shared_from_this<cluster>
             }
             handler(ec);
         });
-        b->on_configuration_update([self = shared_from_this()](topology::configuration new_config) {
-            self->session_manager_->update_configuration(std::move(new_config));
-        });
+        b->on_configuration_update(session_manager_);
     }
 
     template<typename Handler>
@@ -267,7 +282,6 @@ class cluster : public std::enable_shared_from_this<cluster>
       : ctx_(ctx)
       , work_(asio::make_work_guard(ctx_))
       , session_manager_(std::make_shared<io::http_session_manager>(id_, ctx_, tls_))
-      , dns_client_(ctx_)
     {
     }
 
@@ -292,42 +306,6 @@ class cluster : public std::enable_shared_from_this<cluster>
         for (auto bucket : buckets) {
             handler(bucket);
         }
-    }
-
-    template<typename Handler>
-    void do_dns_srv(Handler&& handler)
-    {
-        std::string hostname;
-        std::string service;
-        std::tie(hostname, service) = origin_.next_address();
-        service = origin_.options().enable_tls ? "_couchbases" : "_couchbase";
-        dns_client_.query_srv(
-          hostname,
-          service,
-          [hostname, self = shared_from_this(), handler = std::forward<Handler>(handler)](
-            couchbase::core::io::dns::dns_client::dns_srv_response&& resp) mutable {
-              if (resp.ec) {
-                  LOG_WARNING("failed to fetch DNS SRV records for \"{}\" ({}), assuming that cluster is listening this address",
-                              hostname,
-                              resp.ec.message());
-              } else if (resp.targets.empty()) {
-                  LOG_WARNING("DNS SRV query returned 0 records for \"{}\", assuming that cluster is listening this address", hostname);
-              } else {
-                  origin::node_list nodes;
-                  nodes.reserve(resp.targets.size());
-                  for (const auto& address : resp.targets) {
-                      origin::node_entry node;
-                      node.first = address.hostname;
-                      node.second = std::to_string(address.port);
-                      nodes.emplace_back(node);
-                  }
-                  self->origin_.set_nodes(nodes);
-                  LOG_INFO("replace list of bootstrap nodes with addresses from DNS SRV of \"{}\": [{}]",
-                           hostname,
-                           utils::join_strings(self->origin_.get_nodes(), ", "));
-              }
-              return self->do_open(std::forward<Handler>(handler));
-          });
     }
 
     template<typename Handler>
@@ -418,9 +396,9 @@ class cluster : public std::enable_shared_from_this<cluster>
                     return handler(ec);
                 }
             }
-            session_ = std::make_shared<io::mcbp_session>(id_, ctx_, tls_, origin_);
+            session_ = std::make_shared<io::mcbp_session>(id_, ctx_, tls_, origin_, dns_srv_tracker_);
         } else {
-            session_ = std::make_shared<io::mcbp_session>(id_, ctx_, origin_);
+            session_ = std::make_shared<io::mcbp_session>(id_, ctx_, origin_, dns_srv_tracker_);
         }
         session_->bootstrap([self = shared_from_this(),
                              handler = std::forward<Handler>(handler)](std::error_code ec, const topology::configuration& config) mutable {
@@ -453,9 +431,7 @@ class cluster : public std::enable_shared_from_this<cluster>
                              utils::join_strings(self->origin_.get_nodes(), ","));
                 }
                 self->session_manager_->set_configuration(config, self->origin_.options());
-                self->session_->on_configuration_update([manager = self->session_manager_](topology::configuration new_config) {
-                    manager->update_configuration(std::move(new_config));
-                });
+                self->session_->on_configuration_update(self->session_manager_);
                 self->session_->on_stop([self](retry_reason) { self->session_.reset(); });
             }
             handler(ec);
@@ -467,9 +443,8 @@ class cluster : public std::enable_shared_from_this<cluster>
     asio::executor_work_guard<asio::io_context::executor_type> work_;
     asio::ssl::context tls_{ asio::ssl::context::tls_client };
     std::shared_ptr<io::http_session_manager> session_manager_;
-    io::dns::dns_config& dns_config_{ io::dns::dns_config::get() };
-    couchbase::core::io::dns::dns_client dns_client_;
     std::shared_ptr<io::mcbp_session> session_{};
+    std::shared_ptr<impl::dns_srv_tracker> dns_srv_tracker_{};
     std::mutex buckets_mutex_{};
     std::map<std::string, std::shared_ptr<bucket>> buckets_{};
     couchbase::core::origin origin_{};

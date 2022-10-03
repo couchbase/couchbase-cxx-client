@@ -52,6 +52,14 @@ test_context::load_from_environment()
         ctx.bucket = var;
     }
 
+    if (auto var = spdlog::details::os::getenv("TEST_DNS_NAMESERVER"); !var.empty()) {
+        ctx.dns_nameserver = var;
+    }
+
+    if (auto var = spdlog::details::os::getenv("TEST_DNS_PORT"); !var.empty()) {
+        ctx.dns_port = std::stol(var);
+    }
+
     if (auto var = spdlog::details::os::getenv("TEST_DEPLOYMENT_TYPE"); !var.empty()) {
         if (var == "on_prem") {
             ctx.deployment = deployment_type::on_prem;

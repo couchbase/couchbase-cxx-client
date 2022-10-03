@@ -101,6 +101,12 @@ main()
     asio::io_context io(static_cast<int>(number_of_io_threads));
 
     auto origin = couchbase::core::origin(auth, connstr);
+    if (ctx.dns_nameserver || ctx.dns_port) {
+        origin.options().dns_config = couchbase::core::io::dns::dns_config{
+            ctx.dns_nameserver.value_or(couchbase::core::io::dns::dns_config::default_nameserver),
+            ctx.dns_port.value_or(couchbase::core::io::dns::dns_config::default_port),
+        };
+    }
     auto cluster = couchbase::core::cluster::create(io);
 
     std::vector<std::thread> io_pool{};

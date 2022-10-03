@@ -151,6 +151,16 @@ configuration::node::port_or(const std::string& network, service_type type, bool
     return default_value;
 }
 
+std::optional<std::string>
+configuration::node::endpoint(const std::string& network, service_type type, bool is_tls) const
+{
+    auto p = port_or(type, is_tls, 0);
+    if (p == 0) {
+        return {};
+    }
+    return fmt::format("{}:{}", hostname_for(network), p);
+}
+
 bool
 configuration::has_node_with_hostname(const std::string& hostname) const
 {
@@ -199,7 +209,7 @@ std::pair<std::uint16_t, std::int16_t>
 configuration::map_key(const std::string& key, std::size_t index)
 {
     if (!vbmap.has_value()) {
-        throw std::runtime_error("cannot map key: partition map is not available");
+        return { 0, -1 };
     }
     std::uint32_t crc = utils::hash_crc32(key.data(), key.size());
     auto vbucket = std::uint16_t(crc % vbmap->size());
@@ -218,6 +228,28 @@ make_blank_configuration(const std::string& hostname, std::uint16_t plain_port, 
     result.nodes[0].this_node = true;
     result.nodes[0].services_plain.key_value = plain_port;
     result.nodes[0].services_tls.key_value = tls_port;
+    return result;
+}
+
+configuration
+make_blank_configuration(const std::vector<std::pair<std::string, std::string>>& endpoints, bool use_tls, bool force)
+{
+    configuration result;
+    result.force = force;
+    result.id = couchbase::core::uuid::random();
+    result.epoch = 0;
+    result.rev = 0;
+    result.nodes.resize(endpoints.size());
+    std::size_t idx{ 0 };
+    for (const auto& [hostname, port] : endpoints) {
+        configuration::node node{ false, idx++, hostname };
+        if (use_tls) {
+            node.services_tls.key_value = std::stol(port);
+        } else {
+            node.services_plain.key_value = std::stol(port);
+        }
+        result.nodes.emplace_back(node);
+    }
     return result;
 }
 } // namespace couchbase::core::topology
