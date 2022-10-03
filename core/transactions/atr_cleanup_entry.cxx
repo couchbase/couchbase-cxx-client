@@ -271,7 +271,7 @@ atr_cleanup_entry::commit_docs(std::shared_ptr<spdlog::logger> logger, std::opti
                           couchbase::mutate_in_specs::replace_raw({}, content),
                       }
                         .specs();
-                    req.cas = couchbase::cas(doc.cas());
+                    req.cas = doc.cas();
                     req.store_semantics = couchbase::store_semantics::replace;
                     wrap_durable_request(req, cleanup_->config(), dl);
                     auto barrier = std::make_shared<std::promise<result>>();
@@ -304,7 +304,7 @@ atr_cleanup_entry::remove_docs(std::shared_ptr<spdlog::logger> logger, std::opti
                       couchbase::mutate_in_specs::remove(TRANSACTION_INTERFACE_PREFIX_ONLY).xattr(),
                   }
                     .specs();
-                req.cas = couchbase::cas(doc.cas());
+                req.cas = doc.cas();
                 req.access_deleted = true;
                 wrap_durable_request(req, cleanup_->config(), dl);
                 auto barrier = std::make_shared<std::promise<result>>();
@@ -315,7 +315,7 @@ atr_cleanup_entry::remove_docs(std::shared_ptr<spdlog::logger> logger, std::opti
                 wrap_operation_future(f);
             } else {
                 core::operations::remove_request req{ doc.id() };
-                req.cas = couchbase::cas(doc.cas());
+               req.cas = doc.cas();
                 wrap_durable_request(req, cleanup_->config(), dl);
                 auto barrier = std::make_shared<std::promise<result>>();
                 auto f = barrier->get_future();
@@ -342,7 +342,7 @@ atr_cleanup_entry::remove_docs_staged_for_removal(std::shared_ptr<spdlog::logger
                     throw client_error(*ec, "before_remove_doc_staged_for_removal hook threw error");
                 }
                 core::operations::remove_request req{ doc.id() };
-                req.cas = couchbase::cas(doc.cas());
+                req.cas = doc.cas();
                 wrap_durable_request(req, cleanup_->config(), dl);
                 auto barrier = std::make_shared<std::promise<result>>();
                 auto f = barrier->get_future();
@@ -378,7 +378,7 @@ atr_cleanup_entry::remove_txn_links(std::shared_ptr<spdlog::logger> logger,
               }
                 .specs();
             req.access_deleted = true;
-            req.cas = couchbase::cas(doc.cas());
+            req.cas = doc.cas();
             wrap_durable_request(req, cleanup_->config(), dl);
             auto barrier = std::make_shared<std::promise<result>>();
             auto f = barrier->get_future();
