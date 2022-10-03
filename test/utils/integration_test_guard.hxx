@@ -28,6 +28,12 @@
 
 namespace test::utils
 {
+
+struct pools_response {
+    bool is_developer_preview{ false };
+    server_config_profile config_profile{ server_config_profile::unknown };
+};
+
 class integration_test_guard
 {
   public:
@@ -70,6 +76,8 @@ class integration_test_guard
 
     const couchbase::core::operations::management::cluster_describe_response::cluster_info& load_cluster_info(bool refresh = false);
 
+    pools_response load_pools_info(bool refresh = false);
+
     inline bool has_service(couchbase::core::service_type service)
     {
         return load_cluster_info().services.count(service) > 0;
@@ -103,5 +111,6 @@ class integration_test_guard
 
     std::map<std::string, couchbase::core::operations::management::bucket_describe_response::bucket_info, std::less<>> info{};
     std::optional<couchbase::core::operations::management::cluster_describe_response::cluster_info> cluster_info{};
+    std::optional<pools_response> pools_info{};
 };
 } // namespace test::utils

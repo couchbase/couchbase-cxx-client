@@ -34,6 +34,7 @@ struct test_context {
     std::string bucket{ "default" };
     server_version version{ 6, 6, 0 };
     deployment_type deployment{ deployment_type::on_prem };
+    server_config_profile profile{ server_config_profile::unknown };
 
     [[nodiscard]] couchbase::core::cluster_credentials build_auth() const
     {
