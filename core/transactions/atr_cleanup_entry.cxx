@@ -315,7 +315,7 @@ atr_cleanup_entry::remove_docs(std::shared_ptr<spdlog::logger> logger, std::opti
                 wrap_operation_future(f);
             } else {
                 core::operations::remove_request req{ doc.id() };
-               req.cas = doc.cas();
+                req.cas = doc.cas();
                 wrap_durable_request(req, cleanup_->config(), dl);
                 auto barrier = std::make_shared<std::promise<result>>();
                 auto f = barrier->get_future();
