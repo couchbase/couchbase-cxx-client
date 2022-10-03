@@ -49,6 +49,8 @@ class dns_srv_tracker
     void unregister_config_listener(std::shared_ptr<config_listener> listener) override;
 
   private:
+    void do_dns_refresh();
+
     asio::io_context& ctx_;
     io::dns::dns_client dns_client_;
     std::string address_;
@@ -60,5 +62,7 @@ class dns_srv_tracker
 
     std::set<std::shared_ptr<config_listener>> config_listeners_{};
     std::mutex config_listeners_mutex_;
+
+    std::atomic_bool refresh_in_progress_{ false };
 };
 } // namespace couchbase::core::impl

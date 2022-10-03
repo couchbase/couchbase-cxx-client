@@ -93,12 +93,16 @@ class bucket
 
     void update_config(topology::configuration config) override
     {
+        bool forced_config = false;
         std::vector<topology::configuration::node> added{};
         std::vector<topology::configuration::node> removed{};
         {
             std::scoped_lock lock(config_mutex_);
             if (!config_) {
                 LOG_DEBUG("{} initialize configuration rev={}", log_prefix_, config.rev_str());
+            } else if (config.force) {
+                LOG_DEBUG("{} forced to accept configuration rev={}", log_prefix_, config.rev_str());
+                forced_config = true;
             } else if (!config.vbmap) {
                 LOG_DEBUG("{} will not update the configuration old={} -> new={}, because new config does not have partition map",
                           log_prefix_,
@@ -181,7 +185,7 @@ class bucket
                 }
                 LOG_DEBUG(R"({} rev={}, add session="{}", address="{}:{}")", log_prefix_, config.rev_str(), session->id(), hostname, port);
                 session->bootstrap(
-                  [self = shared_from_this(), session](std::error_code err, topology::configuration cfg) {
+                  [self = shared_from_this(), session, forced_config, idx = node.index](std::error_code err, topology::configuration cfg) {
                       if (!err) {
                           self->update_config(std::move(cfg));
                           session->on_configuration_update(self);
@@ -193,6 +197,8 @@ class bucket
                                 }
                             });
                           self->drain_deferred_queue();
+                      } else if (err == errc::common::unambiguous_timeout && forced_config) {
+                          self->restart_node(idx, session->bootstrap_hostname(), session->bootstrap_port());
                       }
                   },
                   true);

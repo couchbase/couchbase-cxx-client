@@ -88,6 +88,7 @@ struct configuration {
     std::set<bucket_capability> bucket_capabilities{};
     std::set<cluster_capability> cluster_capabilities{};
     node_locator_type node_locator{ node_locator_type::unknown };
+    bool force{ false };
 
     bool operator==(const configuration& other) const
     {
@@ -128,5 +129,5 @@ configuration
 make_blank_configuration(const std::string& hostname, std::uint16_t plain_port, std::uint16_t tls_port);
 
 configuration
-make_blank_configuration(const std::vector<std::pair<std::string, std::string>>& endpoints, bool use_tls);
+make_blank_configuration(const std::vector<std::pair<std::string, std::string>>& endpoints, bool use_tls, bool force = false);
 } // namespace couchbase::core::topology

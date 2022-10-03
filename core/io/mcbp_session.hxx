@@ -714,6 +714,9 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             if (ec == asio::error::operation_aborted || self->stopped_) {
                 return;
             }
+            if (ec && self->state_listener_) {
+                self->state_listener_->report_bootstrap_error(fmt::format("{}:{}", self->bootstrap_hostname_, self->bootstrap_port_), ec);
+            }
             LOG_WARNING("{} unable to bootstrap in time", self->log_prefix_);
             auto h = std::move(self->bootstrap_handler_);
             h(errc::common::unambiguous_timeout, {});
@@ -1059,8 +1062,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
     void invoke_bootstrap_handler(std::error_code ec)
     {
         if (ec && state_listener_) {
-            std::string endpoint = fmt::format("{}:{}", bootstrap_hostname_, endpoint_.port());
-            state_listener_->report_bootstrap_error(endpoint, ec);
+            state_listener_->report_bootstrap_error(fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_), ec);
         }
         if (ec == errc::network::configuration_not_available) {
             return initiate_bootstrap();
@@ -1149,6 +1151,10 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             stream_->async_connect(it->endpoint(), std::bind(&mcbp_session::on_connect, shared_from_this(), std::placeholders::_1, it));
         } else {
             LOG_ERROR("{} no more endpoints left to connect, will try another address", log_prefix_);
+            if (state_listener_) {
+                state_listener_->report_bootstrap_error(fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_),
+                                                        errc::network::no_endpoints_left);
+            }
             return initiate_bootstrap();
         }
     }

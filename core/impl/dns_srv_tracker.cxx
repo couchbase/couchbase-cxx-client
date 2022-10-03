@@ -60,8 +60,40 @@ dns_srv_tracker::get_srv_nodes(utils::movable_function<void(origin::node_list, s
                   nodes.emplace_back(node);
               }
           }
-          return callback(nodes, {});
+          return callback(nodes, resp.ec);
       });
+}
+
+void
+dns_srv_tracker::do_dns_refresh()
+{
+    get_srv_nodes([self = shared_from_this()](origin::node_list nodes, std::error_code dns_ec) mutable {
+        bool expected_state{ true };
+        if (dns_ec || nodes.empty()) {
+            LOG_WARNING("unable to perform DNS-SRV refresh: {}", dns_ec.message());
+            self->refresh_in_progress_.compare_exchange_strong(expected_state, false);
+            return;
+        }
+        std::set<std::shared_ptr<config_listener>> listeners;
+        {
+            std::scoped_lock lock(self->config_listeners_mutex_);
+            listeners = self->config_listeners_;
+        }
+
+        if (!listeners.empty()) {
+            auto config = topology::make_blank_configuration(nodes, self->use_tls_, true);
+            std::vector<std::string> endpoints;
+            endpoints.reserve(nodes.size());
+            for (const auto& [host, port] : nodes) {
+                endpoints.emplace_back(fmt::format("\"{}:{}\"", host, port));
+            }
+            LOG_DEBUG("generated configuration from DNS-SRV response \"{}\": [{}]", self->address_, utils::join_strings(endpoints, ", "));
+            for (const auto& listener : listeners) {
+                listener->update_config(config);
+            }
+        }
+        self->refresh_in_progress_.compare_exchange_strong(expected_state, false);
+    });
 }
 
 void
@@ -79,35 +111,10 @@ dns_srv_tracker::report_bootstrap_error(const std::string& endpoint, std::error_
         return;
     }
 
-    if (trigger_dns_srv_refresh) {
-        LOG_DEBUG("all nodes failed to bootstrap, triggering DNS-SRV refresh");
-        return asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() mutable {
-            return self->get_srv_nodes([self](origin::node_list nodes, std::error_code dns_ec) mutable {
-                if (dns_ec || nodes.empty()) {
-                    LOG_WARNING("unable to perform DNS-SRV refresh: {}", dns_ec.message());
-                    return;
-                }
-                std::set<std::shared_ptr<config_listener>> listeners;
-                {
-                    std::scoped_lock lock(self->config_listeners_mutex_);
-                    listeners = self->config_listeners_;
-                }
-
-                if (!listeners.empty()) {
-                    auto config = topology::make_blank_configuration(nodes, self->use_tls_);
-                    std::vector<std::string> endpoints;
-                    endpoints.reserve(nodes.size());
-                    for (const auto& [host, port] : nodes) {
-                        endpoints.emplace_back(fmt::format("\"{}:{}\"", host, port));
-                    }
-                    LOG_INFO(
-                      "generated configuration from DNS-SRV response \"{}\": [{}]", self->address_, utils::join_strings(endpoints, ", "));
-                    for (const auto& listener : listeners) {
-                        listener->update_config(config);
-                    }
-                }
-            });
-        }));
+    bool expected_state{ false };
+    if (trigger_dns_srv_refresh && refresh_in_progress_.compare_exchange_strong(expected_state, true)) {
+        LOG_DEBUG("all nodes failed to bootstrap, triggering DNS-SRV refresh, ec={}, last endpoint=\"{}\"", ec.message(), endpoint);
+        return asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() mutable { self->do_dns_refresh(); }));
     }
 }
 
