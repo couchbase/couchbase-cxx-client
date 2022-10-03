@@ -203,7 +203,7 @@ staged_mutation_queue::rollback_insert(attempt_context_impl& ctx, const staged_m
           }
             .specs();
         req.access_deleted = true;
-        req.cas = couchbase::cas(item.doc().cas());
+        req.cas = item.doc().cas();
         wrap_durable_request(req, ctx.overall_.config());
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
@@ -260,7 +260,7 @@ staged_mutation_queue::rollback_remove_or_replace(attempt_context_impl& ctx, con
               couchbase::mutate_in_specs::remove(TRANSACTION_INTERFACE_PREFIX_ONLY).xattr(),
           }
             .specs();
-        req.cas = couchbase::cas(item.doc().cas());
+        req.cas = item.doc().cas();
         wrap_durable_request(req, ctx.overall_.config());
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
