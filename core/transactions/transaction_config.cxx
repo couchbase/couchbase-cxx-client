@@ -73,4 +73,4 @@ transaction_config::test_factories(core::transactions::attempt_context_testing_h
     cleanup_hooks_.reset(new core::transactions::cleanup_testing_hooks(cleanup_hooks));
 }
 
-} // namespace couchbase::core::transactions
+} // namespace couchbase::transactions

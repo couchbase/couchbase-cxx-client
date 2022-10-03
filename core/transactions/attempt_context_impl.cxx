@@ -1869,108 +1869,105 @@ attempt_context_impl::do_get(const core::document_id& id, const std::optional<st
             return cb(ec, "before_doc_get hook raised error", std::nullopt);
         }
 
-        get_doc(id,
-                [this, id, resolving_missing_atr_entry = std::move(resolving_missing_atr_entry), cb = std::move(cb)](
-                  std::optional<error_class> ec,
-                  std::optional<std::string> err_message,
-                  std::optional<transaction_get_result> doc) mutable {
-                    if (!ec && !doc) {
-                        // it just isn't there.
-                        return cb(std::nullopt, std::nullopt, std::nullopt);
-                    }
-                    if (!ec) {
-                        if (doc->links().is_document_in_transaction()) {
-                            debug("doc {} in transaction, resolving_missing_atr_entry={}", *doc, resolving_missing_atr_entry.value_or("-"));
+        get_doc(
+          id,
+          [this, id, resolving_missing_atr_entry = std::move(resolving_missing_atr_entry), cb = std::move(cb)](
+            std::optional<error_class> ec, std::optional<std::string> err_message, std::optional<transaction_get_result> doc) mutable {
+              if (!ec && !doc) {
+                  // it just isn't there.
+                  return cb(std::nullopt, std::nullopt, std::nullopt);
+              }
+              if (!ec) {
+                  if (doc->links().is_document_in_transaction()) {
+                      debug("doc {} in transaction, resolving_missing_atr_entry={}", *doc, resolving_missing_atr_entry.value_or("-"));
 
-                            if (resolving_missing_atr_entry.has_value() &&
-                                resolving_missing_atr_entry.value() == doc->links().staged_attempt_id()) {
-                                debug("doc is in lost pending transaction");
+                      if (resolving_missing_atr_entry.has_value() &&
+                          resolving_missing_atr_entry.value() == doc->links().staged_attempt_id()) {
+                          debug("doc is in lost pending transaction");
 
-                                if (doc->links().is_document_being_inserted()) {
-                                    // this document is being inserted, so should not be visible yet
+                          if (doc->links().is_document_being_inserted()) {
+                              // this document is being inserted, so should not be visible yet
+                              return cb(std::nullopt, std::nullopt, std::nullopt);
+                          }
+
+                          return cb(std::nullopt, std::nullopt, doc);
+                      }
+
+                      core::document_id doc_atr_id{ doc->links().atr_bucket_name().value(),
+                                                    doc->links().atr_scope_name().value(),
+                                                    doc->links().atr_collection_name().value(),
+                                                    doc->links().atr_id().value() };
+                      active_transaction_record::get_atr(
+                        cluster_ref(),
+                        doc_atr_id,
+                        [this, id, doc, cb = std::move(cb)](std::error_code ec2, std::optional<active_transaction_record> atr) mutable {
+                            if (!ec2 && atr) {
+                                active_transaction_record& atr_doc = atr.value();
+                                std::optional<atr_entry> entry;
+                                for (const auto& e : atr_doc.entries()) {
+                                    if (doc->links().staged_attempt_id().value() == e.attempt_id()) {
+                                        entry.emplace(e);
+                                        break;
+                                    }
+                                }
+                                bool ignore_doc = false;
+                                auto content = doc->content();
+                                if (entry) {
+                                    if (doc->links().staged_attempt_id() && entry->attempt_id() == this->id()) {
+                                        // Attempt is reading its own writes
+                                        // This is here as backup, it should be returned from the in-memory cache instead
+                                        content = doc->links().staged_content();
+                                    } else {
+                                        auto err = forward_compat::check(forward_compat_stage::GETS_READING_ATR, entry->forward_compat());
+                                        if (err) {
+                                            return cb(FAIL_OTHER, err->what(), std::nullopt);
+                                        }
+                                        switch (entry->state()) {
+                                            case attempt_state::COMPLETED:
+                                            case attempt_state::COMMITTED:
+                                                if (doc->links().is_document_being_removed()) {
+                                                    ignore_doc = true;
+                                                } else {
+                                                    content = doc->links().staged_content();
+                                                }
+                                                break;
+                                            default:
+                                                if (doc->links().is_document_being_inserted()) {
+                                                    // This document is being inserted, so should not be visible yet
+                                                    ignore_doc = true;
+                                                }
+                                                break;
+                                        }
+                                    }
+                                } else {
+                                    // failed to get the ATR entry
+                                    debug("could not get ATR entry, checking again with {}",
+                                          doc->links().staged_attempt_id().value_or("-"));
+                                    return do_get(id, doc->links().staged_attempt_id(), cb);
+                                }
+                                if (ignore_doc) {
                                     return cb(std::nullopt, std::nullopt, std::nullopt);
                                 }
+                                return cb(std::nullopt, std::nullopt, transaction_get_result::create_from(*doc, content));
 
-                                return cb(std::nullopt, std::nullopt, doc);
+                            } else {
+                                // failed to get the ATR
+                                debug("could not get ATR, checking again with {}", doc->links().staged_attempt_id().value_or("-"));
+                                return do_get(id, doc->links().staged_attempt_id(), cb);
                             }
-
-                            core::document_id doc_atr_id{ doc->links().atr_bucket_name().value(),
-                                                          doc->links().atr_scope_name().value(),
-                                                          doc->links().atr_collection_name().value(),
-                                                          doc->links().atr_id().value() };
-                            active_transaction_record::get_atr(
-                              cluster_ref(),
-                              doc_atr_id,
-                              [this, id, doc, cb = std::move(cb)](std::error_code ec2,
-                                                                  std::optional<active_transaction_record> atr) mutable {
-                                  if (!ec2 && atr) {
-                                      active_transaction_record& atr_doc = atr.value();
-                                      std::optional<atr_entry> entry;
-                                      for (const auto& e : atr_doc.entries()) {
-                                          if (doc->links().staged_attempt_id().value() == e.attempt_id()) {
-                                              entry.emplace(e);
-                                              break;
-                                          }
-                                      }
-                                      bool ignore_doc = false;
-                                      auto content = doc->content();
-                                      if (entry) {
-                                          if (doc->links().staged_attempt_id() && entry->attempt_id() == this->id()) {
-                                              // Attempt is reading its own writes
-                                              // This is here as backup, it should be returned from the in-memory cache instead
-                                              content = doc->links().staged_content();
-                                          } else {
-                                              auto err =
-                                                forward_compat::check(forward_compat_stage::GETS_READING_ATR, entry->forward_compat());
-                                              if (err) {
-                                                  return cb(FAIL_OTHER, err->what(), std::nullopt);
-                                              }
-                                              switch (entry->state()) {
-                                                  case attempt_state::COMPLETED:
-                                                  case attempt_state::COMMITTED:
-                                                      if (doc->links().is_document_being_removed()) {
-                                                          ignore_doc = true;
-                                                      } else {
-                                                          content = doc->links().staged_content();
-                                                      }
-                                                      break;
-                                                  default:
-                                                      if (doc->links().is_document_being_inserted()) {
-                                                          // This document is being inserted, so should not be visible yet
-                                                          ignore_doc = true;
-                                                      }
-                                                      break;
-                                              }
-                                          }
-                                      } else {
-                                          // failed to get the ATR entry
-                                          debug("could not get ATR entry, checking again with {}",
-                                                doc->links().staged_attempt_id().value_or("-"));
-                                          return do_get(id, doc->links().staged_attempt_id(), cb);
-                                      }
-                                      if (ignore_doc) {
-                                          return cb(std::nullopt, std::nullopt, std::nullopt);
-                                      }
-                                      return cb(std::nullopt, std::nullopt, transaction_get_result::create_from(*doc, content));
-
-                                  } else {
-                                      // failed to get the ATR
-                                      debug("could not get ATR, checking again with {}", doc->links().staged_attempt_id().value_or("-"));
-                                      return do_get(id, doc->links().staged_attempt_id(), cb);
-                                  }
-                              });
-                        } else {
-                            if (doc->links().is_deleted()) {
-                                debug("doc not in txn, and is_deleted, so not returning it.");
-                                // doc has been deleted, not in txn, so don't return it
-                                return cb(std::nullopt, std::nullopt, std::nullopt);
-                            }
-                            return cb(std::nullopt, std::nullopt, doc);
-                        }
-                    } else {
-                        return cb(ec, err_message, std::nullopt);
-                    }
-                });
+                        });
+                  } else {
+                      if (doc->links().is_deleted()) {
+                          debug("doc not in txn, and is_deleted, so not returning it.");
+                          // doc has been deleted, not in txn, so don't return it
+                          return cb(std::nullopt, std::nullopt, std::nullopt);
+                      }
+                      return cb(std::nullopt, std::nullopt, doc);
+                  }
+              } else {
+                  return cb(ec, err_message, std::nullopt);
+              }
+          });
 
     } catch (const transaction_operation_failed&) {
         throw;
