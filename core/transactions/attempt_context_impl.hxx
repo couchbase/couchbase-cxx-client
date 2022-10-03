@@ -78,7 +78,7 @@ class attempt_context_impl
             auto res = insert_raw({ coll->bucket_name(), coll->scope_name(), coll->name(), id }, content);
             auto retval = std::make_shared<transaction_get_result>(res);
             return retval;
-        } catch (const transaction_operation_failed& e) {
+        } catch (const transaction_operation_failed&) {
             return {};
         }
     }
@@ -92,7 +92,7 @@ class attempt_context_impl
     {
         try {
             return std::make_shared<transaction_get_result>(replace_raw(dynamic_cast<transaction_get_result&>(*doc), content));
-        } catch (const transaction_operation_failed& e) {
+        } catch (const transaction_operation_failed&) {
             return {};
         }
     }
@@ -324,7 +324,7 @@ class attempt_context_impl
         try {
             remove(dynamic_cast<transaction_get_result&>(*doc));
             return doc;
-        } catch (const transaction_operation_failed& e) {
+        } catch (const transaction_operation_failed&) {
             // TODO: here is where we pop the error in
             return doc;
         } // TODO: handle other exceptions
