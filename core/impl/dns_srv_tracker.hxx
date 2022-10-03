@@ -39,7 +39,7 @@ class dns_srv_tracker
   , public bootstrap_state_listener
 {
   public:
-    dns_srv_tracker(asio::io_context& ctx, std::string address, bool use_tls);
+    dns_srv_tracker(asio::io_context& ctx, std::string address, const io::dns::dns_config& config, bool use_tls);
     void get_srv_nodes(utils::movable_function<void(origin::node_list nodes, std::error_code ec)> callback);
 
     void report_bootstrap_error(const std::string& endpoint, std::error_code ec) override;
@@ -52,6 +52,7 @@ class dns_srv_tracker
     asio::io_context& ctx_;
     io::dns::dns_client dns_client_;
     std::string address_;
+    io::dns::dns_config config_;
     bool use_tls_;
     std::string service_;
     std::set<std::string, std::less<>> known_endpoints_{};

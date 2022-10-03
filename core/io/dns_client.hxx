@@ -208,10 +208,14 @@ class dns_client
     }
 
     template<class Handler>
-    void query_srv(const std::string& name, const std::string& service, Handler&& handler)
+    void query_srv(const std::string& name, const std::string& service, const dns_config& config, Handler&& handler)
     {
-        const dns_config& config = dns_config::get();
-        auto cmd = std::make_shared<dns_srv_command>(ctx_, name, service, config.address(), config.port());
+        std::error_code ec;
+        auto address = asio::ip::address::from_string(config.nameserver(), ec);
+        if (ec) {
+            return handler({ ec });
+        }
+        auto cmd = std::make_shared<dns_srv_command>(ctx_, name, service, address, config.port());
         cmd->execute(config.timeout(), std::forward<Handler>(handler));
     }
 

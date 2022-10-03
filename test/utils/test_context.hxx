@@ -35,6 +35,8 @@ struct test_context {
     server_version version{ 6, 6, 0 };
     deployment_type deployment{ deployment_type::on_prem };
     server_config_profile profile{ server_config_profile::unknown };
+    std::optional<std::string> dns_nameserver{};
+    std::optional<std::uint16_t> dns_port{};
 
     [[nodiscard]] couchbase::core::cluster_credentials build_auth() const
     {

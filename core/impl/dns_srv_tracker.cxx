@@ -26,10 +26,11 @@
 
 namespace couchbase::core::impl
 {
-dns_srv_tracker::dns_srv_tracker(asio::io_context& ctx, std::string address, bool use_tls)
+dns_srv_tracker::dns_srv_tracker(asio::io_context& ctx, std::string address, const io::dns::dns_config& config, bool use_tls)
   : ctx_{ ctx }
   , dns_client_{ ctx_ }
   , address_{ std::move(address) }
+  , config_{ config }
   , use_tls_{ use_tls }
   , service_{ use_tls_ ? "_couchbases" : "_couchbase" }
 {
@@ -41,6 +42,7 @@ dns_srv_tracker::get_srv_nodes(utils::movable_function<void(origin::node_list, s
     dns_client_.query_srv(
       address_,
       service_,
+      config_,
       [self = shared_from_this(), callback = std::move(callback)](couchbase::core::io::dns::dns_client::dns_srv_response&& resp) mutable {
           origin::node_list nodes;
           if (resp.ec) {

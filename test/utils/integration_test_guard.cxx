@@ -38,6 +38,12 @@ integration_test_guard::integration_test_guard()
     }
     io_thread = std::thread([this]() { io.run(); });
     origin = couchbase::core::origin(auth, connstr);
+    if (ctx.dns_nameserver || ctx.dns_port) {
+        origin.options().dns_config = couchbase::core::io::dns::dns_config{
+            ctx.dns_nameserver.value_or(couchbase::core::io::dns::dns_config::default_nameserver),
+            ctx.dns_port.value_or(couchbase::core::io::dns::dns_config::default_port),
+        };
+    }
     open_cluster(cluster, origin);
 }
 

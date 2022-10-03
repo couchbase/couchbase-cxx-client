@@ -99,7 +99,8 @@ class cluster : public std::enable_shared_from_this<cluster>
         session_manager_->set_tracer(tracer_);
         if (origin_.options().enable_dns_srv) {
             auto [hostname, _] = origin_.next_address();
-            dns_srv_tracker_ = std::make_shared<impl::dns_srv_tracker>(ctx_, hostname, origin_.options().enable_tls);
+            dns_srv_tracker_ =
+              std::make_shared<impl::dns_srv_tracker>(ctx_, hostname, origin_.options().dns_config, origin_.options().enable_tls);
             return asio::post(asio::bind_executor(
               ctx_, [self = shared_from_this(), hostname = std::move(hostname), handler = std::forward<Handler>(handler)]() mutable {
                   return self->dns_srv_tracker_->get_srv_nodes(
