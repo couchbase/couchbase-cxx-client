@@ -16,15 +16,15 @@
 
 #pragma once
 
-#include "transactions/uid_generator.hxx"
+#include "core/transactions/uid_generator.hxx"
 
 #include "core/cluster.hxx"
 #include "core/operations.hxx"
 #include "core/operations/management/bucket.hxx"
 
-#include <couchbase/transactions.hxx>
-#include <couchbase/transactions/internal/utils.hxx>
-#include <couchbase/transactions/result.hxx>
+#include "core/transactions.hxx"
+#include "core/transactions/internal/utils.hxx"
+#include "core/transactions/result.hxx"
 
 #include <tao/json.hpp>
 
@@ -45,7 +45,7 @@ static const uint32_t DEFAULT_IO_COMPLETION_THREADS = 4;
 static const size_t MAX_PINGS = 10;
 static const auto PING_INTERVAL = std::chrono::milliseconds(100);
 
-namespace tx = couchbase::transactions;
+namespace tx = couchbase::core::transactions;
 
 struct test_config {
     std::string connection_string{ "couchbase://127.0.0.1" };
@@ -95,9 +95,9 @@ struct conn {
         if (!couchbase::core::logger::is_initialized()) {
             couchbase::core::logger::create_console_logger();
         }
-        couchbase::core::logger::set_log_levels(couchbase::core::logger::level::info);
-        couchbase::transactions::set_transactions_log_level(couchbase::core::logger::level::info);
-        couchbase::transactions::txn_log->trace("using {} io completion threads", conf.io_threads);
+        couchbase::core::logger::set_log_levels(couchbase::core::logger::level::trace);
+        tx::set_transactions_log_level(couchbase::core::logger::level::trace);
+        tx::txn_log->trace("using {} io completion threads", conf.io_threads);
         for (std::size_t i = 0; i < conf.io_threads; i++) {
             io_threads.emplace_back([this]() { io.run(); });
         }
@@ -310,13 +310,13 @@ class TransactionsTestEnvironment
 
     static couchbase::core::document_id get_document_id(const std::string& id = {})
     {
-        std::string key = (id.empty() ? couchbase::transactions::uid_generator::next() : id);
+        std::string key = (id.empty() ? tx::uid_generator::next() : id);
         return { get_conf().bucket, couchbase::scope::default_name, couchbase::collection::default_name, key };
     }
 
-    static couchbase::transactions::transactions get_transactions(std::shared_ptr<couchbase::core::cluster> c = get_cluster(),
-                                                                  bool cleanup_client_attempts = true,
-                                                                  bool cleanup_lost_txns = true)
+    static tx::transactions get_transactions(std::shared_ptr<couchbase::core::cluster> c = get_cluster(),
+                                             bool cleanup_client_attempts = true,
+                                             bool cleanup_lost_txns = true)
     {
         couchbase::transactions::transaction_config cfg;
         cfg.cleanup_client_attempts(cleanup_client_attempts);
