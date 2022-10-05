@@ -19,6 +19,7 @@
 
 #include <couchbase/codec/codec_flags.hxx>
 #include <couchbase/codec/encoded_value.hxx>
+#include <couchbase/codec/transcoder_traits.hxx>
 #include <couchbase/error_codes.hxx>
 
 namespace couchbase::codec

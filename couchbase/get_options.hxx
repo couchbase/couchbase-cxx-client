@@ -66,12 +66,33 @@ struct get_options : public common_options<get_options> {
         return { build_common_options(), with_expiry_, {} };
     }
 
+    /**
+     * If set to true, the get will fetch the expiry for the document as well and return it as part of the {@link get_result}.
+     *
+     * @param return_expiry true if it should be fetched.
+     * @return this options builder for chaining purposes.
+     *
+     * @since 1.0.0
+     * @committed
+     */
     auto with_expiry(bool return_expiry) -> get_options&
     {
         with_expiry_ = return_expiry;
         return self();
     }
 
+    /**
+     * Allows to specify a custom list paths to fetch from the document instead of the whole.
+     *
+     * @note that a maximum of 16 individual paths can be projected at a time due to a server limitation. If you need more than that, think
+     * about fetching less-generic paths or the full document straight away.
+     *
+     * @param field_paths a list of paths that should be loaded if present.
+     * @return this options builder for chaining purposes.
+     *
+     * @since 1.0.0
+     * @committed
+     */
     auto project(std::vector<std::string> field_paths) -> get_options&
     {
         projections_ = std::move(field_paths);

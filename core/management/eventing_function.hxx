@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "core/query_scan_consistency.hxx"
+#include "couchbase/query_scan_consistency.hxx"
 #include "eventing_status.hxx"
 
 #include <chrono>
@@ -78,7 +78,7 @@ struct function_settings {
     /** maximum time the lcb command is waited until completion before we terminate the request */
     std::optional<std::chrono::seconds> lcb_timeout{};
     /** consistency level used by n1ql statements in the handler */
-    std::optional<couchbase::core::query_scan_consistency> query_consistency{};
+    std::optional<query_scan_consistency> query_consistency{};
     /** number of timer shards. defaults to number of vbuckets */
     std::optional<std::int64_t> num_timer_partitions{};
     /** batch size for messages from producer to consumer */

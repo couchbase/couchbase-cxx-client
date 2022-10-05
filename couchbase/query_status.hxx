@@ -15,23 +15,28 @@
  *   limitations under the License.
  */
 
-#include "command_bundle.hxx"
-#include "opcode.hxx"
-#include "path_flags.hxx"
-
-#include <couchbase/codec/tao_json_serializer.hxx>
-#include <couchbase/subdoc/counter.hxx>
+#pragma once
 
 namespace couchbase
 {
-void
-subdoc::counter::encode(core::impl::subdoc::command_bundle& bundle) const
-{
-    bundle.emplace_back({
-      core::impl::subdoc::opcode::counter,
-      path_,
-      codec::tao_json_serializer::serialize(delta_),
-      core::impl::subdoc::build_mutate_in_path_flags(xattr_, create_path_, false),
-    });
-}
+
+/**
+ * Status of the N1QL Query
+ *
+ * @since 1.0.0
+ * @committed
+ */
+enum class query_status {
+    running,
+    success,
+    errors,
+    completed,
+    stopped,
+    timeout,
+    closed,
+    fatal,
+    aborted,
+    unknown,
+};
+
 } // namespace couchbase

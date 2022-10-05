@@ -17,11 +17,11 @@
 
 #include "test_helper.hxx"
 
-#include <couchbase/codec/json_transcoder.hxx>
+#include <couchbase/codec/default_json_transcoder.hxx>
 
 #include <tao/json.hpp>
 
-TEST_CASE("unit: json_transcoder encodes primitives", "[unit]")
+TEST_CASE("unit: default_json_transcoder encodes primitives", "[unit]")
 {
     {
         /*
@@ -33,7 +33,7 @@ TEST_CASE("unit: json_transcoder encodes primitives", "[unit]")
             std::byte{ 0x6f }, std::byte{ 0x2c }, std::byte{ 0x20 }, std::byte{ 0x77 }, std::byte{ 0x6f },
             std::byte{ 0x72 }, std::byte{ 0x6c }, std::byte{ 0x64 }, std::byte{ 0x22 },
         };
-        auto encoded = couchbase::codec::json_transcoder::encode("hello, world");
+        auto encoded = couchbase::codec::default_json_transcoder::encode("hello, world");
         REQUIRE(encoded.data == expected_data);
         REQUIRE(encoded.flags == couchbase::codec::codec_flags::json_common_flags);
     }
@@ -49,7 +49,7 @@ TEST_CASE("unit: json_transcoder encodes primitives", "[unit]")
             std::byte{ 0x31 },
             std::byte{ 0x34 },
         };
-        auto encoded = couchbase::codec::json_transcoder::encode(3.14);
+        auto encoded = couchbase::codec::default_json_transcoder::encode(3.14);
         REQUIRE(encoded.data == expected_data);
         REQUIRE(encoded.flags == couchbase::codec::codec_flags::json_common_flags);
     }
@@ -65,13 +65,13 @@ TEST_CASE("unit: json_transcoder encodes primitives", "[unit]")
             std::byte{ 0x75 },
             std::byte{ 0x65 },
         };
-        auto encoded = couchbase::codec::json_transcoder::encode(true);
+        auto encoded = couchbase::codec::default_json_transcoder::encode(true);
         REQUIRE(encoded.data == expected_data);
         REQUIRE(encoded.flags == couchbase::codec::codec_flags::json_common_flags);
     }
 }
 
-TEST_CASE("unit: json_transcoder decodes primitives", "[unit]")
+TEST_CASE("unit: default_json_transcoder decodes primitives", "[unit]")
 {
     {
         /*
@@ -83,8 +83,8 @@ TEST_CASE("unit: json_transcoder decodes primitives", "[unit]")
             std::byte{ 0x6f }, std::byte{ 0x2c }, std::byte{ 0x20 }, std::byte{ 0x77 }, std::byte{ 0x6f },
             std::byte{ 0x72 }, std::byte{ 0x6c }, std::byte{ 0x64 }, std::byte{ 0x22 },
         };
-        auto decoded =
-          couchbase::codec::json_transcoder::decode<std::string>({ encoded_data, couchbase::codec::codec_flags::json_common_flags });
+        auto decoded = couchbase::codec::default_json_transcoder::decode<std::string>(
+          { encoded_data, couchbase::codec::codec_flags::json_common_flags });
         REQUIRE(decoded == "hello, world");
     }
 
@@ -100,7 +100,7 @@ TEST_CASE("unit: json_transcoder decodes primitives", "[unit]")
             std::byte{ 0x34 },
         };
         auto decoded =
-          couchbase::codec::json_transcoder::decode<double>({ encoded_data, couchbase::codec::codec_flags::json_common_flags });
+          couchbase::codec::default_json_transcoder::decode<double>({ encoded_data, couchbase::codec::codec_flags::json_common_flags });
         REQUIRE(Approx(decoded) == 3.14);
     }
 
@@ -115,7 +115,8 @@ TEST_CASE("unit: json_transcoder decodes primitives", "[unit]")
             std::byte{ 0x75 },
             std::byte{ 0x65 },
         };
-        auto decoded = couchbase::codec::json_transcoder::decode<bool>({ encoded_data, couchbase::codec::codec_flags::json_common_flags });
+        auto decoded =
+          couchbase::codec::default_json_transcoder::decode<bool>({ encoded_data, couchbase::codec::codec_flags::json_common_flags });
         REQUIRE(decoded == true);
     }
 }
@@ -150,7 +151,7 @@ struct tao::json::traits<profile> {
     }
 };
 
-TEST_CASE("unit: json_transcoder encodes user data", "[unit]")
+TEST_CASE("unit: default_json_transcoder encodes user data", "[unit]")
 {
     profile albert{ "this_guy_again", "Albert Einstein", 1879 };
 
@@ -172,12 +173,12 @@ TEST_CASE("unit: json_transcoder encodes user data", "[unit]")
         std::byte{ 0x61 }, std::byte{ 0x67 }, std::byte{ 0x61 }, std::byte{ 0x69 }, std::byte{ 0x6e }, std::byte{ 0x22 }, std::byte{ 0x7d },
     };
 
-    auto encoded = couchbase::codec::json_transcoder::encode(albert);
+    auto encoded = couchbase::codec::default_json_transcoder::encode(albert);
     REQUIRE(encoded.data == expected_data);
     REQUIRE(encoded.flags == couchbase::codec::codec_flags::json_common_flags);
 }
 
-TEST_CASE("unit: json_transcoder decodes user data", "[unit]")
+TEST_CASE("unit: default_json_transcoder decodes user data", "[unit]")
 {
     /*
      * echo -n '{"birth_year":1879,"full_name":"Albert Einstein", "username":"this_guy_again"}' \
@@ -197,13 +198,14 @@ TEST_CASE("unit: json_transcoder decodes user data", "[unit]")
         std::byte{ 0x61 }, std::byte{ 0x67 }, std::byte{ 0x61 }, std::byte{ 0x69 }, std::byte{ 0x6e }, std::byte{ 0x22 }, std::byte{ 0x7d },
     };
 
-    auto decoded = couchbase::codec::json_transcoder::decode<profile>({ encoded_data, couchbase::codec::codec_flags::json_common_flags });
+    auto decoded =
+      couchbase::codec::default_json_transcoder::decode<profile>({ encoded_data, couchbase::codec::codec_flags::json_common_flags });
     REQUIRE(decoded.username == "this_guy_again");
     REQUIRE(decoded.full_name == "Albert Einstein");
     REQUIRE(decoded.birth_year == 1879);
 
-    auto value =
-      couchbase::codec::json_transcoder::decode<tao::json::value>({ encoded_data, couchbase::codec::codec_flags::json_common_flags });
+    auto value = couchbase::codec::default_json_transcoder::decode<tao::json::value>(
+      { encoded_data, couchbase::codec::codec_flags::json_common_flags });
     REQUIRE(value.at("username").get_string() == "this_guy_again");
     REQUIRE(value.at("full_name").get_string() == "Albert Einstein");
     REQUIRE(value.at("birth_year").get_unsigned() == 1879);

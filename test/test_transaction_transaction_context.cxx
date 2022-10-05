@@ -402,7 +402,7 @@ TEST_CASE("transactions: can set per transaction config", "[transactions]")
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
     couchbase::transactions::per_transaction_config per_txn_cfg;
-    per_txn_cfg.scan_consistency(couchbase::core::query_scan_consistency::not_bounded);
+    per_txn_cfg.scan_consistency(couchbase::query_scan_consistency::not_bounded);
     per_txn_cfg.expiration_time(std::chrono::milliseconds(1)).kv_timeout(std::chrono::milliseconds(2));
     per_txn_cfg.durability_level(couchbase::durability_level::none);
     transaction_context tx(txns, per_txn_cfg);

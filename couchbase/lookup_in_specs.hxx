@@ -25,6 +25,7 @@
 #include <couchbase/subdoc/exists.hxx>
 #include <couchbase/subdoc/get.hxx>
 
+#include <memory>
 #include <vector>
 
 namespace couchbase
@@ -57,7 +58,7 @@ class lookup_in_specs
     /**
      * Fetches the content from a field represented by given virtual attribute (macro).
      *
-     * @param path the path identifying where to get the value.
+     * @param macro the path identifying where to get the value.
      * @return the created spec
      *
      * @since 1.0.0

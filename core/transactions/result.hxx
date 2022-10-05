@@ -20,7 +20,7 @@
 
 #include "core/transactions/internal/binary.hxx"
 
-#include "couchbase/codec/json_transcoder.hxx"
+#include "couchbase/codec/tao_json_serializer.hxx"
 
 #include <optional>
 #include <string>
@@ -87,6 +87,7 @@ struct subdoc_result : result_base {
         subdoc_multi_path_failure_deleted = 0xd3,
         subdoc_invalid_xattr_order = 0xd4,
     };
+
     status_type status;
 
     subdoc_result()
@@ -94,10 +95,12 @@ struct subdoc_result : result_base {
       , status(status_type::success)
     {
     }
+
     subdoc_result(std::uint32_t s)
       : status(static_cast<status_type>(s))
     {
     }
+
     subdoc_result(const std::vector<std::byte>& v, std::uint32_t s)
       : result_base(v)
       , status(static_cast<status_type>(s))
@@ -110,7 +113,7 @@ struct subdoc_result : result_base {
         // this will always be a json string.  To not have extraneous
         // "" when asked to return as a string, we parse it first.
         // NOTE: lets do better.
-        return codec::json_transcoder::decode<T>(raw_value);
+        return codec::tao_json_serializer::deserialize<T>(raw_value);
     }
 
     [[nodiscard]] tao::json::value content_as() const
@@ -258,7 +261,7 @@ struct result : result_base {
     template<typename T>
     T content_as() const
     {
-        return codec::json_transcoder::decode<T>(raw_value);
+        return codec::tao_json_serializer::deserialize<T>(raw_value);
     }
 
     [[nodiscard]] subdoc_result::status_type subdoc_status() const;

@@ -34,7 +34,7 @@ class async_attempt_context
         if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
             return insert_raw(content, id, content, std::move(handler));
         } else {
-            return insert_raw(coll, id, codec::json_transcoder::encode(content).data, std::move(handler));
+            return insert_raw(coll, id, codec::tao_json_serializer::serialize(content), std::move(handler));
         }
     }
 
@@ -44,7 +44,7 @@ class async_attempt_context
         if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
             return replace_raw(doc, content, std::move(handler));
         } else {
-            return replace_raw(doc, codec::json_transcoder::encode(content).data, std::move(handler));
+            return replace_raw(doc, codec::tao_json_serializer::serialize(content), std::move(handler));
         }
     }
 

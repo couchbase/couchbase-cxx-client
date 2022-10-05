@@ -18,7 +18,7 @@
 #pragma once
 
 #include <couchbase/binary_collection.hxx>
-#include <couchbase/codec/json_transcoder.hxx>
+#include <couchbase/codec/default_json_transcoder.hxx>
 #include <couchbase/exists_options.hxx>
 #include <couchbase/expiry.hxx>
 #include <couchbase/get_all_replicas_options.hxx>
@@ -528,7 +528,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Transcoder = codec::json_transcoder, typename Document, typename Handler>
+    template<typename Transcoder = codec::default_json_transcoder, typename Document, typename Handler>
     void upsert(std::string document_id, Document document, const upsert_options& options, Handler&& handler) const
     {
         return core::impl::initiate_upsert_operation(core_,
@@ -558,7 +558,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Transcoder = codec::json_transcoder, typename Document>
+    template<typename Transcoder = codec::default_json_transcoder, typename Document>
     [[nodiscard]] auto upsert(std::string document_id, const Document& document, const upsert_options& options) const
       -> std::future<std::pair<key_value_error_context, mutation_result>>
     {
@@ -589,7 +589,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Transcoder = codec::json_transcoder, typename Document, typename Handler>
+    template<typename Transcoder = codec::default_json_transcoder, typename Document, typename Handler>
     void insert(std::string document_id, Document document, const insert_options& options, Handler&& handler) const
     {
         return core::impl::initiate_insert_operation(core_,
@@ -620,7 +620,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Transcoder = codec::json_transcoder, typename Document>
+    template<typename Transcoder = codec::default_json_transcoder, typename Document>
     [[nodiscard]] auto insert(std::string document_id, const Document& document, const insert_options& options) const
       -> std::future<std::pair<key_value_error_context, mutation_result>>
     {
@@ -652,7 +652,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Transcoder = codec::json_transcoder, typename Document, typename Handler>
+    template<typename Transcoder = codec::default_json_transcoder, typename Document, typename Handler>
     void replace(std::string document_id, Document document, const replace_options& options, Handler&& handler) const
     {
         return core::impl::initiate_replace_operation(core_,
@@ -684,7 +684,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Transcoder = codec::json_transcoder, typename Document>
+    template<typename Transcoder = codec::default_json_transcoder, typename Document>
     [[nodiscard]] auto replace(std::string document_id, const Document& document, const replace_options& options) const
       -> std::future<std::pair<key_value_error_context, mutation_result>>
     {

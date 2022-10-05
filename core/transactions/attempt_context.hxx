@@ -85,7 +85,7 @@ class attempt_context
         if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
             return replace_raw(document, content);
         } else {
-            return replace_raw(document, codec::json_transcoder::encode(content).data);
+            return replace_raw(document, codec::tao_json_serializer::serialize(content));
         }
     }
     /**
@@ -111,7 +111,7 @@ class attempt_context
         if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
             return insert_raw(id, content);
         } else {
-            return insert_raw(id, codec::json_transcoder::encode(content).data);
+            return insert_raw(id, codec::tao_json_serializer::serialize(content));
         }
     }
     /**

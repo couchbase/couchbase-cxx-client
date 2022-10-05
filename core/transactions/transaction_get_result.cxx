@@ -47,25 +47,25 @@ transaction_get_result::create_from(const core::operations::lookup_in_response& 
     std::vector<std::byte> content;
 
     if (resp.fields[0].status == key_value_status_code::success) {
-        atr_id = codec::json_transcoder::decode<std::string>(resp.fields[0].value);
+        atr_id = codec::tao_json_serializer::deserialize<std::string>(resp.fields[0].value);
     }
     if (resp.fields[1].status == key_value_status_code::success) {
-        transaction_id = codec::json_transcoder::decode<std::string>(resp.fields[1].value);
+        transaction_id = codec::tao_json_serializer::deserialize<std::string>(resp.fields[1].value);
     }
     if (resp.fields[2].status == key_value_status_code::success) {
-        attempt_id = codec::json_transcoder::decode<std::string>(resp.fields[2].value);
+        attempt_id = codec::tao_json_serializer::deserialize<std::string>(resp.fields[2].value);
     }
     if (resp.fields[3].status == key_value_status_code::success) {
         staged_content = resp.fields[3].value;
     }
     if (resp.fields[4].status == key_value_status_code::success) {
-        atr_bucket_name = codec::json_transcoder::decode<std::string>(resp.fields[4].value);
+        atr_bucket_name = codec::tao_json_serializer::deserialize<std::string>(resp.fields[4].value);
     }
     if (resp.fields[5].status == key_value_status_code::success) {
-        atr_scope_name = codec::json_transcoder::decode<std::string>(resp.fields[5].value);
+        atr_scope_name = codec::tao_json_serializer::deserialize<std::string>(resp.fields[5].value);
     }
     if (resp.fields[6].status == key_value_status_code::success) {
-        atr_collection_name = codec::json_transcoder::decode<std::string>(resp.fields[6].value);
+        atr_collection_name = codec::tao_json_serializer::deserialize<std::string>(resp.fields[6].value);
     }
 
     if (resp.fields[7].status == key_value_status_code::success) {
@@ -76,7 +76,7 @@ transaction_get_result::create_from(const core::operations::lookup_in_response& 
         exptime_pre_txn = restore["exptime"].as<std::uint32_t>();
     }
     if (resp.fields[8].status == key_value_status_code::success) {
-        op = codec::json_transcoder::decode<std::string>(resp.fields[8].value);
+        op = codec::tao_json_serializer::deserialize<std::string>(resp.fields[8].value);
     }
     if (resp.fields[9].status == key_value_status_code::success) {
         auto doc = core::utils::json::parse_binary(resp.fields[9].value);
@@ -87,7 +87,7 @@ transaction_get_result::create_from(const core::operations::lookup_in_response& 
         crc32_from_doc = doc["value_crc32c"].as<std::string>();
     }
     if (resp.fields[10].status == key_value_status_code::success) {
-        crc32_of_staging = codec::json_transcoder::decode<std::string>(resp.fields[10].value);
+        crc32_of_staging = codec::tao_json_serializer::deserialize<std::string>(resp.fields[10].value);
     }
     if (resp.fields[11].status == key_value_status_code::success) {
         forward_compat = core::utils::json::parse_binary(resp.fields[11].value);

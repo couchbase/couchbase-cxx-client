@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,7 +17,15 @@
 
 #pragma once
 
-namespace couchbase::core
+#include <type_traits>
+
+namespace couchbase::codec
 {
-enum class query_scan_consistency { not_bounded = 0, request_plus };
-} // namespace couchbase::core
+template<typename T>
+struct is_serializer : public std::false_type {
+};
+
+template<typename T>
+inline constexpr bool is_serializer_v = is_serializer<T>::value;
+
+} // namespace couchbase::codec

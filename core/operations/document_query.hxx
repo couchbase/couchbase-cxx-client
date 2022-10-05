@@ -23,9 +23,10 @@
 #include "core/io/http_traits.hxx"
 #include "core/json_string.hxx"
 #include "core/platform/uuid.h"
-#include "core/query_profile_mode.hxx"
-#include "core/query_scan_consistency.hxx"
 #include "core/timeout_defaults.hxx"
+
+#include "couchbase/query_profile.hxx"
+#include "couchbase/query_scan_consistency.hxx"
 
 #include <couchbase/mutation_token.hxx>
 
@@ -89,7 +90,7 @@ struct query_request {
     std::optional<std::chrono::milliseconds> scan_wait{};
     std::optional<std::uint64_t> pipeline_batch{};
     std::optional<std::uint64_t> pipeline_cap{};
-    std::optional<couchbase::core::query_scan_consistency> scan_consistency{};
+    std::optional<query_scan_consistency> scan_consistency{};
     std::vector<mutation_token> mutation_state{};
     std::optional<std::string> bucket_name{};
     std::optional<std::string> scope_name{};
@@ -97,11 +98,11 @@ struct query_request {
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
 
-    couchbase::core::query_profile_mode profile{ couchbase::core::query_profile_mode::off };
+    query_profile profile{ query_profile::off };
 
-    std::map<std::string, couchbase::core::json_string> raw{};
+    std::map<std::string, couchbase::core::json_string, std::less<>> raw{};
     std::vector<couchbase::core::json_string> positional_parameters{};
-    std::map<std::string, couchbase::core::json_string> named_parameters{};
+    std::map<std::string, couchbase::core::json_string, std::less<>> named_parameters{};
     std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
     std::optional<std::string> send_to_node{};
 

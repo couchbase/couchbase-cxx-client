@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/codec/json_transcoder.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/mutation_result.hxx>
 
 #include <optional>
@@ -78,12 +78,12 @@ class mutate_in_result : public mutation_result
      * @since 1.0.0
      * @committed
      */
-    template<typename Document, std::enable_if_t<!codec::is_transcoder_v<Document>, bool> = true>
+    template<typename Document>
     [[nodiscard]] auto content_as(std::size_t index) const -> Document
     {
         for (const entry& e : entries_) {
             if (e.original_index == index) {
-                return codec::json_transcoder::template decode<Document>(e.value);
+                return codec::tao_json_serializer::deserialize<Document>(e.value);
             }
         }
         throw std::system_error(errc::key_value::path_invalid, "invalid index for mutate_in result: " + std::to_string(index));
@@ -99,12 +99,12 @@ class mutate_in_result : public mutation_result
      * @since 1.0.0
      * @committed
      */
-    template<typename Document, std::enable_if_t<!codec::is_transcoder_v<Document>, bool> = true>
+    template<typename Document>
     [[nodiscard]] auto content_as(const std::string& path) const -> Document
     {
         for (const entry& e : entries_) {
             if (e.path == path) {
-                return codec::json_transcoder::template decode<Document>(e.value);
+                return codec::tao_json_serializer::deserialize<Document>(e.value);
             }
         }
         throw std::system_error(errc::key_value::path_invalid, "invalid path for mutate_in result: " + path);

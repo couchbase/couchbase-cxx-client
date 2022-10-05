@@ -19,7 +19,7 @@
 #include <vector>
 
 #include <couchbase/cas.hxx>
-#include <couchbase/codec/json_transcoder.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/collection.hxx>
 #include <couchbase/transaction_op_error_context.hxx>
 
@@ -54,7 +54,7 @@ class transaction_get_result
     template<typename Content>
     [[nodiscard]] Content content() const
     {
-        return codec::json_transcoder::decode<Content>(value_);
+        return codec::tao_json_serializer::deserialize<Content>(value_);
     }
 
     /**

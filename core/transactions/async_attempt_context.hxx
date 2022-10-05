@@ -79,7 +79,7 @@ class async_attempt_context
     template<typename Content>
     void replace(const transaction_get_result& document, const Content& content, Callback&& cb)
     {
-        return replace_raw(document, codec::json_transcoder::encode(content).data, std::move(cb));
+        return replace_raw(document, codec::tao_json_serializer::serialize(content), std::move(cb));
     }
     /**
      * Inserts a new document into the specified Couchbase collection.
@@ -98,7 +98,7 @@ class async_attempt_context
     template<typename Content>
     void insert(const core::document_id& id, const Content& content, Callback&& cb)
     {
-        return insert_raw(id, codec::json_transcoder::encode(content).data, std::move(cb));
+        return insert_raw(id, codec::tao_json_serializer::serialize(content), std::move(cb));
     }
     /**
      * Removes the specified document, using the document's last TransactionDocument#cas

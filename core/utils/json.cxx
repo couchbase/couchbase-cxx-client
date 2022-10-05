@@ -54,7 +54,12 @@ parse(std::string_view input)
 tao::json::value
 parse(const json_string& input)
 {
-    return parse(input.str());
+    if (input.is_string()) {
+        return parse(input.str());
+    } else if (input.is_binary()) {
+        return parse_binary(input.bytes());
+    }
+    return {};
 }
 
 tao::json::value

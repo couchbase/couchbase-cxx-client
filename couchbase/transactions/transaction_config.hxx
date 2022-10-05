@@ -18,7 +18,7 @@
 #include "couchbase/transactions/transaction_keyspace.hxx"
 
 #include "core/document_id.hxx"
-#include "core/query_scan_consistency.hxx"
+#include "couchbase/query_scan_consistency.hxx"
 
 #include <chrono>
 #include <memory>
@@ -151,7 +151,7 @@ class transaction_config
      *
      * @param scan_consistency Desired default scan consistency
      */
-    void scan_consistency(core::query_scan_consistency scan_consistency)
+    void scan_consistency(query_scan_consistency scan_consistency)
     {
         scan_consistency_ = scan_consistency;
     }
@@ -160,7 +160,7 @@ class transaction_config
      *
      * @return scan consistency for transactional query operations.
      */
-    [[nodiscard]] core::query_scan_consistency scan_consistency() const
+    [[nodiscard]] query_scan_consistency scan_consistency() const
     {
         return scan_consistency_;
     }
@@ -259,7 +259,7 @@ class transaction_config
     bool cleanup_client_attempts_;
     std::unique_ptr<core::transactions::attempt_context_testing_hooks> attempt_context_hooks_;
     std::unique_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks_;
-    core::query_scan_consistency scan_consistency_;
+    query_scan_consistency scan_consistency_;
     std::optional<couchbase::transactions::transaction_keyspace> custom_metadata_collection_;
 };
 } // namespace couchbase::transactions

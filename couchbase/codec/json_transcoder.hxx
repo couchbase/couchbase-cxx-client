@@ -19,51 +19,20 @@
 
 #include <couchbase/codec/codec_flags.hxx>
 #include <couchbase/codec/encoded_value.hxx>
-#include <couchbase/codec/transcoder_traits.hxx>
 #include <couchbase/error_codes.hxx>
 
-#include <tao/json/value.hpp>
+#include <string>
 
-namespace couchbase
+namespace couchbase::codec
 {
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core::utils::json
-{
-std::vector<std::byte>
-generate_binary(const tao::json::value& object);
-
-tao::json::value
-parse_binary(const std::vector<std::byte>& input);
-} // namespace core::utils::json
-#endif
-
-namespace codec
-{
+template<typename Serializer>
 class json_transcoder
 {
   public:
     template<typename Document>
     static auto encode(Document document) -> encoded_value
     {
-        return { core::utils::json::generate_binary(tao::json::value(document)), codec_flags::json_common_flags };
-    }
-
-    template<typename Document>
-    static auto decode(const binary& data) -> Document
-    {
-        try {
-            if constexpr (std::is_same_v<Document, tao::json::value>) {
-                return core::utils::json::parse_binary(data);
-            } else {
-                return core::utils::json::parse_binary(data).as<Document>();
-            }
-        } catch (const tao::pegtl::parse_error& e) {
-            throw std::system_error(errc::common::decoding_failure,
-                                    std::string("json_transcoder cannot parse document as JSON: ").append(e.message()));
-        } catch (const std::out_of_range& e) {
-            throw std::system_error(errc::common::decoding_failure,
-                                    std::string("json_transcoder cannot parse document: ").append(e.what()));
-        }
+        return { Serializer::serialize(document), codec_flags::json_common_flags };
     }
 
     template<typename Document>
@@ -74,14 +43,7 @@ class json_transcoder
                                     "json_transcoder excepts document to have JSON common flags, flags=" + std::to_string(encoded.flags));
         }
 
-        return decode<Document>(encoded.data);
+        return Serializer::template deserialize<Document>(encoded.data);
     }
 };
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-template<>
-struct is_transcoder<json_transcoder> : public std::true_type {
-};
-#endif
-} // namespace codec
-} // namespace couchbase
+} // namespace couchbase::codec

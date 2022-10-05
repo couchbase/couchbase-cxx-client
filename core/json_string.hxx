@@ -18,13 +18,13 @@
 #pragma once
 
 #include <string>
+#include <variant>
+#include <vector>
 
 namespace couchbase::core
 {
 struct json_string {
-    json_string()
-    {
-    }
+    json_string() = default;
 
     json_string(std::string&& value)
       : value_(std::move(value))
@@ -37,12 +37,46 @@ struct json_string {
         return *this;
     }
 
+    json_string(std::vector<std::byte>&& value)
+      : value_(std::move(value))
+    {
+    }
+
+    json_string& operator=(std::vector<std::byte>&& value)
+    {
+        value_ = std::move(value);
+        return *this;
+    }
+
+    [[nodiscard]] auto is_string() const -> bool
+    {
+        return std::holds_alternative<std::string>(value_);
+    }
+
+    [[nodiscard]] auto is_binary() const -> bool
+    {
+        return std::holds_alternative<std::vector<std::byte>>(value_);
+    }
+
     [[nodiscard]] const std::string& str() const
     {
-        return value_;
+        if (is_string()) {
+            return std::get<std::string>(value_);
+        }
+        static std::string empty_string{};
+        return empty_string;
+    }
+
+    [[nodiscard]] const std::vector<std::byte>& bytes() const
+    {
+        if (is_binary()) {
+            return std::get<std::vector<std::byte>>(value_);
+        }
+        static std::vector<std::byte> empty_bytes{};
+        return empty_bytes;
     }
 
   private:
-    std::string value_{};
+    std::variant<std::nullptr_t, std::string, std::vector<std::byte>> value_{ nullptr };
 };
 } // namespace couchbase::core
