@@ -222,16 +222,18 @@ set(couchbase_cxx_client_FILES
     core/utils/split_string.cxx
     core/utils/url_codec.cxx
     core/impl/analytics_error_category.cxx
-    core/impl/dns_srv_tracker.cxx
     core/impl/append.cxx
     core/impl/build_deferred_query_indexes.cxx
     core/impl/cluster.cxx
     core/impl/common_error_category.cxx
     core/impl/decrement.cxx
+    core/impl/dns_srv_tracker.cxx
+    core/impl/exists.cxx
     core/impl/expiry.cxx
     core/impl/field_level_encryption_error_category.cxx
     core/impl/get.cxx
     core/impl/get_all_replicas.cxx
+    core/impl/get_and_lock.cxx
     core/impl/get_and_touch.cxx
     core/impl/get_any_replica.cxx
     core/impl/get_replica.cxx
@@ -250,6 +252,7 @@ set(couchbase_cxx_client_FILES
     core/impl/replace.cxx
     core/impl/search_error_category.cxx
     core/impl/streaming_json_lexter_error_category.cxx
+    core/impl/unlock.cxx
     core/impl/subdoc/array_add_unique.cxx
     core/impl/subdoc/array_append.cxx
     core/impl/subdoc/array_insert.cxx
