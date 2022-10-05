@@ -19,8 +19,10 @@
 
 #include <couchbase/binary_collection.hxx>
 #include <couchbase/codec/json_transcoder.hxx>
+#include <couchbase/exists_options.hxx>
 #include <couchbase/expiry.hxx>
 #include <couchbase/get_all_replicas_options.hxx>
+#include <couchbase/get_and_lock_options.hxx>
 #include <couchbase/get_and_touch_options.hxx>
 #include <couchbase/get_any_replica_options.hxx>
 #include <couchbase/get_options.hxx>
@@ -32,6 +34,7 @@
 #include <couchbase/remove_options.hxx>
 #include <couchbase/replace_options.hxx>
 #include <couchbase/touch_options.hxx>
+#include <couchbase/unlock_options.hxx>
 #include <couchbase/upsert_options.hxx>
 
 #include <future>
@@ -797,6 +800,23 @@ class collection
         return future;
     }
 
+    /**
+     * Performs lookups to document fragments with default options.
+     *
+     * @tparam Handler type of the handler that implements @ref lookup_in_handler
+     *
+     * @param document_id the outer document ID
+     * @param specs an object that specifies the types of lookups to perform
+     * @param options custom options to modify the lookup options
+     * @param handler callable that implements @ref lookup_in_handler
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
     template<typename Handler>
     void lookup_in(std::string document_id, lookup_in_specs specs, const lookup_in_options& options, Handler&& handler) const
     {
@@ -804,12 +824,168 @@ class collection
           core_, bucket_name_, scope_name_, name_, std::move(document_id), specs.specs(), options.build(), std::forward<Handler>(handler));
     }
 
+    /**
+     * Performs lookups to document fragments with default options.
+     *
+     * @param document_id the outer document ID
+     * @param specs an object that specifies the types of lookups to perform
+     * @param options custom options to modify the lookup options
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
     [[nodiscard]] auto lookup_in(std::string document_id, lookup_in_specs specs, const lookup_in_options& options) const
       -> std::future<std::pair<subdocument_error_context, lookup_in_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, lookup_in_result>>>();
         auto future = barrier->get_future();
         lookup_in(std::move(document_id), std::move(specs), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    /**
+     * Gets a document for a given id and places a pessimistic lock on it for mutations
+     *
+     * @tparam Handler type of the handler that implements @ref get_and_lock_handler
+     *
+     * @param document_id the id of the document
+     * @param lock_duration the length of time the lock will be held on the document
+     * @param options the options to customize
+     * @param handler callable that implements @ref get_and_lock_handler
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Handler>
+    void get_and_lock(std::string document_id,
+                      std::chrono::seconds lock_duration,
+                      const get_and_lock_options& options,
+                      Handler&& handler) const
+    {
+        return core::impl::initiate_get_and_lock_operation(
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), lock_duration, options.build(), std::forward<Handler>(handler));
+    }
+
+    /**
+     * Gets a document for a given id and places a pessimistic lock on it for mutations
+     *
+     * @param document_id the id of the document
+     * @param lock_duration the length of time the lock will be held on the document
+     * @param options the options to customize
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto get_and_lock(std::string document_id, std::chrono::seconds lock_duration, const get_and_lock_options& options) const
+      -> std::future<std::pair<key_value_error_context, get_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
+        auto future = barrier->get_future();
+        get_and_lock(std::move(document_id), lock_duration, options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
+
+    /**
+     * Unlocks a document if it has been locked previously, with default options.
+     *
+     * @tparam Handler type of the handler that implements @ref unlock_handler
+     *
+     * @param document_id the id of the document
+     * @param cas the CAS value which is needed to unlock it
+     * @param options the options to customize
+     * @param handler callable that implements @ref unlock_handler
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::cas_mismatch if the document has been concurrently modified on the server.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Handler>
+    void unlock(std::string document_id, couchbase::cas cas, const unlock_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_unlock_operation(
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), cas, options.build(), std::forward<Handler>(handler));
+    }
+
+    /**
+     * Unlocks a document if it has been locked previously, with default options.
+     *
+     * @param document_id the id of the document
+     * @param cas the CAS value which is needed to unlock it
+     * @param options the options to customize
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::cas_mismatch if the document has been concurrently modified on the server.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto unlock(std::string document_id, couchbase::cas cas, const unlock_options& options) const
+      -> std::future<key_value_error_context>
+    {
+        auto barrier = std::make_shared<std::promise<key_value_error_context>>();
+        auto future = barrier->get_future();
+        unlock(std::move(document_id), cas, options, [barrier](auto ctx) { barrier->set_value({ std::move(ctx) }); });
+        return future;
+    }
+
+    /**
+     * Checks if the document exists on the server.
+     *
+     * @tparam Handler type of the handler that implements @ref exists_handler
+     *
+     * @param document_id the id of the document
+     * @param options the options to customize
+     * @param handler callable that implements @ref exists_handler
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Handler>
+    void exists(std::string document_id, const exists_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_exists_operation(
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
+    }
+
+    /**
+     * Checks if the document exists on the server.
+     *
+     * @param document_id the id of the document
+     * @param options the options to customize
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto exists(std::string document_id, const exists_options& options) const
+      -> std::future<std::pair<key_value_error_context, exists_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, exists_result>>>();
+        auto future = barrier->get_future();
+        exists(std::move(document_id), options, [barrier](auto ctx, auto result) {
             barrier->set_value({ std::move(ctx), std::move(result) });
         });
         return future;
