@@ -42,7 +42,7 @@ class transaction_op_error_context
     }
 
   private:
-    std::error_code ec_{};    // a transaction_op error_code
+    std::error_code ec_{}; // a transaction_op error_code
     // TODO: perhaps a variant later to house a kv or query error_context,
     //       or maybe they both have a common base, etc...
     couchbase::error_context cause_{};
