@@ -43,7 +43,12 @@ map_status_code(protocol::client_opcode opcode, std::uint16_t status)
             return {};
 
         case key_value_status_code::not_found:
+            return errc::key_value::document_not_found;
+
         case key_value_status_code::not_stored:
+            if (opcode == protocol::client_opcode::insert) {
+                return errc::key_value::document_exists;
+            }
             return errc::key_value::document_not_found;
 
         case key_value_status_code::exists:

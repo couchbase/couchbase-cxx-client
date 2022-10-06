@@ -103,7 +103,8 @@ mutate_in_request::make_response(key_value_error_context&& ctx, const encoded_re
             response_token = couchbase::utils::build_mutation_token(encoded.body().token(), partition, ctx.bucket());
         }
         std::sort(fields.begin(), fields.end(), [](const auto& lhs, const auto& rhs) { return lhs.original_index < rhs.original_index; });
-    } else if (store_semantics == couchbase::store_semantics::insert && ctx.ec() == errc::common::cas_mismatch) {
+    } else if (store_semantics == couchbase::store_semantics::insert &&
+               (ctx.ec() == errc::common::cas_mismatch || ctx.status_code() == key_value_status_code::not_stored)) {
         ec = errc::key_value::document_exists;
     }
     return mutate_in_response{
