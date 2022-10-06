@@ -127,7 +127,12 @@ transactions::run(const couchbase::transactions::per_transaction_config& config,
 couchbase::transactions::transaction_result
 transactions::run(couchbase::transactions::txn_logic&& code, const couchbase::transactions::per_transaction_config& config)
 {
-    return wrap_run(*this, config, max_attempts_, std::move(code));
+    try {
+        return wrap_run(*this, config, max_attempts_, std::move(code));
+    } catch (const transaction_exception& e) {
+        // get transaction_error_context from e and return it in the transaction_result
+        return e.get_transaction_result();
+    }
 }
 
 void

@@ -15,21 +15,12 @@
  */
 #pragma once
 
-#include <couchbase/transaction_error_context.hxx>
-#include <string>
+#include <couchbase/transactions/transaction_get_result.hxx>
 
 namespace couchbase::transactions
 {
-/**
- * Results of a transaction
- * @volatile
- *
- * Contains internal information on a transaction,
- * returned by @ref core::transactions::run()
- */
-struct transaction_result {
-    std::string transaction_id;
-    bool unstaging_complete;
-    transaction_error_context ctx;
+class async_attempt_context
+{
+  public:
 };
 } // namespace couchbase::transactions

@@ -74,13 +74,9 @@ class attempt_context_impl
                                                                    const std::string& id,
                                                                    std::vector<std::byte> content) override
     {
-        try {
-            auto res = insert_raw({ coll->bucket_name(), coll->scope_name(), coll->name(), id }, content);
-            auto retval = std::make_shared<transaction_get_result>(res);
-            return retval;
-        } catch (const transaction_operation_failed&) {
-            return {};
-        }
+        return wrap_call_for_public_api([this, coll, &id, &content]() -> transaction_get_result {
+            return insert_raw({ coll->bucket_name(), coll->scope_name(), coll->name(), id }, content);
+        });
     }
     transaction_get_result insert_raw(const core::document_id& id, const std::vector<std::byte>& content) override;
 
@@ -90,11 +86,8 @@ class attempt_context_impl
     couchbase::transactions::transaction_get_result_ptr replace_raw(const couchbase::transactions::transaction_get_result_ptr doc,
                                                                     std::vector<std::byte> content) override
     {
-        try {
-            return std::make_shared<transaction_get_result>(replace_raw(dynamic_cast<transaction_get_result&>(*doc), content));
-        } catch (const transaction_operation_failed&) {
-            return {};
-        }
+        return wrap_call_for_public_api(
+          [this, doc, &content]() -> transaction_get_result { return replace_raw(dynamic_cast<transaction_get_result&>(*doc), content); });
     }
     void replace_raw(const transaction_get_result& document, const std::vector<std::byte>& content, Callback&& cb) override;
 
@@ -311,7 +304,9 @@ class attempt_context_impl
     transaction_get_result get(const core::document_id& id) override;
     couchbase::transactions::transaction_get_result_ptr get(std::shared_ptr<couchbase::collection> coll, const std::string& id) override
     {
-        return std::make_shared<transaction_get_result>(get({ coll->bucket_name(), coll->scope_name(), coll->name(), id }));
+        return wrap_call_for_public_api([this, coll, id]() mutable {
+            return get({ coll->bucket_name(), coll->scope_name(), coll->name(), id });
+        });
     }
     void get(const core::document_id& id, Callback&& cb) override;
 
@@ -321,13 +316,7 @@ class attempt_context_impl
     void remove(const transaction_get_result& document) override;
     couchbase::transactions::transaction_get_result_ptr remove(couchbase::transactions::transaction_get_result_ptr doc) override
     {
-        try {
-            remove(dynamic_cast<transaction_get_result&>(*doc));
-            return doc;
-        } catch (const transaction_operation_failed&) {
-            // TODO: here is where we pop the error in
-            return doc;
-        } // TODO: handle other exceptions
+        return wrap_void_call_for_public_api([this, doc]() { remove(dynamic_cast<transaction_get_result&>(*doc)); });
     }
     void remove(const transaction_get_result& document, VoidCallback&& cb) override;
 
@@ -459,5 +448,30 @@ class attempt_context_impl
                                             Handler&& cb,
                                             error_class ec,
                                             const std::string& message);
+
+    couchbase::transactions::transaction_get_result_ptr wrap_call_for_public_api(std::function<transaction_get_result()>&& handler)
+    {
+        try {
+            return std::make_shared<transaction_get_result>(handler());
+        } catch (const transaction_operation_failed& e) {
+            return std::make_shared<transaction_get_result>(e.get_error_ctx());
+        } catch (...) {
+            // the handler should catch everything else, but just in case...
+            return std::make_shared<transaction_get_result>(transaction_op_error_context(errc::transaction_op::unknown));
+        }
+    }
+
+    couchbase::transactions::transaction_get_result_ptr wrap_void_call_for_public_api(std::function<void()>&& handler)
+    {
+        try {
+            handler();
+            return std::make_shared<transaction_get_result>();
+        } catch (const transaction_operation_failed& e) {
+            return std::make_shared<transaction_get_result>(e.get_error_ctx());
+        } catch (...) {
+            // the handler should catch everything else, but just in case...
+            return std::make_shared<transaction_get_result>(transaction_op_error_context(errc::transaction_op::unknown));
+        }
+    }
 };
 } // namespace couchbase::core::transactions

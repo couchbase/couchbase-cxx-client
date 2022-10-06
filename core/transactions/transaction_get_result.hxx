@@ -56,6 +56,12 @@ class transaction_get_result : public couchbase::transactions::transaction_get_r
     transaction_get_result(transaction_get_result&& doc) = default;
 
     /** @internal */
+    transaction_get_result(const transaction_op_error_context& ctx)
+      : couchbase::transactions::transaction_get_result(ctx)
+    {
+    }
+
+    /** @internal */
     template<typename Content>
     transaction_get_result(core::document_id id,
                            Content content,
@@ -204,6 +210,11 @@ class transaction_get_result : public couchbase::transactions::transaction_get_r
     [[nodiscard]] couchbase::cas cas() const override
     {
         return cas_;
+    }
+
+    void ctx(transaction_op_error_context ctx)
+    {
+        ctx_ = std::move(ctx);
     }
 
     /** @internal */

@@ -176,10 +176,10 @@ transaction_context::rollback(async_attempt_context::VoidCallback&& cb)
 }
 
 void
-transaction_context::existing_error()
+transaction_context::existing_error(bool previous_op_failed)
 {
     if (current_attempt_context_) {
-        return current_attempt_context_->existing_error();
+        return current_attempt_context_->existing_error(previous_op_failed);
     }
     throw transaction_operation_failed(FAIL_OTHER, "no current attempt context").no_rollback();
 }
@@ -264,7 +264,7 @@ transaction_context::finalize(txn_complete_callback&& cb)
 {
 
     try {
-        existing_error();
+        existing_error(false);
         if (current_attempt_context_->is_done()) {
             return cb(std::nullopt, get_transaction_result());
         }

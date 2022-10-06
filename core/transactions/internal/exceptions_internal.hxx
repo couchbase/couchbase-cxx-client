@@ -20,6 +20,9 @@
 #include "core/transactions/result.hxx"
 #include "transaction_context.hxx"
 
+#include <couchbase/transaction_op_error_context.hxx>
+
+#include <algorithm>
 #include <list>
 
 namespace couchbase::core::transactions
@@ -76,6 +79,9 @@ enum error_class {
     FAIL_EXPIRY
 };
 
+external_exception
+external_exception_from_error_class(error_class ec);
+
 template<typename OStream>
 OStream&
 operator<<(OStream& os, const error_class& ec)
@@ -127,9 +133,6 @@ enum final_error { FAILED, EXPIRED, FAILED_POST_COMMIT, AMBIGUOUS };
 
 error_class
 error_class_from_result(const result& res);
-
-external_exception
-external_exception_from_error_class(error_class ec);
 
 class client_error : public std::runtime_error
 {
@@ -208,8 +211,13 @@ class transaction_operation_failed : public std::runtime_error
         // is false.  Not rolling back takes precedence over retry.  Otherwise, we
         // just retain the first.
         assert(errors.size() > 0);
-        auto error_to_throw = *errors.begin();
+        // start with first error that isn't previous_operation_failed
+        auto error_to_throw = *(std::find_if(
+          errors.begin(), errors.end(), [](auto& err) { return err.cause() != external_exception::PREVIOUS_OPERATION_FAILED; }));
         for (auto& ex : errors) {
+            if (ex.cause() == external_exception::PREVIOUS_OPERATION_FAILED) {
+                continue;
+            }
             if (!ex.retry_) {
                 error_to_throw = ex;
             }
@@ -313,6 +321,12 @@ class transaction_operation_failed : public std::runtime_error
                     return transaction_exception(*this, context, failure_type::FAIL);
             }
         }
+    }
+
+    transaction_op_error_context get_error_ctx() const
+    {
+        errc::transaction_op ec = transaction_op_errc_from_external_exception(cause_);
+        return { ec };
     }
 
   private:
