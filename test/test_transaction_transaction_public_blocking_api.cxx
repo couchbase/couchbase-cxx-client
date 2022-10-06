@@ -19,7 +19,7 @@
 
 static const tao::json::value content{ { "some_number", 0 } };
 
-TEST_CASE("can get", "[public_transactions_api]")
+TEST_CASE("can get", "[transactions]")
 {
     auto id = TransactionsTestEnvironment::get_document_id();
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
@@ -36,7 +36,7 @@ TEST_CASE("can get", "[public_transactions_api]")
     CHECK_FALSE(result.ctx.ec());
 }
 
-TEST_CASE("get fails as expected when doc doesn't exist", "[public_transactions_api]")
+TEST_CASE("get fails as expected when doc doesn't exist", "[transactions]")
 {
     auto id = TransactionsTestEnvironment::get_document_id();
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
@@ -53,7 +53,7 @@ TEST_CASE("get fails as expected when doc doesn't exist", "[public_transactions_
     CHECK(result.ctx.cause() == couchbase::errc::transaction_op::document_not_found_exception);
 }
 
-TEST_CASE("can insert", "[public_transactions_api]")
+TEST_CASE("can insert", "[transactions]")
 {
     auto id = TransactionsTestEnvironment::get_document_id();
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
@@ -73,7 +73,7 @@ TEST_CASE("can insert", "[public_transactions_api]")
     CHECK(final_doc.content_as<tao::json::value>() == content);
 }
 
-TEST_CASE("insert fails as expected when doc already exists", "[public_transactions_api]")
+TEST_CASE("insert fails as expected when doc already exists", "[transactions]")
 {
     auto id = TransactionsTestEnvironment::get_document_id();
     tao::json::value new_content{ { "something", "else" } };
@@ -95,7 +95,7 @@ TEST_CASE("insert fails as expected when doc already exists", "[public_transacti
     CHECK(final_doc.content_as<tao::json::value>() == content);
 }
 
-TEST_CASE("can replace", "[public_transactions_api]")
+TEST_CASE("can replace", "[transactions]")
 {
     auto id = TransactionsTestEnvironment::get_document_id();
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
@@ -119,7 +119,7 @@ TEST_CASE("can replace", "[public_transactions_api]")
     CHECK(final_doc.content_as<tao::json::value>() == new_content);
 }
 
-TEST_CASE("replace fails as expected with bad cas", "[public_transactions_api]")
+TEST_CASE("replace fails as expected with bad cas", "[transactions]")
 {
     auto id = TransactionsTestEnvironment::get_document_id();
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
@@ -141,7 +141,7 @@ TEST_CASE("replace fails as expected with bad cas", "[public_transactions_api]")
     REQUIRE(doc.content_as<tao::json::value>() == content);
 }
 
-TEST_CASE("can remove", "[public_transactions_api]")
+TEST_CASE("can remove", "[transactions]")
 {
     auto id = TransactionsTestEnvironment::get_document_id();
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
@@ -162,7 +162,7 @@ TEST_CASE("can remove", "[public_transactions_api]")
         REQUIRE(e.res()->ec == couchbase::errc::key_value::document_not_found);
     }
 }
-TEST_CASE("remove fails as expected with bad cas", "[public_transactions_api]")
+TEST_CASE("remove fails as expected with bad cas", "[transactions]")
 {
     auto id = TransactionsTestEnvironment::get_document_id();
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
@@ -182,7 +182,7 @@ TEST_CASE("remove fails as expected with bad cas", "[public_transactions_api]")
     CHECK(result.ctx.ec() == couchbase::errc::transaction::expired);
 }
 
-TEST_CASE("remove fails as expected with missing doc", "[public_transactions_api]")
+TEST_CASE("remove fails as expected with missing doc", "[transactions]")
 {
     auto id = TransactionsTestEnvironment::get_document_id();
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
@@ -203,7 +203,7 @@ TEST_CASE("remove fails as expected with missing doc", "[public_transactions_api
     CHECK(result.ctx.cause() == couchbase::errc::transaction_op::document_not_found_exception);
 }
 
-TEST_CASE("uncaught exception in lambda will rollback without retry", "[public_transactions_api]")
+TEST_CASE("uncaught exception in lambda will rollback without retry", "[transactions]")
 {
     auto id = TransactionsTestEnvironment::get_document_id();
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
