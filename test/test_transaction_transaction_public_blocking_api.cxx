@@ -219,3 +219,34 @@ TEST_CASE("uncaught exception in lambda will rollback without retry", "[transact
     CHECK(result.ctx.ec() == couchbase::errc::transaction::failed);
     CHECK(result.ctx.cause() == couchbase::errc::transaction_op::unknown);
 }
+
+TEST_CASE("can pass per-transaction configs", "[transactions]")
+{
+    auto id = TransactionsTestEnvironment::get_document_id();
+    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    auto core_cluster = TransactionsTestEnvironment::get_cluster();
+    couchbase::cluster c(core_cluster);
+    couchbase::transactions::per_transaction_config cfg{};
+    cfg.expiration_time(std::chrono::seconds(1));
+    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto begin = std::chrono::steady_clock::now();
+    auto result = c.transactions()->run(
+      [id, coll](couchbase::transactions::attempt_context& ctx) {
+          auto doc = ctx.get(coll, id.key());
+          std::reinterpret_pointer_cast<couchbase::core::transactions::transaction_get_result>(doc)->cas(100);
+          auto err = ctx.remove(doc);
+          CHECK(err.ec());
+      },
+      cfg);
+    auto end = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin);
+    // should be greater than the expiration time
+    CHECK(elapsed > *cfg.expiration_time());
+    // but not by too much (default is 15 seconds, we wanted 1, 2 is plenty)
+    CHECK(elapsed < (2 * *cfg.expiration_time()));
+    // and of course the txn should have expired
+    CHECK_FALSE(result.transaction_id.empty());
+    CHECK_FALSE(result.unstaging_complete);
+    CHECK(result.ctx.ec());
+    CHECK(result.ctx.ec() == couchbase::errc::transaction::expired);
+}
