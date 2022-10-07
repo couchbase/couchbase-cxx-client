@@ -36,7 +36,7 @@ TEST_CASE("can get", "[transactions]")
     CHECK_FALSE(result.ctx.ec());
 }
 
-TEST_CASE("get fails as expected when doc doesn't exist", "[transactions]")
+TEST_CASE("get returns error if doc doesn't exist", "[transactions]")
 {
     auto id = TransactionsTestEnvironment::get_document_id();
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
@@ -49,8 +49,7 @@ TEST_CASE("get fails as expected when doc doesn't exist", "[transactions]")
     });
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
-    CHECK(result.ctx.ec() == couchbase::errc::transaction::failed);
-    CHECK(result.ctx.cause() == couchbase::errc::transaction_op::document_not_found_exception);
+    CHECK_FALSE(result.ctx.ec());
 }
 
 TEST_CASE("can insert", "[transactions]")
@@ -173,8 +172,8 @@ TEST_CASE("remove fails as expected with bad cas", "[transactions]")
         auto doc = ctx.get(coll, id.key());
         // change cas, so remove will fail and retry
         std::reinterpret_pointer_cast<couchbase::core::transactions::transaction_get_result>(doc)->cas(100);
-        auto removed_doc = ctx.remove(doc);
-        CHECK(removed_doc->ctx().ec());
+        auto err = ctx.remove(doc);
+        CHECK(err.ec());
     });
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
@@ -191,16 +190,16 @@ TEST_CASE("remove fails as expected with missing doc", "[transactions]")
     auto result = c.transactions()->run([id, coll](couchbase::transactions::attempt_context& ctx) {
         auto doc = ctx.get(coll, id.key());
         CHECK(doc->ctx().ec() == couchbase::errc::transaction_op::document_not_found_exception);
-        // if you go ahead and try another operation, it will fail as well...
-        auto removed_doc = ctx.remove(doc);
-        CHECK(removed_doc->ctx().ec());
-        CHECK(removed_doc->ctx().ec() == couchbase::errc::transaction_op::previous_operation_failed);
+        // the doc is 'blank', so trying to use it results in failure
+        auto err = ctx.remove(doc);
+        CHECK(err.ec());
+        CHECK(err.ec() == couchbase::errc::transaction_op::unknown);
     });
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
     CHECK(result.ctx.ec());
     CHECK(result.ctx.ec() == couchbase::errc::transaction::failed);
-    CHECK(result.ctx.cause() == couchbase::errc::transaction_op::document_not_found_exception);
+    CHECK(result.ctx.cause() == couchbase::errc::transaction_op::unknown);
 }
 
 TEST_CASE("uncaught exception in lambda will rollback without retry", "[transactions]")

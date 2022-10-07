@@ -304,8 +304,12 @@ class attempt_context_impl
     transaction_get_result get(const core::document_id& id) override;
     couchbase::transactions::transaction_get_result_ptr get(std::shared_ptr<couchbase::collection> coll, const std::string& id) override
     {
-        return wrap_call_for_public_api([this, coll, id]() mutable {
-            return get({ coll->bucket_name(), coll->scope_name(), coll->name(), id });
+        return wrap_call_for_public_api([this, coll, id]() mutable -> transaction_get_result {
+            auto ret = get_optional({ coll->bucket_name(), coll->scope_name(), coll->name(), id });
+            if (ret) {
+                return *ret;
+            }
+            return { transaction_op_error_context{ errc::transaction_op::document_not_found_exception } };
         });
     }
     void get(const core::document_id& id, Callback&& cb) override;
@@ -314,7 +318,7 @@ class attempt_context_impl
     void get_optional(const core::document_id& id, Callback&& cb) override;
 
     void remove(const transaction_get_result& document) override;
-    couchbase::transactions::transaction_get_result_ptr remove(couchbase::transactions::transaction_get_result_ptr doc) override
+    couchbase::transaction_op_error_context remove(couchbase::transactions::transaction_get_result_ptr doc) override
     {
         return wrap_void_call_for_public_api([this, doc]() { remove(dynamic_cast<transaction_get_result&>(*doc)); });
     }
@@ -461,16 +465,16 @@ class attempt_context_impl
         }
     }
 
-    couchbase::transactions::transaction_get_result_ptr wrap_void_call_for_public_api(std::function<void()>&& handler)
+    couchbase::transaction_op_error_context wrap_void_call_for_public_api(std::function<void()>&& handler)
     {
         try {
             handler();
-            return std::make_shared<transaction_get_result>();
+            return {};
         } catch (const transaction_operation_failed& e) {
-            return std::make_shared<transaction_get_result>(e.get_error_ctx());
+            return e.get_error_ctx();
         } catch (...) {
             // the handler should catch everything else, but just in case...
-            return std::make_shared<transaction_get_result>(transaction_op_error_context(errc::transaction_op::unknown));
+            return transaction_op_error_context(errc::transaction_op::unknown);
         }
     }
 };
