@@ -43,7 +43,7 @@ struct common_error_category : std::error_category {
             case errc::common::internal_server_failure:
                 return "internal_server_failure (5)";
             case errc::common::authentication_failure:
-                return "authentication_failure (6)";
+                return "authentication_failure (6). Bucket might be hibernated.";
             case errc::common::temporary_failure:
                 return "temporary_failure (7)";
             case errc::common::parsing_failure:
