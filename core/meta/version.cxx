@@ -26,6 +26,7 @@
 #include <fmt/core.h>
 #include <http_parser.h>
 #include <openssl/crypto.h>
+#include <openssl/x509.h>
 #include <snappy-stubs-public.h>
 #include <spdlog/version.h>
 
@@ -89,6 +90,8 @@ sdk_build_info()
 #elif defined(SSLEAY_VERSION)
     info["openssl_runtime"] = SSLeay_version(SSLEAY_VERSION);
 #endif
+    info["openssl_default_cert_dir"] = X509_get_default_cert_dir();
+    info["openssl_default_cert_file"] = X509_get_default_cert_file();
     info["__cplusplus"] = fmt::format("{}", __cplusplus);
 #if defined(_MSC_VER)
     info["_MSC_VER"] = fmt::format("{}", _MSC_VER);
