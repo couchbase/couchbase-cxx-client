@@ -361,9 +361,13 @@ class cluster : public std::enable_shared_from_this<cluster>
                     return handler(ec);
                 }
             } else {
-                // add the cappela Root CA if no other CA was specified.
-                std::error_code ec{};
                 LOG_DEBUG(R"([{}]: use default CA for TLS verify)", id_);
+                std::error_code ec{};
+                tls_.set_default_verify_paths(ec);
+                if (ec) {
+                    LOG_WARNING(R"([{}]: failed to load system CAs: {})", id_, ec.message());
+                }
+                // add the capella Root CA if no other CA was specified.
                 tls_.add_certificate_authority(
                   asio::const_buffer(couchbase::core::default_ca::capellaCaCert, strlen(couchbase::core::default_ca::capellaCaCert)), ec);
                 if (ec) {
