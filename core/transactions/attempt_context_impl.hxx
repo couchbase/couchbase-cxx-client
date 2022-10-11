@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <couchbase/transactions/async_attempt_context.hxx>
 #include <couchbase/transactions/attempt_context.hxx>
 
 #include "attempt_context_testing_hooks.hxx"
@@ -52,6 +53,7 @@ class attempt_context_impl
   : public attempt_context
   , public couchbase::transactions::attempt_context
   , public async_attempt_context
+  , public couchbase::transactions::async_attempt_context
 {
   private:
     transaction_context& overall_;
@@ -79,7 +81,17 @@ class attempt_context_impl
         });
     }
     transaction_get_result insert_raw(const core::document_id& id, const std::vector<std::byte>& content) override;
-
+    void insert_raw(std::shared_ptr<collection> coll,
+                    std::string id,
+                    std::vector<std::byte> content,
+                    couchbase::transactions::async_result_handler&& handler) override
+    {
+        insert_raw({ coll->bucket_name(), coll->scope_name(), coll->name(), std::move(id) },
+                   content,
+                   [this, handler = std::move(handler)](std::exception_ptr err, std::optional<transaction_get_result> res) mutable {
+                       wrap_callback_for_async_public_api(err, res, std::move(handler));
+                   });
+    }
     void insert_raw(const core::document_id& id, const std::vector<std::byte>& content, Callback&& cb) override;
 
     transaction_get_result replace_raw(const transaction_get_result& document, const std::vector<std::byte>& content) override;
@@ -88,6 +100,16 @@ class attempt_context_impl
     {
         return wrap_call_for_public_api(
           [this, doc, &content]() -> transaction_get_result { return replace_raw(dynamic_cast<transaction_get_result&>(*doc), content); });
+    }
+    void replace_raw(couchbase::transactions::transaction_get_result_ptr doc,
+                     std::vector<std::byte> content,
+                     couchbase::transactions::async_result_handler&& handler) override
+    {
+        replace_raw(dynamic_cast<transaction_get_result&>(*doc),
+                    content,
+                    [this, handler = std::move(handler)](std::exception_ptr err, std::optional<transaction_get_result> res) mutable {
+                        wrap_callback_for_async_public_api(err, res, std::move(handler));
+                    });
     }
     void replace_raw(const transaction_get_result& document, const std::vector<std::byte>& content, Callback&& cb) override;
 
@@ -312,6 +334,17 @@ class attempt_context_impl
             return { transaction_op_error_context{ errc::transaction_op::document_not_found_exception } };
         });
     }
+    void get(std::shared_ptr<couchbase::collection> coll, std::string id, couchbase::transactions::async_result_handler&& handler) override
+    {
+        get_optional({ coll->bucket_name(), coll->scope_name(), coll->name(), std::move(id) },
+                     [this, handler = std::move(handler)](std::exception_ptr err, std::optional<transaction_get_result> res) mutable {
+                         if (!res) {
+                             return handler(std::make_shared<transaction_get_result>(
+                               transaction_op_error_context{ errc::transaction_op::document_not_found_exception }));
+                         }
+                         return wrap_callback_for_async_public_api(err, res, std::move(handler));
+                     });
+    }
     void get(const core::document_id& id, Callback&& cb) override;
 
     std::optional<transaction_get_result> get_optional(const core::document_id& id) override;
@@ -323,6 +356,12 @@ class attempt_context_impl
         return wrap_void_call_for_public_api([this, doc]() { remove(dynamic_cast<transaction_get_result&>(*doc)); });
     }
     void remove(const transaction_get_result& document, VoidCallback&& cb) override;
+    void remove(couchbase::transactions::transaction_get_result_ptr doc, couchbase::transactions::async_err_handler&& handler) override
+    {
+        remove(dynamic_cast<transaction_get_result&>(*doc), [this, handler = std::move(handler)](std::exception_ptr e) mutable {
+            wrap_err_callback_for_async_api(e, std::move(handler));
+        });
+    };
 
     core::operations::query_response query(const std::string& statement, const transaction_query_options& options) override;
     void query(const std::string& statement, const transaction_query_options& options, QueryCallback&& cb) override;
@@ -476,6 +515,39 @@ class attempt_context_impl
             // the handler should catch everything else, but just in case...
             return transaction_op_error_context(errc::transaction_op::unknown);
         }
+    }
+
+    void wrap_callback_for_async_public_api(std::exception_ptr err,
+                                            std::optional<transaction_get_result> res,
+                                            std::function<void(couchbase::transactions::transaction_get_result_ptr)>&& cb)
+    {
+        if (res) {
+            return cb(std::make_shared<transaction_get_result>(*res));
+        }
+        if (err) {
+            try {
+                std::rethrow_exception(err);
+            } catch (const transaction_operation_failed& e) {
+                return cb(std::make_shared<transaction_get_result>(e.get_error_ctx()));
+            } catch (...) {
+                return cb(std::make_shared<transaction_get_result>(transaction_op_error_context(errc::transaction_op::unknown)));
+            }
+        }
+        return cb(std::make_shared<transaction_get_result>(transaction_op_error_context(errc::transaction_op::unknown)));
+    }
+
+    void wrap_err_callback_for_async_api(std::exception_ptr err, std::function<void(couchbase::transaction_op_error_context)>&& cb)
+    {
+        if (err) {
+            try {
+                std::rethrow_exception(err);
+            } catch (const transaction_operation_failed& e) {
+                return cb(e.get_error_ctx());
+            } catch (...) {
+                return cb({ errc::transaction_op::unknown });
+            }
+        }
+        return cb({});
     }
 };
 } // namespace couchbase::core::transactions

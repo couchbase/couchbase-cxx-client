@@ -1428,7 +1428,7 @@ attempt_context_impl::commit()
 {
     debug("waiting on ops to finish...");
     op_list_.wait_and_block_ops();
-    existing_error();
+    existing_error(false);
     debug("commit {}", id());
     if (op_list_.get_mode().is_query()) {
         auto barrier = std::make_shared<std::promise<void>>();

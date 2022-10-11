@@ -188,6 +188,9 @@ class transactions : public couchbase::transactions::transactions
 
     void run(const couchbase::transactions::per_transaction_config& config, async_logic&& code, txn_complete_callback&& cb);
 
+    void run(couchbase::transactions::async_txn_logic&& code,
+             couchbase::transactions::async_txn_complete_logic&& complete_cb,
+             const couchbase::transactions::per_transaction_config& cfg = {}) override;
     /**
      * @internal
      * called internally - will likely move
