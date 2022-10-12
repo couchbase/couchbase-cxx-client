@@ -21,6 +21,7 @@
 #include <couchbase/cas.hxx>
 #include <couchbase/codec/json_transcoder.hxx>
 #include <couchbase/collection.hxx>
+#include <couchbase/transaction_op_error_context.hxx>
 
 namespace couchbase::transactions
 {
@@ -29,10 +30,16 @@ class transaction_get_result
 {
   protected:
     std::vector<std::byte> value_{};
+    transaction_op_error_context ctx_{};
 
     transaction_get_result() = default;
     transaction_get_result(std::vector<std::byte> content)
       : value_(content)
+    {
+    }
+
+    transaction_get_result(const transaction_op_error_context& ctx)
+      : ctx_(ctx)
     {
     }
 
@@ -60,9 +67,15 @@ class transaction_get_result
         return value_;
     }
 
+    // TODO: move to core
     void content(const std::vector<std::byte>& content)
     {
         value_ = content;
+    }
+
+    [[nodiscard]] const transaction_op_error_context& ctx() const
+    {
+        return ctx_;
     }
 
     /**

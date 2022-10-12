@@ -124,7 +124,7 @@ class transaction_context
 
     [[nodiscard]] ::couchbase::transactions::transaction_result get_transaction_result() const
     {
-        return couchbase::transactions::transaction_result{ transaction_id(), current_attempt().state == attempt_state::COMPLETED };
+        return couchbase::transactions::transaction_result{ transaction_id(), current_attempt().state == attempt_state::COMPLETED, {} };
     }
     void new_attempt_context()
     {
@@ -162,7 +162,7 @@ class transaction_context
 
     void finalize(txn_complete_callback&& cb);
 
-    void existing_error();
+    void existing_error(bool previous_op_failed = true);
 
     void handle_error(std::exception_ptr err, txn_complete_callback&& cb);
 

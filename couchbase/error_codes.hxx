@@ -53,6 +53,13 @@ network_category() noexcept;
 
 const std::error_category&
 streaming_json_lexer_category() noexcept;
+
+const std::error_category&
+transaction_category() noexcept;
+
+const std::error_category&
+transaction_op_category() noexcept;
+
 } // namespace core::impl
 #endif
 
@@ -997,6 +1004,50 @@ enum class streaming_json_lexer {
     root_does_not_match_json_pointer = 1128,
 };
 
+/**
+ * Errors related to a failed transaction
+ *
+ * @since 1.0.0
+ * @uncommitted
+ */
+enum class transaction {
+    failed = 1200,
+    expired = 1201,
+    failed_post_commit = 1202,
+    ambiguous = 1203,
+};
+
+/**
+ * Errors related to a failed transaction operation
+ *
+ * @since 1.0.0
+ * @uncommitted
+ */
+enum class transaction_op {
+    unknown = 1300,
+    active_transaction_record_entry_not_found = 1301,
+    active_transaction_record_full = 1302,
+    active_transaction_record_not_found = 1303,
+    document_already_in_transaction = 1304,
+    document_exists_exception = 1305,
+    document_not_found_exception = 1306,
+    not_set = 1307,
+    feature_not_available_exception = 1308,
+    transaction_aborted_externally = 1309,
+    previous_operation_failed = 1310,
+    forward_compatibility_failure = 1311,
+    parsing_failure = 1312,
+    illegal_state_exception = 1313,
+    couchbase_exception = 1314,
+    service_not_available_exception = 1315,
+    request_canceled_exception = 1316,
+    concurrent_operations_detected_on_same_document = 1317,
+    commit_not_permitted = 1318,
+    rollback_not_permitted = 1319,
+    transaction_already_aborted = 1320,
+    transaction_already_committed = 1321,
+};
+
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 inline std::error_code
 make_error_code(common e) noexcept
@@ -1057,6 +1108,19 @@ make_error_code(streaming_json_lexer e)
 {
     return { static_cast<int>(e), core::impl::streaming_json_lexer_category() };
 }
+
+inline std::error_code
+make_error_code(transaction e)
+{
+    return { static_cast<int>(e), core::impl::transaction_category() };
+}
+
+inline std::error_code
+make_error_code(transaction_op e)
+{
+    return { static_cast<int>(e), core::impl::transaction_op_category() };
+}
+
 #endif
 } // namespace errc
 } // namespace couchbase
@@ -1101,4 +1165,13 @@ struct std::is_error_code_enum<couchbase::errc::network> : std::true_type {
 template<>
 struct std::is_error_code_enum<couchbase::errc::streaming_json_lexer> : std::true_type {
 };
+
+template<>
+struct std::is_error_code_enum<couchbase::errc::transaction> : std::true_type {
+};
+
+template<>
+struct std::is_error_code_enum<couchbase::errc::transaction_op> : std::true_type {
+};
+
 #endif

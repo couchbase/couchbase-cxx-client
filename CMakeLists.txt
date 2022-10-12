@@ -271,6 +271,8 @@ set(couchbase_cxx_client_FILES
     core/impl/subdoc/replace.cxx
     core/impl/subdoc/upsert.cxx
     core/impl/touch.cxx
+    core/impl/transaction_error_category.cxx
+    core/impl/transaction_op_error_category.cxx
     core/impl/upsert.cxx
     core/impl/view_error_category.cxx
     core/transactions/atr_cleanup_entry.cxx

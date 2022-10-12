@@ -127,18 +127,39 @@ transactions::run(const couchbase::transactions::per_transaction_config& config,
 couchbase::transactions::transaction_result
 transactions::run(couchbase::transactions::txn_logic&& code, const couchbase::transactions::per_transaction_config& config)
 {
-    return wrap_run(*this, config, max_attempts_, std::move(code));
+    try {
+        return wrap_run(*this, config, max_attempts_, std::move(code));
+    } catch (const transaction_exception& e) {
+        // get transaction_error_context from e and return it in the transaction_result
+        return e.get_transaction_result();
+    }
 }
 
 void
 transactions::run(const couchbase::transactions::per_transaction_config& config, async_logic&& code, txn_complete_callback&& cb)
 {
+    // TODO: use underlying asio instead!!
     std::thread([this, config, code = std::move(code), cb = std::move(cb)]() {
         try {
             auto result = wrap_run(*this, config, max_attempts_, std::move(code));
             return cb({}, result);
         } catch (const transaction_exception& e) {
             return cb(e, std::nullopt);
+        }
+    }).detach();
+}
+void
+transactions::run(couchbase::transactions::async_txn_logic&& code,
+                  couchbase::transactions::async_txn_complete_logic&& cb,
+                  const couchbase::transactions::per_transaction_config& config)
+{
+    // TODO: use underlying asio instead!!
+    std::thread([this, config, code = std::move(code), cb = std::move(cb)]() {
+        try {
+            auto result = wrap_run(*this, config, max_attempts_, std::move(code));
+            return cb(result);
+        } catch (const transaction_exception& e) {
+            return cb(e.get_transaction_result());
         }
     }).detach();
 }

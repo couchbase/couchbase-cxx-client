@@ -84,10 +84,65 @@ transaction_exception::transaction_exception(const std::runtime_error& cause, co
   , result_(context.get_transaction_result())
   , cause_(UNKNOWN)
   , type_(type)
+  , txn_id_(context.transaction_id())
 {
     auto txn_op = dynamic_cast<const transaction_operation_failed*>(&cause);
     if (nullptr != txn_op) {
         cause_ = txn_op->cause();
     }
+    result_.ctx = error_context();
 }
+
+errc::transaction_op
+transaction_op_errc_from_external_exception(external_exception e)
+{
+    switch (e) {
+        case external_exception::UNKNOWN:
+            return errc::transaction_op::unknown;
+        case external_exception::ACTIVE_TRANSACTION_RECORD_ENTRY_NOT_FOUND:
+            return errc::transaction_op::active_transaction_record_entry_not_found;
+        case external_exception::ACTIVE_TRANSACTION_RECORD_FULL:
+            return errc::transaction_op::active_transaction_record_full;
+        case external_exception::COMMIT_NOT_PERMITTED:
+            return errc::transaction_op::commit_not_permitted;
+        case external_exception::ACTIVE_TRANSACTION_RECORD_NOT_FOUND:
+            return errc::transaction_op::active_transaction_record_not_found;
+        case external_exception::CONCURRENT_OPERATIONS_DETECTED_ON_SAME_DOCUMENT:
+            return errc::transaction_op::concurrent_operations_detected_on_same_document;
+        case external_exception::COUCHBASE_EXCEPTION:
+            return errc::transaction_op::couchbase_exception;
+        case external_exception::DOCUMENT_ALREADY_IN_TRANSACTION:
+            return errc::transaction_op::document_already_in_transaction;
+        case external_exception::DOCUMENT_EXISTS_EXCEPTION:
+            return errc::transaction_op::document_exists_exception;
+        case external_exception::DOCUMENT_NOT_FOUND_EXCEPTION:
+            return errc::transaction_op::document_not_found_exception;
+        case external_exception::FEATURE_NOT_AVAILABLE_EXCEPTION:
+            return errc::transaction_op::feature_not_available_exception;
+        case external_exception::FORWARD_COMPATIBILITY_FAILURE:
+            return errc::transaction_op::forward_compatibility_failure;
+        case external_exception::ILLEGAL_STATE_EXCEPTION:
+            return errc::transaction_op::illegal_state_exception;
+        case external_exception::PARSING_FAILURE:
+            return errc::transaction_op::parsing_failure;
+        case external_exception::NOT_SET:
+            return errc::transaction_op::not_set;
+        case external_exception::PREVIOUS_OPERATION_FAILED:
+            return errc::transaction_op::previous_operation_failed;
+        case external_exception::REQUEST_CANCELED_EXCEPTION:
+            return errc::transaction_op::request_canceled_exception;
+        case external_exception::ROLLBACK_NOT_PERMITTED:
+            return errc::transaction_op::rollback_not_permitted;
+        case external_exception::SERVICE_NOT_AVAILABLE_EXCEPTION:
+            return errc::transaction_op::service_not_available_exception;
+        case external_exception::TRANSACTION_ABORTED_EXTERNALLY:
+            return errc::transaction_op::transaction_aborted_externally;
+        case external_exception::TRANSACTION_ALREADY_ABORTED:
+            return errc::transaction_op::transaction_already_aborted;
+        case external_exception::TRANSACTION_ALREADY_COMMITTED:
+            return errc::transaction_op::transaction_already_committed;
+    }
+    return errc::transaction_op::unknown;
+}
+
 } // namespace couchbase::core::transactions

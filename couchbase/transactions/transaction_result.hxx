@@ -15,6 +15,7 @@
  */
 #pragma once
 
+#include <couchbase/transaction_error_context.hxx>
 #include <string>
 
 namespace couchbase::transactions
@@ -29,5 +30,6 @@ namespace couchbase::transactions
 struct transaction_result {
     std::string transaction_id;
     bool unstaging_complete;
+    transaction_error_context ctx;
 };
 } // namespace couchbase::transactions

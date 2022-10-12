@@ -16,8 +16,8 @@
 
 #pragma once
 
-#include "couchbase/transactions/transaction_result.hxx"
-
+#include <couchbase/error_codes.hxx>
+#include <couchbase/transactions/transaction_result.hxx>
 #include <optional>
 #include <stdexcept>
 
@@ -54,6 +54,9 @@ enum external_exception {
     TRANSACTION_ALREADY_COMMITTED,
 };
 
+couchbase::errc::transaction_op
+transaction_op_errc_from_external_exception(external_exception e);
+
 /**
  * @brief Base class for all exceptions expected to be raised from a transaction.
  *
@@ -62,9 +65,10 @@ enum external_exception {
 class transaction_exception : public std::runtime_error
 {
   private:
-    const couchbase::transactions::transaction_result result_;
+    couchbase::transactions::transaction_result result_;
     external_exception cause_;
     failure_type type_;
+    std::string txn_id_;
 
   public:
     /**
@@ -80,9 +84,9 @@ class transaction_exception : public std::runtime_error
      *
      * @returns Internal state of transaction.
      */
-    const ::couchbase::transactions::transaction_result& get_transaction_result() const
+    ::couchbase::transactions::transaction_result get_transaction_result() const
     {
-        return result_;
+        return { result_.transaction_id, result_.unstaging_complete, error_context() };
     }
 
     /**
@@ -101,6 +105,23 @@ class transaction_exception : public std::runtime_error
     failure_type type() const
     {
         return type_;
+    }
+
+    [[nodiscard]] transaction_error_context error_context() const
+    {
+        std::error_code ec{};
+        switch (type_) {
+            case failure_type::FAIL:
+                ec = errc::transaction::failed;
+                break;
+            case failure_type::EXPIRY:
+                ec = errc::transaction::expired;
+                break;
+            case failure_type::COMMIT_AMBIGUOUS:
+                ec = errc::transaction::ambiguous;
+                break;
+        }
+        return { ec, transaction_op_errc_from_external_exception(cause_) };
     }
 };
 

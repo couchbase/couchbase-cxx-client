@@ -32,6 +32,7 @@ transaction_test(transaction_context)
 transaction_test(transaction_simple)
 transaction_test(transaction_simple_async)
 transaction_test(transaction_public_blocking_api)
+transaction_test(transaction_public_async_api)
 
 unit_test(transaction_logging)
 unit_test(transaction_utils)
