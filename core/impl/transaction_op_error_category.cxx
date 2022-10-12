@@ -24,7 +24,7 @@ namespace couchbase::core::impl
 struct transaction_op_error_category : std::error_category {
     [[nodiscard]] const char* name() const noexcept override
     {
-        return "couchbase.transaction";
+        return "couchbase.transaction_op";
     }
 
     [[nodiscard]] std::string message(int ev) const noexcept override
@@ -75,7 +75,7 @@ struct transaction_op_error_category : std::error_category {
             case errc::transaction_op::transaction_already_committed:
                 return "transaction already committed (1321)";
         }
-        return "FIXME: unknown error code (recompile with newer library): couchbase.transaction." + std::to_string(ev);
+        return "FIXME: unknown error code (recompile with newer library): couchbase.transaction_op." + std::to_string(ev);
     }
 };
 
