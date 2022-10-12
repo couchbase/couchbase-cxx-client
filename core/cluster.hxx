@@ -367,7 +367,7 @@ class cluster : public std::enable_shared_from_this<cluster>
                 if (ec) {
                     LOG_WARNING(R"([{}]: failed to load system CAs: {})", id_, ec.message());
                 }
-                // add the capella Root CA if no other CA was specified.
+                // add the Capella Root CA in addition to system CAs
                 tls_.add_certificate_authority(
                   asio::const_buffer(couchbase::core::default_ca::capellaCaCert, strlen(couchbase::core::default_ca::capellaCaCert)), ec);
                 if (ec) {
