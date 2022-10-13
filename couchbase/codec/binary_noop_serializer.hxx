@@ -15,23 +15,33 @@
  *   limitations under the License.
  */
 
-#include "command_bundle.hxx"
-#include "opcode.hxx"
-#include "path_flags.hxx"
+#pragma once
 
-#include <couchbase/codec/tao_json_serializer.hxx>
-#include <couchbase/subdoc/counter.hxx>
+#include <couchbase/codec/encoded_value.hxx>
+#include <couchbase/codec/serializer_traits.hxx>
 
-namespace couchbase
+namespace couchbase::codec
 {
-void
-subdoc::counter::encode(core::impl::subdoc::command_bundle& bundle) const
+class binary_noop_serializer
 {
-    bundle.emplace_back({
-      core::impl::subdoc::opcode::counter,
-      path_,
-      codec::tao_json_serializer::serialize(delta_),
-      core::impl::subdoc::build_mutate_in_path_flags(xattr_, create_path_, false),
-    });
-}
-} // namespace couchbase
+  public:
+    using document_type = binary;
+
+    static auto serialize(binary document) -> binary
+    {
+        return document;
+    }
+
+    template<typename Document>
+    static auto deserialize(binary data) -> binary
+    {
+        return data;
+    }
+};
+
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+template<>
+struct is_serializer<binary_noop_serializer> : public std::true_type {
+};
+#endif
+} // namespace couchbase::codec

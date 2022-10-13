@@ -21,7 +21,10 @@
 
 #include "core/operations/management/collections.hxx"
 #include "core/operations/management/query.hxx"
+#include "couchbase/codec/binary_noop_serializer.hxx"
+#include "couchbase/codec/raw_binary_transcoder.hxx"
 
+#include <couchbase/cluster.hxx>
 #include <couchbase/lookup_in_specs.hxx>
 
 TEST_CASE("integration: trivial non-data query", "[integration]")
@@ -462,5 +465,42 @@ TEST_CASE("integration: prepared query", "[integration]")
         REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 1);
         REQUIRE(value == couchbase::core::utils::json::parse(resp.rows[0]));
+    }
+}
+
+TEST_CASE("integration: query with public API", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_gcccp()) {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    }
+
+    auto cluster = couchbase::cluster(integration.cluster);
+
+    {
+        auto [ctx, resp] = cluster.query("SELECT 42 AS the_answer", {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        auto rows = resp.rows_as_json();
+        REQUIRE(rows.size() == 1);
+        REQUIRE(rows[0]["the_answer"] == 42);
+    }
+
+    {
+        auto [ctx, resp] = cluster.query("SELECT 42 AS the_answer", {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        auto rows = resp.rows_as<couchbase::codec::binary_noop_serializer>();
+        REQUIRE(rows.size() == 1);
+        REQUIRE(rows[0] == couchbase::core::utils::to_binary("{\"the_answer\":42}"));
+    }
+
+    {
+        couchbase::query_options options{};
+        options.named_parameters(std::pair{ "a", 2 }, std::pair{ "b", 40 });
+        auto [ctx, resp] = cluster.query("SELECT $a + $b AS the_answer", options).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        auto rows = resp.rows_as_json();
+        REQUIRE(rows.size() == 1);
+        REQUIRE(rows[0]["the_answer"] == 42);
     }
 }

@@ -247,6 +247,7 @@ set(couchbase_cxx_client_FILES
     core/impl/observe_poll.cxx
     core/impl/observe_seqno.cxx
     core/impl/prepend.cxx
+    core/impl/query.cxx
     core/impl/query_error_category.cxx
     core/impl/remove.cxx
     core/impl/replace.cxx

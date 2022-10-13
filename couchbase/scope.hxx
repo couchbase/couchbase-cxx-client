@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <couchbase/query_options.hxx>
+
 #include <memory>
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
@@ -82,6 +84,49 @@ class scope
     [[nodiscard]] auto collection(std::string_view collection_name) const -> collection
     {
         return { core_, bucket_name_, name_, collection_name };
+    }
+
+    /**
+     * Performs a query against the query (N1QL) services.
+     *
+     * @tparam Handler callable type that implements @ref query_handler signature
+     *
+     * @param statement the N1QL query statement.
+     * @param options options to customize the query request.
+     * @param handler the handler that implements @ref query_handler
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    template<typename Handler>
+    void query(std::string statement, const query_options& options, Handler&& handler) const
+    {
+        return core::impl::initiate_query_operation(
+          core_, std::move(statement), bucket_name_, name_, options.build(), std::forward<Handler>(handler));
+    }
+
+    /**
+     * Performs a query against the query (N1QL) services.
+     *
+     * @param statement the N1QL query statement.
+     * @param options options to customize the query request.
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto query(std::string statement, const query_options& options) const
+      -> std::future<std::pair<query_error_context, query_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<query_error_context, query_result>>>();
+        auto future = barrier->get_future();
+        query(std::move(statement), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
     }
 
   private:

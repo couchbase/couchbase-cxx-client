@@ -51,13 +51,13 @@ class transaction_query_options
         return *this;
     }
 
-    transaction_query_options& scan_consistency(core::query_scan_consistency scan_consistency)
+    transaction_query_options& scan_consistency(query_scan_consistency scan_consistency)
     {
         query_req_.scan_consistency = scan_consistency;
         return *this;
     }
 
-    transaction_query_options& profile(core::query_profile_mode mode)
+    transaction_query_options& profile(query_profile mode)
     {
         query_req_.profile = mode;
         return *this;
@@ -105,7 +105,7 @@ class transaction_query_options
         return *this;
     }
 
-    transaction_query_options& named_parameters(std::map<std::string, core::json_string> params)
+    transaction_query_options& named_parameters(std::map<std::string, core::json_string, std::less<>> params)
     {
         query_req_.named_parameters = params;
         return *this;

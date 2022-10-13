@@ -74,13 +74,13 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
         body["args"] = std::move(parameters);
     }
     switch (profile) {
-        case couchbase::core::query_profile_mode::phases:
+        case couchbase::query_profile::phases:
             body["profile"] = "phases";
             break;
-        case couchbase::core::query_profile_mode::timings:
+        case couchbase::query_profile::timings:
             body["profile"] = "timings";
             break;
-        case couchbase::core::query_profile_mode::off:
+        case couchbase::query_profile::off:
             break;
     }
     if (max_parallelism) {
@@ -110,10 +110,10 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
     bool check_scan_wait = false;
     if (scan_consistency) {
         switch (scan_consistency.value()) {
-            case couchbase::core::query_scan_consistency::not_bounded:
+            case query_scan_consistency::not_bounded:
                 body["scan_consistency"] = "not_bounded";
                 break;
-            case couchbase::core::query_scan_consistency::request_plus:
+            case query_scan_consistency::request_plus:
                 check_scan_wait = true;
                 body["scan_consistency"] = "request_plus";
                 break;

@@ -20,7 +20,7 @@
 #include <couchbase/subdoc/fwd/command.hxx>
 #include <couchbase/subdoc/fwd/command_bundle.hxx>
 
-#include <couchbase/codec/json_transcoder.hxx>
+#include <couchbase/codec/default_json_transcoder.hxx>
 #include <couchbase/subdoc/array_add_unique.hxx>
 #include <couchbase/subdoc/array_append.hxx>
 #include <couchbase/subdoc/array_insert.hxx>
@@ -43,14 +43,14 @@ template<typename Value>
 std::vector<std::vector<std::byte>>
 encode_array(const Value& value)
 {
-    return { std::move(codec::json_transcoder::encode(value).data) };
+    return { std::move(codec::default_json_transcoder::encode(value).data) };
 }
 
 template<typename Value>
 std::vector<std::vector<std::byte>>
 encode_array(std::vector<std::vector<std::byte>>&& output, const Value& value)
 {
-    output.emplace_back(std::move(codec::json_transcoder::encode(value).data));
+    output.emplace_back(std::move(codec::default_json_transcoder::encode(value).data));
     return std::move(output);
 }
 
@@ -58,7 +58,7 @@ template<typename Value, typename... Rest>
 std::vector<std::vector<std::byte>>
 encode_array(std::vector<std::vector<std::byte>>&& output, const Value& value, Rest... args)
 {
-    output.emplace_back(std::move(codec::json_transcoder::encode(value).data));
+    output.emplace_back(std::move(codec::default_json_transcoder::encode(value).data));
     return encode_array(std::move(output), args...);
 }
 
@@ -99,7 +99,7 @@ class mutate_in_specs
     template<typename Value>
     static auto replace(std::string path, const Value& value) -> subdoc::replace
     {
-        return { std::move(path), std::move(codec::json_transcoder::encode(value).data) };
+        return { std::move(path), std::move(codec::default_json_transcoder::encode(value).data) };
     }
 
     /**
@@ -155,7 +155,7 @@ class mutate_in_specs
     template<typename Value>
     static auto insert(std::string path, const Value& value) -> subdoc::insert
     {
-        return { std::move(path), std::move(codec::json_transcoder::encode(value).data) };
+        return { std::move(path), std::move(codec::default_json_transcoder::encode(value).data) };
     }
 
     /**
@@ -227,7 +227,7 @@ class mutate_in_specs
     template<typename Value>
     static auto upsert(std::string path, const Value& value) -> subdoc::upsert
     {
-        return { std::move(path), std::move(codec::json_transcoder::encode(value).data) };
+        return { std::move(path), std::move(codec::default_json_transcoder::encode(value).data) };
     }
 
     /**
@@ -435,7 +435,7 @@ class mutate_in_specs
     template<typename Value>
     static auto array_add_unique(std::string path, const Value& value) -> subdoc::array_add_unique
     {
-        return { std::move(path), std::move(codec::json_transcoder::encode(value).data) };
+        return { std::move(path), std::move(codec::default_json_transcoder::encode(value).data) };
     }
 
     /**

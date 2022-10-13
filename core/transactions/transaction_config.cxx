@@ -30,7 +30,7 @@ transaction_config::transaction_config()
   , cleanup_client_attempts_(true)
   , attempt_context_hooks_(new core::transactions::attempt_context_testing_hooks())
   , cleanup_hooks_(new core::transactions::cleanup_testing_hooks())
-  , scan_consistency_(core::query_scan_consistency::request_plus)
+  , scan_consistency_(query_scan_consistency::request_plus)
 {
 }
 

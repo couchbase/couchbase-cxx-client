@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/codec/json_transcoder.hxx>
+#include <couchbase/codec/default_json_transcoder.hxx>
 #include <couchbase/result.hxx>
 
 #include <vector>
@@ -101,7 +101,7 @@ class get_replica_result : public result
      * @committed
      */
     template<typename Document,
-             typename Transcoder = codec::json_transcoder,
+             typename Transcoder = codec::default_json_transcoder,
              std::enable_if_t<!codec::is_transcoder_v<Document>, bool> = true,
              std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
     [[nodiscard]] auto content_as() const -> Document
