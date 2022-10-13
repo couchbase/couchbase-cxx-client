@@ -107,7 +107,7 @@ TEST_CASE("async remove with bad cas fails as expected", "[transactions]")
     c.transactions()->run(
       [coll, id](couchbase::transactions::async_attempt_context& ctx) {
           ctx.get(coll, id.key(), [&ctx](couchbase::transactions::transaction_get_result_ptr res) {
-              std::reinterpret_pointer_cast<couchbase::core::transactions::transaction_get_result>(res)->cas(100);
+              reinterpret_cast<couchbase::core::transactions::transaction_get_result&>(*res).cas(100);
               ctx.remove(res, [](couchbase::transaction_op_error_context err) { CHECK(err.ec()); });
           });
       },
@@ -207,7 +207,7 @@ TEST_CASE("async replace fails as expected with bad cas", "[transactions]")
     c.transactions()->run(
       [id, coll, new_content](couchbase::transactions::async_attempt_context& ctx) {
           ctx.get(coll, id.key(), [new_content, &ctx](couchbase::transactions::transaction_get_result_ptr res) {
-              std::reinterpret_pointer_cast<couchbase::core::transactions::transaction_get_result>(res)->cas(100);
+              reinterpret_cast<couchbase::core::transactions::transaction_get_result&>(*res).cas(100);
               ctx.replace(
                 res, new_content, [](couchbase::transactions::transaction_get_result_ptr replace_res) { CHECK(replace_res->ctx().ec()); });
           });

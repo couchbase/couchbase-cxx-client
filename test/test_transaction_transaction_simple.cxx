@@ -16,15 +16,9 @@
 
 #include "simple_object.hxx"
 #include "test_helper.hxx"
-
 #include "utils/transactions_env.h"
 
-#include "core/transactions.hxx"
-#include <couchbase/error_codes.hxx>
-
 #include <spdlog/spdlog.h>
-
-#include <couchbase/cluster.hxx>
 #include <stdexcept>
 
 using namespace couchbase::core::transactions;
