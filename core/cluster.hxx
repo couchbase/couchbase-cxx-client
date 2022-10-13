@@ -334,10 +334,9 @@ class cluster : public std::enable_shared_from_this<cluster>
                 && origin_.options().trust_certificate.empty() /* No CA certificate (or other SDK-specific trust source) is specified */
                 && origin_.options().tls_verify != tls_verify_mode::none /* The user did not disable all TLS verification */
                 && has_non_capella_host /* The connection string has a hostname that does NOT end in ".cloud.couchbase.com" */) {
-                LOG_ERROR("[{}] When TLS is enabled, the cluster options must specify certificate(s) to trust. (Unless connecting to "
-                          "cloud.couchbase.com.)",
-                          id_);
-                return handler(errc::common::invalid_argument);
+                LOG_WARNING("[{}] When TLS is enabled, the cluster options must specify certificate(s) to trust or ensure that they are "
+                            "available in system CA store. (Unless connecting to cloud.couchbase.com.)",
+                            id_);
             }
         }
 
@@ -352,27 +351,32 @@ class cluster : public std::enable_shared_from_this<cluster>
                     tls_.set_verify_mode(asio::ssl::verify_peer);
                     break;
             }
-            if (!origin_.options().trust_certificate.empty()) {
-                std::error_code ec{};
-                LOG_DEBUG(R"([{}]: use TLS verify file: "{}")", id_, origin_.options().trust_certificate);
-                tls_.load_verify_file(origin_.options().trust_certificate, ec);
-                if (ec) {
-                    LOG_ERROR("[{}]: unable to load verify file \"{}\": {}", id_, origin_.options().trust_certificate, ec.message());
-                    return handler(ec);
-                }
-            } else {
+            if (origin_.options().trust_certificate.empty()) { // trust certificate is not explicitly specified
                 LOG_DEBUG(R"([{}]: use default CA for TLS verify)", id_);
                 std::error_code ec{};
+
+                // load system certificates
                 tls_.set_default_verify_paths(ec);
                 if (ec) {
                     LOG_WARNING(R"([{}]: failed to load system CAs: {})", id_, ec.message());
                 }
+
                 // add the Capella Root CA in addition to system CAs
                 tls_.add_certificate_authority(
                   asio::const_buffer(couchbase::core::default_ca::capellaCaCert, strlen(couchbase::core::default_ca::capellaCaCert)), ec);
                 if (ec) {
                     LOG_WARNING("[{}]: unable to load default CAs: {}", id_, ec.message());
                     // we don't consider this fatal and try to continue without it
+                }
+            } else { // trust certificate is explicitly specified
+                std::error_code ec{};
+                // load only the explicit certificate
+                // system and default capella certificates are not loaded
+                LOG_DEBUG(R"([{}]: use TLS verify file: "{}")", id_, origin_.options().trust_certificate);
+                tls_.load_verify_file(origin_.options().trust_certificate, ec);
+                if (ec) {
+                    LOG_ERROR("[{}]: unable to load verify file \"{}\": {}", id_, origin_.options().trust_certificate, ec.message());
+                    return handler(ec);
                 }
             }
 #ifdef COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE
