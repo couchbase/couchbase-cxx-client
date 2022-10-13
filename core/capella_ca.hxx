@@ -38,6 +38,6 @@ static const char* capellaCaCert = "-----BEGIN CERTIFICATE-----\n"
                                    "Js7HEHKVms5tZTgKIw1fbmgR2XHleah1AcANB+MAPBCcTgqurqr5G7W2aPSBLLGA\n"
                                    "fRIiVzm7VFLc7kWbp7ENH39HVG6TZzKnfl9zJYeiklo5vQQhGSMhzBsO70z4RRzi\n"
                                    "DPFAN/4qZAgD5q3AFNIq2WWADFQGSwVJhg==\n"
-                                   "-----END CERTIFICATE-----\n";
+                                   "-----END CERTIFICATE-----";
 
 } // namespace couchbase::core::default_ca
