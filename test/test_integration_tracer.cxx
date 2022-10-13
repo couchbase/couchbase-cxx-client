@@ -21,15 +21,16 @@
 
 #include <couchbase/lookup_in_specs.hxx>
 #include <couchbase/mutate_in_specs.hxx>
+#include <couchbase/tracing/request_tracer.hxx>
 
-class test_span : public couchbase::core::tracing::request_span
+class test_span : public couchbase::tracing::request_span
 {
   public:
     test_span(const std::string& name)
       : test_span(name, nullptr)
     {
     }
-    test_span(const std::string& name, std::shared_ptr<couchbase::core::tracing::request_span> parent)
+    test_span(const std::string& name, std::shared_ptr<couchbase::tracing::request_span> parent)
       : request_span(name, parent)
     {
         start_ = std::chrono::steady_clock::now();
@@ -76,11 +77,11 @@ class test_span : public couchbase::core::tracing::request_span
     std::map<std::string, std::uint64_t> int_tags_;
 };
 
-class test_tracer : public couchbase::core::tracing::request_tracer
+class test_tracer : public couchbase::tracing::request_tracer
 {
   public:
-    std::shared_ptr<couchbase::core::tracing::request_span> start_span(std::string name,
-                                                                       std::shared_ptr<couchbase::core::tracing::request_span> parent = {})
+    std::shared_ptr<couchbase::tracing::request_span> start_span(std::string name,
+                                                                 std::shared_ptr<couchbase::tracing::request_span> parent = {})
     {
         std::lock_guard<std::mutex> lock(mutex_);
         spans_.push_back(std::make_shared<test_span>(name, parent));

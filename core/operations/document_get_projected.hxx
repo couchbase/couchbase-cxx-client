@@ -24,7 +24,7 @@
 #include "core/protocol/client_request.hxx"
 #include "core/protocol/cmd_lookup_in.hxx"
 #include "core/timeout_defaults.hxx"
-#include "core/tracing/request_tracer.hxx"
+#include "couchbase/tracing/request_tracer.hxx"
 
 namespace couchbase::core::operations
 {
@@ -51,7 +51,7 @@ struct get_projected_request {
     bool preserve_array_indexes{ false };
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ true };
-    std::shared_ptr<tracing::request_span> parent_span{ nullptr };
+    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context);
 

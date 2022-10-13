@@ -19,7 +19,9 @@
 
 #include "core/platform/uuid.h"
 
-class test_value_recorder : public couchbase::core::metrics::value_recorder
+#include <couchbase/metrics/meter.hxx>
+
+class test_value_recorder : public couchbase::metrics::value_recorder
 {
   public:
     test_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags)
@@ -54,15 +56,15 @@ class test_value_recorder : public couchbase::core::metrics::value_recorder
     std::list<std::uint64_t> values_;
 };
 
-class test_meter : public couchbase::core::metrics::meter
+class test_meter : public couchbase::metrics::meter
 {
   public:
     test_meter()
-      : couchbase::core::metrics::meter()
+      : couchbase::metrics::meter()
     {
     }
-    std::shared_ptr<couchbase::core::metrics::value_recorder> get_value_recorder(const std::string& name,
-                                                                                 const std::map<std::string, std::string>& tags) override
+    std::shared_ptr<couchbase::metrics::value_recorder> get_value_recorder(const std::string& name,
+                                                                           const std::map<std::string, std::string>& tags) override
     {
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = value_recorders_.equal_range(name);

@@ -113,7 +113,7 @@ struct query_request {
     std::optional<http_context> ctx_{};
     bool extract_encoded_plan_{ false };
     std::string body_str{};
-    std::shared_ptr<tracing::request_span> parent_span{ nullptr };
+    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 };
 
 } // namespace couchbase::core::operations

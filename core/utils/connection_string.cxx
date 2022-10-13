@@ -389,9 +389,10 @@ extract_options(connection_string& connstr)
 }
 
 connection_string
-parse_connection_string(const std::string& input)
+parse_connection_string(const std::string& input, cluster_options options)
 {
     connection_string res{};
+    res.options = std::move(options);
 
     if (input.empty()) {
         res.error = "failed to parse connection string: empty input";

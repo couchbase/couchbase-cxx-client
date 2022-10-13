@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/bucket.hxx>
+#include <couchbase/cluster_options.hxx>
 #include <couchbase/query_index_manager.hxx>
 #include <couchbase/query_options.hxx>
 #include <couchbase/transactions.hxx>
@@ -47,6 +48,57 @@ namespace couchbase
 class cluster
 {
   public:
+    /**
+     * Connect to a Couchbase cluster.
+     *
+     * @tparam Handler callable type that implements @ref cluster_connect_handler signature
+     *
+     * @param io IO context
+     * @param connection_string connection string used to locate the Couchbase cluster object.
+     * @param options options to customize connection (note, that connection_string takes precedence over this options).
+     * @param handler the handler that implements @ref cluster_connect_handler
+     *
+     * @since 1.0.0
+     * @comitted
+     */
+    template<typename Handler>
+    static void connect(asio::io_context& io, const std::string& connection_string, const cluster_options& options, Handler&& handler)
+    {
+        return core::impl::initiate_cluster_connect(io, connection_string, options, std::forward<Handler>(handler));
+    }
+
+    /**
+     * Connect to a Couchbase cluster.
+     *
+     * @param io IO context
+     * @param connection_string connection string used to locate the Couchbase cluster object.
+     * @param options options to customize connection (note, that connection_string takes precedence over this options).
+     *
+     * @return future object that carries cluster object and operation status
+     *
+     * @since 1.0.0
+     * @comitted
+     */
+    [[nodiscard]] static auto connect(asio::io_context& io, const std::string& connection_string, const cluster_options& options)
+      -> std::future<std::pair<cluster, std::error_code>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<cluster, std::error_code>>>();
+        auto future = barrier->get_future();
+        connect(io, connection_string, options, [barrier](auto c, auto ec) { barrier->set_value({ std::move(c), ec }); });
+        return future;
+    }
+
+    cluster() = default;
+    cluster(const cluster& other) = default;
+    cluster(cluster&& other) = default;
+    auto operator=(const cluster& other) -> cluster& = default;
+    auto operator=(cluster&& other) -> cluster& = default;
+
+    void close()
+    {
+        return core::impl::initiate_cluster_close(core_);
+    }
+
     /**
      * Wraps low-level implementation of the SDK to provide common API.
      *
@@ -132,7 +184,7 @@ class cluster
     [[nodiscard]] auto transactions() -> std::shared_ptr<couchbase::transactions::transactions>;
 
   private:
-    std::shared_ptr<couchbase::core::cluster> core_;
-    std::shared_ptr<couchbase::core::transactions::transactions> transactions_;
+    std::shared_ptr<couchbase::core::cluster> core_{};
+    std::shared_ptr<couchbase::core::transactions::transactions> transactions_{};
 };
 } // namespace couchbase

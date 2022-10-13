@@ -101,7 +101,7 @@ struct analytics_request {
     [[nodiscard]] analytics_response make_response(error_context::analytics&& ctx, const encoded_response_type& encoded) const;
 
     std::string body_str{};
-    std::shared_ptr<tracing::request_span> parent_span{ nullptr };
+    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 };
 
 } // namespace couchbase::core::operations

@@ -17,6 +17,7 @@
 
 #include "threshold_logging_tracer.hxx"
 
+#include "constants.hxx"
 #include "core/logger/logger.hxx"
 #include "core/meta/version.hxx"
 #include "core/platform/uuid.h"
@@ -42,7 +43,7 @@ struct reported_span {
 };
 
 class threshold_logging_span
-  : public request_span
+  : public couchbase::tracing::request_span
   , public std::enable_shared_from_this<threshold_logging_span>
 {
   private:
@@ -384,8 +385,8 @@ class threshold_logging_tracer_impl
     std::map<service_type, fixed_span_queue> threshold_queues_{};
 };
 
-std::shared_ptr<request_span>
-threshold_logging_tracer::start_span(std::string name, std::shared_ptr<request_span> parent)
+std::shared_ptr<couchbase::tracing::request_span>
+threshold_logging_tracer::start_span(std::string name, std::shared_ptr<couchbase::tracing::request_span> parent)
 {
     return std::make_shared<threshold_logging_span>(std::move(name), shared_from_this(), parent);
 }

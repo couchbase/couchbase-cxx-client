@@ -28,7 +28,7 @@
 
 namespace couchbase::core::metrics
 {
-class logging_value_recorder : public value_recorder
+class logging_value_recorder : public couchbase::metrics::value_recorder
 {
   private:
     std::string name_;
@@ -158,7 +158,7 @@ logging_meter::log_report() const
     }
 }
 
-std::shared_ptr<value_recorder>
+std::shared_ptr<couchbase::metrics::value_recorder>
 logging_meter::get_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags)
 {
     static std::shared_ptr<noop_value_recorder> noop_recorder{ std::make_shared<noop_value_recorder>() };

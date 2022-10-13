@@ -20,9 +20,9 @@
 #include "core/io/dns_config.hxx"
 #include "core/io/ip_protocol.hxx"
 #include "core/metrics/logging_meter_options.hxx"
-#include "core/metrics/meter.hxx"
-#include "core/tracing/request_tracer.hxx"
 #include "core/tracing/threshold_logging_options.hxx"
+#include "couchbase/metrics/meter.hxx"
+#include "couchbase/tracing/request_tracer.hxx"
 #include "service_type.hxx"
 #include "timeout_defaults.hxx"
 
@@ -67,8 +67,8 @@ struct cluster_options {
     tracing::threshold_logging_options tracing_options{};
     metrics::logging_meter_options metrics_options{};
     tls_verify_mode tls_verify{ tls_verify_mode::peer };
-    std::shared_ptr<tracing::request_tracer> tracer{ nullptr };
-    std::shared_ptr<metrics::meter> meter{ nullptr };
+    std::shared_ptr<couchbase::tracing::request_tracer> tracer{ nullptr };
+    std::shared_ptr<couchbase::metrics::meter> meter{ nullptr };
 
     std::chrono::milliseconds tcp_keep_alive_interval = timeout_defaults::tcp_keep_alive_interval;
     std::chrono::milliseconds config_poll_interval = timeout_defaults::config_poll_interval;

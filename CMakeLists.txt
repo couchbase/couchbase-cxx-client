@@ -226,6 +226,7 @@ set(couchbase_cxx_client_FILES
     core/impl/build_deferred_query_indexes.cxx
     core/impl/cluster.cxx
     core/impl/common_error_category.cxx
+    core/impl/configuration_profiles_registry.cxx
     core/impl/decrement.cxx
     core/impl/dns_srv_tracker.cxx
     core/impl/exists.cxx

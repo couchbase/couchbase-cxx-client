@@ -24,7 +24,7 @@
 #include "core/protocol/client_request.hxx"
 #include "core/protocol/cmd_get_and_lock.hxx"
 #include "core/timeout_defaults.hxx"
-#include "core/tracing/request_tracer.hxx"
+#include "couchbase/tracing/request_tracer.hxx"
 
 namespace couchbase::core::operations
 {
@@ -47,7 +47,7 @@ struct get_and_lock_request {
     std::uint32_t lock_time{};
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
-    std::shared_ptr<tracing::request_span> parent_span{ nullptr };
+    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 

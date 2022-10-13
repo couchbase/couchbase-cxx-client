@@ -72,5 +72,5 @@ struct connection_string {
 };
 
 connection_string
-parse_connection_string(const std::string& input);
+parse_connection_string(const std::string& input, cluster_options options = {});
 } // namespace couchbase::core::utils

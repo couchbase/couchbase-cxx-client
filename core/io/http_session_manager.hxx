@@ -18,10 +18,10 @@
 #pragma once
 
 #include "core/config_listener.hxx"
-#include "core/metrics/meter.hxx"
 #include "core/operations/http_noop.hxx"
 #include "core/service_type.hxx"
 #include "core/tracing/noop_tracer.hxx"
+#include "couchbase/metrics/meter.hxx"
 #include "http_command.hxx"
 #include "http_context.hxx"
 #include "http_session.hxx"
@@ -44,12 +44,12 @@ class http_session_manager
     {
     }
 
-    void set_tracer(std::shared_ptr<tracing::request_tracer> tracer)
+    void set_tracer(std::shared_ptr<couchbase::tracing::request_tracer> tracer)
     {
         tracer_ = std::move(tracer);
     }
 
-    void set_meter(std::shared_ptr<metrics::meter> meter)
+    void set_meter(std::shared_ptr<couchbase::metrics::meter> meter)
     {
         meter_ = std::move(meter);
     }
@@ -370,8 +370,8 @@ class http_session_manager
     std::string client_id_;
     asio::io_context& ctx_;
     asio::ssl::context& tls_;
-    std::shared_ptr<tracing::request_tracer> tracer_{ nullptr };
-    std::shared_ptr<metrics::meter> meter_{ nullptr };
+    std::shared_ptr<couchbase::tracing::request_tracer> tracer_{ nullptr };
+    std::shared_ptr<couchbase::metrics::meter> meter_{ nullptr };
     cluster_options options_{};
 
     topology::configuration config_{};
