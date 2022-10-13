@@ -18,12 +18,9 @@
 #include "test_helper.hxx"
 
 #include "core/transactions/attempt_context_impl.hxx"
-#include "core/transactions/attempt_context_testing_hooks.hxx"
 
 #include "utils/transactions_env.h"
 
-#include "core/transactions.hxx"
-#include <couchbase/error_codes.hxx>
 #include <spdlog/spdlog.h>
 
 #include <future>

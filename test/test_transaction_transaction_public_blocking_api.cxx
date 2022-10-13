@@ -128,7 +128,7 @@ TEST_CASE("replace fails as expected with bad cas", "[transactions]")
     auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
     auto result = c.transactions()->run([id, coll, new_content](couchbase::transactions::attempt_context& ctx) {
         auto doc = ctx.get(coll, id.key());
-        std::reinterpret_pointer_cast<couchbase::core::transactions::transaction_get_result>(doc)->cas(100);
+        reinterpret_cast<couchbase::core::transactions::transaction_get_result&>(*doc).cas(100);
         auto replaced_doc = ctx.replace(doc, new_content);
     });
     CHECK_FALSE(result.transaction_id.empty());
@@ -171,7 +171,7 @@ TEST_CASE("remove fails as expected with bad cas", "[transactions]")
     auto result = c.transactions()->run([id, coll](couchbase::transactions::attempt_context& ctx) {
         auto doc = ctx.get(coll, id.key());
         // change cas, so remove will fail and retry
-        std::reinterpret_pointer_cast<couchbase::core::transactions::transaction_get_result>(doc)->cas(100);
+        reinterpret_cast<couchbase::core::transactions::transaction_get_result&>(*doc).cas(100);
         auto err = ctx.remove(doc);
         CHECK(err.ec());
     });
@@ -233,7 +233,7 @@ TEST_CASE("can pass per-transaction configs", "[transactions]")
     auto result = c.transactions()->run(
       [id, coll](couchbase::transactions::attempt_context& ctx) {
           auto doc = ctx.get(coll, id.key());
-          std::reinterpret_pointer_cast<couchbase::core::transactions::transaction_get_result>(doc)->cas(100);
+          reinterpret_cast<couchbase::core::transactions::transaction_get_result&>(*doc).cas(100);
           auto err = ctx.remove(doc);
           CHECK(err.ec());
       },
