@@ -17,6 +17,8 @@
 #include "test_helper.hxx"
 #include "utils/transactions_env.h"
 
+#include <memory>
+
 static const tao::json::value content{ { "some_number", 0 } };
 
 TEST_CASE("can get", "[transactions]")
