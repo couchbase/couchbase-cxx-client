@@ -302,7 +302,7 @@ attempt_context_impl::replace_raw(const transaction_get_result& document, const 
                       return op_completed_with_error(std::move(cb), *e1);
                   }
                   select_atr_if_needed_unlocked(
-                    {document.id().bucket(), document.id().scope(), document.id().collection(), document.id().key()},
+                    { document.id().bucket(), document.id().scope(), document.id().collection(), document.id().key() },
                     [this, existing_sm = std::move(existing_sm), document = std::move(document), cb = std::move(cb), content](
                       std::optional<transaction_operation_failed> e2) mutable {
                         if (e2) {
