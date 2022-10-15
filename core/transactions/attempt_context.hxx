@@ -15,8 +15,8 @@
  */
 #pragma once
 
+#include "couchbase/transactions/transaction_query_options.hxx"
 #include "transaction_get_result.hxx"
-#include "transaction_query_options.hxx"
 
 #include <optional>
 #include <string>

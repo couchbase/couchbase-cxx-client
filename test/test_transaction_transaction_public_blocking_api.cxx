@@ -17,6 +17,8 @@
 #include "test_helper.hxx"
 #include "utils/transactions_env.h"
 
+#include <memory>
+
 static const tao::json::value content{ { "some_number", 0 } };
 
 TEST_CASE("can get", "[transactions]")
@@ -226,7 +228,7 @@ TEST_CASE("can pass per-transaction configs", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    couchbase::transactions::per_transaction_config cfg{};
+    couchbase::transactions::transaction_options cfg{};
     cfg.expiration_time(std::chrono::seconds(1));
     auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
     auto begin = std::chrono::steady_clock::now();

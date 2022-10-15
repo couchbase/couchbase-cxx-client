@@ -42,19 +42,15 @@ transactions_cleanup_attempt::transactions_cleanup_attempt(const atr_cleanup_ent
 }
 
 transactions_cleanup::transactions_cleanup(std::shared_ptr<core::cluster> cluster,
-                                           const couchbase::transactions::transaction_config& config)
+                                           const couchbase::transactions::transactions_config& config)
   : cluster_(cluster)
   , config_(config)
   , client_uuid_(uid_generator::next())
   , running_(false)
 {
-    if (config.cleanup_client_attempts()) {
+    if (config.cleanup_config().cleanup_client_attempts()) {
         running_ = true;
         cleanup_thr_ = std::thread(std::bind(&transactions_cleanup::attempts_loop, this));
-    }
-    if (config.cleanup_lost_attempts()) {
-        running_ = true;
-        lost_attempts_thr_ = std::thread(std::bind(&transactions_cleanup::lost_attempts_loop, this));
     }
 }
 
@@ -120,74 +116,74 @@ transactions_cleanup::interruptable_wait(std::chrono::duration<R, P> delay)
 }
 
 void
-transactions_cleanup::clean_lost_attempts_in_bucket(const std::string& bucket_name)
+transactions_cleanup::clean_collection(const couchbase::transactions::transaction_keyspace& keyspace)
 {
-    lost_attempts_cleanup_log->info("{} cleanup for {} starting", static_cast<void*>(this), bucket_name);
-    if (!running_.load()) {
-        lost_attempts_cleanup_log->info("{} cleanup of {} complete", static_cast<void*>(this), bucket_name);
-        return;
+    // first make sure the collection is in the list
+    while (running_.load()) {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (collections_.end() == std::find(collections_.begin(), collections_.end(), keyspace)) {
+                lost_attempts_cleanup_log->info(
+                  "{} cleanup for {} ending, no longer in collection cleanup list", static_cast<void*>(this), keyspace);
+                return;
+            }
+        }
+        lost_attempts_cleanup_log->info("{} cleanup for {} starting", static_cast<void*>(this), keyspace);
+        // we are running, and collection is in the list, so lets clean it.
+        auto details = get_active_clients(keyspace, client_uuid_);
+        auto all_atrs = atr_ids::all();
+
+        std::chrono::microseconds cleanup_window =
+          std::chrono::duration_cast<std::chrono::microseconds>(config_.cleanup_config().cleanup_window());
+        auto start = std::chrono::steady_clock::now();
+        lost_attempts_cleanup_log->info("{} {} active clients (including this one), {} ATRs to check in {}ms",
+                                        static_cast<void*>(this),
+                                        details.num_active_clients,
+                                        all_atrs.size(),
+                                        config_.cleanup_config().cleanup_window().count());
+
+        for (auto it = all_atrs.begin() + details.index_of_this_client; it < all_atrs.end(); it += details.num_active_clients) {
+            auto atrs_left_for_this_client =
+              std::distance(it, all_atrs.end()) / std::max<decltype(it)::difference_type>(1, details.num_active_clients);
+            auto now = std::chrono::steady_clock::now();
+            std::chrono::microseconds elapsed_in_cleanup_window = std::chrono::duration_cast<std::chrono::microseconds>(now - start);
+            std::chrono::microseconds remaining_in_cleanup_window = cleanup_window - elapsed_in_cleanup_window;
+            std::chrono::microseconds budget_for_this_atr = std::chrono::microseconds(
+              remaining_in_cleanup_window.count() / std::max<decltype(it)::difference_type>(1, atrs_left_for_this_client));
+            // clean the ATR entry
+            std::string atr_id = *it;
+            if (!running_.load()) {
+                lost_attempts_cleanup_log->debug("{} cleanup of {} complete", static_cast<void*>(this), keyspace);
+                return;
+            }
+            try {
+                handle_atr_cleanup({ keyspace.bucket, keyspace.scope, keyspace.collection, atr_id });
+            } catch (const std::runtime_error& err) {
+                lost_attempts_cleanup_log->error(
+                  "{} cleanup of atr {} failed with {}, moving on", static_cast<void*>(this), atr_id, err.what());
+            }
+
+            auto atr_end = std::chrono::steady_clock::now();
+            std::chrono::microseconds atr_used = std::chrono::duration_cast<std::chrono::microseconds>(atr_end - now);
+            std::chrono::microseconds atr_left = budget_for_this_atr - atr_used;
+
+            // Too verbose to log, but leaving here commented as it may be useful later for internal debugging
+            /*lost_attempts_cleanup_log->info("{} {} atrs_left_for_this_client={} elapsed_in_cleanup_window={}us "
+                                            "remaining_in_cleanup_window={}us budget_for_this_atr={}us atr_used={}us atr_left={}us",
+                                            bucket_name,
+                                            atr_id,
+                                            atrs_left_for_this_client,
+                                            elapsed_in_cleanup_window.count(),
+                                            remaining_in_cleanup_window.count(),
+                                            budget_for_this_atr.count(),
+                                            atr_used.count(),
+                                            atr_left.count());*/
+
+            if (atr_left.count() > 0 && atr_left.count() < 1000000000) { // safety check protects against bugs
+                std::this_thread::sleep_for(atr_left);
+            }
+        }
     }
-    auto details = get_active_clients(bucket_name, client_uuid_);
-    auto all_atrs = atr_ids::all();
-
-    // TXNCXX-232 - dynamically adjust the budget for fetching each ATR, based on how long is left of the cleanup window and how many are
-    // left to fetch
-    // FIXME: was not used in original transactions code
-    // auto atrs_handled_by_this_client = all_atrs.size() / details.num_active_clients;
-    std::chrono::microseconds cleanup_window = std::chrono::duration_cast<std::chrono::microseconds>(config_.cleanup_window());
-    auto start = std::chrono::steady_clock::now();
-    lost_attempts_cleanup_log->info("{} {} active clients (including this one), {} ATRs to check in {}ms",
-                                    static_cast<void*>(this),
-                                    details.num_active_clients,
-                                    all_atrs.size(),
-                                    config_.cleanup_window().count());
-
-    for (auto it = all_atrs.begin() + details.index_of_this_client; it < all_atrs.end(); it += details.num_active_clients) {
-        auto atrs_left_for_this_client =
-          std::distance(it, all_atrs.end()) / std::max<decltype(it)::difference_type>(1, details.num_active_clients);
-        auto now = std::chrono::steady_clock::now();
-        std::chrono::microseconds elapsed_in_cleanup_window = std::chrono::duration_cast<std::chrono::microseconds>(now - start);
-        std::chrono::microseconds remaining_in_cleanup_window = cleanup_window - elapsed_in_cleanup_window;
-        std::chrono::microseconds budget_for_this_atr = std::chrono::microseconds(
-          remaining_in_cleanup_window.count() / std::max<decltype(it)::difference_type>(1, atrs_left_for_this_client));
-
-        // clean the ATR entry
-        std::string atr_id = *it;
-        if (!running_.load()) {
-            lost_attempts_cleanup_log->debug("{} cleanup of {} complete", static_cast<void*>(this), bucket_name);
-            return;
-        }
-        try {
-            auto id = config_.atr_id_from_bucket_and_key(bucket_name, atr_id);
-            handle_atr_cleanup(id);
-
-        } catch (const std::runtime_error& err) {
-            lost_attempts_cleanup_log->error(
-              "{} cleanup of atr {} failed with {}, moving on", static_cast<void*>(this), atr_id, err.what());
-        }
-
-        auto atr_end = std::chrono::steady_clock::now();
-        std::chrono::microseconds atr_used = std::chrono::duration_cast<std::chrono::microseconds>(atr_end - now);
-        std::chrono::microseconds atr_left = budget_for_this_atr - atr_used;
-
-        // Too verbose to log, but leaving here commented as it may be useful later for internal debugging
-        /*lost_attempts_cleanup_log->info("{} {} atrs_left_for_this_client={} elapsed_in_cleanup_window={}us "
-                                        "remaining_in_cleanup_window={}us budget_for_this_atr={}us atr_used={}us atr_left={}us",
-                                        bucket_name,
-                                        atr_id,
-                                        atrs_left_for_this_client,
-                                        elapsed_in_cleanup_window.count(),
-                                        remaining_in_cleanup_window.count(),
-                                        budget_for_this_atr.count(),
-                                        atr_used.count(),
-                                        atr_left.count());*/
-
-        if (atr_left.count() > 0 && atr_left.count() < 1000000000) { // safety check protects against bugs
-            std::this_thread::sleep_for(atr_left);
-        }
-    }
-    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - start);
-    lost_attempts_cleanup_log->info("{} cleanup of {} complete in {}s", static_cast<void*>(this), bucket_name, elapsed.count());
 }
 
 const atr_cleanup_stats
@@ -225,10 +221,11 @@ transactions_cleanup::handle_atr_cleanup(const core::document_id& atr_id, std::v
 }
 
 void
-transactions_cleanup::create_client_record(const std::string& bucket_name)
+transactions_cleanup::create_client_record(const couchbase::transactions::transaction_keyspace& keyspace)
+
 {
     try {
-        auto id = config_.atr_id_from_bucket_and_key(bucket_name, CLIENT_RECORD_DOC_ID);
+        auto id = document_id(keyspace.bucket, keyspace.scope, keyspace.collection, CLIENT_RECORD_DOC_ID);
         core::operations::mutate_in_request req{ id };
         req.store_semantics = couchbase::store_semantics::insert;
         req.specs =
@@ -242,7 +239,7 @@ transactions_cleanup::create_client_record(const std::string& bucket_name)
         wrap_durable_request(req, config_);
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
-        auto ec = config_.cleanup_hooks().client_record_before_create(bucket_name);
+        auto ec = config_.cleanup_hooks().client_record_before_create(keyspace.bucket);
         if (ec) {
             throw client_error(*ec, "client_record_before_create hook raised error");
         }
@@ -266,16 +263,25 @@ transactions_cleanup::create_client_record(const std::string& bucket_name)
 const client_record_details
 transactions_cleanup::get_active_clients(const std::string& bucket_name, const std::string& uuid)
 {
+    if (config_.metadata_collection()) {
+        return get_active_clients(config_.metadata_collection().value(), uuid);
+    }
+    return get_active_clients({ bucket_name, couchbase::scope::default_name, couchbase::collection::default_name }, uuid);
+}
+
+const client_record_details
+transactions_cleanup::get_active_clients(const couchbase::transactions::transaction_keyspace& keyspace, const std::string& uuid)
+{
     std::chrono::milliseconds min_retry(1000);
-    if (config_.cleanup_window() < min_retry) {
-        min_retry = config_.cleanup_window();
+    if (config_.cleanup_config().cleanup_window() < min_retry) {
+        min_retry = config_.cleanup_config().cleanup_window();
     }
     return retry_op_exponential_backoff_timeout<client_record_details>(
-      min_retry, std::chrono::seconds(1), config_.cleanup_window(), [&]() -> client_record_details {
+      min_retry, std::chrono::seconds(1), config_.cleanup_config().cleanup_window(), [&]() -> client_record_details {
           client_record_details details;
           // Write our client record, return details.
           try {
-              auto id = config_.atr_id_from_bucket_and_key(bucket_name, CLIENT_RECORD_DOC_ID);
+              auto id = document_id{ keyspace.bucket, keyspace.scope, keyspace.collection, CLIENT_RECORD_DOC_ID };
               core::operations::lookup_in_request req{ id };
               req.specs =
                 lookup_in_specs{
@@ -286,7 +292,7 @@ transactions_cleanup::get_active_clients(const std::string& bucket_name, const s
               wrap_request(req, config_);
               auto barrier = std::make_shared<std::promise<result>>();
               auto f = barrier->get_future();
-              auto ec = config_.cleanup_hooks().client_record_before_get(bucket_name);
+              auto ec = config_.cleanup_hooks().client_record_before_get(keyspace.bucket);
               if (ec) {
                   throw client_error(*ec, "client_record_before_get hook raised error");
               }
@@ -353,7 +359,7 @@ transactions_cleanup::get_active_clients(const std::string& bucket_name, const s
                     .xattr()
                     .create_path(),
                   couchbase::mutate_in_specs::upsert(FIELD_CLIENTS + "." + uuid + "." + FIELD_EXPIRES,
-                                                     config_.cleanup_window().count() / 2 + SAFETY_MARGIN_EXPIRY_MS)
+                                                     config_.cleanup_config().cleanup_window().count() / 2 + SAFETY_MARGIN_EXPIRY_MS)
                     .xattr()
                     .create_path(),
                   couchbase::mutate_in_specs::upsert(FIELD_CLIENTS + "." + uuid + "." + FIELD_NUM_ATRS, atr_ids::all().size())
@@ -366,7 +372,7 @@ transactions_cleanup::get_active_clients(const std::string& bucket_name, const s
                   mut_specs.push_back(couchbase::mutate_in_specs::remove(FIELD_CLIENTS + "." + details.expired_client_ids[idx]).xattr());
               }
               mutate_req.specs = mut_specs.specs();
-              ec = config_.cleanup_hooks().client_record_before_update(bucket_name);
+              ec = config_.cleanup_hooks().client_record_before_update(keyspace.bucket);
               if (ec) {
                   throw client_error(*ec, "client_record_before_update hook raised error");
               }
@@ -388,7 +394,7 @@ transactions_cleanup::get_active_clients(const std::string& bucket_name, const s
               switch (ec) {
                   case FAIL_DOC_NOT_FOUND:
                       lost_attempts_cleanup_log->debug("{} client record not found, creating new one", static_cast<void*>(this));
-                      create_client_record(bucket_name);
+                      create_client_record(keyspace);
                       throw retry_operation("Client record didn't exist. Creating and retrying");
                   default:
                       throw; // retry_operation(fmt::format("got error '' while processing client record, retrying...", e.what()));
@@ -400,19 +406,19 @@ transactions_cleanup::get_active_clients(const std::string& bucket_name, const s
 void
 transactions_cleanup::remove_client_record_from_all_buckets(const std::string& uuid)
 {
-    for (const auto& bucket_name : get_and_open_buckets(cluster_)) {
+    for (const auto& keyspace : collections_) {
         try {
             retry_op_exponential_backoff_timeout<void>(
               std::chrono::milliseconds(10), std::chrono::milliseconds(250), std::chrono::milliseconds(500), [&]() {
                   try {
                       // insure a client record document exists...
-                      create_client_record(bucket_name);
+                      create_client_record(keyspace);
                       // now, proceed to remove the client uuid if it exists
-                      auto ec = config_.cleanup_hooks().client_record_before_remove_client(bucket_name);
+                      auto ec = config_.cleanup_hooks().client_record_before_remove_client(keyspace.bucket);
                       if (ec) {
                           throw client_error(*ec, "client_record_before_remove_client hook raised error");
                       }
-                      auto id = config_.atr_id_from_bucket_and_key(bucket_name, CLIENT_RECORD_DOC_ID);
+                      document_id id{ keyspace.bucket, keyspace.scope, keyspace.collection, CLIENT_RECORD_DOC_ID };
                       core::operations::mutate_in_request req{ id };
                       req.specs =
                         couchbase::mutate_in_specs{
@@ -426,18 +432,17 @@ transactions_cleanup::remove_client_record_from_all_buckets(const std::string& u
                           barrier->set_value(result::create_from_subdoc_response(resp));
                       });
                       wrap_operation_future(f);
-                      lost_attempts_cleanup_log->debug("{} removed {} from {}", static_cast<void*>(this), uuid, bucket_name);
+                      lost_attempts_cleanup_log->debug("{} removed {} from {}", static_cast<void*>(this), uuid, keyspace);
                   } catch (const client_error& e) {
                       lost_attempts_cleanup_log->debug("{} error removing client records {}", static_cast<void*>(this), e.what());
                       auto ec = e.ec();
                       switch (ec) {
                           case FAIL_DOC_NOT_FOUND:
-                              lost_attempts_cleanup_log->debug(
-                                "{} no client record in {}, ignoring", static_cast<void*>(this), bucket_name);
+                              lost_attempts_cleanup_log->debug("{} no client record in {}, ignoring", static_cast<void*>(this), keyspace);
                               return;
                           case FAIL_PATH_NOT_FOUND:
                               lost_attempts_cleanup_log->debug(
-                                "{} client {} not in client record for {}, ignoring", static_cast<void*>(this), uuid, bucket_name);
+                                "{} client {} not in client record for {}, ignoring", static_cast<void*>(this), uuid, keyspace);
                               return;
                           default:
                               throw retry_operation("retry remove until timeout");
@@ -446,43 +451,9 @@ transactions_cleanup::remove_client_record_from_all_buckets(const std::string& u
               });
         } catch (const std::exception& e) {
             lost_attempts_cleanup_log->error(
-              "{} Error removing client record {} from bucket {}: {}", static_cast<void*>(this), uuid, bucket_name, e.what());
+              "{} Error removing client record {} from {}: {}", static_cast<void*>(this), uuid, keyspace, e.what());
         }
     }
-}
-
-void
-transactions_cleanup::lost_attempts_loop()
-{
-    lost_attempts_cleanup_log->info("{} starting lost attempts loop", static_cast<void*>(this));
-    while (running_.load()) {
-        std::list<std::thread> workers;
-        try {
-            auto names = get_and_open_buckets(cluster_);
-            lost_attempts_cleanup_log->info("{} creating {} tasks to clean buckets", static_cast<void*>(this), names.size());
-            // TODO consider std::async here.
-            for (const auto& name : names) {
-                workers.emplace_back([&]() {
-                    try {
-                        clean_lost_attempts_in_bucket(name);
-                    } catch (const std::runtime_error& e) {
-                        lost_attempts_cleanup_log->error(
-                          "{} got error {} attempting to clean {}", static_cast<void*>(this), e.what(), name);
-                    }
-                });
-            }
-            for (auto& thr : workers) {
-                if (thr.joinable()) {
-                    thr.join();
-                }
-            }
-        } catch (const std::exception& e) {
-            lost_attempts_cleanup_log->error(
-              "{} got error {}, rescheduling in {}ms", static_cast<void*>(this), e.what(), config_.cleanup_window().count());
-            interruptable_wait(config_.cleanup_window());
-        }
-    }
-    remove_client_record_from_all_buckets(client_uuid_);
 }
 
 const atr_cleanup_stats
@@ -564,7 +535,7 @@ transactions_cleanup::add_attempt(attempt_context& ctx)
             attempt_cleanup_log->trace("attempt in state {}, not adding to cleanup", attempt_state_name(ctx_impl.state()));
             return;
         default:
-            if (config_.cleanup_client_attempts()) {
+            if (config_.cleanup_config().cleanup_client_attempts()) {
                 attempt_cleanup_log->debug("adding attempt {} to cleanup queue", ctx_impl.id());
                 atr_queue_.push(ctx);
             } else {
@@ -585,9 +556,13 @@ transactions_cleanup::close()
         cleanup_thr_.join();
         attempt_cleanup_log->info("cleanup attempt thread closed");
     }
-    if (lost_attempts_thr_.joinable()) {
-        lost_attempts_thr_.join();
-        lost_attempts_cleanup_log->info("{} lost attempts thread closed", static_cast<void*>(this));
+    for (auto& t : lost_attempt_cleanup_workers_) {
+        lost_attempts_cleanup_log->info("shutting down all lost attempt threads...");
+        if (t.joinable()) {
+            t.join();
+        }
+        lost_attempts_cleanup_log->info("all lost attempt cleanup threads closed");
+        remove_client_record_from_all_buckets(client_uuid_);
     }
 }
 

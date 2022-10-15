@@ -18,9 +18,9 @@
 
 #include "core/transactions.hxx"
 #include "core/transactions/async_attempt_context.hxx"
-#include "couchbase/transactions/per_transaction_config.hxx"
-#include "couchbase/transactions/transaction_config.hxx"
+#include "couchbase/transactions/transaction_options.hxx"
 #include "couchbase/transactions/transaction_result.hxx"
+#include "couchbase/transactions/transactions_config.hxx"
 #include "transaction_attempt.hxx"
 #include "transactions_cleanup.hxx"
 
@@ -39,7 +39,7 @@ class transaction_context
 {
   public:
     transaction_context(transactions& txns,
-                        const couchbase::transactions::per_transaction_config& conf = couchbase::transactions::per_transaction_config());
+                        const couchbase::transactions::transaction_options& conf = couchbase::transactions::transaction_options());
     transaction_context(const transaction_context&);
 
     [[nodiscard]] const std::string& transaction_id() const
@@ -78,12 +78,12 @@ class transaction_context
         return transactions_.cluster_ref();
     }
 
-    couchbase::transactions::transaction_config& config()
+    couchbase::transactions::transactions_config& config()
     {
         return config_;
     }
 
-    const couchbase::transactions::transaction_config& config() const
+    const couchbase::transactions::transactions_config& config() const
     {
         return config_;
     }
@@ -176,7 +176,7 @@ class transaction_context
 
     transactions& transactions_;
 
-    couchbase::transactions::transaction_config config_;
+    couchbase::transactions::transactions_config config_;
 
     /**
      * Will be non-zero only when resuming a deferred transaction. It records how much time has elapsed in total in the deferred

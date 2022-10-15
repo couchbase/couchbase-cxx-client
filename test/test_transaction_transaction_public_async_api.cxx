@@ -16,8 +16,19 @@
 
 #include "test_helper.hxx"
 #include "utils/transactions_env.h"
+#include <couchbase/transactions/transaction_options.hxx>
+
+#include <memory>
 
 static const tao::json::value async_content{ { "some_number", 0 } };
+
+couchbase::transactions::transaction_options
+async_options()
+{
+    couchbase::transactions::transaction_options cfg;
+    cfg.expiration_time(std::chrono::seconds(1));
+    return cfg;
+}
 
 TEST_CASE("can async get", "[transactions]")
 {
@@ -43,7 +54,8 @@ TEST_CASE("can async get", "[transactions]")
           CHECK_FALSE(res.transaction_id.empty());
           CHECK_FALSE(res.unstaging_complete);
           barrier->set_value();
-      });
+      },
+      async_options());
     f.get();
 }
 
@@ -67,7 +79,8 @@ TEST_CASE("can get fail as expected", "[transactions]")
           CHECK_FALSE(res.transaction_id.empty());
           CHECK_FALSE(res.unstaging_complete);
           barrier->set_value();
-      });
+      },
+      async_options());
     f.get();
 }
 TEST_CASE("can async remove", "[transactions]")
@@ -91,7 +104,8 @@ TEST_CASE("can async remove", "[transactions]")
           CHECK(res.unstaging_complete);
           CHECK_FALSE(res.ctx.ec());
           barrier->set_value();
-      });
+      },
+      async_options());
     f.get();
 }
 
@@ -116,7 +130,8 @@ TEST_CASE("async remove with bad cas fails as expected", "[transactions]")
           CHECK_FALSE(res.unstaging_complete);
           CHECK(res.ctx.ec() == couchbase::errc::transaction::expired);
           barrier->set_value();
-      });
+      },
+      async_options());
     f.get();
 }
 TEST_CASE("can async insert", "[transactions]")
@@ -138,7 +153,8 @@ TEST_CASE("can async insert", "[transactions]")
           CHECK(res.unstaging_complete);
           CHECK_FALSE(res.ctx.ec());
           barrier->set_value();
-      });
+      },
+      async_options());
     f.get();
 }
 
@@ -163,7 +179,8 @@ TEST_CASE("async insert fails when doc already exists", "[transactions]")
           CHECK(res.ctx.ec() == couchbase::errc::transaction::failed);
           CHECK(res.ctx.cause() == couchbase::errc::transaction_op::document_exists_exception);
           barrier->set_value();
-      });
+      },
+      async_options());
     f.get();
 }
 
@@ -191,7 +208,8 @@ TEST_CASE("can async replace", "[transactions]")
           CHECK(tx_result.unstaging_complete);
           CHECK_FALSE(tx_result.ctx.ec());
           barrier->set_value();
-      });
+      },
+      async_options());
     f.get();
 }
 TEST_CASE("async replace fails as expected with bad cas", "[transactions]")
@@ -217,7 +235,8 @@ TEST_CASE("async replace fails as expected with bad cas", "[transactions]")
           CHECK_FALSE(tx_result.unstaging_complete);
           CHECK(tx_result.ctx.ec() == couchbase::errc::transaction::expired);
           barrier->set_value();
-      });
+      },
+      async_options());
     f.get();
 }
 
@@ -246,6 +265,7 @@ TEST_CASE("uncaught exception will rollback", "[transactions]")
           CHECK_FALSE(res.unstaging_complete);
           CHECK_FALSE(res.transaction_id.empty());
           barrier->set_value();
-      });
+      },
+      async_options());
     f.get();
 }

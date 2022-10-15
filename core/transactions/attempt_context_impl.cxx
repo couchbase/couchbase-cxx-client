@@ -460,16 +460,17 @@ attempt_context_impl::select_atr_if_needed_unlocked(const core::document_id id,
         std::size_t vbucket_id = 0;
         std::optional<const std::string> hook_atr = hooks_.random_atr_id_for_vbucket(this);
         if (hook_atr) {
-            atr_id_ = overall_.config().atr_id_from_bucket_and_key(id.bucket(), hook_atr.value());
+            atr_id_ = atr_id_from_bucket_and_key(overall_.config(), id.bucket(), hook_atr.value());
         } else {
             vbucket_id = atr_ids::vbucket_for_key(id.key());
-            atr_id_ = overall_.config().atr_id_from_bucket_and_key(id.bucket(), atr_ids::atr_id_for_vbucket(vbucket_id));
+            atr_id_ = atr_id_from_bucket_and_key(overall_.config(), id.bucket(), atr_ids::atr_id_for_vbucket(vbucket_id));
         }
         // TODO: cleanup the transaction_context - this should be set (threadsafe) from the above calls
         overall_.atr_collection(collection_spec_from_id(id));
         overall_.atr_id(atr_id_->key());
         state(attempt_state::NOT_STARTED);
         trace(R"(first mutated doc in transaction is "{}" on vbucket {}, so using atr "{}")", id, vbucket_id, atr_id_.value());
+        overall_.cleanup().add_collection({ atr_id_->bucket(), atr_id_->scope(), atr_id_->collection() });
         set_atr_pending_locked(id, std::move(lock), std::move(cb));
     } catch (const std::exception& e) {
         error("unexpected error \"{}\" during select atr if needed", e.what());
@@ -704,8 +705,8 @@ attempt_context_impl::query_begin_work(utils::movable_function<void(std::excepti
         txdata["atr"]["coll"] = atr_id_->collection();
         txdata["atr"]["bkt"] = atr_id_->bucket();
         txdata["atr"]["id"] = atr_id_->key();
-    } else if (overall_.config().custom_metadata_collection()) {
-        auto id = overall_.config().atr_id_from_bucket_and_key("", "");
+    } else if (overall_.config().metadata_collection()) {
+        auto id = atr_id_from_bucket_and_key(overall_.config(), "", "");
         txdata["atr"] = tao::json::empty_object;
         txdata["atr"]["scp"] = id.scope();
         txdata["atr"]["coll"] = id.collection();

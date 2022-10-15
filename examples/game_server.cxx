@@ -270,11 +270,11 @@ main()
     }
 
     get_and_open_buckets(low_level_cluster);
-    couchbase::transactions::transaction_config configuration;
+    couchbase::transactions::transactions_config configuration;
     configuration.durability_level(couchbase::durability_level::majority);
-    configuration.cleanup_client_attempts(true);
-    configuration.cleanup_lost_attempts(true);
-    configuration.cleanup_window(std::chrono::seconds(5));
+    configuration.cleanup_config().cleanup_client_attempts(true);
+    configuration.cleanup_config().cleanup_lost_attempts(true);
+    configuration.cleanup_config().cleanup_window(std::chrono::seconds(5));
     transactions transactions(low_level_cluster, configuration);
     GameServer game_server(transactions);
     std::vector<std::thread> threads;

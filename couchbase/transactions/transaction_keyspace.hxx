@@ -27,9 +27,26 @@ namespace couchbase::transactions
  * @brief  Offline, serializable representation of a bucket, scope, and collection
  */
 struct transaction_keyspace {
+
     std::string bucket;
     std::string scope{ couchbase::scope::default_name };
     std::string collection{ couchbase::collection::default_name };
+
+    transaction_keyspace(const transaction_keyspace&) = default;
+    transaction_keyspace(transaction_keyspace&&) = default;
+    transaction_keyspace& operator=(const transaction_keyspace& keyspace)
+    {
+        if (this != &keyspace) {
+            bucket = keyspace.bucket;
+            scope = keyspace.scope;
+            collection = keyspace.collection;
+        }
+        return *this;
+    }
+    bool operator==(const transaction_keyspace& keyspace)
+    {
+        return bucket == keyspace.bucket && scope == keyspace.scope && collection == keyspace.collection;
+    }
 
     transaction_keyspace(std::string bucket_name, std::string scope_name, std::string collection_name)
       : bucket(std::move(bucket_name))
@@ -47,6 +64,17 @@ struct transaction_keyspace {
     explicit transaction_keyspace(const std::string& bucket_name)
       : transaction_keyspace{ bucket_name, couchbase::scope::default_name, couchbase::collection::default_name }
     {
+    }
+
+    template<typename OStream>
+    friend OStream& operator<<(OStream& os, const transaction_keyspace& keyspace)
+    {
+        os << "transaction_keyspace{";
+        os << "bucket: " << keyspace.bucket;
+        os << ", scope: " << keyspace.scope;
+        os << ", collection: " << keyspace.collection;
+        os << "}";
+        return os;
     }
 };
 } // namespace couchbase::transactions

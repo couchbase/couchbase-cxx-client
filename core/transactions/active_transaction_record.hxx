@@ -17,7 +17,7 @@
 
 #include "core/cluster.hxx"
 
-#include "couchbase/transactions/transaction_config.hxx"
+#include "couchbase/transactions/transactions_config.hxx"
 #include "exceptions.hxx"
 #include "internal/atr_entry.hxx"
 #include "internal/doc_record.hxx"
@@ -35,7 +35,7 @@ namespace couchbase::core::transactions
 class active_transaction_record
 {
   public:
-    // TODO: we should get the kv_timeout and put it in the request (pass in the transaction_config)
+    // TODO: we should get the kv_timeout and put it in the request (pass in the transactions_config)
     template<typename Callback>
     static void get_atr(std::shared_ptr<core::cluster> cluster, const core::document_id& atr_id, Callback&& cb)
     {

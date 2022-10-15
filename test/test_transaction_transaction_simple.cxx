@@ -26,9 +26,7 @@ using namespace couchbase::core::transactions;
 TEST_CASE("transactions: arbitrary runtime error", "[transactions]")
 {
     auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
+    couchbase::transactions::transactions_config cfg;
     transactions txn(cluster, cfg);
     auto id = TransactionsTestEnvironment::get_document_id();
     const tao::json::value content{
@@ -56,9 +54,7 @@ TEST_CASE("transactions: arbitrary runtime error", "[transactions]")
 TEST_CASE("transactions: arbitrary exception", "[transactions]")
 {
     auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
+    couchbase::transactions::transactions_config cfg;
     transactions txn(cluster, cfg);
     auto id = TransactionsTestEnvironment::get_document_id();
 
@@ -86,9 +82,7 @@ TEST_CASE("transactions: arbitrary exception", "[transactions]")
 TEST_CASE("transactions: can get replica", "[transactions]")
 {
     auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
+    couchbase::transactions::transactions_config cfg;
     transactions txn(cluster, cfg);
     // upsert initial doc
     auto id = TransactionsTestEnvironment::get_document_id();
@@ -120,9 +114,9 @@ TEST_CASE("transactions: can use custom metadata collections per transactions", 
     // upsert initial doc
     auto id = TransactionsTestEnvironment::get_document_id();
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, initial));
-    couchbase::transactions::per_transaction_config cfg;
-    cfg.custom_metadata_collection(
-      couchbase::transactions::transaction_keyspace{ TransactionsTestEnvironment::get_conf().metadata_bucket });
+    couchbase::cluster c(TransactionsTestEnvironment::get_cluster());
+    couchbase::transactions::transaction_options cfg;
+    cfg.metadata_collection(c.bucket(TransactionsTestEnvironment::get_conf().extra_bucket).default_collection());
     txn.run(cfg, [id](attempt_context& ctx) {
         auto doc = ctx.get(id);
         auto content = doc.content<tao::json::value>();
@@ -147,9 +141,10 @@ TEST_CASE("transactions: non existent bucket in per transactions custom metadata
         { "some number", 0 },
     };
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, initial));
-    couchbase::transactions::per_transaction_config cfg;
+    couchbase::transactions::transaction_options cfg;
     cfg.expiration_time(std::chrono::seconds(1));
-    cfg.custom_metadata_collection(couchbase::transactions::transaction_keyspace{ "i_dont_exist" });
+    couchbase::cluster c(TransactionsTestEnvironment::get_cluster());
+    cfg.metadata_collection(c.bucket("idontexist").default_collection());
     try {
         txn.run(cfg, [&](attempt_context& ctx) {
             auto doc = ctx.get(id);
@@ -177,13 +172,10 @@ TEST_CASE("transactions: non existent scope in per transactions custom metadata 
         { "some number", 0 },
     };
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, initial));
-    couchbase::transactions::per_transaction_config cfg;
+    couchbase::transactions::transaction_options cfg;
     cfg.expiration_time(std::chrono::seconds(1));
-    cfg.custom_metadata_collection(couchbase::transactions::transaction_keyspace{
-      TransactionsTestEnvironment::get_conf().metadata_bucket,
-      "i_dont_exist",
-      couchbase::collection::default_name,
-    });
+    couchbase::cluster c(TransactionsTestEnvironment::get_cluster());
+    cfg.metadata_collection(c.bucket(TransactionsTestEnvironment::get_conf().extra_bucket).scope("Idontexist").collection("_default"));
     try {
         txn.run(cfg, [&](attempt_context& ctx) {
             auto doc = ctx.get(id);
@@ -211,13 +203,10 @@ TEST_CASE("transactions: non existent collection in per transactions custom meta
         { "some number", 0 },
     };
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, initial));
-    couchbase::transactions::per_transaction_config cfg;
+    couchbase::transactions::transaction_options cfg;
     cfg.expiration_time(std::chrono::seconds(1));
-    cfg.custom_metadata_collection(couchbase::transactions::transaction_keyspace{
-      TransactionsTestEnvironment::get_conf().metadata_bucket,
-      couchbase::scope::default_name,
-      "i_dont_exist",
-    });
+    couchbase::cluster c(TransactionsTestEnvironment::get_cluster());
+    cfg.metadata_collection(c.bucket(TransactionsTestEnvironment::get_conf().extra_bucket).default_scope().collection("idontexist"));
     try {
         txn.run(cfg, [&](attempt_context& ctx) {
             auto doc = ctx.get(id);
@@ -238,9 +227,9 @@ TEST_CASE("transactions: non existent collection in per transactions custom meta
 TEST_CASE("transactions: can use custom metadata collections", "[transactions]")
 {
     auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transaction_config cfg;
-    cfg.custom_metadata_collection(couchbase::transactions::transaction_keyspace{
-      TransactionsTestEnvironment::get_conf().metadata_bucket,
+    couchbase::transactions::transactions_config cfg;
+    cfg.metadata_collection(couchbase::transactions::transaction_keyspace{
+      TransactionsTestEnvironment::get_conf().extra_bucket,
       couchbase::scope::default_name,
       couchbase::collection::default_name,
     });
@@ -269,8 +258,8 @@ TEST_CASE("transactions: can use custom metadata collections", "[transactions]")
 TEST_CASE("transactions: non existent bucket in custom metadata collections", "[transactions]")
 {
     auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transaction_config cfg;
-    cfg.custom_metadata_collection(couchbase::transactions::transaction_keyspace{
+    couchbase::transactions::transactions_config cfg;
+    cfg.metadata_collection(couchbase::transactions::transaction_keyspace{
       "i_dont_exist",
       couchbase::scope::default_name,
       couchbase::collection::default_name,
@@ -281,9 +270,9 @@ TEST_CASE("transactions: non existent bucket in custom metadata collections", "[
 TEST_CASE("transactions: non existent scope in custom metadata collections", "[transactions]")
 {
     auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transaction_config cfg;
-    cfg.custom_metadata_collection(couchbase::transactions::transaction_keyspace{
-      TransactionsTestEnvironment::get_conf().metadata_bucket,
+    couchbase::transactions::transactions_config cfg;
+    cfg.metadata_collection(couchbase::transactions::transaction_keyspace{
+      TransactionsTestEnvironment::get_conf().extra_bucket,
       "i_dont_exist",
       couchbase::collection::default_name,
     });
@@ -314,9 +303,9 @@ TEST_CASE("transactions: non existent scope in custom metadata collections", "[t
 TEST_CASE("transactions: non existent collection in custom metadata collections", "[transactions]")
 {
     auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transaction_config cfg;
-    cfg.custom_metadata_collection(couchbase::transactions::transaction_keyspace{
-      TransactionsTestEnvironment::get_conf().metadata_bucket,
+    couchbase::transactions::transactions_config cfg;
+    cfg.metadata_collection(couchbase::transactions::transaction_keyspace{
+      TransactionsTestEnvironment::get_conf().extra_bucket,
       couchbase::scope::default_name,
       "i_dont_exist",
     });
@@ -346,9 +335,7 @@ TEST_CASE("transactions: non existent collection in custom metadata collections"
 TEST_CASE("transactions: can get replace raw strings", "[transactions]")
 {
     auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
+    couchbase::transactions::transactions_config cfg;
     transactions txn(cluster, cfg);
 
     // upsert initial doc
@@ -369,9 +356,7 @@ TEST_CASE("transactions: can get replace raw strings", "[transactions]")
 TEST_CASE("transactions: can json string as content", "[transactions]")
 {
     auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
+    couchbase::transactions::transactions_config cfg;
     transactions txn(cluster, cfg);
     std::string content = "\"imaquotedjsonstring\"";
     // insert the doc
@@ -428,9 +413,7 @@ TEST_CASE("transactions: can get replace objects", "[transactions]")
     auto cluster = TransactionsTestEnvironment::get_cluster();
     SimpleObject o{ "someone", 100 };
     SimpleObject o2{ "someone else", 200 };
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
+    couchbase::transactions::transactions_config cfg;
     transactions txn(cluster, cfg);
 
     // upsert initial doc
@@ -448,9 +431,7 @@ TEST_CASE("transactions: can get replace mixed object strings", "[transactions]"
     auto cluster = TransactionsTestEnvironment::get_cluster();
     SimpleObject o{ "someone", 100 };
     SimpleObject o2{ "someone else", 200 };
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
+    couchbase::transactions::transactions_config cfg;
     transactions txn(cluster, cfg);
 
     // upsert initial doc
@@ -473,9 +454,7 @@ TEST_CASE("transactions: can get replace mixed object strings", "[transactions]"
 TEST_CASE("transactions: can rollback insert", "[transactions]")
 {
     auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
+    couchbase::transactions::transactions_config cfg;
     transactions txn(cluster, cfg);
 
     auto id = TransactionsTestEnvironment::get_document_id();
@@ -503,9 +482,7 @@ TEST_CASE("transactions: can rollback remove", "[transactions]")
     tao::json::value content{
         { "some number", 0 },
     };
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
+    couchbase::transactions::transactions_config cfg;
     transactions txn(cluster, cfg);
 
     auto id = TransactionsTestEnvironment::get_document_id();
@@ -528,9 +505,7 @@ TEST_CASE("transactions: can rollback replace", "[transactions]")
     tao::json::value content{
         { "some number", 0 },
     };
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
+    couchbase::transactions::transactions_config cfg;
     transactions txn(cluster, cfg);
 
     auto id = TransactionsTestEnvironment::get_document_id();
@@ -556,9 +531,7 @@ TEST_CASE("transactions: can have trivial query in transaction", "[transactions]
     tao::json::value content{
         { "some_number", 0 },
     };
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
+    couchbase::transactions::transactions_config cfg;
 
     auto id = TransactionsTestEnvironment::get_document_id();
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
@@ -579,10 +552,7 @@ TEST_CASE("transactions: can modify doc in query", "[transactions]")
     tao::json::value content{
         { "some_number", 0 },
     };
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
-
+    couchbase::transactions::transactions_config cfg;
     auto id = TransactionsTestEnvironment::get_document_id();
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
 
@@ -606,10 +576,7 @@ TEST_CASE("transactions: can rollback", "[transactions]")
     tao::json::value content{
         { "some_number", 0 },
     };
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
-
+    couchbase::transactions::transactions_config cfg;
     auto id = TransactionsTestEnvironment::get_document_id();
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
 
@@ -638,12 +605,8 @@ TEST_CASE("transactions: query updates insert", "[transactions]")
     tao::json::value content{
         { "some_number", 0 },
     };
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
-
+    couchbase::transactions::transactions_config cfg;
     auto id = TransactionsTestEnvironment::get_document_id();
-
     std::ostringstream stream;
     stream << "UPDATE `" << id.bucket() << "` USE KEYS '" << id.key() << "' SET `some_number` = 10";
     transactions txn(cluster, cfg);
@@ -663,12 +626,8 @@ TEST_CASE("transactions: can KV get", "[transactions]")
     tao::json::value content{
         { "some_number", 0 },
     };
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
-
+    couchbase::transactions::transactions_config cfg;
     auto id = TransactionsTestEnvironment::get_document_id();
-
     std::ostringstream stream;
     stream << "UPDATE `" << id.bucket() << "` USE KEYS '" << id.key() << "' SET `some_number` = 10";
     transactions txn(cluster, cfg);
@@ -690,10 +649,7 @@ TEST_CASE("transactions: can KV insert", "[transactions]")
     tao::json::value content{
         { "some_number", 0 },
     };
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
-
+    couchbase::transactions::transactions_config cfg;
     auto id = TransactionsTestEnvironment::get_document_id();
     std::ostringstream stream;
     stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
@@ -708,10 +664,7 @@ TEST_CASE("transactions: can KV insert", "[transactions]")
 TEST_CASE("transactions: can rollback KV insert", "[transactions]")
 {
     auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
-
+    couchbase::transactions::transactions_config cfg;
     auto id = TransactionsTestEnvironment::get_document_id();
     std::ostringstream stream;
     stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
@@ -740,10 +693,7 @@ TEST_CASE("transactions: can KV replace", "[transactions]")
     tao::json::value content{
         { "some_number", 0 },
     };
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
-
+    couchbase::transactions::transactions_config cfg;
     auto id = TransactionsTestEnvironment::get_document_id();
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
 
@@ -768,10 +718,7 @@ TEST_CASE("transactions: can rollback KV replace", "[transactions]")
     tao::json::value content{
         { "some_number", 0 },
     };
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
-
+    couchbase::transactions::transactions_config cfg;
     auto id = TransactionsTestEnvironment::get_document_id();
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
 
@@ -801,10 +748,7 @@ TEST_CASE("transactions: can KV remove", "[transactions]")
     tao::json::value content{
         { "some_number", 0 },
     };
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
-
+    couchbase::transactions::transactions_config cfg;
     auto id = TransactionsTestEnvironment::get_document_id();
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
 
@@ -830,9 +774,7 @@ TEST_CASE("transactions: can rollback KV remove", "[transactions]")
     tao::json::value content{
         { "some_number", 0 },
     };
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
+    couchbase::transactions::transactions_config cfg;
     cfg.expiration_time(std::chrono::seconds(1));
 
     auto id = TransactionsTestEnvironment::get_document_id();
@@ -860,9 +802,7 @@ TEST_CASE("transactions: can rollback retry bad KV replace", "[transactions]")
     tao::json::value content{
         { "some_number", 0 },
     };
-    couchbase::transactions::transaction_config cfg;
-    cfg.cleanup_client_attempts(false);
-    cfg.cleanup_lost_attempts(false);
+    couchbase::transactions::transactions_config cfg;
     cfg.expiration_time(std::chrono::seconds(1));
 
     auto id = TransactionsTestEnvironment::get_document_id();

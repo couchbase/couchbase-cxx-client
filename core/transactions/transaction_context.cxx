@@ -25,7 +25,7 @@
 
 namespace couchbase::core::transactions
 {
-transaction_context::transaction_context(transactions& txns, const couchbase::transactions::per_transaction_config& config)
+transaction_context::transaction_context(transactions& txns, const couchbase::transactions::transaction_options& config)
   : transaction_id_(uid_generator::next())
   , start_time_client_(std::chrono::steady_clock::now())
   , transactions_(txns)
