@@ -16,6 +16,8 @@
 
 #include "attempt_context_impl.hxx"
 #include "uid_generator.hxx"
+#include <asio/post.hpp>
+#include <core/cluster.hxx>
 
 #include "internal/logging.hxx"
 #include "internal/transaction_context.hxx"
@@ -82,8 +84,7 @@ transaction_context::retry_delay()
 void
 transaction_context::new_attempt_context(async_attempt_context::VoidCallback&& cb)
 {
-    // thread.detach hack for async - move the delay to an asio timer
-    std::thread([this, cb = std::move(cb)]() {
+    asio::post(transactions_.cluster_ref()->io_context(), [this, cb = std::move(cb)]() {
         // the first time we call the delay, it just records an end time.  After that, it
         // actually delays.
         try {
@@ -94,7 +95,7 @@ transaction_context::new_attempt_context(async_attempt_context::VoidCallback&& c
         } catch (...) {
             cb(std::current_exception());
         }
-    }).detach();
+    });
 }
 
 std::shared_ptr<attempt_context_impl>

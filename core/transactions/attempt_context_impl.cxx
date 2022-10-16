@@ -1413,7 +1413,7 @@ void
 attempt_context_impl::commit(VoidCallback&& cb)
 {
     // for now, lets keep the blocking implementation
-    std::thread t([cb = std::move(cb), this]() mutable {
+    asio::post(cluster_ref()->io_context(), [cb = std::move(cb), this]() mutable {
         try {
             commit();
             return cb({});
@@ -1423,7 +1423,6 @@ attempt_context_impl::commit(VoidCallback&& cb)
             return cb(std::make_exception_ptr(transaction_operation_failed(FAIL_OTHER, e.what())));
         }
     });
-    t.detach();
 }
 
 void
@@ -1593,7 +1592,7 @@ void
 attempt_context_impl::rollback(VoidCallback&& cb)
 {
     // for now, lets keep the blocking implementation
-    std::thread t([cb = std::move(cb), this]() mutable {
+    asio::post(cluster_ref()->io_context(), [cb = std::move(cb), this]() mutable {
         if (op_list_.get_mode().is_query()) {
             return rollback_with_query(std::move(cb));
         }
@@ -1608,7 +1607,6 @@ attempt_context_impl::rollback(VoidCallback&& cb)
             return cb(std::make_exception_ptr(transaction_operation_failed(FAIL_OTHER, "unexpected exception during rollback")));
         }
     });
-    t.detach();
 }
 
 void
