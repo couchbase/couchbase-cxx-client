@@ -301,8 +301,10 @@ attempt_context_impl::replace_raw(const transaction_get_result& document, const 
                   if (e1) {
                       return op_completed_with_error(std::move(cb), *e1);
                   }
+                  auto tmp_doc =
+                    document_id{ document.id().bucket(), document.id().scope(), document.id().collection(), document.id().key() };
                   select_atr_if_needed_unlocked(
-                    { document.id().bucket(), document.id().scope(), document.id().collection(), document.id().key() },
+                    tmp_doc,
                     [this, existing_sm = std::move(existing_sm), document = std::move(document), cb = std::move(cb), content](
                       std::optional<transaction_operation_failed> e2) mutable {
                         if (e2) {
@@ -573,8 +575,9 @@ attempt_context_impl::remove(const transaction_get_result& document, VoidCallbac
               if (err1) {
                   return op_completed_with_error(std::move(cb), *err1);
               }
+              auto tmp_doc = document_id{ document.id().bucket(), document.id().scope(), document.id().collection(), document.id().key() };
               select_atr_if_needed_unlocked(
-                document.id(),
+                tmp_doc,
                 [document = std::move(document), cb = std::move(cb), this, error_handler = std::move(error_handler)](
                   std::optional<transaction_operation_failed> err2) mutable {
                     if (err2) {
