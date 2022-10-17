@@ -44,7 +44,7 @@ class tao_json_serializer
     using document_type = tao::json::value;
 
     template<typename Document>
-    static auto serialize(Document document) -> binary
+    static auto serialize([[maybe_unused]] Document document) -> binary
     {
         if constexpr (std::is_null_pointer_v<Document>) {
             return core::utils::json::generate_binary(tao::json::null);
