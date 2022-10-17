@@ -714,12 +714,15 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
             if (ec == asio::error::operation_aborted || self->stopped_) {
                 return;
             }
-            if (ec && self->state_listener_) {
+            if (!ec) {
+                ec = errc::common::unambiguous_timeout;
+            }
+            if (self->state_listener_) {
                 self->state_listener_->report_bootstrap_error(fmt::format("{}:{}", self->bootstrap_hostname_, self->bootstrap_port_), ec);
             }
             LOG_WARNING("{} unable to bootstrap in time", self->log_prefix_);
             auto h = std::move(self->bootstrap_handler_);
-            h(errc::common::unambiguous_timeout, {});
+            h(ec, {});
             self->stop(retry_reason::do_not_retry);
         });
         initiate_bootstrap();
