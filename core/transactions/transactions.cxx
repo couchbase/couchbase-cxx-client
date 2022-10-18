@@ -138,28 +138,28 @@ transactions::run(couchbase::transactions::txn_logic&& code, const couchbase::tr
 void
 transactions::run(const couchbase::transactions::per_transaction_config& config, async_logic&& code, txn_complete_callback&& cb)
 {
-    asio::post(cluster_->io_context(), [this, config, code = std::move(code), cb = std::move(cb)]() {
+    std::thread([this, config, code = std::move(code), cb = std::move(cb)]() {
         try {
             auto result = wrap_run(*this, config, max_attempts_, std::move(code));
             return cb({}, result);
         } catch (const transaction_exception& e) {
             return cb(e, std::nullopt);
         }
-    });
+    }).detach();
 }
 void
 transactions::run(couchbase::transactions::async_txn_logic&& code,
                   couchbase::transactions::async_txn_complete_logic&& cb,
                   const couchbase::transactions::per_transaction_config& config)
 {
-    asio::post(cluster_->io_context(), [this, config, code = std::move(code), cb = std::move(cb)]() {
+    std::thread([this, config, code = std::move(code), cb = std::move(cb)]() {
         try {
             auto result = wrap_run(*this, config, max_attempts_, std::move(code));
             return cb(result);
         } catch (const transaction_exception& e) {
             return cb(e.get_transaction_result());
         }
-    });
+    }).detach();
 }
 
 void
