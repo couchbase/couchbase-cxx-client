@@ -26,7 +26,7 @@
 #include "core/protocol/client_request.hxx"
 #include "core/protocol/cmd_increment.hxx"
 #include "core/timeout_defaults.hxx"
-#include "core/tracing/request_tracer.hxx"
+#include "couchbase/tracing/request_tracer.hxx"
 
 #include <couchbase/durability_level.hxx>
 
@@ -54,7 +54,7 @@ struct increment_request {
     couchbase::durability_level durability_level{ durability_level::none };
     std::optional<std::chrono::milliseconds> timeout{};
     io::retry_context<io::retry_strategy::best_effort> retries{ false };
-    std::shared_ptr<tracing::request_span> parent_span{ nullptr };
+    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
 

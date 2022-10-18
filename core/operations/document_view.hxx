@@ -92,7 +92,7 @@ struct document_view_request {
     std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
-    std::shared_ptr<tracing::request_span> parent_span{ nullptr };
+    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
 

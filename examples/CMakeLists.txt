@@ -5,3 +5,4 @@ macro(define_example name)
 endmacro()
 
 define_example(game_server)
+define_example(minimal)

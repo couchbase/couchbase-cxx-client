@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include "core/metrics/meter.hxx"
 #include "core/service_type_fmt.hxx"
-#include "core/tracing/request_tracer.hxx"
 #include "core/utils/movable_function.hxx"
+#include "couchbase/metrics/meter.hxx"
+#include "couchbase/tracing/request_tracer.hxx"
 #include "http_session.hxx"
 #include <utility>
 
@@ -38,19 +38,19 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     asio::steady_timer retry_backoff;
     Request request;
     encoded_request_type encoded;
-    std::shared_ptr<tracing::request_tracer> tracer_;
-    std::shared_ptr<tracing::request_span> span_{ nullptr };
-    std::shared_ptr<metrics::meter> meter_{};
+    std::shared_ptr<couchbase::tracing::request_tracer> tracer_;
+    std::shared_ptr<couchbase::tracing::request_span> span_{ nullptr };
+    std::shared_ptr<couchbase::metrics::meter> meter_{};
     std::shared_ptr<io::http_session> session_{};
     http_command_handler handler_{};
     std::chrono::milliseconds timeout_{};
     std::string client_context_id_;
-    std::shared_ptr<tracing::request_span> parent_span{ nullptr };
+    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
     http_command(asio::io_context& ctx,
                  Request req,
-                 std::shared_ptr<tracing::request_tracer> tracer,
-                 std::shared_ptr<metrics::meter> meter,
+                 std::shared_ptr<couchbase::tracing::request_tracer> tracer,
+                 std::shared_ptr<couchbase::metrics::meter> meter,
                  std::chrono::milliseconds default_timeout)
       : deadline(ctx)
       , retry_backoff(ctx)

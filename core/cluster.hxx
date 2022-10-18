@@ -227,8 +227,19 @@ class cluster : public std::enable_shared_from_this<cluster>
             if (auto bucket = find_bucket_by_name(request.id.bucket()); bucket != nullptr) {
                 return bucket->execute(request, std::forward<Handler>(handler));
             }
-            return handler(
-              request.make_response(make_key_value_error_context(errc::common::bucket_not_found, request.id), response_type{}));
+            if (request.id.bucket().empty()) {
+                return handler(
+                  request.make_response(make_key_value_error_context(errc::common::bucket_not_found, request.id), response_type{}));
+            }
+            auto bucket_name = request.id.bucket();
+            return open_bucket(bucket_name,
+                               [self = shared_from_this(), request = std::move(request), handler = std::forward<Handler>(handler)](
+                                 std::error_code ec) mutable {
+                                   if (ec) {
+                                       return handler(request.make_response(make_key_value_error_context(ec, request.id), response_type{}));
+                                   }
+                                   return self->execute(std::move(request), std::forward<Handler>(handler));
+                               });
         }
     }
 
@@ -456,8 +467,8 @@ class cluster : public std::enable_shared_from_this<cluster>
     std::mutex buckets_mutex_{};
     std::map<std::string, std::shared_ptr<bucket>> buckets_{};
     couchbase::core::origin origin_{};
-    std::shared_ptr<tracing::request_tracer> tracer_{ nullptr };
-    std::shared_ptr<metrics::meter> meter_{ nullptr };
+    std::shared_ptr<couchbase::tracing::request_tracer> tracer_{ nullptr };
+    std::shared_ptr<couchbase::metrics::meter> meter_{ nullptr };
     std::atomic_bool stopped_{ false };
 };
 } // namespace couchbase::core

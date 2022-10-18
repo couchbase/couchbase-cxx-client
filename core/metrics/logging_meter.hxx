@@ -18,7 +18,8 @@
 #pragma once
 
 #include "logging_meter_options.hxx"
-#include "meter.hxx"
+
+#include <couchbase/metrics/meter.hxx>
 
 #include <asio/steady_timer.hpp>
 
@@ -28,7 +29,7 @@ namespace couchbase::core::metrics
 {
 class logging_value_recorder;
 
-class logging_meter : public meter
+class logging_meter : public couchbase::metrics::meter
 {
   private:
     asio::steady_timer emit_report_;
@@ -68,7 +69,8 @@ class logging_meter : public meter
         rearm_reporter();
     }
 
-    std::shared_ptr<value_recorder> get_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags) override;
+    std::shared_ptr<couchbase::metrics::value_recorder> get_value_recorder(const std::string& name,
+                                                                           const std::map<std::string, std::string>& tags) override;
 };
 
 } // namespace couchbase::core::metrics

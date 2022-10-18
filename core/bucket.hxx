@@ -19,8 +19,8 @@
 
 #include "config_listener.hxx"
 #include "core/io/mcbp_command.hxx"
-#include "core/metrics/meter.hxx"
-#include "core/tracing/request_tracer.hxx"
+#include "couchbase/metrics/meter.hxx"
+#include "couchbase/tracing/request_tracer.hxx"
 #include "operations.hxx"
 #include "origin.hxx"
 
@@ -40,8 +40,8 @@ class bucket
     explicit bucket(const std::string& client_id,
                     asio::io_context& ctx,
                     asio::ssl::context& tls,
-                    std::shared_ptr<tracing::request_tracer> tracer,
-                    std::shared_ptr<metrics::meter> meter,
+                    std::shared_ptr<couchbase::tracing::request_tracer> tracer,
+                    std::shared_ptr<couchbase::metrics::meter> meter,
                     std::string name,
                     couchbase::core::origin origin,
                     const std::vector<protocol::hello_feature>& known_features,
@@ -543,8 +543,8 @@ class bucket
     std::string client_id_;
     asio::io_context& ctx_;
     asio::ssl::context& tls_;
-    std::shared_ptr<tracing::request_tracer> tracer_;
-    std::shared_ptr<metrics::meter> meter_;
+    std::shared_ptr<couchbase::tracing::request_tracer> tracer_;
+    std::shared_ptr<couchbase::metrics::meter> meter_;
     std::string name_;
     origin origin_;
 

@@ -17,11 +17,10 @@
 
 #pragma once
 
-#include "constants.hxx"
-
 #include <memory>
+#include <string>
 
-namespace couchbase::core::tracing
+namespace couchbase::tracing
 {
 
 class request_span
@@ -76,4 +75,4 @@ class request_tracer
     virtual std::shared_ptr<request_span> start_span(std::string name, std::shared_ptr<request_span> parent = {}) = 0;
 };
 
-} // namespace couchbase::core::tracing
+} // namespace couchbase::tracing

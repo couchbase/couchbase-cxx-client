@@ -21,7 +21,7 @@
 #include <memory>
 #include <string>
 
-namespace couchbase::core::metrics
+namespace couchbase::metrics
 {
 class value_recorder
 {
@@ -49,4 +49,4 @@ class meter
     virtual std::shared_ptr<value_recorder> get_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags) = 0;
 };
 
-} // namespace couchbase::core::metrics
+} // namespace couchbase::metrics

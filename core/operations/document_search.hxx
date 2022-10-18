@@ -151,7 +151,7 @@ struct search_request {
 
     std::string body_str{};
 
-    std::shared_ptr<tracing::request_span> parent_span{ nullptr };
+    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 };
 
 } // namespace couchbase::core::operations

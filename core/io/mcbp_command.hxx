@@ -18,11 +18,12 @@
 #pragma once
 
 #include "core/document_id_fmt.hxx"
-#include "core/metrics/meter.hxx"
 #include "core/platform/uuid.h"
 #include "core/protocol/cmd_get_collection_id.hxx"
-#include "core/tracing/request_tracer.hxx"
+#include "core/tracing/constants.hxx"
 #include "core/utils/movable_function.hxx"
+#include "couchbase/metrics/meter.hxx"
+#include "couchbase/tracing/request_tracer.hxx"
 #include "mcbp_session.hxx"
 #include "mcbp_traits.hxx"
 #include "retry_orchestrator.hxx"
@@ -53,8 +54,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     std::shared_ptr<Manager> manager_{};
     std::chrono::milliseconds timeout_{};
     std::string id_{ uuid::to_string(uuid::random()) };
-    std::shared_ptr<tracing::request_span> span_{ nullptr };
-    std::shared_ptr<tracing::request_span> parent_span{ nullptr };
+    std::shared_ptr<couchbase::tracing::request_span> span_{ nullptr };
+    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
     mcbp_command(asio::io_context& ctx, std::shared_ptr<Manager> manager, Request req, std::chrono::milliseconds default_timeout)
       : deadline(ctx)

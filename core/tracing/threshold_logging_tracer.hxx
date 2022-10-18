@@ -17,10 +17,12 @@
 
 #pragma once
 
-#include "request_tracer.hxx"
 #include "threshold_logging_options.hxx"
 
+#include <couchbase/tracing/request_tracer.hxx>
+
 #include <asio/io_context.hpp>
+
 #include <memory>
 #include <string>
 
@@ -30,7 +32,7 @@ class threshold_logging_span;
 class threshold_logging_tracer_impl;
 
 class threshold_logging_tracer
-  : public request_tracer
+  : public couchbase::tracing::request_tracer
   , public std::enable_shared_from_this<threshold_logging_tracer>
 {
   public:
@@ -38,7 +40,8 @@ class threshold_logging_tracer
 
     void start();
 
-    std::shared_ptr<request_span> start_span(std::string name, std::shared_ptr<request_span> parent) override;
+    std::shared_ptr<couchbase::tracing::request_span> start_span(std::string name,
+                                                                 std::shared_ptr<couchbase::tracing::request_span> parent) override;
     void report(std::shared_ptr<threshold_logging_span> span);
 
   private:
