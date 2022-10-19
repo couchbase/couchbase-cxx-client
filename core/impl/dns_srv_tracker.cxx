@@ -50,7 +50,7 @@ dns_srv_tracker::get_srv_nodes(utils::movable_function<void(origin::node_list, s
               LOG_WARNING("failed to fetch DNS SRV records for \"{}\" ({}), assuming that cluster is listening this address",
                           self->address_,
                           resp.ec.message());
-          } else if (resp.targets.empty()) {
+          } else if (resp.targets.empty() && self->address_ != "localhost") {
               LOG_WARNING("DNS SRV query returned 0 records for \"{}\", assuming that cluster is listening this address", self->address_);
           } else {
               nodes.reserve(resp.targets.size());
@@ -71,7 +71,9 @@ dns_srv_tracker::do_dns_refresh()
     get_srv_nodes([self = shared_from_this()](origin::node_list nodes, std::error_code dns_ec) mutable {
         bool expected_state{ true };
         if (dns_ec || nodes.empty()) {
-            LOG_WARNING("unable to perform DNS-SRV refresh: {}", dns_ec.message());
+            if (dns_ec) {
+                LOG_WARNING("unable to perform DNS-SRV refresh: {}", dns_ec.message());
+            }
             self->refresh_in_progress_.compare_exchange_strong(expected_state, false);
             return;
         }
