@@ -17,9 +17,9 @@
 
 #include "couchbase/cluster.hxx"
 #include "couchbase/subdocument_error_context.hxx"
+#include "couchbase/transactions/transaction_query_options.hxx"
 #include "exceptions.hxx"
 #include "transaction_get_result.hxx"
-#include "transaction_query_options.hxx"
 
 #include "core/operations/document_query.hxx"
 #include "core/utils/movable_function.hxx"

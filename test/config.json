@@ -4,5 +4,9 @@
     "password": "password",
     "io_threads": 4,
     "bucket": "default",
-    "metadata_bucket": "secBucket"
+    "metadata_keyspace": {
+        "bucket": "secBucket",
+        "scope": "_default",
+        "collection": "_default"
+    }
 }

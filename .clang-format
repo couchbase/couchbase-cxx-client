@@ -1,5 +1,8 @@
 # -*- mode: yaml; -*-
-
+---
+BasedOnStyle: Mozilla
+IndentWidth: 4
+---
 Language: Cpp
 BasedOnStyle: Mozilla
 Standard: c++17
@@ -12,3 +15,4 @@ AllowShortBlocksOnASingleLine: Never
 AllowShortCaseLabelsOnASingleLine: false
 BreakBeforeBraces: Linux
 FixNamespaceComments: true
+

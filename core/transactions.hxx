@@ -18,9 +18,9 @@
 
 #include <couchbase/transactions.hxx>
 
-#include "couchbase/transactions/per_transaction_config.hxx"
-#include "couchbase/transactions/transaction_config.hxx"
+#include "couchbase/transactions/transaction_options.hxx"
 #include "couchbase/transactions/transaction_result.hxx"
+#include "couchbase/transactions/transactions_config.hxx"
 #include "transactions/async_attempt_context.hxx"
 #include "transactions/attempt_context.hxx"
 #include "transactions/exceptions.hxx"
@@ -84,7 +84,7 @@ create_loggers(core::logger::level level = core::logger::level::off, spdlog::sin
  *
  * @code{.cpp}
  * cluster c("couchbase://127.0.0.1", "Administrator", "password");
- * transaction_config config;
+ * transactions_config config;
  * config.durability_level(transactions::durability_level::MAJORITY);
  * auto b = cluster.bucket("default");
  * auto coll = b->default_collection();
@@ -146,7 +146,7 @@ class transactions : public couchbase::transactions::transactions
      * @param cluster The cluster to use for the transactions.
      * @param config The configuration parameters to use for the transactions.
      */
-    transactions(std::shared_ptr<core::cluster> cluster, const couchbase::transactions::transaction_config& config);
+    transactions(std::shared_ptr<core::cluster> cluster, const couchbase::transactions::transactions_config& config);
 
     /**
      * @brief Destructor
@@ -166,11 +166,11 @@ class transactions : public couchbase::transactions::transactions
      */
     couchbase::transactions::transaction_result run(logic&& code);
 
-    couchbase::transactions::transaction_result run(const couchbase::transactions::per_transaction_config& config, logic&& code);
+    couchbase::transactions::transaction_result run(const couchbase::transactions::transaction_options& config, logic&& code);
 
     couchbase::transactions::transaction_result run(
       ::couchbase::transactions::txn_logic&& code,
-      const couchbase::transactions::per_transaction_config& cfg = couchbase::transactions::per_transaction_config()) override;
+      const couchbase::transactions::transaction_options& cfg = couchbase::transactions::transaction_options()) override;
 
     /**
      * @brief Run a transaction
@@ -186,11 +186,11 @@ class transactions : public couchbase::transactions::transactions
      */
     void run(async_logic&& code, txn_complete_callback&& cb);
 
-    void run(const couchbase::transactions::per_transaction_config& config, async_logic&& code, txn_complete_callback&& cb);
+    void run(const couchbase::transactions::transaction_options& config, async_logic&& code, txn_complete_callback&& cb);
 
     void run(couchbase::transactions::async_txn_logic&& code,
              couchbase::transactions::async_txn_complete_logic&& complete_cb,
-             const couchbase::transactions::per_transaction_config& cfg = {}) override;
+             const couchbase::transactions::transaction_options& cfg = {}) override;
     /**
      * @internal
      * called internally - will likely move
@@ -218,11 +218,11 @@ class transactions : public couchbase::transactions::transactions
     void close();
 
     /**
-     * @brief Return reference to @ref transaction_config.
+     * @brief Return reference to @ref transactions_config.
      *
      * @return config for this transactions instance.
      */
-    [[nodiscard]] couchbase::transactions::transaction_config& config()
+    [[nodiscard]] couchbase::transactions::transactions_config& config()
     {
         return config_;
     }
@@ -257,7 +257,7 @@ class transactions : public couchbase::transactions::transactions
 
   private:
     std::shared_ptr<core::cluster> cluster_;
-    couchbase::transactions::transaction_config config_;
+    couchbase::transactions::transactions_config config_;
     std::unique_ptr<transactions_cleanup> cleanup_;
     const std::size_t max_attempts_{ 1000 };
     const std::chrono::milliseconds min_retry_delay_{ 1 };

@@ -13,7 +13,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
-#include "transaction_query_options.hxx"
+#include "couchbase/transactions/transaction_query_options.hxx"
 #include "internal/transaction_context.hxx"
 
 namespace couchbase::core::transactions
@@ -28,7 +28,7 @@ transaction_query_options::wrap_request(const transaction_context& txn_context) 
       txn_context.config().kv_timeout() ? txn_context.config().kv_timeout().value() : core::timeout_defaults::key_value_durable_timeout;
     core::operations::query_request req = query_req_;
     if (!req.scan_consistency) {
-        req.scan_consistency = txn_context.config().scan_consistency();
+        req.scan_consistency = txn_context.config().query_config().scan_consistency();
     }
     auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(txn_context.remaining());
     req.timeout = remaining + extra;

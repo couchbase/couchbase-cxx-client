@@ -19,7 +19,7 @@
 
 #include <couchbase/transactions/async_attempt_context.hxx>
 #include <couchbase/transactions/attempt_context.hxx>
-#include <couchbase/transactions/per_transaction_config.hxx>
+#include <couchbase/transactions/transaction_options.hxx>
 #include <couchbase/transactions/transaction_result.hxx>
 
 #include <functional>
@@ -34,9 +34,9 @@ class transactions
 {
   public:
     virtual ~transactions() = default;
-    virtual transaction_result run(txn_logic&& logic, const per_transaction_config& cfg = per_transaction_config()) = 0;
+    virtual transaction_result run(txn_logic&& logic, const transaction_options& cfg = transaction_options()) = 0;
     virtual void run(async_txn_logic&& logic,
                      async_txn_complete_logic&& complete_callback,
-                     const per_transaction_config& cfg = per_transaction_config()) = 0;
+                     const transaction_options& cfg = transaction_options()) = 0;
 };
 } // namespace couchbase::transactions

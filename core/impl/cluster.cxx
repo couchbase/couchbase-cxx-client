@@ -30,7 +30,8 @@ cluster::transactions() -> std::shared_ptr<couchbase::transactions::transactions
     // TODO: add mutex for thread safety.
     if (!transactions_) {
         // TODO: fill in the cluster config, add an optional transactions_config, use it here.
-        transactions_ = std::make_shared<couchbase::core::transactions::transactions>(core_, couchbase::transactions::transaction_config());
+        transactions_ =
+          std::make_shared<couchbase::core::transactions::transactions>(core_, couchbase::transactions::transactions_config());
     }
     return transactions_;
 }

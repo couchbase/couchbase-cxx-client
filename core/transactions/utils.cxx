@@ -109,4 +109,13 @@ error_class_from_response_extras(const core::operations::mutate_in_response& res
     }
     return FAIL_OTHER;
 }
+
+core::document_id
+atr_id_from_bucket_and_key(const couchbase::transactions::transactions_config& cfg, const std::string& bucket, const std::string& key)
+{
+    if (cfg.metadata_collection()) {
+        return { cfg.metadata_collection()->bucket, cfg.metadata_collection()->scope, cfg.metadata_collection()->collection, key };
+    }
+    return { bucket, couchbase::scope::default_name, couchbase::collection::default_name, key };
+}
 } // namespace couchbase::core::transactions

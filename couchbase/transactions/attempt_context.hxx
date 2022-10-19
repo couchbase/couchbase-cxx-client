@@ -16,6 +16,7 @@
 #pragma once
 
 #include <couchbase/transactions/transaction_get_result.hxx>
+#include <couchbase/transactions/transaction_query_options.hxx>
 
 namespace couchbase::transactions
 {
@@ -47,8 +48,8 @@ class attempt_context
     virtual transaction_op_error_context remove(transaction_get_result_ptr doc) = 0;
 
     // TODO: when public api has query, we will be able to use non-core options to create the transaction_query_options.
-    // virtual transaction_op_error_context query(const std::string& statement, const transaction_query_options& options, QueryCallback&&
-    // cb) = 0;
+    // virtual transaction_op_error_context query(const std::string& statement, const core::transactions::transaction_query_options&
+    // options) = 0;
 
     virtual ~attempt_context() = default;
 

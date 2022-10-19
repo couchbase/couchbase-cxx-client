@@ -22,6 +22,8 @@
 #include "core/operations.hxx"
 #include "core/operations/management/bucket.hxx"
 
+#include <couchbase/transactions/transaction_keyspace.hxx>
+
 #include "core/transactions.hxx"
 #include "core/transactions/internal/utils.hxx"
 #include "core/transactions/result.hxx"
@@ -53,7 +55,7 @@ struct test_config {
     std::string password{ "password" };
     std::size_t io_threads{ 4U };
     std::string bucket{ "default" };
-    std::string metadata_bucket{ "default" };
+    std::string extra_bucket{ "secBucket" };
 };
 
 template<>
@@ -76,8 +78,8 @@ struct tao::json::traits<test_config> {
         if (const auto& val = v.template optional<std::string>("bucket"); val) {
             config.bucket = val.value();
         }
-        if (const auto& val = v.template optional<std::string>("metadata_bucket"); val) {
-            config.metadata_bucket = val.value();
+        if (const auto& val = v.template optional<std::string>("extra_bucket"); val) {
+            config.extra_bucket = val.value();
         }
     }
 };
@@ -150,15 +152,18 @@ struct conn {
                 exit(-1);
             }
         }
-        // now open the metadata bucket
+        // now open the extra bucket
         {
-            auto barrier = std::make_shared<std::promise<std::error_code>>();
-            auto f = barrier->get_future();
-            c->open_bucket(conf.metadata_bucket, [barrier](std::error_code ec) { barrier->set_value(ec); });
-            auto rc = f.get();
-            if (rc) {
-                std::cout << "ERROR opening metadata bucket `" << conf.metadata_bucket << "`: " << rc.message() << std::endl;
-                exit(-1);
+            if (!conf.extra_bucket.empty()) {
+                auto barrier = std::make_shared<std::promise<std::error_code>>();
+
+                auto f = barrier->get_future();
+                c->open_bucket(conf.extra_bucket, [barrier](std::error_code ec) { barrier->set_value(ec); });
+                auto rc = f.get();
+                if (rc) {
+                    std::cout << "ERROR opening extra bucket `" << conf.extra_bucket << "`: " << rc.message() << std::endl;
+                    exit(-1);
+                }
             }
         }
 
@@ -248,11 +253,11 @@ class TransactionsTestEnvironment
             if (auto var = spdlog::details::os::getenv("TEST_PASSWORD"); !var.empty()) {
                 global_config.password = var;
             }
-            spdlog::info(R"(connection_string: "{}", username: "{}", bucket: "{}", metadata_bucket: "{}", io_threads: {})",
+            spdlog::info(R"(connection_string: "{}", username: "{}", bucket: "{}", extra_bucket: "{}", io_threads: {})",
                          global_config.connection_string,
                          global_config.username,
                          global_config.bucket,
-                         global_config.metadata_bucket,
+                         global_config.extra_bucket,
                          global_config.io_threads);
         });
 
@@ -318,9 +323,9 @@ class TransactionsTestEnvironment
                                              bool cleanup_client_attempts = true,
                                              bool cleanup_lost_txns = true)
     {
-        couchbase::transactions::transaction_config cfg;
-        cfg.cleanup_client_attempts(cleanup_client_attempts);
-        cfg.cleanup_lost_attempts(cleanup_lost_txns);
+        couchbase::transactions::transactions_config cfg;
+        cfg.cleanup_config().cleanup_client_attempts(cleanup_client_attempts);
+        cfg.cleanup_config().cleanup_lost_attempts(cleanup_lost_txns);
         cfg.expiration_time(std::chrono::seconds(5));
         return { c, cfg };
     }

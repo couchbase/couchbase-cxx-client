@@ -18,7 +18,7 @@
 
 #include "atr_cleanup_entry.hxx"
 #include "client_record.hxx"
-#include "couchbase/transactions/transaction_config.hxx"
+#include "couchbase/transactions/transactions_config.hxx"
 
 #include <atomic>
 #include <condition_variable>
@@ -87,7 +87,7 @@ struct atr_cleanup_stats {
 class transactions_cleanup
 {
   public:
-    transactions_cleanup(std::shared_ptr<core::cluster> cluster, const couchbase::transactions::transaction_config& config);
+    transactions_cleanup(std::shared_ptr<core::cluster> cluster, const couchbase::transactions::transactions_config& config);
     ~transactions_cleanup();
 
     [[nodiscard]] std::shared_ptr<core::cluster> cluster_ref() const
@@ -95,17 +95,31 @@ class transactions_cleanup
         return cluster_;
     };
 
-    [[nodiscard]] const couchbase::transactions::transaction_config& config() const
+    [[nodiscard]] const couchbase::transactions::transactions_config& config() const
     {
         return config_;
     }
 
-    // Add an attempt to cleanup later.
+    // Add an attempt cleanup later.
     void add_attempt(attempt_context& ctx);
 
     std::size_t cleanup_queue_length() const
     {
         return atr_queue_.size();
+    }
+
+    void add_collection(couchbase::transactions::transaction_keyspace keyspace)
+    {
+        if (config_.cleanup_config().cleanup_lost_attempts()) {
+            std::lock_guard<std::mutex> lock(mutex_);
+
+            auto it = std::find(collections_.begin(), collections_.end(), keyspace);
+            if (it == collections_.end()) {
+                collections_.emplace_back(std::move(keyspace));
+                // start cleaning right away
+                lost_attempt_cleanup_workers_.emplace_back([this, keyspace = collections_.back()]() { this->clean_collection(keyspace); });
+            }
+        }
     }
 
     // only used for testing.
@@ -115,21 +129,23 @@ class transactions_cleanup
     // only used for testing
     const atr_cleanup_stats force_cleanup_atr(const core::document_id& atr_id, std::vector<transactions_cleanup_attempt>& results);
     const client_record_details get_active_clients(const std::string& bucket_name, const std::string& uuid);
+    const client_record_details get_active_clients(const couchbase::transactions::transaction_keyspace& keyspace, const std::string& uuid);
     void remove_client_record_from_all_buckets(const std::string& uuid);
     void close();
 
   private:
     std::shared_ptr<core::cluster> cluster_;
-    const couchbase::transactions::transaction_config& config_;
+    const couchbase::transactions::transactions_config& config_;
     const std::chrono::milliseconds cleanup_loop_delay_{ 100 };
 
-    std::thread lost_attempts_thr_;
     std::thread cleanup_thr_;
     atr_cleanup_queue atr_queue_;
     mutable std::condition_variable cv_;
     mutable std::mutex mutex_;
+    std::list<std::thread> lost_attempt_cleanup_workers_;
 
     const std::string client_uuid_;
+    std::list<couchbase::transactions::transaction_keyspace> collections_;
 
     void attempts_loop();
 
@@ -137,8 +153,8 @@ class transactions_cleanup
     bool interruptable_wait(std::chrono::duration<R, P> time);
 
     void lost_attempts_loop();
-    void clean_lost_attempts_in_bucket(const std::string& bucket_name);
-    void create_client_record(const std::string& bucket_name);
+    void clean_collection(const couchbase::transactions::transaction_keyspace& keyspace);
+    void create_client_record(const couchbase::transactions::transaction_keyspace& keyspace);
     const atr_cleanup_stats handle_atr_cleanup(const core::document_id& atr_id,
                                                std::vector<transactions_cleanup_attempt>* result = nullptr);
     std::atomic<bool> running_{ false };
