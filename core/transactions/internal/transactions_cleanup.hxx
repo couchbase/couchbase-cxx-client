@@ -87,7 +87,7 @@ struct atr_cleanup_stats {
 class transactions_cleanup
 {
   public:
-    transactions_cleanup(std::shared_ptr<core::cluster> cluster, const couchbase::transactions::transactions_config& config);
+    transactions_cleanup(std::shared_ptr<core::cluster> cluster, const couchbase::transactions::transactions_config::built& config);
     ~transactions_cleanup();
 
     [[nodiscard]] std::shared_ptr<core::cluster> cluster_ref() const
@@ -95,7 +95,7 @@ class transactions_cleanup
         return cluster_;
     };
 
-    [[nodiscard]] const couchbase::transactions::transactions_config& config() const
+    [[nodiscard]] const couchbase::transactions::transactions_config::built& config() const
     {
         return config_;
     }
@@ -110,7 +110,7 @@ class transactions_cleanup
 
     void add_collection(couchbase::transactions::transaction_keyspace keyspace)
     {
-        if (config_.cleanup_config().cleanup_lost_attempts()) {
+        if (config_.cleanup_config.cleanup_lost_attempts) {
             std::lock_guard<std::mutex> lock(mutex_);
 
             auto it = std::find(collections_.begin(), collections_.end(), keyspace);
@@ -128,14 +128,13 @@ class transactions_cleanup
     void force_cleanup_entry(atr_cleanup_entry& entry, transactions_cleanup_attempt& attempt);
     // only used for testing
     const atr_cleanup_stats force_cleanup_atr(const core::document_id& atr_id, std::vector<transactions_cleanup_attempt>& results);
-    const client_record_details get_active_clients(const std::string& bucket_name, const std::string& uuid);
     const client_record_details get_active_clients(const couchbase::transactions::transaction_keyspace& keyspace, const std::string& uuid);
     void remove_client_record_from_all_buckets(const std::string& uuid);
     void close();
 
   private:
     std::shared_ptr<core::cluster> cluster_;
-    const couchbase::transactions::transactions_config& config_;
+    const couchbase::transactions::transactions_config::built& config_;
     const std::chrono::milliseconds cleanup_loop_delay_{ 100 };
 
     std::thread cleanup_thr_;

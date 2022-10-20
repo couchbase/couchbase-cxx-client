@@ -228,8 +228,7 @@ TEST_CASE("can pass per-transaction configs", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    couchbase::transactions::transaction_options cfg{};
-    cfg.expiration_time(std::chrono::seconds(1));
+    auto cfg = couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(2));
     auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
     auto begin = std::chrono::steady_clock::now();
     auto result = c.transactions()->run(

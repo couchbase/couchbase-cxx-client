@@ -402,14 +402,15 @@ TEST_CASE("transactions: can set per transaction config", "[transactions]")
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
     couchbase::transactions::transaction_options per_txn_cfg;
-    per_txn_cfg.scan_consistency(couchbase::query_scan_consistency::not_bounded);
-    per_txn_cfg.expiration_time(std::chrono::milliseconds(1)).kv_timeout(std::chrono::milliseconds(2));
-    per_txn_cfg.durability_level(couchbase::durability_level::none);
+    per_txn_cfg.scan_consistency(couchbase::query_scan_consistency::not_bounded)
+      .expiration_time(std::chrono::milliseconds(1))
+      .kv_timeout(std::chrono::milliseconds(2))
+      .durability_level(couchbase::durability_level::none);
     transaction_context tx(txns, per_txn_cfg);
-    REQUIRE(tx.config().durability_level() == per_txn_cfg.durability_level());
-    REQUIRE(tx.config().kv_timeout() == per_txn_cfg.kv_timeout());
-    REQUIRE(tx.config().expiration_time() == per_txn_cfg.expiration_time());
-    REQUIRE(tx.config().query_config().scan_consistency() == per_txn_cfg.scan_consistency());
+    REQUIRE(tx.config().level == per_txn_cfg.durability_level());
+    REQUIRE(tx.config().kv_timeout == per_txn_cfg.kv_timeout());
+    REQUIRE(tx.config().expiration_time == per_txn_cfg.expiration_time());
+    REQUIRE(tx.config().query_config.scan_consistency == per_txn_cfg.scan_consistency());
 }
 
 TEST_CASE("transactions: can not per transactions config", "[transactions]")
@@ -417,8 +418,8 @@ TEST_CASE("transactions: can not per transactions config", "[transactions]")
     auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     transaction_context tx(txns);
-    REQUIRE(tx.config().durability_level() == txns.config().durability_level());
-    REQUIRE(tx.config().kv_timeout() == txns.config().kv_timeout());
-    REQUIRE(tx.config().expiration_time() == txns.config().expiration_time());
-    REQUIRE(tx.config().query_config().scan_consistency() == txns.config().query_config().scan_consistency());
+    REQUIRE(tx.config().level == txns.config().level);
+    REQUIRE(tx.config().kv_timeout == txns.config().kv_timeout);
+    REQUIRE(tx.config().expiration_time == txns.config().expiration_time);
+    REQUIRE(tx.config().query_config.scan_consistency == txns.config().query_config.scan_consistency);
 }

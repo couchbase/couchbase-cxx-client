@@ -22,11 +22,23 @@
 namespace couchbase
 {
 class cluster_options;
-
+/**
+ * Base class for all defined configuration profiles
+ *
+ * Just implement the apply function, and register it.  See @ref configuration_profiles_registry#register()
+ */
 class configuration_profile
 {
   public:
     virtual ~configuration_profile() = default;
+
+    /**
+     * Implement this in derived class, modifying the @ref cluster_options passed in.
+     *
+     * @param options The options class which will be modified.
+     * @since 1.0.0
+     * @volatile
+     */
     virtual void apply(cluster_options& options) = 0;
 };
 } // namespace couchbase

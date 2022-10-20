@@ -114,7 +114,7 @@ atr_cleanup_entry::check_atr_and_cleanup(std::shared_ptr<spdlog::logger> logger,
 {
     // ExtStoreDurability: this is the first point where we're guaranteed to have the ATR entry
     auto durability_level_raw = atr_entry_->durability_level();
-    auto durability_level = cleanup_->config().durability_level();
+    auto durability_level = cleanup_->config().level;
     if (durability_level_raw.has_value()) {
         durability_level = store_string_to_durability_level(durability_level_raw.value());
     }
@@ -134,12 +134,12 @@ atr_cleanup_entry::check_atr_and_cleanup(std::shared_ptr<spdlog::logger> logger,
         throw *err;
     }
     cleanup_docs(logger, durability_level);
-    auto ec = cleanup_->config().cleanup_hooks().on_cleanup_docs_completed();
+    auto ec = cleanup_->config().cleanup_hooks->on_cleanup_docs_completed();
     if (ec) {
         throw client_error(*ec, "on_cleanup_docs_completed hook threw error");
     }
     cleanup_entry(logger, durability_level);
-    ec = cleanup_->config().cleanup_hooks().on_cleanup_completed();
+    ec = cleanup_->config().cleanup_hooks->on_cleanup_completed();
     if (ec) {
         throw client_error(*ec, "on_cleanup_completed hook threw error");
     }
@@ -250,7 +250,7 @@ atr_cleanup_entry::commit_docs(std::shared_ptr<spdlog::logger> logger, std::opti
         do_per_doc(logger, *docs, true, [&](std::shared_ptr<spdlog::logger> log, transaction_get_result& doc, bool) {
             if (doc.links().has_staged_content()) {
                 auto content = doc.links().staged_content();
-                auto ec = cleanup_->config().cleanup_hooks().before_commit_doc(doc.id().key());
+                auto ec = cleanup_->config().cleanup_hooks->before_commit_doc(doc.id().key());
                 if (ec) {
                     throw client_error(*ec, "before_commit_doc hook threw error");
                 }
@@ -293,7 +293,7 @@ atr_cleanup_entry::remove_docs(std::shared_ptr<spdlog::logger> logger, std::opti
 {
     if (docs) {
         do_per_doc(logger, *docs, true, [&](std::shared_ptr<spdlog::logger> log, transaction_get_result& doc, bool is_deleted) {
-            auto ec = cleanup_->config().cleanup_hooks().before_remove_doc(doc.id().key());
+            auto ec = cleanup_->config().cleanup_hooks->before_remove_doc(doc.id().key());
             if (ec) {
                 throw client_error(*ec, "before_remove_doc hook threw error");
             }
@@ -337,7 +337,7 @@ atr_cleanup_entry::remove_docs_staged_for_removal(std::shared_ptr<spdlog::logger
     if (docs) {
         do_per_doc(logger, *docs, true, [&](std::shared_ptr<spdlog::logger> log, transaction_get_result& doc, bool) {
             if (doc.links().is_document_being_removed()) {
-                auto ec = cleanup_->config().cleanup_hooks().before_remove_doc_staged_for_removal(doc.id().key());
+                auto ec = cleanup_->config().cleanup_hooks->before_remove_doc_staged_for_removal(doc.id().key());
                 if (ec) {
                     throw client_error(*ec, "before_remove_doc_staged_for_removal hook threw error");
                 }
@@ -367,7 +367,7 @@ atr_cleanup_entry::remove_txn_links(std::shared_ptr<spdlog::logger> logger,
 {
     if (docs) {
         do_per_doc(logger, *docs, false, [&](std::shared_ptr<spdlog::logger> log, transaction_get_result& doc, bool) {
-            auto ec = cleanup_->config().cleanup_hooks().before_remove_links(doc.id().key());
+            auto ec = cleanup_->config().cleanup_hooks->before_remove_links(doc.id().key());
             if (ec) {
                 throw client_error(*ec, "before_remove_links hook threw error");
             }
@@ -394,7 +394,7 @@ void
 atr_cleanup_entry::cleanup_entry(std::shared_ptr<spdlog::logger> logger, durability_level dl)
 {
     try {
-        auto ec = cleanup_->config().cleanup_hooks().before_atr_remove();
+        auto ec = cleanup_->config().cleanup_hooks->before_atr_remove();
         if (ec) {
             throw client_error(*ec, "before_atr_remove hook threw error");
         }

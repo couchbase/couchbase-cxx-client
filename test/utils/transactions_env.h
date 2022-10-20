@@ -133,7 +133,9 @@ struct conn {
             auth.password = conf.password;
             auto barrier = std::make_shared<std::promise<std::error_code>>();
             auto f = barrier->get_future();
-            c->open(couchbase::core::origin(auth, connstr), [barrier](std::error_code ec) { barrier->set_value(ec); });
+            couchbase::core::origin orig(auth, connstr);
+            orig.options().transactions.expiration_time = std::chrono::seconds(1);
+            c->open(orig, [barrier](std::error_code ec) { barrier->set_value(ec); });
             auto rc = f.get();
             if (rc) {
                 std::cout << "ERROR opening cluster: " << rc.message() << std::endl;

@@ -46,6 +46,8 @@ class transactions_config
 
     transactions_config(const transactions_config& c);
 
+    transactions_config(transactions_config&& c);
+
     transactions_config& operator=(const transactions_config& c);
 
     /**
@@ -62,10 +64,12 @@ class transactions_config
      * @brief Set the default durability level for all transaction operations
      *
      * @param level The default durability level desired for write operations.
+     * @return reference to this, so calls can be chained.
      */
-    void durability_level(enum couchbase::durability_level level)
+    transactions_config& durability_level(enum couchbase::durability_level level)
     {
         level_ = level;
+        return *this;
     }
 
     /**
@@ -73,11 +77,13 @@ class transactions_config
      *
      * @see kv_timeout()
      * @param duration An std::chrono::duration representing the desired default kv operation timeout.
+     * @return reference to this, so calls can be chained.
      */
     template<typename T>
-    void kv_timeout(T duration)
+    transactions_config& kv_timeout(T duration)
     {
         kv_timeout_ = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
+        return *this;
     }
 
     /**
@@ -110,54 +116,99 @@ class transactions_config
      * @brief Set the expiration time for transactions.
      *
      * @param duration desired expiration for transactions. see @expiration_time().
+     * @return reference to this, so calls can be chained.
      */
     template<typename T>
-    void expiration_time(T duration)
+    transactions_config& expiration_time(T duration)
     {
         expiration_time_ = std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
+        return *this;
     }
 
-    void metadata_collection(const couchbase::transactions::transaction_keyspace& keyspace)
+    /**
+     * Set the transaction's metadata collection.
+     *
+     * @param keyspace The collection to use for the transaction metadata.
+     * @return reference to this, so calls can be chained.
+     */
+    transactions_config& metadata_collection(const couchbase::transactions::transaction_keyspace& keyspace)
     {
         metadata_collection_ = keyspace;
+        return *this;
     }
 
-    void metadata_collection(const std::string& bucket, const std::string& scope, const std::string& collection)
+    /*void metadata_collection(const std::string& bucket, const std::string& scope, const std::string& collection)
     {
         metadata_collection_.emplace(bucket, scope, collection);
-    }
+    }*/
 
     [[nodiscard]] std::optional<couchbase::transactions::transaction_keyspace> metadata_collection() const
     {
         return metadata_collection_;
     }
 
+    /**
+     * Get the query config values
+     *
+     * @return The query configuration for transactions.
+     */
     [[nodiscard]] const transactions_query_config& query_config() const
     {
         return query_config_;
     }
 
+    /**
+     * Get the query config values
+     *
+     * @return The query configuration for transactions.
+     */
     [[nodiscard]] transactions_query_config& query_config()
     {
         return query_config_;
     }
-    void query_config(const transactions_query_config& config)
+
+    /**
+     * Set the query configuration for transactions.
+     *
+     * @param config The transactions query configuration to use.
+     * @return reference to this, so calls can be chained.
+     */
+    transactions_config& query_config(const transactions_query_config& config)
     {
         query_config_ = config;
+        return *this;
     }
 
+    /**
+     * Get the cleanup configuration for transactions.
+     *
+     * @return The cleanup configuration.
+     */
     [[nodiscard]] const transactions_cleanup_config& cleanup_config() const
     {
         return cleanup_config_;
     }
 
+    /**
+     * Get the cleanup configuration for transactions.
+     *
+     * @return The cleanup configuration.
+     */
     [[nodiscard]] transactions_cleanup_config& cleanup_config()
     {
         return cleanup_config_;
     }
-    void cleanup_config(const transactions_cleanup_config& cleanup_config)
+
+    /**
+     * Set the cleanup configuration.
+     *
+     * @param cleanup_config The cleanup configuration to use.
+     * @return reference to this, so calls can be chained.
+     */
+    transactions_config& cleanup_config(const transactions_cleanup_config& cleanup_config)
     {
         cleanup_config_ = cleanup_config;
+        return *this;
     }
 
     /** @internal */
@@ -175,7 +226,34 @@ class transactions_config
         return *cleanup_hooks_;
     }
 
-  protected:
+    /** @internal */
+    struct built {
+        built();
+        ~built();
+        built(const built&);
+        built(const couchbase::durability_level,
+              const std::chrono::nanoseconds,
+              const std::optional<std::chrono::milliseconds>,
+              const std::unique_ptr<couchbase::core::transactions::attempt_context_testing_hooks>&,
+              const std::unique_ptr<couchbase::core::transactions::cleanup_testing_hooks>&,
+              const std::optional<transaction_keyspace>&,
+              const transactions_query_config::built&,
+              const transactions_cleanup_config::built&);
+        built& operator=(const built&);
+        couchbase::durability_level level;
+        std::chrono::nanoseconds expiration_time;
+        std::optional<std::chrono::milliseconds> kv_timeout;
+        std::unique_ptr<core::transactions::attempt_context_testing_hooks> attempt_context_hooks;
+        std::unique_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks;
+        std::optional<couchbase::transactions::transaction_keyspace> metadata_collection;
+        transactions_query_config::built query_config;
+        transactions_cleanup_config::built cleanup_config;
+    };
+
+    /** @internal */
+    [[nodiscard]] built build() const;
+
+  private:
     couchbase::durability_level level_;
     std::chrono::nanoseconds expiration_time_;
     std::optional<std::chrono::milliseconds> kv_timeout_;

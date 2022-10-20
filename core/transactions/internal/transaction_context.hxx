@@ -78,12 +78,7 @@ class transaction_context
         return transactions_.cluster_ref();
     }
 
-    couchbase::transactions::transactions_config& config()
-    {
-        return config_;
-    }
-
-    const couchbase::transactions::transactions_config& config() const
+    const couchbase::transactions::transactions_config::built& config() const
     {
         return config_;
     }
@@ -176,7 +171,7 @@ class transaction_context
 
     transactions& transactions_;
 
-    couchbase::transactions::transactions_config config_;
+    couchbase::transactions::transactions_config::built config_;
 
     /**
      * Will be non-zero only when resuming a deferred transaction. It records how much time has elapsed in total in the deferred

@@ -54,26 +54,26 @@ operator<<(OStream& os, const core::document_id& id)
 
 template<typename T>
 T&
-wrap_request(T&& req, const couchbase::transactions::transactions_config& config)
+wrap_request(T&& req, const couchbase::transactions::transactions_config::built& config)
 {
-    if (config.kv_timeout()) {
-        req.timeout = config.kv_timeout().value();
+    if (config.kv_timeout) {
+        req.timeout = config.kv_timeout.value();
     }
     return req;
 }
 
 template<typename T>
 T&
-wrap_durable_request(T&& req, const couchbase::transactions::transactions_config& config)
+wrap_durable_request(T&& req, const couchbase::transactions::transactions_config::built& config)
 {
     wrap_request(req, config);
-    req.durability_level = config.durability_level();
+    req.durability_level = config.level;
     return req;
 }
 
 template<typename T>
 T&
-wrap_durable_request(T&& req, const couchbase::transactions::transactions_config& config, durability_level level)
+wrap_durable_request(T&& req, const couchbase::transactions::transactions_config::built& config, durability_level level)
 {
     wrap_request(req, config);
     req.durability_level = level;
@@ -302,6 +302,8 @@ std::list<std::string>
 get_and_open_buckets(std::shared_ptr<core::cluster> c);
 
 core::document_id
-atr_id_from_bucket_and_key(const couchbase::transactions::transactions_config& cfg, const std::string& bucket, const std::string& key);
+atr_id_from_bucket_and_key(const couchbase::transactions::transactions_config::built& cfg,
+                           const std::string& bucket,
+                           const std::string& key);
 
 } // namespace couchbase::core::transactions
