@@ -293,8 +293,7 @@ set(couchbase_cxx_client_FILES
     core/transactions/transaction_get_result.cxx
     core/transactions/transaction_links.cxx
     core/transactions/transaction_options.cxx
-    core/transactions/transaction_query_options.cxx
-    core/transactions/transactions.cxx
+        core/transactions/transactions.cxx
     core/transactions/transactions_cleanup.cxx
     core/transactions/uid_generator.cxx)
 

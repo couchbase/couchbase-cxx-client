@@ -243,11 +243,88 @@ TEST_CASE("can pass per-transaction configs", "[transactions]")
     auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin);
     // should be greater than the expiration time
     CHECK(elapsed > *cfg.expiration_time());
-    // but not by too much (default is 15 seconds, we wanted 1, 2 is plenty)
+    // but not by too much (default is 15 seconds, we wanted 2, 2x that is plenty)
     CHECK(elapsed < (2 * *cfg.expiration_time()));
     // and of course the txn should have expired
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
     CHECK(result.ctx.ec());
     CHECK(result.ctx.ec() == couchbase::errc::transaction::expired);
+}
+
+TEST_CASE("can do simple query", "[transactions]")
+{
+    auto id = TransactionsTestEnvironment::get_document_id();
+    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    auto core_cluster = TransactionsTestEnvironment::get_cluster();
+    couchbase::cluster c(core_cluster);
+    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto result = c.transactions()->run([id, coll](couchbase::transactions::attempt_context& ctx) {
+        auto res = ctx.query(fmt::format("SELECT * FROM `{}` USE KEYS '{}'", id.bucket(), id.key()));
+        CHECK_FALSE(res->ctx().ec());
+        CHECK(content == res->rows_as_json().front()["default"]);
+    });
+    CHECK_FALSE(result.ctx.ec());
+    CHECK(result.unstaging_complete);
+    CHECK_FALSE(result.transaction_id.empty());
+}
+
+TEST_CASE("can do simple mutating query", "[transactions]")
+{
+    auto id = TransactionsTestEnvironment::get_document_id();
+    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    auto core_cluster = TransactionsTestEnvironment::get_cluster();
+    couchbase::cluster c(core_cluster);
+    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto result = c.transactions()->run([id, coll](couchbase::transactions::attempt_context& ctx) {
+        auto res = ctx.query(fmt::format("UPDATE `{}` USE KEYS '{}' SET `some_number` = 10", id.bucket(), id.key()));
+        CHECK_FALSE(res->ctx().ec());
+    });
+    CHECK_FALSE(result.ctx.ec());
+    CHECK(result.unstaging_complete);
+    CHECK_FALSE(result.transaction_id.empty());
+    auto final_doc = TransactionsTestEnvironment::get_doc(id);
+    CHECK(final_doc.content_as<tao::json::value>().at("some_number") == 10);
+}
+
+TEST_CASE("some query errors don't rollback", "[transactions]")
+{
+    auto id = TransactionsTestEnvironment::get_document_id();
+    auto core_cluster = TransactionsTestEnvironment::get_cluster();
+    couchbase::cluster c(core_cluster);
+    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto result = c.transactions()->run([id, coll](couchbase::transactions::attempt_context& ctx) {
+        auto get_res = ctx.query(fmt::format("SELECT * FROM `{}` USE KEYS '{}'", id.bucket(), id.key()));
+        CHECK_FALSE(get_res->ctx().ec());
+        CHECK(get_res->rows_as_json().size() == 0);
+        auto insert_res = ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES ("{}", {}))", id.bucket(), id.key(), content));
+        CHECK_FALSE(insert_res->ctx().ec());
+    });
+    CHECK_FALSE(result.ctx.ec());
+    CHECK(result.unstaging_complete);
+    CHECK_FALSE(result.transaction_id.empty());
+    auto final_doc = TransactionsTestEnvironment::get_doc(id);
+    CHECK(final_doc.content_as<tao::json::value>() == content);
+}
+
+TEST_CASE("some query errors do rollback", "[transactions]")
+{
+    auto id = TransactionsTestEnvironment::get_document_id();
+    auto id2 = TransactionsTestEnvironment::get_document_id();
+    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    auto core_cluster = TransactionsTestEnvironment::get_cluster();
+    couchbase::cluster c(core_cluster);
+    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto result = c.transactions()->run([id, id2, coll](couchbase::transactions::attempt_context& ctx) {
+        // this one works.
+        ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES ("{}", {}))", id2.bucket(), id2.key(), content));
+        // but not this one.
+        ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES ("{}", {}))", id.bucket(), id.key(), content));
+    });
+    CHECK(result.ctx.ec() == couchbase::errc::transaction::failed);
+
+    // id2 should not exist, since the txn should have rolled back.
+    auto [err, doc2] = coll->get(id2.key(), {}).get();
+    CHECK(err.ec() == couchbase::errc::key_value::document_not_found);
+    CHECK(doc2.cas().empty());
 }

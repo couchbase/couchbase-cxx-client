@@ -15,8 +15,8 @@
  */
 #pragma once
 
-#include "couchbase/transactions/transaction_query_options.hxx"
 #include "transaction_get_result.hxx"
+#include <couchbase/transactions/transaction_query_options.hxx>
 
 #include <optional>
 #include <string>
@@ -136,7 +136,10 @@ class attempt_context
      * @param options options to apply to the query.
      * @returns result of the query.
      */
-    virtual core::operations::query_response query(const std::string& statement, const transaction_query_options& options) = 0;
+    core::operations::query_response query(const std::string& statement, const couchbase::transactions::transaction_query_options& opts)
+    {
+        return do_core_query(statement, opts);
+    };
     /**
      * Performs a Query, within the current transaction.
      *
@@ -145,7 +148,7 @@ class attempt_context
      */
     core::operations::query_response query(const std::string& statement)
     {
-        transaction_query_options opts;
+        couchbase::transactions::transaction_query_options opts;
         return query(statement, opts);
     }
 
@@ -179,6 +182,9 @@ class attempt_context
 
     /** @internal */
     virtual transaction_get_result replace_raw(const transaction_get_result& document, const std::vector<std::byte>& content) = 0;
+
+    virtual core::operations::query_response do_core_query(const std::string&,
+                                                           const couchbase::transactions::transaction_query_options& opts) = 0;
 };
 
 } // namespace couchbase::core::transactions

@@ -99,5 +99,4 @@ class query_result
     query_meta_data meta_data_{};
     std::vector<codec::binary> rows_{};
 };
-
 } // namespace couchbase

@@ -17,7 +17,8 @@
 
 #pragma once
 
-#include <couchbase/error_context.hxx>
+#include <couchbase/key_value_error_context.hxx>
+#include <couchbase/query_error_context.hxx>
 
 namespace couchbase
 {
@@ -26,25 +27,49 @@ class transaction_op_error_context
   public:
     transaction_op_error_context() = default;
 
-    transaction_op_error_context(std::error_code ec, couchbase::error_context cause = {})
-      : ec_(std::move(ec))
+    transaction_op_error_context(std::error_code ec)
+      : ec_(ec)
+    {
+    }
+
+    transaction_op_error_context(std::error_code ec, couchbase::key_value_error_context cause)
+      : ec_(ec)
       , cause_(std::move(cause))
     {
     }
+
+    transaction_op_error_context(std::error_code ec, couchbase::query_error_context cause)
+      : ec_(ec)
+      , cause_(std::move(cause))
+    {
+    }
+
+    /**
+     * The error_code associated with this error context.   This will always be a @ref transaction_op_error_code
+     *
+     * Note that some query errors are not _transaction_ errors, so this error code will be 0, but there will be
+     * a @ref transaction_op_error_code#cause() with a query_error_context in it.  These errors do not rollback a
+     * transaction.   If you want to roll it back, raise an exception.
+     *
+     * @return a transaction_op_error_code, if any.
+     */
     [[nodiscard]] std::error_code ec() const
     {
         return ec_;
     }
 
-    [[nodiscard]] couchbase::error_context cause() const
+    /**
+     * The underlying cause of this error.   This can be either a @ref key_value_error_code or a @ref query_error_context.
+     *
+     * @return the error_context associated with the underlying cause of this error.
+     */
+    [[nodiscard]] std::variant<key_value_error_context, query_error_context> cause() const
     {
         return cause_;
     }
 
   private:
     std::error_code ec_{}; // a transaction_op error_code
-    // TODO: perhaps a variant later to house a kv or query error_context,
-    //       or maybe they both have a common base, etc...
-    couchbase::error_context cause_{};
+    std::variant<key_value_error_context, query_error_context> cause_{};
 };
 } // namespace couchbase

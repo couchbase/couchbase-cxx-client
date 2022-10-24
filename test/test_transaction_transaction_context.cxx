@@ -345,7 +345,7 @@ TEST_CASE("transactions: can do query", "[transactions]")
     auto f = barrier->get_future();
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, tx_content));
     auto query = fmt::format("SELECT * FROM `{}` USE KEYS '{}'", id.bucket(), id.key());
-    transaction_query_options opts;
+    couchbase::transactions::transaction_query_options opts;
     tx.query(query, opts, [&barrier](std::exception_ptr err, std::optional<couchbase::core::operations::query_response> payload) {
         // this should result in a transaction_operation_failed exception since the doc isn't there
         CHECK(payload);
@@ -370,7 +370,7 @@ TEST_CASE("transactions: can see some query errors but no transactions failed", 
     tx.new_attempt_context();
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
-    transaction_query_options opts;
+    couchbase::transactions::transaction_query_options opts;
     tx.query("jkjkjl;kjlk;  jfjjffjfj",
              opts,
              [&barrier](std::exception_ptr err, std::optional<couchbase::core::operations::query_response> payload) {
