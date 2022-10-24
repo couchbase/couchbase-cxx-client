@@ -41,6 +41,9 @@ static const std::string KV_REPLACE{ "EXECUTE __update" };
 static const std::string KV_REMOVE{ "EXECUTE __delete" };
 static const tao::json::value KV_TXDATA{ { "kv", true } };
 
+// the config may have nullptr for attempt context hooks, so we use the noop here in that case
+static auto noop_hooks = attempt_context_testing_hooks{};
+
 std::shared_ptr<core::cluster>
 attempt_context_impl::cluster_ref()
 {
@@ -50,7 +53,7 @@ attempt_context_impl::cluster_ref()
 attempt_context_impl::attempt_context_impl(transaction_context& transaction_ctx)
   : overall_(transaction_ctx)
   , staged_mutations_(std::make_unique<staged_mutation_queue>())
-  , hooks_(*overall_.config().attempt_context_hooks)
+  , hooks_(overall_.config().attempt_context_hooks ? *overall_.config().attempt_context_hooks : noop_hooks)
 {
     // put a new transaction_attempt in the context...
     overall_.add_attempt();

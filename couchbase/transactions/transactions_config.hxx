@@ -137,11 +137,6 @@ class transactions_config
         return *this;
     }
 
-    /*void metadata_collection(const std::string& bucket, const std::string& scope, const std::string& collection)
-    {
-        metadata_collection_.emplace(bucket, scope, collection);
-    }*/
-
     [[nodiscard]] std::optional<couchbase::transactions::transaction_keyspace> metadata_collection() const
     {
         return metadata_collection_;
@@ -228,23 +223,11 @@ class transactions_config
 
     /** @internal */
     struct built {
-        built();
-        ~built();
-        built(const built&);
-        built(const couchbase::durability_level,
-              const std::chrono::nanoseconds,
-              const std::optional<std::chrono::milliseconds>,
-              const std::unique_ptr<couchbase::core::transactions::attempt_context_testing_hooks>&,
-              const std::unique_ptr<couchbase::core::transactions::cleanup_testing_hooks>&,
-              const std::optional<transaction_keyspace>&,
-              const transactions_query_config::built&,
-              const transactions_cleanup_config::built&);
-        built& operator=(const built&);
         couchbase::durability_level level;
         std::chrono::nanoseconds expiration_time;
         std::optional<std::chrono::milliseconds> kv_timeout;
-        std::unique_ptr<core::transactions::attempt_context_testing_hooks> attempt_context_hooks;
-        std::unique_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks;
+        std::shared_ptr<core::transactions::attempt_context_testing_hooks> attempt_context_hooks;
+        std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks;
         std::optional<couchbase::transactions::transaction_keyspace> metadata_collection;
         transactions_query_config::built query_config;
         transactions_cleanup_config::built cleanup_config;
@@ -257,8 +240,8 @@ class transactions_config
     couchbase::durability_level level_;
     std::chrono::nanoseconds expiration_time_;
     std::optional<std::chrono::milliseconds> kv_timeout_;
-    std::unique_ptr<core::transactions::attempt_context_testing_hooks> attempt_context_hooks_;
-    std::unique_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks_;
+    std::shared_ptr<core::transactions::attempt_context_testing_hooks> attempt_context_hooks_;
+    std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks_;
     std::optional<couchbase::transactions::transaction_keyspace> metadata_collection_;
     transactions_query_config query_config_{};
     transactions_cleanup_config cleanup_config_{};
