@@ -46,7 +46,7 @@ class transactions_config
 
     transactions_config(const transactions_config& c);
 
-    transactions_config(transactions_config&& c);
+    transactions_config(transactions_config&& c) noexcept;
 
     transactions_config& operator=(const transactions_config& c);
 
@@ -210,13 +210,13 @@ class transactions_config
     void test_factories(core::transactions::attempt_context_testing_hooks& hooks, core::transactions::cleanup_testing_hooks& cleanup_hooks);
 
     /** @internal */
-    core::transactions::attempt_context_testing_hooks& attempt_context_hooks() const
+    [[nodiscard]] core::transactions::attempt_context_testing_hooks& attempt_context_hooks() const
     {
         return *attempt_context_hooks_;
     }
 
     /** @internal */
-    core::transactions::cleanup_testing_hooks& cleanup_hooks() const
+    [[nodiscard]] core::transactions::cleanup_testing_hooks& cleanup_hooks() const
     {
         return *cleanup_hooks_;
     }

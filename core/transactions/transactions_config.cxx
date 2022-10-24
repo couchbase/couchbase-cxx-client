@@ -32,17 +32,15 @@ transactions_config::transactions_config()
 {
 }
 
-transactions_config::~transactions_config()
-{
-}
+transactions_config::~transactions_config() = default;
 
-transactions_config::transactions_config(transactions_config&& c)
-  : level_(std::move(c.level_))
-  , expiration_time_(std::move(c.expiration_time_))
+transactions_config::transactions_config(transactions_config&& c) noexcept
+  : level_(c.level_)
+  , expiration_time_(c.expiration_time_)
   , attempt_context_hooks_(c.attempt_context_hooks_)
   , cleanup_hooks_(c.cleanup_hooks_)
   , metadata_collection_(std::move(c.metadata_collection_))
-  , query_config_(std::move(c.query_config_))
+  , query_config_(c.query_config_)
   , cleanup_config_(std::move(c.cleanup_config_))
 {
 }
@@ -61,13 +59,16 @@ transactions_config::transactions_config(const transactions_config& config)
 transactions_config&
 transactions_config::operator=(const transactions_config& c)
 {
-    level_ = c.level_;
-    expiration_time_ = c.expiration_time_;
-    attempt_context_hooks_ = c.attempt_context_hooks_;
-    cleanup_hooks_ = c.cleanup_hooks_;
-    query_config_ = c.query_config_;
-    metadata_collection_ = c.metadata_collection_;
-    cleanup_config_ = c.cleanup_config_;
+    if (this != &c) {
+        level_ = c.level_;
+
+        expiration_time_ = c.expiration_time_;
+        attempt_context_hooks_ = c.attempt_context_hooks_;
+        cleanup_hooks_ = c.cleanup_hooks_;
+        query_config_ = c.query_config_;
+        metadata_collection_ = c.metadata_collection_;
+        cleanup_config_ = c.cleanup_config_;
+    }
     return *this;
 }
 
