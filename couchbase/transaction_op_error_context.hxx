@@ -19,6 +19,7 @@
 
 #include <couchbase/key_value_error_context.hxx>
 #include <couchbase/query_error_context.hxx>
+#include <variant>
 
 namespace couchbase
 {
