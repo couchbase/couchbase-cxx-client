@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "core/transactions/error_class.hxx"
 #include "core/transactions/exceptions.hxx"
 #include "core/transactions/result.hxx"
 #include "transaction_context.hxx"
@@ -62,21 +63,6 @@ class retry_operation_retries_exhausted : public std::runtime_error
       : std::runtime_error(what)
     {
     }
-};
-
-enum error_class {
-    FAIL_HARD = 0,
-    FAIL_OTHER,
-    FAIL_TRANSIENT,
-    FAIL_AMBIGUOUS,
-    FAIL_DOC_ALREADY_EXISTS,
-    FAIL_DOC_NOT_FOUND,
-    FAIL_PATH_NOT_FOUND,
-    FAIL_CAS_MISMATCH,
-    FAIL_WRITE_WRITE_CONFLICT,
-    FAIL_ATR_FULL,
-    FAIL_PATH_ALREADY_EXISTS,
-    FAIL_EXPIRY
 };
 
 external_exception

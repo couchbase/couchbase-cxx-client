@@ -21,8 +21,11 @@
 #include "core/io/ip_protocol.hxx"
 #include "core/metrics/logging_meter_options.hxx"
 #include "core/tracing/threshold_logging_options.hxx"
+#include "core/transactions/attempt_context_testing_hooks.hxx"
+#include "core/transactions/cleanup_testing_hooks.hxx"
 #include "couchbase/metrics/meter.hxx"
 #include "couchbase/tracing/request_tracer.hxx"
+#include "couchbase/transactions/transactions_config.hxx"
 #include "service_type.hxx"
 #include "timeout_defaults.hxx"
 
@@ -78,6 +81,7 @@ struct cluster_options {
     std::size_t max_http_connections{ 0 };
     std::chrono::milliseconds idle_http_connection_timeout = timeout_defaults::idle_http_connection_timeout;
     std::string user_agent_extra{};
+    couchbase::transactions::transactions_config::built transactions{};
 
     [[nodiscard]] std::chrono::milliseconds default_timeout_for(service_type type) const;
     void apply_profile(std::string profile_name);

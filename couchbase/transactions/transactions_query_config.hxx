@@ -22,14 +22,37 @@ namespace couchbase::transactions
 class transactions_query_config
 {
   public:
-    void scan_consistency(query_scan_consistency consistency)
+    /**
+     * Set scan consistency for transactions.
+     *
+     * @param consistency the query_scan_consistency to use.
+     * @return reference to this, so calls can be chained.
+     */
+    transactions_query_config& scan_consistency(query_scan_consistency consistency)
     {
         scan_consistency_ = consistency;
+        return *this;
     }
 
+    /**
+     * Get the scan consistency
+     *
+     * @return the query_scan_consistency
+     */
     [[nodiscard]] query_scan_consistency scan_consistency() const
     {
         return scan_consistency_;
+    }
+
+    /** @internal */
+    struct built {
+        query_scan_consistency scan_consistency;
+    };
+
+    /** @internal */
+    [[nodiscard]] auto build() const -> built
+    {
+        return { scan_consistency_ };
     }
 
   private:

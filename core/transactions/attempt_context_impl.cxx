@@ -41,6 +41,9 @@ static const std::string KV_REPLACE{ "EXECUTE __update" };
 static const std::string KV_REMOVE{ "EXECUTE __delete" };
 static const tao::json::value KV_TXDATA{ { "kv", true } };
 
+// the config may have nullptr for attempt context hooks, so we use the noop here in that case
+static auto noop_hooks = attempt_context_testing_hooks{};
+
 std::shared_ptr<core::cluster>
 attempt_context_impl::cluster_ref()
 {
@@ -50,7 +53,7 @@ attempt_context_impl::cluster_ref()
 attempt_context_impl::attempt_context_impl(transaction_context& transaction_ctx)
   : overall_(transaction_ctx)
   , staged_mutations_(std::make_unique<staged_mutation_queue>())
-  , hooks_(overall_.config().attempt_context_hooks())
+  , hooks_(overall_.config().attempt_context_hooks ? *overall_.config().attempt_context_hooks : noop_hooks)
 {
     // put a new transaction_attempt in the context...
     overall_.add_attempt();
@@ -313,7 +316,7 @@ attempt_context_impl::replace_raw(const transaction_get_result& document, const 
                         if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::INSERT) {
                             debug("found existing INSERT of {} while replacing", document);
                             exp_delay delay(
-                              std::chrono::milliseconds(5), std::chrono::milliseconds(300), overall_.config().expiration_time());
+                              std::chrono::milliseconds(5), std::chrono::milliseconds(300), overall_.config().expiration_time);
                             create_staged_insert(document.id(), content, existing_sm->doc().cas().value(), delay, std::move(cb));
                             return;
                         }
@@ -438,7 +441,7 @@ attempt_context_impl::insert_raw(const core::document_id& id, const std::vector<
                       return create_staged_replace(existing_sm->doc(), content, std::move(cb));
                   }
                   uint64_t cas = 0;
-                  exp_delay delay(std::chrono::milliseconds(5), std::chrono::milliseconds(300), overall_.config().expiration_time());
+                  exp_delay delay(std::chrono::milliseconds(5), std::chrono::milliseconds(300), overall_.config().expiration_time);
                   create_staged_insert(id, content, cas, delay, std::move(cb));
               });
         } catch (const std::exception& e) {
@@ -694,18 +697,18 @@ attempt_context_impl::query_begin_work(utils::movable_function<void(std::excepti
     txdata["state"]["timeLeftMs"] = overall_.remaining().count() / 1000000;
     txdata["config"] = tao::json::empty_object;
     txdata["config"]["kvTimeoutMs"] =
-      overall_.config().kv_timeout() ? overall_.config().kv_timeout()->count() : core::timeout_defaults::key_value_timeout.count();
+      overall_.config().kv_timeout ? overall_.config().kv_timeout->count() : core::timeout_defaults::key_value_timeout.count();
     txdata["config"]["numAtrs"] = 1024;
     opts.raw("numatrs", jsonify(1024));
-    txdata["config"]["durabilityLevel"] = durability_level_to_string(overall_.config().durability_level());
-    opts.raw("durability_level", jsonify(durability_level_to_string_for_query(overall_.config().durability_level())));
+    txdata["config"]["durabilityLevel"] = durability_level_to_string(overall_.config().level);
+    opts.raw("durability_level", jsonify(durability_level_to_string_for_query(overall_.config().level)));
     if (atr_id_) {
         txdata["atr"] = tao::json::empty_object;
         txdata["atr"]["scp"] = atr_id_->scope();
         txdata["atr"]["coll"] = atr_id_->collection();
         txdata["atr"]["bkt"] = atr_id_->bucket();
         txdata["atr"]["id"] = atr_id_->key();
-    } else if (overall_.config().metadata_collection()) {
+    } else if (overall_.config().metadata_collection) {
         auto id = atr_id_from_bucket_and_key(overall_.config(), "", "");
         txdata["atr"] = tao::json::empty_object;
         txdata["atr"]["scp"] = id.scope();
@@ -1769,7 +1772,7 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id, std::u
             std::chrono::nanoseconds remaining = overall_.remaining();
             // This bounds the value to [0-expirationTime].  It should always be in this range, this is just to protect
             // against the application clock changing.
-            long remaining_bounded_nanos = std::max(std::min(remaining.count(), overall_.config().expiration_time().count()),
+            long remaining_bounded_nanos = std::max(std::min(remaining.count(), overall_.config().expiration_time.count()),
                                                     static_cast<std::chrono::nanoseconds::rep>(0));
             long remaining_bounded_msecs = remaining_bounded_nanos / 1'000'000;
 
@@ -1787,7 +1790,7 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id, std::u
                   couchbase::mutate_in_specs::insert(prefix + ATR_FIELD_EXPIRES_AFTER_MSECS, remaining_bounded_msecs).xattr().create_path(),
                   // ExtStoreDurability
                   couchbase::mutate_in_specs::insert(prefix + ATR_FIELD_DURABILITY_LEVEL,
-                                                     store_durability_level_to_string(overall_.config().durability_level()))
+                                                     store_durability_level_to_string(overall_.config().level))
                     .xattr()
                     .create_path(),
                   // subdoc::opcode::set_doc used in replace w/ empty path

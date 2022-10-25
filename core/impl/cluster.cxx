@@ -30,8 +30,7 @@ cluster::transactions() -> std::shared_ptr<couchbase::transactions::transactions
     // TODO: add mutex for thread safety.
     if (!transactions_) {
         // TODO: fill in the cluster config, add an optional transactions_config, use it here.
-        transactions_ =
-          std::make_shared<couchbase::core::transactions::transactions>(core_, couchbase::transactions::transactions_config());
+        transactions_ = std::make_shared<couchbase::core::transactions::transactions>(core_, core_->origin().second.options().transactions);
     }
     return transactions_;
 }
@@ -135,7 +134,7 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
         user_options.tracing_options.management_threshold = opts.tracing.management_threshold;
         user_options.tracing_options.eventing_threshold = opts.tracing.eventing_threshold;
     }
-
+    user_options.transactions = opts.transactions;
     // connection string might override some user options
     return { auth, couchbase::core::utils::parse_connection_string(connection_string, user_options) };
 }

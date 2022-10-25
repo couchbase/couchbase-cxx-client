@@ -181,6 +181,15 @@ class cluster
         return query_index_manager{ core_ };
     }
 
+    /**
+     * Provides access to transaction services.
+     *
+     * @return
+     *
+     * @since 1.0.0
+     * @committed
+     */
+
     [[nodiscard]] auto transactions() -> std::shared_ptr<couchbase::transactions::transactions>;
 
   private:

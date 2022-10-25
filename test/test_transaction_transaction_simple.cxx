@@ -131,99 +131,6 @@ TEST_CASE("transactions: can use custom metadata collections per transactions", 
     REQUIRE(expected == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>());
 }
 
-TEST_CASE("transactions: non existent bucket in per transactions custom metadata collections", "[transactions]")
-{
-    auto txn = TransactionsTestEnvironment::get_transactions();
-
-    // upsert initial doc
-    auto id = TransactionsTestEnvironment::get_document_id();
-    const tao::json::value initial{
-        { "some number", 0 },
-    };
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, initial));
-    couchbase::transactions::transaction_options cfg;
-    cfg.expiration_time(std::chrono::seconds(1));
-    couchbase::cluster c(TransactionsTestEnvironment::get_cluster());
-    cfg.metadata_collection(c.bucket("idontexist").default_collection());
-    try {
-        txn.run(cfg, [&](attempt_context& ctx) {
-            auto doc = ctx.get(id);
-            auto content = doc.content<tao::json::value>();
-            content["another one"] = 1;
-            ctx.replace(doc, content);
-        });
-        FAIL("expected txn to throw a transaction_exception");
-    } catch (const transaction_exception& e) {
-        REQUIRE(e.type() == failure_type::FAIL);
-    } catch (...) {
-        FAIL("expected transaction to throw a transaction_exception");
-    }
-    // check that doc content untouched
-    REQUIRE(initial == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>());
-}
-
-TEST_CASE("transactions: non existent scope in per transactions custom metadata collections", "[transactions]")
-{
-    auto txn = TransactionsTestEnvironment::get_transactions();
-
-    // upsert initial doc
-    auto id = TransactionsTestEnvironment::get_document_id();
-    const tao::json::value initial{
-        { "some number", 0 },
-    };
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, initial));
-    couchbase::transactions::transaction_options cfg;
-    cfg.expiration_time(std::chrono::seconds(1));
-    couchbase::cluster c(TransactionsTestEnvironment::get_cluster());
-    cfg.metadata_collection(c.bucket(TransactionsTestEnvironment::get_conf().extra_bucket).scope("Idontexist").collection("_default"));
-    try {
-        txn.run(cfg, [&](attempt_context& ctx) {
-            auto doc = ctx.get(id);
-            auto content = doc.content<tao::json::value>();
-            content["another one"] = 1;
-            ctx.replace(doc, content);
-        });
-        FAIL("expected txn to throw a transaction_exception");
-    } catch (const transaction_exception& e) {
-        REQUIRE((e.type() == failure_type::EXPIRY || e.type() == failure_type::FAIL));
-    } catch (...) {
-        FAIL("expected transaction to throw a transaction_exception");
-    }
-    // check that doc content untouched
-    REQUIRE(initial == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>());
-}
-
-TEST_CASE("transactions: non existent collection in per transactions custom metadata collections", "[transactions]")
-{
-    auto txn = TransactionsTestEnvironment::get_transactions();
-
-    // upsert initial doc
-    auto id = TransactionsTestEnvironment::get_document_id();
-    const tao::json::value initial{
-        { "some number", 0 },
-    };
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, initial));
-    couchbase::transactions::transaction_options cfg;
-    cfg.expiration_time(std::chrono::seconds(1));
-    couchbase::cluster c(TransactionsTestEnvironment::get_cluster());
-    cfg.metadata_collection(c.bucket(TransactionsTestEnvironment::get_conf().extra_bucket).default_scope().collection("idontexist"));
-    try {
-        txn.run(cfg, [&](attempt_context& ctx) {
-            auto doc = ctx.get(id);
-            auto content = doc.content<tao::json::value>();
-            content["another one"] = 1;
-            ctx.replace(doc, content);
-        });
-        FAIL("expected txn to throw a transaction_exception");
-    } catch (const transaction_exception& e) {
-        REQUIRE((e.type() == failure_type::EXPIRY || e.type() == failure_type::FAIL));
-    } catch (...) {
-        FAIL("expected transaction to throw a transaction_exception");
-    }
-    // check that doc content untouched
-    REQUIRE(initial == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>());
-}
-
 TEST_CASE("transactions: can use custom metadata collections", "[transactions]")
 {
     auto cluster = TransactionsTestEnvironment::get_cluster();
@@ -304,11 +211,10 @@ TEST_CASE("transactions: non existent collection in custom metadata collections"
 {
     auto cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::transactions::transactions_config cfg;
-    cfg.metadata_collection(couchbase::transactions::transaction_keyspace{
-      TransactionsTestEnvironment::get_conf().extra_bucket,
-      couchbase::scope::default_name,
-      "i_dont_exist",
-    });
+    cfg
+      .metadata_collection(couchbase::transactions::transaction_keyspace{
+        TransactionsTestEnvironment::get_conf().extra_bucket, couchbase::scope::default_name, "i_dont_exist" })
+      .cleanup_config(transactions_cleanup_config().cleanup_lost_attempts(true));
     cfg.expiration_time(std::chrono::seconds(2));
     transactions txn(cluster, cfg);
 

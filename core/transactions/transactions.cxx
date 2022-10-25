@@ -27,8 +27,12 @@
 
 namespace couchbase::core::transactions
 {
-
 transactions::transactions(std::shared_ptr<core::cluster> cluster, const couchbase::transactions::transactions_config& config)
+  : transactions(cluster, config.build())
+{
+}
+
+transactions::transactions(std::shared_ptr<core::cluster> cluster, const couchbase::transactions::transactions_config::built& config)
   : cluster_(cluster)
   , config_(config)
   , cleanup_(new transactions_cleanup(cluster_, config_))
@@ -40,11 +44,11 @@ transactions::transactions(std::shared_ptr<core::cluster> cluster, const couchba
     // on the cluster (that we have permissions to open) in the cleanup.   However, that is happening asynchronously
     // so there's a chance we will fail to have opened the custom metadata collection bucket before trying to make a
     // transaction.   We have to open this one _now_.
-    if (config_.metadata_collection()) {
+    if (config_.metadata_collection) {
         auto barrier = std::make_shared<std::promise<std::error_code>>();
         auto f = barrier->get_future();
         std::atomic<bool> callback_called{ false };
-        cluster_->open_bucket(config_.metadata_collection()->bucket, [&callback_called, barrier](std::error_code ec) {
+        cluster_->open_bucket(config_.metadata_collection->bucket, [&callback_called, barrier](std::error_code ec) {
             if (callback_called.load()) {
                 return;
             }
@@ -54,7 +58,7 @@ transactions::transactions(std::shared_ptr<core::cluster> cluster, const couchba
         auto err = f.get();
         if (err) {
             auto err_msg =
-              fmt::format("error opening metadata_collection bucket '{}' specified in the config!", config_.metadata_collection()->bucket);
+              fmt::format("error opening metadata_collection bucket '{}' specified in the config!", config_.metadata_collection->bucket);
             txn_log->error(err_msg);
             throw std::runtime_error(err_msg);
         }

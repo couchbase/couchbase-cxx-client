@@ -26,10 +26,12 @@ class transactions_cleanup_config
      * @see @ref cleanup_window() for description of the cleanup lost attempts loop.
      *
      * @param value If false, do not start the lost attempts cleanup threads.
+     * @return reference to this, so calls can be chained.
      */
-    void cleanup_lost_attempts(bool value)
+    transactions_cleanup_config& cleanup_lost_attempts(bool value)
     {
         cleanup_lost_attempts_ = value;
+        return *this;
     }
     /**
      * @brief Get lost attempts cleanup loop status.
@@ -47,10 +49,12 @@ class transactions_cleanup_config
      * @see @ref cleanup_client_attempts()
      *
      * @param value If true, run the cleanup client attempts loop.
+     * @return reference to this, so calls can be chained.
      */
-    void cleanup_client_attempts(bool value)
+    transactions_cleanup_config& cleanup_client_attempts(bool value)
     {
         cleanup_client_attempts_ = value;
+        return *this;
     }
 
     /**
@@ -65,6 +69,7 @@ class transactions_cleanup_config
     {
         return cleanup_client_attempts_;
     }
+
     /**
      * @brief Get cleanup window
      *
@@ -87,11 +92,26 @@ class transactions_cleanup_config
      *
      * @see cleanup_window() for more info.
      * @param duration An std::chrono::duration representing the cleanup window duration.
+     * @return reference to this, so calls can be chained.
      */
     template<typename T>
-    void cleanup_window(T duration)
+    transactions_cleanup_config cleanup_window(T duration)
     {
         cleanup_window_ = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
+        return *this;
+    }
+
+    /** @internal */
+    struct built {
+        bool cleanup_lost_attempts;
+        bool cleanup_client_attempts;
+        std::chrono::milliseconds cleanup_window;
+    };
+
+    /** @internal */
+    [[nodiscard]] auto build() const -> built
+    {
+        return { cleanup_lost_attempts_, cleanup_client_attempts_, cleanup_window_ };
     }
 
   private:

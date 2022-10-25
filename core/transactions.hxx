@@ -146,6 +146,7 @@ class transactions : public couchbase::transactions::transactions
      * @param cluster The cluster to use for the transactions.
      * @param config The configuration parameters to use for the transactions.
      */
+    transactions(std::shared_ptr<core::cluster> cluster, const couchbase::transactions::transactions_config::built& config);
     transactions(std::shared_ptr<core::cluster> cluster, const couchbase::transactions::transactions_config& config);
 
     /**
@@ -222,7 +223,7 @@ class transactions : public couchbase::transactions::transactions
      *
      * @return config for this transactions instance.
      */
-    [[nodiscard]] couchbase::transactions::transactions_config& config()
+    [[nodiscard]] couchbase::transactions::transactions_config::built& config()
     {
         return config_;
     }
@@ -257,7 +258,7 @@ class transactions : public couchbase::transactions::transactions
 
   private:
     std::shared_ptr<core::cluster> cluster_;
-    couchbase::transactions::transactions_config config_;
+    couchbase::transactions::transactions_config::built config_;
     std::unique_ptr<transactions_cleanup> cleanup_;
     const std::size_t max_attempts_{ 1000 };
     const std::chrono::milliseconds min_retry_delay_{ 1 };

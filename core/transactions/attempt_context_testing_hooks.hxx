@@ -15,7 +15,7 @@
  */
 #pragma once
 
-#include "internal/exceptions_internal.hxx"
+#include "core/transactions/error_class.hxx"
 
 #include <functional>
 #include <optional>
@@ -136,5 +136,10 @@ struct attempt_context_testing_hooks {
     std::function<std::optional<const std::string>(attempt_context*)> random_atr_id_for_vbucket = noop_3;
 
     std::function<bool(attempt_context*, const std::string&, std::optional<const std::string>)> has_expired_client_side = noop_4;
+
+    // needed for unique_ptr<attempt_context_testing_hooks> in transaction_config, with a forward declaration.
+    ~attempt_context_testing_hooks()
+    {
+    }
 };
 } // namespace couchbase::core::transactions

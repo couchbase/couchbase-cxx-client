@@ -32,7 +32,7 @@ transaction_context::transaction_context(transactions& txns, const couchbase::tr
   , config_(config.apply(txns.config()))
   , deferred_elapsed_(0)
   , cleanup_(txns.cleanup())
-  , delay_(new exp_delay(std::chrono::milliseconds(1), std::chrono::milliseconds(100), 2 * config_.expiration_time()))
+  , delay_(new exp_delay(std::chrono::milliseconds(1), std::chrono::milliseconds(100), 2 * config_.expiration_time))
 {
 }
 
@@ -48,7 +48,7 @@ transaction_context::remaining() const
 {
     const auto& now = std::chrono::steady_clock::now();
     auto expired_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(now - start_time_client_) + deferred_elapsed_;
-    return config_.expiration_time() - expired_nanos;
+    return config_.expiration_time - expired_nanos;
 }
 
 [[nodiscard]] bool
@@ -58,7 +58,7 @@ transaction_context::has_expired_client_side()
     const auto& now = std::chrono::steady_clock::now();
     auto expired_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(now - start_time_client_) + deferred_elapsed_;
     auto expired_millis = std::chrono::duration_cast<std::chrono::milliseconds>(expired_nanos);
-    bool is_expired = expired_nanos > config_.expiration_time();
+    bool is_expired = expired_nanos > config_.expiration_time;
     if (is_expired) {
         txn_log->info("has expired client side (now={}ns, start={}ns, deferred_elapsed={}ns, expired={}ns ({}ms), config={}ms)",
                       now.time_since_epoch().count(),
@@ -66,7 +66,7 @@ transaction_context::has_expired_client_side()
                       deferred_elapsed_.count(),
                       expired_nanos.count(),
                       expired_millis.count(),
-                      std::chrono::duration_cast<std::chrono::milliseconds>(config_.expiration_time()).count());
+                      std::chrono::duration_cast<std::chrono::milliseconds>(config_.expiration_time).count());
     }
     return is_expired;
 }
@@ -76,7 +76,7 @@ transaction_context::retry_delay()
 {
     // when we retry an operation, we typically call that function recursively.  So, we need to
     // limit total number of times we do it.  Later we can be more sophisticated, perhaps.
-    auto delay = config_.expiration_time() / 100; // the 100 is arbitrary
+    auto delay = config_.expiration_time / 100; // the 100 is arbitrary
     txn_log->trace("about to sleep for {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(delay).count());
     std::this_thread::sleep_for(delay);
 }

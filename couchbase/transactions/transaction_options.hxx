@@ -80,31 +80,12 @@ class transaction_options
         return *this;
     }
 
-    std::optional<transaction_keyspace> custom_metadata_collection()
+    std::optional<transaction_keyspace> metadata_collection()
     {
         return metadata_collection_;
     }
 
-    transactions_config apply(const transactions_config& conf) const
-    {
-        transactions_config retval = conf;
-        if (durability_) {
-            retval.durability_level(*durability_);
-        }
-        if (scan_consistency_) {
-            retval.query_config().scan_consistency(*scan_consistency_);
-        }
-        if (kv_timeout_) {
-            retval.kv_timeout(*kv_timeout_);
-        }
-        if (expiration_time_) {
-            retval.expiration_time(*expiration_time_);
-        }
-        if (metadata_collection_) {
-            retval.metadata_collection(*metadata_collection_);
-        }
-        return retval;
-    }
+    [[nodiscard]] transactions_config::built apply(const transactions_config::built& conf) const;
 
   private:
     std::optional<couchbase::durability_level> durability_;

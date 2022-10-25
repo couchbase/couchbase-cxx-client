@@ -288,10 +288,11 @@ set(couchbase_cxx_client_FILES
     core/transactions/get_and_open_buckets.cxx
     core/transactions/utils.cxx
     core/transactions/transaction_attempt.cxx
-    core/transactions/transaction_config.cxx
+    core/transactions/transactions_config.cxx
     core/transactions/transaction_context.cxx
     core/transactions/transaction_get_result.cxx
     core/transactions/transaction_links.cxx
+    core/transactions/transaction_options.cxx
     core/transactions/transaction_query_options.cxx
     core/transactions/transactions.cxx
     core/transactions/transactions_cleanup.cxx

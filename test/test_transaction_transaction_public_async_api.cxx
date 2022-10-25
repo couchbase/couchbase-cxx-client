@@ -269,3 +269,40 @@ TEST_CASE("uncaught exception will rollback", "[transactions]")
       async_options());
     f.get();
 }
+
+TEST_CASE("can set transaction options", "[transactions]")
+{
+    auto id = TransactionsTestEnvironment::get_document_id();
+    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
+    auto core_cluster = TransactionsTestEnvironment::get_cluster();
+    couchbase::cluster c(core_cluster);
+    auto cfg = couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(2));
+    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto begin = std::chrono::steady_clock::now();
+    auto barrier = std::make_shared<std::promise<void>>();
+    auto f = barrier->get_future();
+    c.transactions()->run(
+      [id, coll](couchbase::transactions::async_attempt_context& ctx) {
+          ctx.get(coll, id.key(), [&ctx](couchbase::transactions::transaction_get_result_ptr doc) {
+              reinterpret_cast<couchbase::core::transactions::transaction_get_result&>(*doc).cas(100);
+              ctx.remove(doc, [](couchbase::transaction_op_error_context err) { CHECK(err.ec()); });
+          });
+      },
+      [&begin, &cfg, barrier](couchbase::transactions::transaction_result res) {
+          auto end = std::chrono::steady_clock::now();
+          auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin);
+          // should be greater than the expiration time
+          CHECK(elapsed > *cfg.expiration_time());
+          // but not by too much (default is 15 seconds, we wanted 1, 2 is plenty)
+          CHECK(elapsed < (2 * *cfg.expiration_time()));
+          // and of course the txn should have expired
+          CHECK_FALSE(res.transaction_id.empty());
+          CHECK_FALSE(res.unstaging_complete);
+          CHECK(res.ctx.ec());
+          CHECK(res.ctx.ec() == couchbase::errc::transaction::expired);
+          barrier->set_value();
+      },
+      cfg);
+
+    f.get();
+}

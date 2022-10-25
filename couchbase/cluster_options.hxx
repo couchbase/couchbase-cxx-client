@@ -28,6 +28,7 @@
 #include <couchbase/security_options.hxx>
 #include <couchbase/timeout_options.hxx>
 #include <couchbase/tracing_options.hxx>
+#include <couchbase/transactions/transactions_config.hxx>
 
 #include <functional>
 #include <string>
@@ -98,7 +99,7 @@ class cluster_options
      * @see wan_development_configuration_profile
      *
      * @since 1.0.0
-     * @comitted
+     * @volatile
      */
     void apply_profile(const std::string& profile_name)
     {
@@ -223,6 +224,7 @@ class cluster_options
         metrics_options::built metrics;
         tracing_options::built tracing;
         behavior_options::built behavior;
+        transactions::transactions_config::built transactions;
     };
 
     [[nodiscard]] auto build() const -> built
@@ -244,6 +246,7 @@ class cluster_options
             metrics_.build(),
             tracing_.build(),
             behavior_.build(),
+            transactions_.build(),
         };
     }
 
@@ -262,6 +265,7 @@ class cluster_options
     metrics_options metrics_{};
     tracing_options tracing_{};
     behavior_options behavior_{};
+    transactions::transactions_config transactions_{};
 };
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN

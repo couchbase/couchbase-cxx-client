@@ -15,6 +15,8 @@
  */
 #pragma once
 
+#include "core/transactions/error_class.hxx"
+
 #include <functional>
 #include <string>
 
@@ -24,12 +26,12 @@ using error_func3 = std::function<std::optional<error_class>(const std::string&)
 using error_func4 = std::function<std::optional<error_class>(void)>;
 namespace
 {
-std::optional<error_class>
+std::optional<couchbase::core::transactions::error_class>
 noop1(const std::string&)
 {
     return {};
 }
-std::optional<error_class>
+std::optional<couchbase::core::transactions::error_class>
 noop2()
 {
     return {};
@@ -58,5 +60,10 @@ struct cleanup_testing_hooks {
     error_func3 client_record_before_get = noop1;
     error_func3 client_record_before_update = noop1;
     error_func3 client_record_before_remove_client = noop1;
+
+    // needed for unique_ptr<cleanup_testing_hooks> in transaction_config, with a forward declaration.
+    ~cleanup_testing_hooks()
+    {
+    }
 };
 } // namespace couchbase::core::transactions
