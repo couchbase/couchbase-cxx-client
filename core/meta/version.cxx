@@ -17,6 +17,8 @@
 
 #include "version.hxx"
 
+#include "core/transactions/forward_compat.hxx"
+#include "core/utils/join_strings.hxx"
 #include "core/utils/json.hxx"
 
 #include <couchbase/build_info.hxx>
@@ -50,6 +52,10 @@ sdk_build_info()
 #else
     info["snapshot"] = "false";
 #endif
+    auto txns_forward_compat = core::transactions::forward_compat_supported{};
+    info["txns_forward_compat_protocol_version"] =
+      fmt::format("{}.{}", txns_forward_compat.protocol_major, txns_forward_compat.protocol_minor);
+    info["txns_forward_compat_extensions"] = utils::join_strings(txns_forward_compat.extensions, ",");
     info["platform"] = COUCHBASE_CXX_CLIENT_SYSTEM;
     info["cpu"] = COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR;
     info["cc"] = COUCHBASE_CXX_CLIENT_C_COMPILER;
