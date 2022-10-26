@@ -16,10 +16,13 @@
 #pragma once
 
 #include <couchbase/transactions/transaction_get_result.hxx>
+#include <couchbase/transactions/transaction_query_options.hxx>
+#include <couchbase/transactions/transaction_query_result.hxx>
 
 namespace couchbase::transactions
 {
 using async_result_handler = std::function<void(transaction_get_result_ptr)>;
+using async_query_handler = std::function<void(transaction_query_result_ptr)>;
 using async_err_handler = std::function<void(transaction_op_error_context)>;
 class async_attempt_context
 {
@@ -48,6 +51,11 @@ class async_attempt_context
         }
     }
 
+    virtual void query(std::string statement, transaction_query_options opts, async_query_handler&& handler) = 0;
+    void query(std::string statement, async_query_handler&& handler)
+    {
+        return query(statement, {}, std::move(handler));
+    }
     virtual ~async_attempt_context() = default;
 
   protected:

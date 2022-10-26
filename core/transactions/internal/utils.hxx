@@ -15,8 +15,10 @@
  */
 #pragma once
 
+#include <couchbase/transactions/transaction_query_result.hxx>
+#include <couchbase/transactions/transactions_config.hxx>
+
 #include "core/transactions/result.hxx"
-#include "couchbase/transactions/transactions_config.hxx"
 #include "exceptions_internal.hxx"
 
 #include <chrono>

@@ -150,7 +150,9 @@ transaction_context::remove(const transaction_get_result& doc, async_attempt_con
 }
 
 void
-transaction_context::query(const std::string& statement, const transaction_query_options& opts, async_attempt_context::QueryCallback&& cb)
+transaction_context::query(const std::string& statement,
+                           const couchbase::transactions::transaction_query_options& opts,
+                           async_attempt_context::QueryCallback&& cb)
 {
     if (current_attempt_context_) {
         return current_attempt_context_->query(statement, opts, std::move(cb));

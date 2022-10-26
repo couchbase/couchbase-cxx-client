@@ -149,7 +149,9 @@ class transaction_context
 
     void remove(const transaction_get_result& doc, async_attempt_context::VoidCallback&& cb);
 
-    void query(const std::string& statement, const transaction_query_options& opts, async_attempt_context::QueryCallback&& cb);
+    void query(const std::string& statement,
+               const couchbase::transactions::transaction_query_options& opts,
+               async_attempt_context::QueryCallback&& cb);
 
     void commit(async_attempt_context::VoidCallback&& cb);
 

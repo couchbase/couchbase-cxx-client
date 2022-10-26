@@ -64,7 +64,6 @@ attempt_context_impl::attempt_context_impl(transaction_context& transaction_ctx)
 
 attempt_context_impl::~attempt_context_impl() = default;
 
-// not a member of attempt_context_impl, as forward_compat is internal.
 template<typename Handler>
 void
 attempt_context_impl::check_and_handle_blocking_transactions(const transaction_get_result& doc, forward_compat_stage stage, Handler&& cb)
@@ -682,13 +681,32 @@ attempt_context_impl::remove(const transaction_get_result& document)
     f.get();
 }
 
+static core::operations::query_request
+wrap_query_request(const couchbase::transactions::transaction_query_options& opts, const transaction_context& txn_context)
+{
+    // build what we can directly from the options:
+    auto req = core::impl::build_transaction_query_request(opts.get_query_options().build());
+    // set timeout stuff using the config/context.
+    // Add some extra time, so we don't time out right at expiry.
+    auto extra =
+      txn_context.config().kv_timeout ? txn_context.config().kv_timeout.value() : core::timeout_defaults::key_value_durable_timeout;
+    if (!req.scan_consistency) {
+        req.scan_consistency = txn_context.config().query_config.scan_consistency;
+    }
+    auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(txn_context.remaining());
+    req.timeout = remaining + extra;
+    req.raw["txtimeout"] = fmt::format("\"{}ms\"", remaining.count());
+    req.timeout = std::chrono::duration_cast<std::chrono::milliseconds>(txn_context.remaining()) + extra;
+    return req;
+}
+
 void
 attempt_context_impl::query_begin_work(utils::movable_function<void(std::exception_ptr)>&& cb)
 {
     // check for expiry
 
     // construct the txn_data and query options for the existing transaction
-    transaction_query_options opts;
+    couchbase::transactions::transaction_query_options opts;
     tao::json::value txdata;
     txdata["id"] = tao::json::empty_object;
     txdata["id"]["atmpt"] = id();
@@ -701,7 +719,7 @@ attempt_context_impl::query_begin_work(utils::movable_function<void(std::excepti
     txdata["config"]["numAtrs"] = 1024;
     opts.raw("numatrs", jsonify(1024));
     txdata["config"]["durabilityLevel"] = durability_level_to_string(overall_.config().level);
-    opts.raw("durability_level", jsonify(durability_level_to_string_for_query(overall_.config().level)));
+    opts.raw("durability_level", durability_level_to_string_for_query(overall_.config().level));
     if (atr_id_) {
         txdata["atr"] = tao::json::empty_object;
         txdata["atr"]["scp"] = atr_id_->scope();
@@ -822,7 +840,9 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
 }
 
 void
-attempt_context_impl::do_query(const std::string& statement, const transaction_query_options& opts, QueryCallback&& cb)
+attempt_context_impl::do_query(const std::string& statement,
+                               const couchbase::transactions::transaction_query_options& opts,
+                               QueryCallback&& cb)
 {
     std::vector<core::json_string> params;
     tao::json::value txdata;
@@ -859,14 +879,14 @@ dump_request(const core::operations::query_request& req)
 }
 void
 attempt_context_impl::wrap_query(const std::string& statement,
-                                 const transaction_query_options& opts,
+                                 const couchbase::transactions::transaction_query_options& opts,
                                  const std::vector<core::json_string>& params,
                                  const tao::json::value& txdata,
                                  const std::string& hook_point,
                                  bool check_expiry,
                                  utils::movable_function<void(std::exception_ptr, core::operations::query_response)>&& cb)
 {
-    auto req = opts.wrap_request(overall_);
+    auto req = wrap_query_request(opts, overall_);
     if (statement != BEGIN_WORK) {
         auto mode = op_list_.get_mode();
         assert(mode.is_query());
@@ -913,7 +933,9 @@ attempt_context_impl::wrap_query(const std::string& statement,
 }
 
 void
-attempt_context_impl::query(const std::string& statement, const transaction_query_options& options, QueryCallback&& cb)
+attempt_context_impl::query(const std::string& statement,
+                            const couchbase::transactions::transaction_query_options& options,
+                            QueryCallback&& cb)
 {
     return cache_error_async(std::move(cb), [&]() {
         check_if_done(cb);
@@ -927,12 +949,12 @@ attempt_context_impl::query(const std::string& statement, const transaction_quer
                   return do_query(statement, options, std::move(cb));
               });
           },
-          [this, statement = std::move(statement), options, cb]() mutable { return do_query(statement, options, std::move(cb)); });
+          [this, statement, options, cb]() mutable { return do_query(statement, options, std::move(cb)); });
     });
 }
 
 core::operations::query_response
-attempt_context_impl::query(const std::string& statement, const transaction_query_options& options)
+attempt_context_impl::do_core_query(const std::string& statement, const couchbase::transactions::transaction_query_options& options)
 {
     auto barrier = std::make_shared<std::promise<core::operations::query_response>>();
     auto f = barrier->get_future();
@@ -943,6 +965,21 @@ attempt_context_impl::query(const std::string& statement, const transaction_quer
         barrier->set_value(*resp);
     });
     return f.get();
+}
+
+couchbase::transactions::transaction_query_result_ptr
+attempt_context_impl::do_public_query(const std::string& statement, const couchbase::transactions::transaction_query_options& opts)
+{
+    try {
+        auto result = do_core_query(statement, opts);
+        return std::make_shared<couchbase::transactions::transaction_query_result>(core::impl::build_transaction_query_result(result));
+    } catch (const transaction_operation_failed& e) {
+        return std::make_shared<couchbase::transactions::transaction_query_result>(e.get_error_ctx());
+    } catch (...) {
+        // should not be necessary, but just in case...
+        transaction_op_error_context ctx(couchbase::errc::transaction_op::unknown);
+        return std::make_shared<couchbase::transactions::transaction_query_result>(ctx);
+    }
 }
 
 std::vector<core::json_string>
@@ -977,7 +1014,7 @@ attempt_context_impl::get_with_query(const core::document_id& id, bool optional,
 {
     cache_error_async(std::move(cb), [&]() {
         auto params = make_params(id, {});
-        transaction_query_options opts;
+        couchbase::transactions::transaction_query_options opts;
         opts.readonly(true);
         return wrap_query(KV_GET,
                           opts,
@@ -1025,7 +1062,7 @@ attempt_context_impl::insert_raw_with_query(const core::document_id& id, const s
     cache_error_async(std::move(cb), [&]() {
         std::vector<std::byte> content_copy = content;
         auto params = make_params(id, std::move(content_copy));
-        transaction_query_options opts;
+        couchbase::transactions::transaction_query_options opts;
         return wrap_query(KV_INSERT,
                           opts,
                           params,
@@ -1066,7 +1103,7 @@ attempt_context_impl::replace_raw_with_query(const transaction_get_result& docum
     cache_error_async(std::move(cb), [&]() {
         std::vector<std::byte> content_copy = content;
         auto params = make_params(document.id(), std::move(content_copy));
-        transaction_query_options opts;
+        couchbase::transactions::transaction_query_options opts;
         return wrap_query(
           KV_REPLACE,
           opts,
@@ -1108,7 +1145,7 @@ attempt_context_impl::remove_with_query(const transaction_get_result& document, 
 {
     cache_error_async(std::move(cb), [&]() {
         auto params = make_params(document.id(), {});
-        transaction_query_options opts;
+        couchbase::transactions::transaction_query_options opts;
         return wrap_query(
           KV_REMOVE,
           opts,
@@ -1143,7 +1180,7 @@ attempt_context_impl::commit_with_query(VoidCallback&& cb)
 {
     core::operations::query_request req;
     trace("commit_with_query called");
-    transaction_query_options opts;
+    couchbase::transactions::transaction_query_options opts;
     std::vector<core::json_string> params;
     wrap_query(
       COMMIT,
@@ -1180,7 +1217,7 @@ attempt_context_impl::rollback_with_query(VoidCallback&& cb)
 {
     core::operations::query_request req;
     trace("rollback_with_query called");
-    transaction_query_options opts;
+    couchbase::transactions::transaction_query_options opts;
     std::vector<core::json_string> params;
     wrap_query(ROLLBACK,
                opts,
