@@ -226,6 +226,11 @@ enum class client_opcode : std::uint8_t {
     get_cluster_config = 0xb5,
 
     get_error_map = 0xfe,
+
+    range_scan_create = 0xda,
+    range_scan_continue = 0xdb,
+    range_scan_cancel = 0xdc,
+
     invalid = 0xff,
 };
 
@@ -325,6 +330,9 @@ is_valid_client_opcode(std::uint8_t code)
         case client_opcode::get_keys:
         case client_opcode::set_collections_manifest:
         case client_opcode::get_scope_id:
+        case client_opcode::range_scan_create:
+        case client_opcode::range_scan_continue:
+        case client_opcode::range_scan_cancel:
             return true;
     }
     return false;

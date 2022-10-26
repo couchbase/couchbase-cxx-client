@@ -144,6 +144,18 @@ class agent
     auto range_scan_create(std::uint16_t vbucket_id, range_scan_create_options options, range_scan_create_callback&& callback)
       -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
+    auto range_scan_continue(std::vector<std::byte> scan_uuid,
+                             std::uint16_t vbucket_id,
+                             range_scan_continue_options options,
+                             range_scan_item_callback&& item_callback,
+                             range_scan_continue_callback&& callback) -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+    auto range_scan_cancel(std::vector<std::byte> scan_uuid,
+                           std::uint16_t vbucket_id,
+                           range_scan_cancel_options options,
+                           range_scan_cancel_callback&& callback) const
+      -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
     /// Integration point for unit testing. Not for public usage.
     [[nodiscard]] auto unit_test_api() -> agent_unit_test_api;
 
