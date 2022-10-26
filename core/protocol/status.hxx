@@ -98,6 +98,10 @@ is_valid_status(std::uint16_t code)
         case key_value_status_code::subdoc_xattr_unknown_vattr_macro:
         case key_value_status_code::subdoc_can_only_revive_deleted_documents:
         case key_value_status_code::subdoc_deleted_document_cannot_have_value:
+        case key_value_status_code::range_scan_cancelled:
+        case key_value_status_code::range_scan_more:
+        case key_value_status_code::range_scan_complete:
+        case key_value_status_code::range_scan_vb_uuid_not_equal:
             return true;
         case key_value_status_code::unknown:
             return false;

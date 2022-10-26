@@ -40,6 +40,8 @@ map_status_code(protocol::client_opcode opcode, std::uint16_t status)
         case key_value_status_code::subdoc_multi_path_failure:
         case key_value_status_code::subdoc_success_deleted:
         case key_value_status_code::subdoc_multi_path_failure_deleted:
+        case key_value_status_code::range_scan_complete:
+        case key_value_status_code::range_scan_more:
             return {};
 
         case key_value_status_code::not_found:
@@ -185,6 +187,12 @@ map_status_code(protocol::client_opcode opcode, std::uint16_t status)
         case key_value_status_code::dcp_stream_id_invalid:
         case key_value_status_code::dcp_stream_not_found:
         case key_value_status_code::opaque_no_match:
+
+        case key_value_status_code::range_scan_cancelled:
+            return errc::key_value::range_scan_cancelled;
+
+        case key_value_status_code::range_scan_vb_uuid_not_equal:
+            return errc::key_value::range_scan_vb_uuid_not_equal;
 
         case key_value_status_code::unknown:
             break;

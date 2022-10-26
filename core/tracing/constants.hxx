@@ -60,6 +60,9 @@ constexpr auto mcbp_prepend = "cb.prepend";
 constexpr auto mcbp_increment = "cb.increment";
 constexpr auto mcbp_decrement = "cb.decrement";
 constexpr auto mcbp_observe = "cb.observe";
+constexpr auto mcbp_range_scan_create = "cb.range_scan_create";
+constexpr auto mcbp_range_scan_continue = "cb.range_scan_continue";
+constexpr auto mcbp_range_scan_cancel = "cb.range_scan_cancel";
 /* multi-command operations */
 constexpr auto mcbp_get_all_replicas = "cb.get_all_replicas";
 constexpr auto mcbp_get_any_replica = "cb.get_any_replica";
@@ -210,6 +213,15 @@ span_name_for_mcbp_command(protocol::client_opcode opcode)
 
         case protocol::client_opcode::observe:
             return operation::mcbp_exists;
+
+        case protocol::client_opcode::range_scan_create:
+            return operation::mcbp_range_scan_create;
+
+        case protocol::client_opcode::range_scan_continue:
+            return operation::mcbp_range_scan_continue;
+
+        case protocol::client_opcode::range_scan_cancel:
+            return operation::mcbp_range_scan_cancel;
 
         case protocol::client_opcode::noop:
         case protocol::client_opcode::version:

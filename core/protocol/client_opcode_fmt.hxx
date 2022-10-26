@@ -244,6 +244,15 @@ struct fmt::formatter<couchbase::core::protocol::client_opcode> {
             case couchbase::core::protocol::client_opcode::get_scope_id:
                 name = "get_scope_id (0xbc)";
                 break;
+            case couchbase::core::protocol::client_opcode::range_scan_create:
+                name = "range_scan_create (0xda)";
+                break;
+            case couchbase::core::protocol::client_opcode::range_scan_continue:
+                name = "range_scan_continue (0xdb)";
+                break;
+            case couchbase::core::protocol::client_opcode::range_scan_cancel:
+                name = "range_scan_cancel (0xdc)";
+                break;
         }
         return format_to(ctx.out(), "{}", name);
     }
