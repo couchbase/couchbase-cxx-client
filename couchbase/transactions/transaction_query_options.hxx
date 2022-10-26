@@ -15,12 +15,14 @@
  */
 #pragma once
 
+// TODO: remove this when moving the wrap_request call
 #include "core/operations/document_query.hxx"
+#include <couchbase/query_options.hxx>
 
 // NOTE: when query is in public api, we will hold a query_options struct instead, and
 // import that from the public api.
 
-namespace couchbase::core::transactions
+namespace couchbase::transactions
 {
 class transaction_context;
 
@@ -30,112 +32,113 @@ class transaction_query_options
     transaction_query_options()
     {
         // set defaults specific to query in transactions.
-        query_req_.metrics = true;
+        opts_.metrics(true);
     }
-    transaction_query_options(const core::operations::query_request& req)
+    /*transaction_query_options(const core::operations::query_request& req)
       : query_req_(req)
     {
-    }
+    }*/
 
-    transaction_query_options& raw(const std::string& key, const core::json_string& value)
+    template<typename Value>
+    transaction_query_options& raw(const std::string& key, const Value& value)
     {
-        query_req_.raw[key] = value;
+        opts_.raw(key, value);
         return *this;
     }
 
     transaction_query_options& ad_hoc(bool value)
     {
-        query_req_.adhoc = value;
+        opts_.adhoc(value);
         return *this;
     }
 
     transaction_query_options& scan_consistency(query_scan_consistency scan_consistency)
     {
-        query_req_.scan_consistency = scan_consistency;
+        opts_.scan_consistency(scan_consistency);
         return *this;
     }
 
     transaction_query_options& profile(query_profile mode)
     {
-        query_req_.profile = mode;
+        opts_.profile(mode);
         return *this;
     }
 
     transaction_query_options& client_context_id(const std::string& id)
     {
-        query_req_.client_context_id = id;
+        opts_.client_context_id(id);
         return *this;
     }
 
     transaction_query_options& scan_wait(std::chrono::milliseconds scan_wait)
     {
-        query_req_.scan_wait = scan_wait;
+        opts_.scan_wait(scan_wait);
         return *this;
     }
 
     transaction_query_options& readonly(bool readonly)
     {
-        query_req_.readonly = readonly;
+        opts_.readonly(readonly);
         return *this;
     }
 
     transaction_query_options& scan_cap(std::uint64_t cap)
     {
-        query_req_.scan_cap = cap;
+        opts_.scan_cap(cap);
         return *this;
     }
 
     transaction_query_options& pipeline_batch(std::uint64_t batch)
     {
-        query_req_.pipeline_batch = batch;
+        opts_.pipeline_batch(batch);
         return *this;
     }
 
     transaction_query_options& pipeline_cap(std::uint64_t cap)
     {
-        query_req_.pipeline_cap = cap;
+        opts_.pipeline_cap(cap);
         return *this;
     }
 
-    transaction_query_options& positional_parameters(std::vector<core::json_string> params)
+    template<typename... Parameters>
+    auto positional_parameters(const Parameters&... parameters)
     {
-        query_req_.positional_parameters = params;
+        opts_.positional_parameters(parameters...);
         return *this;
     }
 
-    transaction_query_options& named_parameters(std::map<std::string, json_string, std::less<>> params)
+    template<typename... Parameters>
+    transaction_query_options& named_parameters(const Parameters&... parameters)
     {
-        query_req_.named_parameters = params;
+        opts_.named_parameters(parameters...);
         return *this;
     }
 
-    transaction_query_options& bucket_name(const std::string& bucket)
+    transaction_query_options& scope_qualifier(const std::string& scope)
     {
-        query_req_.bucket_name = bucket;
-        return *this;
-    }
-
-    transaction_query_options& scope_name(const std::string& scope)
-    {
-        query_req_.scope_name = scope;
+        opts_.scope_qualifier(scope);
         return *this;
     }
 
     transaction_query_options& metrics(bool metrics)
     {
-        query_req_.metrics = metrics;
+        opts_.metrics(metrics);
         return *this;
     }
 
     transaction_query_options& max_parallelism(std::uint64_t max)
     {
-        query_req_.max_parallelism = max;
+        opts_.max_parallelism(max);
         return *this;
     }
 
-    [[nodiscard]] core::operations::query_request wrap_request(const transaction_context& txn_ctx) const;
+    /** @internal */
+    const query_options& get_query_options() const
+    {
+        return opts_;
+    }
 
   private:
-    core::operations::query_request query_req_;
+    query_options opts_{};
 };
 } // namespace couchbase::core::transactions

@@ -121,7 +121,9 @@ class async_attempt_context
      * @param options options to apply to the query.
      * @param cb callback which is called when the query completes.
      */
-    virtual void query(const std::string& statement, const transaction_query_options& options, QueryCallback&& cb) = 0;
+    virtual void query(const std::string& statement,
+                       const couchbase::transactions::transaction_query_options& options,
+                       QueryCallback&& cb) = 0;
 
     /**
      * Performs a Query, within the current transaction.
@@ -131,7 +133,7 @@ class async_attempt_context
      */
     void query(const std::string& statement, QueryCallback&& cb)
     {
-        transaction_query_options opts;
+        couchbase::transactions::transaction_query_options opts;
         return query(statement, opts, std::move(cb));
     }
 

@@ -466,10 +466,7 @@ TEST_CASE("transactions: can modify doc in query", "[transactions]")
     stream << "UPDATE `" << id.bucket() << "` USE KEYS '" << id.key() << "' SET `some_number` = 10";
 
     transactions txn(cluster, cfg);
-    txn.run([statement = stream.str()](attempt_context& ctx) {
-        auto payload = ctx.query(statement);
-        REQUIRE_FALSE(payload.meta.errors);
-    });
+    txn.run([statement = stream.str()](attempt_context& ctx) { ctx.query(statement); });
 
     auto res = TransactionsTestEnvironment::get_doc(id);
     auto j = res.content_as<tao::json::value>();
@@ -494,8 +491,6 @@ TEST_CASE("transactions: can rollback", "[transactions]")
       [](auto& txn, std::string statement) {
           txn.run([&](attempt_context& ctx) {
               auto payload = ctx.query(statement);
-              REQUIRE_FALSE(payload.meta.errors);
-              // now, lets force a rollback
               throw 3;
           });
       }(txn, stream.str()),
@@ -518,8 +513,7 @@ TEST_CASE("transactions: query updates insert", "[transactions]")
     transactions txn(cluster, cfg);
     txn.run([id, content, statement = stream.str()](attempt_context& ctx) {
         ctx.insert(id, content);
-        auto payload = ctx.query(statement);
-        REQUIRE_FALSE(payload.meta.errors);
+        ctx.query(statement);
     });
 
     auto res = TransactionsTestEnvironment::get_doc(id);
@@ -541,7 +535,6 @@ TEST_CASE("transactions: can KV get", "[transactions]")
         ctx.insert(id, content);
         auto payload = ctx.query(statement);
         REQUIRE(payload.rows.empty());
-        REQUIRE_FALSE(payload.meta.errors);
         auto doc = ctx.get(id);
         REQUIRE(10 == doc.content<tao::json::value>()["some_number"].as<uint32_t>());
     });

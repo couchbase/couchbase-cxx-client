@@ -17,6 +17,7 @@
 
 #include <couchbase/error_codes.hxx>
 #include <couchbase/query_options.hxx>
+#include <couchbase/transactions/transaction_query_result.hxx>
 
 #include "core/cluster.hxx"
 #include "core/operations/document_query.hxx"
@@ -150,16 +151,11 @@ build_result(operations::query_response& resp)
     };
 }
 
-void
-initiate_query_operation(std::shared_ptr<couchbase::core::cluster> core,
-                         std::string statement,
-                         std::optional<std::string> bucket_name,
-                         std::optional<std::string> scope_name,
-                         query_options::built options,
-                         query_handler&& handler)
+static core::operations::query_request
+build_query_request(query_options::built options)
 {
     operations::query_request request{
-        std::move(statement),
+        "",
         options.adhoc,
         options.metrics,
         options.readonly,
@@ -172,8 +168,8 @@ initiate_query_operation(std::shared_ptr<couchbase::core::cluster> core,
         options.pipeline_cap,
         options.scan_consistency,
         std::move(options.mutation_state),
-        std::move(bucket_name),
-        std::move(scope_name),
+        {},
+        {},
         std::move(options.scope_qualifier),
         std::move(options.client_context_id),
         options.timeout,
@@ -194,6 +190,43 @@ initiate_query_operation(std::shared_ptr<couchbase::core::cluster> core,
             request.named_parameters[name] = std::move(value);
         }
     }
+    return request;
+}
+
+couchbase::transactions::transaction_query_result
+build_transaction_query_result(operations::query_response resp)
+{
+    return { query_meta_data{
+               std::move(resp.meta.request_id),
+               std::move(resp.meta.client_context_id),
+               map_status(resp.meta.status),
+               map_warnings(resp),
+               map_metrics(resp),
+               map_signature(resp),
+               map_profile(resp),
+             },
+             map_rows(resp),
+             build_context(resp) };
+}
+
+core::operations::query_request
+build_transaction_query_request(query_options::built opts)
+{
+    return build_query_request(opts);
+}
+void
+initiate_query_operation(std::shared_ptr<couchbase::core::cluster> core,
+                         std::string statement,
+                         std::optional<std::string> bucket_name,
+                         std::optional<std::string> scope_name,
+                         query_options::built options,
+                         query_handler&& handler)
+{
+    auto request = build_query_request(options);
+    request.statement = std::move(statement);
+    request.bucket_name = std::move(bucket_name);
+    request.scope_name = std::move(scope_name);
+
     core->execute(std::move(request), [core, handler = std::move(handler)](operations::query_response resp) mutable {
         auto r = std::move(resp);
         return handler(build_context(r), build_result(r));

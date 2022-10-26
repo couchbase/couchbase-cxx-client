@@ -306,3 +306,51 @@ TEST_CASE("can set transaction options", "[transactions]")
 
     f.get();
 }
+
+TEST_CASE("can do mutating query", "[transactions]")
+{
+    auto id = TransactionsTestEnvironment::get_document_id();
+    auto core_cluster = TransactionsTestEnvironment::get_cluster();
+    couchbase::cluster c(core_cluster);
+    auto barrier = std::make_shared<std::promise<void>>();
+    auto f = barrier->get_future();
+    c.transactions()->run(
+      [id](couchbase::transactions::async_attempt_context& ctx) {
+          ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES("{}", {}))", id.bucket(), id.key(), async_content),
+                    [](couchbase::transactions::transaction_query_result_ptr res) { CHECK_FALSE(res->ctx().ec()); });
+      },
+      [barrier](couchbase::transactions::transaction_result res) {
+          CHECK_FALSE(res.ctx.ec());
+          CHECK_FALSE(res.transaction_id.empty());
+          CHECK(res.unstaging_complete);
+          barrier->set_value();
+      });
+    f.get();
+}
+
+TEST_CASE("some query errors rollback", "[transactions]")
+{
+    auto id = TransactionsTestEnvironment::get_document_id();
+    auto id2 = TransactionsTestEnvironment::get_document_id();
+    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
+    auto core_cluster = TransactionsTestEnvironment::get_cluster();
+    couchbase::cluster c(core_cluster);
+    auto barrier = std::make_shared<std::promise<void>>();
+    auto f = barrier->get_future();
+    c.transactions()->run(
+      [id, id2](couchbase::transactions::async_attempt_context& ctx) {
+          ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES("{}", {}))", id2.bucket(), id2.key(), async_content),
+                    [id, &ctx](couchbase::transactions::transaction_query_result_ptr res) {
+                        CHECK_FALSE(res->ctx().ec());
+                        ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES("{}", {}))", id.bucket(), id.key(), async_content),
+                                  [](couchbase::transactions::transaction_query_result_ptr) {});
+                    });
+      },
+      [barrier](couchbase::transactions::transaction_result res) {
+          CHECK(res.ctx.ec() == couchbase::errc::transaction::failed);
+          CHECK_FALSE(res.transaction_id.empty());
+          CHECK_FALSE(res.unstaging_complete);
+          barrier->set_value();
+      });
+    f.get();
+}

@@ -80,6 +80,12 @@ class transaction_options
         return *this;
     }
 
+    transaction_options& metadata_collection(const couchbase::transactions::transaction_keyspace& keyspace)
+    {
+        metadata_collection_.emplace(keyspace);
+        return *this;
+    }
+
     std::optional<transaction_keyspace> metadata_collection()
     {
         return metadata_collection_;
