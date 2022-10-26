@@ -17,9 +17,18 @@
 
 #include "cluster.hxx"
 
+#include "core/mcbp/completion_token.hxx"
+#include "core/mcbp/queue_request.hxx"
+#include "ping_collector.hxx"
+#include "ping_reporter.hxx"
+
 namespace couchbase::core
 {
-class ping_collector : public std::enable_shared_from_this<ping_collector>
+
+class ping_collector_impl
+  : public std::enable_shared_from_this<ping_collector_impl>
+  , public diag::ping_reporter
+  , public diag::ping_collector
 {
     diag::ping_result res_;
     utils::movable_function<void(diag::ping_result)> handler_;
@@ -27,13 +36,13 @@ class ping_collector : public std::enable_shared_from_this<ping_collector>
     std::mutex mutex_{};
 
   public:
-    ping_collector(std::string report_id, utils::movable_function<void(diag::ping_result)>&& handler)
+    ping_collector_impl(std::string report_id, utils::movable_function<void(diag::ping_result)>&& handler)
       : res_{ std::move(report_id), meta::sdk_id() }
       , handler_(std::move(handler))
     {
     }
 
-    ~ping_collector()
+    ~ping_collector_impl()
     {
         invoke_handler();
     }
@@ -43,16 +52,19 @@ class ping_collector : public std::enable_shared_from_this<ping_collector>
         return res_;
     }
 
-    auto build_reporter()
+    void report(diag::endpoint_ping_info&& info) override
+    {
+        std::scoped_lock lock(mutex_);
+        res_.services[info.type].emplace_back(std::move(info));
+        if (--expected_ == 0) {
+            invoke_handler();
+        }
+    }
+
+    auto build_reporter() -> std::shared_ptr<diag::ping_reporter> override
     {
         ++expected_;
-        return [self = this->shared_from_this()](diag::endpoint_ping_info&& info) {
-            std::scoped_lock lock(self->mutex_);
-            self->res_.services[info.type].emplace_back(std::move(info));
-            if (--self->expected_ == 0) {
-                self->invoke_handler();
-            }
-        };
+        return shared_from_this();
     }
 
     void invoke_handler()
@@ -84,7 +96,7 @@ cluster::do_ping(std::optional<std::string> report_id,
     }
     asio::post(
       asio::bind_executor(ctx_, [cluster = shared_from_this(), report_id, bucket_name, services, handler = std::move(handler)]() mutable {
-          auto collector = std::make_shared<ping_collector>(report_id.value(), std::move(handler));
+          auto collector = std::make_shared<ping_collector_impl>(report_id.value(), std::move(handler));
           if (bucket_name) {
               if (services.find(service_type::key_value) != services.end()) {
                   if (auto bucket = cluster->find_bucket_by_name(bucket_name.value()); bucket) {
@@ -100,8 +112,8 @@ cluster::do_ping(std::optional<std::string> report_id,
               }
           } else {
               if (services.find(service_type::key_value) != services.end()) {
-                  if (cluster->session_) {
-                      cluster->session_->ping(collector->build_reporter());
+                  if (!cluster->session_.empty()) {
+                      cluster->session_.ping(collector->build_reporter());
                   }
                   cluster->for_each_bucket([&collector](auto& bucket) { bucket->ping(collector); });
               }
@@ -121,4 +133,49 @@ cluster::find_bucket_by_name(const std::string& name)
     }
     return bucket->second;
 }
+
+auto
+cluster::direct_dispatch(const std::string& bucket_name, std::shared_ptr<couchbase::core::mcbp::queue_request> req) -> std::error_code
+{
+    if (stopped_) {
+        return errc::network::cluster_closed;
+    }
+    if (bucket_name.empty()) {
+        return errc::common::invalid_argument;
+    }
+    if (auto bucket = find_bucket_by_name(bucket_name); bucket != nullptr) {
+        return bucket->direct_dispatch(std::move(req));
+    }
+
+    open_bucket(bucket_name, [self = shared_from_this(), req = std::move(req), bucket_name](std::error_code ec) mutable {
+        if (ec) {
+            return req->cancel(ec);
+        }
+        self->direct_dispatch(bucket_name, std::move(req));
+    });
+    return {};
+}
+
+auto
+cluster::direct_re_queue(const std::string& bucket_name, std::shared_ptr<mcbp::queue_request> req, bool is_retry) -> std::error_code
+{
+    if (stopped_) {
+        return errc::network::cluster_closed;
+    }
+    if (bucket_name.empty()) {
+        return errc::common::invalid_argument;
+    }
+    if (auto bucket = find_bucket_by_name(bucket_name); bucket != nullptr) {
+        return bucket->direct_re_queue(std::move(req), is_retry);
+    }
+
+    open_bucket(bucket_name, [self = shared_from_this(), bucket_name, req = std::move(req), is_retry](std::error_code ec) mutable {
+        if (ec) {
+            return req->cancel(ec);
+        }
+        self->direct_re_queue(bucket_name, std::move(req), is_retry);
+    });
+    return {};
+}
+
 } // namespace couchbase::core

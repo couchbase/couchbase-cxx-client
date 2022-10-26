@@ -89,5 +89,7 @@ enum class key_value_status_code : std::uint16_t {
     subdoc_xattr_unknown_vattr_macro = 0xd5,
     subdoc_can_only_revive_deleted_documents = 0xd6,
     subdoc_deleted_document_cannot_have_value = 0xd7,
+
+    unknown = 0xffff,
 };
 } // namespace couchbase

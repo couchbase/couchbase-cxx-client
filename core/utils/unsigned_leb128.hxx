@@ -16,8 +16,11 @@
  */
 #pragma once
 
-#include <array>
+#include <gsl/span>
 #include <gsl/util>
+
+#include <array>
+#include <cstdint>
 #include <optional>
 #include <stdexcept>
 #include <type_traits>
@@ -30,8 +33,7 @@ namespace couchbase::core::utils
  * - mcbp encodes collection-ID as an unsigned LEB128
  * - see https://en.wikipedia.org/wiki/LEB128
  */
-
-struct Leb128NoThrow {
+struct leb_128_no_throw {
 };
 
 /**
@@ -47,17 +49,17 @@ struct Leb128NoThrow {
  *          leb128 data.
  */
 template<class T>
-typename std::enable_if_t<std::is_unsigned_v<T>, std::pair<T, std::string_view>>
-decode_unsigned_leb128(std::string_view buf, struct Leb128NoThrow /* unused */)
+typename std::enable_if_t<std::is_unsigned_v<T>, std::pair<T, gsl::span<std::byte>>>
+decode_unsigned_leb128(gsl::span<std::byte> buf, struct leb_128_no_throw /* unused */)
 {
-    T rv = std::to_integer<T>(static_cast<std::byte>(buf[0]) & std::byte{ 0b0111'1111 });
+    T rv = std::to_integer<T>(buf[0] & std::byte{ 0b0111'1111 });
     std::size_t end = 0;
-    if ((static_cast<std::byte>(buf[0]) & std::byte{ 0b1000'0000 }) == std::byte{ 0b1000'0000 }) {
+    if ((buf[0] & std::byte{ 0b1000'0000 }) == std::byte{ 0b1000'0000 }) {
         T shift = 7;
         // shift in the remaining data
         for (end = 1; end < buf.size(); end++) {
-            rv |= std::to_integer<T>((static_cast<std::byte>(buf[end]) & std::byte{ 0b0111'1111 }) << shift);
-            if ((static_cast<std::byte>(buf[end]) & std::byte{ 0b1000'0000 }) == std::byte{ 0 }) {
+            rv |= std::to_integer<T>(buf[end] & std::byte{ 0b0111'1111 }) << shift;
+            if ((buf[end] & std::byte{ 0b1000'0000 }) == std::byte{ 0 }) {
                 break; // no more
             }
             shift += 7;
@@ -65,11 +67,11 @@ decode_unsigned_leb128(std::string_view buf, struct Leb128NoThrow /* unused */)
 
         // We should be stopped for a stop byte, not the end of the buffer
         if (end == buf.size()) {
-            return { 0U, std::string_view{} };
+            return { 0U, {} };
         }
     }
     // Return the decoded value and a buffer for any remaining data
-    return { rv, std::string_view{ buf.data() + end + 1, buf.size() - (end + 1) } };
+    return { rv, { buf.data() + end + 1, buf.size() - (end + 1) } };
 }
 
 /**
@@ -84,11 +86,11 @@ decode_unsigned_leb128(std::string_view buf, struct Leb128NoThrow /* unused */)
  *         a stop byte.
  */
 template<class T>
-typename std::enable_if_t<std::is_unsigned_v<T>, std::pair<T, std::string_view>>
-decode_unsigned_leb128(std::string_view buf)
+typename std::enable_if_t<std::is_unsigned_v<T>, std::pair<T, gsl::span<std::byte>>>
+decode_unsigned_leb128(gsl::span<std::byte> buf)
 {
     if (!buf.empty()) {
-        auto rv = decode_unsigned_leb128<T>(buf, Leb128NoThrow());
+        auto rv = decode_unsigned_leb128<T>(buf, leb_128_no_throw{});
         if (rv.second.data()) {
             return rv;
         }
@@ -100,13 +102,13 @@ decode_unsigned_leb128(std::string_view buf)
  * @return a buffer to the data after the leb128 prefix
  */
 template<class T>
-typename std::enable_if_t<std::is_unsigned_v<T>, std::string_view>
-skip_unsigned_leb128(std::string_view buf)
+typename std::enable_if_t<std::is_unsigned_v<T>, gsl::span<std::byte>>
+skip_unsigned_leb128(gsl::span<std::byte> buf)
 {
     return decode_unsigned_leb128<T>(buf).second;
 }
 
-// Empty, non specialised version of the decoder class
+// Empty, non-specialised version of the decoder class
 template<class T, class Enable = void>
 class unsigned_leb128
 {

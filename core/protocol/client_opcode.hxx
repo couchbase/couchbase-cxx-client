@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -224,6 +224,7 @@ enum class client_opcode : std::uint8_t {
     subdoc_multi_mutation = 0xd1,
 
     get_cluster_config = 0xb5,
+
     get_error_map = 0xfe,
     invalid = 0xff,
 };

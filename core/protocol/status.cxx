@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -185,6 +185,8 @@ map_status_code(protocol::client_opcode opcode, std::uint16_t status)
         case key_value_status_code::dcp_stream_id_invalid:
         case key_value_status_code::dcp_stream_not_found:
         case key_value_status_code::opaque_no_match:
+
+        case key_value_status_code::unknown:
             break;
     }
     return errc::network::protocol_error;

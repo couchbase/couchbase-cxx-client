@@ -53,6 +53,8 @@ class best_effort_retry_strategy : public retry_strategy
 
     auto retry_after(const retry_request& request, retry_reason reason) -> retry_action override;
 
+    [[nodiscard]] auto to_string() const -> std::string override;
+
   private:
     backoff_calculator backoff_calculator_;
 };
