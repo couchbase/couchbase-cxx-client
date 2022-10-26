@@ -351,7 +351,7 @@ struct query_options : public common_options<query_options> {
      */
     auto scope_qualifier(std::string scope_qualifier) -> query_options&
     {
-        client_context_id_ = std::move(scope_qualifier);
+        scope_qualifier_ = std::move(scope_qualifier);
         return self();
     }
 
