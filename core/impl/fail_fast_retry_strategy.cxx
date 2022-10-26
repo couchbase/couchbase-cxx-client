@@ -17,12 +17,20 @@
 
 #include <couchbase/fail_fast_retry_strategy.hxx>
 
+#include <fmt/core.h>
+
 namespace couchbase
 {
 auto
 fail_fast_retry_strategy::retry_after(const retry_request& /* request */, retry_reason /* reason */) -> retry_action
 {
     return retry_action::do_not_retry();
+}
+
+auto
+fail_fast_retry_strategy::to_string() const -> std::string
+{
+    return fmt::format(R"(#<fail_fast_retry_strategy:{}>)", static_cast<const void*>(this));
 }
 
 auto

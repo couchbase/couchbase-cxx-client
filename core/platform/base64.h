@@ -16,6 +16,8 @@
  */
 #pragma once
 
+#include <gsl/span>
+
 #include <string>
 #include <vector>
 
@@ -29,7 +31,10 @@ namespace couchbase::core::base64
  * @return the base64 encoded value
  */
 std::string
-encode(std::string_view blob, bool prettyprint = false);
+encode(gsl::span<const std::byte> blob, bool pretty_print = false);
+
+std::string
+encode(std::string_view blob, bool pretty_print = false);
 
 /**
  * Decode a base64 encoded blob (which may be pretty-printed to avoid
@@ -38,7 +43,10 @@ encode(std::string_view blob, bool prettyprint = false);
  * @param source string to decode
  * @return the decoded data
  */
-std::string
+std::vector<std::byte>
 decode(std::string_view blob);
+
+std::string
+decode_to_string(std::string_view blob);
 
 } // namespace couchbase::core::base64

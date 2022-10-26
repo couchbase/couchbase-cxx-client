@@ -100,6 +100,12 @@ struct fmt::formatter<couchbase::core::protocol::hello_feature> {
             case couchbase::core::protocol::hello_feature::subdoc_document_macro_support:
                 name = "subdoc_document_macro_support";
                 break;
+            case couchbase::core::protocol::hello_feature::replace_body_with_xattr:
+                name = "replace_body_with_xattr";
+                break;
+            case couchbase::core::protocol::hello_feature::resource_units:
+                name = "resource_units";
+                break;
         }
         return format_to(ctx.out(), "{}", name);
     }

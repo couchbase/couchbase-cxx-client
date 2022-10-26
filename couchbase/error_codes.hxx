@@ -598,6 +598,10 @@ enum class key_value {
      */
     // KV Code: 0xd6
     cannot_revive_living_document = 131,
+
+    range_scan_cancelled = 132,
+    range_scan_vb_uuid_not_equal = 133,
+
 };
 
 /**
@@ -965,6 +969,48 @@ enum class network {
      * @uncommitted
      */
     cluster_closed = 1006,
+
+    /**
+     * @since 1.0.0
+     * @uncommitted
+     */
+    end_of_stream = 1007,
+
+    /**
+     * @since 1.0.0
+     * @uncommitted
+     */
+    need_more_data = 1008,
+
+    /**
+     * @since 1.0.0
+     * @uncommitted
+     */
+    operation_queue_closed = 1009,
+
+    /**
+     * @since 1.0.0
+     * @uncommitted
+     */
+    operation_queue_full = 1010,
+
+    /**
+     * @since 1.0.0
+     * @uncommitted
+     */
+    request_already_queued = 1011,
+
+    /**
+     * @since 1.0.0
+     * @uncommitted
+     */
+    request_cancelled = 1012,
+
+    /**
+     * @since 1.0.0
+     * @uncommitted
+     */
+    bucket_closed = 1013,
 };
 
 /**

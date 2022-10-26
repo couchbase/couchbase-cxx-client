@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -224,6 +224,11 @@ enum class client_opcode : std::uint8_t {
     subdoc_multi_mutation = 0xd1,
 
     get_cluster_config = 0xb5,
+
+    range_scan_create = 0xda,
+    range_scan_continue = 0xdb,
+    range_scan_cancel = 0xdc,
+
     get_error_map = 0xfe,
     invalid = 0xff,
 };
@@ -324,6 +329,9 @@ is_valid_client_opcode(std::uint8_t code)
         case client_opcode::get_keys:
         case client_opcode::set_collections_manifest:
         case client_opcode::get_scope_id:
+        case client_opcode::range_scan_create:
+        case client_opcode::range_scan_continue:
+        case client_opcode::range_scan_cancel:
             return true;
     }
     return false;

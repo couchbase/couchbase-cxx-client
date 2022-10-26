@@ -61,7 +61,7 @@ class client_request
 
     void opaque(std::uint32_t val)
     {
-        opaque_ = val;
+        opaque_ = utils::byte_swap(val);
     }
 
     void datatype(protocol::datatype val)
@@ -76,7 +76,7 @@ class client_request
 
     [[nodiscard]] std::uint32_t opaque() const
     {
-        return opaque_;
+        return utils::byte_swap(opaque_);
     }
 
     void opcode(client_opcode val)

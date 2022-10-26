@@ -150,12 +150,17 @@ enum class hello_feature : std::uint16_t {
      * Does the server support using the virtual $document attributes in macro expansion ("${document.CAS}" etc)
      */
     subdoc_document_macro_support = 0x18,
+
+    // indicates support for the replacing body with xattr feature.
+    replace_body_with_xattr = 0x19,
+
+    resource_units = 0x1a,
 };
 
 constexpr bool
 is_valid_hello_feature(std::uint16_t code)
 {
-    switch (hello_feature(code)) {
+    switch (static_cast<hello_feature>(code)) {
         case hello_feature::tls:
         case hello_feature::tcp_nodelay:
         case hello_feature::mutation_seqno:
@@ -178,6 +183,8 @@ is_valid_hello_feature(std::uint16_t code)
         case hello_feature::tracing:
         case hello_feature::subdoc_create_as_deleted:
         case hello_feature::subdoc_document_macro_support:
+        case hello_feature::replace_body_with_xattr:
+        case hello_feature::resource_units:
             return true;
     }
     return false;

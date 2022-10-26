@@ -18,8 +18,10 @@
 #pragma once
 
 #include "core/logger/logger.hxx"
+#include "core/protocol/client_opcode_fmt.hxx"
 
 #include <couchbase/best_effort_retry_strategy.hxx>
+#include <couchbase/fmt/retry_reason.hxx>
 
 #include <chrono>
 #include <memory>

@@ -30,5 +30,6 @@ class retry_strategy
   public:
     virtual ~retry_strategy() = default;
     virtual auto retry_after(const retry_request& request, retry_reason reason) -> retry_action = 0;
+    [[nodiscard]] virtual auto to_string() const -> std::string = 0;
 };
 } // namespace couchbase

@@ -236,6 +236,22 @@ struct fmt::formatter<couchbase::key_value_status_code> {
             case key_value_status_code::subdoc_deleted_document_cannot_have_value:
                 name = "subdoc_deleted_document_cannot_have_value (0xd7)";
                 break;
+            case key_value_status_code::range_scan_cancelled:
+                name = "range_scan_cancelled (0xa5)";
+                break;
+            case key_value_status_code::range_scan_more:
+                name = "range_scan_more (0xa6)";
+                break;
+            case key_value_status_code::range_scan_complete:
+                name = "range_scan_complete (0xa7)";
+                break;
+            case key_value_status_code::range_scan_vb_uuid_not_equal:
+                name = "range_scan_vb_uuid_not_equal (0xa8)";
+                break;
+
+            case key_value_status_code::unknown:
+                name = "unknown (0xffff)";
+                break;
         }
         return format_to(ctx.out(), "{}", name);
     }

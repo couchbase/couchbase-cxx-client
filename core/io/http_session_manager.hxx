@@ -27,6 +27,8 @@
 #include "http_session.hxx"
 #include "http_traits.hxx"
 
+#include <gsl/narrow>
+
 #include <random>
 
 namespace couchbase::core::io
@@ -156,14 +158,14 @@ class http_session_manager
                                 self = shared_from_this(),
                                 type,
                                 cmd,
-                                handler = std::move(collector->build_reporter())](std::error_code ec, io::http_response&& msg) {
+                                handler = collector->build_reporter()](std::error_code ec, io::http_response&& msg) {
                         diag::ping_state state = diag::ping_state::ok;
                         std::optional<std::string> error{};
                         if (ec) {
                             state = diag::ping_state::error;
                             error.emplace(fmt::format("code={}, message={}, http_code={}", ec.value(), ec.message(), msg.status_code));
                         }
-                        handler(diag::endpoint_ping_info{
+                        handler->report(diag::endpoint_ping_info{
                           type,
                           cmd->session_->id(),
                           std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start),
@@ -341,14 +343,14 @@ class http_session_manager
                 return { node.hostname_for(options_.network), port };
             }
         }
-        return { "", std::uint16_t(0U) };
+        return { "", static_cast<std::uint16_t>(0U) };
     }
 
     std::pair<std::string, std::uint16_t> split_host_port(const std::string& address)
     {
         auto last_colon = address.find_last_of(':');
         if (last_colon == std::string::npos || address.size() - 1 == last_colon) {
-            return { "", std::uint16_t(0U) };
+            return { "", static_cast<std::uint16_t>(0U) };
         }
         auto hostname = address.substr(0, last_colon);
         auto port = gsl::narrow_cast<std::uint16_t>(std::stoul(address.substr(last_colon + 1)));
@@ -362,7 +364,7 @@ class http_session_manager
         if (std::none_of(config_.nodes.begin(), config_.nodes.end(), [this, type, &h = hostname, &p = port](const auto& node) {
                 return node.hostname == h && node.port_or(options_.network, type, options_.enable_tls, 0) == p;
             })) {
-            return { "", std::uint16_t(0U) };
+            return { "", static_cast<std::uint16_t>(0U) };
         }
         return { hostname, port };
     }
