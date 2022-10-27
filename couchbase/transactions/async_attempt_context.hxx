@@ -28,11 +28,11 @@ class async_attempt_context
 {
 
   public:
-    virtual void get(std::shared_ptr<collection> coll, std::string id, async_result_handler&& handler) = 0;
+    virtual void get(const collection& coll, std::string id, async_result_handler&& handler) = 0;
     virtual void remove(transaction_get_result_ptr doc, async_err_handler&& handler) = 0;
 
     template<typename Content>
-    void insert(std::shared_ptr<collection> coll, std::string id, Content&& content, async_result_handler&& handler)
+    void insert(const collection& coll, std::string id, Content&& content, async_result_handler&& handler)
     {
         if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
             return insert_raw(content, id, content, std::move(handler));
@@ -59,10 +59,7 @@ class async_attempt_context
     virtual ~async_attempt_context() = default;
 
   protected:
-    virtual void insert_raw(std::shared_ptr<collection> coll,
-                            std::string id,
-                            std::vector<std::byte> content,
-                            async_result_handler&& handler) = 0;
+    virtual void insert_raw(const collection& coll, std::string id, std::vector<std::byte> content, async_result_handler&& handler) = 0;
     virtual void replace_raw(transaction_get_result_ptr doc, std::vector<std::byte> content, async_result_handler&& handler) = 0;
 };
 } // namespace couchbase::transactions
