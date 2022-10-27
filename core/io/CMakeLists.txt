@@ -9,4 +9,7 @@ target_link_libraries(
           http_parser
           fmt::fmt
           spdlog::spdlog)
+if(WIN32)
+    target_link_libraries(couchbase_io PRIVATE iphlpapi)
+endif()
 target_include_directories(couchbase_io PRIVATE ../.. ../../third_party/http_parser)

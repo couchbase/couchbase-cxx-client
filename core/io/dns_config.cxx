@@ -15,12 +15,84 @@
  *   limitations under the License.
  */
 
-#include "dns_config.hxx"
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 
+#include <windows.h>
+
+#include <iphlpapi.h>
+#include <winsock2.h>
+
+#include "core/utils/join_strings.hxx"
+#endif
+
+#include "core/logger/logger.hxx"
+#include "dns_config.hxx"
 #include <mutex>
 
 namespace couchbase::core::io::dns
 {
+
+#ifdef _WIN32
+// Reference:  https://learn.microsoft.com/en-us/windows/win32/api/_iphlp/
+std::string
+load_resolv_conf()
+{
+    FIXED_INFO* fixed_info;
+    ULONG buf;
+    DWORD ret;
+
+    fixed_info = (FIXED_INFO*)malloc(sizeof(FIXED_INFO));
+    if (fixed_info == NULL) {
+        LOG_WARNING("Error allocating memory needed to call GetNetworkParams");
+    }
+    buf = sizeof(FIXED_INFO);
+
+    // Make an initial call to GetAdaptersInfo to get
+    // the necessary size into the ulOutBufLen variable
+    if (GetNetworkParams(fixed_info, &buf) == ERROR_BUFFER_OVERFLOW) {
+        free(fixed_info);
+        fixed_info = (FIXED_INFO*)malloc(buf);
+        if (fixed_info == NULL) {
+            LOG_WARNING("Error allocating memory needed to call GetNetworkParams");
+        }
+    }
+
+    auto dns_servers = std::vector<std::string>{};
+    ret = GetNetworkParams(fixed_info, &buf);
+    if (ret == NO_ERROR) {
+        if (fixed_info) {
+            auto dns_ip = std::string{ fixed_info->DnsServerList.IpAddress.String };
+            if (!dns_ip.empty()) {
+                dns_servers.emplace_back(dns_ip);
+            }
+
+            auto ip_addr = fixed_info->DnsServerList.Next;
+            while (ip_addr) {
+                dns_ip = std::string{ ip_addr->IpAddress.String };
+                if (!dns_ip.empty()) {
+                    dns_servers.emplace_back(dns_ip);
+                }
+                ip_addr = ip_addr->Next;
+            }
+        }
+    } else {
+        LOG_WARNING("GetNetworkParams failed with error: {}", ret);
+    }
+
+    if (fixed_info)
+        free(fixed_info);
+
+    if (dns_servers.size() > 0) {
+        LOG_DEBUG("Found DNS Servers: [{}], using nameserver: {}", couchbase::core::utils::join_strings(dns_servers, ", "), dns_servers[0]);
+        return dns_servers[0];
+    }
+    LOG_WARNING("Unable to find DNS nameserver");
+    return {};
+}
+#else
 static constexpr auto default_resolv_conf_path = "/etc/resolv.conf";
 
 std::string
@@ -50,12 +122,14 @@ load_resolv_conf(const char* conf_path)
             }
             offset = space + 1;
             space = line.find(' ', offset);
-            return line.substr(offset, space);
+            auto nameserver = line.substr(offset, space);
+            LOG_DEBUG("Using nameserver: {}", nameserver);
+            return nameserver;
         }
     }
     return {};
 }
-
+#endif
 static std::once_flag system_config_initialized_flag;
 
 const dns_config&
@@ -64,7 +138,11 @@ dns_config::system_config()
     static dns_config instance{};
 
     std::call_once(system_config_initialized_flag, []() {
+#ifdef _WIN32
+        auto nameserver = load_resolv_conf();
+#else
         auto nameserver = load_resolv_conf(default_resolv_conf_path);
+#endif
         std::error_code ec;
         asio::ip::address::from_string(nameserver, ec);
         if (ec) {
