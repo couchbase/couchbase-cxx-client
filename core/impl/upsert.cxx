@@ -56,7 +56,7 @@ initiate_upsert_operation(std::shared_ptr<couchbase::core::cluster> core,
             options.expiry,
             options.durability_level,
             options.timeout,
-            {},
+            { options.retry_strategy },
             options.preserve_expiry,
           },
           [handler = std::move(handler)](operations::upsert_response&& resp) mutable {
@@ -65,7 +65,16 @@ initiate_upsert_operation(std::shared_ptr<couchbase::core::cluster> core,
     }
 
     operations::upsert_request request{
-        id, std::move(value.data), {}, {}, value.flags, options.expiry, durability_level::none, options.timeout, {}, options.preserve_expiry
+        id,
+        std::move(value.data),
+        {},
+        {},
+        value.flags,
+        options.expiry,
+        durability_level::none,
+        options.timeout,
+        { options.retry_strategy },
+        options.preserve_expiry,
     };
     return core->execute(
       std::move(request), [core, id = std::move(id), options, handler = std::move(handler)](operations::upsert_response&& resp) mutable {

@@ -51,6 +51,10 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
     auth.allowed_sasl_mechanisms = std::move(opts.allowed_sasl_mechanisms);
 
     core::cluster_options user_options;
+
+    if (opts.default_retry_strategy != nullptr) {
+        user_options.default_retry_strategy_ = std::move(opts.default_retry_strategy);
+    }
     user_options.bootstrap_timeout = opts.timeouts.bootstrap_timeout;
     user_options.resolve_timeout = opts.timeouts.resolve_timeout;
     user_options.connect_timeout = opts.timeouts.connect_timeout;

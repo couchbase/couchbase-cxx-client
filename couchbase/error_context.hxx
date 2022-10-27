@@ -59,7 +59,7 @@ class error_context
     error_context(std::error_code ec,
                   std::optional<std::string> last_dispatched_to,
                   std::optional<std::string> last_dispatched_from,
-                  int retry_attempts,
+                  std::size_t retry_attempts,
                   std::set<retry_reason> retry_reasons)
       : ec_{ ec }
       , last_dispatched_to_{ std::move(last_dispatched_to) }
@@ -131,7 +131,7 @@ class error_context
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto retry_attempts() const -> int
+    [[nodiscard]] auto retry_attempts() const -> std::size_t
     {
         return retry_attempts_;
     }
@@ -167,7 +167,7 @@ class error_context
     std::error_code ec_{};
     std::optional<std::string> last_dispatched_to_{};
     std::optional<std::string> last_dispatched_from_{};
-    int retry_attempts_{ 0 };
+    std::size_t retry_attempts_{ 0 };
     std::set<retry_reason> retry_reasons_{};
 };
 } // namespace couchbase

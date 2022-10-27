@@ -54,7 +54,7 @@ initiate_replace_operation(std::shared_ptr<couchbase::core::cluster> core,
             options.cas,
             options.durability_level,
             options.timeout,
-            {},
+            { options.retry_strategy },
             options.preserve_expiry,
           },
           [handler = std::move(handler)](operations::replace_response&& resp) mutable {
@@ -66,8 +66,17 @@ initiate_replace_operation(std::shared_ptr<couchbase::core::cluster> core,
     }
 
     operations::replace_request request{
-        id, std::move(value.data),  {}, {}, value.flags, options.expiry, options.cas, durability_level::none, options.timeout,
-        {}, options.preserve_expiry
+        id,
+        std::move(value.data),
+        {},
+        {},
+        value.flags,
+        options.expiry,
+        options.cas,
+        durability_level::none,
+        options.timeout,
+        { options.retry_strategy },
+        options.preserve_expiry,
     };
     return core->execute(
       std::move(request), [core, id = std::move(id), options, handler = std::move(handler)](operations::replace_response&& resp) mutable {

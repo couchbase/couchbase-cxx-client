@@ -56,7 +56,7 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
             specs,
             options.durability_level,
             options.timeout,
-            {},
+            { options.retry_strategy },
             options.preserve_expiry,
           },
           [handler = std::move(handler)](operations::mutate_in_response&& resp) mutable {
@@ -88,7 +88,7 @@ initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
         specs,
         durability_level::none,
         options.timeout,
-        {},
+        { options.retry_strategy },
         options.preserve_expiry,
     };
     return core->execute(

@@ -45,7 +45,7 @@ struct get_request {
     std::uint16_t partition{};
     std::uint32_t opaque{};
     std::optional<std::chrono::milliseconds> timeout{};
-    io::retry_context<io::retry_strategy::best_effort> retries{ true };
+    io::retry_context<true> retries{};
     std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;

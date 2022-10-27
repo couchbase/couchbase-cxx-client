@@ -45,6 +45,7 @@ initiate_lookup_in_operation(std::shared_ptr<couchbase::core::cluster> core,
         options.access_deleted,
         specs,
         options.timeout,
+        { options.retry_strategy },
       },
       [handler = std::move(handler)](operations::lookup_in_response&& resp) mutable {
           if (resp.ctx.ec()) {

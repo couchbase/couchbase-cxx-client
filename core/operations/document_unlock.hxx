@@ -44,7 +44,7 @@ struct unlock_request {
     std::uint32_t opaque{};
     couchbase::cas cas{};
     std::optional<std::chrono::milliseconds> timeout{};
-    io::retry_context<io::retry_strategy::best_effort> retries{ false };
+    io::retry_context<false> retries{};
     std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;

@@ -49,6 +49,7 @@ initiate_remove_operation(std::shared_ptr<couchbase::core::cluster> core,
             options.cas,
             options.durability_level,
             options.timeout,
+            { options.retry_strategy },
           },
           [handler = std::move(handler)](operations::remove_response&& resp) mutable {
               if (resp.ctx.ec()) {
@@ -58,7 +59,9 @@ initiate_remove_operation(std::shared_ptr<couchbase::core::cluster> core,
           });
     }
 
-    operations::remove_request request{ id, {}, {}, options.cas, durability_level::none, options.timeout };
+    operations::remove_request request{
+        id, {}, {}, options.cas, durability_level::none, options.timeout, { options.retry_strategy },
+    };
     return core->execute(
       std::move(request), [core, id = std::move(id), options, handler = std::move(handler)](operations::remove_response&& resp) mutable {
           if (resp.ctx.ec()) {

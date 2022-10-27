@@ -104,7 +104,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                 handler_ = nullptr;
             }
         }
-        invoke_handler(request.retries.idempotent ? errc::common::unambiguous_timeout : errc::common::ambiguous_timeout);
+        invoke_handler(request.retries.idempotent() ? errc::common::unambiguous_timeout : errc::common::ambiguous_timeout);
     }
 
     void invoke_handler(std::error_code ec, std::optional<io::mcbp_message> msg = {})
@@ -166,10 +166,10 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                   request.id,
                   std::chrono::duration_cast<std::chrono::milliseconds>(time_left).count(),
                   id_);
-        request.retries.reasons.insert(retry_reason::kv_collection_outdated);
+        request.retries.add_reason(retry_reason::key_value_collection_outdated);
         if (time_left < backoff) {
             return invoke_handler(
-              make_error_code(request.retries.idempotent ? errc::common::unambiguous_timeout : errc::common::ambiguous_timeout));
+              make_error_code(request.retries.idempotent() ? errc::common::unambiguous_timeout : errc::common::ambiguous_timeout));
         }
         retry_backoff.expires_after(backoff);
         retry_backoff.async_wait([self = this->shared_from_this()](std::error_code ec) mutable {
@@ -232,8 +232,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
               self->retry_backoff.cancel();
               if (ec == asio::error::operation_aborted) {
                   self->span_->add_tag(tracing::attributes::orphan, "aborted");
-                  return self->invoke_handler(make_error_code(self->request.retries.idempotent ? errc::common::unambiguous_timeout
-                                                                                               : errc::common::ambiguous_timeout));
+                  return self->invoke_handler(make_error_code(self->request.retries.idempotent() ? errc::common::unambiguous_timeout
+                                                                                                 : errc::common::ambiguous_timeout));
               }
               if (ec == errc::common::request_canceled) {
                   if (reason == retry_reason::do_not_retry) {
@@ -251,13 +251,13 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
               }
               if (status == key_value_status_code::not_my_vbucket) {
                   self->session_->handle_not_my_vbucket(msg);
-                  return io::retry_orchestrator::maybe_retry(self->manager_, self, retry_reason::kv_not_my_vbucket, ec);
+                  return io::retry_orchestrator::maybe_retry(self->manager_, self, retry_reason::key_value_not_my_vbucket, ec);
               }
               if (status == key_value_status_code::unknown_collection) {
                   return self->handle_unknown_collection();
               }
               if (error_code && error_code.value().has_retry_attribute()) {
-                  reason = retry_reason::kv_error_map_retry_indicated;
+                  reason = retry_reason::key_value_error_map_retry_indicated;
               } else {
                   switch (status) {
                       case key_value_status_code::locked:
@@ -266,17 +266,17 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                                * special case for unlock command, when it should not be retried, because it does not make sense
                                * (someone else unlocked the document)
                                */
-                              reason = retry_reason::kv_locked;
+                              reason = retry_reason::key_value_locked;
                           }
                           break;
                       case key_value_status_code::temporary_failure:
-                          reason = retry_reason::kv_temporary_failure;
+                          reason = retry_reason::key_value_temporary_failure;
                           break;
                       case key_value_status_code::sync_write_in_progress:
-                          reason = retry_reason::kv_sync_write_in_progress;
+                          reason = retry_reason::key_value_sync_write_in_progress;
                           break;
                       case key_value_status_code::sync_write_re_commit_in_progress:
-                          reason = retry_reason::kv_sync_write_re_commit_in_progress;
+                          reason = retry_reason::key_value_sync_write_re_commit_in_progress;
                           break;
                       default:
                           break;

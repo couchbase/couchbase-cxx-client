@@ -40,6 +40,7 @@ initiate_get_and_touch_operation(std::shared_ptr<couchbase::core::cluster> core,
         {},
         expiry,
         options.timeout,
+        { options.retry_strategy },
       },
       [handler = std::move(handler)](operations::get_and_touch_response&& resp) mutable {
           return handler(std::move(resp.ctx), get_result{ resp.cas, { std::move(resp.value), resp.flags }, {} });

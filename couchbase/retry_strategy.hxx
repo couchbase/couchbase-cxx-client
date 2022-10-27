@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2022-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,31 +17,18 @@
 
 #pragma once
 
+#include <couchbase/retry_action.hxx>
 #include <couchbase/retry_reason.hxx>
+#include <couchbase/retry_request.hxx>
 
-#include <optional>
-#include <set>
-#include <string>
-#include <system_error>
+#include <cstddef>
 
-namespace couchbase::core::error_context
+namespace couchbase
 {
-
-struct http {
-    std::error_code ec{};
-    std::string client_context_id{};
-
-    std::string method{};
-    std::string path{};
-    std::uint32_t http_status{};
-    std::string http_body{};
-    std::string hostname{};
-    std::uint16_t port{};
-
-    std::optional<std::string> last_dispatched_to{};
-    std::optional<std::string> last_dispatched_from{};
-    std::size_t retry_attempts{ 0 };
-    std::set<retry_reason> retry_reasons{};
+class retry_strategy
+{
+  public:
+    virtual ~retry_strategy() = default;
+    virtual auto retry_after(const retry_request& request, retry_reason reason) -> retry_action = 0;
 };
-
-} // namespace couchbase::core::error_context
+} // namespace couchbase

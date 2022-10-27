@@ -40,6 +40,7 @@ initiate_unlock_operation(std::shared_ptr<couchbase::core::cluster> core,
         {},
         cas,
         options.timeout,
+        { options.retry_strategy },
       },
       [handler = std::move(handler)](operations::unlock_response&& resp) mutable { return handler(std::move(resp.ctx)); });
 }

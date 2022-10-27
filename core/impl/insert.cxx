@@ -53,6 +53,7 @@ initiate_insert_operation(std::shared_ptr<couchbase::core::cluster> core,
             options.expiry,
             options.durability_level,
             options.timeout,
+            { options.retry_strategy },
           },
           [handler = std::move(handler)](operations::insert_response&& resp) mutable {
               if (resp.ctx.ec()) {
@@ -63,7 +64,7 @@ initiate_insert_operation(std::shared_ptr<couchbase::core::cluster> core,
     }
 
     operations::insert_request request{
-        id, std::move(value.data), {}, {}, value.flags, options.expiry, durability_level::none, options.timeout,
+        id, std::move(value.data), {}, {}, value.flags, options.expiry, durability_level::none, options.timeout, { options.retry_strategy },
     };
     return core->execute(
       std::move(request), [core, id = std::move(id), options, handler = std::move(handler)](operations::insert_response&& resp) mutable {

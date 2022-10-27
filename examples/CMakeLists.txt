@@ -6,3 +6,4 @@ endmacro()
 
 define_example(game_server)
 define_example(minimal)
+define_example(distributed_mutex)

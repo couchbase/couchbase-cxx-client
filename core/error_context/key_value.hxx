@@ -44,8 +44,8 @@ make_key_value_error_context(std::error_code ec, std::uint16_t status_code, cons
     const auto& bucket = command->request.id.bucket();
     std::uint32_t opaque = (ec && response.opaque() == 0) ? command->request.opaque : response.opaque();
     auto status = response.status();
-    auto retry_attempts = command->request.retries.retry_attempts;
-    auto retry_reasons = command->request.retries.reasons;
+    auto retry_attempts = command->request.retries.retry_attempts();
+    auto retry_reasons = command->request.retries.retry_reasons();
     std::optional<std::string> last_dispatched_from{};
     std::optional<std::string> last_dispatched_to{};
     std::optional<key_value_error_map_info> error_map_info{};

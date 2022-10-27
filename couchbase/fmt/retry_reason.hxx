@@ -49,25 +49,25 @@ struct fmt::formatter<couchbase::retry_reason> {
             case couchbase::retry_reason::node_not_available:
                 name = "node_not_available";
                 break;
-            case couchbase::retry_reason::kv_not_my_vbucket:
+            case couchbase::retry_reason::key_value_not_my_vbucket:
                 name = "kv_not_my_vbucket";
                 break;
-            case couchbase::retry_reason::kv_collection_outdated:
+            case couchbase::retry_reason::key_value_collection_outdated:
                 name = "kv_collection_outdated";
                 break;
-            case couchbase::retry_reason::kv_error_map_retry_indicated:
+            case couchbase::retry_reason::key_value_error_map_retry_indicated:
                 name = "kv_error_map_retry_indicated";
                 break;
-            case couchbase::retry_reason::kv_locked:
+            case couchbase::retry_reason::key_value_locked:
                 name = "kv_locked";
                 break;
-            case couchbase::retry_reason::kv_temporary_failure:
+            case couchbase::retry_reason::key_value_temporary_failure:
                 name = "kv_temporary_failure";
                 break;
-            case couchbase::retry_reason::kv_sync_write_in_progress:
+            case couchbase::retry_reason::key_value_sync_write_in_progress:
                 name = "kv_sync_write_in_progress";
                 break;
-            case couchbase::retry_reason::kv_sync_write_re_commit_in_progress:
+            case couchbase::retry_reason::key_value_sync_write_re_commit_in_progress:
                 name = "kv_sync_write_re_commit_in_progress";
                 break;
             case couchbase::retry_reason::service_response_code_indicated:

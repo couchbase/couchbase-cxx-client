@@ -69,7 +69,7 @@ class key_value_error_context : public error_context
     key_value_error_context(std::error_code ec,
                             std::optional<std::string> last_dispatched_to,
                             std::optional<std::string> last_dispatched_from,
-                            int retry_attempts,
+                            std::size_t retry_attempts,
                             std::set<retry_reason> retry_reasons,
                             std::string id,
                             std::string bucket,
