@@ -24,10 +24,10 @@ namespace couchbase::transactions
 class attempt_context
 {
   public:
-    virtual transaction_get_result_ptr get(std::shared_ptr<couchbase::collection> coll, const std::string& id) = 0;
+    virtual transaction_get_result_ptr get(const couchbase::collection& coll, const std::string& id) = 0;
 
     template<typename Content>
-    transaction_get_result_ptr insert(std::shared_ptr<couchbase::collection> coll, const std::string& id, const Content& content)
+    transaction_get_result_ptr insert(const couchbase::collection& coll, const std::string& id, const Content& content)
     {
         if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
             return insert_raw(content, id, content);
@@ -57,7 +57,7 @@ class attempt_context
 
   protected:
     virtual transaction_get_result_ptr replace_raw(const transaction_get_result_ptr doc, std::vector<std::byte> content) = 0;
-    virtual transaction_get_result_ptr insert_raw(std::shared_ptr<couchbase::collection> coll,
+    virtual transaction_get_result_ptr insert_raw(const couchbase::collection& coll,
                                                   const std::string& id,
                                                   std::vector<std::byte> content) = 0;
     virtual transaction_query_result_ptr do_public_query(const std::string& statement, const transaction_query_options& options) = 0;

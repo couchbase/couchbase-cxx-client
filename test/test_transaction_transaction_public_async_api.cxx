@@ -36,7 +36,7 @@ TEST_CASE("can async get", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
@@ -64,7 +64,7 @@ TEST_CASE("can get fail as expected", "[transactions]")
     auto id = TransactionsTestEnvironment::get_document_id();
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
@@ -89,7 +89,7 @@ TEST_CASE("can async remove", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
@@ -115,7 +115,7 @@ TEST_CASE("async remove with bad cas fails as expected", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
@@ -139,7 +139,7 @@ TEST_CASE("can async insert", "[transactions]")
     auto id = TransactionsTestEnvironment::get_document_id();
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
@@ -164,7 +164,7 @@ TEST_CASE("async insert fails when doc already exists", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
@@ -190,7 +190,7 @@ TEST_CASE("can async replace", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     tao::json::value new_content = { { "Iam", "new content" } };
@@ -218,7 +218,7 @@ TEST_CASE("async replace fails as expected with bad cas", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     tao::json::value new_content = { { "Iam", "new content" } };
@@ -246,7 +246,7 @@ TEST_CASE("uncaught exception will rollback", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     tao::json::value new_content = { { "Iam", "new content" } };
@@ -277,7 +277,7 @@ TEST_CASE("can set transaction options", "[transactions]")
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
     auto cfg = couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(2));
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto begin = std::chrono::steady_clock::now();
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();

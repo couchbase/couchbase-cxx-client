@@ -85,21 +85,21 @@ class attempt_context_impl
     // transaction_context needs access to the two functions below
     friend class transaction_context;
 
-    couchbase::transactions::transaction_get_result_ptr insert_raw(std::shared_ptr<couchbase::collection> coll,
+    couchbase::transactions::transaction_get_result_ptr insert_raw(const couchbase::collection& coll,
                                                                    const std::string& id,
                                                                    std::vector<std::byte> content) override
     {
         return wrap_call_for_public_api([this, coll, &id, &content]() -> transaction_get_result {
-            return insert_raw({ coll->bucket_name(), coll->scope_name(), coll->name(), id }, content);
+            return insert_raw({ coll.bucket_name(), coll.scope_name(), coll.name(), id }, content);
         });
     }
     transaction_get_result insert_raw(const core::document_id& id, const std::vector<std::byte>& content) override;
-    void insert_raw(std::shared_ptr<collection> coll,
+    void insert_raw(const collection& coll,
                     std::string id,
                     std::vector<std::byte> content,
                     couchbase::transactions::async_result_handler&& handler) override
     {
-        insert_raw({ coll->bucket_name(), coll->scope_name(), coll->name(), std::move(id) },
+        insert_raw({ coll.bucket_name(), coll.scope_name(), coll.name(), std::move(id) },
                    content,
                    [this, handler = std::move(handler)](std::exception_ptr err, std::optional<transaction_get_result> res) mutable {
                        wrap_callback_for_async_public_api(err, res, std::move(handler));
@@ -337,19 +337,19 @@ class attempt_context_impl
     ~attempt_context_impl() override;
 
     transaction_get_result get(const core::document_id& id) override;
-    couchbase::transactions::transaction_get_result_ptr get(std::shared_ptr<couchbase::collection> coll, const std::string& id) override
+    couchbase::transactions::transaction_get_result_ptr get(const couchbase::collection& coll, const std::string& id) override
     {
         return wrap_call_for_public_api([this, coll, id]() mutable -> transaction_get_result {
-            auto ret = get_optional({ coll->bucket_name(), coll->scope_name(), coll->name(), id });
+            auto ret = get_optional({ coll.bucket_name(), coll.scope_name(), coll.name(), id });
             if (ret) {
                 return *ret;
             }
             return { transaction_op_error_context{ errc::transaction_op::document_not_found_exception } };
         });
     }
-    void get(std::shared_ptr<couchbase::collection> coll, std::string id, couchbase::transactions::async_result_handler&& handler) override
+    void get(const couchbase::collection& coll, std::string id, couchbase::transactions::async_result_handler&& handler) override
     {
-        get_optional({ coll->bucket_name(), coll->scope_name(), coll->name(), std::move(id) },
+        get_optional({ coll.bucket_name(), coll.scope_name(), coll.name(), std::move(id) },
                      [this, handler = std::move(handler)](std::exception_ptr err, std::optional<transaction_get_result> res) mutable {
                          if (!res) {
                              return handler(std::make_shared<transaction_get_result>(

@@ -210,6 +210,19 @@ class cluster_options
         return behavior_;
     }
 
+    /**
+     * Returns the transactions options which effect the transactions behavior.
+     *
+     * @return  transactions configuration.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto transactions() -> transactions::transactions_config&
+    {
+        return transactions_;
+    }
+
     struct built {
         std::string username;
         std::string password;

@@ -27,7 +27,7 @@ TEST_CASE("can get", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto result = c.transactions()->run([id, coll](couchbase::transactions::attempt_context& ctx) {
         auto doc = ctx.get(coll, id.key());
         CHECK(doc->key() == id.key());
@@ -43,7 +43,7 @@ TEST_CASE("get returns error if doc doesn't exist", "[transactions]")
     auto id = TransactionsTestEnvironment::get_document_id();
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto result = c.transactions()->run([id, coll](couchbase::transactions::attempt_context& ctx) {
         auto doc = ctx.get(coll, id.key());
         CHECK(doc->ctx().ec());
@@ -59,7 +59,7 @@ TEST_CASE("can insert", "[transactions]")
     auto id = TransactionsTestEnvironment::get_document_id();
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket(id.bucket()).scope(id.scope()).collection(id.collection()));
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto result = c.transactions()->run([id, coll](couchbase::transactions::attempt_context& ctx) {
         auto doc = ctx.insert(coll, id.key(), content);
         CHECK(doc->key() == id.key());
@@ -81,7 +81,7 @@ TEST_CASE("insert fails as expected when doc already exists", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket(id.bucket()).scope(id.scope()).collection(id.collection()));
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto result = c.transactions()->run([id, coll, new_content](couchbase::transactions::attempt_context& ctx) {
         auto doc = ctx.insert(coll, id.key(), new_content);
         CHECK(doc->ctx().ec());
@@ -102,7 +102,7 @@ TEST_CASE("can replace", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     tao::json::value new_content = { { "some_other_number", 3 } };
     auto result = c.transactions()->run([id, coll, new_content](couchbase::transactions::attempt_context& ctx) {
         auto doc = ctx.get(coll, id.key());
@@ -127,7 +127,7 @@ TEST_CASE("replace fails as expected with bad cas", "[transactions]")
     tao::json::value new_content = { { "some_other_number", 3 } };
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto result = c.transactions()->run([id, coll, new_content](couchbase::transactions::attempt_context& ctx) {
         auto doc = ctx.get(coll, id.key());
         reinterpret_cast<couchbase::core::transactions::transaction_get_result&>(*doc).cas(100);
@@ -148,7 +148,7 @@ TEST_CASE("can remove", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto result = c.transactions()->run([id, coll](couchbase::transactions::attempt_context& ctx) {
         auto doc = ctx.get(coll, id.key());
         auto removed_doc = ctx.remove(doc);
@@ -169,7 +169,7 @@ TEST_CASE("remove fails as expected with bad cas", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto result = c.transactions()->run([id, coll](couchbase::transactions::attempt_context& ctx) {
         auto doc = ctx.get(coll, id.key());
         // change cas, so remove will fail and retry
@@ -188,7 +188,7 @@ TEST_CASE("remove fails as expected with missing doc", "[transactions]")
     auto id = TransactionsTestEnvironment::get_document_id();
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto result = c.transactions()->run([id, coll](couchbase::transactions::attempt_context& ctx) {
         auto doc = ctx.get(coll, id.key());
         CHECK(doc->ctx().ec() == couchbase::errc::transaction_op::document_not_found_exception);
@@ -209,7 +209,7 @@ TEST_CASE("uncaught exception in lambda will rollback without retry", "[transact
     auto id = TransactionsTestEnvironment::get_document_id();
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto result = c.transactions()->run([id, coll](couchbase::transactions::attempt_context& ctx) {
         auto doc = ctx.insert(coll, id.key(), content);
         CHECK_FALSE(doc->ctx().ec());
@@ -229,7 +229,7 @@ TEST_CASE("can pass per-transaction configs", "[transactions]")
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
     auto cfg = couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(2));
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto begin = std::chrono::steady_clock::now();
     auto result = c.transactions()->run(
       [id, coll](couchbase::transactions::attempt_context& ctx) {
@@ -258,7 +258,7 @@ TEST_CASE("can do simple query", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto result = c.transactions()->run([id, coll](couchbase::transactions::attempt_context& ctx) {
         auto res = ctx.query(fmt::format("SELECT * FROM `{}` USE KEYS '{}'", id.bucket(), id.key()));
         CHECK_FALSE(res->ctx().ec());
@@ -275,7 +275,7 @@ TEST_CASE("can do simple mutating query", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto result = c.transactions()->run([id, coll](couchbase::transactions::attempt_context& ctx) {
         auto res = ctx.query(fmt::format("UPDATE `{}` USE KEYS '{}' SET `some_number` = 10", id.bucket(), id.key()));
         CHECK_FALSE(res->ctx().ec());
@@ -292,7 +292,7 @@ TEST_CASE("some query errors don't rollback", "[transactions]")
     auto id = TransactionsTestEnvironment::get_document_id();
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto result = c.transactions()->run([id, coll](couchbase::transactions::attempt_context& ctx) {
         auto get_res = ctx.query(fmt::format("SELECT * FROM `{}` USE KEYS '{}'", id.bucket(), id.key()));
         CHECK_FALSE(get_res->ctx().ec());
@@ -314,7 +314,7 @@ TEST_CASE("some query errors do rollback", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
     auto core_cluster = TransactionsTestEnvironment::get_cluster();
     couchbase::cluster c(core_cluster);
-    auto coll = std::make_shared<couchbase::collection>(c.bucket("default").default_collection());
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     auto result = c.transactions()->run([id, id2, coll](couchbase::transactions::attempt_context& ctx) {
         // this one works.
         ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES ("{}", {}))", id2.bucket(), id2.key(), content));
@@ -324,7 +324,7 @@ TEST_CASE("some query errors do rollback", "[transactions]")
     CHECK(result.ctx.ec() == couchbase::errc::transaction::failed);
 
     // id2 should not exist, since the txn should have rolled back.
-    auto [err, doc2] = coll->get(id2.key(), {}).get();
+    auto [err, doc2] = coll.get(id2.key(), {}).get();
     CHECK(err.ec() == couchbase::errc::key_value::document_not_found);
     CHECK(doc2.cas().empty());
 }
