@@ -80,7 +80,6 @@ struct append_options : public common_durability_options<append_options> {
      */
     auto cas(couchbase::cas cas) -> append_options&
     {
-
         cas_ = cas;
         return self();
     }
