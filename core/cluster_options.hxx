@@ -23,11 +23,13 @@
 #include "core/tracing/threshold_logging_options.hxx"
 #include "core/transactions/attempt_context_testing_hooks.hxx"
 #include "core/transactions/cleanup_testing_hooks.hxx"
-#include "couchbase/metrics/meter.hxx"
-#include "couchbase/tracing/request_tracer.hxx"
-#include "couchbase/transactions/transactions_config.hxx"
 #include "service_type.hxx"
 #include "timeout_defaults.hxx"
+
+#include <couchbase/best_effort_retry_strategy.hxx>
+#include <couchbase/metrics/meter.hxx>
+#include <couchbase/tracing/request_tracer.hxx>
+#include <couchbase/transactions/transactions_config.hxx>
 
 #include <chrono>
 #include <list>
@@ -72,6 +74,7 @@ struct cluster_options {
     tls_verify_mode tls_verify{ tls_verify_mode::peer };
     std::shared_ptr<couchbase::tracing::request_tracer> tracer{ nullptr };
     std::shared_ptr<couchbase::metrics::meter> meter{ nullptr };
+    std::shared_ptr<retry_strategy> default_retry_strategy_{ make_best_effort_retry_strategy() };
 
     std::chrono::milliseconds tcp_keep_alive_interval = timeout_defaults::tcp_keep_alive_interval;
     std::chrono::milliseconds config_poll_interval = timeout_defaults::config_poll_interval;

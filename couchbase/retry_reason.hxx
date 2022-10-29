@@ -42,7 +42,7 @@ enum class retry_reason {
     socket_not_available,
 
     /**
-     * The service on a node (i.e. kv, query) is not available.
+     * The service on a node (i.e. key_value, query) is not available.
      */
     service_not_available,
 
@@ -54,25 +54,25 @@ enum class retry_reason {
     /**
      * A not my vbucket response has been received.
      */
-    kv_not_my_vbucket,
+    key_value_not_my_vbucket,
 
     /**
      * A KV response has been received which signals an outdated collection.
      */
-    kv_collection_outdated,
+    key_value_collection_outdated,
 
     /**
      * An unknown response was returned and the consulted KV error map indicated a retry.
      */
-    kv_error_map_retry_indicated,
+    key_value_error_map_retry_indicated,
 
-    kv_locked,
+    key_value_locked,
 
-    kv_temporary_failure,
+    key_value_temporary_failure,
 
-    kv_sync_write_in_progress,
+    key_value_sync_write_in_progress,
 
-    kv_sync_write_re_commit_in_progress,
+    key_value_sync_write_re_commit_in_progress,
 
     service_response_code_indicated,
 
@@ -98,4 +98,10 @@ enum class retry_reason {
 
     views_no_active_partition,
 };
+
+bool
+allows_non_idempotent_retry(retry_reason reason);
+
+bool
+always_retry(retry_reason reason);
 } // namespace couchbase

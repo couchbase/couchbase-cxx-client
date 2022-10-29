@@ -39,6 +39,7 @@ initiate_get_operation(std::shared_ptr<couchbase::core::cluster> core,
             {},
             {},
             options.timeout,
+            { options.retry_strategy },
           },
           [handler = std::move(handler)](operations::get_response&& resp) mutable {
               return handler(std::move(resp.ctx), get_result{ resp.cas, { std::move(resp.value), resp.flags }, {} });
@@ -54,6 +55,7 @@ initiate_get_operation(std::shared_ptr<couchbase::core::cluster> core,
         {},
         false,
         options.timeout,
+        { options.retry_strategy },
       },
       [handler = std::move(handler)](operations::get_projected_response&& resp) mutable {
           std::optional<std::chrono::system_clock::time_point> expiry_time{};

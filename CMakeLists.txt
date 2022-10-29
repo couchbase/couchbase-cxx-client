@@ -223,6 +223,7 @@ set(couchbase_cxx_client_FILES
     core/utils/url_codec.cxx
     core/impl/analytics_error_category.cxx
     core/impl/append.cxx
+    core/impl/best_effort_retry_strategy.cxx
     core/impl/build_deferred_query_indexes.cxx
     core/impl/cluster.cxx
     core/impl/common_error_category.cxx
@@ -231,6 +232,7 @@ set(couchbase_cxx_client_FILES
     core/impl/dns_srv_tracker.cxx
     core/impl/exists.cxx
     core/impl/expiry.cxx
+    core/impl/fail_fast_retry_strategy.cxx
     core/impl/field_level_encryption_error_category.cxx
     core/impl/get.cxx
     core/impl/get_all_replicas.cxx
@@ -252,6 +254,8 @@ set(couchbase_cxx_client_FILES
     core/impl/query_error_category.cxx
     core/impl/remove.cxx
     core/impl/replace.cxx
+    core/impl/retry_action.cxx
+    core/impl/retry_reason.cxx
     core/impl/search_error_category.cxx
     core/impl/streaming_json_lexter_error_category.cxx
     core/impl/unlock.cxx
@@ -293,7 +297,7 @@ set(couchbase_cxx_client_FILES
     core/transactions/transaction_get_result.cxx
     core/transactions/transaction_links.cxx
     core/transactions/transaction_options.cxx
-        core/transactions/transactions.cxx
+    core/transactions/transactions.cxx
     core/transactions/transactions_cleanup.cxx
     core/transactions/uid_generator.cxx)
 

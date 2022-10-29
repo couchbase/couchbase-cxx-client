@@ -66,7 +66,7 @@ struct mutate_in_request {
     std::vector<couchbase::core::impl::subdoc::command> specs{};
     couchbase::durability_level durability_level{ durability_level::none };
     std::optional<std::chrono::milliseconds> timeout{};
-    io::retry_context<io::retry_strategy::best_effort> retries{ false };
+    io::retry_context<false> retries{};
     bool preserve_expiry{ false };
     std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 

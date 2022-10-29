@@ -54,7 +54,7 @@ struct observe_seqno_request {
     std::optional<std::chrono::milliseconds> timeout{};
     std::uint16_t partition{};
     std::uint32_t opaque{};
-    core::io::retry_context<core::io::retry_strategy::best_effort> retries{ true };
+    io::retry_context<true> retries{};
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, core::mcbp_context&& context);
 

@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2022-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,31 +17,25 @@
 
 #pragma once
 
-#include <couchbase/retry_reason.hxx>
+#include <chrono>
 
-#include <optional>
-#include <set>
-#include <string>
-#include <system_error>
-
-namespace couchbase::core::error_context
+namespace couchbase
 {
+class retry_action
+{
+  public:
+    static auto do_not_retry() -> const retry_action&;
 
-struct http {
-    std::error_code ec{};
-    std::string client_context_id{};
+    explicit retry_action(std::chrono::milliseconds waiting_duration);
 
-    std::string method{};
-    std::string path{};
-    std::uint32_t http_status{};
-    std::string http_body{};
-    std::string hostname{};
-    std::uint16_t port{};
+    [[nodiscard]] auto need_to_retry() const -> bool;
 
-    std::optional<std::string> last_dispatched_to{};
-    std::optional<std::string> last_dispatched_from{};
-    std::size_t retry_attempts{ 0 };
-    std::set<retry_reason> retry_reasons{};
+    [[nodiscard]] auto duration() const -> std::chrono::milliseconds
+    {
+        return waiting_duration_;
+    }
+
+  private:
+    std::chrono::milliseconds waiting_duration_;
 };
-
-} // namespace couchbase::core::error_context
+} // namespace couchbase

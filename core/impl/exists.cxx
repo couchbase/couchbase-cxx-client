@@ -38,6 +38,7 @@ initiate_exists_operation(std::shared_ptr<couchbase::core::cluster> core,
         {},
         {},
         options.timeout,
+        { options.retry_strategy },
       },
       [handler = std::move(handler)](operations::exists_response&& resp) mutable {
           return handler(std::move(resp.ctx), exists_result{ resp.cas, resp.exists() });

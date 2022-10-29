@@ -539,6 +539,11 @@ class bucket
         return meter_;
     }
 
+    auto default_retry_strategy() const
+    {
+        return origin_.options().default_retry_strategy_;
+    }
+
   private:
     std::string client_id_;
     asio::io_context& ctx_;

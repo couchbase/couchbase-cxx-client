@@ -44,7 +44,7 @@ class query_error_context : public error_context
     query_error_context(std::error_code ec,
                         std::optional<std::string> last_dispatched_to,
                         std::optional<std::string> last_dispatched_from,
-                        int retry_attempts,
+                        std::size_t retry_attempts,
                         std::set<retry_reason> retry_reasons,
                         std::uint64_t first_error_code,
                         std::string first_error_message,

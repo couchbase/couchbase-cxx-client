@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2022-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -15,16 +15,25 @@
  *   limitations under the License.
  */
 
-#pragma once
+#include <couchbase/retry_action.hxx>
 
-#include <chrono>
-#include <optional>
-
-namespace couchbase::core::io
+namespace couchbase
 {
-struct retry_action {
-    bool retry_requested{ false };
-    std::chrono::milliseconds duration{};
-};
+retry_action::retry_action(std::chrono::milliseconds waiting_duration)
+  : waiting_duration_{ waiting_duration }
+{
+}
 
-} // namespace couchbase::core::io
+auto
+retry_action::need_to_retry() const -> bool
+{
+    return waiting_duration_ != std::chrono::milliseconds::zero();
+}
+
+auto
+retry_action::do_not_retry() -> const retry_action&
+{
+    const static retry_action instance{ std::chrono::milliseconds::zero() };
+    return instance;
+}
+} // namespace couchbase

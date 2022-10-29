@@ -17,7 +17,10 @@
 
 #pragma once
 
+#include <couchbase/retry_strategy.hxx>
+
 #include <chrono>
+#include <memory>
 #include <optional>
 #include <type_traits>
 
@@ -52,6 +55,21 @@ class common_options
     }
 
     /**
+     * Specifies a custom {@link retry_strategy} for this operation.
+     *
+     * @param strategy the retry strategy to use for this operation.
+     * @return this options builder for chaining purposes.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    auto retry_strategy(const std::shared_ptr<retry_strategy> strategy) -> derived_class&
+    {
+        retry_strategy_ = strategy;
+        return self();
+    }
+
+    /**
      * Immutable value object representing consistent options.
      *
      * @since 1.0.0
@@ -59,6 +77,7 @@ class common_options
      */
     struct built {
         const std::optional<std::chrono::milliseconds> timeout;
+        const std::shared_ptr<couchbase::retry_strategy> retry_strategy;
     };
 
   protected:
@@ -69,7 +88,7 @@ class common_options
      */
     [[nodiscard]] auto build_common_options() const -> built
     {
-        return { timeout_ };
+        return { timeout_, retry_strategy_ };
     }
 
     /**
@@ -87,6 +106,7 @@ class common_options
 
   private:
     std::optional<std::chrono::milliseconds> timeout_{};
+    std::shared_ptr<couchbase::retry_strategy> retry_strategy_{ nullptr };
 };
 
 } // namespace couchbase

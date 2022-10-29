@@ -54,7 +54,7 @@ TEST_CASE("integration: missing scope and collection", "[integration]")
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::errc::common::unambiguous_timeout);
-        REQUIRE(resp.ctx.retried_because_of(couchbase::retry_reason::kv_collection_outdated));
+        REQUIRE(resp.ctx.retried_because_of(couchbase::retry_reason::key_value_collection_outdated));
     }
 
     SECTION("insert missing collection")
@@ -67,7 +67,7 @@ TEST_CASE("integration: missing scope and collection", "[integration]")
         couchbase::core::operations::insert_request req{ id, couchbase::core::utils::json::generate_binary(value) };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::errc::common::ambiguous_timeout);
-        REQUIRE(resp.ctx.retried_because_of(couchbase::retry_reason::kv_collection_outdated));
+        REQUIRE(resp.ctx.retried_because_of(couchbase::retry_reason::key_value_collection_outdated));
     }
 }
 

@@ -225,7 +225,7 @@ class cluster : public std::enable_shared_from_this<cluster>
                   request.make_response(make_key_value_error_context(errc::network::cluster_closed, request.id), response_type{}));
             }
             if (auto bucket = find_bucket_by_name(request.id.bucket()); bucket != nullptr) {
-                return bucket->execute(request, std::forward<Handler>(handler));
+                return bucket->execute(std::move(request), std::forward<Handler>(handler));
             }
             if (request.id.bucket().empty()) {
                 return handler(
@@ -255,7 +255,7 @@ class cluster : public std::enable_shared_from_this<cluster>
         if constexpr (operations::is_compound_operation_v<Request>) {
             return request.execute(shared_from_this(), std::forward<Handler>(handler));
         } else {
-            return session_manager_->execute(request, std::forward<Handler>(handler), origin_.credentials());
+            return session_manager_->execute(std::move(request), std::forward<Handler>(handler), origin_.credentials());
         }
     }
 

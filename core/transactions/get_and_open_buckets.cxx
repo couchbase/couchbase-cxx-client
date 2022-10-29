@@ -32,7 +32,7 @@ get_and_open_buckets(std::shared_ptr<core::cluster> c)
     auto cv = std::make_shared<std::condition_variable>();
     std::size_t count = 1; // non-zero so we know not to stop waiting immediately
     std::list<std::string> bucket_names;
-    c->execute(req, [cv, &bucket_names, &c, mtx, &count](core::operations::management::bucket_get_all_response resp) {
+    c->execute(std::move(req), [cv, &bucket_names, &c, mtx, &count](core::operations::management::bucket_get_all_response resp) {
         {
             std::unique_lock lock(*mtx);
             // now set count to correct # of buckets to try to open

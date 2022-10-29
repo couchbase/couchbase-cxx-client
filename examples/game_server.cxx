@@ -19,13 +19,14 @@
 #include <couchbase/cluster.hxx>
 #include <couchbase/transactions.hxx>
 
+#include <asio/io_context.hpp>
 #include <spdlog/spdlog.h>
 
-#include <asio/io_context.hpp>
 #include <functional>
 #include <iostream>
 #include <random>
 #include <string>
+#include <thread>
 
 using namespace couchbase::transactions;
 

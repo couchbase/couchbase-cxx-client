@@ -224,9 +224,9 @@ TEST_CASE("integration: analytics scope query")
 couchbase::core::http_context
 make_http_context()
 {
-    couchbase::core::topology::configuration config{};
-    couchbase::core::query_cache query_cache{};
-    couchbase::core::cluster_options cluster_options{};
+    static couchbase::core::topology::configuration config{};
+    static couchbase::core::query_cache query_cache{};
+    static couchbase::core::cluster_options cluster_options{};
     std::string hostname{};
     std::uint16_t port{};
     couchbase::core::http_context ctx{ config, cluster_options, query_cache, hostname, port };

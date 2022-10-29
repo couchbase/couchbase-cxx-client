@@ -204,7 +204,7 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
         req.lock_time = lock_time;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::errc::common::ambiguous_timeout);
-        REQUIRE(resp.ctx.retried_because_of(couchbase::retry_reason::kv_locked));
+        REQUIRE(resp.ctx.retried_because_of(couchbase::retry_reason::key_value_locked));
     }
 
     // but unlock operation is not retried in this case, because it would never have succeeded
@@ -213,7 +213,7 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
         req.cas = couchbase::cas{ cas.value() - 1 };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_locked);
-        REQUIRE_FALSE(resp.ctx.retried_because_of(couchbase::retry_reason::kv_locked));
+        REQUIRE_FALSE(resp.ctx.retried_because_of(couchbase::retry_reason::key_value_locked));
     }
 
     // but mutating the locked key is allowed with known cas
@@ -784,7 +784,7 @@ TEST_CASE("integration: pessimistic locking with public API", "[integration]")
     {
         auto [ctx, resp] = collection.get_and_lock(id, lock_time, {}).get();
         REQUIRE(ctx.ec() == couchbase::errc::common::ambiguous_timeout);
-        REQUIRE(ctx.retried_because_of(couchbase::retry_reason::kv_locked));
+        REQUIRE(ctx.retried_because_of(couchbase::retry_reason::key_value_locked));
     }
 
     // but unlock operation is not retried in this case, because it would never have succeeded
@@ -792,7 +792,7 @@ TEST_CASE("integration: pessimistic locking with public API", "[integration]")
         auto wrong_cas = couchbase::cas{ cas.value() - 1 };
         auto ctx = collection.unlock(id, wrong_cas, {}).get();
         REQUIRE(ctx.ec() == couchbase::errc::key_value::document_locked);
-        REQUIRE_FALSE(ctx.retried_because_of(couchbase::retry_reason::kv_locked));
+        REQUIRE_FALSE(ctx.retried_because_of(couchbase::retry_reason::key_value_locked));
     }
 
     // and yet mutating the locked key is allowed with known cas

@@ -18,8 +18,8 @@
 #pragma once
 
 #include "core/logger/logger.hxx"
-#include "retry_action.hxx"
-#include "retry_reason.hxx"
+
+#include <couchbase/best_effort_retry_strategy.hxx>
 
 #include <chrono>
 #include <memory>
@@ -45,25 +45,6 @@ cap_duration(std::chrono::milliseconds uncapped, std::shared_ptr<Command> comman
     return uncapped;
 }
 
-inline std::chrono::milliseconds
-controlled_backoff(int retry_attempts)
-{
-    switch (retry_attempts) {
-        case 0:
-            return std::chrono::milliseconds(1);
-        case 1:
-            return std::chrono::milliseconds(10);
-        case 2:
-            return std::chrono::milliseconds(50);
-        case 3:
-            return std::chrono::milliseconds(100);
-        case 4:
-            return std::chrono::milliseconds(500);
-        default:
-            return std::chrono::milliseconds(1000);
-    }
-}
-
 template<class Manager, class Command>
 void
 retry_with_duration(std::shared_ptr<Manager> manager,
@@ -71,16 +52,14 @@ retry_with_duration(std::shared_ptr<Manager> manager,
                     retry_reason reason,
                     std::chrono::milliseconds duration)
 {
-    ++command->request.retries.retry_attempts;
-    command->request.retries.reasons.insert(reason);
-    command->request.retries.last_duration = duration;
+    command->request.retries.record_retry_attempt(reason);
     LOG_TRACE(R"({} retrying operation {} (duration={}ms, id="{}", reason={}, attempts={}))",
               manager->log_prefix(),
               decltype(command->request)::encoded_request_type::body_type::opcode,
               duration.count(),
               command->id_,
               reason,
-              command->request.retries.retry_attempts);
+              command->request.retries.retry_attempts());
     manager->schedule_for_retry(command, duration);
 }
 
@@ -91,11 +70,15 @@ void
 maybe_retry(std::shared_ptr<Manager> manager, std::shared_ptr<Command> command, retry_reason reason, std::error_code ec)
 {
     if (always_retry(reason)) {
-        return priv::retry_with_duration(manager, command, reason, priv::controlled_backoff(command->request.retries.retry_attempts));
+        return priv::retry_with_duration(manager, command, reason, controlled_backoff(command->request.retries.retry_attempts()));
     }
 
-    if (retry_action action = command->request.retries.strategy.should_retry(command->request, reason); action.retry_requested) {
-        return priv::retry_with_duration(manager, command, reason, priv::cap_duration(action.duration, command));
+    auto retry_strategy = command->request.retries.strategy();
+    if (retry_strategy == nullptr) {
+        retry_strategy = manager->default_retry_strategy();
+    }
+    if (retry_action action = retry_strategy->retry_after(command->request.retries, reason); action.need_to_retry()) {
+        return priv::retry_with_duration(manager, command, reason, priv::cap_duration(action.duration(), command));
     }
 
     LOG_TRACE(R"({} not retrying operation {} (id="{}", reason={}, attempts={}, ec={} ({})))",
@@ -103,7 +86,7 @@ maybe_retry(std::shared_ptr<Manager> manager, std::shared_ptr<Command> command, 
               decltype(command->request)::encoded_request_type::body_type::opcode,
               command->id_,
               reason,
-              command->request.retries.retry_attempts,
+              command->request.retries.retry_attempts(),
               ec.value(),
               ec.message());
     return command->invoke_handler(ec);

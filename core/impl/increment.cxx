@@ -51,6 +51,7 @@ initiate_increment_operation(std::shared_ptr<couchbase::core::cluster> core,
             options.initial_value,
             options.durability_level,
             options.timeout,
+            { options.retry_strategy },
           },
           [handler = std::move(handler)](operations::increment_response&& resp) mutable {
               if (resp.ctx.ec()) {
@@ -61,7 +62,15 @@ initiate_increment_operation(std::shared_ptr<couchbase::core::cluster> core,
     }
 
     operations::increment_request request{
-        id, {}, {}, options.expiry, options.delta, options.initial_value, durability_level::none, options.timeout
+        id,
+        {},
+        {},
+        options.expiry,
+        options.delta,
+        options.initial_value,
+        durability_level::none,
+        options.timeout,
+        { options.retry_strategy },
     };
     return core->execute(
       std::move(request), [core, id = std::move(id), options, handler = std::move(handler)](operations::increment_response&& resp) mutable {

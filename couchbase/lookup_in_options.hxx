@@ -65,7 +65,8 @@ struct lookup_in_options : public common_durability_options<lookup_in_options> {
      */
     [[nodiscard]] auto build() const -> built
     {
-        return { build_common_durability_options(), access_deleted_ };
+        auto base = build_common_durability_options();
+        return { base, access_deleted_ };
     }
 
     /**

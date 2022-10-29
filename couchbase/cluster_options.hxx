@@ -31,6 +31,7 @@
 #include <couchbase/transactions/transactions_config.hxx>
 
 #include <functional>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -223,6 +224,23 @@ class cluster_options
         return transactions_;
     }
 
+    /**
+     * Override default retry strategy
+     *
+     * @return cluster options object for chaining
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    auto default_retry_strategy(std::shared_ptr<retry_strategy> strategy) -> cluster_options&
+    {
+        if (strategy == nullptr) {
+            throw std::invalid_argument("retry strategy cannot be null");
+        }
+        default_retry_strategy_ = std::move(strategy);
+        return *this;
+    }
+
     struct built {
         std::string username;
         std::string password;
@@ -238,6 +256,7 @@ class cluster_options
         tracing_options::built tracing;
         behavior_options::built behavior;
         transactions::transactions_config::built transactions;
+        std::shared_ptr<retry_strategy> default_retry_strategy;
     };
 
     [[nodiscard]] auto build() const -> built
@@ -260,6 +279,7 @@ class cluster_options
             tracing_.build(),
             behavior_.build(),
             transactions_.build(),
+            default_retry_strategy_,
         };
     }
 
@@ -279,6 +299,7 @@ class cluster_options
     tracing_options tracing_{};
     behavior_options behavior_{};
     transactions::transactions_config transactions_{};
+    std::shared_ptr<retry_strategy> default_retry_strategy_{ nullptr };
 };
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN

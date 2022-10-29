@@ -50,6 +50,7 @@ initiate_prepend_operation(std::shared_ptr<couchbase::core::cluster> core,
             {},
             options.durability_level,
             options.timeout,
+            { options.retry_strategy },
           },
           [handler = std::move(handler)](operations::prepend_response&& resp) mutable {
               if (resp.ctx.ec()) {
@@ -59,7 +60,9 @@ initiate_prepend_operation(std::shared_ptr<couchbase::core::cluster> core,
           });
     }
 
-    operations::prepend_request request{ id, std::move(data), {}, {}, durability_level::none, options.timeout };
+    operations::prepend_request request{
+        id, std::move(data), {}, {}, durability_level::none, options.timeout, { options.retry_strategy },
+    };
     return core->execute(
       std::move(request), [core, id = std::move(id), options, handler = std::move(handler)](operations::prepend_response&& resp) mutable {
           if (resp.ctx.ec()) {

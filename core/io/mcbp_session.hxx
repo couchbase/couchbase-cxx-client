@@ -1270,7 +1270,7 @@ class mcbp_session : public std::enable_shared_from_this<mcbp_session>
                           }
                           return;
                       case mcbp_parser::result::failure:
-                          return self->stop(retry_reason::kv_temporary_failure);
+                          return self->stop(retry_reason::key_value_temporary_failure);
                   }
               }
           });

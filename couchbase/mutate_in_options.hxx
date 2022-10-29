@@ -69,9 +69,8 @@ struct mutate_in_options : public common_durability_options<mutate_in_options> {
      */
     [[nodiscard]] auto build() const -> built
     {
-        return {
-            build_common_durability_options(), expiry_, preserve_expiry_, store_semantics_, cas_, access_deleted_, create_as_deleted_
-        };
+        auto base = build_common_durability_options();
+        return { base, expiry_, preserve_expiry_, store_semantics_, cas_, access_deleted_, create_as_deleted_ };
     }
 
     /**
