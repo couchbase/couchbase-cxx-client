@@ -61,7 +61,8 @@ struct insert_options : public common_durability_options<insert_options> {
      */
     [[nodiscard]] auto build() const -> built
     {
-        return { build_common_durability_options(), expiry_ };
+        auto base = build_common_durability_options();
+        return { base, expiry_ };
     }
 
     /**

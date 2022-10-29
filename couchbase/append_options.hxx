@@ -61,7 +61,8 @@ struct append_options : public common_durability_options<append_options> {
      */
     [[nodiscard]] auto build() const -> built
     {
-        return { build_common_durability_options(), cas_ };
+        auto base = build_common_durability_options();
+        return { base, cas_ };
     }
 
     /**
