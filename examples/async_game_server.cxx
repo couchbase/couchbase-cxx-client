@@ -18,14 +18,13 @@
 #include <core/logger/logger.hxx>
 #include <couchbase/cluster.hxx>
 
-#include <asio/io_context.hpp>
 #include <spdlog/spdlog.h>
 
+#include <asio/io_context.hpp>
 #include <functional>
 #include <iostream>
 #include <random>
 #include <string>
-#include <thread>
 
 using namespace couchbase::transactions;
 
@@ -135,64 +134,87 @@ class GameServer
         return experience / 100;
     }
 
-    void player_hits_monster(int damage_,
-                             const couchbase::collection& collection,
-                             const std::string& player_id,
-                             const std::string& monster_id,
-                             std::atomic<bool>& exists)
+    std::future<transaction_result> player_hits_monster(int damage,
+                                                        const couchbase::collection& collection,
+                                                        const std::string& player_id,
+                                                        const std::string& monster_id,
+                                                        std::atomic<bool>& exists)
     {
-        auto result = transactions_->run([&](attempt_context& ctx) {
-            auto monster = ctx.get(collection, monster_id);
-            if (monster->ctx().ec() == couchbase::errc::transaction_op::document_not_found_exception) {
-                std::cout << "monster no longer exists" << std::endl;
-                exists = false;
-                return;
-            }
-            const Monster& monster_body = monster->content<Monster>();
+        auto barrier = std::make_shared<std::promise<transaction_result>>();
+        auto f = barrier->get_future();
+        transactions_->run(
+          [this, damage, collection, player_id, monster_id, &exists](async_attempt_context& ctx) {
+              ctx.get(
+                collection,
+                monster_id,
+                [&ctx, this, collection, monster_id, player_id, &exists, damage = std::move(damage)](transaction_get_result_ptr monster) {
+                    if (monster->ctx().ec()) {
+                        if (monster->ctx().ec() == couchbase::errc::transaction_op::document_not_found_exception) {
+                            std::cout << "monster no longer exists" << std::endl;
+                            exists = false;
+                            return;
+                        }
+                    }
+                    auto monster_body = monster->content<Monster>();
+                    auto monster_hitpoints = monster_body.hitpoints;
+                    auto monster_new_hitpoints = monster_hitpoints - damage;
 
-            int monster_hitpoints = monster_body.hitpoints;
-            int monster_new_hitpoints = monster_hitpoints - damage_;
+                    std::cout << "Monster " << monster_id << " had " << monster_hitpoints << " hitpoints, took " << damage
+                              << " damage, now has " << monster_new_hitpoints << " hitpoints" << std::endl;
+                    if (monster_new_hitpoints <= 0) {
+                        // Monster is killed. The remove is just for demoing, and a more realistic examples would set a "dead" flag or
+                        // similar.
+                        ctx.remove(monster, [](couchbase::transaction_op_error_context e) {
+                            if (e.ec()) {
+                                std::cout << "error removing monster: " << e.ec().message() << std::endl;
+                            }
+                        });
+                        // also, in parallel, get/update player
+                        ctx.get(
+                          collection, player_id, [&ctx, player_id, monster_id, monster_body, this](transaction_get_result_ptr player) {
+                              if (player->ctx().ec()) {
+                                  std::cout << "error getting player: " << player->ctx().ec().message() << std::endl;
+                                  return;
+                              }
+                              const Player& player_body = player->content<Player>();
 
-            std::cout << "Monster " << monster_id << " had " << monster_hitpoints << " hitpoints, took " << damage_ << " damage, now has "
-                      << monster_new_hitpoints << " hitpoints" << std::endl;
+                              // the player earns experience for killing the monster
+                              int experience_for_killing_monster = monster_body.experience_when_killed;
+                              int player_experience = player_body.experience;
+                              int player_new_experience = player_experience + experience_for_killing_monster;
+                              int player_new_level = calculate_level_for_experience(player_new_experience);
 
-            auto player = ctx.get(collection, player_id);
-            if (player->ctx().ec()) {
-                // rollback
-                throw std::runtime_error(fmt::format("error getting player {}", player_id));
-            }
+                              std::cout << "Monster " << monster_id << " was killed. Player " << player_id << " gains "
+                                        << experience_for_killing_monster << " experience, now has level " << player_new_level << std::endl;
 
-            if (monster_new_hitpoints <= 0) {
-                // Monster is killed. The remove is just for demoing, and a more realistic examples would set a "dead" flag or similar.
-                ctx.remove(monster);
+                              Player player_new_body = player_body;
+                              player_new_body.experience = player_new_experience;
+                              player_new_body.level = player_new_level;
+                              ctx.replace(player, player_new_body, [](transaction_get_result_ptr res) {
+                                  if (res->ctx().ec()) {
+                                      std::cout << "Error updating player :" << res->ctx().ec().message() << std::endl;
+                                  }
+                              });
+                          });
+                    } else {
+                        std::cout << "Monster " << monster_id << " is damaged but alive" << std::endl;
 
-                const Player& player_body = player->content<Player>();
-
-                // the player earns experience for killing the monster
-                int experience_for_killing_monster = monster_body.experience_when_killed;
-                int player_experience = player_body.experience;
-                int player_new_experience = player_experience + experience_for_killing_monster;
-                int player_new_level = calculate_level_for_experience(player_new_experience);
-
-                std::cout << "Monster " << monster_id << " was killed. Player " << player_id << " gains " << experience_for_killing_monster
-                          << " experience, now has level " << player_new_level << std::endl;
-
-                Player player_new_body = player_body;
-                player_new_body.experience = player_new_experience;
-                player_new_body.level = player_new_level;
-                ctx.replace(player, player_new_body);
-            } else {
-                std::cout << "Monster " << monster_id << " is damaged but alive" << std::endl;
-
-                Monster monster_new_body = monster_body;
-                monster_new_body.hitpoints = monster_new_hitpoints;
-                ctx.replace(monster, monster_new_body);
-            }
-        });
-        if (result.ctx.ec()) {
-            std::cout << "txn error during player_hits_monster: " << result.ctx.ec().message() << ", " << result.ctx.cause().message()
-                      << std::endl;
-        }
+                        Monster monster_new_body = monster_body;
+                        monster_new_body.hitpoints = monster_new_hitpoints;
+                        ctx.replace(monster, monster_new_body, [monster_new_body](transaction_get_result_ptr res) {
+                            if (res->ctx().ec()) {
+                                std::cout << "Error updating monster :" << res->ctx().ec().message() << std::endl;
+                            } else {
+                                auto body = couchbase::codec::tao_json_serializer::serialize(monster_new_body);
+                                std::cout << "Monster body updated to :" << std::string(reinterpret_cast<char*>(&body.front()), body.size())
+                                          << std::endl;
+                            }
+                        });
+                    }
+                });
+          },
+          [barrier](transaction_result res) { barrier->set_value(res); });
+        return f;
     }
 };
 
@@ -211,7 +233,7 @@ main()
     }
 
     std::list<std::thread> io_threads;
-    for (int i = 0; i < 2 * NUM_THREADS; i++) {
+    for (int i = 0; i < 2 * (NUM_THREADS + 1); i++) {
         io_threads.emplace_back([&io]() { io.run(); });
     }
 
@@ -220,11 +242,10 @@ main()
     auto rand = std::bind(hit_distribution, random_number_engine);
 
     auto options = couchbase::cluster_options("Administrator", "password");
-    options.transactions().cleanup_config().cleanup_window(std::chrono::seconds(5));
+    options.transactions().cleanup_config().cleanup_window(std::chrono::seconds(60));
     options.transactions().durability_level(couchbase::durability_level::majority);
     options.transactions().cleanup_config().cleanup_lost_attempts(true);
     options.transactions().cleanup_config().cleanup_client_attempts(true);
-    options.transactions().expiration_time(std::chrono::milliseconds(100));
 
     auto [cluster, ec] = couchbase::cluster::connect(io, "couchbase://localhost", options).get();
     if (ec) {
@@ -261,7 +282,12 @@ main()
         threads.emplace_back([&rand, player_id, collection, monster_id, &monster_exists, &game_server]() {
             while (monster_exists.load()) {
                 std::cout << "[thread " << std::this_thread::get_id() << "]Monster exists -- lets hit it!" << std::endl;
-                game_server.player_hits_monster(rand() % 80, collection, player_id, monster_id, monster_exists);
+                auto res = game_server.player_hits_monster(rand() % 80, collection, player_id, monster_id, monster_exists).get();
+                if (res.unstaging_complete) {
+                    std::cout << "[thread " << std::this_thread::get_id() << "] success" << std::endl;
+                } else {
+                    std::cout << "[thread " << std::this_thread::get_id() << "] " << res.ctx.ec().message() << std::endl;
+                }
             }
         });
     }

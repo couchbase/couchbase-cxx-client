@@ -5,5 +5,6 @@ macro(define_example name)
 endmacro()
 
 define_example(game_server)
+define_example(async_game_server)
 define_example(minimal)
 define_example(distributed_mutex)
