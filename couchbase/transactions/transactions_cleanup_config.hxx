@@ -17,6 +17,8 @@
 
 #include <chrono>
 #include <couchbase/transactions/transaction_keyspace.hxx>
+namespace couchbase::transactions
+{
 
 class transactions_cleanup_config
 {
@@ -120,3 +122,4 @@ class transactions_cleanup_config
     std::chrono::milliseconds cleanup_window_{ std::chrono::seconds(60) };
     std::optional<couchbase::transactions::transaction_keyspace> add_collection_{};
 };
+} // namespace couchbase::transactions
