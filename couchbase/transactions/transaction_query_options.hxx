@@ -133,6 +133,27 @@ class transaction_query_options
     }
 
     /** @internal */
+    transaction_query_options& encoded_raw_options(std::map<std::string, codec::binary, std::less<>> options)
+    {
+        opts_.encoded_raw_options(options);
+        return *this;
+    }
+
+    /** @internal */
+    transaction_query_options& encoded_positional_parameters(std::vector<codec::binary> parameters)
+    {
+        opts_.encoded_positional_parameters(parameters);
+        return *this;
+    }
+
+    /** @internal */
+    transaction_query_options& encoded_named_parameters(std::map<std::string, codec::binary, std::less<>> parameters)
+    {
+        opts_.encoded_named_parameters(parameters);
+        return *this;
+    }
+
+    /** @internal */
     const query_options& get_query_options() const
     {
         return opts_;
@@ -141,4 +162,4 @@ class transaction_query_options
   private:
     query_options opts_{};
 };
-} // namespace couchbase::core::transactions
+} // namespace couchbase::transactions

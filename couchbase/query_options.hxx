@@ -461,6 +461,26 @@ struct query_options : public common_options<query_options> {
     }
 
     /**
+     * Set map of raw options for a query.
+     *
+     * This function expects that all parameters encoded into pairs containing mapping names of the parameter to valid JSON values encoded
+     * as string.
+     *
+     * @note This function is low-level, and instead @ref raw() should be considered.
+     *
+     * @param options mapping of pairs, where each entry contains string with valid JSON value.
+     * @return this options builder for chaining purposes.
+     *
+     * @since 1.0.0
+     * @uncommitted
+     */
+    auto encoded_raw_options(std::map<std::string, codec::binary, std::less<>> options) -> query_options&
+    {
+        raw_ = std::move(options);
+        return self();
+    }
+
+    /**
      * Set list of positional parameters for a query.
      *
      * This function expects that all parameters encoded into byte strings containing valid JSON values.

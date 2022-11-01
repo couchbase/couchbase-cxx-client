@@ -214,7 +214,7 @@ TEST_CASE("transactions: non existent collection in custom metadata collections"
     cfg
       .metadata_collection(couchbase::transactions::transaction_keyspace{
         TransactionsTestEnvironment::get_conf().extra_bucket, couchbase::scope::default_name, "i_dont_exist" })
-      .cleanup_config(transactions_cleanup_config().cleanup_lost_attempts(true));
+      .cleanup_config(couchbase::transactions::transactions_cleanup_config().cleanup_lost_attempts(true));
     cfg.expiration_time(std::chrono::seconds(2));
     transactions txn(cluster, cfg);
 
