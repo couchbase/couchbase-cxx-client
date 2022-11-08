@@ -253,14 +253,6 @@ class attempt_context_impl
             } catch (...) {
                 handle_err_from_callback(std::current_exception());
             }
-        } catch (const query_exception& qe) {
-            try {
-                op_list_.decrement_in_flight();
-                cb(std::current_exception(), std::optional<Ret>());
-                op_list_.decrement_ops();
-            } catch (...) {
-                handle_err_from_callback(std::current_exception());
-            }
         } catch (...) {
             try {
                 op_list_.decrement_in_flight();
