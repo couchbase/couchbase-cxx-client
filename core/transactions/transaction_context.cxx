@@ -34,6 +34,11 @@ transaction_context::transaction_context(transactions& txns, const couchbase::tr
   , cleanup_(txns.cleanup())
   , delay_(new exp_delay(std::chrono::milliseconds(1), std::chrono::milliseconds(100), 2 * config_.expiration_time))
 {
+    // add metadata_collection to cleanup, if present
+    if (config_.metadata_collection) {
+        transactions_.cleanup().add_collection(
+          { config_.metadata_collection->bucket, config_.metadata_collection->scope, config_.metadata_collection->collection });
+    }
 }
 
 void

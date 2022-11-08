@@ -39,6 +39,8 @@ class transaction_query_result : public query_result
       : query_result()
       , ctx_(std::move(ctx))
     {
+        int i = 0;
+        i++;
     }
 
     [[nodiscard]] const transaction_op_error_context& ctx() const

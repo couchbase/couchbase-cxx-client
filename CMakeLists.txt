@@ -292,7 +292,6 @@ set(couchbase_cxx_client_FILES
     core/transactions/logging.cxx
     core/transactions/result.cxx
     core/transactions/staged_mutation.cxx
-    core/transactions/get_and_open_buckets.cxx
     core/transactions/utils.cxx
     core/transactions/transaction_attempt.cxx
     core/transactions/transactions_config.cxx

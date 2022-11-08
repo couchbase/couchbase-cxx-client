@@ -48,9 +48,16 @@ transactions_cleanup::transactions_cleanup(std::shared_ptr<core::cluster> cluste
   , client_uuid_(uid_generator::next())
   , running_(false)
 {
+    running_ = config.cleanup_config.cleanup_client_attempts || config.cleanup_config.cleanup_lost_attempts;
     if (config.cleanup_config.cleanup_client_attempts) {
-        running_ = true;
         cleanup_thr_ = std::thread(std::bind(&transactions_cleanup::attempts_loop, this));
+    }
+    if (config_.metadata_collection) {
+        add_collection(
+          { config_.metadata_collection->bucket, config_.metadata_collection->scope, config_.metadata_collection->collection });
+    }
+    for (auto& k : config_.cleanup_config.collections) {
+        add_collection(k);
     }
 }
 
@@ -540,6 +547,24 @@ transactions_cleanup::add_attempt(attempt_context& ctx)
             } else {
                 attempt_cleanup_log->trace("not cleaning client attempts, ignoring {}", ctx_impl.id());
             }
+    }
+}
+
+void
+transactions_cleanup::add_collection(couchbase::transactions::transaction_keyspace keyspace)
+{
+
+    if (keyspace.valid() && config_.cleanup_config.cleanup_lost_attempts) {
+        std::unique_lock<std::mutex> lock(mutex_);
+
+        auto it = std::find(collections_.begin(), collections_.end(), keyspace);
+        if (it == collections_.end()) {
+            collections_.emplace_back(std::move(keyspace));
+            // start cleaning right away
+            lost_attempt_cleanup_workers_.emplace_back([this, keyspace = collections_.back()]() { this->clean_collection(keyspace); });
+        }
+        lock.unlock();
+        lost_attempts_cleanup_log->info("added {} to lost transaction cleanup", keyspace);
     }
 }
 

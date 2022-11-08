@@ -61,7 +61,6 @@ transactions_config::operator=(const transactions_config& c)
 {
     if (this != &c) {
         level_ = c.level_;
-
         expiration_time_ = c.expiration_time_;
         attempt_context_hooks_ = c.attempt_context_hooks_;
         cleanup_hooks_ = c.cleanup_hooks_;
@@ -70,14 +69,6 @@ transactions_config::operator=(const transactions_config& c)
         cleanup_config_ = c.cleanup_config_;
     }
     return *this;
-}
-
-void
-transactions_config::test_factories(core::transactions::attempt_context_testing_hooks& hooks,
-                                    core::transactions::cleanup_testing_hooks& cleanup_hooks)
-{
-    attempt_context_hooks_ = std::make_shared<core::transactions::attempt_context_testing_hooks>(hooks);
-    cleanup_hooks_ = std::make_shared<core::transactions::cleanup_testing_hooks>(cleanup_hooks);
 }
 
 transactions_config::built

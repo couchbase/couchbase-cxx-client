@@ -155,7 +155,10 @@ initiate_cluster_connect(asio::io_service& io,
         if (ec) {
             return handler({}, ec);
         }
-        handler(couchbase::cluster(core), {});
+        auto c = couchbase::cluster(core);
+        // create txns as we want to start cleanup immediately if configured with metadata_collection
+        [[maybe_unused]] std::shared_ptr<couchbase::transactions::transactions> t = c.transactions();
+        handler(c, {});
     });
 }
 

@@ -69,7 +69,7 @@ staged_mutation_queue::extract_to(const std::string& prefix, core::operations::m
                 break;
         }
     }
-    req.specs =
+    auto specs =
       couchbase::mutate_in_specs{
           couchbase::mutate_in_specs::upsert_raw(prefix + ATR_FIELD_DOCS_INSERTED, core::utils::json::generate_binary(inserts))
             .xattr()
@@ -82,6 +82,7 @@ staged_mutation_queue::extract_to(const std::string& prefix, core::operations::m
             .create_path(),
       }
         .specs();
+    req.specs.insert(req.specs.end(), specs.begin(), specs.end());
 }
 
 void
@@ -152,6 +153,7 @@ staged_mutation_queue::iterate(std::function<void(staged_mutation&)> op)
 void
 staged_mutation_queue::commit(attempt_context_impl& ctx)
 {
+    ctx.trace("staged mutations committing...");
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto& item : queue_) {
         switch (item.type()) {

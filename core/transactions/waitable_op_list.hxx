@@ -98,9 +98,11 @@ class waitable_op_list
         in_flight_--;
         if (mode_.mode == attempt_mode::modes::KV) {
             // wait until all in_flight ops are done
+            txn_log->trace("set_query_mode: waiting for in_flight ops to go to 0...");
             cv_in_flight_.wait(lock, [this]() { return (0 == in_flight_); });
             // ok, now no outstanding ops(apart from the query that called this), and I have the lock, so...
             if (mode_.mode == attempt_mode::modes::KV) {
+                txn_log->trace("set_query_mode: in_flight ops = 0, we were kv, setting mode to query");
                 // still kv, so now (while blocking) set the mode
                 mode_.mode = attempt_mode::modes::QUERY;
                 // ok to unlock now, as any racing set_query_mode will wait for
@@ -115,8 +117,10 @@ class waitable_op_list
         }
         // you make it here, and someone else is currently setting the node (a byproduct of
         // calling the callback).  So wait for that.
+        txn_log->trace("set_query_mode: mode already query, waiting for node to be set...");
         cv_query_.wait(lock, [this]() { return !mode_.query_node.empty(); });
         in_flight_++;
+        txn_log->trace("set_query_mode: node set, continuing...");
         lock.unlock();
         cb();
     }

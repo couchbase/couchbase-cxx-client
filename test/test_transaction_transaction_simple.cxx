@@ -534,9 +534,9 @@ TEST_CASE("transactions: can KV get", "[transactions]")
     txn.run([id, content, statement = stream.str()](attempt_context& ctx) {
         ctx.insert(id, content);
         auto payload = ctx.query(statement);
-        REQUIRE(payload.rows.empty());
+        CHECK(payload.rows.empty());
         auto doc = ctx.get(id);
-        REQUIRE(10 == doc.content<tao::json::value>()["some_number"].as<uint32_t>());
+        CHECK(10 == doc.content<tao::json::value>()["some_number"].as<uint32_t>());
     });
     auto res = TransactionsTestEnvironment::get_doc(id);
     REQUIRE(10 == res.content_as<tao::json::value>()["some_number"]);
@@ -605,8 +605,8 @@ TEST_CASE("transactions: can KV replace", "[transactions]")
         auto new_content = doc.content<tao::json::value>();
         new_content["some_number"] = 10;
         auto replaced_doc = ctx.replace(doc, new_content);
-        REQUIRE(replaced_doc.cas() != doc.cas());
-        REQUIRE_FALSE(replaced_doc.cas().empty());
+        CHECK(replaced_doc.cas() != doc.cas());
+        CHECK_FALSE(replaced_doc.cas().empty());
     });
     REQUIRE(10 == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>()["some_number"].as<int>());
 }
@@ -745,41 +745,5 @@ TEST_CASE("transactions: query can set any durability", "[transactions]")
             auto doc = ctx.get_optional(id);
             REQUIRE(doc);
         });
-    }
-}
-
-TEST_CASE("get_and_open_buckets: can get buckets", "[transactions]")
-{
-    auto c = TransactionsTestEnvironment::get_cluster();
-    std::list<std::string> buckets = get_and_open_buckets(c);
-    REQUIRE(buckets.end() != std::find(buckets.begin(), buckets.end(), std::string("default")));
-    REQUIRE(buckets.end() != std::find(buckets.begin(), buckets.end(), std::string("secBucket")));
-}
-
-TEST_CASE("get_and_open_buckets: can race to get and open buckets", "[transactions]")
-{
-    std::list<std::future<std::list<std::string>>> futures;
-    std::size_t num_futures = 20;
-    auto c = TransactionsTestEnvironment::get_cluster();
-    for (std::size_t i = 0; i < num_futures; i++) {
-        futures.push_back(std::async(std::launch::async, [&c] { return get_and_open_buckets(c); }));
-    }
-    for (auto& f : futures) {
-        CHECK_NOTHROW(f.get());
-    }
-}
-
-TEST_CASE("get_and_open_buckets: can race to get and open buckets in multiple threads", "[transactions]")
-{
-    std::list<std::future<std::list<std::string>>> futures;
-    std::size_t num_futures = 20;
-    for (std::size_t i = 0; i < num_futures; i++) {
-        futures.push_back(std::async(std::launch::async, [] {
-            auto c = TransactionsTestEnvironment::get_cluster();
-            return get_and_open_buckets(c);
-        }));
-    }
-    for (auto& f : futures) {
-        CHECK_NOTHROW(f.get());
     }
 }

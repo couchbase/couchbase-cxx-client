@@ -66,6 +66,11 @@ struct transaction_keyspace {
     {
     }
 
+    bool valid()
+    {
+        return !(bucket.empty() || scope.empty() || collection.empty());
+    }
+
     template<typename OStream>
     friend OStream& operator<<(OStream& os, const transaction_keyspace& keyspace)
     {

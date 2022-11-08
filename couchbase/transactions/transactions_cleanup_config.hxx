@@ -16,6 +16,8 @@
 #pragma once
 
 #include <chrono>
+#include <list>
+
 #include <couchbase/transactions/transaction_keyspace.hxx>
 namespace couchbase::transactions
 {
@@ -97,9 +99,21 @@ class transactions_cleanup_config
      * @return reference to this, so calls can be chained.
      */
     template<typename T>
-    transactions_cleanup_config cleanup_window(T duration)
+    transactions_cleanup_config& cleanup_window(T duration)
     {
         cleanup_window_ = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
+        return *this;
+    }
+
+    /**
+     * @brief Add a collection to be cleaned
+     *
+     * This can be called multiple times, to add several collections, if needed.
+     *
+     */
+    transactions_cleanup_config& add_collection(const couchbase::transactions::transaction_keyspace& keyspace)
+    {
+        collections_.emplace_back(keyspace);
         return *this;
     }
 
@@ -108,18 +122,19 @@ class transactions_cleanup_config
         bool cleanup_lost_attempts;
         bool cleanup_client_attempts;
         std::chrono::milliseconds cleanup_window;
+        std::list<couchbase::transactions::transaction_keyspace> collections;
     };
 
     /** @internal */
     [[nodiscard]] auto build() const -> built
     {
-        return { cleanup_lost_attempts_, cleanup_client_attempts_, cleanup_window_ };
+        return { cleanup_lost_attempts_, cleanup_client_attempts_, cleanup_window_, collections_ };
     }
 
   private:
     bool cleanup_lost_attempts_{ true };
     bool cleanup_client_attempts_{ true };
     std::chrono::milliseconds cleanup_window_{ std::chrono::seconds(60) };
-    std::optional<couchbase::transactions::transaction_keyspace> add_collection_{};
+    std::list<couchbase::transactions::transaction_keyspace> collections_{};
 };
 } // namespace couchbase::transactions
