@@ -378,12 +378,15 @@ class attempt_context_impl
 
     core::operations::query_response do_core_query(const std::string& statement,
                                                    const couchbase::transactions::transaction_query_options& options) override;
+
     couchbase::transactions::transaction_query_result_ptr do_public_query(
       const std::string& statement,
       const couchbase::transactions::transaction_query_options& opts) override;
+
     void query(const std::string& statement,
                const couchbase::transactions::transaction_query_options& options,
                QueryCallback&& cb) override;
+
     void query(std::string statement,
                couchbase::transactions::transaction_query_options opts,
                couchbase::transactions::async_query_handler&& handler) override
@@ -395,6 +398,8 @@ class attempt_context_impl
                       std::rethrow_exception(err);
                   } catch (const transaction_operation_failed& e) {
                       return handler(std::make_shared<couchbase::transactions::transaction_query_result>(e.get_error_ctx()));
+                  } catch (const query_exception& ex) {
+                      return handler(std::make_shared<couchbase::transactions::transaction_query_result>(ex.ctx()));
                   } catch (...) {
                       // just in case...
                       return handler(std::make_shared<couchbase::transactions::transaction_query_result>(

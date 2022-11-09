@@ -96,6 +96,7 @@ class cluster
 
     void close()
     {
+        transactions_.reset();
         return core::impl::initiate_cluster_close(core_);
     }
 

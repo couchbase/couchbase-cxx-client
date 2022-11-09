@@ -29,8 +29,8 @@ transaction_options::apply(const transactions_config::built& conf) const
     return { durability_.value_or(conf.level),
              expiration_time_.value_or(conf.expiration_time),
              kv_timeout_ ? kv_timeout_ : conf.kv_timeout,
-             conf.attempt_context_hooks,
-             conf.cleanup_hooks,
+             attempt_context_hooks_ ? attempt_context_hooks_ : conf.attempt_context_hooks,
+             cleanup_hooks_ ? cleanup_hooks_ : conf.cleanup_hooks,
              metadata_collection_ ? metadata_collection_ : conf.metadata_collection,
              query_config,
              conf.cleanup_config };

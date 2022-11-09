@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <core/error_context/query.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/transactions/transaction_result.hxx>
 #include <optional>
@@ -128,25 +129,34 @@ class transaction_exception : public std::runtime_error
 class query_exception : public std::runtime_error
 {
   public:
-    query_exception(const std::string& what, external_exception cause = COUCHBASE_EXCEPTION)
-      : std::runtime_error(what)
+    query_exception(transaction_op_error_context ctx, external_exception cause = COUCHBASE_EXCEPTION)
+      : std::runtime_error(ctx.ec().message())
       , cause_(cause)
+      , ctx_(std::move(ctx))
     {
     }
-    external_exception cause() const
+
+    [[nodiscard]] external_exception cause() const
     {
         return cause_;
     }
 
+    [[nodiscard]] const transaction_op_error_context& ctx() const
+    {
+
+        return ctx_;
+    }
+
   private:
     external_exception cause_;
+    transaction_op_error_context ctx_;
 };
 
 class query_document_not_found : public query_exception
 {
   public:
-    explicit query_document_not_found(const std::string& what)
-      : query_exception(what, DOCUMENT_NOT_FOUND_EXCEPTION)
+    explicit query_document_not_found(transaction_op_error_context ctx)
+      : query_exception(ctx, DOCUMENT_NOT_FOUND_EXCEPTION)
     {
     }
 };
@@ -154,8 +164,8 @@ class query_document_not_found : public query_exception
 class query_document_exists : public query_exception
 {
   public:
-    explicit query_document_exists(const std::string& what)
-      : query_exception(what, DOCUMENT_EXISTS_EXCEPTION)
+    explicit query_document_exists(transaction_op_error_context ctx)
+      : query_exception(ctx, DOCUMENT_EXISTS_EXCEPTION)
     {
     }
 };
@@ -163,8 +173,8 @@ class query_document_exists : public query_exception
 class query_attempt_not_found : public query_exception
 {
   public:
-    query_attempt_not_found(const std::string& what)
-      : query_exception(what)
+    query_attempt_not_found(transaction_op_error_context ctx)
+      : query_exception(ctx)
     {
     }
 };
@@ -172,8 +182,8 @@ class query_attempt_not_found : public query_exception
 class query_cas_mismatch : public query_exception
 {
   public:
-    query_cas_mismatch(const std::string& what)
-      : query_exception(what)
+    query_cas_mismatch(transaction_op_error_context ctx)
+      : query_exception(ctx)
     {
     }
 };
@@ -181,8 +191,8 @@ class query_cas_mismatch : public query_exception
 class query_attempt_expired : public query_exception
 {
   public:
-    query_attempt_expired(const std::string& what)
-      : query_exception(what)
+    query_attempt_expired(transaction_op_error_context ctx)
+      : query_exception(ctx)
     {
     }
 };
@@ -190,8 +200,8 @@ class query_attempt_expired : public query_exception
 class query_parsing_failure : public query_exception
 {
   public:
-    query_parsing_failure(const std::string& what)
-      : query_exception(what, PARSING_FAILURE)
+    query_parsing_failure(transaction_op_error_context ctx)
+      : query_exception(ctx, PARSING_FAILURE)
     {
     }
 };

@@ -196,6 +196,11 @@ build_query_request(query_options::built options)
 couchbase::transactions::transaction_query_result
 build_transaction_query_result(operations::query_response resp)
 {
+    std::error_code txn_ec{};
+    if (resp.ctx.ec) {
+        // TODO: pass in the op error, as it could be several things.
+        txn_ec = errc::transaction_op::not_set;
+    }
     return { query_meta_data{
                std::move(resp.meta.request_id),
                std::move(resp.meta.client_context_id),
@@ -206,7 +211,7 @@ build_transaction_query_result(operations::query_response resp)
                map_profile(resp),
              },
              map_rows(resp),
-             build_context(resp) };
+             { txn_ec, build_context(resp) } };
 }
 
 core::operations::query_request

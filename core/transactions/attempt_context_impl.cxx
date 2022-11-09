@@ -755,7 +755,7 @@ attempt_context_impl::query_begin_work(utils::movable_function<void(std::excepti
                params,
                txdata,
                STAGE_QUERY_BEGIN_WORK,
-               true,
+               false,
                [this, cb = std::move(cb)](std::exception_ptr err, core::operations::query_response resp) mutable {
                    trace("begin_work setting query node to {}", resp.served_by_node);
                    op_list_.set_query_node(resp.served_by_node);
@@ -769,10 +769,11 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
     if (!resp.ctx.ec && !resp.meta.errors) {
         return {};
     }
+    auto tx_resp = couchbase::core::impl::build_transaction_query_result(resp);
     // TODO: look at ambiguous and unambiguous timeout errors vs the codes, etc...
     trace("handling query error {}, {} errors in meta_data", resp.ctx.ec.message(), resp.meta.errors ? "has" : "no");
     if (resp.ctx.ec == couchbase::errc::common::ambiguous_timeout || resp.ctx.ec == couchbase::errc::common::unambiguous_timeout) {
-        return std::make_exception_ptr(query_attempt_expired(resp.ctx.ec.message()));
+        return std::make_exception_ptr(query_attempt_expired(tx_resp.ctx()));
     }
     if (!resp.meta.errors) {
         // can't choose an error, map using the ec...
@@ -794,18 +795,18 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
               transaction_operation_failed(FAIL_OTHER, "N1QL Queries in transactions are supported in couchbase server 7.0 and later")
                 .cause(FEATURE_NOT_AVAILABLE_EXCEPTION));
         case 3000:
-            return std::make_exception_ptr(query_parsing_failure(chosen_error.message));
+            return std::make_exception_ptr(query_parsing_failure(tx_resp.ctx()));
         case 17004:
-            return std::make_exception_ptr(query_attempt_not_found(chosen_error.message));
+            return std::make_exception_ptr(query_attempt_not_found(tx_resp.ctx()));
         case 1080:
         case 17010:
-            return std::make_exception_ptr(transaction_operation_failed(FAIL_EXPIRY, "transaction expired"));
+            return std::make_exception_ptr(transaction_operation_failed(FAIL_EXPIRY, "transaction expired").expired());
         case 17012:
-            return std::make_exception_ptr(query_document_exists(chosen_error.message));
+            return std::make_exception_ptr(query_document_exists(tx_resp.ctx()));
         case 17014:
-            return std::make_exception_ptr(query_document_not_found(chosen_error.message));
+            return std::make_exception_ptr(query_document_not_found(tx_resp.ctx()));
         case 17015:
-            return std::make_exception_ptr(query_cas_mismatch(chosen_error.message));
+            return std::make_exception_ptr(query_cas_mismatch(tx_resp.ctx()));
     }
     if (chosen_error.code >= 17000 && chosen_error.code <= 18000) {
         transaction_operation_failed err(FAIL_OTHER, chosen_error.message);
@@ -836,7 +837,7 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
         }
     }
 
-    return { std::make_exception_ptr(query_exception(chosen_error.message)) };
+    return { std::make_exception_ptr(query_exception(tx_resp.ctx())) };
 }
 
 void
@@ -975,6 +976,8 @@ attempt_context_impl::do_public_query(const std::string& statement, const couchb
         return std::make_shared<couchbase::transactions::transaction_query_result>(core::impl::build_transaction_query_result(result));
     } catch (const transaction_operation_failed& e) {
         return std::make_shared<couchbase::transactions::transaction_query_result>(e.get_error_ctx());
+    } catch (const query_exception& qe) {
+        return std::make_shared<couchbase::transactions::transaction_query_result>(qe.ctx());
     } catch (...) {
         // should not be necessary, but just in case...
         transaction_op_error_context ctx(couchbase::errc::transaction_op::unknown);
@@ -1031,7 +1034,8 @@ attempt_context_impl::get_with_query(const core::document_id& id, bool optional,
                                   try {
                                       if (resp.rows.empty()) {
                                           trace("get_with_query got no doc and no error, returning query_document_not_found");
-                                          return op_completed_with_error(std::move(cb), query_document_not_found("doc not found"));
+                                          auto query_err = core::impl::build_transaction_query_result(resp);
+                                          return op_completed_with_error(std::move(cb), query_document_not_found(query_err.ctx()));
                                       }
                                       trace("get_with_query got: {}", resp.rows.front());
                                       transaction_get_result doc(id, core::utils::json::parse(resp.rows.front()));
@@ -1269,7 +1273,7 @@ attempt_context_impl::atr_commit(bool ambiguity_resolution_mode)
             staged_mutations_->extract_to(prefix, req);
             auto barrier = std::make_shared<std::promise<result>>();
             auto f = barrier->get_future();
-            trace("updating atr {}", req.id);
+            trace("updating atr {}, setting to {}", req.id, attempt_state_name(attempt_state::COMMITTED));
             overall_.cluster_ref()->execute(
               req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
             auto res = wrap_operation_future(f, false);

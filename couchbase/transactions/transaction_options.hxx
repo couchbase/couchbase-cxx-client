@@ -91,6 +91,15 @@ class transaction_options
         return metadata_collection_;
     }
 
+    /** @internal */
+    transaction_options& test_factories(std::shared_ptr<core::transactions::attempt_context_testing_hooks> hooks,
+                                        std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks)
+    {
+        attempt_context_hooks_ = hooks;
+        cleanup_hooks_ = cleanup_hooks;
+        return *this;
+    }
+
     [[nodiscard]] transactions_config::built apply(const transactions_config::built& conf) const;
 
   private:
@@ -99,6 +108,8 @@ class transaction_options
     std::optional<std::chrono::milliseconds> kv_timeout_;
     std::optional<std::chrono::nanoseconds> expiration_time_;
     std::optional<transaction_keyspace> metadata_collection_;
+    std::shared_ptr<core::transactions::attempt_context_testing_hooks> attempt_context_hooks_;
+    std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks_;
 };
 
 } // namespace couchbase::transactions

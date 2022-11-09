@@ -99,6 +99,10 @@ class transactions_cleanup
     {
         return config_;
     }
+    [[nodiscard]] couchbase::transactions::transactions_config::built& config()
+    {
+        return config_;
+    };
 
     // Add an attempt cleanup later.
     void add_attempt(attempt_context& ctx);
@@ -108,18 +112,11 @@ class transactions_cleanup
         return atr_queue_.size();
     }
 
-    void add_collection(couchbase::transactions::transaction_keyspace keyspace)
+    void add_collection(couchbase::transactions::transaction_keyspace keyspace);
+    std::list<couchbase::transactions::transaction_keyspace> collections()
     {
-        if (config_.cleanup_config.cleanup_lost_attempts) {
-            std::lock_guard<std::mutex> lock(mutex_);
-
-            auto it = std::find(collections_.begin(), collections_.end(), keyspace);
-            if (it == collections_.end()) {
-                collections_.emplace_back(std::move(keyspace));
-                // start cleaning right away
-                lost_attempt_cleanup_workers_.emplace_back([this, keyspace = collections_.back()]() { this->clean_collection(keyspace); });
-            }
-        }
+        std::lock_guard<std::mutex> lock(mutex_);
+        return collections_;
     }
 
     // only used for testing.
@@ -134,7 +131,7 @@ class transactions_cleanup
 
   private:
     std::shared_ptr<core::cluster> cluster_;
-    const couchbase::transactions::transactions_config::built& config_;
+    couchbase::transactions::transactions_config::built config_;
     const std::chrono::milliseconds cleanup_loop_delay_{ 100 };
 
     std::thread cleanup_thr_;
