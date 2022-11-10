@@ -83,7 +83,7 @@ attempt_context_impl::check_and_handle_blocking_transactions(const transaction_g
                 return cb(err);
             }
             exp_delay delay(std::chrono::milliseconds(50), std::chrono::milliseconds(500), std::chrono::seconds(1));
-            return check_atr_entry_for_blocking_document(doc, delay, cb);
+            return check_atr_entry_for_blocking_document(doc, delay, std::move(cb));
         }
         debug("doc {} is in another transaction {}, but doesn't have enough info to check the atr. "
               "probably a bug, proceeding to overwrite",
@@ -281,6 +281,12 @@ attempt_context_impl::replace_raw(const transaction_get_result& document, const 
     }
     return cache_error_async(std::move(cb), [&]() {
         try {
+            // a get can return a 'empty' doc, so check for that and short-circuit the eventual error that will occur...
+            if (document.key().empty() || document.bucket().empty()) {
+                return op_completed_with_error(std::move(cb),
+                                               transaction_operation_failed(FAIL_DOC_NOT_FOUND, "can't replace empty doc")
+                                                 .cause(external_exception::DOCUMENT_NOT_FOUND_EXCEPTION));
+            }
             trace("replacing {} with {}", document, to_string(content));
             check_if_done(cb);
             staged_mutation* existing_sm = staged_mutations_->find_any(document.id());
@@ -497,24 +503,26 @@ attempt_context_impl::check_atr_entry_for_blocking_document(const transaction_ge
           [this, delay = std::move(delay), cb = std::move(cb), doc = std::move(doc)](std::error_code err,
                                                                                      std::optional<active_transaction_record> atr) mutable {
               if (!err) {
-                  auto entries = atr->entries();
-                  auto it = std::find_if(entries.begin(), entries.end(), [&doc](const atr_entry& e) {
-                      return e.attempt_id() == doc.links().staged_attempt_id();
-                  });
-                  if (it != entries.end()) {
-                      auto fwd_err = forward_compat::check(forward_compat_stage::WWC_READING_ATR, it->forward_compat());
-                      if (fwd_err) {
-                          return cb(fwd_err);
+                  if (atr) {
+                      auto entries = atr->entries();
+                      auto it = std::find_if(entries.begin(), entries.end(), [&doc](const atr_entry& e) {
+                          return e.attempt_id() == doc.links().staged_attempt_id();
+                      });
+                      if (it != entries.end()) {
+                          auto fwd_err = forward_compat::check(forward_compat_stage::WWC_READING_ATR, it->forward_compat());
+                          if (fwd_err) {
+                              return cb(fwd_err);
+                          }
+                          switch (it->state()) {
+                              case attempt_state::COMPLETED:
+                              case attempt_state::ROLLED_BACK:
+                                  debug("existing atr entry can be ignored due to state {}", attempt_state_name(it->state()));
+                                  return cb(std::nullopt);
+                              default:
+                                  debug("existing atr entry found in state {}, retrying", attempt_state_name(it->state()));
+                          }
+                          return check_atr_entry_for_blocking_document(doc, delay, std::move(cb));
                       }
-                      switch (it->state()) {
-                          case attempt_state::COMPLETED:
-                          case attempt_state::ROLLED_BACK:
-                              debug("existing atr entry can be ignored due to state {}", attempt_state_name(it->state()));
-                              return cb(std::nullopt);
-                          default:
-                              debug("existing atr entry found in state {}, retrying", attempt_state_name(it->state()));
-                      }
-                      return check_atr_entry_for_blocking_document(doc, delay, std::move(cb));
                   }
                   debug("no blocking atr entry");
                   return cb(std::nullopt);
@@ -624,7 +632,7 @@ attempt_context_impl::remove_staged_insert(const core::document_id& id, VoidCall
           std::move(cb), transaction_operation_failed(FAIL_EXPIRY, std::string("expired in remove_staged_insert")).no_rollback().expired());
     }
 
-    auto error_handler = [this, cb = std::move(cb)](error_class ec, const std::string& msg) mutable {
+    auto error_handler = [this](error_class ec, const std::string& msg, VoidCallback&& cb) mutable {
         transaction_operation_failed err(ec, msg);
         switch (ec) {
             case FAIL_HARD:
@@ -636,8 +644,7 @@ attempt_context_impl::remove_staged_insert(const core::document_id& id, VoidCall
     debug("removing staged insert {}", id);
 
     if (auto err = hooks_.before_remove_staged_insert(this, id.key()); err) {
-        error_handler(*err, "before_remove_staged_insert hook returned error");
-        return;
+        return error_handler(*err, "before_remove_staged_insert hook returned error", std::move(cb));
     }
 
     core::operations::mutate_in_request req{ id };
@@ -649,22 +656,23 @@ attempt_context_impl::remove_staged_insert(const core::document_id& id, VoidCall
     wrap_durable_request(req, overall_.config());
     req.access_deleted = true;
 
-    overall_.cluster_ref()->execute(
-      req, [this, id = std::move(id), cb, error_handler = std::move(error_handler)](core::operations::mutate_in_response resp) mutable {
-          auto ec = error_class_from_response(resp);
-          if (!ec) {
-              debug("remove_staged_insert got error {}", *ec);
+    overall_.cluster_ref()->execute(req,
+                                    [this, id = std::move(id), cb = std::move(cb), error_handler = std::move(error_handler)](
+                                      core::operations::mutate_in_response resp) mutable {
+                                        auto ec = error_class_from_response(resp);
+                                        if (!ec) {
 
-              if (auto err = hooks_.after_remove_staged_insert(this, id.key()); err) {
-                  error_handler(*err, "after_remove_staged_insert hook returned error");
-                  return;
-              }
-              staged_mutations_->remove_any(id);
-              op_completed_with_callback(std::move(cb));
-              return;
-          }
-          return error_handler(*ec, resp.ctx.ec().message());
-      });
+                                            if (auto err = hooks_.after_remove_staged_insert(this, id.key()); err) {
+                                                error_handler(*err, "after_remove_staged_insert hook returned error", std::move(cb));
+                                                return;
+                                            }
+                                            staged_mutations_->remove_any(id);
+                                            op_completed_with_callback(std::move(cb));
+                                            return;
+                                        }
+                                        debug("remove_staged_insert got error {}", *ec);
+                                        return error_handler(*ec, resp.ctx.ec().message(), std::move(cb));
+                                    });
 }
 
 void
