@@ -643,7 +643,7 @@ attempt_context_impl::remove_staged_insert(const core::document_id& id, VoidCall
     };
     debug("removing staged insert {}", id);
 
-    if (auto err = hooks_.before_remove_staged_insert(this, id.key(); err) {
+    if (auto err = hooks_.before_remove_staged_insert(this, id.key()); err) {
         return error_handler(*err, "before_remove_staged_insert hook returned error", std::move(cb));
     }
 
@@ -659,19 +659,19 @@ attempt_context_impl::remove_staged_insert(const core::document_id& id, VoidCall
     overall_.cluster_ref()->execute(req,
                                     [this, id = std::move(id), cb = std::move(cb), error_handler = std::move(error_handler)](
                                       core::operations::mutate_in_response resp) mutable {
-                                        auto ec = error_class_from_response(resp);
-                                        if (!ec) {
+        auto ec = error_class_from_response(resp);
+        if (!ec) {
 
-                                            if (auto err = hooks_.after_remove_staged_insert(this, id.key()); err) {
-                                                error_handler(*err, "after_remove_staged_insert hook returned error", std::move(cb));
-                                                return;
-                                            }
-                                            staged_mutations_->remove_any(id);
-                                            op_completed_with_callback(std::move(cb));
-                                            return;
-                                        }
-                                        debug("remove_staged_insert got error {}", *ec);
-                                        return error_handler(*ec, resp.ctx.ec().message(), std::move(cb));
+            if (auto err = hooks_.after_remove_staged_insert(this, id.key()); err) {
+                error_handler(*err, "after_remove_staged_insert hook returned error", std::move(cb));
+                return;
+            }
+            staged_mutations_->remove_any(id);
+            op_completed_with_callback(std::move(cb));
+            return;
+        }
+        debug("remove_staged_insert got error {}", *ec);
+        return error_handler(*ec, resp.ctx.ec().message(), std::move(cb));
                                     });
 }
 
