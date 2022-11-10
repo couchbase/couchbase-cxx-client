@@ -643,10 +643,8 @@ attempt_context_impl::remove_staged_insert(const core::document_id& id, VoidCall
     };
     debug("removing staged insert {}", id);
 
-    auto err = hooks_.before_remove_staged_insert(this, id.key());
-    if (err) {
-        error_handler(*err, "before_remove_staged_insert hook returned error", std::move(cb));
-        return;
+    if (auto err = hooks_.before_remove_staged_insert(this, id.key(); err) {
+        return error_handler(*err, "before_remove_staged_insert hook returned error", std::move(cb));
     }
 
     core::operations::mutate_in_request req{ id };
