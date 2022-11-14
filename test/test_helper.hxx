@@ -26,3 +26,8 @@
 #include <catch2/catch.hpp>
 
 #define REQUIRE_SUCCESS(ec) INFO((ec).message()) REQUIRE_FALSE(ec)
+#define EXPECT_SUCCESS(result)                                                                                                             \
+    if (!result) {                                                                                                                         \
+        INFO(result.error().message())                                                                                                     \
+    }                                                                                                                                      \
+    REQUIRE(result)

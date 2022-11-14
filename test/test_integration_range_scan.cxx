@@ -57,7 +57,7 @@ do_range_scan(couchbase::core::agent agent,
         auto op = agent.range_scan_create(vbucket_id, create_options, [barrier](auto res, auto error) {
             barrier->set_value({ std::move(res), error });
         });
-        REQUIRE_SUCCESS(op.error());
+        EXPECT_SUCCESS(op);
 
         auto [res, ec] = f.get();
         REQUIRE_SUCCESS(ec);
@@ -79,7 +79,7 @@ do_range_scan(couchbase::core::agent agent,
           [barrier](auto res, auto error) {
               barrier->set_value({ std::move(res), error });
           });
-        REQUIRE_SUCCESS(op.error());
+        EXPECT_SUCCESS(op);
 
         auto [res, ec] = f.get();
         REQUIRE_SUCCESS(ec);
@@ -407,7 +407,7 @@ TEST_CASE("integration: range scan cancellation before continue", "[integration]
         auto op = agent->range_scan_create(vbucket_id, options, [barrier](auto res, auto ec) {
             barrier->set_value({ std::move(res), ec });
         });
-        REQUIRE_SUCCESS(op.error());
+        EXPECT_SUCCESS(op);
 
         auto [res, ec] = f.get();
         REQUIRE_SUCCESS(ec);
@@ -422,7 +422,7 @@ TEST_CASE("integration: range scan cancellation before continue", "[integration]
         auto op = agent->range_scan_cancel(scan_uuid, vbucket_id, {}, [barrier](auto res, auto ec) {
             barrier->set_value({ std::move(res), ec });
         });
-        REQUIRE_SUCCESS(op.error());
+        EXPECT_SUCCESS(op);
 
         auto [resp, ec] = f.get();
         REQUIRE_SUCCESS(ec);
@@ -441,7 +441,7 @@ TEST_CASE("integration: range scan cancellation before continue", "[integration]
           [barrier](auto res, auto ec) {
               barrier->set_value({ std::move(res), ec });
           });
-        REQUIRE_SUCCESS(op.error());
+        EXPECT_SUCCESS(op);
 
         auto [resp, ec] = f.get();
         REQUIRE(ec == couchbase::errc::key_value::document_not_found);
@@ -502,7 +502,7 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
         auto op = agent->range_scan_create(vbucket_id, options, [barrier](auto res, auto ec) {
             barrier->set_value({ std::move(res), ec });
         });
-        REQUIRE_SUCCESS(op.error());
+        EXPECT_SUCCESS(op);
 
         auto [res, ec] = f.get();
         REQUIRE_SUCCESS(ec);
@@ -512,7 +512,7 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
 
     auto execute_protocol_cancel = [agent, scan_uuid, vbid = vbucket_id]() {
         auto op = agent->range_scan_cancel(scan_uuid, vbid, {}, [](auto /* res */, auto ec) { REQUIRE_SUCCESS(ec); });
-        REQUIRE_SUCCESS(op.error());
+        EXPECT_SUCCESS(op);
     };
 
     std::vector<couchbase::core::range_scan_item> data;
@@ -541,7 +541,7 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
           [barrier](auto res, auto ec) {
               barrier->set_value({ std::move(res), ec });
           });
-        REQUIRE_SUCCESS(op.error());
+        EXPECT_SUCCESS(op);
 
         auto [res, ec] = f.get();
         if (iteration == 1) {
@@ -608,7 +608,7 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
         auto op = agent->range_scan_create(vbucket_id, options, [barrier](auto res, auto ec) {
             barrier->set_value({ std::move(res), ec });
         });
-        REQUIRE_SUCCESS(op.error());
+        EXPECT_SUCCESS(op);
 
         auto [res, ec] = f.get();
         REQUIRE_SUCCESS(ec);
@@ -641,7 +641,7 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
           [barrier](auto res, auto ec) {
               barrier->set_value({ std::move(res), ec });
           });
-        REQUIRE_SUCCESS(op.error());
+        EXPECT_SUCCESS(op);
         std::swap(operation_holder, op.value()); // store the operation for cancellation
 
         auto [res, ec] = f.get();
@@ -685,6 +685,7 @@ TEST_CASE("integration: sampling scan keys only", "[integration]")
     create_options.scope_name = couchbase::scope::default_name;
     create_options.collection_name = couchbase::collection::default_name;
     create_options.scan_type = couchbase::core::sampling_scan{ 10 };
+    create_options.ids_only = true;
     create_options.snapshot_requirements = couchbase::core::range_snapshot_requirements{
         highest_mutation->second.partition_uuid(),
         highest_mutation->second.sequence_number(),
@@ -695,11 +696,4 @@ TEST_CASE("integration: sampling scan keys only", "[integration]")
 
     auto data = do_range_scan(agent.value(), 12, create_options, continue_options);
     REQUIRE_FALSE(data.empty());
-    for (const auto& item : data) {
-        REQUIRE(item.body.has_value());
-        REQUIRE(item.body->value == value);
-        if (auto it = mutations.find(item.key); it != mutations.end()) {
-            REQUIRE(it->second.sequence_number() == item.body->sequence_number);
-        }
-    }
 }

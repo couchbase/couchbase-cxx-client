@@ -392,6 +392,9 @@ collection_id_cache_entry_impl::refresh_collection_id(std::shared_ptr<mcbp::queu
               self->dispatcher_.direct_re_queue(r, false);
           });
       });
+    if (op) {
+        return {};
+    }
     return op.error();
 }
 
