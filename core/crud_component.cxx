@@ -127,7 +127,7 @@ parse_range_scan_documents(gsl::span<std::byte> data, range_scan_item_callback&&
         body.expiry = mcbp::big_endian::read_uint32(data, 4);
         body.sequence_number = mcbp::big_endian::read_uint64(data, 8);
         body.cas = couchbase::cas{ mcbp::big_endian::read_uint64(data, 16) };
-        body.datatype = mcbp::big_endian::read_uint8(data, 24);
+        body.datatype = data[24];
         data = gsl::make_span(data.data() + header_offset, data.size() - header_offset);
 
         std::vector<std::byte> key{};
@@ -146,11 +146,11 @@ parse_range_scan_documents(gsl::span<std::byte> data, range_scan_item_callback&&
                 return errc::network::protocol_error;
             }
             body.value = { remaining.begin(), remaining.begin() + static_cast<std::ptrdiff_t>(value_length) };
-            if ((body.datatype & static_cast<std::uint8_t>(protocol::datatype::snappy)) != 0) {
+            if ((body.datatype & static_cast<std::byte>(protocol::datatype::snappy)) != std::byte{ 0 }) {
                 std::string uncompressed;
                 if (snappy::Uncompress(reinterpret_cast<const char*>(body.value.data()), body.value.size(), &uncompressed)) {
                     body.value = core::utils::to_binary(uncompressed);
-                    body.datatype &= ~static_cast<std::uint8_t>(protocol::datatype::snappy);
+                    body.datatype &= ~static_cast<std::byte>(protocol::datatype::snappy);
                 }
             }
             data = gsl::make_span(remaining.data() + value_length, remaining.size() - value_length);
