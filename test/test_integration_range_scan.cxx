@@ -510,8 +510,8 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
         scan_uuid = res.scan_uuid;
     }
 
-    auto execute_protocol_cancel = [agent, scan_uuid]() {
-        auto op = agent->range_scan_cancel(scan_uuid, vbucket_id, {}, [](auto /* res */, auto ec) { REQUIRE_SUCCESS(ec); });
+    auto execute_protocol_cancel = [agent, scan_uuid, vbid = vbucket_id]() {
+        auto op = agent->range_scan_cancel(scan_uuid, vbid, {}, [](auto /* res */, auto ec) { REQUIRE_SUCCESS(ec); });
         REQUIRE_SUCCESS(op.error());
     };
 
