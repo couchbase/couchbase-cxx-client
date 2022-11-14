@@ -333,7 +333,7 @@ TEST_CASE("integration: range scan only keys", "[integration]")
     couchbase::core::range_scan_create_options create_options{};
     create_options.scope_name = couchbase::scope::default_name;
     create_options.collection_name = couchbase::collection::default_name;
-    create_options.without_content = true;
+    create_options.ids_only = true;
     create_options.scan_type = couchbase::core::range_scan{
         { couchbase::core::utils::to_binary("rangekeysonly") },
         { couchbase::core::utils::to_binary("rangekeysonly\xff") },
@@ -391,7 +391,7 @@ TEST_CASE("integration: range scan cancellation before continue", "[integration]
         couchbase::core::range_scan_create_options options{};
         options.scope_name = couchbase::scope::default_name;
         options.collection_name = couchbase::collection::default_name;
-        options.without_content = true;
+        options.ids_only = true;
         options.scan_type = couchbase::core::range_scan{
             { couchbase::core::utils::to_binary("rangescancancel") },
             { couchbase::core::utils::to_binary("rangescancancel\xff") },
@@ -486,7 +486,7 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
         couchbase::core::range_scan_create_options options{};
         options.scope_name = couchbase::scope::default_name;
         options.collection_name = couchbase::collection::default_name;
-        options.without_content = true;
+        options.ids_only = true;
         options.scan_type = couchbase::core::range_scan{
             { couchbase::core::utils::to_binary("rangescancancel") },
             { couchbase::core::utils::to_binary("rangescancancel\xff") },
@@ -592,7 +592,7 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
         couchbase::core::range_scan_create_options options{};
         options.scope_name = couchbase::scope::default_name;
         options.collection_name = couchbase::collection::default_name;
-        options.without_content = true;
+        options.ids_only = true;
         options.scan_type = couchbase::core::range_scan{
             { couchbase::core::utils::to_binary("rangescancancel") },
             { couchbase::core::utils::to_binary("rangescancancel\xff") },

@@ -44,7 +44,7 @@ std::pair<std::vector<std::byte>, std::error_code>
 serialize_range_scan_create_options(const range_scan_create_options& options)
 {
     tao::json::value body{};
-    if (options.without_content) {
+    if (options.ids_only) {
         body["key_only"] = true;
     }
 
@@ -187,7 +187,7 @@ class crud_component_impl
             if (error) {
                 return cb({}, error);
             }
-            return cb(range_scan_create_result{ response->value_, options.without_content }, {});
+            return cb(range_scan_create_result{ response->value_, options.ids_only }, {});
         };
 
         auto req = std::make_shared<mcbp::queue_request>(
