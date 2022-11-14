@@ -80,8 +80,11 @@ void
 transaction_context::retry_delay()
 {
     // when we retry an operation, we typically call that function recursively.  So, we need to
-    // limit total number of times we do it.  Later we can be more sophisticated, perhaps.
-    auto delay = config_.expiration_time / 50; // the 50 is arbitrary
+    // limit total number of times we do it.  CXXCBC-263 will address this, and no longer make the
+    // recursive calls that lead to hacks like this. No way to know how many calls will blow up the
+    // stack, so using 50 in hopes that makes jenkins happy till we do this better.
+    constexpr auto arbitrary_factor = 50;
+    auto delay = config_.expiration_time / arbitrary_factor;
     txn_log->trace("about to sleep for {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(delay).count());
     std::this_thread::sleep_for(delay);
 }
