@@ -54,13 +54,13 @@ do_range_scan(couchbase::core::agent agent,
         auto barrier = std::make_shared<std::promise<std::pair<couchbase::core::range_scan_create_result, std::error_code>>>();
         auto f = barrier->get_future();
 
-        auto [_, ec] = agent.range_scan_create(vbucket_id, create_options, [barrier](auto res, auto error) {
+        auto op = agent.range_scan_create(vbucket_id, create_options, [barrier](auto res, auto error) {
             barrier->set_value({ std::move(res), error });
         });
-        REQUIRE_SUCCESS(ec);
+        REQUIRE_SUCCESS(op.error());
 
-        auto [res, error] = f.get();
-        REQUIRE_SUCCESS(error);
+        auto [res, ec] = f.get();
+        REQUIRE_SUCCESS(ec);
         REQUIRE_FALSE(res.scan_uuid.empty());
         scan_uuid = res.scan_uuid;
     }
@@ -71,7 +71,7 @@ do_range_scan(couchbase::core::agent agent,
         auto barrier = std::make_shared<std::promise<std::pair<couchbase::core::range_scan_continue_result, std::error_code>>>();
         auto f = barrier->get_future();
 
-        auto [_, ec] = agent.range_scan_continue(
+        auto op = agent.range_scan_continue(
           scan_uuid,
           vbucket_id,
           continue_options,
@@ -79,10 +79,10 @@ do_range_scan(couchbase::core::agent agent,
           [barrier](auto res, auto error) {
               barrier->set_value({ std::move(res), error });
           });
-        REQUIRE_SUCCESS(ec);
+        REQUIRE_SUCCESS(op.error());
 
-        auto [res, error] = f.get();
-        REQUIRE_SUCCESS(error);
+        auto [res, ec] = f.get();
+        REQUIRE_SUCCESS(ec);
 
         if (res.complete) {
             break;
@@ -272,7 +272,7 @@ TEST_CASE("integration: range scan collection retry", "[integration]")
     auto agent = ag.get_agent(integration.ctx.bucket);
     REQUIRE(agent.has_value());
 
-    // we're going to force a refresh so we need to delete the collection from our cache.
+    // we're going to force a refresh, so we need to delete the collection from our cache.
     agent->unit_test_api().collections().remove_collection_from_cache(couchbase::scope::default_name, new_collection.name());
 
     couchbase::core::range_scan_create_options create_options{};
@@ -404,13 +404,13 @@ TEST_CASE("integration: range scan cancellation before continue", "[integration]
         auto barrier = std::make_shared<std::promise<std::pair<couchbase::core::range_scan_create_result, std::error_code>>>();
         auto f = barrier->get_future();
 
-        auto [_, ec] = agent->range_scan_create(vbucket_id, options, [barrier](auto res, auto error) {
-            barrier->set_value({ std::move(res), error });
+        auto op = agent->range_scan_create(vbucket_id, options, [barrier](auto res, auto ec) {
+            barrier->set_value({ std::move(res), ec });
         });
-        REQUIRE_SUCCESS(ec);
+        REQUIRE_SUCCESS(op.error());
 
-        auto [res, error] = f.get();
-        REQUIRE_SUCCESS(error);
+        auto [res, ec] = f.get();
+        REQUIRE_SUCCESS(ec);
         REQUIRE_FALSE(res.scan_uuid.empty());
         scan_uuid = res.scan_uuid;
     }
@@ -419,13 +419,13 @@ TEST_CASE("integration: range scan cancellation before continue", "[integration]
         auto barrier = std::make_shared<std::promise<std::pair<couchbase::core::range_scan_cancel_result, std::error_code>>>();
         auto f = barrier->get_future();
 
-        auto [_, ec] = agent->range_scan_cancel(scan_uuid, vbucket_id, {}, [barrier](auto res, auto error) {
-            barrier->set_value({ std::move(res), error });
+        auto op = agent->range_scan_cancel(scan_uuid, vbucket_id, {}, [barrier](auto res, auto ec) {
+            barrier->set_value({ std::move(res), ec });
         });
-        REQUIRE_SUCCESS(ec);
+        REQUIRE_SUCCESS(op.error());
 
-        auto [resp, error] = f.get();
-        REQUIRE_SUCCESS(error);
+        auto [resp, ec] = f.get();
+        REQUIRE_SUCCESS(ec);
     }
 
     bool items_callback_invoked{ false };
@@ -433,18 +433,18 @@ TEST_CASE("integration: range scan cancellation before continue", "[integration]
         auto barrier = std::make_shared<std::promise<std::pair<couchbase::core::range_scan_continue_result, std::error_code>>>();
         auto f = barrier->get_future();
 
-        auto [_, ec] = agent->range_scan_continue(
+        auto op = agent->range_scan_continue(
           scan_uuid,
           vbucket_id,
           {},
           [&items_callback_invoked](auto) { items_callback_invoked = true; },
-          [barrier](auto res, auto error) {
-              barrier->set_value({ std::move(res), error });
+          [barrier](auto res, auto ec) {
+              barrier->set_value({ std::move(res), ec });
           });
-        REQUIRE_SUCCESS(ec);
+        REQUIRE_SUCCESS(op.error());
 
-        auto [resp, error] = f.get();
-        REQUIRE(error == couchbase::errc::key_value::document_not_found);
+        auto [resp, ec] = f.get();
+        REQUIRE(ec == couchbase::errc::key_value::document_not_found);
     }
 
     REQUIRE_FALSE(items_callback_invoked);
@@ -499,20 +499,20 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
         auto barrier = std::make_shared<std::promise<std::pair<couchbase::core::range_scan_create_result, std::error_code>>>();
         auto f = barrier->get_future();
 
-        auto [_, ec] = agent->range_scan_create(vbucket_id, options, [barrier](auto res, auto error) {
-            barrier->set_value({ std::move(res), error });
+        auto op = agent->range_scan_create(vbucket_id, options, [barrier](auto res, auto ec) {
+            barrier->set_value({ std::move(res), ec });
         });
-        REQUIRE_SUCCESS(ec);
+        REQUIRE_SUCCESS(op.error());
 
-        auto [res, error] = f.get();
-        REQUIRE_SUCCESS(error);
+        auto [res, ec] = f.get();
+        REQUIRE_SUCCESS(ec);
         REQUIRE_FALSE(res.scan_uuid.empty());
         scan_uuid = res.scan_uuid;
     }
 
     auto execute_protocol_cancel = [agent, scan_uuid]() {
-        auto [_, ec] = agent->range_scan_cancel(scan_uuid, vbucket_id, {}, [](auto /* res */, auto error) { REQUIRE_SUCCESS(error); });
-        REQUIRE_SUCCESS(ec);
+        auto op = agent->range_scan_cancel(scan_uuid, vbucket_id, {}, [](auto /* res */, auto ec) { REQUIRE_SUCCESS(ec); });
+        REQUIRE_SUCCESS(op.error());
     };
 
     std::vector<couchbase::core::range_scan_item> data;
@@ -528,7 +528,7 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
         auto barrier = std::make_shared<std::promise<std::pair<couchbase::core::range_scan_continue_result, std::error_code>>>();
         auto f = barrier->get_future();
 
-        auto [_, ec] = agent->range_scan_continue(
+        auto op = agent->range_scan_continue(
           scan_uuid,
           vbucket_id,
           options,
@@ -538,17 +538,17 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
               }
               data.emplace_back(std::move(item));
           },
-          [barrier](auto res, auto error) {
-              barrier->set_value({ std::move(res), error });
+          [barrier](auto res, auto ec) {
+              barrier->set_value({ std::move(res), ec });
           });
-        REQUIRE_SUCCESS(ec);
+        REQUIRE_SUCCESS(op.error());
 
-        auto [res, error] = f.get();
+        auto [res, ec] = f.get();
         if (iteration == 1) {
             REQUIRE(res.complete == false);
-            REQUIRE_SUCCESS(error);
+            REQUIRE_SUCCESS(ec);
         } else {
-            REQUIRE(error == couchbase::errc::key_value::document_not_found); // scan has been cancelled
+            REQUIRE(ec == couchbase::errc::key_value::document_not_found); // scan has been cancelled
             break;
         }
     } while (true);
@@ -605,13 +605,13 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
         auto barrier = std::make_shared<std::promise<std::pair<couchbase::core::range_scan_create_result, std::error_code>>>();
         auto f = barrier->get_future();
 
-        auto [_, ec] = agent->range_scan_create(vbucket_id, options, [barrier](auto res, auto error) {
-            barrier->set_value({ std::move(res), error });
+        auto op = agent->range_scan_create(vbucket_id, options, [barrier](auto res, auto ec) {
+            barrier->set_value({ std::move(res), ec });
         });
-        REQUIRE_SUCCESS(ec);
+        REQUIRE_SUCCESS(op.error());
 
-        auto [res, error] = f.get();
-        REQUIRE_SUCCESS(error);
+        auto [res, ec] = f.get();
+        REQUIRE_SUCCESS(ec);
         REQUIRE_FALSE(res.scan_uuid.empty());
         scan_uuid = res.scan_uuid;
     }
@@ -630,7 +630,7 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
         auto barrier = std::make_shared<std::promise<std::pair<couchbase::core::range_scan_continue_result, std::error_code>>>();
         auto f = barrier->get_future();
 
-        auto [op, ec] = agent->range_scan_continue(
+        auto op = agent->range_scan_continue(
           scan_uuid,
           vbucket_id,
           options,
@@ -638,15 +638,15 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
               data.emplace_back(std::move(item));
               do_cancel(); // cancel operation after first document
           },
-          [barrier](auto res, auto error) {
-              barrier->set_value({ std::move(res), error });
+          [barrier](auto res, auto ec) {
+              barrier->set_value({ std::move(res), ec });
           });
-        REQUIRE_SUCCESS(ec);
-        std::swap(operation_holder, op); // store the operation for cancellation
+        REQUIRE_SUCCESS(op.error());
+        std::swap(operation_holder, op.value()); // store the operation for cancellation
 
-        auto [res, error] = f.get();
+        auto [res, ec] = f.get();
         REQUIRE(res.complete == false);
-        REQUIRE(error == couchbase::errc::common::request_canceled);
+        REQUIRE(ec == couchbase::errc::common::request_canceled);
     }
 
     REQUIRE(data.size() == 3);
