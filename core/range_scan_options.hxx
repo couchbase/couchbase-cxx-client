@@ -109,7 +109,7 @@ struct range_scan_item_body {
     std::uint32_t expiry{};
     couchbase::cas cas{};
     std::uint64_t sequence_number{};
-    std::uint8_t datatype{};
+    std::byte datatype{};
     std::vector<std::byte> value{};
 };
 
