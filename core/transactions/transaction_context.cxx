@@ -81,7 +81,7 @@ transaction_context::retry_delay()
 {
     // when we retry an operation, we typically call that function recursively.  So, we need to
     // limit total number of times we do it.  Later we can be more sophisticated, perhaps.
-    auto delay = config_.expiration_time / 100; // the 100 is arbitrary
+    auto delay = config_.expiration_time / 50; // the 50 is arbitrary
     txn_log->trace("about to sleep for {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(delay).count());
     std::this_thread::sleep_for(delay);
 }
