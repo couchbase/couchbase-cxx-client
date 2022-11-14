@@ -34,6 +34,8 @@ constexpr std::chrono::milliseconds search_timeout{ 75'000 };
 constexpr std::chrono::milliseconds management_timeout{ 75'000 };
 constexpr std::chrono::milliseconds eventing_timeout{ 75'000 };
 
+constexpr std::chrono::milliseconds range_scan_timeout{ 75'000 };
+
 constexpr std::chrono::milliseconds dns_srv_timeout{ 500 };
 constexpr std::chrono::milliseconds tcp_keep_alive_interval{ 60'000 };
 constexpr std::chrono::milliseconds config_poll_interval{ 2'500 };

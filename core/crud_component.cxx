@@ -29,6 +29,7 @@
 #include "mcbp/queue_response.hxx"
 #include "platform/base64.h"
 #include "snappy.h"
+#include "timeout_defaults.hxx"
 #include "utils/json.hxx"
 
 #include <couchbase/error_codes.hxx>
@@ -73,7 +74,9 @@ serialize_range_scan_create_options(const range_scan_create_options& options)
         tao::json::value requirements = {
             { "vb_uuid", std::to_string(snapshot.vbucket_uuid) },
             { "seqno", snapshot.sequence_number },
-            { "timeout_ms", options.timeout.count() },
+            { "timeout_ms",
+              (options.timeout == std::chrono::milliseconds::zero()) ? timeout_defaults::range_scan_timeout.count()
+                                                                     : options.timeout.count() },
         };
         if (snapshot.sequence_number_exists) {
             requirements["seqno_exists"] = true;
@@ -267,7 +270,8 @@ class crud_component_impl
         mcbp::buffer_writer buf{ scan_uuid.size() + sizeof(std::uint32_t) * 3 };
         buf.write(scan_uuid);
         buf.write_uint32(options.batch_item_limit);
-        buf.write_uint32(gsl::narrow_cast<std::uint32_t>(options.timeout.count()));
+        buf.write_uint32(gsl::narrow_cast<std::uint32_t>(
+          (options.timeout == std::chrono::milliseconds::zero()) ? timeout_defaults::range_scan_timeout.count() : options.timeout.count()));
         buf.write_uint32(options.batch_byte_limit);
         req->extras_ = std::move(buf.store_);
 
