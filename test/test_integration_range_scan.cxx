@@ -98,6 +98,10 @@ TEST_CASE("integration: range scan large values", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.has_bucket_capability("range_scan")) {
+        return;
+    }
+
     auto collection = couchbase::cluster(integration.cluster)
                         .bucket(integration.ctx.bucket)
                         .scope(couchbase::scope::default_name)
@@ -151,6 +155,10 @@ TEST_CASE("integration: range scan large values", "[integration]")
 TEST_CASE("integration: range scan small values", "[integration]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.has_bucket_capability("range_scan")) {
+        return;
+    }
 
     auto collection = couchbase::cluster(integration.cluster)
                         .bucket(integration.ctx.bucket)
@@ -244,6 +252,11 @@ class collection_guard
 TEST_CASE("integration: range scan collection retry", "[integration]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.has_bucket_capability("range_scan")) {
+        return;
+    }
+
     collection_guard new_collection(integration);
 
     auto collection = couchbase::cluster(integration.cluster)
@@ -305,6 +318,10 @@ TEST_CASE("integration: range scan only keys", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.has_bucket_capability("range_scan")) {
+        return;
+    }
+
     auto collection = couchbase::cluster(integration.cluster)
                         .bucket(integration.ctx.bucket)
                         .scope(couchbase::scope::default_name)
@@ -358,6 +375,10 @@ TEST_CASE("integration: range scan only keys", "[integration]")
 TEST_CASE("integration: range scan cancellation before continue", "[integration]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.has_bucket_capability("range_scan")) {
+        return;
+    }
 
     auto collection = couchbase::cluster(integration.cluster)
                         .bucket(integration.ctx.bucket)
@@ -453,6 +474,10 @@ TEST_CASE("integration: range scan cancellation before continue", "[integration]
 TEST_CASE("integration: range scan cancel during streaming using protocol cancel", "[integration]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.has_bucket_capability("range_scan")) {
+        return;
+    }
 
     auto collection = couchbase::cluster(integration.cluster)
                         .bucket(integration.ctx.bucket)
@@ -560,6 +585,10 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.has_bucket_capability("range_scan")) {
+        return;
+    }
+
     auto collection = couchbase::cluster(integration.cluster)
                         .bucket(integration.ctx.bucket)
                         .scope(couchbase::scope::default_name)
@@ -655,6 +684,10 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
 TEST_CASE("integration: sampling scan keys only", "[integration]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.has_bucket_capability("range_scan")) {
+        return;
+    }
 
     auto collection = couchbase::cluster(integration.cluster)
                         .bucket(integration.ctx.bucket)

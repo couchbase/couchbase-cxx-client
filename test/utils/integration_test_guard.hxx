@@ -74,6 +74,16 @@ class integration_test_guard
         return load_bucket_info(ctx.bucket).storage_backend;
     }
 
+    inline bool has_bucket_capability(const std::string& bucket_name, const std::string& capability)
+    {
+        return load_bucket_info(bucket_name).has_capability(capability);
+    }
+
+    inline bool has_bucket_capability(const std::string& capability)
+    {
+        return has_bucket_capability(ctx.bucket, capability);
+    }
+
     const couchbase::core::operations::management::cluster_describe_response::cluster_info& load_cluster_info(bool refresh = false);
 
     pools_response load_pools_info(bool refresh = false);

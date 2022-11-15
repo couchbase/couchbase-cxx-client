@@ -32,9 +32,12 @@ struct bucket_describe_response {
         std::string uuid{};
         std::size_t number_of_nodes{ 0 };
         std::size_t number_of_replicas{ 0 };
+        std::vector<std::string> bucket_capabilities{};
         couchbase::core::management::cluster::bucket_storage_backend storage_backend{
             couchbase::core::management::cluster::bucket_storage_backend::unknown
         };
+
+        [[nodiscard]] auto has_capability(const std::string& capability) const -> bool;
     };
 
     error_context::http ctx;
