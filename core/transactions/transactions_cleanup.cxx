@@ -283,7 +283,7 @@ transactions_cleanup::get_active_clients(const couchbase::transactions::transact
         min_retry = config_.cleanup_config.cleanup_window;
     }
     return retry_op_exponential_backoff_timeout<client_record_details>(
-      min_retry, std::chrono::seconds(1), config_.cleanup_config.cleanup_window, [&]() -> client_record_details {
+      min_retry, std::chrono::seconds(1), config_.cleanup_config.cleanup_window, [this, keyspace, uuid]() -> client_record_details {
           client_record_details details;
           // Write our client record, return details.
           try {
@@ -415,7 +415,7 @@ transactions_cleanup::remove_client_record_from_all_buckets(const std::string& u
     for (const auto& keyspace : collections_) {
         try {
             retry_op_exponential_backoff_timeout<void>(
-              std::chrono::milliseconds(10), std::chrono::milliseconds(250), std::chrono::milliseconds(500), [&]() {
+              std::chrono::milliseconds(10), std::chrono::milliseconds(250), std::chrono::milliseconds(500), [this, keyspace, uuid]() {
                   try {
                       // insure a client record document exists...
                       create_client_record(keyspace);
