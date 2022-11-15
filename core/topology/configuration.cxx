@@ -205,15 +205,16 @@ configuration::index_for_this_node() const
     throw std::runtime_error("no nodes marked as this_node");
 }
 
-std::pair<std::uint16_t, std::int16_t>
-configuration::map_key(const std::string& key, std::size_t index)
+std::optional<std::size_t>
+configuration::server_by_vbucket(std::uint16_t vbucket, std::size_t index)
 {
-    if (!vbmap.has_value()) {
-        return { 0, -1 };
+    if (!vbmap.has_value() || vbucket >= vbmap->size()) {
+        return {};
     }
-    std::uint32_t crc = utils::hash_crc32(key.data(), key.size());
-    auto vbucket = std::uint16_t(crc % vbmap->size());
-    return { vbucket, vbmap->at(vbucket)[index] };
+    if (auto server_index = vbmap->at(vbucket)[index]; server_index >= 0) {
+        return static_cast<std::size_t>(server_index);
+    }
+    return {};
 }
 
 configuration

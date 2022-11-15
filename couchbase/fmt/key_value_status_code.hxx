@@ -236,6 +236,10 @@ struct fmt::formatter<couchbase::key_value_status_code> {
             case key_value_status_code::subdoc_deleted_document_cannot_have_value:
                 name = "subdoc_deleted_document_cannot_have_value (0xd7)";
                 break;
+
+            case key_value_status_code::unknown:
+                name = "unknown (0xffff)";
+                break;
         }
         return format_to(ctx.out(), "{}", name);
     }

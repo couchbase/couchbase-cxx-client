@@ -35,6 +35,7 @@ include_directories(BEFORE SYSTEM ${PROJECT_SOURCE_DIR}/third_party/json/externa
 include_directories(BEFORE SYSTEM ${PROJECT_SOURCE_DIR}/third_party/fmt/include)
 include_directories(BEFORE SYSTEM ${PROJECT_SOURCE_DIR}/third_party/spdlog/include)
 include_directories(BEFORE SYSTEM ${PROJECT_SOURCE_DIR}/third_party/cxx_function)
+include_directories(BEFORE SYSTEM ${PROJECT_SOURCE_DIR}/third_party/expected/include)
 
 add_library(http_parser OBJECT ${PROJECT_SOURCE_DIR}/third_party/http_parser/http_parser.c)
 set_target_properties(http_parser PROPERTIES C_VISIBILITY_PRESET hidden POSITION_INDEPENDENT_CODE TRUE)

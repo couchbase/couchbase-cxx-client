@@ -314,8 +314,9 @@ class http_session : public std::enable_shared_from_this<http_session>
             keep_alive_ = true;
         }
         request.headers["user-agent"] = user_agent_;
+        auto credentials = fmt::format("{}:{}", credentials_.username, credentials_.password);
         request.headers["authorization"] =
-          fmt::format("Basic {}", base64::encode(fmt::format("{}:{}", credentials_.username, credentials_.password)));
+          fmt::format("Basic {}", base64::encode(gsl::as_bytes(gsl::span{ credentials.data(), credentials.size() })));
         write(fmt::format("{} {} HTTP/1.1\r\nhost: {}:{}\r\n", request.method, request.path, hostname_, service_));
         if (!request.body.empty()) {
             request.headers["content-length"] = std::to_string(request.body.size());

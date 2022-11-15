@@ -50,10 +50,10 @@ make_key_value_error_context(std::error_code ec, std::uint16_t status_code, cons
     std::optional<std::string> last_dispatched_to{};
     std::optional<key_value_error_map_info> error_map_info{};
     if (command->session_) {
-        last_dispatched_from = command->session_->local_address();
-        last_dispatched_to = command->session_->remote_address();
+        last_dispatched_from = command->session_.local_address();
+        last_dispatched_to = command->session_.remote_address();
         if (status_code) {
-            error_map_info = command->session_->decode_error_code(status_code);
+            error_map_info = command->session_.decode_error_code(status_code);
         }
     }
 

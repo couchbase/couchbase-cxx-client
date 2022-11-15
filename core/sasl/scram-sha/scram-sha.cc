@@ -292,7 +292,7 @@ ClientBackend::step(std::string_view input)
                     nonce_ = attribute.second;
                     break;
                 case 's':
-                    salt = couchbase::core::base64::decode(attribute.second);
+                    salt = couchbase::core::base64::decode_to_string(attribute.second);
                     break;
                 case 'i':
                     try {

@@ -18,10 +18,14 @@
 #pragma once
 
 #include "core/service_type_fmt.hxx"
+#include "core/tracing/constants.hxx"
 #include "core/utils/movable_function.hxx"
-#include "couchbase/metrics/meter.hxx"
-#include "couchbase/tracing/request_tracer.hxx"
 #include "http_session.hxx"
+#include "http_traits.hxx"
+
+#include <couchbase/metrics/meter.hxx>
+#include <couchbase/tracing/request_tracer.hxx>
+
 #include <utility>
 
 namespace couchbase::core::operations

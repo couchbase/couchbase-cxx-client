@@ -76,19 +76,46 @@ add_subdirectory(core/platform)
 add_subdirectory(core/logger)
 add_subdirectory(core/crypto)
 add_subdirectory(core/sasl)
-add_subdirectory(core/io)
 add_subdirectory(core/tracing)
 add_subdirectory(core/metrics)
 
 set(couchbase_cxx_client_FILES
+    core/agent.cxx
+    core/agent_config.cxx
+    core/agent_group.cxx
+    core/agent_group_config.cxx
+    core/analytics_query_options.cxx
+    core/bucket.cxx
     core/cluster.cxx
+    core/cluster_agent.cxx
+    core/cluster_agent_config.cxx
     core/cluster_options.cxx
+    core/collections_component.cxx
     core/config_profile.cxx
+    core/core_sdk_shim.cxx
+    core/crud_component.cxx
+    core/dispatcher.cxx
     core/document_id.cxx
+    core/free_form_http_request.cxx
+    core/key_value_config.cxx
+    core/n1ql_query_options.cxx
+    core/retry_orchestrator.cxx
+    core/search_query_options.cxx
+    core/seed_config.cxx
+    core/view_query_options.cxx
     core/error_context/key_value.cxx
     core/management/analytics_link_azure_blob_external.cxx
     core/management/analytics_link_couchbase_remote.cxx
     core/management/analytics_link_s3_external.cxx
+    core/mcbp/big_endian.cxx
+    core/mcbp/buffer_writer.cxx
+    core/mcbp/codec.cxx
+    core/mcbp/command_code.cxx
+    core/mcbp/operation_consumer.cxx
+    core/mcbp/operation_queue.cxx
+    core/mcbp/packet.cxx
+    core/mcbp/queue_request.cxx
+    core/mcbp/server_duration.cxx
     core/operations/document_analytics.cxx
     core/operations/document_append.cxx
     core/operations/document_decrement.cxx
@@ -284,6 +311,11 @@ set(couchbase_cxx_client_FILES
     core/impl/transaction_op_error_category.cxx
     core/impl/upsert.cxx
     core/impl/view_error_category.cxx
+    core/io/dns_config.cxx
+    core/io/http_parser.cxx
+    core/io/mcbp_message.cxx
+    core/io/mcbp_parser.cxx
+    core/io/mcbp_session.cxx
     core/transactions/atr_cleanup_entry.cxx
     core/transactions/atr_ids.cxx
     core/transactions/attempt_context_impl.cxx
@@ -294,13 +326,13 @@ set(couchbase_cxx_client_FILES
     core/transactions/staged_mutation.cxx
     core/transactions/utils.cxx
     core/transactions/transaction_attempt.cxx
-    core/transactions/transactions_config.cxx
     core/transactions/transaction_context.cxx
     core/transactions/transaction_get_result.cxx
     core/transactions/transaction_links.cxx
     core/transactions/transaction_options.cxx
     core/transactions/transactions.cxx
     core/transactions/transactions_cleanup.cxx
+    core/transactions/transactions_config.cxx
     core/transactions/uid_generator.cxx)
 
 if(COUCHBASE_CXX_CLIENT_BUILD_SHARED)
@@ -314,6 +346,7 @@ target_include_directories(
   couchbase_cxx_client SYSTEM
   PUBLIC ${PROJECT_SOURCE_DIR}/third_party/asio/asio/include
          ${PROJECT_SOURCE_DIR}/third_party/gsl/include
+         ${PROJECT_SOURCE_DIR}/third_party/http_parser/include
          ${PROJECT_SOURCE_DIR}/third_party/json/external/PEGTL/include
          ${PROJECT_SOURCE_DIR}/third_party/json/include
          ${PROJECT_SOURCE_DIR}/third_party/cxx_function
@@ -344,12 +377,17 @@ target_link_libraries(
          couchbase_backtrace
          couchbase_logger
          couchbase_platform
-         couchbase_io
          couchbase_meta
          couchbase_crypto
          couchbase_sasl
          couchbase_tracing
          couchbase_metrics)
+
+target_link_libraries(couchbase_cxx_client PRIVATE http_parser)
+if(WIN32)
+  target_link_libraries(couchbase_cxx_client PRIVATE iphlpapi)
+endif()
+
 if(NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
   target_link_libraries(couchbase_cxx_client PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 endif()

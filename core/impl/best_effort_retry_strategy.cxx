@@ -17,6 +17,8 @@
 
 #include <couchbase/best_effort_retry_strategy.hxx>
 
+#include <fmt/core.h>
+
 #include <cmath>
 
 namespace couchbase
@@ -88,6 +90,15 @@ best_effort_retry_strategy::retry_after(const retry_request& request, retry_reas
         return retry_action{ backoff_calculator_(request.retry_attempts()) };
     }
     return retry_action::do_not_retry();
+}
+
+auto
+best_effort_retry_strategy::to_string() const -> std::string
+{
+    return fmt::format(R"(#<best_effort_retry_strategy:{} backoff_calculator=#<{}:{}>>)",
+                       static_cast<const void*>(this),
+                       typeid(backoff_calculator_).name(),
+                       typeid(backoff_calculator_).hash_code());
 }
 
 auto

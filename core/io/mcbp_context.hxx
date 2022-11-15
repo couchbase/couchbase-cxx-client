@@ -21,6 +21,7 @@
 #include "core/topology/configuration.hxx"
 
 #include <algorithm>
+#include <optional>
 #include <vector>
 
 namespace couchbase::core

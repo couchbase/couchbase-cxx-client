@@ -46,4 +46,10 @@ hash_crc32(const char* key, size_t key_length)
 
     return ((~crc) >> 16) & 0x7fff;
 }
+
+static inline std::uint32_t
+hash_crc32(const std::byte* key, size_t key_length)
+{
+    return hash_crc32(reinterpret_cast<const char*>(key), key_length);
+}
 } // namespace couchbase::core::utils

@@ -43,6 +43,20 @@ struct network_error_category : std::error_category {
                 return "configuration_not_available (1005)";
             case errc::network::cluster_closed:
                 return "cluster_closed (1006)";
+            case errc::network::end_of_stream:
+                return "end_of_stream (1007)";
+            case errc::network::need_more_data:
+                return "need_more_data (1008)";
+            case errc::network::operation_queue_closed:
+                return "operation_queue_closed (1009)";
+            case errc::network::operation_queue_full:
+                return "operation_queue_full (1010)";
+            case errc::network::request_already_queued:
+                return "request_already_queued (1011)";
+            case errc::network::request_cancelled:
+                return "request_cancelled (1012)";
+            case errc::network::bucket_closed:
+                return "bucket_closed (1013)";
         }
         return "FIXME: unknown error code (recompile with newer library): couchbase.network." + std::to_string(ev);
     }

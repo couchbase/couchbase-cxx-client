@@ -19,6 +19,7 @@
 
 #include "core/config_listener.hxx"
 
+#include <memory>
 #include <string>
 #include <system_error>
 #include <vector>

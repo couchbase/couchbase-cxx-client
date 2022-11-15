@@ -36,4 +36,19 @@ fi
 
 cd "${BUILD_DIR}"
 
+cat /proc/sys/kernel/core_pattern
+if [ -e /usr/bin/coredumpctl ]
+then
+    echo "|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h" | sudo tee /proc/sys/kernel/core_pattern || true
+fi
+ulimit -c unlimited
+
 ${CB_CTEST} --output-on-failure --label-regex 'integration|unit' --output-junit results.xml
+STATUS=$?
+
+if [ -e /usr/bin/coredumpctl -a  "x${STATUS}" != "x0" ]
+then
+    /usr/bin/coredumpctl -1 info
+fi
+
+exit $STATUS
