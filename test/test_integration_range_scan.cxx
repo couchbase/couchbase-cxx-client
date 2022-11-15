@@ -67,6 +67,9 @@ do_range_scan(couchbase::core::agent agent,
 
     std::vector<couchbase::core::range_scan_item> data;
 
+    auto options = continue_options;
+    options.ids_only = create_options.ids_only; // support servers before MB-54267. TODO: remove after server GA
+
     do {
         auto barrier = std::make_shared<std::promise<std::pair<couchbase::core::range_scan_continue_result, std::error_code>>>();
         auto f = barrier->get_future();
@@ -74,7 +77,7 @@ do_range_scan(couchbase::core::agent agent,
         auto op = agent.range_scan_continue(
           scan_uuid,
           vbucket_id,
-          continue_options,
+          options,
           [&data](auto item) { data.emplace_back(std::move(item)); },
           [barrier](auto res, auto error) {
               barrier->set_value({ std::move(res), error });
@@ -449,6 +452,10 @@ TEST_CASE("integration: range scan cancellation before continue", "[integration]
         REQUIRE_SUCCESS(ec);
     }
 
+    couchbase::core::range_scan_continue_options options{};
+    options.timeout = std::chrono::seconds{ 10 };
+    options.ids_only = true; // support servers before MB-54267. TODO: remove after server GA
+
     bool items_callback_invoked{ false };
     {
         auto barrier = std::make_shared<std::promise<std::pair<couchbase::core::range_scan_continue_result, std::error_code>>>();
@@ -457,7 +464,7 @@ TEST_CASE("integration: range scan cancellation before continue", "[integration]
         auto op = agent->range_scan_continue(
           scan_uuid,
           vbucket_id,
-          {},
+          options,
           [&items_callback_invoked](auto) { items_callback_invoked = true; },
           [barrier](auto res, auto ec) {
               barrier->set_value({ std::move(res), ec });
@@ -549,6 +556,7 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
         couchbase::core::range_scan_continue_options options{};
         options.timeout = std::chrono::seconds{ 10 };
         options.batch_item_limit = 3; // limit batch to 3 items, while range expected to be larger
+        options.ids_only = true;      // support servers before MB-54267. TODO: remove after server GA
 
         auto barrier = std::make_shared<std::promise<std::pair<couchbase::core::range_scan_continue_result, std::error_code>>>();
         auto f = barrier->get_future();
@@ -655,6 +663,7 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
         couchbase::core::range_scan_continue_options options{};
         options.timeout = std::chrono::seconds{ 10 };
         options.batch_item_limit = 3; // limit batch to 3 items, while range expected to be larger
+        options.ids_only = true; // support servers before MB-54267. TODO: remove after server GA
 
         auto barrier = std::make_shared<std::promise<std::pair<couchbase::core::range_scan_continue_result, std::error_code>>>();
         auto f = barrier->get_future();

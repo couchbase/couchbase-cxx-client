@@ -242,19 +242,28 @@ class crud_component_impl
               if (error) {
                   return cb({}, error);
               }
-              if (response->extras_.size() != 4) {
-                  return cb({}, errc::network::protocol_error);
+              bool ids_only;
+              switch (response->extras_.size()) {
+                  case 4:
+                      ids_only = mcbp::big_endian::read_uint32(response->extras_, 0) == 0;
+                      break;
+
+                  case 0:
+                      ids_only = options.ids_only; // support servers before MB-54267. TODO: remove after server GA
+                      break;
+
+                  default:
+                      return cb({}, errc::network::protocol_error);
               }
 
-              std::uint64_t keys_only = mcbp::big_endian::read_uint32(response->extras_, 0);
-
-              if (auto ec = parse_range_scan_data(response->value_, std::move(item_cb), keys_only == 0); ec) {
+              if (auto ec = parse_range_scan_data(response->value_, std::move(item_cb), ids_only); ec) {
                   return cb({}, ec);
               }
 
               range_scan_continue_result res{
                   response->status_code_ == key_value_status_code::range_scan_more,
                   response->status_code_ == key_value_status_code::range_scan_complete,
+                  ids_only,
               };
 
               if ((res.more || res.complete) && request->internal_cancel()) {
