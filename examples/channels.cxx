@@ -20,65 +20,29 @@
 
 #include <iostream>
 
-void
-send_loop(int i, asio::steady_timer& timer, asio::experimental::concurrent_channel<void(std::error_code, int)>& ch)
-{
-    if (i < 10) {
-        timer.expires_after(std::chrono::seconds(1));
-        timer.async_wait([i, &timer, &ch](std::error_code error) {
-            if (!error) {
-                std::cout << "Sending " << i << "\n";
-                ch.async_send(std::error_code(), i, [i, &timer, &ch](std::error_code error) {
-                    if (!error) {
-                        std::cout << "Sent " << i << "\n";
-                        send_loop(i + 1, timer, ch);
-                    } else {
-                        std::cout << "send error " << error << ", " << error.message() << "\n";
-                    }
-                });
-            }
-        });
-    } else {
-        ch.close();
-    }
-}
-
-void
-receive_loop(asio::steady_timer& timer, asio::experimental::concurrent_channel<void(std::error_code, int)>& ch)
-{
-    timer.expires_after(std::chrono::seconds(3));
-    timer.async_wait([&timer, &ch](std::error_code error) {
-        if (error) {
-            std::cout << "timer error " << error << ", " << error.message() << "\n";
-            return;
-        }
-        ch.async_receive([&timer, &ch](std::error_code error, int i) {
-            if (!error) {
-                std::cout << "Received " << i << "\n";
-                receive_loop(timer, ch);
-                if (i == 5) {
-                    std::cout << "Closing after 5"
-                              << "\n";
-                    ch.close();
-                }
-            } else {
-                std::cout << "receive error " << error << ", " << error.message() << "\n";
-            }
-        });
-    });
-}
-
 int
 main()
 {
     asio::io_context io;
 
-    asio::steady_timer sender_timer{ io };
-    asio::steady_timer receiver_timer{ io };
     asio::experimental::concurrent_channel<void(std::error_code, int)> ch{ io, 1 };
 
-    send_loop(0, sender_timer, ch);
-    receive_loop(receiver_timer, ch);
+    ch.async_send(std::error_code(), 42, [](std::error_code error) {
+        if (!error) {
+            std::cout << "Sent "
+                      << "\n";
+        } else {
+            std::cout << "send error " << error << ", " << error.message() << "\n";
+        }
+    });
+
+    ch.async_receive([](std::error_code error, int i) {
+        if (!error) {
+            std::cout << "Received " << i << "\n";
+        } else {
+            std::cout << "receive error " << error << ", " << error.message() << "\n";
+        }
+    });
 
     io.run();
 

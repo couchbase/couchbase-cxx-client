@@ -36,7 +36,10 @@ integration_test_guard::integration_test_guard()
         auth.username = ctx.username;
         auth.password = ctx.password;
     }
-    io_thread = std::thread([this]() { io.run(); });
+    io_threads.reserve(number_of_threads);
+    for (int i = 0; i < number_of_threads; i++) {
+        io_threads.emplace_back(std::thread([this]() { io.run(); }));
+    }
     origin = couchbase::core::origin(auth, connstr);
     if (ctx.dns_nameserver || ctx.dns_port) {
         origin.options().dns_config = couchbase::core::io::dns::dns_config{
@@ -58,14 +61,19 @@ integration_test_guard::integration_test_guard(const couchbase::core::cluster_op
     connstr.options.tracer = opts.tracer;
     couchbase::core::origin orig(auth, connstr);
     cluster = couchbase::core::cluster::create(io);
-    io_thread = std::thread([this]() { io.run(); });
+    io_threads.reserve(number_of_threads);
+    for (int i = 0; i < number_of_threads; i++) {
+        io_threads.emplace_back(std::thread([this]() { io.run(); }));
+    }
     open_cluster(cluster, orig);
 }
 
 integration_test_guard::~integration_test_guard()
 {
     close_cluster(cluster);
-    io_thread.join();
+    for (auto& thread : io_threads) {
+        thread.join();
+    }
 }
 
 const couchbase::core::operations::management::bucket_describe_response::bucket_info&

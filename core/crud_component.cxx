@@ -41,7 +41,7 @@
 
 namespace couchbase::core
 {
-std::pair<std::vector<std::byte>, std::error_code>
+static std::pair<std::vector<std::byte>, std::error_code>
 serialize_range_scan_create_options(const range_scan_create_options& options)
 {
     tao::json::value body{};
@@ -56,8 +56,8 @@ serialize_range_scan_create_options(const range_scan_create_options& options)
     if (std::holds_alternative<range_scan>(options.scan_type)) {
         const auto& range = std::get<range_scan>(options.scan_type);
         body["range"] = {
-            { range.start.exclusive ? "excl_start" : "start", base64::encode(range.start.id) },
-            { range.end.exclusive ? "excl_end" : "end", base64::encode(range.end.id) },
+            { range.start_.exclusive ? "excl_start" : "start", base64::encode(range.start_.id) },
+            { range.end_.exclusive ? "excl_end" : "end", base64::encode(range.end_.id) },
         };
     } else if (std::holds_alternative<sampling_scan>(options.scan_type)) {
         const auto& sampling = std::get<sampling_scan>(options.scan_type);

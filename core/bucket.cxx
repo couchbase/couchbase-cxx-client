@@ -122,7 +122,10 @@ class bucket_impl
             backoff_and_retry(req, retry_reason::node_not_available);
             return;
         }
-        key_value_status_code status = resp->status_code_;
+        key_value_status_code status{ key_value_status_code::unknown };
+        if (resp) {
+            status = resp->status_code_;
+        }
         if (status == key_value_status_code::not_my_vbucket) {
             reason = retry_reason::key_value_not_my_vbucket;
         }

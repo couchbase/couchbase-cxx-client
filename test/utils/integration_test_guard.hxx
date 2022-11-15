@@ -113,8 +113,9 @@ class integration_test_guard
 
     server_version cluster_version();
 
-    std::thread io_thread{};
-    asio::io_context io{};
+    std::vector<std::thread> io_threads{};
+    static constexpr int number_of_threads{ 4 };
+    asio::io_context io{ number_of_threads };
     std::shared_ptr<couchbase::core::cluster> cluster;
     test_context ctx;
     couchbase::core::origin origin;
