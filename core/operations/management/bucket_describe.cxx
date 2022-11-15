@@ -30,6 +30,19 @@ bucket_describe_request::encode_to(encoded_request_type& encoded, http_context& 
     return {};
 }
 
+std::string
+normalize_capability(const std::string& capability)
+{
+    std::string normalized;
+    normalized.reserve(capability.size());
+    for (auto ch : capability) {
+        if (ch != '_') {
+            normalized.push_back(static_cast<char>(std::tolower(ch)));
+        }
+    }
+    return normalized;
+}
+
 bucket_describe_response
 bucket_describe_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
 {
@@ -61,6 +74,25 @@ bucket_describe_request::make_response(error_context::http&& ctx, const encoded_
         }
     }
 
+    if (const auto* bucket_caps = payload.find("bucketCapabilities"); bucket_caps != nullptr && bucket_caps->is_array()) {
+        for (const auto& cap : bucket_caps->get_array()) {
+            if (cap.is_string()) {
+                response.info.bucket_capabilities.emplace_back(normalize_capability(cap.get_string()));
+            }
+        }
+    }
+
     return response;
+}
+
+auto
+bucket_describe_response::bucket_info::has_capability(const std::string& capability) const -> bool
+{
+    for (const auto& cap : bucket_capabilities) {
+        if (cap == normalize_capability(capability)) {
+            return true;
+        }
+    }
+    return false;
 }
 } // namespace couchbase::core::operations::management

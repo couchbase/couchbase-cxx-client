@@ -90,6 +90,18 @@ enum class key_value_status_code : std::uint16_t {
     subdoc_can_only_revive_deleted_documents = 0xd6,
     subdoc_deleted_document_cannot_have_value = 0xd7,
 
+    // occurs during a range scan to indicate that the range scan was cancelled.
+    range_scan_cancelled = 0xa5,
+
+    // occurs during a range scan to indicate that a range scan has more results.
+    range_scan_more = 0xa6,
+
+    // occurs during a range scan to indicate that a range scan has completed.
+    range_scan_complete = 0xa7,
+
+    // occurs during a range scan to indicate that a vb-uuid mismatch has occurred.
+    range_scan_vb_uuid_not_equal = 0xa8,
+
     unknown = 0xffff,
 };
 } // namespace couchbase

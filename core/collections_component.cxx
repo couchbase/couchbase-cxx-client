@@ -117,6 +117,17 @@ class collection_id_cache_entry_impl
     [[nodiscard]] auto assign_collection_id(std::shared_ptr<mcbp::queue_request> req) -> std::error_code
     {
         auto collection_id = get_id();
+        if (req->command_ == protocol::client_opcode::range_scan_create) {
+            tao::json::value body;
+            try {
+                body = utils::json::parse_binary(req->value_);
+            } catch (const tao::pegtl::parse_error&) {
+                return errc::common::parsing_failure;
+            }
+            body["collection"] = fmt::format("{:x}", collection_id);
+            req->value_ = utils::json::generate_binary(body);
+            return {};
+        }
         req->collection_id_ = collection_id;
         return {};
     }
@@ -381,6 +392,9 @@ collection_id_cache_entry_impl::refresh_collection_id(std::shared_ptr<mcbp::queu
               self->dispatcher_.direct_re_queue(r, false);
           });
       });
+    if (op) {
+        return {};
+    }
     return op.error();
 }
 

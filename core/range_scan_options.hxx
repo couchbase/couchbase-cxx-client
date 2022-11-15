@@ -59,7 +59,7 @@ struct range_scan_create_options {
     std::uint32_t collection_id{ 0 };
     std::variant<range_scan, sampling_scan> scan_type;
     std::optional<range_snapshot_requirements> snapshot_requirements{};
-    bool without_content{ false };
+    bool ids_only{ false };
     std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
 
     struct {
@@ -69,7 +69,7 @@ struct range_scan_create_options {
 
 struct range_scan_create_result {
     std::vector<std::byte> scan_uuid;
-    bool without_content;
+    bool ids_only;
 };
 
 using range_scan_create_callback = utils::movable_function<void(range_scan_create_result, std::error_code)>;
@@ -83,6 +83,7 @@ struct range_scan_continue_options {
     std::uint32_t batch_byte_limit{ default_batch_byte_limit };
     std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
 
+    bool ids_only{ false }; // support servers before MB-54267. TODO: remove after server GA
     struct {
         std::string user{};
     } internal{};
@@ -91,6 +92,7 @@ struct range_scan_continue_options {
 struct range_scan_continue_result {
     bool more;
     bool complete;
+    bool ids_only;
 };
 
 using range_scan_continue_callback = utils::movable_function<void(range_scan_continue_result, std::error_code)>;
@@ -109,7 +111,7 @@ struct range_scan_item_body {
     std::uint32_t expiry{};
     couchbase::cas cas{};
     std::uint64_t sequence_number{};
-    std::uint8_t datatype{};
+    std::byte datatype{};
     std::vector<std::byte> value{};
 };
 

@@ -489,6 +489,9 @@ class mcbp_session_impl
                         case protocol::client_opcode::observe_seqno:
                         case protocol::client_opcode::unlock:
                         case protocol::client_opcode::increment:
+                        case protocol::client_opcode::range_scan_create:
+                        case protocol::client_opcode::range_scan_continue:
+                        case protocol::client_opcode::range_scan_cancel:
                         case protocol::client_opcode::decrement:
                         case protocol::client_opcode::subdoc_multi_lookup:
                         case protocol::client_opcode::subdoc_multi_mutation: {
