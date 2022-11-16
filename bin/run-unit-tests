@@ -37,18 +37,40 @@ fi
 cd "${BUILD_DIR}"
 
 cat /proc/sys/kernel/core_pattern
-if [ -e /usr/bin/coredumpctl ]
+if [ -e /usr/bin/apport-unpack ]
 then
-    echo "|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h" | sudo tee /proc/sys/kernel/core_pattern || true
+    mkdir -p $HOME/.config/apport
+    cat <<EOF >$HOME/.config/apport/settings
+[main]
+unpackaged=true
+EOF
 fi
+
 ulimit -c unlimited
 
 ${CB_CTEST} --output-on-failure --label-regex 'integration|unit' --output-junit results.xml
 STATUS=$?
 
-if [ -e /usr/bin/coredumpctl -a  "x${STATUS}" != "x0" ]
+if [ "x${STATUS}" != "x0" ]
 then
-    /usr/bin/coredumpctl -1 info
+    if [ -e /usr/bin/coredumpctl ]
+    then
+        /usr/bin/ccoredumpctl list -n 10 --no-pager --reverse
+        /usr/bin/coredumpctl -1 info
+    elif [ -e /usr/bin/apport-unpack ]
+    then
+        for crash in /var/crash/*
+        do
+           if [ -f $crash ]
+           then
+             echo $crash
+             /usr/bin/apport-unpack $crash /tmp/the_crash/
+             executable=$(cat /tmp/the_crash/ExecutablePath)
+             gdb $executable /tmp/the_crash/CoreDump --batch -ex "thread apply all bt"
+             rm -rf $crash /tmp/the_crash
+           fi
+        done
+    fi
 fi
 
 exit $STATUS
