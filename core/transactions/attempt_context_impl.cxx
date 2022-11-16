@@ -777,7 +777,7 @@ choose_error(std::vector<tao::json::value>& errors)
     auto chosen_error = errors.front();
     if (errors.size() > 1) {
         // if there's one with a "reason":{"cause", ...} field, choose it
-        for(const auto& e: errors) {
+        for (const auto& e : errors) {
             auto reason = e.find("reason");
             auto cause = e.find("cause");
             if (reason && !reason->is_null() && cause && !cause->is_null()) {
@@ -785,7 +785,7 @@ choose_error(std::vector<tao::json::value>& errors)
             }
         }
         // ok, so now lets see if we have one with code in the range 17000-18000 and return that.
-        for (const auto& e: errors) {
+        for (const auto& e : errors) {
             auto code = e.at("code").as<uint64_t>();
             if (code >= 17000 && code <= 18000) {
                 return e;
