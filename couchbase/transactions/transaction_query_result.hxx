@@ -35,12 +35,10 @@ class transaction_query_result : public query_result
     {
     }
 
-    transaction_query_result(transaction_op_error_context ctx)
+    explicit transaction_query_result(transaction_op_error_context ctx)
       : query_result()
       , ctx_(std::move(ctx))
     {
-        int i = 0;
-        i++;
     }
 
     [[nodiscard]] const transaction_op_error_context& ctx() const

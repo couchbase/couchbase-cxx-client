@@ -55,7 +55,7 @@ if [ "x${STATUS}" != "x0" ]
 then
     if [ -e /usr/bin/coredumpctl ]
     then
-        /usr/bin/coredumpctl list -n 10 --no-pager --reverse
+        /usr/bin/coredumpctl list --no-pager --reverse | head
         /usr/bin/coredumpctl -1 info
     elif [ -e /usr/bin/apport-unpack ]
     then
