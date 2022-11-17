@@ -771,6 +771,31 @@ attempt_context_impl::query_begin_work(utils::movable_function<void(std::excepti
                });
 }
 
+tao::json::value
+choose_error(std::vector<tao::json::value>& errors)
+{
+    auto chosen_error = errors.front();
+    if (errors.size() > 1) {
+        // if there's one with a "reason":{"cause", ...} field, choose it
+        for (const auto& e : errors) {
+            auto reason = e.find("reason");
+            auto cause = e.find("cause");
+            if (reason && !reason->is_null() && cause && !cause->is_null()) {
+                return e;
+            }
+        }
+        // ok, so now lets see if we have one with code in the range 17000-18000 and return that.
+        for (const auto& e : errors) {
+            auto code = e.at("code").as<uint64_t>();
+            if (code >= 17000 && code <= 18000) {
+                return e;
+            }
+        }
+    }
+    // then, just the first one.
+    return chosen_error;
+}
+
 std::exception_ptr
 attempt_context_impl::handle_query_error(const core::operations::query_response& resp)
 {
@@ -789,15 +814,17 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
           (resp.ctx.ec == couchbase::errc::common::service_not_available ? SERVICE_NOT_AVAILABLE_EXCEPTION : COUCHBASE_EXCEPTION);
         return std::make_exception_ptr(transaction_operation_failed(FAIL_OTHER, resp.ctx.ec.message()).cause(cause));
     }
-    auto chosen_error = resp.meta.errors->front();
-    for (const auto& err : *resp.meta.errors) {
-        if (err.code >= 17000 && err.code <= 18000) {
-            chosen_error = err;
-            break;
-        }
-    }
-    trace("chosen query error ({}):'{}'", chosen_error.code, chosen_error.message);
-    switch (chosen_error.code) {
+    // TODO: we should have all the fields in these transactional query errors in the errors object.  For now, lets
+    //   parse the body, get the serialized info to decide which error to choose.
+    auto errors = core::utils::json::parse(resp.ctx.http_body)["errors"].get_array();
+
+    // just chose first one, to start with...
+    auto chosen_error = choose_error(errors);
+    trace("chosen query error: {}", jsonify(chosen_error));
+    auto code = chosen_error.at("code").as<uint64_t>();
+
+    // we have a fixed strategy for these errors...
+    switch (code) {
         case 1065:
             return std::make_exception_ptr(
               transaction_operation_failed(FAIL_OTHER, "N1QL Queries in transactions are supported in couchbase server 7.0 and later")
@@ -816,32 +843,31 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
         case 17015:
             return std::make_exception_ptr(query_cas_mismatch(tx_resp.ctx()));
     }
-    if (chosen_error.code >= 17000 && chosen_error.code <= 18000) {
-        transaction_operation_failed err(FAIL_OTHER, chosen_error.message);
+
+    // For these errors, we will create a transaction_operation_failed from the info in it.
+    if (code >= 17000 && code <= 18000) {
+        // the assumption below is there's always a top-level msg.
+        // TODO: when we parse the errors more thoroughly in the client, we should be able to add a lot of info on the underlying
+        //   cause of the error here (in addition to perhaps a more granular message).
+        transaction_operation_failed err(FAIL_OTHER, chosen_error.at("msg").as<std::string>());
         // parse the body for now, get the serialized info to create a transaction_operation_failed:
-        auto body = core::utils::json::parse(resp.ctx.http_body);
-        auto errors = body["errors"];
-        for (const auto& e : errors.get_array()) {
-            if (e.at("code").as<std::uint64_t>() == chosen_error.code) {
-                if (const auto* cause = e.find("cause"); cause != nullptr) {
-                    if (cause->at("retry").get_boolean()) {
-                        err.retry();
-                    }
-                    if (!cause->at("rollback").get_boolean()) {
-                        err.no_rollback();
-                    }
-                    if (auto raise = cause->at("raise").get_string(); raise == std::string("expired")) {
-                        err.expired();
-                    } else if (raise == std::string("commit_ambiguous")) {
-                        err.ambiguous();
-                    } else if (raise == std::string("failed_post_commit")) {
-                        err.failed_post_commit();
-                    } else if (raise != std::string("failed")) {
-                        trace("unknown value in raise field: {}, raising failed", raise);
-                    }
-                    return std::make_exception_ptr(err);
-                }
+        if (const auto* cause = chosen_error.find("cause"); cause != nullptr) {
+            if (cause->find("retry")->get_boolean()) {
+                err.retry();
             }
+            if (!cause->find("rollback")->get_boolean()) {
+                err.no_rollback();
+            }
+            if (auto raise = cause->find("raise")->get_string(); raise == std::string("expired")) {
+                err.expired();
+            } else if (raise == std::string("commit_ambiguous")) {
+                err.ambiguous();
+            } else if (raise == std::string("failed_post_commit")) {
+                err.failed_post_commit();
+            } else if (raise != std::string("failed")) {
+                trace("unknown value in raise field: {}, raising failed", raise);
+            }
+            return std::make_exception_ptr(err);
         }
     }
 

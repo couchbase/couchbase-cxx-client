@@ -46,10 +46,10 @@ include(cmake/Sanitizers.cmake)
 include(cmake/StaticAnalyzers.cmake)
 
 include(cmake/Backtrace.cmake)
+enable_sanitizers(project_options)
 
 if(COUCHBASE_CXX_CLIENT_MASTER_PROJECT)
   set_project_warnings(project_warnings)
-  enable_sanitizers(project_options)
   if(WIN32)
     add_definitions(-D_WIN32_WINNT=0x0601)
   endif()
@@ -351,6 +351,7 @@ target_include_directories(
          ${PROJECT_SOURCE_DIR}/third_party/json/include
          ${PROJECT_SOURCE_DIR}/third_party/cxx_function
          ${PROJECT_SOURCE_DIR}/third_party/fmt/include
+	 ${PROJECT_SOURCE_DIR}/third_party/expected/include
          ${PROJECT_SOURCE_DIR}/third_party/spdlog/include)
 target_link_libraries(couchbase_cxx_client PRIVATE project_options project_warnings)
 
