@@ -501,8 +501,8 @@ class mcbp_session_impl
                             }
 
                             std::uint32_t opaque = utils::byte_swap(msg.header.opaque);
-                            if (session_->handle_request_legacy(opcode, status, opaque, std::move(msg)) ||
-                                session_->handle_request(opcode, status, opaque, std::move(msg))) {
+                            if (session_->handle_request_legacy(opcode, status, opaque, msg) ||
+                                session_->handle_request(opcode, status, opaque, msg)) {
                                 LOG_TRACE("{} MCBP invoked operation handler: opcode={}, opaque={}, status={}",
                                           session_->log_prefix_,
                                           opcode,
@@ -512,7 +512,7 @@ class mcbp_session_impl
                                 LOG_DEBUG("{} unexpected orphan response: opcode={}, opaque={}, status={}",
                                           session_->log_prefix_,
                                           opcode,
-                                          msg.header.opaque,
+                                          opaque,
                                           protocol::status_to_string(status));
                             }
                         } break;
@@ -874,7 +874,7 @@ class mcbp_session_impl
         operations_.try_emplace(opaque, std::move(request), std::move(handler));
     }
 
-    auto handle_request(protocol::client_opcode opcode, std::uint16_t status, std::uint32_t opaque, mcbp_message&& msg) -> bool
+    auto handle_request(protocol::client_opcode opcode, std::uint16_t status, std::uint32_t opaque, mcbp_message msg) -> bool
     {
         std::shared_ptr<mcbp::queue_request> request{};
         std::shared_ptr<response_handler> handler{};
@@ -899,7 +899,7 @@ class mcbp_session_impl
         return false;
     }
 
-    auto handle_request_legacy(protocol::client_opcode opcode, std::uint16_t status, std::uint32_t opaque, mcbp_message&& msg) -> bool
+    auto handle_request_legacy(protocol::client_opcode opcode, std::uint16_t status, std::uint32_t opaque, mcbp_message msg) -> bool
     {
         command_handler fun{};
         {
