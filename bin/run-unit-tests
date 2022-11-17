@@ -27,7 +27,7 @@ CB_SANITIZER=${CB_SANITIZER:-""}
 
 echo "CB_CTEST=${CB_CTEST}"
 
-set -exuo pipefail
+set -xu
 
 BUILD_DIR="${PROJECT_ROOT}/cmake-build-tests"
 if [ "x${CB_SANITIZER}" != "x" ]; then
@@ -55,7 +55,7 @@ if [ "x${STATUS}" != "x0" ]
 then
     if [ -e /usr/bin/coredumpctl ]
     then
-        /usr/bin/ccoredumpctl list -n 10 --no-pager --reverse
+        /usr/bin/coredumpctl list -n 10 --no-pager --reverse
         /usr/bin/coredumpctl -1 info
     elif [ -e /usr/bin/apport-unpack ]
     then
@@ -69,6 +69,15 @@ then
              gdb $executable /tmp/the_crash/CoreDump --batch -ex "thread apply all bt"
              rm -rf $crash /tmp/the_crash
            fi
+        done
+    else
+        for core in /tmp/core.* "${PWD}/core*"
+        do
+            echo $core
+            executable=$(file $core | ruby -e "print ARGF.read[/execfn: '([^']+)'/, 1]")
+            echo $executable
+            gdb $executable $core --batch -ex "thread apply all bt"
+            rm -f $core
         done
     fi
 fi

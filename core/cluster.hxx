@@ -190,9 +190,9 @@ class cluster : public std::enable_shared_from_this<cluster>
         std::shared_ptr<bucket> b{};
         {
             std::scoped_lock lock(buckets_mutex_);
-            auto ptr = buckets_.find(bucket_name);
-            if (ptr != buckets_.end()) {
-                b = ptr->second;
+
+            if (auto ptr = buckets_.find(bucket_name); ptr != buckets_.end()) {
+                b = std::move(ptr->second);
                 buckets_.erase(ptr);
             }
         }

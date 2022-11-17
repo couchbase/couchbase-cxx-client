@@ -630,7 +630,9 @@ TEST_CASE("integration: multi-threaded open/close bucket", "[integration]")
     threads.clear();
 
     for (auto i = 0; i < number_of_threads; ++i) {
-        threads.emplace_back([&integration]() { test::utils::close_bucket(integration.cluster, integration.ctx.bucket); });
+        auto close_bucket = [&integration]() { test::utils::close_bucket(integration.cluster, integration.ctx.bucket); };
+        std::thread closer(std::move(close_bucket));
+        threads.emplace_back(std::move(closer));
     }
     std::for_each(threads.begin(), threads.end(), [](auto& thread) { thread.join(); });
 }
