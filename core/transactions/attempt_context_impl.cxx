@@ -711,8 +711,6 @@ wrap_query_request(const couchbase::transactions::transaction_query_options& opt
 void
 attempt_context_impl::query_begin_work(utils::movable_function<void(std::exception_ptr)>&& cb)
 {
-    // check for expiry
-
     // construct the txn_data and query options for the existing transaction
     couchbase::transactions::transaction_query_options opts;
     tao::json::value txdata;
@@ -767,6 +765,11 @@ attempt_context_impl::query_begin_work(utils::movable_function<void(std::excepti
                [this, cb = std::move(cb)](std::exception_ptr err, core::operations::query_response resp) mutable {
                    trace("begin_work setting query node to {}", resp.served_by_node);
                    op_list_.set_query_node(resp.served_by_node);
+                   // we check for expiry _after_ this call, so we always set the query node.
+                   if (has_expired_client_side(STAGE_QUERY_BEGIN_WORK, {})) {
+                       return cb(std::make_exception_ptr(
+                         transaction_operation_failed(FAIL_EXPIRY, "expired in BEGIN WORK").no_rollback().expired()));
+                   }
                    return cb(err);
                });
 }

@@ -94,11 +94,7 @@ class cluster
     auto operator=(const cluster& other) -> cluster& = default;
     auto operator=(cluster&& other) -> cluster& = default;
 
-    void close()
-    {
-        transactions_.reset();
-        return core::impl::initiate_cluster_close(core_);
-    }
+    void close();
 
     /**
      * Wraps low-level implementation of the SDK to provide common API.
