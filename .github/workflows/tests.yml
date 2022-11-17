@@ -28,7 +28,7 @@ jobs:
       - name: Install build environment
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake gcc g++ curl
+          sudo apt-get install -y libssl-dev cmake gcc g++ curl gdb
       - uses: actions/checkout@v2
         with:
           submodules: recursive
