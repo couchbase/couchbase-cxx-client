@@ -142,7 +142,7 @@ TEST_CASE("integration: range scan large values", "[integration]")
     };
 
     couchbase::core::range_scan_continue_options continue_options{};
-    continue_options.timeout = std::chrono::seconds{ 10 };
+    continue_options.batch_time_limit = std::chrono::seconds{ 10 };
 
     auto data = do_range_scan(agent.value(), 12, create_options, continue_options);
     REQUIRE_FALSE(data.empty());
@@ -201,7 +201,7 @@ TEST_CASE("integration: range scan small values", "[integration]")
     };
 
     couchbase::core::range_scan_continue_options continue_options{};
-    continue_options.timeout = std::chrono::seconds{ 10 };
+    continue_options.batch_time_limit = std::chrono::seconds{ 10 };
 
     auto data = do_range_scan(agent.value(), 12, create_options, continue_options);
     REQUIRE_FALSE(data.empty());
@@ -304,7 +304,7 @@ TEST_CASE("integration: range scan collection retry", "[integration]")
     };
 
     couchbase::core::range_scan_continue_options continue_options{};
-    continue_options.timeout = std::chrono::seconds{ 10 };
+    continue_options.batch_time_limit = std::chrono::seconds{ 10 };
 
     auto data = do_range_scan(agent.value(), 12, create_options, continue_options);
     REQUIRE_FALSE(data.empty());
@@ -364,7 +364,7 @@ TEST_CASE("integration: range scan only keys", "[integration]")
     };
 
     couchbase::core::range_scan_continue_options continue_options{};
-    continue_options.timeout = std::chrono::seconds{ 10 };
+    continue_options.batch_time_limit = std::chrono::seconds{ 10 };
 
     auto data = do_range_scan(agent.value(), 12, create_options, continue_options);
     REQUIRE_FALSE(data.empty());
@@ -453,7 +453,7 @@ TEST_CASE("integration: range scan cancellation before continue", "[integration]
     }
 
     couchbase::core::range_scan_continue_options options{};
-    options.timeout = std::chrono::seconds{ 10 };
+    options.batch_time_limit = std::chrono::seconds{ 10 };
     options.ids_only = true; // support servers before MB-54267. TODO: remove after server GA
 
     bool items_callback_invoked{ false };
@@ -554,7 +554,7 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
         ++iteration;
 
         couchbase::core::range_scan_continue_options options{};
-        options.timeout = std::chrono::seconds{ 10 };
+        options.batch_time_limit = std::chrono::seconds{ 10 };
         options.batch_item_limit = 3; // limit batch to 3 items, while range expected to be larger
         options.ids_only = true;      // support servers before MB-54267. TODO: remove after server GA
 
@@ -661,7 +661,7 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
 
     {
         couchbase::core::range_scan_continue_options options{};
-        options.timeout = std::chrono::seconds{ 10 };
+        options.batch_time_limit = std::chrono::seconds{ 10 };
         options.batch_item_limit = 3; // limit batch to 3 items, while range expected to be larger
         options.ids_only = true;      // support servers before MB-54267. TODO: remove after server GA
 
@@ -734,7 +734,7 @@ TEST_CASE("integration: sampling scan keys only", "[integration]")
     };
 
     couchbase::core::range_scan_continue_options continue_options{};
-    continue_options.timeout = std::chrono::seconds{ 10 };
+    continue_options.batch_time_limit = std::chrono::seconds{ 10 };
 
     auto data = do_range_scan(agent.value(), 12, create_options, continue_options);
     REQUIRE_FALSE(data.empty());
