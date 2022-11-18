@@ -822,6 +822,18 @@ class mcbp_session_impl
             }
             command_handlers_.clear();
         }
+        {
+            std::scoped_lock lock(operations_mutex_);
+            auto operations = std::move(operations_);
+            for (auto& [opaque, operation] : operations) {
+                auto& [request, handler] = operation;
+                if (handler) {
+                    LOG_DEBUG("{} MCBP cancel operation during session close, opaque={}, ec={}", log_prefix_, opaque, ec.message());
+                    handler->handle_response(std::move(request), {}, reason, {}, {});
+                }
+            }
+            operations_.clear();
+        }
         config_listeners_.clear();
         if (on_stop_handler_) {
             on_stop_handler_(reason);
