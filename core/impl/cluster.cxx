@@ -40,7 +40,7 @@ cluster::close() -> void
 {
     if (transactions_) {
         // blocks until cleanup is finished
-        static_cast<core::transactions::transactions&>(*transactions_).close();
+        transactions_->close();
     }
     transactions_.reset();
     return core::impl::initiate_cluster_close(core_);
