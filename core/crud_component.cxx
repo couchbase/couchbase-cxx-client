@@ -279,29 +279,11 @@ class crud_component_impl
         mcbp::buffer_writer buf{ scan_uuid.size() + sizeof(std::uint32_t) * 3 };
         buf.write(scan_uuid);
         buf.write_uint32(options.batch_item_limit);
-        buf.write_uint32(gsl::narrow_cast<std::uint32_t>(
-          (options.timeout == std::chrono::milliseconds::zero()) ? timeout_defaults::range_scan_timeout.count() : options.timeout.count()));
+        buf.write_uint32(gsl::narrow_cast<std::uint32_t>(options.batch_time_limit.count()));
         buf.write_uint32(options.batch_byte_limit);
         req->extras_ = std::move(buf.store_);
 
-        auto op = collections_.dispatch(req);
-        if (!op) {
-            return op;
-        }
-
-        if (options.timeout != std::chrono::milliseconds::zero()) {
-            auto timer = std::make_shared<asio::steady_timer>(io_);
-            timer->expires_after(options.timeout);
-            timer->async_wait([req](auto error) {
-                if (error == asio::error::operation_aborted) {
-                    return;
-                }
-                req->cancel(couchbase::errc::common::unambiguous_timeout);
-            });
-            req->set_deadline(timer);
-        }
-
-        return op;
+        return collections_.dispatch(req);
     }
 
     auto range_scan_cancel(std::vector<std::byte> scan_uuid,

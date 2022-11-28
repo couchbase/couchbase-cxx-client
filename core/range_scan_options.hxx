@@ -77,10 +77,11 @@ using range_scan_create_callback = utils::movable_function<void(range_scan_creat
 struct range_scan_continue_options {
     static constexpr std::uint32_t default_batch_item_limit{ 50 };
     static constexpr std::uint32_t default_batch_byte_limit{ 15000 };
+    static constexpr std::chrono::milliseconds default_batch_time_limit{ 0 };
 
-    std::chrono::milliseconds timeout;
     std::uint32_t batch_item_limit{ default_batch_item_limit };
     std::uint32_t batch_byte_limit{ default_batch_byte_limit };
+    std::chrono::milliseconds batch_time_limit{ default_batch_time_limit };
     std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
 
     bool ids_only{ false }; // support servers before MB-54267. TODO: remove after server GA
