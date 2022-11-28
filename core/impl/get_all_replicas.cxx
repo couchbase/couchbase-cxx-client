@@ -102,6 +102,9 @@ initiate_get_all_replicas_operation(std::shared_ptr<cluster> core,
                       }
                   }
                   if (local_handler) {
+                      if (!ctx->result_.empty()) {
+                          resp.ctx.override_ec({});
+                      }
                       return local_handler(std::move(resp.ctx), std::move(ctx->result_));
                   }
               });
@@ -131,6 +134,9 @@ initiate_get_all_replicas_operation(std::shared_ptr<cluster> core,
                   }
               }
               if (local_handler) {
+                  if (!ctx->result_.empty()) {
+                      resp.ctx.override_ec({});
+                  }
                   return local_handler(std::move(resp.ctx), std::move(ctx->result_));
               }
           });
