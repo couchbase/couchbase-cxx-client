@@ -29,7 +29,7 @@ open_cluster(std::shared_ptr<couchbase::core::cluster> cluster, const couchbase:
     cluster->open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
     if (rc) {
-        LOG_CRITICAL(
+        CB_LOG_CRITICAL(
           "unable to connect to the cluster: {}, nodes={}", rc.message(), couchbase::core::utils::join_strings(origin.get_nodes(), ", "));
         throw std::system_error(rc);
     }
@@ -51,7 +51,7 @@ open_bucket(std::shared_ptr<couchbase::core::cluster> cluster, const std::string
     cluster->open_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
     if (rc) {
-        LOG_CRITICAL("unable to open bucket: {}, name={}", rc.message(), bucket_name);
+        CB_LOG_CRITICAL("unable to open bucket: {}, name={}", rc.message(), bucket_name);
         throw std::system_error(rc);
     }
 }
@@ -64,7 +64,7 @@ close_bucket(std::shared_ptr<couchbase::core::cluster> cluster, const std::strin
     cluster->close_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
     if (rc) {
-        LOG_CRITICAL("unable to close bucket: {}, name={}", rc.message(), bucket_name);
+        CB_LOG_CRITICAL("unable to close bucket: {}, name={}", rc.message(), bucket_name);
         throw std::system_error(rc);
     }
 }

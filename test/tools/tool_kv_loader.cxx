@@ -81,12 +81,12 @@ main()
     if (auto val = spdlog::details::os::getenv("TEST_NUMBER_OF_IO_THREADS"); !val.empty()) {
         number_of_io_threads = std::stoul(val, nullptr, 10);
     }
-    LOG_INFO("send_queries: {}, number_of_threads: {}, username: \"{}\", connection_string: \"{}\", bucket: \"{}\"",
-             send_queries,
-             number_of_io_threads,
-             ctx.username,
-             ctx.connection_string,
-             ctx.bucket);
+    CB_LOG_INFO("send_queries: {}, number_of_threads: {}, username: \"{}\", connection_string: \"{}\", bucket: \"{}\"",
+                send_queries,
+                number_of_io_threads,
+                ctx.username,
+                ctx.connection_string,
+                ctx.bucket);
 
     auto connstr = couchbase::core::utils::parse_connection_string(ctx.connection_string);
     couchbase::core::cluster_credentials auth{};
@@ -135,10 +135,10 @@ main()
     std::signal(SIGINT, sigint_handler);
     std::signal(SIGTERM, sigint_handler);
 
-    LOG_INFO("start workload, chance_of_get: {}, hit_chance_for_upsert: {}, hit_chance_for_get: {}",
-             chance_of_get,
-             hit_chance_for_upsert,
-             hit_chance_for_get);
+    CB_LOG_INFO("start workload, chance_of_get: {}, hit_chance_for_upsert: {}, hit_chance_for_get: {}",
+                chance_of_get,
+                hit_chance_for_upsert,
+                hit_chance_for_get);
 
     const auto json_doc = couchbase::core::utils::to_binary(R"({
   "type": "fake_profile",

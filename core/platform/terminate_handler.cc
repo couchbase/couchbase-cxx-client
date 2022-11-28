@@ -51,7 +51,7 @@ log_handled_exception()
     } catch (const std::exception& e) {
         CB_LOG_CRITICAL("Caught unhandled std::exception-derived exception. what(): {}", e.what());
     } catch (...) {
-        LOG_CRITICAL_RAW("Caught unknown/unhandled exception.");
+        CB_LOG_CRITICAL_RAW("Caught unknown/unhandled exception.");
     }
 #endif
 }
@@ -71,7 +71,7 @@ log_backtrace()
         fprintf(stderr, format_str, "");
         print_backtrace_to_file(stderr);
         fflush(stderr);
-        LOG_CRITICAL_RAW("Call stack exceeds 8k, rendered to STDERR");
+        CB_LOG_CRITICAL_RAW("Call stack exceeds 8k, rendered to STDERR");
     }
 }
 
