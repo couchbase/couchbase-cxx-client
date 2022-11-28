@@ -35,6 +35,17 @@ cluster::transactions() -> std::shared_ptr<couchbase::transactions::transactions
     return transactions_;
 }
 
+auto
+cluster::close() -> void
+{
+    if (transactions_) {
+        // blocks until cleanup is finished
+        transactions_->close();
+    }
+    transactions_.reset();
+    return core::impl::initiate_cluster_close(core_);
+}
+
 namespace core::impl
 {
 
