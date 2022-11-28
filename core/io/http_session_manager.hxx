@@ -230,7 +230,7 @@ class http_session_manager
         }
         if (!session->is_stopped()) {
             session->set_idle(options_.idle_http_connection_timeout);
-            LOG_DEBUG("{} put HTTP session back to idle connections", session->log_prefix());
+            CB_LOG_DEBUG("{} put HTTP session back to idle connections", session->log_prefix());
             std::scoped_lock lock(sessions_mutex_);
             idle_sessions_[type].push_back(session);
             busy_sessions_[type].remove_if([id = session->id()](const auto& s) -> bool { return !s || s->id() == id; });

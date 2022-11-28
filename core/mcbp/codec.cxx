@@ -60,7 +60,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet) -> tl::expecte
             // While it's possible that the Observe operation is in fact supported with collections
             // enabled, we don't currently implement that operation for simplicity, as the key is
             // actually hidden away in the value data instead of the usual key data.
-            LOG_DEBUG("the observe operation is not supported with collections enabled");
+            CB_LOG_DEBUG("the observe operation is not supported with collections enabled");
             return tl::unexpected(errc::common::unsupported_operation);
         }
         if (supports_collection_id(packet.command_)) {
@@ -75,7 +75,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet) -> tl::expecte
             big_endian::put_uint32(extras, packet.collection_id_);
         }
         if (packet.collection_id_ > 0) {
-            LOG_DEBUG("cannot encode collection id with a non-collection command");
+            CB_LOG_DEBUG("cannot encode collection id with a non-collection command");
             return tl::unexpected(errc::common::invalid_argument);
         }
     }
@@ -128,7 +128,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet) -> tl::expecte
         switch (packet_magic) {
             case protocol::magic::client_request:
                 if (!is_feature_enabled(protocol::hello_feature::alt_request_support)) {
-                    LOG_DEBUG("cannot use frames in req packets without enabling the feature");
+                    CB_LOG_DEBUG("cannot use frames in req packets without enabling the feature");
                     return tl::unexpected(errc::common::unsupported_operation);
                 }
                 packet_magic = protocol::magic::alt_client_request;
@@ -137,7 +137,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet) -> tl::expecte
                 packet_magic = protocol::magic::alt_client_response;
                 break;
             default:
-                LOG_DEBUG("cannot use frames with an unsupported magic");
+                CB_LOG_DEBUG("cannot use frames with an unsupported magic");
                 return tl::unexpected(errc::common::unsupported_operation);
         }
     }
@@ -160,7 +160,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet) -> tl::expecte
         case protocol::magic::client_request:
         case protocol::magic::alt_client_request:
             if (static_cast<std::uint32_t>(packet.status_) != 0) {
-                LOG_DEBUG("cannot specify status in a request packet");
+                CB_LOG_DEBUG("cannot specify status in a request packet");
                 return tl::unexpected(errc::common::invalid_argument);
             }
             buffer.write_uint16(packet.vbucket_);
@@ -169,14 +169,14 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet) -> tl::expecte
         case protocol::magic::client_response:
         case protocol::magic::alt_client_response:
             if (static_cast<std::uint32_t>(packet.vbucket_) != 0) {
-                LOG_DEBUG("cannot specify vbucket in a response packet");
+                CB_LOG_DEBUG("cannot specify vbucket in a response packet");
                 return tl::unexpected(errc::common::invalid_argument);
             }
             buffer.write_uint16(packet.status_);
             break;
 
         default:
-            LOG_DEBUG("cannot encode status/vbucket for unknown packet magic");
+            CB_LOG_DEBUG("cannot encode status/vbucket for unknown packet magic");
             return tl::unexpected(errc::common::invalid_argument);
     }
 
@@ -188,7 +188,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet) -> tl::expecte
 
     if (packet.barrier_frame_) {
         if (packet.magic_ != protocol::magic::client_request) {
-            LOG_DEBUG("cannot use barrier frame in non-request packets");
+            CB_LOG_DEBUG("cannot use barrier frame in non-request packets");
             return tl::unexpected(errc::common::invalid_argument);
         }
         buffer.write_frame_header(mcbp::request_barrier, 0);
@@ -196,12 +196,12 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet) -> tl::expecte
 
     if (packet.durability_level_frame_) {
         if (packet.magic_ != protocol::magic::client_request) {
-            LOG_DEBUG("cannot use durability level frame in non-request packets");
+            CB_LOG_DEBUG("cannot use durability level frame in non-request packets");
             return tl::unexpected(errc::common::invalid_argument);
         }
 
         if (!is_feature_enabled(protocol::hello_feature::sync_replication)) {
-            LOG_DEBUG("cannot use sync replication frames without enabling the feature");
+            CB_LOG_DEBUG("cannot use sync replication frames without enabling the feature");
             return tl::unexpected(errc::common::feature_not_available);
         }
 
@@ -221,7 +221,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet) -> tl::expecte
 
     if (packet.stream_id_frame_) {
         if (packet.magic_ != protocol::magic::client_request) {
-            LOG_DEBUG("cannot use stream id frame in non-request packets");
+            CB_LOG_DEBUG("cannot use stream id frame in non-request packets");
             return tl::unexpected(errc::common::invalid_argument);
         }
 
@@ -231,12 +231,12 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet) -> tl::expecte
 
     if (packet.open_tracing_frame_) {
         if (packet.magic_ != protocol::magic::client_request) {
-            LOG_DEBUG("cannot use open tracing frame in non-request packets");
+            CB_LOG_DEBUG("cannot use open tracing frame in non-request packets");
             return tl::unexpected(errc::common::invalid_argument);
         }
 
         if (!is_feature_enabled(protocol::hello_feature::open_tracing)) {
-            LOG_DEBUG("cannot use open tracing frames without enabling the feature");
+            CB_LOG_DEBUG("cannot use open tracing frames without enabling the feature");
             return tl::unexpected(errc::common::feature_not_available);
         }
 
@@ -253,7 +253,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet) -> tl::expecte
 
     if (packet.server_duration_frame_) {
         if (packet.magic_ != protocol::magic::client_response) {
-            LOG_DEBUG("cannot use server duration frame in non-response packets");
+            CB_LOG_DEBUG("cannot use server duration frame in non-response packets");
             return tl::unexpected(errc::common::invalid_argument);
         }
 
@@ -265,7 +265,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet) -> tl::expecte
 
     if (packet.user_impersonation_frame_) {
         if (packet.magic_ != protocol::magic::client_request) {
-            LOG_DEBUG("cannot use user impersonation frame in non-request packets");
+            CB_LOG_DEBUG("cannot use user impersonation frame in non-request packets");
             return tl::unexpected(errc::common::invalid_argument);
         }
 
@@ -282,12 +282,12 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet) -> tl::expecte
 
     if (packet.preserve_expiry_frame_) {
         if (packet.magic_ != protocol::magic::client_request) {
-            LOG_DEBUG("cannot use preserve expiry frame in non-request packets");
+            CB_LOG_DEBUG("cannot use preserve expiry frame in non-request packets");
             return tl::unexpected(errc::common::invalid_argument);
         }
 
         if (!is_feature_enabled(protocol::hello_feature::preserve_ttl)) {
-            LOG_DEBUG("cannot use preserve expiry frame without enabling the feature");
+            CB_LOG_DEBUG("cannot use preserve expiry frame without enabling the feature");
             return tl::unexpected(errc::common::feature_not_available);
         }
 
@@ -295,7 +295,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet) -> tl::expecte
     }
 
     if (!packet.unsupported_frames_.empty()) {
-        LOG_DEBUG("cannot use send packets with unsupported frames");
+        CB_LOG_DEBUG("cannot use send packets with unsupported frames");
         return tl::unexpected(errc::common::invalid_argument);
     }
 
@@ -363,7 +363,7 @@ codec::decode_packet(gsl::span<std::byte> header, gsl::span<std::byte> body)
             break;
 
         default:
-            LOG_DEBUG("cannot decode status/vbucket for unknown pkt magic");
+            CB_LOG_DEBUG("cannot decode status/vbucket for unknown pkt magic");
             return { {}, {}, errc::network::protocol_error };
     }
 
@@ -389,7 +389,7 @@ codec::decode_packet(gsl::span<std::byte> header, gsl::span<std::byte> body)
     }
 
     if (frames_len + ext_len + key_len > body_len) {
-        LOG_DEBUG("frames_len ({}) + ext_len ({}) + key_len ({}) > body_len ({})", frames_len, ext_len, key_len, body_len);
+        CB_LOG_DEBUG("frames_len ({}) + ext_len ({}) + key_len ({}) > body_len ({})", frames_len, ext_len, key_len, body_len);
         return { {}, {}, errc::network::protocol_error };
     }
     std::size_t value_len = body_len - (frames_len + ext_len + key_len);
@@ -459,7 +459,7 @@ codec::decode_packet(gsl::span<std::byte> header, gsl::span<std::byte> body)
                     break;
 
                 default:
-                    LOG_DEBUG("got unexpected magic when decoding frames");
+                    CB_LOG_DEBUG("got unexpected magic when decoding frames");
                     return { {}, {}, errc::network::protocol_error };
             }
             frame_offset += frame_len;
@@ -481,13 +481,13 @@ codec::decode_packet(gsl::span<std::byte> header, gsl::span<std::byte> body)
             // While it's possible that the Observe operation is in fact supported with collections
             // enabled, we don't currently implement that operation for simplicity, as the key is
             // actually hidden away in the value data instead of the usual key data.
-            LOG_DEBUG("the observe operation is not supported with collections enabled");
+            CB_LOG_DEBUG("the observe operation is not supported with collections enabled");
             return { {}, {}, errc::common::feature_not_available };
         }
         if (key_len > 0 && supports_collection_id(pkt.command_)) {
             auto [id, remaining] = core::utils::decode_unsigned_leb128<std::uint32_t>(pkt.key_, core::utils::leb_128_no_throw{});
             if (remaining.empty()) {
-                LOG_DEBUG("unable to decode collection id");
+                CB_LOG_DEBUG("unable to decode collection id");
                 return { {}, {}, errc::network::protocol_error };
             }
             pkt.collection_id_ = id;

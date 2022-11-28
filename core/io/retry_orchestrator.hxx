@@ -55,13 +55,13 @@ retry_with_duration(std::shared_ptr<Manager> manager,
                     std::chrono::milliseconds duration)
 {
     command->request.retries.record_retry_attempt(reason);
-    LOG_TRACE(R"({} retrying operation {} (duration={}ms, id="{}", reason={}, attempts={}))",
-              manager->log_prefix(),
-              decltype(command->request)::encoded_request_type::body_type::opcode,
-              duration.count(),
-              command->id_,
-              reason,
-              command->request.retries.retry_attempts());
+    CB_LOG_TRACE(R"({} retrying operation {} (duration={}ms, id="{}", reason={}, attempts={}))",
+                 manager->log_prefix(),
+                 decltype(command->request)::encoded_request_type::body_type::opcode,
+                 duration.count(),
+                 command->id_,
+                 reason,
+                 command->request.retries.retry_attempts());
     manager->schedule_for_retry(command, duration);
 }
 
@@ -83,14 +83,14 @@ maybe_retry(std::shared_ptr<Manager> manager, std::shared_ptr<Command> command, 
         return priv::retry_with_duration(manager, command, reason, priv::cap_duration(action.duration(), command));
     }
 
-    LOG_TRACE(R"({} not retrying operation {} (id="{}", reason={}, attempts={}, ec={} ({})))",
-              manager->log_prefix(),
-              decltype(command->request)::encoded_request_type::body_type::opcode,
-              command->id_,
-              reason,
-              command->request.retries.retry_attempts(),
-              ec.value(),
-              ec.message());
+    CB_LOG_TRACE(R"({} not retrying operation {} (id="{}", reason={}, attempts={}, ec={} ({})))",
+                 manager->log_prefix(),
+                 decltype(command->request)::encoded_request_type::body_type::opcode,
+                 command->id_,
+                 reason,
+                 command->request.retries.retry_attempts(),
+                 ec.value(),
+                 ec.message());
     return command->invoke_handler(ec);
 }
 

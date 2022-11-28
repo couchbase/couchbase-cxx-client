@@ -76,7 +76,7 @@ get_cluster_config_response_body::parse(key_value_status_code status,
         try {
             config_ = parse_config(config_text, info.endpoint_address, info.endpoint_port);
         } catch (const tao::pegtl::parse_error& e) {
-            LOG_DEBUG("unable to parse cluster configuration as JSON: {}, {}", e.message(), config_text);
+            CB_LOG_DEBUG("unable to parse cluster configuration as JSON: {}, {}", e.message(), config_text);
         }
         return true;
     }

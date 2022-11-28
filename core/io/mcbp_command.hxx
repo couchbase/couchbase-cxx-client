@@ -72,7 +72,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     {
         if constexpr (io::mcbp_traits::supports_durability_v<Request>) {
             if (request.durability_level != durability_level::none && timeout_ < durability_timeout_floor) {
-                LOG_DEBUG(
+                CB_LOG_DEBUG(
                   R"({} Timeout is too low for operation with durability, increasing to sensible value. timeout={}ms, floor={}ms, id="{}")",
                   session_.log_prefix(),
                   request.id,
@@ -170,11 +170,11 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     {
         auto backoff = std::chrono::milliseconds(500);
         auto time_left = deadline.expiry() - std::chrono::steady_clock::now();
-        LOG_DEBUG(R"({} unknown collection response for "{}", time_left={}ms, id="{}")",
-                  session_.log_prefix(),
-                  request.id,
-                  std::chrono::duration_cast<std::chrono::milliseconds>(time_left).count(),
-                  id_);
+        CB_LOG_DEBUG(R"({} unknown collection response for "{}", time_left={}ms, id="{}")",
+                     session_.log_prefix(),
+                     request.id,
+                     std::chrono::duration_cast<std::chrono::milliseconds>(time_left).count(),
+                     id_);
         request.retries.add_reason(retry_reason::key_value_collection_outdated);
         if (time_left < backoff) {
             return invoke_handler(
@@ -200,11 +200,11 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                 if (collection_id) {
                     request.id.collection_uid(collection_id.value());
                 } else {
-                    LOG_DEBUG(R"({} no cache entry for collection, resolve collection id for "{}", timeout={}ms, id="{}")",
-                              session_.log_prefix(),
-                              request.id,
-                              timeout_.count(),
-                              id_);
+                    CB_LOG_DEBUG(R"({} no cache entry for collection, resolve collection id for "{}", timeout={}ms, id="{}")",
+                                 session_.log_prefix(),
+                                 request.id,
+                                 timeout_.count(),
+                                 id_);
                     return request_collection_id();
                 }
             } else {

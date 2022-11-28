@@ -164,15 +164,15 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
         prep = false;
     }
     if (ctx_->options.show_queries) {
-        LOG_INFO("QUERY: client_context_id=\"{}\", prep={}, {}",
-                 encoded.client_context_id,
-                 utils::json::generate(prep),
-                 utils::json::generate(stmt));
+        CB_LOG_INFO("QUERY: client_context_id=\"{}\", prep={}, {}",
+                    encoded.client_context_id,
+                    utils::json::generate(prep),
+                    utils::json::generate(stmt));
     } else {
-        LOG_DEBUG("QUERY: client_context_id=\"{}\", prep={}, {}",
-                  encoded.client_context_id,
-                  utils::json::generate(prep),
-                  utils::json::generate(stmt));
+        CB_LOG_DEBUG("QUERY: client_context_id=\"{}\", prep={}, {}",
+                     encoded.client_context_id,
+                     utils::json::generate(prep),
+                     utils::json::generate(stmt));
     }
     if (row_callback) {
         encoded.streaming.emplace(couchbase::core::io::streaming_settings{
@@ -217,9 +217,9 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
         if (const auto* i = payload.find("clientContextID"); i != nullptr) {
             response.meta.client_context_id = i->get_string();
             if (response.ctx.client_context_id != response.meta.client_context_id) {
-                LOG_WARNING(R"(unexpected clientContextID returned by service: "{}", expected "{}")",
-                            response.meta.client_context_id,
-                            response.ctx.client_context_id);
+                CB_LOG_WARNING(R"(unexpected clientContextID returned by service: "{}", expected "{}")",
+                               response.meta.client_context_id,
+                               response.ctx.client_context_id);
             }
         }
         response.meta.status = payload.at("status").get_string();
@@ -373,9 +373,9 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                 }
             }
             if (!response.ctx.ec) {
-                LOG_TRACE("Unexpected error returned by query engine: client_context_id=\"{}\", body={}",
-                          response.ctx.client_context_id,
-                          encoded.body.data());
+                CB_LOG_TRACE("Unexpected error returned by query engine: client_context_id=\"{}\", body={}",
+                             response.ctx.client_context_id,
+                             encoded.body.data());
                 response.ctx.ec = errc::common::internal_server_failure;
             }
         }

@@ -154,7 +154,7 @@ logging_meter::log_report() const
         }
     }
     if (report.find("operations") != nullptr) {
-        LOG_INFO("Metrics: {}", utils::json::generate(report));
+        CB_LOG_INFO("Metrics: {}", utils::json::generate(report));
     }
 }
 

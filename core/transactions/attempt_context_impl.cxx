@@ -694,15 +694,13 @@ wrap_query_request(const couchbase::transactions::transaction_query_options& opt
 {
     // build what we can directly from the options:
     auto req = core::impl::build_transaction_query_request(opts.get_query_options().build());
-    // set timeout stuff using the config/context.
-    // Add some extra time, so we don't time out right at expiry.
-    auto extra =
-      txn_context.config().kv_timeout ? txn_context.config().kv_timeout.value() : core::timeout_defaults::key_value_durable_timeout;
+    // set timeout to remaining time plus some extra time, so we don't time out right at expiry.
+    auto extra = core::timeout_defaults::key_value_durable_timeout;
     if (!req.scan_consistency) {
         req.scan_consistency = txn_context.config().query_config.scan_consistency;
     }
     auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(txn_context.remaining());
-    req.timeout = remaining + extra;
+    req.timeout = remaining + extra + std::chrono::milliseconds(1000); // match java with 1 second over the kv durable timeout.
     req.raw["txtimeout"] = fmt::format("\"{}ms\"", remaining.count());
     req.timeout = std::chrono::duration_cast<std::chrono::milliseconds>(txn_context.remaining()) + extra;
     return req;
@@ -834,6 +832,8 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
                 .cause(FEATURE_NOT_AVAILABLE_EXCEPTION));
         case 3000:
             return std::make_exception_ptr(query_parsing_failure(tx_resp.ctx()));
+            /*return std::make_exception_ptr(
+              transaction_operation_failed(FAIL_OTHER, chosen_error.at("msg").as<std::string>()).cause(PARSING_FAILURE));*/
         case 17004:
             return std::make_exception_ptr(query_attempt_not_found(tx_resp.ctx()));
         case 1080:
@@ -1117,7 +1117,8 @@ attempt_context_impl::insert_raw_with_query(const core::document_id& id, const s
                                   } catch (const transaction_operation_failed&) {
                                       return op_completed_with_error(std::move(cb), err);
                                   } catch (const query_document_exists& e) {
-                                      return op_completed_with_error(std::move(cb), e);
+                                      return op_completed_with_error(std::move(cb),
+                                                                     transaction_operation_failed(FAIL_DOC_ALREADY_EXISTS, e.what()));
                                   } catch (const std::exception& e) {
                                       return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
                                   } catch (...) {

@@ -49,18 +49,18 @@ decodeAttributeList(const std::string& list, AttributeMap& attributes)
 {
     size_t pos = 0;
 
-    LOG_TRACE("decoding attribute list [{}]", list);
+    CB_LOG_TRACE("decoding attribute list [{}]", list);
 
     while (pos < list.length()) {
         auto equal = list.find('=', pos);
         if (equal == std::string::npos) {
             // syntax error!!
-            LOG_ERROR("decode attribute list [{}] failed: no '='", list);
+            CB_LOG_ERROR("decode attribute list [{}] failed: no '='", list);
             return false;
         }
 
         if ((equal - pos) != 1) {
-            LOG_ERROR("decode attribute list [{}] failed: no key is multichar", list);
+            CB_LOG_ERROR("decode attribute list [{}] failed: no key is multichar", list);
             return false;
         }
 
@@ -69,7 +69,7 @@ decodeAttributeList(const std::string& list, AttributeMap& attributes)
 
         // Make sure we haven't seen this key before..
         if (attributes.find(key) != attributes.end()) {
-            LOG_ERROR("decode attribute list [{}] failed: key [{}] is multichar", list, key);
+            CB_LOG_ERROR("decode attribute list [{}] failed: key [{}] is multichar", list, key);
             return false;
         }
 
@@ -341,7 +341,7 @@ ClientBackend::step(std::string_view input)
     }
 
     if (attributes.find('e') != attributes.end()) {
-        LOG_ERROR("failed to authenticate: {}", attributes['e']);
+        CB_LOG_ERROR("failed to authenticate: {}", attributes['e']);
         return { error::FAIL, {} };
     }
 

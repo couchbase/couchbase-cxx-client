@@ -104,9 +104,9 @@ search_request::encode_to(search_request::encoded_request_type& encoded, http_co
     body_str = utils::json::generate(body);
     encoded.body = body_str;
     if (context.options.show_queries) {
-        LOG_INFO("SEARCH: {}", utils::json::generate(body["query"]));
+        CB_LOG_INFO("SEARCH: {}", utils::json::generate(body["query"]));
     } else {
-        LOG_DEBUG("SEARCH: {}", utils::json::generate(body["query"]));
+        CB_LOG_DEBUG("SEARCH: {}", utils::json::generate(body["query"]));
     }
     if (row_callback) {
         encoded.streaming.emplace(couchbase::core::io::streaming_settings{

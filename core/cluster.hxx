@@ -114,9 +114,9 @@ class cluster : public std::enable_shared_from_this<cluster>
                         }
                         if (!nodes.empty()) {
                             self->origin_.set_nodes(std::move(nodes));
-                            LOG_INFO("replace list of bootstrap nodes with addresses from DNS SRV of \"{}\": [{}]",
-                                     hostname,
-                                     utils::join_strings(self->origin_.get_nodes(), ", "));
+                            CB_LOG_INFO("replace list of bootstrap nodes with addresses from DNS SRV of \"{}\": [{}]",
+                                        hostname,
+                                        utils::join_strings(self->origin_.get_nodes(), ", "));
                         }
                         return self->do_open(std::forward<Handler>(handler));
                     });
@@ -343,18 +343,18 @@ class cluster : public std::enable_shared_from_this<cluster>
             }
 
             if (has_capella_host && !origin_.options().enable_tls) {
-                LOG_WARNING("[{}]: TLS is required when connecting to Couchbase Capella. Please enable TLS by prefixing "
-                            "the connection string with \"couchbases://\" (note the final 's').",
-                            id_);
+                CB_LOG_WARNING("[{}]: TLS is required when connecting to Couchbase Capella. Please enable TLS by prefixing "
+                               "the connection string with \"couchbases://\" (note the final 's').",
+                               id_);
             }
 
             if (origin_.options().enable_tls                   /* TLS is enabled */
                 && origin_.options().trust_certificate.empty() /* No CA certificate (or other SDK-specific trust source) is specified */
                 && origin_.options().tls_verify != tls_verify_mode::none /* The user did not disable all TLS verification */
                 && has_non_capella_host /* The connection string has a hostname that does NOT end in ".cloud.couchbase.com" */) {
-                LOG_WARNING("[{}] When TLS is enabled, the cluster options must specify certificate(s) to trust or ensure that they are "
-                            "available in system CA store. (Unless connecting to cloud.couchbase.com.)",
-                            id_);
+                CB_LOG_WARNING("[{}] When TLS is enabled, the cluster options must specify certificate(s) to trust or ensure that they are "
+                               "available in system CA store. (Unless connecting to cloud.couchbase.com.)",
+                               id_);
             }
         }
 
@@ -370,30 +370,30 @@ class cluster : public std::enable_shared_from_this<cluster>
                     break;
             }
             if (origin_.options().trust_certificate.empty()) { // trust certificate is not explicitly specified
-                LOG_DEBUG(R"([{}]: use default CA for TLS verify)", id_);
+                CB_LOG_DEBUG(R"([{}]: use default CA for TLS verify)", id_);
                 std::error_code ec{};
 
                 // load system certificates
                 tls_.set_default_verify_paths(ec);
                 if (ec) {
-                    LOG_WARNING(R"([{}]: failed to load system CAs: {})", id_, ec.message());
+                    CB_LOG_WARNING(R"([{}]: failed to load system CAs: {})", id_, ec.message());
                 }
 
                 // add the Capella Root CA in addition to system CAs
                 tls_.add_certificate_authority(
                   asio::const_buffer(couchbase::core::default_ca::capellaCaCert, strlen(couchbase::core::default_ca::capellaCaCert)), ec);
                 if (ec) {
-                    LOG_WARNING("[{}]: unable to load default CAs: {}", id_, ec.message());
+                    CB_LOG_WARNING("[{}]: unable to load default CAs: {}", id_, ec.message());
                     // we don't consider this fatal and try to continue without it
                 }
             } else { // trust certificate is explicitly specified
                 std::error_code ec{};
                 // load only the explicit certificate
                 // system and default capella certificates are not loaded
-                LOG_DEBUG(R"([{}]: use TLS verify file: "{}")", id_, origin_.options().trust_certificate);
+                CB_LOG_DEBUG(R"([{}]: use TLS verify file: "{}")", id_, origin_.options().trust_certificate);
                 tls_.load_verify_file(origin_.options().trust_certificate, ec);
                 if (ec) {
-                    LOG_ERROR("[{}]: unable to load verify file \"{}\": {}", id_, origin_.options().trust_certificate, ec.message());
+                    CB_LOG_ERROR("[{}]: unable to load verify file \"{}\": {}", id_, origin_.options().trust_certificate, ec.message());
                     return handler(ec);
                 }
             }
@@ -402,23 +402,23 @@ class cluster : public std::enable_shared_from_this<cluster>
                 std::ofstream keylog(COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE, std::ios::out | std::ios::app | std::ios::binary);
                 keylog << std::string_view(line) << std::endl;
             });
-            LOG_CRITICAL(
+            CB_LOG_CRITICAL(
               "COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE was set to \"{}\" during build, all TLS keys will be logged for network analysis "
               "(https://wiki.wireshark.org/TLS). DO NOT USE THIS BUILD IN PRODUCTION",
               COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE);
 #endif
             if (origin_.credentials().uses_certificate()) {
                 std::error_code ec{};
-                LOG_DEBUG(R"([{}]: use TLS certificate chain: "{}")", id_, origin_.certificate_path());
+                CB_LOG_DEBUG(R"([{}]: use TLS certificate chain: "{}")", id_, origin_.certificate_path());
                 tls_.use_certificate_chain_file(origin_.certificate_path(), ec);
                 if (ec) {
-                    LOG_ERROR("[{}]: unable to load certificate chain \"{}\": {}", id_, origin_.certificate_path(), ec.message());
+                    CB_LOG_ERROR("[{}]: unable to load certificate chain \"{}\": {}", id_, origin_.certificate_path(), ec.message());
                     return handler(ec);
                 }
-                LOG_DEBUG(R"([{}]: use TLS private key: "{}")", id_, origin_.key_path());
+                CB_LOG_DEBUG(R"([{}]: use TLS private key: "{}")", id_, origin_.key_path());
                 tls_.use_private_key_file(origin_.key_path(), asio::ssl::context::file_format::pem, ec);
                 if (ec) {
-                    LOG_ERROR("[{}]: unable to load private key \"{}\": {}", id_, origin_.key_path(), ec.message());
+                    CB_LOG_ERROR("[{}]: unable to load private key \"{}\": {}", id_, origin_.key_path(), ec.message());
                     return handler(ec);
                 }
             }
@@ -432,9 +432,9 @@ class cluster : public std::enable_shared_from_this<cluster>
                 if (self->origin_.options().network == "auto") {
                     self->origin_.options().network = config.select_network(self->session_.bootstrap_hostname());
                     if (self->origin_.options().network == "default") {
-                        LOG_DEBUG(R"({} detected network is "{}")", self->session_.log_prefix(), self->origin_.options().network);
+                        CB_LOG_DEBUG(R"({} detected network is "{}")", self->session_.log_prefix(), self->origin_.options().network);
                     } else {
-                        LOG_INFO(R"({} detected network is "{}")", self->session_.log_prefix(), self->origin_.options().network);
+                        CB_LOG_INFO(R"({} detected network is "{}")", self->session_.log_prefix(), self->origin_.options().network);
                     }
                 }
                 if (self->origin_.options().network != "default") {
@@ -452,9 +452,9 @@ class cluster : public std::enable_shared_from_this<cluster>
                         nodes.emplace_back(node);
                     }
                     self->origin_.set_nodes(nodes);
-                    LOG_INFO("replace list of bootstrap nodes with addresses of alternative network \"{}\": [{}]",
-                             self->origin_.options().network,
-                             utils::join_strings(self->origin_.get_nodes(), ","));
+                    CB_LOG_INFO("replace list of bootstrap nodes with addresses of alternative network \"{}\": [{}]",
+                                self->origin_.options().network,
+                                utils::join_strings(self->origin_.get_nodes(), ","));
                 }
                 self->session_manager_->set_configuration(config, self->origin_.options());
                 self->session_.on_configuration_update(self->session_manager_);

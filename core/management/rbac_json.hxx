@@ -36,7 +36,7 @@ struct traits<couchbase::core::management::rbac::user_and_metadata> {
         } else if (domain == "external") {
             result.domain = couchbase::core::management::rbac::auth_domain::external;
         } else {
-            LOG_ERROR(R"("unexpected domain for user with metadata: "{}")", domain);
+            CB_LOG_ERROR(R"("unexpected domain for user with metadata: "{}")", domain);
         }
         result.username = v.at("id").get_string();
         if (const auto* display_name = v.find("name"); display_name != nullptr && !display_name->get_string().empty()) {

@@ -39,7 +39,7 @@ dns_srv_tracker::dns_srv_tracker(asio::io_context& ctx, std::string address, con
 void
 dns_srv_tracker::get_srv_nodes(utils::movable_function<void(origin::node_list, std::error_code)> callback)
 {
-    LOG_TRACE("query DNS-SRV: address=\"{}\", service=\"{}\"", address_, service_);
+    CB_LOG_TRACE("query DNS-SRV: address=\"{}\", service=\"{}\"", address_, service_);
     dns_client_.query_srv(
       address_,
       service_,
@@ -47,11 +47,12 @@ dns_srv_tracker::get_srv_nodes(utils::movable_function<void(origin::node_list, s
       [self = shared_from_this(), callback = std::move(callback)](couchbase::core::io::dns::dns_client::dns_srv_response&& resp) mutable {
           origin::node_list nodes;
           if (resp.ec) {
-              LOG_WARNING("failed to fetch DNS SRV records for \"{}\" ({}), assuming that cluster is listening this address",
-                          self->address_,
-                          resp.ec.message());
+              CB_LOG_WARNING("failed to fetch DNS SRV records for \"{}\" ({}), assuming that cluster is listening this address",
+                             self->address_,
+                             resp.ec.message());
           } else if (resp.targets.empty() && self->address_ != "localhost") {
-              LOG_WARNING("DNS SRV query returned 0 records for \"{}\", assuming that cluster is listening this address", self->address_);
+              CB_LOG_WARNING("DNS SRV query returned 0 records for \"{}\", assuming that cluster is listening this address",
+                             self->address_);
           } else {
               nodes.reserve(resp.targets.size());
               for (const auto& address : resp.targets) {
@@ -72,7 +73,7 @@ dns_srv_tracker::do_dns_refresh()
         bool expected_state{ true };
         if (dns_ec || nodes.empty()) {
             if (dns_ec) {
-                LOG_WARNING("unable to perform DNS-SRV refresh: {}", dns_ec.message());
+                CB_LOG_WARNING("unable to perform DNS-SRV refresh: {}", dns_ec.message());
             }
             self->refresh_in_progress_.compare_exchange_strong(expected_state, false);
             return;
@@ -90,7 +91,8 @@ dns_srv_tracker::do_dns_refresh()
             for (const auto& [host, port] : nodes) {
                 endpoints.emplace_back(fmt::format("\"{}:{}\"", host, port));
             }
-            LOG_DEBUG("generated configuration from DNS-SRV response \"{}\": [{}]", self->address_, utils::join_strings(endpoints, ", "));
+            CB_LOG_DEBUG(
+              "generated configuration from DNS-SRV response \"{}\": [{}]", self->address_, utils::join_strings(endpoints, ", "));
             for (const auto& listener : listeners) {
                 listener->update_config(config);
             }
@@ -116,7 +118,7 @@ dns_srv_tracker::report_bootstrap_error(const std::string& endpoint, std::error_
 
     bool expected_state{ false };
     if (trigger_dns_srv_refresh && refresh_in_progress_.compare_exchange_strong(expected_state, true)) {
-        LOG_DEBUG("all nodes failed to bootstrap, triggering DNS-SRV refresh, ec={}, last endpoint=\"{}\"", ec.message(), endpoint);
+        CB_LOG_DEBUG("all nodes failed to bootstrap, triggering DNS-SRV refresh, ec={}, last endpoint=\"{}\"", ec.message(), endpoint);
         return asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() mutable { self->do_dns_refresh(); }));
     }
 }

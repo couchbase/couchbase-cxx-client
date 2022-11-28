@@ -41,8 +41,8 @@ class agent_group_impl
           config_.key_value,
         })
     {
-        LOG_DEBUG("SDK version: {}", meta::sdk_id());
-        LOG_DEBUG("creating new agent group: {}", config_.to_string());
+        CB_LOG_DEBUG("SDK version: {}", meta::sdk_id());
+        CB_LOG_DEBUG("creating new agent group: {}", config_.to_string());
     }
 
     auto open_bucket(const std::string& bucket_name) -> std::error_code

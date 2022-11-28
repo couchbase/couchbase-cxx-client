@@ -206,13 +206,13 @@ class bucket_impl
         auto handle_error = [is_retry, req](std::error_code ec) {
             // We only want to log an error on retries if the error isn't cancelled.
             if (!is_retry || (is_retry && ec != errc::common::request_canceled)) {
-                LOG_ERROR("reschedule failed, failing request ({})", ec.message());
+                CB_LOG_ERROR("reschedule failed, failing request ({})", ec.message());
             }
 
             req->try_callback({}, ec);
         };
 
-        LOG_DEBUG("request being re-queued. opaque={}, opcode={}", req->opaque_, req->command_);
+        CB_LOG_DEBUG("request being re-queued. opaque={}, opcode={}", req->opaque_, req->command_);
 
         auto session = route_request(req);
         if (session.empty() || !session.has_config()) {
@@ -227,7 +227,7 @@ class bucket_impl
         }
         auto data = codec_.encode_packet(*req);
         if (!data) {
-            LOG_DEBUG("unable to encode packet. ec={}", data.error().message());
+            CB_LOG_DEBUG("unable to encode packet. ec={}", data.error().message());
             handle_error(data.error());
             return data.error();
         }
@@ -302,17 +302,17 @@ class bucket_impl
     void restart_node(std::size_t index, const std::string& hostname, const std::string& port)
     {
         if (closed_) {
-            LOG_DEBUG(R"({} requested to restart session, but the bucket has been closed already. idx={}, address="{}:{}")",
-                      log_prefix_,
-                      index,
-                      hostname,
-                      port);
+            CB_LOG_DEBUG(R"({} requested to restart session, but the bucket has been closed already. idx={}, address="{}:{}")",
+                         log_prefix_,
+                         index,
+                         hostname,
+                         port);
             return;
         }
         {
             std::scoped_lock lock(config_mutex_);
             if (!config_->has_node_with_hostname(hostname)) {
-                LOG_TRACE(
+                CB_LOG_TRACE(
                   R"({} requested to restart session, but the node has been ejected from current configuration already. idx={}, address="{}:{}")",
                   log_prefix_,
                   index,
@@ -332,24 +332,24 @@ class bucket_impl
 
         std::scoped_lock lock(sessions_mutex_);
         if (auto ptr = sessions_.find(index); ptr == sessions_.end() || ptr->second.empty()) {
-            LOG_DEBUG(R"({} requested to restart session idx={}, which does not exist yet, initiate new one id="{}", address="{}:{}")",
-                      log_prefix_,
-                      index,
-                      session.id(),
-                      hostname,
-                      port);
+            CB_LOG_DEBUG(R"({} requested to restart session idx={}, which does not exist yet, initiate new one id="{}", address="{}:{}")",
+                         log_prefix_,
+                         index,
+                         session.id(),
+                         hostname,
+                         port);
         } else {
             const auto& old_session = ptr->second;
             auto old_id = old_session.id();
             sessions_.erase(ptr);
             Expects(sessions_[index].empty());
-            LOG_DEBUG(R"({} restarting session idx={}, id=("{}" -> "{}"), address="{}:{}")",
-                      log_prefix_,
-                      index,
-                      old_id,
-                      session.id(),
-                      hostname,
-                      port);
+            CB_LOG_DEBUG(R"({} restarting session idx={}, id=("{}" -> "{}"), address="{}:{}")",
+                         log_prefix_,
+                         index,
+                         old_id,
+                         session.id(),
+                         hostname,
+                         port);
         }
 
         session.bootstrap(
@@ -361,7 +361,7 @@ class bucket_impl
                   return;
               }
               if (ec) {
-                  LOG_WARNING(R"({} failed to restart session idx={}, ec={})", session.log_prefix(), this_index, ec.message());
+                  CB_LOG_WARNING(R"({} failed to restart session idx={}, ec={})", session.log_prefix(), this_index, ec.message());
                   self->restart_node(this_index, hostname, port);
                   return;
               }
@@ -393,7 +393,8 @@ class bucket_impl
         new_session.bootstrap(
           [self = shared_from_this(), new_session, h = std::move(handler)](std::error_code ec, const topology::configuration& cfg) mutable {
               if (ec) {
-                  LOG_WARNING(R"({} failed to bootstrap session ec={}, bucket="{}")", new_session.log_prefix(), ec.message(), self->name_);
+                  CB_LOG_WARNING(
+                    R"({} failed to bootstrap session ec={}, bucket="{}")", new_session.log_prefix(), ec.message(), self->name_);
               } else {
                   size_t this_index = new_session.index();
                   new_session.on_configuration_update(self);
@@ -487,7 +488,7 @@ class bucket_impl
         }
         for (auto& [index, session] : old_sessions) {
             if (session) {
-                LOG_DEBUG(R"({} shutdown session session="{}", idx={})", log_prefix_, session.id(), index);
+                CB_LOG_DEBUG(R"({} shutdown session session="{}", idx={})", log_prefix_, session.id(), index);
                 session.stop(retry_reason::do_not_retry);
             }
         }
@@ -501,18 +502,18 @@ class bucket_impl
         {
             std::scoped_lock lock(config_mutex_);
             if (!config_) {
-                LOG_DEBUG("{} initialize configuration rev={}", log_prefix_, config.rev_str());
+                CB_LOG_DEBUG("{} initialize configuration rev={}", log_prefix_, config.rev_str());
             } else if (config.force) {
-                LOG_DEBUG("{} forced to accept configuration rev={}", log_prefix_, config.rev_str());
+                CB_LOG_DEBUG("{} forced to accept configuration rev={}", log_prefix_, config.rev_str());
                 forced_config = true;
             } else if (!config.vbmap) {
-                LOG_DEBUG("{} will not update the configuration old={} -> new={}, because new config does not have partition map",
-                          log_prefix_,
-                          config_->rev_str(),
-                          config.rev_str());
+                CB_LOG_DEBUG("{} will not update the configuration old={} -> new={}, because new config does not have partition map",
+                             log_prefix_,
+                             config_->rev_str(),
+                             config.rev_str());
                 return;
             } else if (config_ < config) {
-                LOG_DEBUG("{} will update the configuration old={} -> new={}", log_prefix_, config_->rev_str(), config.rev_str());
+                CB_LOG_DEBUG("{} will update the configuration old={} -> new={}", log_prefix_, config_->rev_str(), config.rev_str());
             } else {
                 return;
             }
@@ -549,20 +550,20 @@ class bucket_impl
                     }
                 }
                 if (new_index < config.nodes.size()) {
-                    LOG_DEBUG(R"({} rev={}, preserve session="{}", address="{}:{}")",
-                              log_prefix_,
-                              config.rev_str(),
-                              session.id(),
-                              session.bootstrap_hostname(),
-                              session.bootstrap_port());
+                    CB_LOG_DEBUG(R"({} rev={}, preserve session="{}", address="{}:{}")",
+                                 log_prefix_,
+                                 config.rev_str(),
+                                 session.id(),
+                                 session.bootstrap_hostname(),
+                                 session.bootstrap_port());
                     new_sessions[new_index] = std::move(session);
                 } else {
-                    LOG_DEBUG(R"({} rev={}, drop session="{}", address="{}:{}")",
-                              log_prefix_,
-                              config.rev_str(),
-                              session.id(),
-                              session.bootstrap_hostname(),
-                              session.bootstrap_port());
+                    CB_LOG_DEBUG(R"({} rev={}, drop session="{}", address="{}:{}")",
+                                 log_prefix_,
+                                 config.rev_str(),
+                                 session.id(),
+                                 session.bootstrap_hostname(),
+                                 session.bootstrap_port());
                     asio::post(asio::bind_executor(
                       ctx_, [session = std::move(session)]() mutable { return session.stop(retry_reason::do_not_retry); }));
                 }
@@ -585,7 +586,8 @@ class bucket_impl
                 } else {
                     session = io::mcbp_session(client_id_, ctx_, origin, state_listener_, name_, known_features_);
                 }
-                LOG_DEBUG(R"({} rev={}, add session="{}", address="{}:{}")", log_prefix_, config.rev_str(), session.id(), hostname, port);
+                CB_LOG_DEBUG(
+                  R"({} rev={}, add session="{}", address="{}:{}")", log_prefix_, config.rev_str(), session.id(), hostname, port);
                 session.bootstrap(
                   [self = shared_from_this(), session, forced_config, idx = node.index](std::error_code err,
                                                                                         topology::configuration cfg) mutable {

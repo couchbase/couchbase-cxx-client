@@ -137,13 +137,13 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
             return invoke_handler(ec, {});
         }
         encoded.headers["client-context-id"] = client_context_id_;
-        LOG_TRACE(R"({} HTTP request: {}, method={}, path="{}", client_context_id="{}", timeout={}ms)",
-                  session_->log_prefix(),
-                  encoded.type,
-                  encoded.method,
-                  encoded.path,
-                  client_context_id_,
-                  timeout_.count());
+        CB_LOG_TRACE(R"({} HTTP request: {}, method={}, path="{}", client_context_id="{}", timeout={}ms)",
+                     session_->log_prefix(),
+                     encoded.type,
+                     encoded.method,
+                     encoded.path,
+                     client_context_id_,
+                     timeout_.count());
         session_->write_and_subscribe(
           encoded,
           [self = this->shared_from_this(), start = std::chrono::steady_clock::now()](std::error_code ec, io::http_response&& msg) {
@@ -161,12 +161,12 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
               }
               self->deadline.cancel();
               self->finish_dispatch(self->session_->remote_address(), self->session_->local_address());
-              LOG_TRACE(R"({} HTTP response: {}, client_context_id="{}", status={}, body={})",
-                        self->session_->log_prefix(),
-                        self->request.type,
-                        self->client_context_id_,
-                        msg.status_code,
-                        msg.status_code == 200 ? "[hidden]" : msg.body.data());
+              CB_LOG_TRACE(R"({} HTTP response: {}, client_context_id="{}", status={}, body={})",
+                           self->session_->log_prefix(),
+                           self->request.type,
+                           self->client_context_id_,
+                           msg.status_code,
+                           msg.status_code == 200 ? "[hidden]" : msg.body.data());
               if (auto parser_ec = msg.body.ec(); !ec && parser_ec) {
                   ec = parser_ec;
               }

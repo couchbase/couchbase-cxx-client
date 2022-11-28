@@ -40,8 +40,8 @@ class agent_impl
       , collections_{ io_, { bucket_name_, config_.shim }, { config_.key_value.max_queue_size, config_.default_retry_strategy } }
       , crud_{ io_, collections_, config_.default_retry_strategy }
     {
-        LOG_DEBUG("SDK version: {}", meta::sdk_id());
-        LOG_DEBUG("creating new agent: {}", config_.to_string());
+        CB_LOG_DEBUG("SDK version: {}", meta::sdk_id());
+        CB_LOG_DEBUG("creating new agent: {}", config_.to_string());
     }
 
     [[nodiscard]] auto bucket_name() const -> const std::string&

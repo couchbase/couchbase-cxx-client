@@ -49,7 +49,7 @@ log_handled_exception()
             throw;
         }
     } catch (const std::exception& e) {
-        LOG_CRITICAL("Caught unhandled std::exception-derived exception. what(): {}", e.what());
+        CB_LOG_CRITICAL("Caught unhandled std::exception-derived exception. what(): {}", e.what());
     } catch (...) {
         LOG_CRITICAL_RAW("Caught unknown/unhandled exception.");
     }
@@ -64,7 +64,7 @@ log_backtrace()
 
     char buffer[8192];
     if (print_backtrace_to_buffer("    ", buffer, sizeof(buffer))) {
-        LOG_CRITICAL("Call stack:\n{}", buffer);
+        CB_LOG_CRITICAL("Call stack:\n{}", buffer);
     } else {
         // Exceeded buffer space - print directly to stderr FD (requires no
         // buffering, but has the disadvantage that we don't get it in the log).
@@ -82,7 +82,7 @@ backtrace_terminate_handler()
 {
     static bool meta_reported = false;
     if (!meta_reported) {
-        LOG_CRITICAL(R"(*** Fatal error encountered during exception handling ({}) ***)", meta::sdk_build_info_short());
+        CB_LOG_CRITICAL(R"(*** Fatal error encountered during exception handling ({}) ***)", meta::sdk_build_info_short());
         meta_reported = true;
     }
     log_handled_exception();

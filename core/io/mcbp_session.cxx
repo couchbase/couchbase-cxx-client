@@ -143,10 +143,10 @@ class mcbp_session_impl
             auto user_agent =
               meta::user_agent_for_mcbp(session_->client_id_, session_->id_, session_->origin_.options().user_agent_extra, 250);
             hello_req.body().user_agent(user_agent);
-            LOG_DEBUG("{} user_agent={}, requested_features=[{}]",
-                      session_->log_prefix_,
-                      user_agent,
-                      utils::join_strings_fmt("{}", hello_req.body().features(), ", "));
+            CB_LOG_DEBUG("{} user_agent={}, requested_features=[{}]",
+                         session_->log_prefix_,
+                         user_agent,
+                         utils::join_strings_fmt("{}", hello_req.body().features(), ", "));
             session_->write(hello_req.data());
 
             if (!session->origin_.credentials().uses_certificate()) {
@@ -206,7 +206,7 @@ class mcbp_session_impl
                         case key_value_status_code::rate_limited_max_connections:
                         case key_value_status_code::rate_limited_network_egress:
                         case key_value_status_code::rate_limited_network_ingress:
-                            LOG_DEBUG(
+                            CB_LOG_DEBUG(
                               "{} unable to bootstrap MCBP session (bucket={}, opcode={}, status={}), the user has reached rate limit",
                               session_->log_prefix_,
                               session_->bucket_name_.value_or(""),
@@ -215,7 +215,7 @@ class mcbp_session_impl
                             return complete(errc::common::rate_limited);
 
                         case key_value_status_code::scope_size_limit_exceeded:
-                            LOG_DEBUG(
+                            CB_LOG_DEBUG(
                               "{} unable to bootstrap MCBP session (bucket={}, opcode={}, status={}), the user has reached quota limit",
                               session_->log_prefix_,
                               session_->bucket_name_.value_or(""),
@@ -231,28 +231,29 @@ class mcbp_session_impl
                             protocol::client_response<protocol::hello_response_body> resp(std::move(msg));
                             if (resp.status() == key_value_status_code::success) {
                                 session_->supported_features_ = resp.body().supported_features();
-                                LOG_DEBUG("{} supported_features=[{}]",
-                                          session_->log_prefix_,
-                                          utils::join_strings_fmt("{}", session_->supported_features_, ", "));
+                                CB_LOG_DEBUG("{} supported_features=[{}]",
+                                             session_->log_prefix_,
+                                             utils::join_strings_fmt("{}", session_->supported_features_, ", "));
                                 if (session_->origin_.credentials().uses_certificate()) {
-                                    LOG_DEBUG("{} skip SASL authentication, because TLS certificate was specified", session_->log_prefix_);
+                                    CB_LOG_DEBUG("{} skip SASL authentication, because TLS certificate was specified",
+                                                 session_->log_prefix_);
                                     return auth_success();
                                 }
                             } else {
-                                LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
-                                            session_->log_prefix_,
-                                            resp.error_message(),
-                                            resp.opaque());
+                                CB_LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
+                                               session_->log_prefix_,
+                                               resp.error_message(),
+                                               resp.opaque());
                                 return complete(errc::network::handshake_failure);
                             }
                         } break;
                         case protocol::client_opcode::sasl_list_mechs: {
                             protocol::client_response<protocol::sasl_list_mechs_response_body> resp(std::move(msg));
                             if (resp.status() != key_value_status_code::success) {
-                                LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
-                                            session_->log_prefix_,
-                                            resp.error_message(),
-                                            resp.opaque());
+                                CB_LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
+                                               session_->log_prefix_,
+                                               resp.error_message(),
+                                               resp.opaque());
                                 return complete(errc::common::authentication_failure);
                             }
                         } break;
@@ -273,17 +274,17 @@ class mcbp_session_impl
                                     req.body().sasl_data(sasl_payload);
                                     session_->write_and_flush(req.data());
                                 } else {
-                                    LOG_ERROR("{} unable to authenticate: (sasl_code={}, opaque={})",
-                                              session_->log_prefix_,
-                                              sasl_code,
-                                              resp.opaque());
+                                    CB_LOG_ERROR("{} unable to authenticate: (sasl_code={}, opaque={})",
+                                                 session_->log_prefix_,
+                                                 sasl_code,
+                                                 resp.opaque());
                                     return complete(errc::common::authentication_failure);
                                 }
                             } else {
-                                LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
-                                            session_->log_prefix_,
-                                            resp.error_message(),
-                                            resp.opaque());
+                                CB_LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
+                                               session_->log_prefix_,
+                                               resp.error_message(),
+                                               resp.opaque());
                                 return complete(errc::common::authentication_failure);
                             }
                         } break;
@@ -299,38 +300,39 @@ class mcbp_session_impl
                             if (resp.status() == key_value_status_code::success) {
                                 session_->error_map_.emplace(resp.body().errmap());
                             } else {
-                                LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
-                                            session_->log_prefix_,
-                                            resp.error_message(),
-                                            resp.opaque(),
-                                            spdlog::to_hex(resp.header()));
+                                CB_LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
+                                               session_->log_prefix_,
+                                               resp.error_message(),
+                                               resp.opaque(),
+                                               spdlog::to_hex(resp.header()));
                                 return complete(errc::network::protocol_error);
                             }
                         } break;
                         case protocol::client_opcode::select_bucket: {
                             protocol::client_response<protocol::select_bucket_response_body> resp(std::move(msg));
                             if (resp.status() == key_value_status_code::success) {
-                                LOG_DEBUG("{} selected bucket: {}", session_->log_prefix_, session_->bucket_name_.value_or(""));
+                                CB_LOG_DEBUG("{} selected bucket: {}", session_->log_prefix_, session_->bucket_name_.value_or(""));
                                 session_->bucket_selected_ = true;
                             } else if (resp.status() == key_value_status_code::not_found) {
-                                LOG_DEBUG("{} kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
-                                          session_->log_prefix_,
-                                          opcode,
-                                          resp.status(),
-                                          resp.opaque());
+                                CB_LOG_DEBUG(
+                                  "{} kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
+                                  session_->log_prefix_,
+                                  opcode,
+                                  resp.status(),
+                                  resp.opaque());
                                 return complete(errc::network::configuration_not_available);
                             } else if (resp.status() == key_value_status_code::no_access) {
-                                LOG_DEBUG("{} unable to select bucket: {}, probably the bucket does not exist",
-                                          session_->log_prefix_,
-                                          session_->bucket_name_.value_or(""));
+                                CB_LOG_DEBUG("{} unable to select bucket: {}, probably the bucket does not exist",
+                                             session_->log_prefix_,
+                                             session_->bucket_name_.value_or(""));
                                 session_->bucket_selected_ = false;
                                 return complete(errc::common::bucket_not_found);
                             } else {
-                                LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
-                                            session_->log_prefix_,
-                                            resp.error_message(),
-                                            resp.opaque(),
-                                            spdlog::to_hex(resp.header()));
+                                CB_LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
+                                               session_->log_prefix_,
+                                               resp.error_message(),
+                                               resp.opaque(),
+                                               spdlog::to_hex(resp.header()));
                                 return complete(errc::common::bucket_not_found);
                             }
                         } break;
@@ -341,31 +343,32 @@ class mcbp_session_impl
                                 session_->update_configuration(resp.body().config());
                                 complete({});
                             } else if (resp.status() == key_value_status_code::not_found) {
-                                LOG_DEBUG("{} kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
-                                          session_->log_prefix_,
-                                          opcode,
-                                          resp.status(),
-                                          resp.opaque());
+                                CB_LOG_DEBUG(
+                                  "{} kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
+                                  session_->log_prefix_,
+                                  opcode,
+                                  resp.status(),
+                                  resp.opaque());
                                 return complete(errc::network::configuration_not_available);
                             } else if (resp.status() == key_value_status_code::no_bucket && !session_->bucket_name_) {
                                 // bucket-less session, but the server wants bucket
                                 session_->supports_gcccp_ = false;
-                                LOG_WARNING("{} this server does not support GCCCP, open bucket before making any cluster-level command",
-                                            session_->log_prefix_);
+                                CB_LOG_WARNING("{} this server does not support GCCCP, open bucket before making any cluster-level command",
+                                               session_->log_prefix_);
                                 session_->update_configuration(
                                   topology::make_blank_configuration(session_->endpoint_address_, session_->endpoint_.port(), 0));
                                 complete({});
                             } else {
-                                LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
-                                            session_->log_prefix_,
-                                            resp.error_message(),
-                                            resp.opaque(),
-                                            spdlog::to_hex(resp.header()));
+                                CB_LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
+                                               session_->log_prefix_,
+                                               resp.error_message(),
+                                               resp.opaque(),
+                                               spdlog::to_hex(resp.header()));
                                 return complete(errc::network::protocol_error);
                             }
                         } break;
                         default:
-                            LOG_WARNING("{} unexpected message during bootstrap: {}", session_->log_prefix_, opcode);
+                            CB_LOG_WARNING("{} unexpected message during bootstrap: {}", session_->log_prefix_, opcode);
                             return complete(errc::network::protocol_error);
                     }
                     break;
@@ -385,24 +388,24 @@ class mcbp_session_impl
                             }
                         } break;
                         default:
-                            LOG_WARNING("{} unexpected server request: opcode={:x}, opaque={}{:a}{:a}",
-                                        session_->log_prefix_,
-                                        msg.header.opcode,
-                                        msg.header.opaque,
-                                        spdlog::to_hex(msg.header_data()),
-                                        spdlog::to_hex(msg.body));
+                            CB_LOG_WARNING("{} unexpected server request: opcode={:x}, opaque={}{:a}{:a}",
+                                           session_->log_prefix_,
+                                           msg.header.opcode,
+                                           msg.header.opaque,
+                                           spdlog::to_hex(msg.header_data()),
+                                           spdlog::to_hex(msg.body));
                     }
                     break;
                 case protocol::magic::client_request:
                 case protocol::magic::alt_client_request:
                 case protocol::magic::server_response:
-                    LOG_WARNING("{} unexpected magic: {} (opcode={:x}, opaque={}){:a}{:a}",
-                                session_->log_prefix_,
-                                magic,
-                                msg.header.opcode,
-                                msg.header.opaque,
-                                spdlog::to_hex(msg.header_data()),
-                                spdlog::to_hex(msg.body));
+                    CB_LOG_WARNING("{} unexpected magic: {} (opcode={:x}, opaque={}){:a}{:a}",
+                                   session_->log_prefix_,
+                                   magic,
+                                   msg.header.opcode,
+                                   msg.header.opaque,
+                                   spdlog::to_hex(msg.header_data()),
+                                   spdlog::to_hex(msg.body));
                     break;
             }
         }
@@ -465,10 +468,10 @@ class mcbp_session_impl
                                     session_->update_configuration(resp.body().config());
                                 }
                             } else {
-                                LOG_WARNING("{} unexpected message status: {} (opaque={})",
-                                            session_->log_prefix_,
-                                            resp.error_message(),
-                                            resp.opaque());
+                                CB_LOG_WARNING("{} unexpected message status: {} (opaque={})",
+                                               session_->log_prefix_,
+                                               resp.error_message(),
+                                               resp.opaque());
                             }
                         } break;
                         case protocol::client_opcode::noop:
@@ -503,26 +506,26 @@ class mcbp_session_impl
                             std::uint32_t opaque = utils::byte_swap(msg.header.opaque);
                             if (session_->handle_request_legacy(opcode, status, opaque, msg) ||
                                 session_->handle_request(opcode, status, opaque, msg)) {
-                                LOG_TRACE("{} MCBP invoked operation handler: opcode={}, opaque={}, status={}",
-                                          session_->log_prefix_,
-                                          opcode,
-                                          opaque,
-                                          protocol::status_to_string(status));
+                                CB_LOG_TRACE("{} MCBP invoked operation handler: opcode={}, opaque={}, status={}",
+                                             session_->log_prefix_,
+                                             opcode,
+                                             opaque,
+                                             protocol::status_to_string(status));
                             } else {
-                                LOG_DEBUG("{} unexpected orphan response: opcode={}, opaque={}, status={}",
-                                          session_->log_prefix_,
-                                          opcode,
-                                          opaque,
-                                          protocol::status_to_string(status));
+                                CB_LOG_DEBUG("{} unexpected orphan response: opcode={}, opaque={}, status={}",
+                                             session_->log_prefix_,
+                                             opcode,
+                                             opaque,
+                                             protocol::status_to_string(status));
                             }
                         } break;
                         default:
-                            LOG_WARNING("{} unexpected client response: opcode={}, opaque={}{:a}{:a})",
-                                        session_->log_prefix_,
-                                        opcode,
-                                        msg.header.opaque,
-                                        spdlog::to_hex(msg.header_data()),
-                                        spdlog::to_hex(msg.body));
+                            CB_LOG_WARNING("{} unexpected client response: opcode={}, opaque={}{:a}{:a})",
+                                           session_->log_prefix_,
+                                           opcode,
+                                           msg.header.opaque,
+                                           spdlog::to_hex(msg.header_data()),
+                                           spdlog::to_hex(msg.body));
                     }
                     break;
                 case protocol::magic::server_request:
@@ -540,24 +543,24 @@ class mcbp_session_impl
                             }
                         } break;
                         default:
-                            LOG_WARNING("{} unexpected server request: opcode={:x}, opaque={}{:a}{:a}",
-                                        session_->log_prefix_,
-                                        msg.header.opcode,
-                                        msg.header.opaque,
-                                        spdlog::to_hex(msg.header_data()),
-                                        spdlog::to_hex(msg.body));
+                            CB_LOG_WARNING("{} unexpected server request: opcode={:x}, opaque={}{:a}{:a}",
+                                           session_->log_prefix_,
+                                           msg.header.opcode,
+                                           msg.header.opaque,
+                                           spdlog::to_hex(msg.header_data()),
+                                           spdlog::to_hex(msg.body));
                     }
                     break;
                 case protocol::magic::client_request:
                 case protocol::magic::alt_client_request:
                 case protocol::magic::server_response:
-                    LOG_WARNING("{} unexpected magic: {} (opcode={:x}, opaque={}){:a}{:a}",
-                                session_->log_prefix_,
-                                magic,
-                                msg.header.opcode,
-                                msg.header.opaque,
-                                spdlog::to_hex(msg.header_data()),
-                                spdlog::to_hex(msg.body));
+                    CB_LOG_WARNING("{} unexpected magic: {} (opcode={:x}, opaque={}){:a}{:a}",
+                                   session_->log_prefix_,
+                                   magic,
+                                   msg.header.opcode,
+                                   msg.header.opaque,
+                                   spdlog::to_hex(msg.header_data()),
+                                   spdlog::to_hex(msg.body));
                     break;
             }
         }
@@ -631,7 +634,7 @@ class mcbp_session_impl
 
     ~mcbp_session_impl()
     {
-        LOG_DEBUG("{} destroy MCBP connection", log_prefix_);
+        CB_LOG_DEBUG("{} destroy MCBP connection", log_prefix_);
         stop(retry_reason::do_not_retry);
     }
 
@@ -720,7 +723,7 @@ class mcbp_session_impl
             if (self->state_listener_) {
                 self->state_listener_->report_bootstrap_error(fmt::format("{}:{}", self->bootstrap_hostname_, self->bootstrap_port_), ec);
             }
-            LOG_WARNING("{} unable to bootstrap in time", self->log_prefix_);
+            CB_LOG_WARNING("{} unable to bootstrap in time", self->log_prefix_);
             auto h = std::move(self->bootstrap_handler_);
             h(ec, {});
             self->stop(retry_reason::do_not_retry);
@@ -737,16 +740,16 @@ class mcbp_session_impl
         if (stream_->is_open()) {
             std::string old_id = stream_->id();
             stream_->reopen();
-            LOG_TRACE(R"({} reopen socket connection "{}" -> "{}", host="{}", port={})",
-                      log_prefix_,
-                      old_id,
-                      stream_->id(),
-                      bootstrap_hostname_,
-                      bootstrap_port_);
+            CB_LOG_TRACE(R"({} reopen socket connection "{}" -> "{}", host="{}", port={})",
+                         log_prefix_,
+                         old_id,
+                         stream_->id(),
+                         bootstrap_hostname_,
+                         bootstrap_port_);
         }
         if (origin_.exhausted()) {
             auto backoff = std::chrono::milliseconds(500);
-            LOG_DEBUG("{} reached the end of list of bootstrap nodes, waiting for {}ms before restart", log_prefix_, backoff.count());
+            CB_LOG_DEBUG("{} reached the end of list of bootstrap nodes, waiting for {}ms before restart", log_prefix_, backoff.count());
             retry_backoff_.expires_after(backoff);
             retry_backoff_.async_wait([self = shared_from_this()](std::error_code ec) mutable {
                 if (ec == asio::error::operation_aborted || self->stopped_) {
@@ -765,7 +768,7 @@ class mcbp_session_impl
                                   bucket_name_.value_or("-"),
                                   bootstrap_hostname_,
                                   bootstrap_port_);
-        LOG_DEBUG("{} attempt to establish MCBP connection", log_prefix_);
+        CB_LOG_DEBUG("{} attempt to establish MCBP connection", log_prefix_);
 
         async_resolve(origin_.options().use_ip_protocol,
                       resolver_,
@@ -795,7 +798,7 @@ class mcbp_session_impl
             return;
         }
         state_ = diag::endpoint_state::disconnecting;
-        LOG_DEBUG("{} stop MCBP connection, reason={}", log_prefix_, reason);
+        CB_LOG_DEBUG("{} stop MCBP connection, reason={}", log_prefix_, reason);
         stopped_ = true;
         bootstrap_deadline_.cancel();
         connection_deadline_.cancel();
@@ -815,7 +818,7 @@ class mcbp_session_impl
             std::scoped_lock lock(command_handlers_mutex_);
             for (auto& [opaque, handler] : command_handlers_) {
                 if (handler) {
-                    LOG_DEBUG("{} MCBP cancel operation during session close, opaque={}, ec={}", log_prefix_, opaque, ec.message());
+                    CB_LOG_DEBUG("{} MCBP cancel operation during session close, opaque={}, ec={}", log_prefix_, opaque, ec.message());
                     auto fun = std::move(handler);
                     fun(ec, reason, {}, {});
                 }
@@ -828,7 +831,7 @@ class mcbp_session_impl
             for (auto& [opaque, operation] : operations) {
                 auto& [request, handler] = operation;
                 if (handler) {
-                    LOG_DEBUG("{} MCBP cancel operation during session close, opaque={}, ec={}", log_prefix_, opaque, ec.message());
+                    CB_LOG_DEBUG("{} MCBP cancel operation during session close, opaque={}, ec={}", log_prefix_, opaque, ec.message());
                     handler->handle_response(std::move(request), {}, reason, {}, {});
                 }
             }
@@ -849,7 +852,7 @@ class mcbp_session_impl
         }
         std::uint32_t opaque{ 0 };
         std::memcpy(&opaque, buf.data() + 12, sizeof(opaque));
-        LOG_TRACE("{} MCBP send, opaque={}, {:n}", log_prefix_, opaque, spdlog::to_hex(buf.begin(), buf.begin() + 24));
+        CB_LOG_TRACE("{} MCBP send, opaque={}, {:n}", log_prefix_, opaque, spdlog::to_hex(buf.begin(), buf.begin() + 24));
         std::scoped_lock lock(output_buffer_mutex_);
         output_buffer_.emplace_back(std::move(buf));
     }
@@ -934,13 +937,13 @@ class mcbp_session_impl
         auto opaque = request->opaque_;
         auto data = codec_.encode_packet(*request);
         if (!data) {
-            LOG_DEBUG("unable to encode packet. opaque={}, ec={}", opaque, data.error().message());
+            CB_LOG_DEBUG("unable to encode packet. opaque={}, ec={}", opaque, data.error().message());
             request->try_callback({}, data.error());
             return;
         }
 
         if (stopped_) {
-            LOG_WARNING("cancel operation while trying to write to closed mcbp session, opaque={}", opaque);
+            CB_LOG_WARNING("cancel operation while trying to write to closed mcbp session, opaque={}", opaque);
             handler->handle_response(request, errc::common::request_canceled, retry_reason::socket_closed_while_in_flight, {}, {});
             return;
         }
@@ -948,7 +951,7 @@ class mcbp_session_impl
         if (bootstrapped_ && stream_->is_open()) {
             write_and_flush(std::move(data.value()));
         } else {
-            LOG_DEBUG("{} the stream is not ready yet, put the message into pending buffer, opaque={}", log_prefix_, opaque);
+            CB_LOG_DEBUG("{} the stream is not ready yet, put the message into pending buffer, opaque={}", log_prefix_, opaque);
             std::scoped_lock lock(pending_buffer_mutex_);
             if (bootstrapped_ && stream_->is_open()) {
                 write_and_flush(std::move(data.value()));
@@ -961,7 +964,7 @@ class mcbp_session_impl
     void write_and_subscribe(std::uint32_t opaque, std::vector<std::byte>&& data, command_handler&& handler)
     {
         if (stopped_) {
-            LOG_WARNING("{} MCBP cancel operation, while trying to write to closed session, opaque={}", log_prefix_, opaque);
+            CB_LOG_WARNING("{} MCBP cancel operation, while trying to write to closed session, opaque={}", log_prefix_, opaque);
             handler(errc::common::request_canceled, retry_reason::socket_closed_while_in_flight, {}, {});
             return;
         }
@@ -972,7 +975,7 @@ class mcbp_session_impl
         if (bootstrapped_ && stream_->is_open()) {
             write_and_flush(std::move(data));
         } else {
-            LOG_DEBUG("{} the stream is not ready yet, put the message into pending buffer, opaque={}", log_prefix_, opaque);
+            CB_LOG_DEBUG("{} the stream is not ready yet, put the message into pending buffer, opaque={}", log_prefix_, opaque);
             std::scoped_lock lock(pending_buffer_mutex_);
             if (bootstrapped_ && stream_->is_open()) {
                 write_and_flush(std::move(data));
@@ -989,7 +992,7 @@ class mcbp_session_impl
         }
         command_handlers_mutex_.lock();
         if (auto handler = command_handlers_.find(opaque); handler != command_handlers_.end()) {
-            LOG_DEBUG("{} MCBP cancel operation, opaque={}, ec={} ({})", log_prefix_, opaque, ec.value(), ec.message());
+            CB_LOG_DEBUG("{} MCBP cancel operation, opaque={}, ec={} ({})", log_prefix_, opaque, ec.value(), ec.message());
             if (handler->second) {
                 auto fun = std::move(handler->second);
                 command_handlers_.erase(handler);
@@ -1074,15 +1077,15 @@ class mcbp_session_impl
         std::scoped_lock lock(config_mutex_);
         if (config_) {
             if (config_->vbmap && config.vbmap && config_->vbmap->size() != config.vbmap->size()) {
-                LOG_DEBUG("{} received a configuration with a different number of vbuckets, ignoring", log_prefix_);
+                CB_LOG_DEBUG("{} received a configuration with a different number of vbuckets, ignoring", log_prefix_);
                 return;
             }
             if (config == config_) {
-                LOG_TRACE("{} received a configuration with identical revision (rev={}), ignoring", log_prefix_, config.rev_str());
+                CB_LOG_TRACE("{} received a configuration with identical revision (rev={}), ignoring", log_prefix_, config.rev_str());
                 return;
             }
             if (config < config_) {
-                LOG_DEBUG("{} received a configuration with older revision, ignoring", log_prefix_);
+                CB_LOG_DEBUG("{} received a configuration with older revision, ignoring", log_prefix_);
                 return;
             }
         }
@@ -1107,7 +1110,7 @@ class mcbp_session_impl
         }
         config_.emplace(std::move(config));
         configured_ = true;
-        LOG_DEBUG("{} received new configuration: {}", log_prefix_, config_.value());
+        CB_LOG_DEBUG("{} received new configuration: {}", log_prefix_, config_.value());
         for (const auto& listener : config_listeners_) {
             listener->update_config(*config_);
         }
@@ -1135,11 +1138,11 @@ class mcbp_session_impl
                 std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()) + offset,
                                               msg.body.size() - static_cast<std::size_t>(offset) };
                 auto config = protocol::parse_config(config_text, endpoint_address_, endpoint_.port());
-                LOG_DEBUG("{} received not_my_vbucket status for {}, opaque={} with config rev={} in the payload",
-                          log_prefix_,
-                          protocol::client_opcode(msg.header.opcode),
-                          msg.header.opaque,
-                          config.rev_str());
+                CB_LOG_DEBUG("{} received not_my_vbucket status for {}, opaque={} with config rev={} in the payload",
+                             log_prefix_,
+                             protocol::client_opcode(msg.header.opcode),
+                             msg.header.opaque,
+                             config.rev_str());
                 update_configuration(std::move(config));
             }
         }
@@ -1168,7 +1171,7 @@ class mcbp_session_impl
             return initiate_bootstrap();
         }
         if (retry_bootstrap_on_bucket_not_found_ && ec == errc::common::bucket_not_found) {
-            LOG_DEBUG(R"({} server returned {} ({}), it must be transient condition, retrying)", log_prefix_, ec.value(), ec.message());
+            CB_LOG_DEBUG(R"({} server returned {} ({}), it must be transient condition, retrying)", log_prefix_, ec.value(), ec.message());
             return initiate_bootstrap();
         }
 
@@ -1215,7 +1218,7 @@ class mcbp_session_impl
         }
         last_active_ = std::chrono::steady_clock::now();
         if (ec) {
-            LOG_ERROR("{} error on resolve: {} ({})", log_prefix_, ec.value(), ec.message());
+            CB_LOG_ERROR("{} error on resolve: {} ({})", log_prefix_, ec.value(), ec.message());
             return initiate_bootstrap();
         }
         endpoints_ = endpoints;
@@ -1236,11 +1239,11 @@ class mcbp_session_impl
         }
         last_active_ = std::chrono::steady_clock::now();
         if (it != endpoints_.end()) {
-            LOG_DEBUG("{} connecting to {}:{}, timeout={}ms",
-                      log_prefix_,
-                      it->endpoint().address().to_string(),
-                      it->endpoint().port(),
-                      origin_.options().connect_timeout.count());
+            CB_LOG_DEBUG("{} connecting to {}:{}, timeout={}ms",
+                         log_prefix_,
+                         it->endpoint().address().to_string(),
+                         it->endpoint().port(),
+                         origin_.options().connect_timeout.count());
             connection_deadline_.expires_after(origin_.options().connect_timeout);
             connection_deadline_.async_wait([self = shared_from_this()](const auto timer_ec) {
                 if (timer_ec == asio::error::operation_aborted || self->stopped_) {
@@ -1251,7 +1254,7 @@ class mcbp_session_impl
             stream_->async_connect(it->endpoint(),
                                    std::bind(&mcbp_session_impl::on_connect, shared_from_this(), std::placeholders::_1, it));
         } else {
-            LOG_ERROR("{} no more endpoints left to connect, will try another address", log_prefix_);
+            CB_LOG_ERROR("{} no more endpoints left to connect, will try another address", log_prefix_);
             if (state_listener_) {
                 state_listener_->report_bootstrap_error(fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_),
                                                         errc::network::no_endpoints_left);
@@ -1268,15 +1271,15 @@ class mcbp_session_impl
         last_active_ = std::chrono::steady_clock::now();
         if (!stream_->is_open() || ec) {
 
-            LOG_WARNING("{} unable to connect to {}:{}: {} ({}){}. is_open={}",
-                        log_prefix_,
-                        it->endpoint().address().to_string(),
-                        it->endpoint().port(),
-                        ec.value(),
-                        (ec.category() == asio::error::ssl_category) ? ERR_error_string(static_cast<unsigned long>(ec.value()), nullptr)
-                                                                     : ec.message(),
-                        (ec == asio::error::connection_refused) ? ", check server ports and cluster encryption setting" : "",
-                        stream_->is_open());
+            CB_LOG_WARNING("{} unable to connect to {}:{}: {} ({}){}. is_open={}",
+                           log_prefix_,
+                           it->endpoint().address().to_string(),
+                           it->endpoint().port(),
+                           ec.value(),
+                           (ec.category() == asio::error::ssl_category) ? ERR_error_string(static_cast<unsigned long>(ec.value()), nullptr)
+                                                                        : ec.message(),
+                           (ec == asio::error::connection_refused) ? ", check server ports and cluster encryption setting" : "",
+                           stream_->is_open());
             if (stream_->is_open()) {
                 stream_->close(std::bind(&mcbp_session_impl::do_connect, shared_from_this(), ++it));
             } else {
@@ -1288,7 +1291,7 @@ class mcbp_session_impl
             local_endpoint_address_ = local_endpoint_.address().to_string();
             endpoint_ = it->endpoint();
             endpoint_address_ = endpoint_.address().to_string();
-            LOG_DEBUG("{} connected to {}:{}", log_prefix_, endpoint_address_, it->endpoint().port());
+            CB_LOG_DEBUG("{} connected to {}:{}", log_prefix_, endpoint_address_, it->endpoint().port());
             log_prefix_ = fmt::format("[{}/{}/{}/{}] <{}/{}:{}>",
                                       client_id_,
                                       id_,
@@ -1330,19 +1333,19 @@ class mcbp_session_impl
               self->last_active_ = std::chrono::steady_clock::now();
               if (ec) {
                   if (stream_id != self->stream_->id()) {
-                      LOG_ERROR(R"({} ignore IO error while reading from the socket: {} ({}), old_id="{}", new_id="{}")",
-                                self->log_prefix_,
-                                ec.value(),
-                                ec.message(),
-                                stream_id,
-                                self->stream_->id());
+                      CB_LOG_ERROR(R"({} ignore IO error while reading from the socket: {} ({}), old_id="{}", new_id="{}")",
+                                   self->log_prefix_,
+                                   ec.value(),
+                                   ec.message(),
+                                   stream_id,
+                                   self->stream_->id());
                       return;
                   }
-                  LOG_ERROR(R"({} IO error while reading from the socket("{}"): {} ({}))",
-                            self->log_prefix_,
-                            self->stream_->id(),
-                            ec.value(),
-                            ec.message());
+                  CB_LOG_ERROR(R"({} IO error while reading from the socket("{}"): {} ({}))",
+                               self->log_prefix_,
+                               self->stream_->id(),
+                               ec.value(),
+                               ec.message());
                   return self->stop(retry_reason::socket_closed_while_in_flight);
               }
               self->parser_.feed(self->input_buffer_.data(), self->input_buffer_.data() + static_cast<std::ptrdiff_t>(bytes_transferred));
@@ -1354,7 +1357,7 @@ class mcbp_session_impl
                           if (self->handler_ == nullptr || self->stopped_) {
                               return;
                           }
-                          LOG_TRACE(
+                          CB_LOG_TRACE(
                             "{} MCBP recv, opaque={}, {:n}", self->log_prefix_, msg.header.opaque, spdlog::to_hex(msg.header_data()));
                           self->handler_->handle(std::move(msg));
                           if (self->stopped_) {
@@ -1395,11 +1398,11 @@ class mcbp_session_impl
             }
             self->last_active_ = std::chrono::steady_clock::now();
             if (ec) {
-                LOG_ERROR(R"({} IO error while writing to the socket("{}"): {} ({}))",
-                          self->log_prefix_,
-                          self->stream_->id(),
-                          ec.value(),
-                          ec.message());
+                CB_LOG_ERROR(R"({} IO error while writing to the socket("{}"): {} ({}))",
+                             self->log_prefix_,
+                             self->stream_->id(),
+                             ec.value(),
+                             ec.message());
                 return self->stop(retry_reason::socket_closed_while_in_flight);
             }
             {
