@@ -357,7 +357,7 @@ class http_session : public std::enable_shared_from_this<http_session>
             return;
         }
         if (ec) {
-            LOG_ERROR("{} error on resolve: {}", info_.log_prefix(), ec.message());
+            CB_LOG_ERROR("{} error on resolve: {}", info_.log_prefix(), ec.message());
             return;
         }
         last_active_ = std::chrono::steady_clock::now();
@@ -372,15 +372,15 @@ class http_session : public std::enable_shared_from_this<http_session>
             return;
         }
         if (it != endpoints_.end()) {
-            LOG_DEBUG("{} connecting to {}:{}, timeout={}ms",
-                      info_.log_prefix(),
-                      it->endpoint().address().to_string(),
-                      it->endpoint().port(),
-                      http_ctx_.options.connect_timeout.count());
+            CB_LOG_DEBUG("{} connecting to {}:{}, timeout={}ms",
+                         info_.log_prefix(),
+                         it->endpoint().address().to_string(),
+                         it->endpoint().port(),
+                         http_ctx_.options.connect_timeout.count());
             deadline_timer_.expires_after(http_ctx_.options.connect_timeout);
             stream_->async_connect(it->endpoint(), std::bind(&http_session::on_connect, shared_from_this(), std::placeholders::_1, it));
         } else {
-            LOG_ERROR("{} no more endpoints left to connect", info_.log_prefix());
+            CB_LOG_ERROR("{} no more endpoints left to connect", info_.log_prefix());
             stop();
         }
     }
@@ -392,12 +392,12 @@ class http_session : public std::enable_shared_from_this<http_session>
         }
         last_active_ = std::chrono::steady_clock::now();
         if (!stream_->is_open() || ec) {
-            LOG_WARNING("{} unable to connect to {}:{}: {}{}",
-                        info_.log_prefix(),
-                        it->endpoint().address().to_string(),
-                        it->endpoint().port(),
-                        ec.message(),
-                        (ec == asio::error::connection_refused) ? ", check server ports and cluster encryption setting" : "");
+            CB_LOG_WARNING("{} unable to connect to {}:{}: {}{}",
+                           info_.log_prefix(),
+                           it->endpoint().address().to_string(),
+                           it->endpoint().port(),
+                           ec.message(),
+                           (ec == asio::error::connection_refused) ? ", check server ports and cluster encryption setting" : "");
             if (stream_->is_open()) {
                 stream_->close(std::bind(&http_session::do_connect, shared_from_this(), ++it));
             } else {
@@ -406,7 +406,7 @@ class http_session : public std::enable_shared_from_this<http_session>
         } else {
             state_ = diag::endpoint_state::connected;
             connected_ = true;
-            LOG_DEBUG("{} connected to {}:{}", info_.log_prefix(), it->endpoint().address().to_string(), it->endpoint().port());
+            CB_LOG_DEBUG("{} connected to {}:{}", info_.log_prefix(), it->endpoint().address().to_string(), it->endpoint().port());
             {
                 std::scoped_lock lock(info_mutex_);
                 info_ = http_session_info(client_id_, id_, stream_->local_endpoint(), it->endpoint());
@@ -442,7 +442,7 @@ class http_session : public std::enable_shared_from_this<http_session>
               }
               self->last_active_ = std::chrono::steady_clock::now();
               if (ec) {
-                  LOG_ERROR("{} IO error while reading from the socket: {}", self->info_.log_prefix(), ec.message());
+                  CB_LOG_ERROR("{} IO error while reading from the socket: {}", self->info_.log_prefix(), ec.message());
                   return self->stop();
               }
 
@@ -493,7 +493,7 @@ class http_session : public std::enable_shared_from_this<http_session>
             }
             self->last_active_ = std::chrono::steady_clock::now();
             if (ec) {
-                LOG_ERROR("{} IO error while writing to the socket: {}", self->info_.log_prefix(), ec.message());
+                CB_LOG_ERROR("{} IO error while writing to the socket: {}", self->info_.log_prefix(), ec.message());
                 return self->stop();
             }
             {

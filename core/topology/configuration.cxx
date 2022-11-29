@@ -85,7 +85,7 @@ configuration::node::hostname_for(const std::string& network) const
     }
     const auto& address = alt.find(network);
     if (address == alt.end()) {
-        LOG_WARNING(R"(requested network "{}" is not found, fallback to "default" host)", network);
+        CB_LOG_WARNING(R"(requested network "{}" is not found, fallback to "default" host)", network);
         return hostname;
     }
     return address->second.hostname;
@@ -99,7 +99,7 @@ configuration::node::port_or(const std::string& network, service_type type, bool
     }
     const auto& address = alt.find(network);
     if (address == alt.end()) {
-        LOG_WARNING(R"(requested network "{}" is not found, fallback to "default" port of {} service)", network, type);
+        CB_LOG_WARNING(R"(requested network "{}" is not found, fallback to "default" port of {} service)", network, type);
         return port_or(type, is_tls, default_value);
     }
     if (is_tls) {

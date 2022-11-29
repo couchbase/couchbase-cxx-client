@@ -32,7 +32,7 @@ retry_orchestrator::should_retry(std::shared_ptr<mcbp::queue_request> request, r
 {
     if (always_retry(reason)) {
         auto duration = controlled_backoff(request->retry_attempts());
-        LOG_DEBUG("will retry request. backoff={}, operation_id={}, reason={}", duration, request->identifier(), reason);
+        CB_LOG_DEBUG("will retry request. backoff={}, operation_id={}, reason={}", duration, request->identifier(), reason);
         request->record_retry_attempt(reason);
         return retry_action{ duration };
     }
@@ -44,10 +44,10 @@ retry_orchestrator::should_retry(std::shared_ptr<mcbp::queue_request> request, r
 
     auto action = strategy->retry_after(*request, reason);
     if (!action.need_to_retry()) {
-        LOG_DEBUG("will not retry request. operation_id={}, reason={}", request->identifier(), reason);
+        CB_LOG_DEBUG("will not retry request. operation_id={}, reason={}", request->identifier(), reason);
         return retry_action::do_not_retry();
     }
-    LOG_DEBUG("will retry request. backoff={}, operation_id={}, reason={}", action.duration(), request->identifier(), reason);
+    CB_LOG_DEBUG("will retry request. backoff={}, operation_id={}, reason={}", action.duration(), request->identifier(), reason);
     request->record_retry_attempt(reason);
     return action;
 }

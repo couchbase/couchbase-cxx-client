@@ -42,7 +42,7 @@ get_collections_manifest_response_body::parse(key_value_status_code status,
         try {
             manifest_ = utils::json::parse(manifest_text).as<topology::collections_manifest>();
         } catch (const tao::pegtl::parse_error& e) {
-            LOG_DEBUG("unable to parse collections manifest as JSON: {}, {}", e.message(), manifest_text);
+            CB_LOG_DEBUG("unable to parse collections manifest as JSON: {}, {}", e.message(), manifest_text);
         }
         return true;
     }

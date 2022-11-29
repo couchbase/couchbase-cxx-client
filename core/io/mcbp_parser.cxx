@@ -72,15 +72,15 @@ mcbp_parser::next(mcbp_message& msg)
     }
     buf.erase(buf.begin(), buf.begin() + header_size + body_size);
     if (!buf.empty() && !protocol::is_valid_magic(std::to_integer<std::uint8_t>(buf[0]))) {
-        LOG_WARNING("parsed frame for magic={:x}, opcode={:x}, opaque={}, body_len={}. Invalid magic of the next frame: {:x}, {} "
-                    "bytes to parse{}",
-                    msg.header.magic,
-                    msg.header.opcode,
-                    msg.header.opaque,
-                    body_size,
-                    buf[0],
-                    buf.size(),
-                    spdlog::to_hex(buf));
+        CB_LOG_WARNING("parsed frame for magic={:x}, opcode={:x}, opaque={}, body_len={}. Invalid magic of the next frame: {:x}, {} "
+                       "bytes to parse{}",
+                       msg.header.magic,
+                       msg.header.opcode,
+                       msg.header.opaque,
+                       body_size,
+                       buf[0],
+                       buf.size(),
+                       spdlog::to_hex(buf));
         reset();
     }
     return result::ok;

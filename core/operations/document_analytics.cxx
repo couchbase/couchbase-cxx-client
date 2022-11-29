@@ -79,9 +79,9 @@ analytics_request::encode_to(analytics_request::encoded_request_type& encoded, h
     body_str = utils::json::generate(body);
     encoded.body = body_str;
     if (context.options.show_queries) {
-        LOG_INFO("ANALYTICS: client_context_id=\"{}\", {}", encoded.client_context_id, utils::json::generate(body["statement"]));
+        CB_LOG_INFO("ANALYTICS: client_context_id=\"{}\", {}", encoded.client_context_id, utils::json::generate(body["statement"]));
     } else {
-        LOG_DEBUG("ANALYTICS: client_context_id=\"{}\", {}", encoded.client_context_id, utils::json::generate(body["statement"]));
+        CB_LOG_DEBUG("ANALYTICS: client_context_id=\"{}\", {}", encoded.client_context_id, utils::json::generate(body["statement"]));
     }
     if (row_callback) {
         encoded.streaming.emplace(couchbase::core::io::streaming_settings{
@@ -110,9 +110,9 @@ analytics_request::make_response(error_context::analytics&& ctx, const encoded_r
         response.meta.request_id = payload.at("requestID").get_string();
         response.meta.client_context_id = payload.at("clientContextID").get_string();
         if (response.ctx.client_context_id != response.meta.client_context_id) {
-            LOG_WARNING(R"(unexpected clientContextID returned by service: "{}", expected "{}")",
-                        response.meta.client_context_id,
-                        response.ctx.client_context_id);
+            CB_LOG_WARNING(R"(unexpected clientContextID returned by service: "{}", expected "{}")",
+                           response.meta.client_context_id,
+                           response.ctx.client_context_id);
         }
         if (auto& status_prop = payload.at("status"); status_prop.is_string()) {
             const auto status = status_prop.get_string();

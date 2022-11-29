@@ -140,7 +140,7 @@ operation_queue::items_to_drain() -> std::list<std::shared_ptr<queue_request>>
     std::scoped_lock lock(mutex_);
 
     if (is_open_) {
-        LOG_ERROR("attempted to drain open MCBP operation queue, ignoring");
+        CB_LOG_ERROR("attempted to drain open MCBP operation queue, ignoring");
         return {};
     }
 

@@ -585,7 +585,9 @@ transactions_cleanup::close()
         if (t.joinable()) {
             t.join();
         }
-        lost_attempts_cleanup_log->info("all lost attempt cleanup threads closed");
+    }
+    lost_attempts_cleanup_log->info("all lost attempt cleanup threads closed");
+    if (true) {
         remove_client_record_from_all_buckets(client_uuid_);
     }
 }

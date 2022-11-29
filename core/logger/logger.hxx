@@ -208,12 +208,12 @@ is_initialized();
         }                                                                                                                                  \
     } while (false)
 
-#define LOG_TRACE(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::trace, __VA_ARGS__)
-#define LOG_DEBUG(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::debug, __VA_ARGS__)
-#define LOG_INFO(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::info, __VA_ARGS__)
-#define LOG_WARNING(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::warn, __VA_ARGS__)
-#define LOG_ERROR(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::err, __VA_ARGS__)
-#define LOG_CRITICAL(...)                                                                                                                  \
+#define CB_LOG_TRACE(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::trace, __VA_ARGS__)
+#define CB_LOG_DEBUG(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::debug, __VA_ARGS__)
+#define CB_LOG_INFO(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::info, __VA_ARGS__)
+#define CB_LOG_WARNING(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::warn, __VA_ARGS__)
+#define CB_LOG_ERROR(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::err, __VA_ARGS__)
+#define CB_LOG_CRITICAL(...)                                                                                                               \
     COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::critical, __VA_ARGS__)
 
 /**
@@ -233,10 +233,10 @@ is_initialized();
         }                                                                                                                                  \
     } while (false)
 
-#define LOG_TRACE_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::trace, msg)
-#define LOG_DEBUG_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::debug, msg)
-#define LOG_INFO_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::info, msg)
-#define LOG_WARNING_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::warn, msg)
-#define LOG_ERROR_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::err, msg)
-#define LOG_CRITICAL_RAW(msg)                                                                                                              \
+#define CB_LOG_TRACE_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::trace, msg)
+#define CB_LOG_DEBUG_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::debug, msg)
+#define CB_LOG_INFO_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::info, msg)
+#define CB_LOG_WARNING_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::warn, msg)
+#define CB_LOG_ERROR_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::err, msg)
+#define CB_LOG_CRITICAL_RAW(msg)                                                                                                           \
     COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::critical, msg)

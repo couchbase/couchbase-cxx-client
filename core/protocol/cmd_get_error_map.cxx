@@ -44,7 +44,7 @@ get_error_map_response_body::parse(key_value_status_code status,
         try {
             errmap_ = utils::json::parse(error_map_text).as<error_map>();
         } catch (const tao::pegtl::parse_error& e) {
-            LOG_DEBUG("unable to parse error map as JSON: {}, {}", e.message(), error_map_text);
+            CB_LOG_DEBUG("unable to parse error map as JSON: {}, {}", e.message(), error_map_text);
         }
         return true;
     }

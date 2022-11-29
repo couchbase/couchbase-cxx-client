@@ -348,7 +348,7 @@ class threshold_logging_tracer_impl
             queue.pop();
         }
         report["top"] = entries;
-        LOG_WARNING("Orphan responses observed: {}", utils::json::generate(report));
+        CB_LOG_WARNING("Orphan responses observed: {}", utils::json::generate(report));
     }
 
     void log_threshold_report()
@@ -373,7 +373,7 @@ class threshold_logging_tracer_impl
                 queue.pop();
             }
             report["top"] = entries;
-            LOG_WARNING("Operations over threshold: {}", utils::json::generate(report));
+            CB_LOG_WARNING("Operations over threshold: {}", utils::json::generate(report));
         }
     }
 

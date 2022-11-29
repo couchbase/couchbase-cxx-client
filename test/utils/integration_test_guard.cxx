@@ -81,7 +81,7 @@ integration_test_guard::load_bucket_info(const std::string& bucket_name, bool re
         resp = execute(cluster, couchbase::core::operations::management::bucket_describe_request{ bucket_name });
     }
     if (resp.ctx.ec) {
-        LOG_CRITICAL("unable to load info for bucket \"{}\": {}", bucket_name, resp.ctx.ec.message());
+        CB_LOG_CRITICAL("unable to load info for bucket \"{}\": {}", bucket_name, resp.ctx.ec.message());
         throw std::system_error(resp.ctx.ec);
     }
 
@@ -102,7 +102,7 @@ integration_test_guard::load_cluster_info(bool refresh)
         resp = execute(cluster, couchbase::core::operations::management::cluster_describe_request{});
     }
     if (resp.ctx.ec) {
-        LOG_CRITICAL("unable to load info for cluster: {}", resp.ctx.ec.message());
+        CB_LOG_CRITICAL("unable to load info for cluster: {}", resp.ctx.ec.message());
         throw std::system_error(resp.ctx.ec);
     }
 
@@ -124,7 +124,7 @@ integration_test_guard::load_pools_info(bool refresh)
     req.path = "/pools";
     auto resp = execute(cluster, req);
     if (resp.ctx.ec || resp.status != 200) {
-        LOG_CRITICAL("unable to load pools info for cluster: {}", resp.ctx.ec.message());
+        CB_LOG_CRITICAL("unable to load pools info for cluster: {}", resp.ctx.ec.message());
         throw std::system_error(resp.ctx.ec);
     }
 

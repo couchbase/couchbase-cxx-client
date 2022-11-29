@@ -49,18 +49,18 @@ decodeAttributeList(const std::string& list, AttributeMap& attributes)
 {
     size_t pos = 0;
 
-    LOG_TRACE("decoding attribute list [{}]", list);
+    CB_LOG_TRACE("decoding attribute list [{}]", list);
 
     while (pos < list.length()) {
         auto equal = list.find('=', pos);
         if (equal == std::string::npos) {
             // syntax error!!
-            LOG_ERROR("decode attribute list [{}] failed: no '='", list);
+            CB_LOG_ERROR("decode attribute list [{}] failed: no '='", list);
             return false;
         }
 
         if ((equal - pos) != 1) {
-            LOG_ERROR("decode attribute list [{}] failed: no key is multichar", list);
+            CB_LOG_ERROR("decode attribute list [{}] failed: no key is multichar", list);
             return false;
         }
 
@@ -69,7 +69,7 @@ decodeAttributeList(const std::string& list, AttributeMap& attributes)
 
         // Make sure we haven't seen this key before..
         if (attributes.find(key) != attributes.end()) {
-            LOG_ERROR("decode attribute list [{}] failed: key [{}] is multichar", list, key);
+            CB_LOG_ERROR("decode attribute list [{}] failed: key [{}] is multichar", list, key);
             return false;
         }
 
@@ -250,7 +250,7 @@ ClientBackend::ClientBackend(GetUsernameCallback& user_cb,
 
     std::array<char, 8> nonce{};
     if (!randomGenerator.getBytes(nonce.data(), nonce.size())) {
-        LOG_ERROR_RAW("failed to generate server nonce");
+        CB_LOG_ERROR_RAW("failed to generate server nonce");
         throw std::bad_alloc();
     }
 
@@ -308,13 +308,13 @@ ClientBackend::step(std::string_view input)
 
         if (attributes.find('r') == attributes.end() || attributes.find('s') == attributes.end() ||
             attributes.find('i') == attributes.end()) {
-            LOG_ERROR_RAW("missing r/s/i in server message");
+            CB_LOG_ERROR_RAW("missing r/s/i in server message");
             return { error::BAD_PARAM, {} };
         }
 
         // I've got the SALT, lets generate the salted password
         if (!generateSaltedPassword(passwordCallback())) {
-            LOG_ERROR_RAW("failed to generated salted password");
+            CB_LOG_ERROR_RAW("failed to generated salted password");
             return { error::FAIL, {} };
         }
 
@@ -336,22 +336,22 @@ ClientBackend::step(std::string_view input)
 
     AttributeMap attributes;
     if (!decodeAttributeList(server_final_message, attributes)) {
-        LOG_ERROR_RAW("SCRAM: failed to decode server-final-message");
+        CB_LOG_ERROR_RAW("SCRAM: failed to decode server-final-message");
         return { error::BAD_PARAM, {} };
     }
 
     if (attributes.find('e') != attributes.end()) {
-        LOG_ERROR("failed to authenticate: {}", attributes['e']);
+        CB_LOG_ERROR("failed to authenticate: {}", attributes['e']);
         return { error::FAIL, {} };
     }
 
     if (attributes.find('v') == attributes.end()) {
-        LOG_ERROR_RAW("syntax error server final message is missing 'v'");
+        CB_LOG_ERROR_RAW("syntax error server final message is missing 'v'");
         return { error::BAD_PARAM, {} };
     }
 
     if (auto encoded = couchbase::core::base64::encode(getServerSignature()); encoded != attributes['v']) {
-        LOG_ERROR_RAW("incorrect ServerKey received");
+        CB_LOG_ERROR_RAW("incorrect ServerKey received");
         return { error::FAIL, {} };
     }
 

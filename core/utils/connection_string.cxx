@@ -211,9 +211,9 @@ parse_option(std::size_t& receiver, const std::string& name, const std::string& 
     try {
         receiver = std::stoull(value, nullptr, 10);
     } catch (const std::invalid_argument& ex1) {
-        LOG_WARNING(R"(unable to parse "{}" parameter in connection string (value "{}" is not a number): {})", name, value, ex1.what());
+        CB_LOG_WARNING(R"(unable to parse "{}" parameter in connection string (value "{}" is not a number): {})", name, value, ex1.what());
     } catch (const std::out_of_range& ex2) {
-        LOG_WARNING(R"(unable to parse "{}" parameter in connection string (value "{}" is out of range): {})", name, value, ex2.what());
+        CB_LOG_WARNING(R"(unable to parse "{}" parameter in connection string (value "{}" is out of range): {})", name, value, ex2.what());
     }
 }
 
@@ -226,9 +226,11 @@ parse_option(std::chrono::milliseconds& receiver, const std::string& name, const
         try {
             receiver = std::chrono::milliseconds(std::stoull(value, nullptr, 10));
         } catch (const std::invalid_argument& ex1) {
-            LOG_WARNING(R"(unable to parse "{}" parameter in connection string (value "{}" is not a number): {})", name, value, ex1.what());
+            CB_LOG_WARNING(
+              R"(unable to parse "{}" parameter in connection string (value "{}" is not a number): {})", name, value, ex1.what());
         } catch (const std::out_of_range& ex2) {
-            LOG_WARNING(R"(unable to parse "{}" parameter in connection string (value "{}" is out of range): {})", name, value, ex2.what());
+            CB_LOG_WARNING(
+              R"(unable to parse "{}" parameter in connection string (value "{}" is out of range): {})", name, value, ex2.what());
         }
     }
 }
@@ -335,7 +337,7 @@ extract_options(connection_string& connstr)
             if (connstr.bootstrap_nodes.size() == 1) {
                 parse_option(connstr.options.enable_dns_srv, name, value);
             } else {
-                LOG_WARNING(
+                CB_LOG_WARNING(
                   R"(parameter "{}" require single entry in bootstrap nodes list of the connection string, ignoring (value "{}"))",
                   name,
                   value);
@@ -383,7 +385,7 @@ extract_options(connection_string& connstr)
              */
             connstr.options.user_agent_extra = value;
         } else {
-            LOG_WARNING(R"(unknown parameter "{}" in connection string (value "{}"))", name, value);
+            CB_LOG_WARNING(R"(unknown parameter "{}" in connection string (value "{}"))", name, value);
         }
     }
 }

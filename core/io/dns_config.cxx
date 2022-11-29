@@ -46,7 +46,7 @@ load_resolv_conf()
 
     fixed_info = (FIXED_INFO*)malloc(sizeof(FIXED_INFO));
     if (fixed_info == NULL) {
-        LOG_WARNING("Error allocating memory needed to call GetNetworkParams");
+        CB_LOG_WARNING("Error allocating memory needed to call GetNetworkParams");
     }
     buf = sizeof(FIXED_INFO);
 
@@ -56,7 +56,7 @@ load_resolv_conf()
         free(fixed_info);
         fixed_info = (FIXED_INFO*)malloc(buf);
         if (fixed_info == NULL) {
-            LOG_WARNING("Error allocating memory needed to call GetNetworkParams");
+            CB_LOG_WARNING("Error allocating memory needed to call GetNetworkParams");
         }
     }
 
@@ -79,17 +79,18 @@ load_resolv_conf()
             }
         }
     } else {
-        LOG_WARNING("GetNetworkParams failed with error: {}", ret);
+        CB_LOG_WARNING("GetNetworkParams failed with error: {}", ret);
     }
 
     if (fixed_info)
         free(fixed_info);
 
     if (dns_servers.size() > 0) {
-        LOG_DEBUG("Found DNS Servers: [{}], using nameserver: {}", couchbase::core::utils::join_strings(dns_servers, ", "), dns_servers[0]);
+        CB_LOG_DEBUG(
+          "Found DNS Servers: [{}], using nameserver: {}", couchbase::core::utils::join_strings(dns_servers, ", "), dns_servers[0]);
         return dns_servers[0];
     }
-    LOG_WARNING("Unable to find DNS nameserver");
+    CB_LOG_WARNING("Unable to find DNS nameserver");
     return {};
 }
 #else
@@ -123,7 +124,7 @@ load_resolv_conf(const char* conf_path)
             offset = space + 1;
             space = line.find(' ', offset);
             auto nameserver = line.substr(offset, space);
-            LOG_DEBUG("Using nameserver: {}", nameserver);
+            CB_LOG_DEBUG("Using nameserver: {}", nameserver);
             return nameserver;
         }
     }
