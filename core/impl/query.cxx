@@ -194,12 +194,17 @@ build_query_request(query_options::built options)
 }
 
 couchbase::transactions::transaction_query_result
-build_transaction_query_result(operations::query_response resp)
+build_transaction_query_result(operations::query_response resp, std::error_code txn_ec /*defaults to 0*/)
 {
-    std::error_code txn_ec{};
     if (resp.ctx.ec) {
-        // TODO: pass in the op error, as it could be several things.
-        txn_ec = errc::transaction_op::not_set;
+        if (resp.ctx.ec == errc::common::parsing_failure) {
+            txn_ec = errc::transaction_op::parsing_failure;
+        }
+        if (!txn_ec) {
+            // TODO: review what our default should be...
+            // no override error code was passed in, so default to not_set
+            txn_ec = errc::transaction_op::not_set;
+        }
     }
     return { query_meta_data{
                std::move(resp.meta.request_id),

@@ -761,9 +761,14 @@ attempt_context_impl::query_begin_work(utils::movable_function<void(std::excepti
                STAGE_QUERY_BEGIN_WORK,
                false,
                [this, cb = std::move(cb)](std::exception_ptr err, core::operations::query_response resp) mutable {
-                   trace("begin_work setting query node to {}", resp.served_by_node);
-                   op_list_.set_query_node(resp.served_by_node);
-                   // we check for expiry _after_ this call, so we always set the query node.
+                   if (resp.served_by_node.empty()) {
+                       trace("begin_work didn't reach a query node, resetting mode to kv");
+                       op_list_.reset_query_mode();
+                   } else {
+                       trace("begin_work setting query node to {}", resp.served_by_node);
+                       op_list_.set_query_node(resp.served_by_node);
+                   }
+                   // we check for expiry _after_ this call, so we always set the query node if we can.
                    if (has_expired_client_side(STAGE_QUERY_BEGIN_WORK, {})) {
                        return cb(std::make_exception_ptr(
                          transaction_operation_failed(FAIL_EXPIRY, "expired in BEGIN WORK").no_rollback().expired()));
@@ -809,6 +814,9 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
     if (resp.ctx.ec == couchbase::errc::common::ambiguous_timeout || resp.ctx.ec == couchbase::errc::common::unambiguous_timeout) {
         return std::make_exception_ptr(query_attempt_expired(tx_resp.ctx()));
     }
+    if (resp.ctx.ec == couchbase::errc::common::parsing_failure) {
+        return std::make_exception_ptr(query_parsing_failure(tx_resp.ctx()));
+    }
     if (!resp.meta.errors) {
         // can't choose an error, map using the ec...
         external_exception cause =
@@ -830,10 +838,6 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
             return std::make_exception_ptr(
               transaction_operation_failed(FAIL_OTHER, "N1QL Queries in transactions are supported in couchbase server 7.0 and later")
                 .cause(FEATURE_NOT_AVAILABLE_EXCEPTION));
-        case 3000:
-            return std::make_exception_ptr(query_parsing_failure(tx_resp.ctx()));
-            /*return std::make_exception_ptr(
-              transaction_operation_failed(FAIL_OTHER, chosen_error.at("msg").as<std::string>()).cause(PARSING_FAILURE));*/
         case 17004:
             return std::make_exception_ptr(query_attempt_not_found(tx_resp.ctx()));
         case 1080:
@@ -1070,9 +1074,8 @@ attempt_context_impl::get_with_query(const core::document_id& id, bool optional,
                                   // make a transaction_get_result from the row...
                                   try {
                                       if (resp.rows.empty()) {
-                                          trace("get_with_query got no doc and no error, returning query_document_not_found");
-                                          auto query_err = core::impl::build_transaction_query_result(resp);
-                                          return op_completed_with_error(std::move(cb), query_document_not_found(query_err.ctx()));
+                                          return op_completed_with_error(
+                                            std::move(cb), transaction_operation_failed(FAIL_DOC_NOT_FOUND, "document not found"));
                                       }
                                       trace("get_with_query got: {}", resp.rows.front());
                                       transaction_get_result doc(id, core::utils::json::parse(resp.rows.front()));

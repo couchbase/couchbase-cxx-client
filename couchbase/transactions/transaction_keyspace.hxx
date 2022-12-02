@@ -68,7 +68,7 @@ struct transaction_keyspace {
 
     bool valid()
     {
-        return !(bucket.empty() || scope.empty() || collection.empty());
+        return !bucket.empty() && !scope.empty() && !collection.empty();
     }
 
     template<typename OStream>
