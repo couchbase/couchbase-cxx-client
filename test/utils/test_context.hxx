@@ -37,6 +37,7 @@ struct test_context {
     server_config_profile profile{ server_config_profile::unknown };
     std::optional<std::string> dns_nameserver{};
     std::optional<std::uint16_t> dns_port{};
+    std::size_t number_of_io_threads{ 1 };
 
     [[nodiscard]] couchbase::core::cluster_credentials build_auth() const
     {

@@ -84,6 +84,10 @@ test_context::load_from_environment()
         }
     }
 
+    if (auto var = spdlog::details::os::getenv("TEST_NUMBER_OF_IO_THREADS"); !var.empty()) {
+        ctx.number_of_io_threads = std::stoul(var);
+    }
+
     return ctx;
 }
 } // namespace test::utils

@@ -113,14 +113,14 @@ class bucket
             index = server.value();
         }
         auto session = find_session_by_index(index);
-        if (session.empty() || !session.has_config()) {
+        if (!session || !session->has_config()) {
             return defer_command([self = shared_from_this(), cmd]() { self->map_and_send(cmd); });
         }
-        if (session.is_stopped()) {
+        if (session->is_stopped()) {
             return io::retry_orchestrator::maybe_retry(
               cmd->manager_, cmd, retry_reason::node_not_available, errc::common::request_canceled);
         }
-        cmd->send_to(session);
+        cmd->send_to(session.value());
     }
 
     template<typename Request>
@@ -162,7 +162,7 @@ class bucket
   private:
     [[nodiscard]] auto default_timeout() const -> std::chrono::milliseconds;
     [[nodiscard]] auto next_session_index() -> std::size_t;
-    [[nodiscard]] auto find_session_by_index(std::size_t index) const -> io::mcbp_session;
+    [[nodiscard]] auto find_session_by_index(std::size_t index) const -> std::optional<io::mcbp_session>;
     [[nodiscard]] auto map_id(const document_id& id) -> std::pair<std::uint16_t, std::optional<std::size_t>>;
 
     asio::io_context& ctx_;

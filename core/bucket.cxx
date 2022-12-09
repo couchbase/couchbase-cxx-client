@@ -190,17 +190,17 @@ class bucket_impl
         req->dispatched_time_ = std::chrono::steady_clock::now();
 
         auto session = route_request(req);
-        if (session.empty() || !session.has_config()) {
+        if (!session || !session->has_config()) {
             return defer_command([self = shared_from_this(), req]() mutable { self->direct_dispatch(std::move(req)); });
         }
-        if (session.is_stopped()) {
+        if (session->is_stopped()) {
             if (backoff_and_retry(req, retry_reason::node_not_available)) {
                 return {};
             }
             return errc::common::service_not_available;
         }
-        req->opaque_ = session.next_opaque();
-        session.write_and_subscribe(req, shared_from_this());
+        req->opaque_ = session->next_opaque();
+        session->write_and_subscribe(req, shared_from_this());
         return {};
     }
 
@@ -218,10 +218,10 @@ class bucket_impl
         CB_LOG_DEBUG("request being re-queued. opaque={}, opcode={}", req->opaque_, req->command_);
 
         auto session = route_request(req);
-        if (session.empty() || !session.has_config()) {
+        if (!session || !session->has_config()) {
             return defer_command([self = shared_from_this(), req]() { self->direct_dispatch(std::move(req)); });
         }
-        if (session.is_stopped()) {
+        if (session->is_stopped()) {
             if (backoff_and_retry(req, retry_reason::node_not_available)) {
                 return {};
             }
@@ -234,7 +234,7 @@ class bucket_impl
             handle_error(data.error());
             return data.error();
         }
-        session.write_and_subscribe(
+        session->write_and_subscribe(
           req->opaque_,
           std::move(data.value()),
           [self = shared_from_this(), req, session](
@@ -270,7 +270,7 @@ class bucket_impl
         return retried;
     }
 
-    auto route_request(std::shared_ptr<mcbp::queue_request> req) -> io::mcbp_session
+    auto route_request(std::shared_ptr<mcbp::queue_request> req) -> std::optional<io::mcbp_session>
     {
         if (req->key_.empty()) {
             if (auto server = server_by_vbucket(req->vbucket_, req->replica_index_); server) {
@@ -326,15 +326,12 @@ class bucket_impl
         }
         couchbase::core::origin origin(origin_.credentials(), hostname, port, origin_.options());
 
-        io::mcbp_session session;
-        if (origin_.options().enable_tls) {
-            session = io::mcbp_session(client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_);
-        } else {
-            session = io::mcbp_session(client_id_, ctx_, origin, state_listener_, name_, known_features_);
-        }
+        io::mcbp_session session = origin_.options().enable_tls
+                                     ? io::mcbp_session(client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_)
+                                     : io::mcbp_session(client_id_, ctx_, origin, state_listener_, name_, known_features_);
 
         std::scoped_lock lock(sessions_mutex_);
-        if (auto ptr = sessions_.find(index); ptr == sessions_.end() || ptr->second.empty()) {
+        if (auto ptr = sessions_.find(index); ptr == sessions_.end()) {
             CB_LOG_DEBUG(R"({} requested to restart session idx={}, which does not exist yet, initiate new one id="{}", address="{}:{}")",
                          log_prefix_,
                          index,
@@ -345,7 +342,7 @@ class bucket_impl
             const auto& old_session = ptr->second;
             auto old_id = old_session.id();
             sessions_.erase(ptr);
-            Expects(sessions_[index].empty());
+            Expects(sessions_.count(index) == 0);
             CB_LOG_DEBUG(R"({} restarting session idx={}, id=("{}" -> "{}"), address="{}:{}")",
                          log_prefix_,
                          index,
@@ -379,7 +376,7 @@ class bucket_impl
               self->drain_deferred_queue();
           },
           true);
-        sessions_[index] = std::move(session);
+        sessions_.insert_or_assign(index, std::move(session));
     }
 
     void bootstrap(utils::movable_function<void(std::error_code, topology::configuration)>&& handler)
@@ -387,36 +384,32 @@ class bucket_impl
         if (state_listener_) {
             state_listener_->register_config_listener(shared_from_this());
         }
-        io::mcbp_session new_session;
-        if (origin_.options().enable_tls) {
-            new_session = io::mcbp_session(client_id_, ctx_, tls_, origin_, state_listener_, name_, known_features_);
-        } else {
-            new_session = io::mcbp_session(client_id_, ctx_, origin_, state_listener_, name_, known_features_);
-        }
-        new_session.bootstrap(
-          [self = shared_from_this(), new_session, h = std::move(handler)](std::error_code ec, const topology::configuration& cfg) mutable {
-              if (ec) {
-                  CB_LOG_WARNING(
-                    R"({} failed to bootstrap session ec={}, bucket="{}")", new_session.log_prefix(), ec.message(), self->name_);
-              } else {
-                  size_t this_index = new_session.index();
-                  new_session.on_configuration_update(self);
-                  new_session.on_stop([this_index, hostname = new_session.bootstrap_hostname(), port = new_session.bootstrap_port(), self](
-                                        retry_reason reason) {
-                      if (reason == retry_reason::socket_closed_while_in_flight) {
-                          self->restart_node(this_index, hostname, port);
-                      }
-                  });
+        io::mcbp_session new_session = origin_.options().enable_tls
+                                         ? io::mcbp_session(client_id_, ctx_, tls_, origin_, state_listener_, name_, known_features_)
+                                         : io::mcbp_session(client_id_, ctx_, origin_, state_listener_, name_, known_features_);
+        new_session.bootstrap([self = shared_from_this(), new_session, h = std::move(handler)](std::error_code ec,
+                                                                                               topology::configuration cfg) mutable {
+            if (ec) {
+                CB_LOG_WARNING(R"({} failed to bootstrap session ec={}, bucket="{}")", new_session.log_prefix(), ec.message(), self->name_);
+            } else {
+                const std::size_t this_index = new_session.index();
+                new_session.on_configuration_update(self);
+                new_session.on_stop([this_index, hostname = new_session.bootstrap_hostname(), port = new_session.bootstrap_port(), self](
+                                      retry_reason reason) {
+                    if (reason == retry_reason::socket_closed_while_in_flight) {
+                        self->restart_node(this_index, hostname, port);
+                    }
+                });
 
-                  {
-                      std::scoped_lock lock(self->sessions_mutex_);
-                      self->sessions_[this_index] = std::move(new_session);
-                  }
-                  self->update_config(cfg);
-                  self->drain_deferred_queue();
-              }
-              h(ec, cfg);
-          });
+                {
+                    std::scoped_lock lock(self->sessions_mutex_);
+                    self->sessions_.insert_or_assign(this_index, std::move(new_session));
+                }
+                self->update_config(cfg);
+                self->drain_deferred_queue();
+            }
+            asio::post(asio::bind_executor(self->ctx_, [h = std::move(h), ec, cfg = std::move(cfg)]() mutable { h(ec, cfg); }));
+        });
     }
 
     void with_configuration(utils::movable_function<void(std::error_code, topology::configuration)>&& handler)
@@ -490,10 +483,7 @@ class bucket_impl
             std::swap(old_sessions, sessions_);
         }
         for (auto& [index, session] : old_sessions) {
-            if (session) {
-                CB_LOG_DEBUG(R"({} shutdown session session="{}", idx={})", log_prefix_, session.id(), index);
-                session.stop(retry_reason::do_not_retry);
-            }
+            session.stop(retry_reason::do_not_retry);
         }
     }
 
@@ -553,20 +543,23 @@ class bucket_impl
                     }
                 }
                 if (new_index < config.nodes.size()) {
-                    CB_LOG_DEBUG(R"({} rev={}, preserve session="{}", address="{}:{}")",
+                    CB_LOG_DEBUG(R"({} rev={}, preserve session="{}", address="{}:{}", index={}->{})",
                                  log_prefix_,
                                  config.rev_str(),
                                  session.id(),
                                  session.bootstrap_hostname(),
-                                 session.bootstrap_port());
-                    new_sessions[new_index] = std::move(session);
+                                 session.bootstrap_port(),
+                                 index,
+                                 new_index);
+                    new_sessions.insert_or_assign(new_index, std::move(session));
                 } else {
-                    CB_LOG_DEBUG(R"({} rev={}, drop session="{}", address="{}:{}")",
+                    CB_LOG_DEBUG(R"({} rev={}, drop session="{}", address="{}:{}", index={})",
                                  log_prefix_,
                                  config.rev_str(),
                                  session.id(),
                                  session.bootstrap_hostname(),
-                                 session.bootstrap_port());
+                                 session.bootstrap_port(),
+                                 index);
                     asio::post(asio::bind_executor(
                       ctx_, [session = std::move(session)]() mutable { return session.stop(retry_reason::do_not_retry); }));
                 }
@@ -583,12 +576,9 @@ class bucket_impl
                     continue;
                 }
                 couchbase::core::origin origin(origin_.credentials(), hostname, port, origin_.options());
-                io::mcbp_session session;
-                if (origin_.options().enable_tls) {
-                    session = io::mcbp_session(client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_);
-                } else {
-                    session = io::mcbp_session(client_id_, ctx_, origin, state_listener_, name_, known_features_);
-                }
+                io::mcbp_session session = origin_.options().enable_tls
+                                             ? io::mcbp_session(client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_)
+                                             : io::mcbp_session(client_id_, ctx_, origin, state_listener_, name_, known_features_);
                 CB_LOG_DEBUG(
                   R"({} rev={}, add session="{}", address="{}:{}")", log_prefix_, config.rev_str(), session.id(), hostname, port);
                 session.bootstrap(
@@ -610,13 +600,13 @@ class bucket_impl
                       }
                   },
                   true);
-                new_sessions[node.index] = std::move(session);
+                new_sessions.insert_or_assign(node.index, std::move(session));
             }
             sessions_ = new_sessions;
         }
     }
 
-    [[nodiscard]] auto find_session_by_index(std::size_t index) const -> io::mcbp_session
+    [[nodiscard]] auto find_session_by_index(std::size_t index) const -> std::optional<io::mcbp_session>
     {
         std::scoped_lock lock(sessions_mutex_);
         if (auto ptr = sessions_.find(index); ptr != sessions_.end()) {
@@ -869,7 +859,7 @@ bucket::default_timeout() const -> std::chrono::milliseconds
 }
 
 auto
-bucket::find_session_by_index(std::size_t index) const -> io::mcbp_session
+bucket::find_session_by_index(std::size_t index) const -> std::optional<io::mcbp_session>
 {
     return impl_->find_session_by_index(index);
 }

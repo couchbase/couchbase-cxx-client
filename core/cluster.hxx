@@ -133,8 +133,9 @@ class cluster : public std::enable_shared_from_this<cluster>
         }
         stopped_ = true;
         asio::post(asio::bind_executor(ctx_, [self = shared_from_this(), handler = std::forward<Handler>(handler)]() mutable {
-            if (!self->session_.empty()) {
-                self->session_.stop(retry_reason::do_not_retry);
+            if (self->session_) {
+                self->session_->stop(retry_reason::do_not_retry);
+                self->session_.reset();
             }
             self->for_each_bucket([](auto& bucket) { bucket->close(); });
             self->session_manager_->close();
@@ -157,8 +158,8 @@ class cluster : public std::enable_shared_from_this<cluster>
             auto ptr = buckets_.find(bucket_name);
             if (ptr == buckets_.end()) {
                 std::vector<protocol::hello_feature> known_features;
-                if (session_ && session_.has_config()) {
-                    known_features = session_.supported_features();
+                if (session_ && session_->has_config()) {
+                    known_features = session_->supported_features();
                 }
                 b = std::make_shared<bucket>(id_, ctx_, tls_, tracer_, meter_, bucket_name, origin_, known_features, dns_srv_tracker_);
                 buckets_.try_emplace(bucket_name, b);
@@ -174,7 +175,7 @@ class cluster : public std::enable_shared_from_this<cluster>
             if (ec) {
                 std::scoped_lock lock(self->buckets_mutex_);
                 self->buckets_.erase(bucket_name);
-            } else if (!self->session_.empty() && !self->session_.supports_gcccp()) {
+            } else if (self->session_ && !self->session_->supports_gcccp()) {
                 self->session_manager_->set_configuration(config, self->origin_.options());
             }
             handler(ec);
@@ -273,8 +274,8 @@ class cluster : public std::enable_shared_from_this<cluster>
         }
         asio::post(asio::bind_executor(ctx_, [self = shared_from_this(), report_id, handler = std::forward<Handler>(handler)]() mutable {
             diag::diagnostics_result res{ report_id.value(), couchbase::core::meta::sdk_id() };
-            if (!self->session_.empty()) {
-                res.services[service_type::key_value].emplace_back(self->session_.diag_info());
+            if (self->session_) {
+                res.services[service_type::key_value].emplace_back(self->session_->diag_info());
             }
             self->for_each_bucket([&res](const auto& bucket) { bucket->export_diag_info(res); });
             self->session_manager_->export_diag_info(res);
@@ -426,15 +427,15 @@ class cluster : public std::enable_shared_from_this<cluster>
         } else {
             session_ = io::mcbp_session(id_, ctx_, origin_, dns_srv_tracker_);
         }
-        session_.bootstrap([self = shared_from_this(),
-                            handler = std::forward<Handler>(handler)](std::error_code ec, const topology::configuration& config) mutable {
+        session_->bootstrap([self = shared_from_this(),
+                             handler = std::forward<Handler>(handler)](std::error_code ec, const topology::configuration& config) mutable {
             if (!ec) {
                 if (self->origin_.options().network == "auto") {
-                    self->origin_.options().network = config.select_network(self->session_.bootstrap_hostname());
+                    self->origin_.options().network = config.select_network(self->session_->bootstrap_hostname());
                     if (self->origin_.options().network == "default") {
-                        CB_LOG_DEBUG(R"({} detected network is "{}")", self->session_.log_prefix(), self->origin_.options().network);
+                        CB_LOG_DEBUG(R"({} detected network is "{}")", self->session_->log_prefix(), self->origin_.options().network);
                     } else {
-                        CB_LOG_INFO(R"({} detected network is "{}")", self->session_.log_prefix(), self->origin_.options().network);
+                        CB_LOG_INFO(R"({} detected network is "{}")", self->session_->log_prefix(), self->origin_.options().network);
                     }
                 }
                 if (self->origin_.options().network != "default") {
@@ -457,8 +458,12 @@ class cluster : public std::enable_shared_from_this<cluster>
                                 utils::join_strings(self->origin_.get_nodes(), ","));
                 }
                 self->session_manager_->set_configuration(config, self->origin_.options());
-                self->session_.on_configuration_update(self->session_manager_);
-                self->session_.on_stop([self](retry_reason) { self->session_.reset(); });
+                self->session_->on_configuration_update(self->session_manager_);
+                self->session_->on_stop([self](retry_reason) {
+                    if (self->session_) {
+                        self->session_.reset();
+                    }
+                });
             }
             handler(ec);
         });
@@ -469,7 +474,7 @@ class cluster : public std::enable_shared_from_this<cluster>
     asio::executor_work_guard<asio::io_context::executor_type> work_;
     asio::ssl::context tls_{ asio::ssl::context::tls_client };
     std::shared_ptr<io::http_session_manager> session_manager_;
-    io::mcbp_session session_{};
+    std::optional<io::mcbp_session> session_{};
     std::shared_ptr<impl::dns_srv_tracker> dns_srv_tracker_{};
     std::mutex buckets_mutex_{};
     std::map<std::string, std::shared_ptr<bucket>> buckets_{};
