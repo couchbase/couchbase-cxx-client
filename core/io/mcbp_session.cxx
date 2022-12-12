@@ -789,11 +789,11 @@ class mcbp_session_impl
         retry_backoff_.cancel();
         resolver_.cancel();
         stream_->close([](std::error_code) {});
-        if (bootstrap_handler_) {
-            bootstrap_handler_->stop();
+        if (auto h = std::move(bootstrap_handler_); h) {
+            h->stop();
         }
-        if (handler_) {
-            handler_->stop();
+        if (auto h = std::move(handler_); h) {
+            h->stop();
         }
         std::error_code ec = errc::common::request_canceled;
         if (!bootstrapped_) {
