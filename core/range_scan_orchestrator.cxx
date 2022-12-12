@@ -261,7 +261,7 @@ class range_scan_orchestrator_impl
                                  std::size_t num_vbuckets,
                                  std::string scope_name,
                                  std::string collection_name,
-                                 std::variant<range_scan, sampling_scan> scan_type,
+                                 std::variant<std::monostate, range_scan, sampling_scan> scan_type,
                                  range_scan_orchestrator_options options)
       : io_{ io }
       , agent_{ std::move(kv_provider) }
@@ -319,7 +319,7 @@ class range_scan_orchestrator_impl
             if (item) {
                 callback(std::move(item.value()), {});
             } else {
-                callback({}, errc::key_value::document_not_found);
+                callback({}, errc::key_value::range_scan_completed);
             }
         };
         if (options_.sort == scan_sort::none) {
@@ -389,7 +389,7 @@ class range_scan_orchestrator_impl
     std::size_t num_vbuckets_;
     std::string scope_name_;
     std::string collection_name_;
-    std::variant<range_scan, sampling_scan> scan_type_;
+    std::variant<std::monostate, range_scan, sampling_scan> scan_type_;
     range_scan_orchestrator_options options_;
     std::map<std::size_t, std::optional<range_snapshot_requirements>> vbucket_to_snapshot_requirements_;
     std::map<std::uint16_t, std::shared_ptr<range_scan_stream>> streams_{};
@@ -400,7 +400,7 @@ range_scan_orchestrator::range_scan_orchestrator(asio::io_context& io,
                                                  std::size_t num_vbuckets,
                                                  std::string scope_name,
                                                  std::string collection_name,
-                                                 std::variant<range_scan, sampling_scan> scan_type,
+                                                 std::variant<std::monostate, range_scan, sampling_scan> scan_type,
                                                  range_scan_orchestrator_options options)
   : impl_{ std::make_shared<range_scan_orchestrator_impl>(io,
                                                           std::move(kv_provider),

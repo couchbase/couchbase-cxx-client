@@ -37,6 +37,7 @@ struct scan_term {
 };
 
 struct range_scan {
+    range_scan() = default;
     range_scan(scan_term start, scan_term end);
     range_scan(std::string_view start, std::string_view end);
     range_scan(std::string_view start, bool exclusive_start, std::string_view end, bool exclusive_end);
@@ -48,20 +49,20 @@ struct range_scan {
 };
 
 struct sampling_scan {
-    std::size_t limit;
+    std::size_t limit{};
     std::optional<std::uint32_t> seed{};
 };
 
 struct range_snapshot_requirements {
-    std::uint64_t vbucket_uuid;
-    std::uint64_t sequence_number;
+    std::uint64_t vbucket_uuid{};
+    std::uint64_t sequence_number{};
     bool sequence_number_exists{ false };
 };
 
 struct range_scan_create_options {
-    std::string collection_name;
-    std::string scope_name;
-    std::variant<range_scan, sampling_scan> scan_type;
+    std::string collection_name{};
+    std::string scope_name{};
+    std::variant<std::monostate, range_scan, sampling_scan> scan_type{};
     std::chrono::milliseconds timeout{};
     std::uint32_t collection_id{ 0 };
     std::optional<range_snapshot_requirements> snapshot_requirements{};

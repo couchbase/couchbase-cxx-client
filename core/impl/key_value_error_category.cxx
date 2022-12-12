@@ -88,6 +88,8 @@ struct key_value_error_category : std::error_category {
                 return "range_scan_cancelled (132)";
             case errc::key_value::range_scan_vb_uuid_not_equal:
                 return "range_scan_vb_uuid_not_equal (133)";
+            case errc::key_value::range_scan_completed:
+                return "range_scan_completed (134)";
         }
         return "FIXME: unknown error code (recompile with newer library): couchbase.key_value." + std::to_string(ev);
     }

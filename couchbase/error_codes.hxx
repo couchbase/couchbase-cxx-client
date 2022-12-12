@@ -601,6 +601,7 @@ enum class key_value {
 
     range_scan_cancelled = 132,
     range_scan_vb_uuid_not_equal = 133,
+    range_scan_completed = 134,
 };
 
 /**

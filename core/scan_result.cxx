@@ -35,7 +35,7 @@ class scan_result_impl
         if (auto item = iterator_->next().get(); item) {
             return item.value();
         }
-        return tl::unexpected{ errc::key_value::document_not_found };
+        return tl::unexpected{ errc::key_value::range_scan_completed };
     }
 
     void next(utils::movable_function<void(range_scan_item, std::error_code)> callback) const

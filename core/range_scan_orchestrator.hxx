@@ -42,7 +42,7 @@ class range_scan_orchestrator
                             std::size_t num_vbuckets,
                             std::string scope_name,
                             std::string collection_name,
-                            std::variant<range_scan, sampling_scan> scan_type,
+                            std::variant<std::monostate, range_scan, sampling_scan> scan_type,
                             range_scan_orchestrator_options options);
 
     auto scan() -> tl::expected<scan_result, std::error_code>;
