@@ -60,8 +60,8 @@ struct range_snapshot_requirements {
 };
 
 struct range_scan_create_options {
-    std::string collection_name{};
     std::string scope_name{};
+    std::string collection_name{};
     std::variant<std::monostate, range_scan, sampling_scan> scan_type{};
     std::chrono::milliseconds timeout{};
     std::uint32_t collection_id{ 0 };
