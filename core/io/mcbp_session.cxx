@@ -92,19 +92,7 @@ class mcbp_session_impl
   : public std::enable_shared_from_this<mcbp_session_impl>
   , public operation_map
 {
-    class message_handler
-    {
-      public:
-        virtual void handle(mcbp_message&& msg) = 0;
-
-        virtual ~message_handler() = default;
-
-        virtual void stop()
-        {
-        }
-    };
-
-    class bootstrap_handler : public message_handler
+    class bootstrap_handler : public std::enable_shared_from_this<bootstrap_handler>
     {
       private:
         std::shared_ptr<mcbp_session_impl> session_;
@@ -112,19 +100,19 @@ class mcbp_session_impl
         std::atomic_bool stopped_{ false };
 
       public:
-        ~bootstrap_handler() override = default;
-
-        void stop() override
+        ~bootstrap_handler()
         {
-            if (stopped_) {
-                return;
-            }
-            stopped_ = true;
-            session_.reset();
+            stop();
+        }
+
+        void stop()
+        {
+            bool expected_state{ false };
+            stopped_.compare_exchange_strong(expected_state, true);
         }
 
         explicit bootstrap_handler(std::shared_ptr<mcbp_session_impl> session)
-          : session_(session)
+          : session_(std::move(session))
           , sasl_([origin = session_->origin_]() { return origin.username(); },
                   [origin = session_->origin_]() { return origin.password(); },
                   session_->origin_.credentials().allowed_sasl_mechanisms)
@@ -149,7 +137,7 @@ class mcbp_session_impl
                          utils::join_strings_fmt("{}", hello_req.body().features(), ", "));
             session_->write(hello_req.data());
 
-            if (!session->origin_.credentials().uses_certificate()) {
+            if (!session_->origin_.credentials().uses_certificate()) {
                 protocol::client_request<protocol::sasl_list_mechs_request_body> list_req;
                 list_req.opaque(session_->next_opaque());
                 session_->write(list_req.data());
@@ -167,8 +155,9 @@ class mcbp_session_impl
 
         void complete(std::error_code ec)
         {
-            stopped_ = true;
-            session_->invoke_bootstrap_handler(ec);
+            if (bool expected_state{ false }; stopped_.compare_exchange_strong(expected_state, true)) {
+                session_->invoke_bootstrap_handler(ec);
+            }
         }
 
         void auth_success()
@@ -191,7 +180,7 @@ class mcbp_session_impl
             session_->flush();
         }
 
-        void handle(mcbp_message&& msg) override
+        void handle(mcbp_message&& msg)
         {
             if (stopped_ || !session_) {
                 return;
@@ -411,9 +400,7 @@ class mcbp_session_impl
         }
     };
 
-    class normal_handler
-      : public message_handler
-      , public std::enable_shared_from_this<normal_handler>
+    class message_handler : public std::enable_shared_from_this<message_handler>
     {
       private:
         std::shared_ptr<mcbp_session_impl> session_;
@@ -421,15 +408,15 @@ class mcbp_session_impl
         std::atomic_bool stopped_{ false };
 
       public:
-        ~normal_handler() override
-        {
-            stop();
-        }
-
-        explicit normal_handler(std::shared_ptr<mcbp_session_impl> session)
-          : session_(session)
+        explicit message_handler(std::shared_ptr<mcbp_session_impl> session)
+          : session_(std::move(session))
           , heartbeat_timer_(session_->ctx_)
         {
+        }
+
+        ~message_handler()
+        {
+            stop();
         }
 
         void start()
@@ -439,17 +426,14 @@ class mcbp_session_impl
             }
         }
 
-        void stop() override
+        void stop()
         {
-            if (stopped_) {
-                return;
+            if (bool expected_state{ false }; stopped_.compare_exchange_strong(expected_state, true)) {
+                heartbeat_timer_.cancel();
             }
-            stopped_ = true;
-            heartbeat_timer_.cancel();
-            session_.reset();
         }
 
-        void handle(mcbp_message&& msg) override
+        void handle(mcbp_message&& msg)
         {
             if (stopped_ || !session_) {
                 return;
@@ -707,11 +691,11 @@ class mcbp_session_impl
         return { config_, supported_features_ };
     }
 
-    void bootstrap(utils::movable_function<void(std::error_code, topology::configuration)>&& handler,
+    void bootstrap(utils::movable_function<void(std::error_code, topology::configuration)>&& callback,
                    bool retry_on_bucket_not_found = false)
     {
         retry_bootstrap_on_bucket_not_found_ = retry_on_bucket_not_found;
-        bootstrap_handler_ = std::move(handler);
+        bootstrap_callback_ = std::move(callback);
         bootstrap_deadline_.expires_after(origin_.options().bootstrap_timeout);
         bootstrap_deadline_.async_wait([self = shared_from_this()](std::error_code ec) {
             if (ec == asio::error::operation_aborted || self->stopped_) {
@@ -724,7 +708,7 @@ class mcbp_session_impl
                 self->state_listener_->report_bootstrap_error(fmt::format("{}:{}", self->bootstrap_hostname_, self->bootstrap_port_), ec);
             }
             CB_LOG_WARNING("{} unable to bootstrap in time", self->log_prefix_);
-            auto h = std::move(self->bootstrap_handler_);
+            auto h = std::move(self->bootstrap_callback_);
             h(ec, {});
             self->stop(retry_reason::do_not_retry);
         });
@@ -805,14 +789,17 @@ class mcbp_session_impl
         retry_backoff_.cancel();
         resolver_.cancel();
         stream_->close([](std::error_code) {});
-        std::error_code ec = errc::common::request_canceled;
-        if (!bootstrapped_ && bootstrap_handler_) {
-            auto h = std::move(bootstrap_handler_);
-            h(ec, {});
+        if (auto h = std::move(bootstrap_handler_); h) {
+            h->stop();
         }
-        if (handler_) {
-            handler_->stop();
-            handler_ = nullptr;
+        if (auto h = std::move(handler_); h) {
+            h->stop();
+        }
+        std::error_code ec = errc::common::request_canceled;
+        if (!bootstrapped_) {
+            if (auto h = std::move(bootstrap_callback_); h) {
+                h(ec, {});
+            }
         }
         {
             std::scoped_lock lock(command_handlers_mutex_);
@@ -838,11 +825,10 @@ class mcbp_session_impl
             operations_.clear();
         }
         config_listeners_.clear();
-        if (on_stop_handler_) {
-            on_stop_handler_(reason);
-        }
-        on_stop_handler_ = nullptr;
         state_ = diag::endpoint_state::disconnected;
+        if (auto on_stop = std::move(on_stop_handler_); on_stop) {
+            on_stop(reason);
+        }
     }
 
     void write(std::vector<std::byte>&& buf)
@@ -1110,9 +1096,9 @@ class mcbp_session_impl
         }
         config_.emplace(std::move(config));
         configured_ = true;
-        CB_LOG_DEBUG("{} received new configuration: {}", log_prefix_, config_.value());
         for (const auto& listener : config_listeners_) {
-            listener->update_config(*config_);
+            asio::post(asio::bind_executor(
+              ctx_, [listener, config = config_.value()]() mutable { return listener->update_config(std::move(config)); }));
         }
     }
 
@@ -1164,6 +1150,8 @@ class mcbp_session_impl
   private:
     void invoke_bootstrap_handler(std::error_code ec)
     {
+        retry_backoff_.cancel();
+
         if (ec && state_listener_) {
             state_listener_->report_bootstrap_error(fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_), ec);
         }
@@ -1175,7 +1163,7 @@ class mcbp_session_impl
             return initiate_bootstrap();
         }
 
-        if (!bootstrapped_ && bootstrap_handler_) {
+        if (!bootstrapped_ && bootstrap_callback_) {
             bootstrap_deadline_.cancel();
             if (config_ && state_listener_) {
                 std::vector<std::string> endpoints;
@@ -1187,21 +1175,18 @@ class mcbp_session_impl
                 }
                 state_listener_->report_bootstrap_success(endpoints);
             }
-            auto h = std::move(bootstrap_handler_);
+            auto h = std::move(bootstrap_callback_);
             h(ec, config_.value_or(topology::configuration{}));
         }
         if (ec) {
-            handler_ = nullptr;
             return stop(retry_reason::node_not_available);
         }
         state_ = diag::endpoint_state::connected;
-        {
-            auto handler = std::make_shared<normal_handler>(shared_from_this());
-            handler->start();
-            handler_ = handler;
-        }
         std::scoped_lock lock(pending_buffer_mutex_);
         bootstrapped_ = true;
+        bootstrap_handler_->stop();
+        handler_ = std::make_shared<message_handler>(shared_from_this());
+        handler_->start();
         if (!pending_buffer_.empty()) {
             for (auto& buf : pending_buffer_) {
                 write(std::move(buf));
@@ -1300,8 +1285,7 @@ class mcbp_session_impl
                                       bootstrap_hostname_,
                                       endpoint_address_,
                                       endpoint_.port());
-            handler_ = std::make_shared<bootstrap_handler>(shared_from_this());
-            connection_deadline_.expires_at(asio::steady_timer::time_point::max());
+            bootstrap_handler_ = std::make_shared<bootstrap_handler>(shared_from_this());
             connection_deadline_.cancel();
         }
     }
@@ -1313,7 +1297,6 @@ class mcbp_session_impl
         }
         if (connection_deadline_.expiry() <= asio::steady_timer::clock_type::now()) {
             stream_->close([](std::error_code) {});
-            connection_deadline_.expires_at(asio::steady_timer::time_point::max());
         }
         connection_deadline_.async_wait(std::bind(&mcbp_session_impl::check_deadline, shared_from_this(), std::placeholders::_1));
     }
@@ -1353,17 +1336,21 @@ class mcbp_session_impl
               for (;;) {
                   mcbp_message msg{};
                   switch (self->parser_.next(msg)) {
-                      case mcbp_parser::result::ok:
-                          if (self->handler_ == nullptr || self->stopped_) {
+                      case mcbp_parser::result::ok: {
+                          if (self->stopped_) {
                               return;
                           }
                           CB_LOG_TRACE(
                             "{} MCBP recv, opaque={}, {:n}", self->log_prefix_, msg.header.opaque, spdlog::to_hex(msg.header_data()));
-                          self->handler_->handle(std::move(msg));
+                          if (self->bootstrapped_) {
+                              self->handler_->handle(std::move(msg));
+                          } else {
+                              self->bootstrap_handler_->handle(std::move(msg));
+                          }
                           if (self->stopped_) {
                               return;
                           }
-                          break;
+                      } break;
                       case mcbp_parser::result::need_data:
                           self->reading_ = false;
                           if (!self->stopped_ && self->stream_->is_open()) {
@@ -1425,8 +1412,9 @@ class mcbp_session_impl
     couchbase::core::origin origin_;
     std::optional<std::string> bucket_name_;
     mcbp_parser parser_;
-    std::shared_ptr<message_handler> handler_;
-    utils::movable_function<void(std::error_code, const topology::configuration&)> bootstrap_handler_{};
+    std::shared_ptr<bootstrap_handler> bootstrap_handler_{ nullptr };
+    std::shared_ptr<message_handler> handler_{ nullptr };
+    utils::movable_function<void(std::error_code, const topology::configuration&)> bootstrap_callback_{};
     std::mutex command_handlers_mutex_{};
     std::map<std::uint32_t, command_handler> command_handlers_{};
     std::vector<std::shared_ptr<config_listener>> config_listeners_{};
@@ -1473,7 +1461,7 @@ class mcbp_session_impl
 
     std::string log_prefix_{};
     std::chrono::time_point<std::chrono::steady_clock> last_active_{};
-    diag::endpoint_state state_{ diag::endpoint_state::disconnected };
+    std::atomic<diag::endpoint_state> state_{ diag::endpoint_state::disconnected };
 };
 
 mcbp_session::mcbp_session(std::string client_id,
@@ -1550,10 +1538,22 @@ mcbp_session::supports_feature(protocol::hello_feature feature)
     return impl_->supports_feature(feature);
 }
 
-const std::string&
+// const std::string&
+// mcbp_session::id() const
+// {
+//     return impl_->id();
+// }
+std::string
 mcbp_session::id() const
 {
-    return impl_->id();
+    if (impl_) {
+        return fmt::format("{}, {}, {}, refcnt={}",
+                           reinterpret_cast<const void*>(this),
+                           reinterpret_cast<const void*>(impl_.get()),
+                           impl_->id(),
+                           impl_.use_count());
+    }
+    return fmt::format("{}, nullptr", reinterpret_cast<const void*>(this));
 }
 
 std::string
@@ -1662,18 +1662,6 @@ void
 mcbp_session::update_collection_uid(const std::string& path, std::uint32_t uid)
 {
     return impl_->update_collection_uid(path, uid);
-}
-
-void
-mcbp_session::reset()
-{
-    return impl_.reset();
-}
-
-auto
-mcbp_session::empty() const -> bool
-{
-    return impl_ == nullptr;
 }
 
 void

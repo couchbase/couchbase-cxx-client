@@ -16,15 +16,47 @@
  */
 
 #include "integration_test_guard.hxx"
+
 #include "core/operations/management/freeform.hxx"
 #include "core/utils/json.hxx"
 #include "logger.hxx"
 
 namespace test::utils
 {
+static void
+set_thread_name(const char* name)
+{
+#if defined(__APPLE__)
+    ::pthread_setname_np(name);
+#elif defined(__FreeBSD__)
+    ::pthread_set_name_np(::pthread_self(), name);
+#elif defined(__linux__)
+    ::pthread_setname_np(::pthread_self(), name);
+#elif defined(__NetBSD__)
+    ::pthread_setname_np(::pthread_self(), "%s", name);
+#else
+    (void)name;
+#endif
+}
+
+static auto
+spawn_io_threads(asio::io_context& io, std::size_t number_of_threads) -> std::vector<std::thread>
+{
+    std::vector<std::thread> threads;
+    threads.reserve(number_of_threads);
+    for (std::size_t i = 0; i < number_of_threads; i++) {
+        threads.emplace_back([&io, i]() mutable {
+            set_thread_name(fmt::format("cxx_io_{}", i).c_str());
+            io.run();
+        });
+    }
+    return threads;
+}
+
 integration_test_guard::integration_test_guard()
-  : cluster(couchbase::core::cluster::create(io))
-  , ctx(test_context::load_from_environment())
+  : ctx(test_context::load_from_environment())
+  , io(static_cast<int>(ctx.number_of_io_threads))
+  , cluster(couchbase::core::cluster::create(io))
 {
     init_logger();
     auto connstr = couchbase::core::utils::parse_connection_string(ctx.connection_string);
@@ -36,7 +68,7 @@ integration_test_guard::integration_test_guard()
         auth.username = ctx.username;
         auth.password = ctx.password;
     }
-    io_thread = std::thread([this]() { io.run(); });
+    io_threads = spawn_io_threads(io, ctx.number_of_io_threads);
     origin = couchbase::core::origin(auth, connstr);
     if (ctx.dns_nameserver || ctx.dns_port) {
         origin.options().dns_config = couchbase::core::io::dns::dns_config{
@@ -48,24 +80,27 @@ integration_test_guard::integration_test_guard()
 }
 
 integration_test_guard::integration_test_guard(const couchbase::core::cluster_options& opts)
+  : ctx(test_context::load_from_environment())
+  , io(static_cast<int>(ctx.number_of_io_threads))
+  , cluster(couchbase::core::cluster::create(io))
 {
     init_logger();
-    ctx = test_context::load_from_environment();
     auto auth = ctx.build_auth();
     auto connstr = couchbase::core::utils::parse_connection_string(ctx.connection_string);
     // for now, lets _only_ add a tracer or meter from the incoming options
     connstr.options.meter = opts.meter;
     connstr.options.tracer = opts.tracer;
     couchbase::core::origin orig(auth, connstr);
-    cluster = couchbase::core::cluster::create(io);
-    io_thread = std::thread([this]() { io.run(); });
+    io_threads = spawn_io_threads(io, ctx.number_of_io_threads);
     open_cluster(cluster, orig);
 }
 
 integration_test_guard::~integration_test_guard()
 {
     close_cluster(cluster);
-    io_thread.join();
+    for (auto& thread : io_threads) {
+        thread.join();
+    }
 }
 
 const couchbase::core::operations::management::bucket_describe_response::bucket_info&

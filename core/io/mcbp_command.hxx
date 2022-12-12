@@ -55,7 +55,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     Request request;
     encoded_request_type encoded;
     std::optional<std::uint32_t> opaque_{};
-    io::mcbp_session session_{};
+    std::optional<io::mcbp_session> session_{};
     mcbp_command_handler handler_{};
     std::shared_ptr<Manager> manager_{};
     std::chrono::milliseconds timeout_{};
@@ -73,8 +73,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         if constexpr (io::mcbp_traits::supports_durability_v<Request>) {
             if (request.durability_level != durability_level::none && timeout_ < durability_timeout_floor) {
                 CB_LOG_DEBUG(
-                  R"({} Timeout is too low for operation with durability, increasing to sensible value. timeout={}ms, floor={}ms, id="{}")",
-                  session_.log_prefix(),
+                  R"(Timeout is too low for operation with durability, increasing to sensible value. timeout={}ms, floor={}ms, id="{}")",
                   request.id,
                   timeout_.count(),
                   durability_timeout_floor.count(),
@@ -106,7 +105,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     void cancel(retry_reason reason)
     {
         if (opaque_ && session_) {
-            if (session_.cancel(opaque_.value(), asio::error::operation_aborted, reason)) {
+            if (session_->cancel(opaque_.value(), asio::error::operation_aborted, reason)) {
                 handler_ = nullptr;
             }
         }
@@ -134,36 +133,36 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
     void request_collection_id()
     {
-        if (session_.is_stopped()) {
+        if (session_->is_stopped()) {
             return manager_->map_and_send(this->shared_from_this());
         }
         protocol::client_request<protocol::get_collection_id_request_body> req;
-        req.opaque(session_.next_opaque());
+        req.opaque(session_->next_opaque());
         req.body().collection_path(request.id.collection_path());
-        session_.write_and_subscribe(req.opaque(),
-                                     req.data(session_.supports_feature(protocol::hello_feature::snappy)),
-                                     [self = this->shared_from_this()](std::error_code ec,
-                                                                       retry_reason /* reason */,
-                                                                       io::mcbp_message&& msg,
-                                                                       std::optional<key_value_error_map_info> /* error_info */) mutable {
-                                         if (ec == asio::error::operation_aborted) {
-                                             return self->invoke_handler(errc::common::ambiguous_timeout);
-                                         }
-                                         if (ec == errc::common::collection_not_found) {
-                                             if (self->request.id.is_collection_resolved()) {
-                                                 return self->invoke_handler(ec);
-                                             }
-                                             return self->handle_unknown_collection();
-                                         }
-                                         if (ec) {
-                                             return self->invoke_handler(ec);
-                                         }
-                                         protocol::client_response<protocol::get_collection_id_response_body> resp(std::move(msg));
-                                         self->session_.update_collection_uid(self->request.id.collection_path(),
-                                                                              resp.body().collection_uid());
-                                         self->request.id.collection_uid(resp.body().collection_uid());
-                                         return self->send();
-                                     });
+        session_->write_and_subscribe(req.opaque(),
+                                      req.data(session_->supports_feature(protocol::hello_feature::snappy)),
+                                      [self = this->shared_from_this()](std::error_code ec,
+                                                                        retry_reason /* reason */,
+                                                                        io::mcbp_message&& msg,
+                                                                        std::optional<key_value_error_map_info> /* error_info */) mutable {
+                                          if (ec == asio::error::operation_aborted) {
+                                              return self->invoke_handler(errc::common::ambiguous_timeout);
+                                          }
+                                          if (ec == errc::common::collection_not_found) {
+                                              if (self->request.id.is_collection_resolved()) {
+                                                  return self->invoke_handler(ec);
+                                              }
+                                              return self->handle_unknown_collection();
+                                          }
+                                          if (ec) {
+                                              return self->invoke_handler(ec);
+                                          }
+                                          protocol::client_response<protocol::get_collection_id_response_body> resp(std::move(msg));
+                                          self->session_->update_collection_uid(self->request.id.collection_path(),
+                                                                                resp.body().collection_uid());
+                                          self->request.id.collection_uid(resp.body().collection_uid());
+                                          return self->send();
+                                      });
     }
 
     void handle_unknown_collection()
@@ -171,7 +170,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         auto backoff = std::chrono::milliseconds(500);
         auto time_left = deadline.expiry() - std::chrono::steady_clock::now();
         CB_LOG_DEBUG(R"({} unknown collection response for "{}", time_left={}ms, id="{}")",
-                     session_.log_prefix(),
+                     session_->log_prefix(),
                      request.id,
                      std::chrono::duration_cast<std::chrono::milliseconds>(time_left).count(),
                      id_);
@@ -191,17 +190,17 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
     void send()
     {
-        opaque_ = session_.next_opaque();
+        opaque_ = session_->next_opaque();
         request.opaque = *opaque_;
         span_->add_tag(tracing::attributes::operation_id, fmt::format("0x{:x}", request.opaque));
         if (request.id.use_collections() && !request.id.is_collection_resolved()) {
-            if (session_.supports_feature(protocol::hello_feature::collections)) {
-                auto collection_id = session_.get_collection_uid(request.id.collection_path());
+            if (session_->supports_feature(protocol::hello_feature::collections)) {
+                auto collection_id = session_->get_collection_uid(request.id.collection_path());
                 if (collection_id) {
                     request.id.collection_uid(collection_id.value());
                 } else {
                     CB_LOG_DEBUG(R"({} no cache entry for collection, resolve collection id for "{}", timeout={}ms, id="{}")",
-                                 session_.log_prefix(),
+                                 session_->log_prefix(),
                                  request.id,
                                  timeout_.count(),
                                  id_);
@@ -214,7 +213,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
             }
         }
 
-        if (auto ec = request.encode_to(encoded, session_.context()); ec) {
+        if (auto ec = request.encode_to(encoded, session_->context()); ec) {
             return invoke_handler(ec);
         }
         if constexpr (io::mcbp_traits::supports_durability_v<Request>) {
@@ -224,9 +223,9 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
             }
         }
 
-        session_.write_and_subscribe(
+        session_->write_and_subscribe(
           request.opaque,
-          encoded.data(session_.supports_feature(protocol::hello_feature::snappy)),
+          encoded.data(session_->supports_feature(protocol::hello_feature::snappy)),
           [self = this->shared_from_this(),
            start = std::chrono::steady_clock::now()](std::error_code ec,
                                                      retry_reason reason,
@@ -259,10 +258,10 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
               if (protocol::is_valid_status(msg.header.status())) {
                   status = static_cast<key_value_status_code>(msg.header.status());
               } else {
-                  error_code = self->session_.decode_error_code(msg.header.status());
+                  error_code = self->session_->decode_error_code(msg.header.status());
               }
               if (status == key_value_status_code::not_my_vbucket) {
-                  self->session_.handle_not_my_vbucket(msg);
+                  self->session_->handle_not_my_vbucket(msg);
                   return io::retry_orchestrator::maybe_retry(self->manager_, self, retry_reason::key_value_not_my_vbucket, ec);
               }
               if (status == key_value_status_code::unknown_collection) {
@@ -308,9 +307,9 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
             return;
         }
         session_ = std::move(session);
-        span_->add_tag(tracing::attributes::remote_socket, session_.remote_address());
-        span_->add_tag(tracing::attributes::local_socket, session_.local_address());
-        span_->add_tag(tracing::attributes::local_id, session_.id());
+        span_->add_tag(tracing::attributes::remote_socket, session_->remote_address());
+        span_->add_tag(tracing::attributes::local_socket, session_->local_address());
+        span_->add_tag(tracing::attributes::local_id, session_->id());
         send();
     }
 };

@@ -20,21 +20,29 @@
 #include "core/agent_group.hxx"
 #include "core/agent_unit_test_api.hxx"
 #include "core/collections_component_unit_test_api.hxx"
+#include "core/range_scan_orchestrator.hxx"
+#include "core/scan_options.hxx"
+#include "core/topology/configuration.hxx"
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
 
 #include <chrono>
-#include <spdlog/fmt/bin_to_hex.h>
 
-auto
+static auto
 populate_documents_for_range_scan(const couchbase::collection& collection,
                                   const std::vector<std::string>& ids,
-                                  const std::vector<std::byte>& value)
+                                  const std::vector<std::byte>& value,
+                                  std::optional<std::chrono::seconds> expiry = {})
 {
+    couchbase::upsert_options options{};
+    if (expiry) {
+        options.expiry(expiry.value());
+    }
+
     std::map<std::vector<std::byte>, couchbase::mutation_token> mutations;
     for (const auto& id : ids) {
-        auto [ctx, resp] = collection.upsert<couchbase::codec::raw_binary_transcoder>(id, value, {}).get();
+        auto [ctx, resp] = collection.upsert<couchbase::codec::raw_binary_transcoder>(id, value, options).get();
         REQUIRE_SUCCESS(ctx.ec());
         REQUIRE(resp.mutation_token().has_value());
         mutations[couchbase::core::utils::to_binary(id)] = resp.mutation_token().value();
@@ -97,6 +105,16 @@ do_range_scan(couchbase::core::agent agent,
     return data;
 }
 
+static auto
+make_binary_value(std::size_t number_of_bytes)
+{
+    std::vector<std::byte> value(number_of_bytes);
+    for (std::size_t i = 0; i < value.size(); ++i) {
+        value[i] = static_cast<std::byte>(i);
+    }
+    return value;
+}
+
 TEST_CASE("integration: range scan large values", "[integration]")
 {
     test::utils::integration_test_guard integration;
@@ -110,10 +128,7 @@ TEST_CASE("integration: range scan large values", "[integration]")
                         .scope(couchbase::scope::default_name)
                         .collection(couchbase::collection::default_name);
 
-    std::vector<std::byte> value(16'384);
-    for (std::size_t i = 0; i < value.size(); ++i) {
-        value[i] = static_cast<std::byte>(i);
-    }
+    auto value = make_binary_value(16'384);
 
     std::vector<std::string> ids{
         "largevalues-2960", "largevalues-3064", "largevalues-3686", "largevalues-3716", "largevalues-5354",
@@ -129,12 +144,13 @@ TEST_CASE("integration: range scan large values", "[integration]")
     auto agent = ag.get_agent(integration.ctx.bucket);
     REQUIRE(agent.has_value());
 
-    couchbase::core::range_scan_create_options create_options{};
-    create_options.scope_name = couchbase::scope::default_name;
-    create_options.collection_name = couchbase::collection::default_name;
-    create_options.scan_type = couchbase::core::range_scan{
-        { couchbase::core::utils::to_binary("largevalues") },
-        { couchbase::core::utils::to_binary("largevalues\xff") },
+    couchbase::core::range_scan_create_options create_options{
+        couchbase::scope::default_name,
+        couchbase::collection::default_name,
+        couchbase::core::range_scan{
+          { couchbase::core::utils::to_binary("largevalues") },
+          { couchbase::core::utils::to_binary("largevalues\xff") },
+        },
     };
     create_options.snapshot_requirements = couchbase::core::range_snapshot_requirements{
         highest_mutation->second.partition_uuid(),
@@ -188,12 +204,13 @@ TEST_CASE("integration: range scan small values", "[integration]")
     auto agent = ag.get_agent(integration.ctx.bucket);
     REQUIRE(agent.has_value());
 
-    couchbase::core::range_scan_create_options create_options{};
-    create_options.scope_name = couchbase::scope::default_name;
-    create_options.collection_name = couchbase::collection::default_name;
-    create_options.scan_type = couchbase::core::range_scan{
-        { couchbase::core::utils::to_binary("rangesmallvalues") },
-        { couchbase::core::utils::to_binary("rangesmallvalues\xff") },
+    couchbase::core::range_scan_create_options create_options{
+        couchbase::scope::default_name,
+        couchbase::collection::default_name,
+        couchbase::core::range_scan{
+          { couchbase::core::utils::to_binary("rangesmallvalues") },
+          { couchbase::core::utils::to_binary("rangesmallvalues\xff") },
+        },
     };
     create_options.snapshot_requirements = couchbase::core::range_snapshot_requirements{
         highest_mutation->second.partition_uuid(),
@@ -291,12 +308,13 @@ TEST_CASE("integration: range scan collection retry", "[integration]")
     // we're going to force a refresh, so we need to delete the collection from our cache.
     agent->unit_test_api().collections().remove_collection_from_cache(couchbase::scope::default_name, new_collection.name());
 
-    couchbase::core::range_scan_create_options create_options{};
-    create_options.scope_name = couchbase::scope::default_name;
-    create_options.collection_name = new_collection.name();
-    create_options.scan_type = couchbase::core::range_scan{
-        { couchbase::core::utils::to_binary("rangecollectionretry") },
-        { couchbase::core::utils::to_binary("rangecollectionretry\xff") },
+    couchbase::core::range_scan_create_options create_options{
+        couchbase::scope::default_name,
+        new_collection.name(),
+        couchbase::core::range_scan{
+          { couchbase::core::utils::to_binary("rangecollectionretry") },
+          { couchbase::core::utils::to_binary("rangecollectionretry\xff") },
+        },
     };
     create_options.snapshot_requirements = couchbase::core::range_snapshot_requirements{
         highest_mutation->second.partition_uuid(),
@@ -350,14 +368,15 @@ TEST_CASE("integration: range scan only keys", "[integration]")
     auto agent = ag.get_agent(integration.ctx.bucket);
     REQUIRE(agent.has_value());
 
-    couchbase::core::range_scan_create_options create_options{};
-    create_options.scope_name = couchbase::scope::default_name;
-    create_options.collection_name = couchbase::collection::default_name;
-    create_options.ids_only = true;
-    create_options.scan_type = couchbase::core::range_scan{
-        { couchbase::core::utils::to_binary("rangekeysonly") },
-        { couchbase::core::utils::to_binary("rangekeysonly\xff") },
+    couchbase::core::range_scan_create_options create_options{
+        couchbase::scope::default_name,
+        couchbase::collection::default_name,
+        couchbase::core::range_scan{
+          { couchbase::core::utils::to_binary("rangekeysonly") },
+          { couchbase::core::utils::to_binary("rangekeysonly\xff") },
+        },
     };
+    create_options.ids_only = true;
     create_options.snapshot_requirements = couchbase::core::range_snapshot_requirements{
         highest_mutation->second.partition_uuid(),
         highest_mutation->second.sequence_number(),
@@ -412,14 +431,15 @@ TEST_CASE("integration: range scan cancellation before continue", "[integration]
     std::vector<std::byte> scan_uuid;
 
     {
-        couchbase::core::range_scan_create_options options{};
-        options.scope_name = couchbase::scope::default_name;
-        options.collection_name = couchbase::collection::default_name;
-        options.ids_only = true;
-        options.scan_type = couchbase::core::range_scan{
-            { couchbase::core::utils::to_binary("rangescancancel") },
-            { couchbase::core::utils::to_binary("rangescancancel\xff") },
+        couchbase::core::range_scan_create_options options{
+            couchbase::scope::default_name,
+            couchbase::collection::default_name,
+            couchbase::core::range_scan{
+              { couchbase::core::utils::to_binary("rangescancancel") },
+              { couchbase::core::utils::to_binary("rangescancancel\xff") },
+            },
         };
+        options.ids_only = true;
         options.snapshot_requirements = couchbase::core::range_snapshot_requirements{
             highest_mutation->second.partition_uuid(),
             highest_mutation->second.sequence_number(),
@@ -515,14 +535,15 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
     std::vector<std::byte> scan_uuid;
 
     {
-        couchbase::core::range_scan_create_options options{};
-        options.scope_name = couchbase::scope::default_name;
-        options.collection_name = couchbase::collection::default_name;
-        options.ids_only = true;
-        options.scan_type = couchbase::core::range_scan{
-            { couchbase::core::utils::to_binary("rangescancancel") },
-            { couchbase::core::utils::to_binary("rangescancancel\xff") },
+        couchbase::core::range_scan_create_options options{
+            couchbase::scope::default_name,
+            couchbase::collection::default_name,
+            couchbase::core::range_scan{
+              { couchbase::core::utils::to_binary("rangescancancel") },
+              { couchbase::core::utils::to_binary("rangescancancel\xff") },
+            },
         };
+        options.ids_only = true;
         options.snapshot_requirements = couchbase::core::range_snapshot_requirements{
             highest_mutation->second.partition_uuid(),
             highest_mutation->second.sequence_number(),
@@ -626,14 +647,15 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
     std::vector<std::byte> scan_uuid;
 
     {
-        couchbase::core::range_scan_create_options options{};
-        options.scope_name = couchbase::scope::default_name;
-        options.collection_name = couchbase::collection::default_name;
-        options.ids_only = true;
-        options.scan_type = couchbase::core::range_scan{
-            { couchbase::core::utils::to_binary("rangescancancel") },
-            { couchbase::core::utils::to_binary("rangescancancel\xff") },
+        couchbase::core::range_scan_create_options options{
+            couchbase::scope::default_name,
+            couchbase::collection::default_name,
+            couchbase::core::range_scan{
+              { couchbase::core::utils::to_binary("rangescancancel") },
+              { couchbase::core::utils::to_binary("rangescancancel\xff") },
+            },
         };
+        options.ids_only = true;
         options.snapshot_requirements = couchbase::core::range_snapshot_requirements{
             highest_mutation->second.partition_uuid(),
             highest_mutation->second.sequence_number(),
@@ -723,10 +745,11 @@ TEST_CASE("integration: sampling scan keys only", "[integration]")
     auto agent = ag.get_agent(integration.ctx.bucket);
     REQUIRE(agent.has_value());
 
-    couchbase::core::range_scan_create_options create_options{};
-    create_options.scope_name = couchbase::scope::default_name;
-    create_options.collection_name = couchbase::collection::default_name;
-    create_options.scan_type = couchbase::core::sampling_scan{ 10 };
+    couchbase::core::range_scan_create_options create_options{
+        couchbase::scope::default_name,
+        couchbase::collection::default_name,
+        couchbase::core::sampling_scan{ 10 },
+    };
     create_options.ids_only = true;
     create_options.snapshot_requirements = couchbase::core::range_snapshot_requirements{
         highest_mutation->second.partition_uuid(),
@@ -738,4 +761,166 @@ TEST_CASE("integration: sampling scan keys only", "[integration]")
 
     auto data = do_range_scan(agent.value(), 12, create_options, continue_options);
     REQUIRE_FALSE(data.empty());
+}
+
+static auto
+make_doc_ids(std::size_t number_of_keys, const std::string& prefix)
+{
+    std::vector<std::string> keys{ number_of_keys };
+    for (std::size_t i = 0; i < number_of_keys; ++i) {
+        keys[i] = prefix + std::to_string(i);
+    }
+    return keys;
+}
+
+static auto
+mutations_to_mutation_state(std::map<std::vector<std::byte>, couchbase::mutation_token> mutations)
+{
+    couchbase::core::mutation_state state;
+    for (const auto& [key, token] : mutations) {
+        state.tokens.emplace_back(token);
+    }
+    return state;
+}
+
+TEST_CASE("integration: manager scan range without content", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.has_bucket_capability("range_scan")) {
+        return;
+    }
+
+    auto collection = couchbase::cluster(integration.cluster)
+                        .bucket(integration.ctx.bucket)
+                        .scope(couchbase::scope::default_name)
+                        .collection(couchbase::collection::default_name);
+
+    auto ids = make_doc_ids(100, "rangescanwithoutcontent-");
+    auto value = make_binary_value(1);
+    auto mutations = populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
+
+    auto barrier = std::make_shared<std::promise<tl::expected<std::size_t, std::error_code>>>();
+    auto f = barrier->get_future();
+    integration.cluster->with_bucket_configuration(
+      integration.ctx.bucket, [barrier](std::error_code ec, const couchbase::core::topology::configuration& config) mutable {
+          if (ec) {
+              return barrier->set_value(tl::unexpected(ec));
+          }
+          if (!config.vbmap || config.vbmap->empty()) {
+              return barrier->set_value(tl::unexpected(couchbase::errc::common::feature_not_available));
+          }
+          barrier->set_value(config.vbmap->size());
+      });
+    auto number_of_vbuckets = f.get();
+    EXPECT_SUCCESS(number_of_vbuckets);
+
+    auto ag = couchbase::core::agent_group(integration.io, { { integration.cluster } });
+    ag.open_bucket(integration.ctx.bucket);
+    auto agent = ag.get_agent(integration.ctx.bucket);
+    REQUIRE(agent.has_value());
+
+    couchbase::core::range_scan scan{ "rangescanwithoutcontent", "rangescanwithoutcontent\xff" };
+    couchbase::core::range_scan_orchestrator_options options{};
+    options.consistent_with = mutations_to_mutation_state(mutations);
+    options.ids_only = true;
+    couchbase::core::range_scan_orchestrator orchestrator(integration.io,
+                                                          agent.value(),
+                                                          number_of_vbuckets.value(),
+                                                          couchbase::scope::default_name,
+                                                          couchbase::collection::default_name,
+                                                          scan,
+                                                          options);
+
+    auto result = orchestrator.scan();
+    EXPECT_SUCCESS(result);
+
+    std::set<std::vector<std::byte>> entry_ids{};
+
+    do {
+        auto entry = result->next();
+        if (!entry) {
+            break;
+        }
+
+        auto [_, inserted] = entry_ids.insert(entry->key);
+        REQUIRE(inserted);
+        REQUIRE_FALSE(entry->body.has_value());
+    } while (true);
+
+    for (const auto& id : ids) {
+        REQUIRE(entry_ids.count(couchbase::core::utils::to_binary(id)) == 1);
+    }
+    REQUIRE(ids.size() == entry_ids.size());
+}
+
+TEST_CASE("integration: manager scan range with content", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.has_bucket_capability("range_scan")) {
+        return;
+    }
+
+    auto collection = couchbase::cluster(integration.cluster)
+                        .bucket(integration.ctx.bucket)
+                        .scope(couchbase::scope::default_name)
+                        .collection(couchbase::collection::default_name);
+
+    auto ids = make_doc_ids(100, "rangescanwithcontent-");
+    auto value = make_binary_value(100);
+    auto mutations = populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
+
+    auto barrier = std::make_shared<std::promise<tl::expected<std::size_t, std::error_code>>>();
+    auto f = barrier->get_future();
+    integration.cluster->with_bucket_configuration(
+      integration.ctx.bucket, [barrier](std::error_code ec, const couchbase::core::topology::configuration& config) mutable {
+          if (ec) {
+              return barrier->set_value(tl::unexpected(ec));
+          }
+          if (!config.vbmap || config.vbmap->empty()) {
+              return barrier->set_value(tl::unexpected(couchbase::errc::common::feature_not_available));
+          }
+          barrier->set_value(config.vbmap->size());
+      });
+    auto number_of_vbuckets = f.get();
+    EXPECT_SUCCESS(number_of_vbuckets);
+
+    auto ag = couchbase::core::agent_group(integration.io, { { integration.cluster } });
+    ag.open_bucket(integration.ctx.bucket);
+    auto agent = ag.get_agent(integration.ctx.bucket);
+    REQUIRE(agent.has_value());
+
+    couchbase::core::range_scan scan{ "rangescanwithcontent", "rangescanwithcontent\xff" };
+    couchbase::core::range_scan_orchestrator_options options{};
+    options.consistent_with = mutations_to_mutation_state(mutations);
+    couchbase::core::range_scan_orchestrator orchestrator(integration.io,
+                                                          agent.value(),
+                                                          number_of_vbuckets.value(),
+                                                          couchbase::scope::default_name,
+                                                          couchbase::collection::default_name,
+                                                          scan,
+                                                          options);
+
+    auto result = orchestrator.scan();
+    EXPECT_SUCCESS(result);
+
+    std::set<std::vector<std::byte>> entry_ids{};
+
+    do {
+        auto entry = result->next();
+        if (!entry) {
+            break;
+        }
+
+        auto [_, inserted] = entry_ids.insert(entry->key);
+        REQUIRE(inserted);
+        REQUIRE(entry->body.has_value());
+    } while (true);
+
+    for (const auto& id : ids) {
+        INFO(id);
+        REQUIRE(entry_ids.count(couchbase::core::utils::to_binary(id)) == 1);
+    }
+    REQUIRE(ids.size() == entry_ids.size());
 }

@@ -78,12 +78,14 @@ TEST_CASE("integration: can connect with handler capturing non-copyable object",
         auto barrier = std::make_shared<std::promise<std::error_code>>();
         auto f = barrier->get_future();
         test::utils::move_only_context ctx("foobar");
-        cluster->open(integration.origin, [barrier, ctx = std::move(ctx)](std::error_code ec) {
-            CHECK(ctx.payload() == "foobar");
+        std::string output;
+        cluster->open(integration.origin, [barrier, ctx = std::move(ctx), &output](std::error_code ec) {
+            output = ctx.payload();
             barrier->set_value(ec);
         });
         auto rc = f.get();
         REQUIRE(!rc);
+        CHECK(output == "foobar");
     }
 
     // test opening a bucket
@@ -91,12 +93,14 @@ TEST_CASE("integration: can connect with handler capturing non-copyable object",
         auto barrier = std::make_shared<std::promise<std::error_code>>();
         auto f = barrier->get_future();
         test::utils::move_only_context ctx("foobar");
-        cluster->open_bucket(integration.ctx.bucket, [barrier, ctx = std::move(ctx)](std::error_code ec) {
-            CHECK(ctx.payload() == "foobar");
+        std::string output;
+        cluster->open_bucket(integration.ctx.bucket, [barrier, ctx = std::move(ctx), &output](std::error_code ec) {
+            output = ctx.payload();
             barrier->set_value(ec);
         });
         auto rc = f.get();
         REQUIRE(!rc);
+        CHECK(output == "foobar");
     }
 
     // test disconnecting
@@ -104,13 +108,15 @@ TEST_CASE("integration: can connect with handler capturing non-copyable object",
         auto barrier = std::make_shared<std::promise<bool>>();
         auto f = barrier->get_future();
         test::utils::move_only_context ctx("foobar");
-        cluster->close([barrier, ctx = std::move(ctx)]() mutable {
-            CHECK(ctx.payload() == "foobar");
+        std::string output;
+        cluster->close([barrier, ctx = std::move(ctx), &output]() mutable {
+            output = ctx.payload();
             barrier->set_value(false);
         });
 
         auto rc = f.get();
         REQUIRE(!rc);
+        CHECK(output == "foobar");
     }
 }
 

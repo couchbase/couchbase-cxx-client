@@ -71,7 +71,13 @@ using command_handler =
 class mcbp_session
 {
   public:
-    mcbp_session() = default;
+    mcbp_session() = delete;
+    ~mcbp_session() = default;
+    mcbp_session(const mcbp_session& other) = default;
+    mcbp_session& operator=(const mcbp_session& other) = default;
+    mcbp_session(mcbp_session&& other) = default;
+    mcbp_session& operator=(mcbp_session&& other) = default;
+
     mcbp_session(std::string client_id,
                  asio::io_context& ctx,
                  couchbase::core::origin origin,
@@ -95,7 +101,8 @@ class mcbp_session
     [[nodiscard]] mcbp_context context() const;
     [[nodiscard]] bool supports_feature(protocol::hello_feature feature);
     [[nodiscard]] std::vector<protocol::hello_feature> supported_features() const;
-    [[nodiscard]] const std::string& id() const;
+    //[[nodiscard]] const std::string& id() const;
+    [[nodiscard]] std::string id() const;
     [[nodiscard]] std::string remote_address() const;
     [[nodiscard]] std::string local_address() const;
     [[nodiscard]] const std::string& bootstrap_hostname() const;
@@ -115,13 +122,6 @@ class mcbp_session
     [[nodiscard]] std::optional<key_value_error_map_info> decode_error_code(std::uint16_t code);
     void handle_not_my_vbucket(const io::mcbp_message& msg) const;
     void update_collection_uid(const std::string& path, std::uint32_t uid);
-
-    void reset();
-    [[nodiscard]] auto empty() const -> bool;
-    operator bool() const
-    {
-        return !empty();
-    }
 
   private:
     std::shared_ptr<mcbp_session_impl> impl_{ nullptr };
