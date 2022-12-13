@@ -228,6 +228,7 @@ class bucket_impl
             handle_error(errc::common::service_not_available);
             return errc::common::service_not_available;
         }
+        req->opaque_ = session->next_opaque();
         auto data = codec_.encode_packet(*req);
         if (!data) {
             CB_LOG_DEBUG("unable to encode packet. ec={}", data.error().message());

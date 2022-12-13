@@ -84,7 +84,8 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
             std::get<range_scan>(create_options_.scan_type).start_.id = last_seen_key_;
         }
 
-        agent_.range_scan_create(vbucket_id_, create_options_, [self = shared_from_this()](auto res, auto ec) {
+        auto op = agent_.range_scan_create(vbucket_id_, create_options_, [self = shared_from_this()](auto res, auto ec) {
+            self->drain_waiting_queue();
             if (ec) {
                 self->state_ = failed{ ec };
                 if (ec == errc::key_value::document_not_found) {
@@ -117,17 +118,44 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
 
     auto pop() -> std::optional<range_scan_item>
     {
-        return std::move(peeked_);
+        if (peeked_) {
+            std::optional<range_scan_item> item{};
+            std::swap(peeked_, item);
+            return item;
+        }
+        return peeked_;
     }
 
     template<typename Handler>
     void peek(Handler&& handler)
     {
-        if (is_failed() || is_completed()) {
+        do_when_ready([self = shared_from_this(), handler = std::forward<Handler>(handler)]() mutable {
+            self->peek_when_ready(std::forward<Handler>(handler));
+        });
+    }
+
+    template<typename Handler>
+    void take(Handler&& handler)
+    {
+        do_when_ready([self = shared_from_this(), handler = std::forward<Handler>(handler)]() mutable {
+            self->take_when_ready(std::forward<Handler>(handler));
+        });
+    }
+
+  private:
+    template<typename Handler>
+    void peek_when_ready(Handler&& handler)
+    {
+        if (is_failed()) {
             return handler(std::optional<range_scan_item>{});
         }
+
         if (peeked_) {
             return handler(peeked_);
+        }
+
+        if (is_completed() && !items_.ready()) {
+            return handler(std::optional<range_scan_item>{});
         }
 
         items_.async_receive(
@@ -142,9 +170,9 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
     }
 
     template<typename Handler>
-    void take(Handler&& handler)
+    void take_when_ready(Handler&& handler)
     {
-        if (is_failed() || (is_completed() && !items_.ready())) {
+        if (is_failed() || (!is_running() && !items_.ready())) {
             return handler(std::optional<range_scan_item>{}, false);
         }
         if (!items_.ready()) {
@@ -159,7 +187,24 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
           });
     }
 
-  private:
+    template<typename Handler>
+    void do_when_ready(Handler&& handler)
+    {
+        if (is_ready()) {
+            drain_waiting_queue();
+            return handler();
+        }
+        waiting_queue_.emplace_back(std::forward<Handler>(handler));
+    }
+
+    void drain_waiting_queue()
+    {
+        auto queue = std::move(waiting_queue_);
+        for (auto const& waiter : queue) {
+            waiter();
+        }
+    }
+
     void resume()
     {
         if (!is_running()) {
@@ -188,6 +233,11 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
                   return self->resume();
               }
           });
+    }
+
+    [[nodiscard]] auto is_ready() const -> bool
+    {
+        return !std::holds_alternative<std::monostate>(state_);
     }
 
     [[nodiscard]] auto is_running() const -> bool
@@ -229,6 +279,7 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
     std::vector<std::byte> last_seen_key_{};
     std::variant<std::monostate, failed, running, completed> state_{};
     std::optional<range_scan_item> peeked_{};
+    std::vector<utils::movable_function<void()>> waiting_queue_{};
 };
 
 struct lowest_item {
@@ -361,6 +412,9 @@ class range_scan_orchestrator_impl
     template<typename Iterator, typename Handler>
     void next_item_sorted(std::optional<lowest_item> lowest, Iterator it, Handler&& handler)
     {
+        if (streams_.empty()) {
+            return handler({});
+        }
         auto vbucket_id = it->first;
         auto stream = it->second;
         stream->peek(
@@ -375,7 +429,10 @@ class range_scan_orchestrator_impl
               }
 
               if (it != self->streams_.end()) {
-                  self->next_item_sorted(std::move(lowest), it, std::forward<Handler>(handler));
+                  return asio::post(asio::bind_executor(
+                    self->io_, [lowest = std::move(lowest), it, self, handler = std::forward<Handler>(handler)]() mutable {
+                        self->next_item_sorted(std::move(lowest), it, std::forward<Handler>(handler));
+                    }));
               } else if (lowest) {
                   return handler(self->streams_[lowest->vbucket_id]->pop());
               } else {

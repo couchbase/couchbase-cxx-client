@@ -48,4 +48,10 @@ range_scan::range_scan(std::vector<std::byte> start, bool exclusive_start, std::
   , end_{ std::move(end), exclusive_end }
 {
 }
+
+auto
+range_scan_item_body::expiry_time() const -> std::chrono::system_clock::time_point
+{
+    return std::chrono::system_clock::time_point(std::chrono::seconds{ expiry });
+}
 } // namespace couchbase::core
