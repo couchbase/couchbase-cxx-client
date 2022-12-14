@@ -85,15 +85,16 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
         }
 
         auto op = agent_.range_scan_create(vbucket_id_, create_options_, [self = shared_from_this()](auto res, auto ec) {
-            self->drain_waiting_queue();
             if (ec) {
                 self->state_ = failed{ ec };
+                self->drain_waiting_queue();
                 if (ec == errc::key_value::document_not_found) {
                     CB_LOG_DEBUG("ignoring vbucket_id {} because no documents exist for it", self->vbucket_id_);
                 }
                 return;
             }
             self->state_ = running{ std::move(res.scan_uuid) };
+            self->drain_waiting_queue();
             self->resume();
         });
     }
@@ -172,11 +173,11 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
     template<typename Handler>
     void take_when_ready(Handler&& handler)
     {
-        if (is_failed() || (!is_running() && !items_.ready())) {
+        if (is_failed()) {
             return handler(std::optional<range_scan_item>{}, false);
         }
         if (!items_.ready()) {
-            return handler(std::optional<range_scan_item>{}, true);
+            return handler(std::optional<range_scan_item>{}, is_running());
         }
         items_.async_receive(
           [self = shared_from_this(), handler = std::forward<Handler>(handler)](std::error_code ec, range_scan_item item) mutable {
