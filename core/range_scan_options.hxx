@@ -121,6 +121,8 @@ struct range_scan_item_body {
     std::uint64_t sequence_number{};
     std::byte datatype{};
     std::vector<std::byte> value{};
+
+    [[nodiscard]] auto expiry_time() const -> std::chrono::system_clock::time_point;
 };
 
 struct range_scan_item {

@@ -28,7 +28,7 @@ read_uint64(gsl::span<std::byte> buffer, std::size_t offset) -> std::uint64_t
            (std::to_integer<std::uint64_t>(buffer[offset + 4]) << 24) | //
            (std::to_integer<std::uint64_t>(buffer[offset + 3]) << 32) | //
            (std::to_integer<std::uint64_t>(buffer[offset + 2]) << 40) | //
-           (std::to_integer<std::uint64_t>(buffer[offset + 2]) << 48) | //
+           (std::to_integer<std::uint64_t>(buffer[offset + 1]) << 48) | //
            (std::to_integer<std::uint64_t>(buffer[offset + 0]) << 56);
 }
 
@@ -37,7 +37,7 @@ read_uint32(gsl::span<std::byte> buffer, std::size_t offset) -> std::uint32_t
 {
     return (std::to_integer<std::uint32_t>(buffer[offset + 3])) |       //
            (std::to_integer<std::uint32_t>(buffer[offset + 2]) << 8) |  //
-           (std::to_integer<std::uint32_t>(buffer[offset + 2]) << 16) | //
+           (std::to_integer<std::uint32_t>(buffer[offset + 1]) << 16) | //
            (std::to_integer<std::uint32_t>(buffer[offset + 0]) << 24);
 }
 
