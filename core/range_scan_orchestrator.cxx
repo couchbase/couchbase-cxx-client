@@ -324,6 +324,9 @@ class range_scan_orchestrator_impl
       , options_{ std::move(options) }
       , vbucket_to_snapshot_requirements_{ mutation_state_to_snapshot_requirements(options_.consistent_with) }
     {
+        if (std::holds_alternative<sampling_scan>(scan_type_)) {
+            item_limit = std::get<sampling_scan>(scan_type).limit;
+        }
     }
 
     auto scan()
@@ -357,10 +360,17 @@ class range_scan_orchestrator_impl
     auto next() -> std::future<std::optional<range_scan_item>> override
     {
         auto barrier = std::make_shared<std::promise<std::optional<range_scan_item>>>();
-        if (options_.sort == scan_sort::none) {
-            next_item(streams_.begin(), [barrier](std::optional<range_scan_item> item) { barrier->set_value(std::move(item)); });
+        if (item_limit <= 0) {
+            barrier->set_value(std::nullopt);
+            streams_.clear();
         } else {
-            next_item_sorted({}, streams_.begin(), [barrier](std::optional<range_scan_item> item) { barrier->set_value(std::move(item)); });
+            if (options_.sort == scan_sort::none) {
+                next_item(streams_.begin(), [barrier](std::optional<range_scan_item> item) { barrier->set_value(std::move(item)); });
+            } else {
+                next_item_sorted(
+                  {}, streams_.begin(), [barrier](std::optional<range_scan_item> item) { barrier->set_value(std::move(item)); });
+            }
+            item_limit--;
         }
         return barrier->get_future();
     }
@@ -374,10 +384,16 @@ class range_scan_orchestrator_impl
                 callback({}, errc::key_value::range_scan_completed);
             }
         };
-        if (options_.sort == scan_sort::none) {
-            next_item(streams_.begin(), std::move(handler));
+        if (item_limit <= 0) {
+            callback({}, errc::key_value::range_scan_completed);
+            streams_.clear();
         } else {
-            next_item_sorted({}, streams_.begin(), std::move(handler));
+            if (options_.sort == scan_sort::none) {
+                next_item(streams_.begin(), std::move(handler));
+            } else {
+                next_item_sorted({}, streams_.begin(), std::move(handler));
+            }
+            item_limit--;
         }
     }
 
@@ -451,6 +467,7 @@ class range_scan_orchestrator_impl
     range_scan_orchestrator_options options_;
     std::map<std::size_t, std::optional<range_snapshot_requirements>> vbucket_to_snapshot_requirements_;
     std::map<std::uint16_t, std::shared_ptr<range_scan_stream>> streams_{};
+    std::size_t item_limit{ std::numeric_limits<size_t>::max() };
 };
 
 range_scan_orchestrator::range_scan_orchestrator(asio::io_context& io,

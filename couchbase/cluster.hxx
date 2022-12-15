@@ -189,6 +189,19 @@ class cluster
 
     [[nodiscard]] auto transactions() -> std::shared_ptr<couchbase::transactions::transactions>;
 
+    /**
+     * Provide access to core cluster object
+     *
+     * This is used internally, during testing, and may be removed as the API evolves.
+     *
+     * @return pointer to core cluster
+     * @volatile
+     */
+    [[nodiscard]] auto core() -> std::shared_ptr<couchbase::core::cluster>
+    {
+        return core_;
+    }
+
   private:
     std::shared_ptr<couchbase::core::cluster> core_{};
     std::shared_ptr<couchbase::core::transactions::transactions> transactions_{};
