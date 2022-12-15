@@ -16,7 +16,7 @@ jobs:
           - 6.6.5
         suite:
           - unit
-          - transactions
+          - transaction
     runs-on: ubuntu-20.04
     services:
       couchbase:
@@ -33,12 +33,12 @@ jobs:
         with:
           submodules: recursive
       - name: Initialize couchbase for transactions testing
-        if: ${{ matrix.suite  == 'transactions' }}
+        if: ${{ matrix.suite  == 'transaction' }}
         env: 
           CB_SEC_BUCKET: 'secBucket'
         run: ./bin/init-cluster
       - name: Initialize couchbase for non-transactions testing
-        if: ${{ matrix.suite != 'transactions' }}
+        if: ${{ matrix.suite != 'transaction' }}
         run: ./bin/init-cluster
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -46,7 +46,7 @@ jobs:
           key: ${{ github.job }}
       - name: Build tests
         env:
-          CB_CMAKE_TARGET: build_${{ matrix.suite }}
+          CB_TEST_SUITE: ${{ matrix.suite }}
         run: ./bin/build-tests
       - name: Check couchbase
         run: ./bin/check-cluster
