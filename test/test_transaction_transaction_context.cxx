@@ -70,7 +70,6 @@ simple_txn_wrapper(transaction_context& tx, Handler&& handler)
 
 TEST_CASE("transactions: can do simple transaction with transaction wrapper", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
     tao::json::value new_content{
@@ -97,7 +96,6 @@ TEST_CASE("transactions: can do simple transaction with transaction wrapper", "[
 
 TEST_CASE("transactions: can do simple transaction with finalize", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
 
@@ -132,7 +130,6 @@ TEST_CASE("transactions: can do simple transaction with finalize", "[transaction
 
 TEST_CASE("transactions: can do simple transaction explicit commit", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
 
@@ -164,7 +161,6 @@ TEST_CASE("transactions: can do simple transaction explicit commit", "[transacti
 
 TEST_CASE("transactions: can do rollback simple transaction", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
 
@@ -198,7 +194,6 @@ TEST_CASE("transactions: can do rollback simple transaction", "[transactions]")
 
 TEST_CASE("transactions: can get insert errors", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
 
@@ -225,7 +220,6 @@ TEST_CASE("transactions: can get insert errors", "[transactions]")
 
 TEST_CASE("transactions: can get remove errors", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
 
@@ -255,7 +249,6 @@ TEST_CASE("transactions: can get remove errors", "[transactions]")
 
 TEST_CASE("transactions: can get replace errors", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
 
@@ -311,7 +304,6 @@ TEST_CASE("transactions: RYOW get after insert", "[transactions]")
 
 TEST_CASE("transactions: can get get errors", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
 
@@ -335,7 +327,6 @@ TEST_CASE("transactions: can get get errors", "[transactions]")
 
 TEST_CASE("transactions: can do query", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
 
@@ -362,7 +353,6 @@ TEST_CASE("transactions: can do query", "[transactions]")
 
 TEST_CASE("transactions: can see some query errors but no transactions failed", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
 
@@ -398,7 +388,6 @@ TEST_CASE("transactions: can see some query errors but no transactions failed", 
 
 TEST_CASE("transactions: can set per transaction config", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
     couchbase::transactions::transaction_options per_txn_cfg;
@@ -415,7 +404,6 @@ TEST_CASE("transactions: can set per transaction config", "[transactions]")
 
 TEST_CASE("transactions: can not per transactions config", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     transaction_context tx(txns);
     REQUIRE(tx.config().level == txns.config().level);

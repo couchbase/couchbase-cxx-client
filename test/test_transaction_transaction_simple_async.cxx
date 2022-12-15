@@ -47,7 +47,6 @@ txn_completed(std::optional<transaction_exception> err,
 
 TEST_CASE("transactions: async get", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
     auto cb_called = std::make_shared<std::atomic<bool>>(false);
@@ -97,7 +96,6 @@ TEST_CASE("transactions: can't get from unknown bucket", "[transactions]")
 
 TEST_CASE("transactions: async get fail", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
     auto cb_called = std::make_shared<std::atomic<bool>>(false);
@@ -129,7 +127,6 @@ TEST_CASE("transactions: async get fail", "[transactions]")
 
 TEST_CASE("transactions: async remove fail", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
     auto cb_called = std::make_shared<std::atomic<bool>>(false);
@@ -164,7 +161,6 @@ TEST_CASE("transactions: async remove fail", "[transactions]")
 
 TEST_CASE("transactions: RYOW on insert", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
     auto cb_called = std::make_shared<std::atomic<bool>>(false);
@@ -195,7 +191,6 @@ TEST_CASE("transactions: RYOW on insert", "[transactions]")
 
 TEST_CASE("transactions: async remove", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
     auto cb_called = std::make_shared<std::atomic<bool>>(false);
@@ -229,7 +224,6 @@ TEST_CASE("transactions: async remove", "[transactions]")
 
 TEST_CASE("transactions: async replace", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
     const tao::json::value new_content{
@@ -267,7 +261,6 @@ TEST_CASE("transactions: async replace", "[transactions]")
 
 TEST_CASE("transactions: async replace fail", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
     const tao::json::value new_content{
@@ -308,7 +301,6 @@ TEST_CASE("transactions: async replace fail", "[transactions]")
 
 TEST_CASE("transactions: async insert", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
     auto cb_called = std::make_shared<std::atomic<bool>>(false);
@@ -334,7 +326,6 @@ TEST_CASE("transactions: async insert", "[transactions]")
 
 TEST_CASE("transactions: async insert fail", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
     auto txns = TransactionsTestEnvironment::get_transactions();
     auto id = TransactionsTestEnvironment::get_document_id();
     auto barrier = std::make_shared<std::promise<void>>();
