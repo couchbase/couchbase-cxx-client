@@ -329,8 +329,11 @@ class range_scan_orchestrator_impl
         }
     }
 
-    auto scan()
+    auto scan() -> tl::expected<scan_result, std::error_code>
     {
+        if (item_limit == 0) {
+            return tl::unexpected(errc::common::invalid_argument);
+        }
         range_scan_continue_options continue_options{
             options_.batch_item_limit, options_.batch_byte_limit, options_.batch_time_limit, options_.retry_strategy, options_.ids_only,
         };
@@ -360,7 +363,7 @@ class range_scan_orchestrator_impl
     auto next() -> std::future<std::optional<range_scan_item>> override
     {
         auto barrier = std::make_shared<std::promise<std::optional<range_scan_item>>>();
-        if (item_limit <= 0) {
+        if (item_limit == 0 || item_limit-- == 0) {
             barrier->set_value(std::nullopt);
             streams_.clear();
         } else {
@@ -370,7 +373,6 @@ class range_scan_orchestrator_impl
                 next_item_sorted(
                   {}, streams_.begin(), [barrier](std::optional<range_scan_item> item) { barrier->set_value(std::move(item)); });
             }
-            item_limit--;
         }
         return barrier->get_future();
     }
@@ -384,16 +386,14 @@ class range_scan_orchestrator_impl
                 callback({}, errc::key_value::range_scan_completed);
             }
         };
-        if (item_limit <= 0) {
-            callback({}, errc::key_value::range_scan_completed);
-            streams_.clear();
+        if (item_limit == 0 || item_limit-- == 0) {
+            handler({});
         } else {
             if (options_.sort == scan_sort::none) {
                 next_item(streams_.begin(), std::move(handler));
             } else {
                 next_item_sorted({}, streams_.begin(), std::move(handler));
             }
-            item_limit--;
         }
     }
 
