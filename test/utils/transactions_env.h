@@ -168,16 +168,11 @@ struct conn {
                 }
             }
         }
-
-        // do a ping
+        // ping until everything is up and available (prevents spurious intermittent failures)
         {
             bool ok = false;
             size_t num_pings = 0;
             auto sleep_time = PING_INTERVAL;
-            // TEMPORARILY: because of CCXCBC-94, we can only sleep for some arbitrary time before pinging,
-            // in hopes that query is up by then.
-            spdlog::info("sleeping for 10 seconds before pinging (CXXCBC-94 workaround/hack)");
-            std::this_thread::sleep_for(std::chrono::seconds(10));
             while (!ok && num_pings++ < MAX_PINGS) {
                 spdlog::info("sleeping {}ms before pinging...", sleep_time.count());
                 std::this_thread::sleep_for(sleep_time);

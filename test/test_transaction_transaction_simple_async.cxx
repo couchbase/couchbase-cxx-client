@@ -785,7 +785,7 @@ TEST_CASE("transactions: rollback async KV remove", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>() == async_content);
 }
 
-TEST_CASE("transactions: async get replace", "[transactions]")
+/*TEST_CASE("stress: async get replace", "[stress]")
 {
     static constexpr std::size_t NUM_TXNS{ 2 };
     tao::json::value doc1_content{
@@ -852,7 +852,7 @@ TEST_CASE("transactions: async get replace", "[transactions]")
               });
           },
           [txns, done, errors, &in_flight, &cv_in_flight, &cv_txns_complete, &mut](
-            std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> /* result */) {
+            std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> ) {
               ++(*txns);
               std::unique_lock<std::mutex> lock(mut);
               in_flight--;
@@ -884,4 +884,4 @@ TEST_CASE("transactions: async get replace", "[transactions]")
     // No way we don't have at least one conflict, so attempts should be much larger than txns.
     REQUIRE(attempts->load() > 200);
     std::cout << "attempts: " << attempts->load() << ", txns: " << txns->load() << ", errors: " << errors->load() << std::endl;
-}
+} */
