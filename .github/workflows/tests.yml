@@ -13,10 +13,13 @@ jobs:
         server:
           - 7.1.1
           - 7.0.3
-          - 6.6.5
         suite:
           - unit
           - transaction
+        include:
+          - server: 6.6.5
+            suite: unit
+
     runs-on: ubuntu-20.04
     services:
       couchbase:
