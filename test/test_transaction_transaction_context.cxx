@@ -118,7 +118,7 @@ TEST_CASE("transactions: can do simple transaction with finalize", "[transaction
                    });
     });
     tx.finalize(
-      [&barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> /* result */) {
+      [barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> /* result */) {
           if (err) {
               return barrier->set_exception(std::make_exception_ptr(*err));
           }
@@ -141,15 +141,15 @@ TEST_CASE("transactions: can do simple transaction explicit commit", "[transacti
     };
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
-    tx.get(id, [&tx, &new_content, &barrier](std::exception_ptr err, std::optional<transaction_get_result> res) {
+    tx.get(id, [&tx, &new_content, barrier](std::exception_ptr err, std::optional<transaction_get_result> res) {
         CHECK(res);
         CHECK_FALSE(err);
         tx.replace(*res,
                    couchbase::core::utils::json::generate_binary(new_content),
-                   [&tx, &barrier](std::exception_ptr err, std::optional<transaction_get_result> replaced) {
+                   [&tx, barrier](std::exception_ptr err, std::optional<transaction_get_result> replaced) {
                        CHECK(replaced);
                        CHECK_FALSE(err);
-                       tx.commit([&barrier](std::exception_ptr err) {
+                       tx.commit([barrier](std::exception_ptr err) {
                            CHECK_FALSE(err);
                            txn_completed(err, barrier);
                        });
@@ -172,16 +172,16 @@ TEST_CASE("transactions: can do rollback simple transaction", "[transactions]")
     };
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
-    tx.get(id, [&tx, &new_content, &barrier](std::exception_ptr err, std::optional<transaction_get_result> res) {
+    tx.get(id, [&tx, &new_content, barrier](std::exception_ptr err, std::optional<transaction_get_result> res) {
         CHECK(res);
         CHECK_FALSE(err);
         tx.replace(*res,
                    couchbase::core::utils::json::generate_binary(new_content),
-                   [&tx, &barrier](std::exception_ptr err, std::optional<transaction_get_result> replaced) {
+                   [&tx, barrier](std::exception_ptr err, std::optional<transaction_get_result> replaced) {
                        CHECK(replaced);
                        CHECK_FALSE(err);
                        // now rollback
-                       tx.rollback([&barrier](std::exception_ptr err) {
+                       tx.rollback([barrier](std::exception_ptr err) {
                            CHECK_FALSE(err); // no error rolling back
                            barrier->set_value();
                        });
@@ -204,7 +204,7 @@ TEST_CASE("transactions: can get insert errors", "[transactions]")
     auto f = barrier->get_future();
     tx.insert(id,
               couchbase::core::utils::json::generate_binary(tx_content),
-              [&barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
+              [barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
                   // this should result in a transaction_operation_failed exception since it already exists, so lets check it
                   CHECK(err);
                   CHECK_FALSE(result);
@@ -228,13 +228,13 @@ TEST_CASE("transactions: can get remove errors", "[transactions]")
     tx.new_attempt_context();
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
-    tx.get(id, [&tx, &barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
+    tx.get(id, [&tx, barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
         // this should result in a transaction_operation_failed exception since it already exists, so lets check it
         CHECK_FALSE(err);
         CHECK(result);
         // make a cas mismatch error
         result->cas(100);
-        tx.remove(*result, [&barrier](std::exception_ptr err) {
+        tx.remove(*result, [barrier](std::exception_ptr err) {
             CHECK(err);
             if (err) {
                 barrier->set_exception(err);
@@ -257,7 +257,7 @@ TEST_CASE("transactions: can get replace errors", "[transactions]")
     tx.new_attempt_context();
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
-    tx.get(id, [&tx, &barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
+    tx.get(id, [&tx, barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
         // this should result in a transaction_operation_failed exception since it already exists, so lets check it
         CHECK_FALSE(err);
         CHECK(result);
@@ -265,7 +265,7 @@ TEST_CASE("transactions: can get replace errors", "[transactions]")
         result->cas(100);
         tx.replace(*result,
                    couchbase::core::utils::json::generate_binary(tx_content),
-                   [&barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
+                   [barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
                        CHECK(err);
                        CHECK_FALSE(result);
                        if (err) {
@@ -311,7 +311,7 @@ TEST_CASE("transactions: can get get errors", "[transactions]")
     tx.new_attempt_context();
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
-    tx.get(id, [&barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
+    tx.get(id, [barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
         // this should result in a transaction_operation_failed exception since it already exists, so lets check it
         CHECK(err);
         CHECK_FALSE(result);
@@ -337,7 +337,7 @@ TEST_CASE("transactions: can do query", "[transactions]")
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, tx_content));
     auto query = fmt::format("SELECT * FROM `{}` USE KEYS '{}'", id.bucket(), id.key());
     couchbase::transactions::transaction_query_options opts;
-    tx.query(query, opts, [&barrier](std::exception_ptr err, std::optional<couchbase::core::operations::query_response> payload) {
+    tx.query(query, opts, [barrier](std::exception_ptr err, std::optional<couchbase::core::operations::query_response> payload) {
         // this should result in a transaction_operation_failed exception since the doc isn't there
         CHECK(payload);
         CHECK_FALSE(err);
@@ -363,7 +363,7 @@ TEST_CASE("transactions: can see some query errors but no transactions failed", 
     couchbase::transactions::transaction_query_options opts;
     tx.query("jkjkjl;kjlk;  jfjjffjfj",
              opts,
-             [&barrier](std::exception_ptr err, std::optional<couchbase::core::operations::query_response> payload) {
+             [barrier](std::exception_ptr err, std::optional<couchbase::core::operations::query_response> payload) {
                  // this should result in a query_exception since the query isn't parseable.
                  CHECK(err);
                  CHECK_FALSE(payload);
