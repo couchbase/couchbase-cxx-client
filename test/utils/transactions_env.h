@@ -172,13 +172,12 @@ struct conn {
         {
             bool ok = false;
             size_t num_pings = 0;
-            auto sleep_time = PING_INTERVAL;
             while (!ok && num_pings++ < MAX_PINGS) {
+                auto sleep_time = num_pings * PING_INTERVAL;
                 spdlog::info("sleeping {}ms before pinging...", sleep_time.count());
-                std::this_thread::sleep_for(sleep_time);
-                // TEMPORARILY only ping key_value.   See CCXCBC-94 for details -- ping not returning any service
-                // except KV.
+                std::this_thread::sleep_for(num_pings * sleep_time);
                 std::set<couchbase::core::service_type> services{ couchbase::core::service_type::key_value };
+
                 auto barrier = std::make_shared<std::promise<couchbase::core::diag::ping_result>>();
                 auto f = barrier->get_future();
                 c->ping("tests_startup", "default", services, [barrier](couchbase::core::diag::ping_result result) {
@@ -201,7 +200,19 @@ struct conn {
                         ok = false;
                     }
                 }
-                spdlog::info("ping after connect {}", ok ? "successful" : "unsuccessful");
+                {
+                    auto query_barrier = std::make_shared<std::promise<std::error_code>>();
+                    auto query_future = query_barrier->get_future();
+                    if (ok) {
+                        // perform a query
+                        couchbase::core::operations::query_request req{ R"(SELECT "foo" as field)" };
+                        c->execute(req, [query_barrier](couchbase::core::operations::query_response resp) {
+                            query_barrier->set_value(resp.ctx.ec);
+                        });
+                        ok = ok && !query_future.get();
+                    }
+                }
+                spdlog::info("ping and query after connect {}", ok ? "successful" : "unsuccessful");
             }
             if (!ok) {
                 exit(-1);
