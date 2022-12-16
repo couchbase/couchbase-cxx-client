@@ -44,7 +44,7 @@ namespace couchbase::core::impl
 {
 
 couchbase::transactions::transaction_query_result
-build_transaction_query_result(operations::query_response resp);
+build_transaction_query_result(operations::query_response resp, std::error_code ec = {});
 
 core::operations::query_request
 build_transaction_query_request(couchbase::query_options::built opts);

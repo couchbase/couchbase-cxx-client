@@ -46,7 +46,7 @@ durability_level_to_string_for_query(durability_level level)
         case durability_level::majority:
             return "majority";
         case durability_level::majority_and_persist_to_active:
-            return "majorityAndPersistToActive";
+            return "majorityAndPersistActive";
         case durability_level::persist_to_majority:
             return "persistToMajority";
     }
