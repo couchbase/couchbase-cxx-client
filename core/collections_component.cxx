@@ -335,7 +335,7 @@ collection_id_cache_entry_impl::refresh_collection_id(std::shared_ptr<mcbp::queu
         return ec;
     }
 
-    CB_LOG_DEBUG("refreshing collection ID for %s.%s", req->scope_name_, req->collection_name_);
+    CB_LOG_DEBUG("refreshing collection ID for \"{}.{}\"", req->scope_name_, req->collection_name_);
     auto op = manager_->get_collection_id(
       req->scope_name_,
       req->collection_name_,
