@@ -1,9 +1,9 @@
 # Couchbase C++ Client
 
 [![license](https://img.shields.io/github/license/couchbaselabs/couchbase-cxx-client?color=brightgreen)](https://opensource.org/licenses/Apache-2.0)
-[![linters](https://img.shields.io/github/workflow/status/couchbaselabs/couchbase-cxx-client/linters?label=linters)](https://github.com/couchbaselabs/couchbase-cxx-client/actions?query=workflow%3Alinters)
-[![sanitizers](https://img.shields.io/github/workflow/status/couchbaselabs/couchbase-cxx-client/sanitizers?label=sanitizers)](https://github.com/couchbaselabs/couchbase-cxx-client/actions?query=workflow%3Asanitizers)
-[![tests](https://img.shields.io/github/workflow/status/couchbaselabs/couchbase-cxx-client/tests?label=tests)](https://github.com/couchbaselabs/couchbase-cxx-client/actions?query=workflow%3Atests)
+[![linters](https://img.shields.io/github/actions/workflow/status/couchbaselabs/couchbase-cxx-client/linters.yml?branch=main&label=linters)](https://github.com/couchbaselabs/couchbase-cxx-client/actions?query=workflow%3Alinters)
+[![sanitizers](https://img.shields.io/github/actions/workflow/status/couchbaselabs/couchbase-cxx-client/sanitizers.yml?branch=main&label=sanitizers)](https://github.com/couchbaselabs/couchbase-cxx-client/actions?query=workflow%3Asanitizers)
+[![tests](https://img.shields.io/github/actions/workflow/status/couchbaselabs/couchbase-cxx-client/tests.yml?branch=main&label=tests)](https://github.com/couchbaselabs/couchbase-cxx-client/actions?query=workflow%3Atests)
 
 This repo is under active development and is not yet ready for release as a public SDK.
 
