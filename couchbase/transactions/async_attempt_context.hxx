@@ -51,6 +51,12 @@ class async_attempt_context
         }
     }
 
+    void query(const scope& scope, std::string statement, transaction_query_options opts, async_query_handler&& handler)
+    {
+        opts.scope_qualifier(fmt::format("{}.{}", scope.bucket_name(), scope.name()));
+        return query(std::move(statement), std::move(opts), std::move(handler));
+    }
+
     virtual void query(std::string statement, transaction_query_options opts, async_query_handler&& handler) = 0;
     void query(std::string statement, async_query_handler&& handler)
     {

@@ -21,12 +21,17 @@
 #include "core/cluster.hxx"
 #include "core/operations.hxx"
 #include "core/operations/management/bucket.hxx"
+#include "core/operations/management/collection_create.hxx"
+#include "core/operations/management/scope_create.hxx"
 
 #include <couchbase/transactions/transaction_keyspace.hxx>
 
 #include "core/transactions.hxx"
 #include "core/transactions/internal/utils.hxx"
 #include "core/transactions/result.hxx"
+
+#include "integration_shortcuts.hxx"
+#include "wait_until.hxx"
 
 #include <tao/json.hpp>
 
@@ -309,16 +314,46 @@ class TransactionsTestEnvironment
         return tx::wrap_operation_future(f);
     }
 
+    static void upsert_collection(const std::string& scope_name, const std::string& collection_name)
+    {
+        {
+            couchbase::core::operations::management::scope_create_request req{ get_conf().bucket, scope_name };
+            auto resp = test::utils::execute(get_cluster(), req);
+            if (resp.ctx.ec) {
+                REQUIRE(resp.ctx.ec == couchbase::errc::management::scope_exists);
+            } else {
+                auto created = test::utils::wait_until_collection_manifest_propagated(get_cluster(), get_conf().bucket, resp.uid);
+                REQUIRE(created);
+            }
+        }
+
+        {
+            couchbase::core::operations::management::collection_create_request req{ get_conf().bucket, scope_name, collection_name };
+            auto resp = test::utils::execute(get_cluster(), req);
+            if (resp.ctx.ec) {
+                REQUIRE(resp.ctx.ec == couchbase::errc::management::collection_exists);
+            } else {
+                auto created = test::utils::wait_until_collection_manifest_propagated(get_cluster(), get_conf().bucket, resp.uid);
+                REQUIRE(created);
+            }
+        }
+    }
+
     static std::shared_ptr<couchbase::core::cluster> get_cluster()
     {
         static conn connection(get_conf());
         return connection.c;
     }
 
-    static couchbase::core::document_id get_document_id(const std::string& id = {})
+    static couchbase::core::document_id get_document_id(const std::string& id = {},
+                                                        const std::string& scope_name = {},
+                                                        const std::string& collection_name = {})
     {
         std::string key = (id.empty() ? tx::uid_generator::next() : id);
-        return { get_conf().bucket, couchbase::scope::default_name, couchbase::collection::default_name, key };
+        return { get_conf().bucket,
+                 scope_name.empty() ? couchbase::scope::default_name : scope_name,
+                 collection_name.empty() ? couchbase::collection::default_name : collection_name,
+                 key };
     }
 
     static tx::transactions get_transactions(std::shared_ptr<couchbase::core::cluster> c = get_cluster(),

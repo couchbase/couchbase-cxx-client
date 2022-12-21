@@ -53,6 +53,12 @@ class attempt_context
         return do_public_query(statement, options);
     }
 
+    transaction_query_result_ptr query(const scope& scope, std::string& statement, const transaction_query_options& opts = {})
+    {
+        auto new_opts = opts;
+        return query(statement, new_opts.scope_qualifier(fmt::format("{}.{}", scope.bucket_name(), scope.name())));
+    }
+
     virtual ~attempt_context() = default;
 
   protected:

@@ -54,7 +54,8 @@ query_index_get_all_request::encode_to(encoded_request_type& encoded, couchbase:
                            { "client_context_id", encoded.client_context_id },
                            { "$bucket_name", bucket_name },
                            { "$scope_name", scope_name },
-                           { "$collection_name", collection_name } };
+                           { "$collection_name", collection_name },
+                           { "query_context", fmt::format("{}.{}", bucket_name, scope_name) } };
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);

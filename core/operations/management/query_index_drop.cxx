@@ -45,7 +45,9 @@ query_index_drop_request::encode_to(encoded_request_type& encoded, http_context&
     } else {
         drop_index_stmt = fmt::format(R"(DROP INDEX {}.`{}` USING GSI)", keyspace, index_name);
     }
-    tao::json::value body{ { "statement", drop_index_stmt }, { "client_context_id", encoded.client_context_id } };
+    tao::json::value body{ { "statement", drop_index_stmt },
+                           { "client_context_id", encoded.client_context_id },
+                           { "query_context", fmt::format("{}.{}", bucket_name, scope_name) } };
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);
