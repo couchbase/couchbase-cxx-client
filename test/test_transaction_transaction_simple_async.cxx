@@ -68,7 +68,7 @@ TEST_CASE("transactions: async get", "[transactions]")
           CHECK(cb_called->load());
           txn_completed(std::move(err), std::move(res), barrier);
       });
-    f.get();
+    wait_for_result(f);
 }
 
 TEST_CASE("transactions: can't get from unknown bucket", "[transactions]")
@@ -90,7 +90,7 @@ TEST_CASE("transactions: can't get from unknown bucket", "[transactions]")
           CHECK(cb_called->load());
           txn_completed(std::move(err), std::move(res), barrier);
       });
-    REQUIRE_THROWS_AS(f.get(), transaction_exception);
+    REQUIRE_THROWS_AS(wait_for_result(f), transaction_exception);
     REQUIRE(cb_called->load());
 }
 
@@ -114,7 +114,7 @@ TEST_CASE("transactions: async get fail", "[transactions]")
               CHECK(cb_called->load());
               txn_completed(std::move(err), std::move(res), barrier);
           });
-        f.get();
+        wait_for_result(f);
         FAIL("expected transaction_exception!");
     } catch (const transaction_exception& e) {
         // nothing to do here, but make sure
@@ -152,7 +152,7 @@ TEST_CASE("transactions: async remove fail", "[transactions]")
               CHECK(cb_called->load());
               txn_completed(std::move(err), std::move(res), barrier);
           });
-        f.get();
+        wait_for_result(f);
         FAIL("expected txn to fail until timeout, or error out during rollback");
     } catch (const transaction_exception&) {
         REQUIRE(cb_called->load());
@@ -185,7 +185,7 @@ TEST_CASE("transactions: RYOW on insert", "[transactions]")
           CHECK(cb_called->load());
           txn_completed(err, std::move(res), barrier);
       });
-    f.get();
+    wait_for_result(f);
     REQUIRE(cb_called->load());
 }
 
@@ -212,7 +212,7 @@ TEST_CASE("transactions: async remove", "[transactions]")
           CHECK(cb_called->load());
           txn_completed(std::move(err), res, barrier);
       });
-    f.get();
+    wait_for_result(f);
     REQUIRE(cb_called->load());
     try {
         TransactionsTestEnvironment::get_doc(id);
@@ -253,7 +253,7 @@ TEST_CASE("transactions: async replace", "[transactions]")
           CHECK(cb_called->load());
           txn_completed(std::move(err), res, barrier);
       });
-    f.get();
+    wait_for_result(f);
     REQUIRE(cb_called->load());
     auto content = TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>();
     REQUIRE(content == new_content);
@@ -289,7 +289,7 @@ TEST_CASE("transactions: async replace fail", "[transactions]")
               CHECK(cb_called->load());
               txn_completed(std::move(err), res, barrier);
           });
-        f.get();
+        wait_for_result(f);
         FAIL("expected exception");
     } catch (const transaction_exception& e) {
         REQUIRE(cb_called->load());
@@ -319,7 +319,7 @@ TEST_CASE("transactions: async insert", "[transactions]")
           CHECK(cb_called->load());
           txn_completed(std::move(err), res, barrier);
       });
-    f.get();
+    wait_for_result(f);
     REQUIRE(cb_called->load());
     REQUIRE(TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>() == async_content);
 }
@@ -346,7 +346,7 @@ TEST_CASE("transactions: async insert fail", "[transactions]")
               CHECK(err->type() == failure_type::FAIL);
               txn_completed(std::move(err), std::move(result), barrier);
           });
-        f.get();
+        wait_for_result(f);
         FAIL("Expected exception");
     } catch (const transaction_exception& e) {
         REQUIRE(cb_called->load());
@@ -383,7 +383,7 @@ TEST_CASE("transactions: async query", "[transactions]")
           CHECK_FALSE(err);
           txn_completed(std::move(err), std::move(result), barrier);
       });
-    f.get();
+    wait_for_result(f);
     REQUIRE(query_called->load());
     auto content = TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>();
     REQUIRE(content["some"].as<std::string>() == std::string("thing else"));
@@ -424,7 +424,7 @@ TEST_CASE("transactions: multiple racing queries", "[transactions]")
           CHECK_FALSE(err);
           txn_completed(std::move(err), std::move(result), barrier);
       });
-    f.get();
+    wait_for_result(f);
     REQUIRE(3 == query_called->load());
     auto content = TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>();
     REQUIRE(content["some"].as<std::string>() == std::string("thing else"));
@@ -455,7 +455,7 @@ TEST_CASE("transactions: rollback async query", "[transactions]")
           CHECK(err);
           txn_completed(std::move(err), std::move(result), barrier);
       });
-    CHECK_THROWS_AS(f.get(), transaction_exception);
+    CHECK_THROWS_AS(wait_for_result(f), transaction_exception);
     REQUIRE(query_called->load());
     REQUIRE(TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>() == async_content);
 }
@@ -490,7 +490,7 @@ TEST_CASE("transactions: async KV get", "[transactions]")
           CHECK_FALSE(err);
           txn_completed(std::move(err), std::move(result), barrier);
       });
-    f.get();
+    wait_for_result(f);
     REQUIRE(get_called->load());
     REQUIRE(TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>()["some"].as<std::string>() == "thing else");
 }
@@ -526,7 +526,7 @@ TEST_CASE("transactions: rollback async KV get", "[transactions]")
           CHECK(err);
           txn_completed(std::move(err), std::move(result), barrier);
       });
-    REQUIRE_THROWS_AS(f.get(), transaction_exception);
+    REQUIRE_THROWS_AS(wait_for_result(f), transaction_exception);
     REQUIRE(get_called->load());
     REQUIRE(TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>()["some"].as<std::string>() == "thing");
 }
@@ -556,7 +556,7 @@ TEST_CASE("transactions: async KV insert", "[transactions]")
           CHECK(insert_called->load());
           txn_completed(std::move(err), std::move(res), barrier);
       });
-    f.get();
+    wait_for_result(f);
     REQUIRE(insert_called->load());
     REQUIRE(TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>() == async_content);
 }
@@ -588,7 +588,7 @@ TEST_CASE("transactions: rollback async KV insert", "[transactions]")
           CHECK(insert_called->load());
           txn_completed(std::move(err), std::move(res), barrier);
       });
-    REQUIRE_THROWS_AS(f.get(), transaction_exception);
+    REQUIRE_THROWS_AS(wait_for_result(f), transaction_exception);
     REQUIRE(insert_called->load());
     try {
         TransactionsTestEnvironment::get_doc(id);
@@ -639,7 +639,7 @@ TEST_CASE("transactions: async KV replace", "[transactions]")
           CHECK_FALSE(err);
           txn_completed(std::move(err), std::move(result), barrier);
       });
-    f.get();
+    wait_for_result(f);
     REQUIRE(replace_called->load());
     REQUIRE(TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>() == new_content);
 }
@@ -686,7 +686,7 @@ TEST_CASE("transactions: rollback async KV replace", "[transactions]")
           CHECK(err);
           txn_completed(std::move(err), std::move(result), barrier);
       });
-    REQUIRE_THROWS_AS(f.get(), transaction_exception);
+    REQUIRE_THROWS_AS(wait_for_result(f), transaction_exception);
     REQUIRE(replace_called->load());
     REQUIRE(TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>() == async_content);
 }
@@ -726,7 +726,7 @@ TEST_CASE("transactions: async KV remove", "[transactions]")
           CHECK_FALSE(err);
           txn_completed(std::move(err), std::move(result), barrier);
       });
-    f.get();
+    wait_for_result(f);
     REQUIRE(remove_called->load());
     try {
         TransactionsTestEnvironment::get_doc(id);
@@ -771,7 +771,7 @@ TEST_CASE("transactions: rollback async KV remove", "[transactions]")
           CHECK(err);
           txn_completed(std::move(err), std::move(result), barrier);
       });
-    REQUIRE_THROWS_AS(f.get(), transaction_exception);
+    REQUIRE_THROWS_AS(wait_for_result(f), transaction_exception);
     REQUIRE(remove_called->load());
     REQUIRE(TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>() == async_content);
 }

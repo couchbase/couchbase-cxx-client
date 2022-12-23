@@ -56,7 +56,7 @@ TEST_CASE("can async get", "[transactions]")
           barrier->set_value();
       },
       async_options());
-    f.get();
+    wait_for_result(f);
 }
 
 TEST_CASE("can get fail as expected", "[transactions]")
@@ -81,7 +81,7 @@ TEST_CASE("can get fail as expected", "[transactions]")
           barrier->set_value();
       },
       async_options());
-    f.get();
+    wait_for_result(f);
 }
 TEST_CASE("can async remove", "[transactions]")
 {
@@ -106,7 +106,7 @@ TEST_CASE("can async remove", "[transactions]")
           barrier->set_value();
       },
       async_options());
-    f.get();
+    wait_for_result(f);
 }
 
 TEST_CASE("async remove with bad cas fails as expected", "[transactions]")
@@ -132,7 +132,7 @@ TEST_CASE("async remove with bad cas fails as expected", "[transactions]")
           barrier->set_value();
       },
       async_options());
-    f.get();
+    wait_for_result(f);
 }
 TEST_CASE("can async insert", "[transactions]")
 {
@@ -155,7 +155,7 @@ TEST_CASE("can async insert", "[transactions]")
           barrier->set_value();
       },
       async_options());
-    f.get();
+    wait_for_result(f);
 }
 
 TEST_CASE("async insert fails when doc already exists", "[transactions]")
@@ -181,7 +181,7 @@ TEST_CASE("async insert fails when doc already exists", "[transactions]")
           barrier->set_value();
       },
       async_options());
-    f.get();
+    wait_for_result(f);
 }
 
 TEST_CASE("can async replace", "[transactions]")
@@ -210,7 +210,7 @@ TEST_CASE("can async replace", "[transactions]")
           barrier->set_value();
       },
       async_options());
-    f.get();
+    wait_for_result(f);
 }
 TEST_CASE("async replace fails as expected with bad cas", "[transactions]")
 {
@@ -237,7 +237,7 @@ TEST_CASE("async replace fails as expected with bad cas", "[transactions]")
           barrier->set_value();
       },
       async_options());
-    f.get();
+    wait_for_result(f);
 }
 
 TEST_CASE("uncaught exception will rollback", "[transactions]")
@@ -267,7 +267,8 @@ TEST_CASE("uncaught exception will rollback", "[transactions]")
           barrier->set_value();
       },
       async_options());
-    f.get();
+
+    wait_for_result(f);
 }
 
 TEST_CASE("can set transaction options", "[transactions]")
@@ -303,7 +304,7 @@ TEST_CASE("can set transaction options", "[transactions]")
       },
       cfg);
 
-    f.get();
+    wait_for_result(f);
 }
 
 TEST_CASE("can do mutating query", "[transactions]")
@@ -324,7 +325,7 @@ TEST_CASE("can do mutating query", "[transactions]")
           CHECK(res.unstaging_complete);
           barrier->set_value();
       });
-    f.get();
+    wait_for_result(f);
 }
 
 TEST_CASE("some query errors rollback", "[transactions]")
@@ -351,5 +352,5 @@ TEST_CASE("some query errors rollback", "[transactions]")
           CHECK_FALSE(res.unstaging_complete);
           barrier->set_value();
       });
-    f.get();
+    wait_for_result(f);
 }

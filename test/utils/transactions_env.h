@@ -58,6 +58,19 @@ struct test_config {
     std::string extra_bucket{ "secBucket" };
 };
 
+// Many txn tests wait for a std::future<void>, and if there are unexpected bugs/issues, we never get
+// the promise set.   This is a way to avoid hanging the entire test suite.
+template<typename Retval>
+Retval
+wait_for_result(std::future<Retval>& fut, std::chrono::seconds timeout = std::chrono::seconds(20))
+{
+    auto res = fut.wait_for(timeout);
+    if (std::future_status::ready != res) {
+        throw std::runtime_error(fmt::format("future not ready after {} seconds!", timeout.count()));
+    }
+    return fut.get();
+}
+
 template<>
 struct tao::json::traits<test_config> {
     template<template<typename...> class Traits>

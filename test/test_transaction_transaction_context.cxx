@@ -28,9 +28,7 @@
 #include <stdexcept>
 
 using namespace couchbase::core::transactions;
-static const tao::json::value tx_content{
-    { "some", "thing" },
-};
+static const tao::json::value tx_content{ { "some", "thing" } };
 
 void
 txn_completed(std::exception_ptr err, std::shared_ptr<std::promise<void>> barrier)
@@ -61,7 +59,7 @@ simple_txn_wrapper(transaction_context& tx, Handler&& handler)
             }
             return barrier->set_value(result);
         });
-        if (auto res = f.get()) {
+        if (auto res = wait_for_result(f)) {
             return *res;
         }
     }
@@ -71,15 +69,19 @@ simple_txn_wrapper(transaction_context& tx, Handler&& handler)
 TEST_CASE("transactions: can do simple transaction with transaction wrapper", "[transactions]")
 {
     auto txns = TransactionsTestEnvironment::get_transactions();
+
     auto id = TransactionsTestEnvironment::get_document_id();
+    spdlog::trace("inserting {}", id);
     tao::json::value new_content{
         { "some", "thing else" },
     };
 
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, tx_content));
+    auto ok = TransactionsTestEnvironment::upsert_doc(id, tx_content);
+    REQUIRE(ok);
+    std::this_thread::sleep_for(std::chrono::seconds(5));
     transaction_context tx(txns);
-    auto txn_logic = [&id, &tx, &new_content]() {
-        tx.get(id, [&tx, &new_content](std::exception_ptr err, std::optional<transaction_get_result> res) {
+    auto txn_logic = [&id, &tx, new_content]() {
+        tx.get(id, [&tx, new_content](std::exception_ptr err, std::optional<transaction_get_result> res) {
             CHECK(res);
             CHECK_FALSE(err);
             tx.replace(*res,
@@ -155,7 +157,7 @@ TEST_CASE("transactions: can do simple transaction explicit commit", "[transacti
                        });
                    });
     });
-    f.get();
+    wait_for_result(f);
     REQUIRE(TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>() == new_content);
 }
 
@@ -187,7 +189,7 @@ TEST_CASE("transactions: can do rollback simple transaction", "[transactions]")
                        });
                    });
     });
-    f.get();
+    wait_for_result(f);
     // this should not throw, as errors should be empty.
     REQUIRE_NOTHROW(tx.existing_error());
 }
@@ -214,7 +216,7 @@ TEST_CASE("transactions: can get insert errors", "[transactions]")
                       barrier->set_value();
                   }
               });
-    CHECK_THROWS_AS(f.get(), transaction_operation_failed);
+    CHECK_THROWS_AS(wait_for_result(f), transaction_operation_failed);
     CHECK_THROWS_AS(tx.existing_error(), transaction_operation_failed);
 }
 
@@ -243,7 +245,7 @@ TEST_CASE("transactions: can get remove errors", "[transactions]")
             }
         });
     });
-    CHECK_THROWS_AS(f.get(), transaction_operation_failed);
+    CHECK_THROWS_AS(wait_for_result(f), transaction_operation_failed);
     CHECK_THROWS_AS(tx.existing_error(), transaction_operation_failed);
 }
 
@@ -275,7 +277,7 @@ TEST_CASE("transactions: can get replace errors", "[transactions]")
                        }
                    });
     });
-    CHECK_THROWS_AS(f.get(), transaction_operation_failed);
+    CHECK_THROWS_AS(wait_for_result(f), transaction_operation_failed);
     CHECK_THROWS_AS(tx.existing_error(), transaction_operation_failed);
 }
 
@@ -286,15 +288,18 @@ TEST_CASE("transactions: RYOW get after insert", "[transactions]")
 
     transaction_context tx(txns);
     tx.new_attempt_context();
-    auto logic = [&tx, &id]() {
+    auto barrier = std::make_shared<std::promise<void>>();
+    auto f = barrier->get_future();
+    auto logic = [&tx, &id, barrier]() {
         tx.insert(id,
                   couchbase::core::utils::json::generate_binary(tx_content),
-                  [&tx, &id](std::exception_ptr err, std::optional<transaction_get_result> res) {
+                  [&tx, &id, barrier](std::exception_ptr err, std::optional<transaction_get_result> res) {
                       CHECK_FALSE(err);
                       CHECK(res);
-                      tx.get(id, [](std::exception_ptr err, std::optional<transaction_get_result> res) {
+                      tx.get(id, [barrier](std::exception_ptr err, std::optional<transaction_get_result> res) {
                           CHECK_FALSE(err);
                           CHECK(res->content<tao::json::value>() == tx_content);
+                          barrier->set_value();
                       });
                   });
     };
@@ -321,7 +326,7 @@ TEST_CASE("transactions: can get get errors", "[transactions]")
             barrier->set_value();
         }
     });
-    CHECK_THROWS_AS(f.get(), transaction_operation_failed);
+    CHECK_THROWS_AS(wait_for_result(f), transaction_operation_failed);
     CHECK_THROWS_AS(tx.existing_error(), transaction_operation_failed);
 }
 
@@ -347,7 +352,7 @@ TEST_CASE("transactions: can do query", "[transactions]")
             barrier->set_value();
         }
     });
-    REQUIRE_NOTHROW(f.get());
+    REQUIRE_NOTHROW(wait_for_result(f));
     REQUIRE_NOTHROW(tx.existing_error());
 }
 
@@ -374,7 +379,7 @@ TEST_CASE("transactions: can see some query errors but no transactions failed", 
                  }
              });
     try {
-        f.get();
+        wait_for_result(f);
         FAIL("expected future to throw exception");
     } catch (const query_exception&) {
 
