@@ -49,6 +49,7 @@ query_index_create_request::encode_to(encoded_request_type& encoded, http_contex
     if (!scope_name.empty()) {
         keyspace += ".`" + scope_name + "`";
     }
+    std::string query_context = keyspace;
     if (!collection_name.empty()) {
         keyspace += ".`" + collection_name + "`";
     }
@@ -64,7 +65,7 @@ query_index_create_request::encode_to(encoded_request_type& encoded, http_contex
                                                       where_clause,
                                                       with_clause) },
                            { "client_context_id", encoded.client_context_id },
-                           { "query_context", fmt::format("{}.{}", bucket_name, scope_name) } };
+                           { "query_context", query_context } };
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);

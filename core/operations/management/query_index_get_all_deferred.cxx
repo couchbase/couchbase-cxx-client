@@ -44,7 +44,7 @@ query_index_get_all_deferred_request::encode_to(encoded_request_type& encoded, c
                            { "$bucket_name", bucket_name },
                            { "$scope_name", scope_name },
                            { "$collection_name", collection_name },
-                           { "query_context", fmt::format("{}.{}", bucket_name, scope_name) } };
+                           { "query_context", fmt::format("{}:`{}`.`{}`", namespace_id, bucket_name, scope_name) } };
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);
