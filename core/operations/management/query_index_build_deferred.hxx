@@ -43,6 +43,8 @@ struct query_index_build_deferred_request {
     using encoded_response_type = io::http_response;
     using error_context_type = error_context::http;
 
+    static constexpr auto namespace_id = "default";
+
     std::string bucket_name;
     std::optional<std::string> scope_name;
     std::optional<std::string> collection_name;

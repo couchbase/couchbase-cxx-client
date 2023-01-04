@@ -30,10 +30,13 @@ query_index_drop_request::encode_to(encoded_request_type& encoded, http_context&
     }
     encoded.headers["content-type"] = "application/json";
     std::string keyspace = fmt::format("{}:`{}`", namespace_id, bucket_name);
+    std::string query_context = keyspace;
     if (!scope_name.empty()) {
         keyspace += ".`" + scope_name + "`";
+        query_context += ".`" + scope_name + "`";
+    } else {
+        query_context += ".`_default`";
     }
-    std::string query_context = keyspace;
     if (!collection_name.empty()) {
         keyspace += ".`" + collection_name + "`";
     }

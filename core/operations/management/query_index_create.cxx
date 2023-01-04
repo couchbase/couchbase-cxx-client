@@ -46,10 +46,14 @@ query_index_create_request::encode_to(encoded_request_type& encoded, http_contex
         with_clause = fmt::format("WITH {}", utils::json::generate(with));
     }
     std::string keyspace = fmt::format("{}:`{}`", namespace_id, bucket_name);
+    std::string query_context = keyspace;
     if (!scope_name.empty()) {
         keyspace += ".`" + scope_name + "`";
+        query_context += ".`" + scope_name + "`";
+    } else {
+        query_context += ".`_default`";
     }
-    std::string query_context = keyspace;
+
     if (!collection_name.empty()) {
         keyspace += ".`" + collection_name + "`";
     }

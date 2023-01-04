@@ -47,6 +47,7 @@ query_index_build_request::encode_to(encoded_request_type& encoded, http_context
     if ((scope_name.empty() && !collection_name.empty()) || (!scope_name.empty() && collection_name.empty()) || index_names.empty()) {
         return errc::common::invalid_argument;
     }
+    std::string query_context = fmt::format("{}.`{}`", namespace_id, bucket_name);
     std::string statement;
     if (!scope_name.empty() && !collection_name.empty()) {
         statement = fmt::format(
