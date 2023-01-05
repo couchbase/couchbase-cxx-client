@@ -42,7 +42,7 @@ quote_and_join_strings(const Range& values, const std::string& sep)
 }
 
 std::error_code
-query_index_build_request::encode_to(encoded_request_type& encoded, http_context&  /* context */ ) const
+query_index_build_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
     if ((scope_name.empty() && !collection_name.empty()) || (!scope_name.empty() && collection_name.empty()) || index_names.empty()) {
         return errc::common::invalid_argument;

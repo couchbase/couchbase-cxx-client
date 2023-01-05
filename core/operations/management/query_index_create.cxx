@@ -68,7 +68,7 @@ query_index_create_request::encode_to(encoded_request_type& encoded, http_contex
                                                       utils::join_strings(fields, ", "),
                                                       where_clause,
                                                       with_clause) },
-                           { "client_context_id", encoded.client_context_id }};
+                           { "client_context_id", encoded.client_context_id } };
     if (!scope_name.empty() || !collection_name.empty()) {
         body["query_context"] = query_context;
     }

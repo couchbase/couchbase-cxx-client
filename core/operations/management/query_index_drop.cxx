@@ -50,8 +50,7 @@ query_index_drop_request::encode_to(encoded_request_type& encoded, http_context&
         drop_index_stmt = fmt::format(R"(DROP INDEX {}.`{}` USING GSI)", keyspace, index_name);
     }
 
-    tao::json::value body{ { "statement", drop_index_stmt },
-                           { "client_context_id", encoded.client_context_id }};
+    tao::json::value body{ { "statement", drop_index_stmt }, { "client_context_id", encoded.client_context_id } };
     if (!scope_name.empty() || !collection_name.empty()) {
         body["query_context"] = query_context;
     }
