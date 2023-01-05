@@ -941,7 +941,7 @@ attempt_context_impl::wrap_query(const std::string& statement,
         }
     }
     // set the query_context, if one has been set, unless this query already has one
-    if ((statement == BEGIN_WORK || statement == COMMIT || statement == ROLLBACK) && !req.scope_qualifier && !query_context_.empty()) {
+    if (!req.scope_qualifier && !query_context_.empty()) {
         req.scope_qualifier = query_context_;
     }
 
