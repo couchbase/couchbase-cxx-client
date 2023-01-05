@@ -38,6 +38,13 @@ query_index_get_all_request::encode_to(encoded_request_type& encoded, couchbase:
         where = bucket_cond;
     }
 
+    std::string query_context = fmt::format("{}:`{}`", namespace_id, bucket_name);
+    if (scope_name.empty()) {
+        query_context += ".`_default`";
+    } else {
+        query_context += ".`" + scope_name + "`";
+    }
+
     if (collection_name == "_default" || collection_name.empty()) {
         std::string default_collection_cond = "(bucket_id IS MISSING AND keyspace_id = $bucket_name)";
         where = "(" + where + " OR " + default_collection_cond + ")";
@@ -55,6 +62,9 @@ query_index_get_all_request::encode_to(encoded_request_type& encoded, couchbase:
                            { "$bucket_name", bucket_name },
                            { "$scope_name", scope_name },
                            { "$collection_name", collection_name } };
+    if (!scope_name.empty() || !collection_name.empty()) {
+        body["query_context"] = query_context;
+    }
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);

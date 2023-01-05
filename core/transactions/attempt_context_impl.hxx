@@ -77,6 +77,7 @@ class attempt_context_impl
     error_list errors_;
     std::mutex mutex_;
     waitable_op_list op_list_;
+    std::string query_context_;
 
     // commit needs to access the hooks
     friend class staged_mutation_queue;

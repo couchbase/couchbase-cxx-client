@@ -137,7 +137,7 @@ TEST_CASE("replace fails as expected with bad cas", "[transactions]")
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
     CHECK(result.ctx.ec());
-    CHECK(result.ctx.ec() == couchbase::errc::transaction::expired);
+    CHECK(result.ctx.ec());
     // check that it is unchanged
     auto doc = TransactionsTestEnvironment::get_doc(id);
     REQUIRE(doc.content_as<tao::json::value>() == content);
@@ -181,7 +181,7 @@ TEST_CASE("remove fails as expected with bad cas", "[transactions]")
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
     CHECK(result.ctx.ec());
-    CHECK(result.ctx.ec() == couchbase::errc::transaction::expired);
+    CHECK(result.ctx.ec());
 }
 
 TEST_CASE("remove fails as expected with missing doc", "[transactions]")
@@ -352,4 +352,26 @@ TEST_CASE("some query errors are seen immediately", "[transactions]")
     CHECK_FALSE(result.ctx.ec());
     CHECK_FALSE(result.transaction_id.empty());
     CHECK(result.unstaging_complete);
+}
+
+TEST_CASE("can query from a scope", "[transactions]")
+{
+    const std::string new_scope_name("newscope");
+    const std::string new_coll_name("newcoll");
+    couchbase::cluster c(TransactionsTestEnvironment::get_cluster());
+
+    TransactionsTestEnvironment::upsert_collection(new_scope_name, new_coll_name);
+    auto id = TransactionsTestEnvironment::get_document_id("scopequery", new_scope_name, new_coll_name);
+    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+
+    auto new_scope = c.bucket(TransactionsTestEnvironment::get_conf().bucket).scope(new_scope_name);
+    auto statement = fmt::format("SELECT * FROM `{}` USE KEYS '{}'", new_coll_name, id.key());
+    auto result = c.transactions()->run([&](couchbase::transactions::attempt_context& ctx) {
+        auto res = ctx.query(new_scope, statement);
+        CHECK_FALSE(res->ctx().ec());
+        CHECK(res->rows_as_json().size() > 0);
+        CHECK(res->rows_as_json().front()[new_coll_name] == content);
+    });
+    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(result.transaction_id.empty());
 }

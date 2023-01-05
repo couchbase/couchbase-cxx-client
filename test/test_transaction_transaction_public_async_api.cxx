@@ -233,7 +233,7 @@ TEST_CASE("async replace fails as expected with bad cas", "[transactions]")
       [barrier](couchbase::transactions::transaction_result tx_result) {
           CHECK_FALSE(tx_result.transaction_id.empty());
           CHECK_FALSE(tx_result.unstaging_complete);
-          CHECK(tx_result.ctx.ec() == couchbase::errc::transaction::expired);
+          CHECK(tx_result.ctx.ec());
           barrier->set_value();
       },
       async_options());

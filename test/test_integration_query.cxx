@@ -504,3 +504,88 @@ TEST_CASE("integration: query with public API", "[integration]")
         REQUIRE(rows[0]["the_answer"] == 42);
     }
 }
+
+TEST_CASE("integration: query from scope with public API", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_collections()) {
+        return;
+    }
+
+    if (!integration.cluster_version().supports_gcccp()) {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    }
+
+    auto cluster = couchbase::cluster(integration.cluster);
+    auto scope_name = test::utils::uniq_id("scope");
+    auto collection_name = test::utils::uniq_id("coll");
+    auto key = test::utils::uniq_id("foo");
+    auto id = couchbase::core::document_id{ integration.ctx.bucket, scope_name, collection_name, key };
+    tao::json::value value = {
+        { "a", 1.0 },
+        { "b", 2.0 },
+    };
+    auto json = couchbase::core::utils::json::generate_binary(value);
+    {
+        couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+        REQUIRE(created);
+    }
+
+    {
+        couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+        REQUIRE(created);
+    }
+
+    {
+        couchbase::core::operations::insert_request req{ id, json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
+    SECTION("correct scope and collection")
+    {
+        auto [ctx, resp] = cluster.bucket(integration.ctx.bucket)
+                             .scope(scope_name)
+                             .query(fmt::format("SELECT * from `{}` USE KEYS '{}'", collection_name, key), {})
+                             .get();
+        REQUIRE_SUCCESS(ctx.ec());
+        auto rows = resp.rows_as_json();
+        REQUIRE(rows.size() == 1);
+        REQUIRE(rows[0][collection_name] == value);
+    }
+    SECTION("missing scope")
+    {
+        auto [ctx, resp] = cluster.bucket(integration.ctx.bucket)
+                             .scope("idontexist")
+                             .query(fmt::format("SELECT * from `{}` USE KEYS '{}'", collection_name, key), {})
+                             .get();
+        REQUIRE(ctx.ec() == couchbase::errc::query::index_failure);
+    }
+    SECTION("missing collection")
+    {
+        auto [ctx, resp] = cluster.bucket(integration.ctx.bucket)
+                             .scope(scope_name)
+                             .query(fmt::format("SELECT * from `{}` USE KEYS '{}'", "idontexist", key), {})
+                             .get();
+        REQUIRE(ctx.ec() == couchbase::errc::query::index_failure);
+    }
+    SECTION("prepared")
+    {
+        auto [ctx, resp] =
+          cluster.bucket(integration.ctx.bucket)
+            .scope(scope_name)
+            .query(fmt::format("SELECT * from `{}` USE KEYS '{}'", collection_name, key), couchbase::query_options().adhoc(true))
+            .get();
+        REQUIRE_SUCCESS(ctx.ec());
+        auto rows = resp.rows_as_json();
+        REQUIRE(rows.size() == 1);
+        REQUIRE(rows[0][collection_name] == value);
+    }
+}

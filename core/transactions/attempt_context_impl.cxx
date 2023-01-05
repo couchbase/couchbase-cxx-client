@@ -838,6 +838,10 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
             return std::make_exception_ptr(
               transaction_operation_failed(FAIL_OTHER, "N1QL Queries in transactions are supported in couchbase server 7.0 and later")
                 .cause(FEATURE_NOT_AVAILABLE_EXCEPTION));
+        case 1197:
+            return std::make_exception_ptr(
+              transaction_operation_failed(FAIL_OTHER, "This couchbase server requires all queries use a scope.")
+                .cause(FEATURE_NOT_AVAILABLE_EXCEPTION));
         case 17004:
             return std::make_exception_ptr(query_attempt_not_found(tx_resp.ctx()));
         case 1080:
@@ -936,6 +940,11 @@ attempt_context_impl::wrap_query(const std::string& statement,
             req.send_to_node = op_list_.get_mode().query_node;
         }
     }
+    // set the query_context, if one has been set, unless this query already has one
+    if (!req.scope_qualifier && !query_context_.empty()) {
+        req.scope_qualifier = query_context_;
+    }
+
     if (check_expiry) {
         if (has_expired_client_side(hook_point, std::nullopt)) {
             auto err = std::make_exception_ptr(
@@ -984,6 +993,10 @@ attempt_context_impl::query(const std::string& statement,
         // decrement in_flight, as we just incremented it in cache_error_async.
         op_list_.set_query_mode(
           [this, statement, options, cb]() mutable {
+              // set query context if set in query options.
+              if (auto query_context = options.get_query_options().build().scope_qualifier; query_context) {
+                  query_context_ = query_context.value();
+              }
               query_begin_work([this, statement, options, cb = std::move(cb)](std::exception_ptr err) mutable {
                   if (err) {
                       return op_completed_with_error(std::move(cb), err);
