@@ -509,6 +509,10 @@ TEST_CASE("integration: query from scope with public API", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_collections()) {
+        return;
+    }
+
     if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }

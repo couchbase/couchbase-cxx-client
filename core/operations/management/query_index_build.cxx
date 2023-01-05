@@ -42,21 +42,26 @@ quote_and_join_strings(const Range& values, const std::string& sep)
 }
 
 std::error_code
-query_index_build_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+query_index_build_request::encode_to(encoded_request_type& encoded, http_context&  /* context */ ) const
 {
     if ((scope_name.empty() && !collection_name.empty()) || (!scope_name.empty() && collection_name.empty()) || index_names.empty()) {
         return errc::common::invalid_argument;
     }
-    std::string query_context = fmt::format("{}.`{}`", namespace_id, bucket_name);
+    std::string query_context = fmt::format("{}:`{}`", namespace_id, bucket_name);
     std::string statement;
     if (!scope_name.empty() && !collection_name.empty()) {
         statement = fmt::format(
           R"(BUILD INDEX ON `{}`.`{}`.`{}` ({}))", bucket_name, scope_name, collection_name, quote_and_join_strings(index_names, ","));
+        query_context += ".`" + scope_name + "`";
     } else {
         statement = fmt::format(R"(BUILD INDEX ON `{}` ({}))", bucket_name, quote_and_join_strings(index_names, ","));
+        query_context += ".`_default`";
     }
     encoded.headers["content-type"] = "application/json";
     tao::json::value body{ { "statement", statement }, { "client_context_id", encoded.client_context_id } };
+    if (!scope_name.empty() || !collection_name.empty()) {
+        body["query_context"] = query_context;
+    }
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);

@@ -24,7 +24,7 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-query_index_create_request::encode_to(encoded_request_type& encoded, http_context&) const
+query_index_create_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
     if ((scope_name.empty() && !collection_name.empty()) || (!scope_name.empty() && collection_name.empty())) {
         return errc::common::invalid_argument;
@@ -68,8 +68,10 @@ query_index_create_request::encode_to(encoded_request_type& encoded, http_contex
                                                       utils::join_strings(fields, ", "),
                                                       where_clause,
                                                       with_clause) },
-                           { "client_context_id", encoded.client_context_id },
-                           { "query_context", query_context } };
+                           { "client_context_id", encoded.client_context_id }};
+    if (!scope_name.empty() || !collection_name.empty()) {
+        body["query_context"] = query_context;
+    }
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);
