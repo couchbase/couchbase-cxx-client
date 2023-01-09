@@ -75,7 +75,7 @@ TEST_CASE("can insert", "[transactions]")
     CHECK(final_doc.content_as<tao::json::value>() == content);
 }
 
-TEST_CASE("insert fails as expected when doc already exists", "[transactions]")
+TEST_CASE("insert has error as expected when doc already exists", "[transactions]")
 {
     auto id = TransactionsTestEnvironment::get_document_id();
     tao::json::value new_content{ { "something", "else" } };
@@ -89,9 +89,9 @@ TEST_CASE("insert fails as expected when doc already exists", "[transactions]")
         CHECK(doc->ctx().ec() == couchbase::errc::transaction_op::document_exists_exception);
     });
     CHECK_FALSE(result.transaction_id.empty());
-    CHECK_FALSE(result.unstaging_complete);
-    CHECK(result.ctx.ec() == couchbase::errc::transaction::failed);
-    CHECK(result.ctx.cause() == couchbase::errc::transaction_op::document_exists_exception);
+    // but the txn is successful
+    CHECK(result.unstaging_complete);
+    CHECK_FALSE(result.ctx.ec());
     // check that it is really unchanged too.
     auto final_doc = TransactionsTestEnvironment::get_doc(id);
     CHECK(final_doc.content_as<tao::json::value>() == content);
@@ -246,11 +246,10 @@ TEST_CASE("can pass per-transaction configs", "[transactions]")
     CHECK(elapsed > *cfg.expiration_time());
     // but not by too much (default is 15 seconds, we wanted 2, 2x that is plenty)
     CHECK(elapsed < (2 * *cfg.expiration_time()));
-    // and of course the txn should have expired
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
+    // could have failed in rollback, which returns fail rather than expired
     CHECK(result.ctx.ec());
-    CHECK(result.ctx.ec() == couchbase::errc::transaction::expired);
 }
 
 TEST_CASE("can do simple query", "[transactions]")

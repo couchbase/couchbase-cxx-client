@@ -123,7 +123,7 @@ struct forward_compat_supported {
     uint32_t protocol_major = 2;
     uint32_t protocol_minor = 0;
     std::list<std::string> extensions{ "TI", "MO", "BM", "QU",     "SD", "BF3787", "BF3705", "BF3838",
-                                       "RC", "UA", "CO", "BF3791", "CM", "SI",     "QC" };
+                                       "RC", "UA", "CO", "BF3791", "CM", "SI",     "QC",     "IX" };
 };
 
 struct forward_compat_requirement {

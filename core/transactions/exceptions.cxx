@@ -33,6 +33,19 @@ external_exception_from_error_class(error_class ec)
     }
 }
 
+couchbase::core::transactions::error_class
+error_class_from_external_exception(external_exception e)
+{
+    switch (e) {
+        case DOCUMENT_NOT_FOUND_EXCEPTION:
+            return FAIL_DOC_NOT_FOUND;
+        case DOCUMENT_EXISTS_EXCEPTION:
+            return FAIL_DOC_ALREADY_EXISTS;
+        default:
+            return FAIL_OTHER;
+    }
+}
+
 error_class
 error_class_from_result(const result& res)
 {

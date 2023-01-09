@@ -161,9 +161,10 @@ class attempt_context_impl
         } catch (const async_operation_conflict& op_ex) {
             // the count isn't changed when this is thrown, so just swallow it and log
             txn_log->error("op callback called a txn operation that threw exception {}", op_ex.what());
-        } catch (const query_exception& query_ex) {
-            txn_log->warn("op callback called a txn operation that threw (and didn't handle) a query_exception {}", query_ex.what());
-            errors_.push_back(transaction_operation_failed(FAIL_OTHER, query_ex.what()).cause(query_ex.cause()));
+        } catch (const op_exception& op_ex) {
+            txn_log->warn("op callback called a txn operation that threw (and didn't handle) a op_exception {}", op_ex.what());
+            errors_.push_back(
+              transaction_operation_failed(error_class_from_external_exception(op_ex.cause()), op_ex.what()).cause(op_ex.cause()));
             op_list_.decrement_ops();
         } catch (const std::exception& std_ex) {
             // if the callback throws something which wasn't handled
@@ -302,6 +303,8 @@ class attempt_context_impl
             if (e.cause() == PREVIOUS_OPERATION_FAILED) {
                 op_completed_with_error(std::move(cb), e);
             }
+        } catch (const op_exception& e) {
+            op_completed_with_error(std::move(cb), e);
         } catch (const std::exception& e) {
             op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
         }
@@ -399,7 +402,7 @@ class attempt_context_impl
                       std::rethrow_exception(err);
                   } catch (const transaction_operation_failed& e) {
                       return handler(std::make_shared<couchbase::transactions::transaction_query_result>(e.get_error_ctx()));
-                  } catch (const query_exception& ex) {
+                  } catch (const op_exception& ex) {
                       return handler(std::make_shared<couchbase::transactions::transaction_query_result>(ex.ctx()));
                   } catch (...) {
                       // just in case...
@@ -544,6 +547,8 @@ class attempt_context_impl
             return std::make_shared<transaction_get_result>(handler());
         } catch (const transaction_operation_failed& e) {
             return std::make_shared<transaction_get_result>(e.get_error_ctx());
+        } catch (const op_exception& ex) {
+            return std::make_shared<transaction_get_result>(ex.ctx());
         } catch (...) {
             // the handler should catch everything else, but just in case...
             return std::make_shared<transaction_get_result>(transaction_op_error_context(errc::transaction_op::unknown));
@@ -573,6 +578,8 @@ class attempt_context_impl
         if (err) {
             try {
                 std::rethrow_exception(err);
+            } catch (const op_exception& e) {
+                return cb(std::make_shared<transaction_get_result>(e.ctx()));
             } catch (const transaction_operation_failed& e) {
                 return cb(std::make_shared<transaction_get_result>(e.get_error_ctx()));
             } catch (...) {

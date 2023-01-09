@@ -201,7 +201,7 @@ transaction_context::handle_error(std::exception_ptr err, txn_complete_callback&
     try {
         try {
             std::rethrow_exception(err);
-        } catch (const query_exception& e) {
+        } catch (const op_exception& e) {
             // turn this into a transaction_operation_failed
             throw transaction_operation_failed(FAIL_OTHER, e.what()).cause(e.cause());
         }
