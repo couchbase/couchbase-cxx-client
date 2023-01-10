@@ -1890,7 +1890,7 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id, std::u
                     .create_path(),
                   // subdoc::opcode::set_doc used in replace w/ empty path
                   // ExtBinaryMetadata
-                  couchbase::mutate_in_specs::replace({}, std::string({ 0x00 })),
+                  couchbase::mutate_in_specs::replace_raw({}, std::vector<std::byte>{ std::byte{ 0x00 } }),
               }
                 .specs();
             req.store_semantics = couchbase::store_semantics::upsert;
