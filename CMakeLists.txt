@@ -336,7 +336,8 @@ set(couchbase_cxx_client_FILES
     core/transactions/transactions.cxx
     core/transactions/transactions_cleanup.cxx
     core/transactions/transactions_config.cxx
-    core/transactions/uid_generator.cxx)
+    core/transactions/uid_generator.cxx
+    core/operations/management/change_password.cxx)
 
 if(COUCHBASE_CXX_CLIENT_BUILD_SHARED)
   add_library(couchbase_cxx_client SHARED ${couchbase_cxx_client_FILES})
