@@ -33,10 +33,10 @@ query_index_get_all_deferred_request::encode_to(encoded_request_type& encoded, c
     }
 
     std::string query_context = fmt::format("{}:`{}`", namespace_id, bucket_name);
-    if (scope_name.empty()) {
-        query_context += ".`_default`";
-    } else {
+    if (!scope_name.empty()) {
         query_context += ".`" + scope_name + "`";
+    } else {
+        query_context += ".`_default`";
     }
 
     std::string statement = "SELECT RAW name FROM system:indexes"
@@ -50,10 +50,8 @@ query_index_get_all_deferred_request::encode_to(encoded_request_type& encoded, c
                            { "client_context_id", encoded.client_context_id },
                            { "$bucket_name", bucket_name },
                            { "$scope_name", scope_name },
-                           { "$collection_name", collection_name } };
-    if (!scope_name.empty() || !collection_name.empty()) {
-        body["query_context"] = query_context;
-    }
+                           { "$collection_name", collection_name },
+                           { "query_context", query_context } };
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);
