@@ -42,7 +42,7 @@ query_index_get_all_request::encode_to(encoded_request_type& encoded, couchbase:
     if (!scope_name.empty()) {
         query_context += ".`" + scope_name + "`";
     } else {
-        query_context += ".`_default`";
+        query_context += fmt::format(".`{}`", couchbase::scope::default_name);
     }
 
     if (collection_name == "_default" || collection_name.empty()) {

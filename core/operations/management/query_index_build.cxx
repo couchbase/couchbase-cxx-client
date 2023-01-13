@@ -55,7 +55,7 @@ query_index_build_request::encode_to(encoded_request_type& encoded, http_context
         query_context += ".`" + scope_name + "`";
     } else {
         statement = fmt::format(R"(BUILD INDEX ON {} ({}))", query_context, quote_and_join_strings(index_names, ","));
-        query_context += ".`_default`";
+        query_context += fmt::format(".`{}`", couchbase::scope::default_name);
     }
     encoded.headers["content-type"] = "application/json";
     tao::json::value body{ { "statement", statement },

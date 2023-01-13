@@ -29,13 +29,13 @@ query_index_drop_request::encode_to(encoded_request_type& encoded, http_context&
         return errc::common::invalid_argument;
     }
     encoded.headers["content-type"] = "application/json";
-    std::string query_context = fmt::format("default:{}", bucket_name);
+    std::string query_context = fmt::format("{}:`{}`", namespace_id, bucket_name);
     auto keyspace = query_context;
     if (!scope_name.empty()) {
         query_context += ".`" + scope_name + "`";
         keyspace += ".`" + scope_name + "`";
     } else {
-        query_context += ".`_default`";
+        query_context += fmt::format(".`{}`", couchbase::scope::default_name);
     }
     if (!collection_name.empty()) {
         keyspace += ".`" + collection_name + "`";
