@@ -615,7 +615,7 @@ attempt_context_impl::remove(const transaction_get_result& document, VoidCallbac
                               transaction_get_result new_res = document;
                               new_res.cas(resp.cas.value());
                               staged_mutations_->add(staged_mutation(new_res, std::vector<std::byte>{}, staged_mutation_type::REMOVE));
-                              return op_completed_with_callback(cb);
+                              return op_completed_with_callback(std::move(cb));
                           }
                           return error_handler(*ec, resp.ctx.ec().message(), std::move(cb));
                       });
@@ -848,9 +848,9 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
         case 17010:
             return std::make_exception_ptr(transaction_operation_failed(FAIL_EXPIRY, "transaction expired").expired());
         case 17012:
-            return std::make_exception_ptr(query_document_exists(tx_resp.ctx()));
+            return std::make_exception_ptr(document_exists(tx_resp.ctx()));
         case 17014:
-            return std::make_exception_ptr(query_document_not_found(tx_resp.ctx()));
+            return std::make_exception_ptr(document_not_found(tx_resp.ctx()));
         case 17015:
             return std::make_exception_ptr(query_cas_mismatch(tx_resp.ctx()));
     }
@@ -882,7 +882,7 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
         }
     }
 
-    return { std::make_exception_ptr(query_exception(tx_resp.ctx())) };
+    return { std::make_exception_ptr(op_exception(tx_resp.ctx())) };
 }
 
 void
@@ -1030,7 +1030,7 @@ attempt_context_impl::do_public_query(const std::string& statement, const couchb
         return std::make_shared<couchbase::transactions::transaction_query_result>(core::impl::build_transaction_query_result(result));
     } catch (const transaction_operation_failed& e) {
         return std::make_shared<couchbase::transactions::transaction_query_result>(e.get_error_ctx());
-    } catch (const query_exception& qe) {
+    } catch (const op_exception& qe) {
         return std::make_shared<couchbase::transactions::transaction_query_result>(qe.ctx());
     } catch (...) {
         // should not be necessary, but just in case...
@@ -1102,7 +1102,7 @@ attempt_context_impl::get_with_query(const core::document_id& id, bool optional,
                               if (optional) {
                                   try {
                                       std::rethrow_exception(err);
-                                  } catch (const query_document_not_found&) {
+                                  } catch (const document_not_found&) {
                                       return op_completed_with_callback(std::move(cb), std::optional<transaction_get_result>());
                                   } catch (...) {
                                       return op_completed_with_error(std::move(cb), std::current_exception());
@@ -1132,9 +1132,9 @@ attempt_context_impl::insert_raw_with_query(const core::document_id& id, const s
                                       std::rethrow_exception(err);
                                   } catch (const transaction_operation_failed&) {
                                       return op_completed_with_error(std::move(cb), err);
-                                  } catch (const query_document_exists& e) {
-                                      return op_completed_with_error(std::move(cb),
-                                                                     transaction_operation_failed(FAIL_DOC_ALREADY_EXISTS, e.what()));
+
+                                  } catch (const document_exists& ex) {
+                                      return op_completed_with_error(std::move(cb), ex);
                                   } catch (const std::exception& e) {
                                       return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
                                   } catch (...) {
@@ -1175,7 +1175,7 @@ attempt_context_impl::replace_raw_with_query(const transaction_get_result& docum
                       std::rethrow_exception(err);
                   } catch (const query_cas_mismatch& e) {
                       return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_CAS_MISMATCH, e.what()).retry());
-                  } catch (const query_document_not_found& e) {
+                  } catch (const document_not_found& e) {
                       return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_DOC_NOT_FOUND, e.what()).retry());
                   } catch (const transaction_operation_failed& e) {
                       return op_completed_with_error(std::move(cb), e);
@@ -1217,7 +1217,7 @@ attempt_context_impl::remove_with_query(const transaction_get_result& document, 
                       std::rethrow_exception(err);
                   } catch (const transaction_operation_failed& e) {
                       return op_completed_with_error(std::move(cb), e);
-                  } catch (const query_document_not_found& e) {
+                  } catch (const document_not_found& e) {
                       return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_DOC_NOT_FOUND, e.what()).retry());
                   } catch (const query_cas_mismatch& e) {
                       return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_CAS_MISMATCH, e.what()).retry());
@@ -1256,9 +1256,9 @@ attempt_context_impl::commit_with_query(VoidCallback&& cb)
                   return cb(std::current_exception());
               } catch (const query_attempt_expired& e) {
                   return cb(std::make_exception_ptr(transaction_operation_failed(FAIL_EXPIRY, e.what()).ambiguous().no_rollback()));
-              } catch (const query_document_not_found& e) {
+              } catch (const document_not_found& e) {
                   return cb(std::make_exception_ptr(transaction_operation_failed(FAIL_DOC_NOT_FOUND, e.what()).no_rollback()));
-              } catch (const query_document_exists& e) {
+              } catch (const document_exists& e) {
                   return cb(std::make_exception_ptr(transaction_operation_failed(FAIL_DOC_ALREADY_EXISTS, e.what()).no_rollback()));
               } catch (const query_cas_mismatch& e) {
                   return cb(std::make_exception_ptr(transaction_operation_failed(FAIL_CAS_MISMATCH, e.what()).no_rollback()));
@@ -2206,7 +2206,7 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
                               trace("doc {} not in txn - was inserted outside txn", id);
                               return op_completed_with_error(
                                 std::forward<Handler>(cb),
-                                transaction_operation_failed(FAIL_DOC_ALREADY_EXISTS, "document already exists"));
+                                document_exists({ couchbase::errc::transaction_op::document_exists_exception, key_value_error_context() }));
                           }
                           // CBD-3787 - Only a staged insert is ok to overwrite
                           if (doc->links().op() && *doc->links().op() != "insert") {
