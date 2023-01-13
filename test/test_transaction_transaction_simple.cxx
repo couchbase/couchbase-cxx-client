@@ -14,6 +14,7 @@
  *   limitations under the License.
  */
 
+#include "../core/transactions/atr_ids.hxx"
 #include "simple_object.hxx"
 #include "test_helper.hxx"
 #include "utils/transactions_env.h"
@@ -746,4 +747,20 @@ TEST_CASE("transactions: query can set any durability", "[transactions]")
             REQUIRE(doc);
         });
     }
+}
+
+TEST_CASE("transactions: atr and client_record are binary documents", "[transactions]")
+{
+    auto txns = TransactionsTestEnvironment::get_transactions();
+    auto id = TransactionsTestEnvironment::get_document_id();
+    std::vector<std::byte> binary_null{ std::byte(0) };
+    tao::json::value content{
+        { "some_number", 0 },
+    };
+    txns.run([id, content](attempt_context& ctx) { ctx.insert(id, content); });
+    auto client_record_id = TransactionsTestEnvironment::get_document_id("_txn:client-record");
+    REQUIRE(TransactionsTestEnvironment::get_doc(client_record_id).raw_value == binary_null);
+    auto atr_key = atr_ids::atr_id_for_vbucket(atr_ids::vbucket_for_key(id.key()));
+    auto atr_id = TransactionsTestEnvironment::get_document_id(atr_key);
+    REQUIRE(TransactionsTestEnvironment::get_doc(atr_id).raw_value == binary_null);
 }
