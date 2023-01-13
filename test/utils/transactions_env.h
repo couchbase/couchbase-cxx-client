@@ -94,7 +94,7 @@ struct conn {
     std::list<std::thread> io_threads;
     std::shared_ptr<couchbase::core::cluster> c;
 
-    conn(const test_config& conf)
+    conn(const test_config& conf, bool open_buckets = true)
       : io(static_cast<int>(conf.io_threads))
       , c(couchbase::core::cluster::create(io))
     {
@@ -108,7 +108,7 @@ struct conn {
         for (std::size_t i = 0; i < conf.io_threads; i++) {
             io_threads.emplace_back([this]() { io.run(); });
         }
-        connect(conf);
+        connect(conf, open_buckets);
     }
 
     ~conn()
@@ -126,7 +126,7 @@ struct conn {
         }
     }
 
-    void connect(const test_config& conf)
+    void connect(const test_config& conf, bool open_bucket = true)
     {
         couchbase::core::cluster_credentials auth{};
         {
@@ -148,74 +148,78 @@ struct conn {
             }
             spdlog::trace("successfully opened connection to {}", connstr.bootstrap_nodes.front().address);
         }
-        // now, open the `default` bucket
-        {
-            auto barrier = std::make_shared<std::promise<std::error_code>>();
-            auto f = barrier->get_future();
-            c->open_bucket(conf.bucket, [barrier](std::error_code ec) { barrier->set_value(ec); });
-            auto rc = f.get();
-            if (rc) {
-                std::cout << "ERROR opening bucket `" << conf.bucket << "`: " << rc.message() << std::endl;
-                exit(-1);
-            }
-        }
-        // now open the extra bucket
-        {
-            if (!conf.extra_bucket.empty()) {
+        if (open_bucket) { // now, open the `default` bucket
+            {
                 auto barrier = std::make_shared<std::promise<std::error_code>>();
-
                 auto f = barrier->get_future();
-                c->open_bucket(conf.extra_bucket, [barrier](std::error_code ec) { barrier->set_value(ec); });
+                c->open_bucket(conf.bucket, [barrier](std::error_code ec) { barrier->set_value(ec); });
                 auto rc = f.get();
                 if (rc) {
-                    std::cout << "ERROR opening extra bucket `" << conf.extra_bucket << "`: " << rc.message() << std::endl;
+                    std::cout << "ERROR opening bucket `" << conf.bucket << "`: " << rc.message() << std::endl;
                     exit(-1);
                 }
             }
-        }
+            // now open the extra bucket
+            {
+                if (!conf.extra_bucket.empty()) {
+                    auto barrier = std::make_shared<std::promise<std::error_code>>();
 
-        // do a ping
-        {
-            bool ok = false;
-            size_t num_pings = 0;
-            auto sleep_time = PING_INTERVAL;
-            // TEMPORARILY: because of CCXCBC-94, we can only sleep for some arbitrary time before pinging,
-            // in hopes that query is up by then.
-            spdlog::info("sleeping for 10 seconds before pinging (CXXCBC-94 workaround/hack)");
-            std::this_thread::sleep_for(std::chrono::seconds(10));
-            while (!ok && num_pings++ < MAX_PINGS) {
-                spdlog::info("sleeping {}ms before pinging...", sleep_time.count());
-                std::this_thread::sleep_for(sleep_time);
-                // TEMPORARILY only ping key_value.   See CCXCBC-94 for details -- ping not returning any service
-                // except KV.
-                std::set<couchbase::core::service_type> services{ couchbase::core::service_type::key_value };
-                auto barrier = std::make_shared<std::promise<couchbase::core::diag::ping_result>>();
-                auto f = barrier->get_future();
-                c->ping("tests_startup", "default", services, [barrier](couchbase::core::diag::ping_result result) {
-                    barrier->set_value(result);
-                });
-                auto result = f.get();
-                ok = true;
-                for (auto& svc : services) {
-                    if (result.services.find(svc) != result.services.end()) {
-                        if (result.services[svc].size() > 0) {
-                            ok = ok && std::all_of(result.services[svc].begin(),
-                                                   result.services[svc].end(),
-                                                   [&](const couchbase::core::diag::endpoint_ping_info& info) {
-                                                       return (!info.error && info.state == couchbase::core::diag::ping_state::ok);
-                                                   });
+                    auto f = barrier->get_future();
+                    c->open_bucket(conf.extra_bucket, [barrier](std::error_code ec) { barrier->set_value(ec); });
+                    auto rc = f.get();
+                    if (rc) {
+                        std::cout << "ERROR opening extra bucket `" << conf.extra_bucket << "`: " << rc.message() << std::endl;
+                        exit(-1);
+                    }
+                }
+            }
+
+            {
+                bool ok = false;
+                size_t num_pings = 0;
+                auto sleep_time = PING_INTERVAL;
+                // TEMPORARILY: because of CCXCBC-94, we can only sleep for some arbitrary time before pinging,
+                // in hopes that query is up by then.
+                spdlog::info("sleeping for 10 seconds before pinging (CXXCBC-94 workaround/hack)");
+                std::this_thread::sleep_for(std::chrono::seconds(10));
+                while (!ok && num_pings++ < MAX_PINGS) {
+                    spdlog::info("sleeping {}ms before pinging...", sleep_time.count());
+                    std::this_thread::sleep_for(sleep_time);
+                    // TEMPORARILY only ping key_value.   See CCXCBC-94 for details -- ping not returning any service
+                    // except KV.
+                    std::set<couchbase::core::service_type> services{ couchbase::core::service_type::key_value };
+                    auto barrier = std::make_shared<std::promise<couchbase::core::diag::ping_result>>();
+                    auto f = barrier->get_future();
+                    std::optional<std::string> ping_bucket;
+                    c->ping("tests_startup", conf.bucket, services, [barrier](couchbase::core::diag::ping_result result) {
+                        barrier->set_value(result);
+                    });
+                    auto result = f.get();
+                    ok = true;
+                    for (auto& svc : services) {
+                        if (result.services.find(svc) != result.services.end()) {
+                            if (result.services[svc].size() > 0) {
+                                ok = ok && std::all_of(result.services[svc].begin(),
+                                                       result.services[svc].end(),
+                                                       [&](const couchbase::core::diag::endpoint_ping_info& info) {
+                                                           return (!info.error && info.state == couchbase::core::diag::ping_state::ok);
+                                                       });
+                            } else {
+                                ok = false;
+                            }
                         } else {
                             ok = false;
                         }
-                    } else {
-                        ok = false;
                     }
+                    spdlog::info("ping after connect {}", ok ? "successful" : "unsuccessful");
                 }
-                spdlog::info("ping after connect {}", ok ? "successful" : "unsuccessful");
+                if (!ok) {
+                    exit(-1);
+                }
             }
-            if (!ok) {
-                exit(-1);
-            }
+        } else {
+            spdlog::info("no open buckets, sleeping for 5 seconds...");
+            std::this_thread::sleep_for(std::chrono::seconds(5));
         }
     }
 };

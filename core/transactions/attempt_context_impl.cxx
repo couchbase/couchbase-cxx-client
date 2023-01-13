@@ -113,7 +113,7 @@ attempt_context_impl::get(const core::document_id& id, Callback&& cb)
     if (op_list_.get_mode().is_query()) {
         return get_with_query(id, false, std::move(cb));
     }
-    cache_error_async(std::move(cb), [&]() mutable {
+    cache_error_async(cb, [&]() mutable {
         check_if_done(cb);
         do_get(
           id,
@@ -178,54 +178,62 @@ attempt_context_impl::get_optional(const core::document_id& id)
 void
 attempt_context_impl::get_optional(const core::document_id& id, Callback&& cb)
 {
+
     if (op_list_.get_mode().is_query()) {
         return get_with_query(id, true, std::move(cb));
     }
-    cache_error_async(std::move(cb), [&]() {
-        check_if_done(cb);
-        do_get(
-          id,
-          std::nullopt,
-          [this, id, cb = std::move(cb)](
-            std::optional<error_class> ec, std::optional<std::string> err_message, std::optional<transaction_get_result> res) mutable {
-              if (!ec) {
-                  ec = hooks_.after_get_complete(this, id.key());
-              }
-              if (ec) {
-                  switch (*ec) {
-                      case FAIL_EXPIRY:
-                          return op_completed_with_error(
-                            std::move(cb),
-                            transaction_operation_failed(*ec, fmt::format("transaction expired during get {}", err_message.value_or("")))
-                              .expired());
-                      case FAIL_DOC_NOT_FOUND:
-                          return op_completed_with_callback(std::move(cb), std::optional<transaction_get_result>());
-                      case FAIL_TRANSIENT:
-                          return op_completed_with_error(
-                            std::move(cb),
-                            transaction_operation_failed(*ec, fmt::format("transient failure in get {}", err_message.value_or("")))
-                              .retry());
-                      case FAIL_HARD:
-                          return op_completed_with_error(
-                            std::move(cb),
-                            transaction_operation_failed(*ec, fmt::format("fail hard in get {}", err_message.value_or(""))).no_rollback());
-                      default: {
-                          return op_completed_with_error(
-                            std::move(cb),
-                            transaction_operation_failed(FAIL_OTHER,
-                                                         fmt::format("error getting {} {}", id.key(), err_message.value_or(""))));
-                      }
-                  }
-              } else {
-                  if (res) {
-                      auto err = forward_compat::check(forward_compat_stage::GETS, res->links().forward_compat());
-                      if (err) {
-                          return op_completed_with_error(std::move(cb), *err);
-                      }
-                  }
-                  return op_completed_with_callback(std::move(cb), res);
-              }
-          });
+    cache_error_async(cb, [&]() {
+        ensure_open_bucket(id.bucket(), [this, id, cb = std::move(cb)](std::error_code ec) mutable {
+            if (ec) {
+                return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_OTHER, ec.message()));
+            }
+            check_if_done(cb);
+            do_get(id,
+                   std::nullopt,
+                   [this, id, cb = std::move(cb)](std::optional<error_class> ec,
+                                                  std::optional<std::string> err_message,
+                                                  std::optional<transaction_get_result> res) mutable {
+                       if (!ec) {
+                           ec = hooks_.after_get_complete(this, id.key());
+                       }
+                       if (ec) {
+                           switch (*ec) {
+                               case FAIL_EXPIRY:
+                                   return op_completed_with_error(
+                                     std::move(cb),
+                                     transaction_operation_failed(
+                                       *ec, fmt::format("transaction expired during get {}", err_message.value_or("")))
+                                       .expired());
+                               case FAIL_DOC_NOT_FOUND:
+                                   return op_completed_with_callback(std::move(cb), std::optional<transaction_get_result>());
+                               case FAIL_TRANSIENT:
+                                   return op_completed_with_error(
+                                     std::move(cb),
+                                     transaction_operation_failed(*ec, fmt::format("transient failure in get {}", err_message.value_or("")))
+                                       .retry());
+                               case FAIL_HARD:
+                                   return op_completed_with_error(
+                                     std::move(cb),
+                                     transaction_operation_failed(*ec, fmt::format("fail hard in get {}", err_message.value_or("")))
+                                       .no_rollback());
+                               default: {
+                                   return op_completed_with_error(
+                                     std::move(cb),
+                                     transaction_operation_failed(FAIL_OTHER,
+                                                                  fmt::format("error getting {} {}", id.key(), err_message.value_or(""))));
+                               }
+                           }
+                       } else {
+                           if (res) {
+                               auto err = forward_compat::check(forward_compat_stage::GETS, res->links().forward_compat());
+                               if (err) {
+                                   return op_completed_with_error(std::move(cb), *err);
+                               }
+                           }
+                           return op_completed_with_callback(std::move(cb), res);
+                       }
+                   });
+        });
     });
 }
 
@@ -276,68 +284,76 @@ attempt_context_impl::create_staging_request(const core::document_id& id,
 void
 attempt_context_impl::replace_raw(const transaction_get_result& document, const std::vector<std::byte>& content, Callback&& cb)
 {
+
     if (op_list_.get_mode().is_query()) {
         return replace_raw_with_query(document, content, std::move(cb));
     }
-    return cache_error_async(std::move(cb), [&]() {
-        try {
-            // a get can return a 'empty' doc, so check for that and short-circuit the eventual error that will occur...
-            if (document.key().empty() || document.bucket().empty()) {
-                return op_completed_with_error(std::move(cb),
-                                               transaction_operation_failed(FAIL_DOC_NOT_FOUND, "can't replace empty doc")
-                                                 .cause(external_exception::DOCUMENT_NOT_FOUND_EXCEPTION));
+    return cache_error_async(cb, [&]() {
+        ensure_open_bucket(document.bucket(), [this, cb = std::move(cb), document, content](std::error_code ec) mutable {
+            if (ec) {
+                return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_OTHER, ec.message()));
             }
-            trace("replacing {} with {}", document, to_string(content));
-            check_if_done(cb);
-            staged_mutation* existing_sm = staged_mutations_->find_any(document.id());
-            if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::REMOVE) {
-                debug("found existing REMOVE of {} while replacing", document);
-                return op_completed_with_error(
-                  std::move(cb),
-                  transaction_operation_failed(FAIL_DOC_NOT_FOUND,
-                                               "cannot replace a document that has been removed in the same transaction")
-                    .cause(external_exception::DOCUMENT_NOT_FOUND_EXCEPTION));
+            try {
+                // a get can return a 'empty' doc, so check for that and short-circuit the eventual error that will occur...
+                if (document.key().empty() || document.bucket().empty()) {
+                    return op_completed_with_error(std::move(cb),
+                                                   transaction_operation_failed(FAIL_DOC_NOT_FOUND, "can't replace empty doc")
+                                                     .cause(external_exception::DOCUMENT_NOT_FOUND_EXCEPTION));
+                }
+                trace("replacing {} with {}", document, to_string(content));
+                check_if_done(cb);
+                staged_mutation* existing_sm = staged_mutations_->find_any(document.id());
+                if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::REMOVE) {
+                    debug("found existing REMOVE of {} while replacing", document);
+                    return op_completed_with_error(
+                      std::move(cb),
+                      transaction_operation_failed(FAIL_DOC_NOT_FOUND,
+                                                   "cannot replace a document that has been removed in the same transaction")
+                        .cause(external_exception::DOCUMENT_NOT_FOUND_EXCEPTION));
+                }
+                if (check_expiry_pre_commit(STAGE_REPLACE, document.id().key())) {
+                    return op_completed_with_error(std::move(cb),
+                                                   transaction_operation_failed(FAIL_EXPIRY, "transaction expired").expired());
+                }
+
+                check_and_handle_blocking_transactions(
+                  document,
+                  forward_compat_stage::WWC_REPLACING,
+                  [this, existing_sm = std::move(existing_sm), document = std::move(document), cb = std::move(cb), content](
+                    std::optional<transaction_operation_failed> e1) mutable {
+                      if (e1) {
+                          return op_completed_with_error(std::move(cb), *e1);
+                      }
+                      auto tmp_doc =
+                        document_id{ document.id().bucket(), document.id().scope(), document.id().collection(), document.id().key() };
+                      select_atr_if_needed_unlocked(
+                        tmp_doc,
+                        [this, existing_sm = std::move(existing_sm), document = std::move(document), cb = std::move(cb), content](
+                          std::optional<transaction_operation_failed> e2) mutable {
+                            if (e2) {
+                                return op_completed_with_error(std::move(cb), *e2);
+                            }
+                            if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::INSERT) {
+                                debug("found existing INSERT of {} while replacing", document);
+                                exp_delay delay(
+                                  std::chrono::milliseconds(5), std::chrono::milliseconds(300), overall_.config().expiration_time);
+                                create_staged_insert(document.id(), content, existing_sm->doc().cas().value(), delay, std::move(cb));
+                                return;
+                            }
+                            create_staged_replace(document, content, std::move(cb));
+                        });
+                  });
+            } catch (const client_error& e) {
+                error_class errc = e.ec();
+                switch (errc) {
+                    case FAIL_EXPIRY:
+                        expiry_overtime_mode_ = true;
+                        throw transaction_operation_failed(errc, e.what()).expired();
+                    default:
+                        throw transaction_operation_failed(errc, e.what());
+                }
             }
-            if (check_expiry_pre_commit(STAGE_REPLACE, document.id().key())) {
-                return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_EXPIRY, "transaction expired").expired());
-            }
-            check_and_handle_blocking_transactions(
-              document,
-              forward_compat_stage::WWC_REPLACING,
-              [this, existing_sm = std::move(existing_sm), document = std::move(document), cb = std::move(cb), content](
-                std::optional<transaction_operation_failed> e1) mutable {
-                  if (e1) {
-                      return op_completed_with_error(std::move(cb), *e1);
-                  }
-                  auto tmp_doc =
-                    document_id{ document.id().bucket(), document.id().scope(), document.id().collection(), document.id().key() };
-                  select_atr_if_needed_unlocked(
-                    tmp_doc,
-                    [this, existing_sm = std::move(existing_sm), document = std::move(document), cb = std::move(cb), content](
-                      std::optional<transaction_operation_failed> e2) mutable {
-                        if (e2) {
-                            return op_completed_with_error(std::move(cb), *e2);
-                        }
-                        if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::INSERT) {
-                            debug("found existing INSERT of {} while replacing", document);
-                            exp_delay delay(
-                              std::chrono::milliseconds(5), std::chrono::milliseconds(300), overall_.config().expiration_time);
-                            create_staged_insert(document.id(), content, existing_sm->doc().cas().value(), delay, std::move(cb));
-                            return;
-                        }
-                        create_staged_replace(document, content, std::move(cb));
-                    });
-              });
-        } catch (const client_error& e) {
-            error_class ec = e.ec();
-            switch (ec) {
-                case FAIL_EXPIRY:
-                    expiry_overtime_mode_ = true;
-                    throw transaction_operation_failed(ec, e.what()).expired();
-                default:
-                    throw transaction_operation_failed(ec, e.what());
-            }
-        }
+        });
     });
 }
 
@@ -419,45 +435,52 @@ attempt_context_impl::insert_raw(const core::document_id& id, const std::vector<
 void
 attempt_context_impl::insert_raw(const core::document_id& id, const std::vector<std::byte>& content, Callback&& cb)
 {
+
     if (op_list_.get_mode().is_query()) {
         return insert_raw_with_query(id, content, std::move(cb));
     }
-    return cache_error_async(std::move(cb), [&]() mutable {
-        try {
-            check_if_done(cb);
-            staged_mutation* existing_sm = staged_mutations_->find_any(id);
-            if ((existing_sm != nullptr) &&
-                (existing_sm->type() == staged_mutation_type::INSERT || existing_sm->type() == staged_mutation_type::REPLACE)) {
-                debug("found existing insert or replace of {} while inserting", id);
-                return op_completed_with_error(
-                  std::move(cb),
-                  transaction_operation_failed(FAIL_DOC_ALREADY_EXISTS, "found existing insert or replace of same document"));
+    return cache_error_async(cb, [&]() mutable {
+        ensure_open_bucket(id.bucket(), [this, id, content, cb = std::move(cb)](std::error_code ec) mutable {
+            if (ec) {
+                return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_OTHER, ec.message()));
             }
-            if (check_expiry_pre_commit(STAGE_INSERT, id.key())) {
-                return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_EXPIRY, "transaction expired").expired());
+            try {
+                check_if_done(cb);
+                staged_mutation* existing_sm = staged_mutations_->find_any(id);
+                if ((existing_sm != nullptr) &&
+                    (existing_sm->type() == staged_mutation_type::INSERT || existing_sm->type() == staged_mutation_type::REPLACE)) {
+                    debug("found existing insert or replace of {} while inserting", id);
+                    return op_completed_with_error(
+                      std::move(cb),
+                      transaction_operation_failed(FAIL_DOC_ALREADY_EXISTS, "found existing insert or replace of same document"));
+                }
+                if (check_expiry_pre_commit(STAGE_INSERT, id.key())) {
+                    return op_completed_with_error(std::move(cb),
+                                                   transaction_operation_failed(FAIL_EXPIRY, "transaction expired").expired());
+                }
+                select_atr_if_needed_unlocked(
+                  id, [this, existing_sm, cb = std::move(cb), id, content](std::optional<transaction_operation_failed> err) mutable {
+                      if (err) {
+                          return op_completed_with_error(std::move(cb), *err);
+                      }
+                      if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::REMOVE) {
+                          debug("found existing remove of {} while inserting", id);
+                          return create_staged_replace(existing_sm->doc(), content, std::move(cb));
+                      }
+                      uint64_t cas = 0;
+                      exp_delay delay(std::chrono::milliseconds(5), std::chrono::milliseconds(300), overall_.config().expiration_time);
+                      create_staged_insert(id, content, cas, delay, std::move(cb));
+                  });
+            } catch (const std::exception& e) {
+                return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
             }
-            select_atr_if_needed_unlocked(
-              id, [this, existing_sm, cb = std::move(cb), id, content](std::optional<transaction_operation_failed> err) mutable {
-                  if (err) {
-                      return op_completed_with_error(std::move(cb), *err);
-                  }
-                  if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::REMOVE) {
-                      debug("found existing remove of {} while inserting", id);
-                      return create_staged_replace(existing_sm->doc(), content, std::move(cb));
-                  }
-                  uint64_t cas = 0;
-                  exp_delay delay(std::chrono::milliseconds(5), std::chrono::milliseconds(300), overall_.config().expiration_time);
-                  create_staged_insert(id, content, cas, delay, std::move(cb));
-              });
-        } catch (const std::exception& e) {
-            return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
-        }
+        });
     });
 }
 
 void
 attempt_context_impl::select_atr_if_needed_unlocked(const core::document_id id,
-                                                    utils::movable_function<void(std::optional<transaction_operation_failed>)>&& cb)
+                                                    std::function<void(std::optional<transaction_operation_failed>)>&& cb)
 {
     try {
         std::unique_lock<std::mutex> lock(mutex_);
@@ -537,90 +560,98 @@ attempt_context_impl::check_atr_entry_for_blocking_document(const transaction_ge
 void
 attempt_context_impl::remove(const transaction_get_result& document, VoidCallback&& cb)
 {
+
     if (op_list_.get_mode().is_query()) {
         return remove_with_query(document, std::move(cb));
     }
-    return cache_error_async(std::move(cb), [&]() mutable {
+    return cache_error_async(cb, [&]() mutable {
         check_if_done(cb);
-        staged_mutation* existing_sm = staged_mutations_->find_any(document.id());
-        auto error_handler = [this](error_class ec, const std::string msg, VoidCallback&& cb) mutable {
-            transaction_operation_failed err(ec, msg);
-            switch (ec) {
-                case FAIL_EXPIRY:
-                    expiry_overtime_mode_ = true;
-                    return op_completed_with_error(std::move(cb), err.expired());
-                case FAIL_DOC_NOT_FOUND:
-                case FAIL_DOC_ALREADY_EXISTS:
-                case FAIL_CAS_MISMATCH:
-                case FAIL_TRANSIENT:
-                case FAIL_AMBIGUOUS:
-                    return op_completed_with_error(std::move(cb), err.retry());
-                case FAIL_HARD:
-                    return op_completed_with_error(std::move(cb), err.no_rollback());
-                default:
-                    return op_completed_with_error(std::move(cb), err);
+        ensure_open_bucket(document.bucket(), [this, document, cb = std::move(cb)](std::error_code ec) mutable {
+            if (ec) {
+                return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_OTHER, ec.message()));
             }
-        };
-        if (check_expiry_pre_commit(STAGE_REMOVE, document.id().key())) {
-            return error_handler(FAIL_EXPIRY, "transaction expired", std::move(cb));
-        }
-        debug("removing {}", document);
-        if (existing_sm != nullptr) {
-            if (existing_sm->type() == staged_mutation_type::REMOVE) {
-                debug("found existing REMOVE of {} while removing", document);
-                return op_completed_with_error(
-                  std::move(cb),
-                  transaction_operation_failed(FAIL_DOC_NOT_FOUND, "cannot remove a document that has been removed in the same transaction")
-                    .cause(external_exception::DOCUMENT_NOT_FOUND_EXCEPTION));
+            staged_mutation* existing_sm = staged_mutations_->find_any(document.id());
+            auto error_handler = [this](error_class ec, const std::string msg, VoidCallback&& cb) mutable {
+                transaction_operation_failed err(ec, msg);
+                switch (ec) {
+                    case FAIL_EXPIRY:
+                        expiry_overtime_mode_ = true;
+                        return op_completed_with_error(std::move(cb), err.expired());
+                    case FAIL_DOC_NOT_FOUND:
+                    case FAIL_DOC_ALREADY_EXISTS:
+                    case FAIL_CAS_MISMATCH:
+                    case FAIL_TRANSIENT:
+                    case FAIL_AMBIGUOUS:
+                        return op_completed_with_error(std::move(cb), err.retry());
+                    case FAIL_HARD:
+                        return op_completed_with_error(std::move(cb), err.no_rollback());
+                    default:
+                        return op_completed_with_error(std::move(cb), err);
+                }
+            };
+            if (check_expiry_pre_commit(STAGE_REMOVE, document.id().key())) {
+                return error_handler(FAIL_EXPIRY, "transaction expired", std::move(cb));
             }
-            if (existing_sm->type() == staged_mutation_type::INSERT) {
-                remove_staged_insert(document.id(), std::move(cb));
-                return;
+            debug("removing {}", document);
+            if (existing_sm != nullptr) {
+                if (existing_sm->type() == staged_mutation_type::REMOVE) {
+                    debug("found existing REMOVE of {} while removing", document);
+                    return op_completed_with_error(
+                      std::move(cb),
+                      transaction_operation_failed(FAIL_DOC_NOT_FOUND,
+                                                   "cannot remove a document that has been removed in the same transaction")
+                        .cause(external_exception::DOCUMENT_NOT_FOUND_EXCEPTION));
+                }
+                if (existing_sm->type() == staged_mutation_type::INSERT) {
+                    remove_staged_insert(document.id(), std::move(cb));
+                    return;
+                }
             }
-        }
-        check_and_handle_blocking_transactions(
-          document,
-          forward_compat_stage::WWC_REMOVING,
-          [this, document = std::move(document), cb = std::move(cb), error_handler = std::move(error_handler)](
-            std::optional<transaction_operation_failed> err1) mutable {
-              if (err1) {
-                  return op_completed_with_error(std::move(cb), *err1);
-              }
-              auto tmp_doc = document_id{ document.id().bucket(), document.id().scope(), document.id().collection(), document.id().key() };
-              select_atr_if_needed_unlocked(
-                tmp_doc,
-                [document = std::move(document), cb = std::move(cb), this, error_handler = std::move(error_handler)](
-                  std::optional<transaction_operation_failed> err2) mutable {
-                    if (err2) {
-                        return op_completed_with_error(std::move(cb), *err2);
-                    }
-                    if (auto ec = hooks_.before_staged_remove(this, document.id().key())) {
-                        return error_handler(*ec, "before_staged_remove hook raised error", std::move(cb));
-                    }
-                    trace("about to remove doc {} with cas {}", document.id(), document.cas().value());
-                    auto req = create_staging_request(document.id(), &document, "remove");
-                    req.cas = document.cas();
-                    req.access_deleted = document.links().is_deleted();
-                    overall_.cluster_ref()->execute(
-                      req,
-                      [this, document = std::move(document), cb = std::move(cb), error_handler = std::move(error_handler)](
-                        core::operations::mutate_in_response resp) mutable {
-                          auto ec = error_class_from_response(resp);
-                          if (!ec) {
-                              ec = hooks_.after_staged_remove_complete(this, document.id().key());
-                          }
-                          if (!ec) {
-                              trace("removed doc {} CAS={}, rc={}", document.id(), resp.cas.value(), resp.ctx.ec().message());
-                              // TODO: this copy...  can we do better?
-                              transaction_get_result new_res = document;
-                              new_res.cas(resp.cas.value());
-                              staged_mutations_->add(staged_mutation(new_res, std::vector<std::byte>{}, staged_mutation_type::REMOVE));
-                              return op_completed_with_callback(std::move(cb));
-                          }
-                          return error_handler(*ec, resp.ctx.ec().message(), std::move(cb));
-                      });
-                });
-          });
+            check_and_handle_blocking_transactions(
+              document,
+              forward_compat_stage::WWC_REMOVING,
+              [this, document = std::move(document), cb = std::move(cb), error_handler = std::move(error_handler)](
+                std::optional<transaction_operation_failed> err1) mutable {
+                  if (err1) {
+                      return op_completed_with_error(std::move(cb), *err1);
+                  }
+                  auto tmp_doc =
+                    document_id{ document.id().bucket(), document.id().scope(), document.id().collection(), document.id().key() };
+                  select_atr_if_needed_unlocked(
+                    tmp_doc,
+                    [document = std::move(document), cb = std::move(cb), this, error_handler = std::move(error_handler)](
+                      std::optional<transaction_operation_failed> err2) mutable {
+                        if (err2) {
+                            return op_completed_with_error(std::move(cb), *err2);
+                        }
+                        if (auto ec = hooks_.before_staged_remove(this, document.id().key())) {
+                            return error_handler(*ec, "before_staged_remove hook raised error", std::move(cb));
+                        }
+                        trace("about to remove doc {} with cas {}", document.id(), document.cas().value());
+                        auto req = create_staging_request(document.id(), &document, "remove");
+                        req.cas = document.cas();
+                        req.access_deleted = document.links().is_deleted();
+                        overall_.cluster_ref()->execute(
+                          req,
+                          [this, document = std::move(document), cb = std::move(cb), error_handler = std::move(error_handler)](
+                            core::operations::mutate_in_response resp) mutable {
+                              auto ec = error_class_from_response(resp);
+                              if (!ec) {
+                                  ec = hooks_.after_staged_remove_complete(this, document.id().key());
+                              }
+                              if (!ec) {
+                                  trace("removed doc {} CAS={}, rc={}", document.id(), resp.cas.value(), resp.ctx.ec().message());
+                                  // TODO: this copy...  can we do better?
+                                  transaction_get_result new_res = document;
+                                  new_res.cas(resp.cas.value());
+                                  staged_mutations_->add(staged_mutation(new_res, std::vector<std::byte>{}, staged_mutation_type::REMOVE));
+                                  return op_completed_with_callback(cb);
+                              }
+                              return error_handler(*ec, resp.ctx.ec().message(), std::move(cb));
+                          });
+                    });
+              });
+        });
     });
 }
 
@@ -707,7 +738,7 @@ wrap_query_request(const couchbase::transactions::transaction_query_options& opt
 }
 
 void
-attempt_context_impl::query_begin_work(utils::movable_function<void(std::exception_ptr)>&& cb)
+attempt_context_impl::query_begin_work(std::function<void(std::exception_ptr)>&& cb)
 {
     // construct the txn_data and query options for the existing transaction
     couchbase::transactions::transaction_query_options opts;
@@ -930,7 +961,7 @@ attempt_context_impl::wrap_query(const std::string& statement,
                                  const tao::json::value& txdata,
                                  const std::string& hook_point,
                                  bool check_expiry,
-                                 utils::movable_function<void(std::exception_ptr, core::operations::query_response)>&& cb)
+                                 std::function<void(std::exception_ptr, core::operations::query_response)>&& cb)
 {
     auto req = wrap_query_request(opts, overall_);
     if (statement != BEGIN_WORK) {
@@ -988,7 +1019,7 @@ attempt_context_impl::query(const std::string& statement,
                             const couchbase::transactions::transaction_query_options& options,
                             QueryCallback&& cb)
 {
-    return cache_error_async(std::move(cb), [&]() {
+    return cache_error_async(cb, [&]() {
         check_if_done(cb);
         // decrement in_flight, as we just incremented it in cache_error_async.
         op_list_.set_query_mode(
@@ -1069,7 +1100,7 @@ make_kv_txdata(std::optional<transaction_get_result> doc = std::nullopt)
 void
 attempt_context_impl::get_with_query(const core::document_id& id, bool optional, Callback&& cb)
 {
-    cache_error_async(std::move(cb), [&]() {
+    cache_error_async(cb, [&]() {
         auto params = make_params(id, {});
         couchbase::transactions::transaction_query_options opts;
         opts.readonly(true);
@@ -1116,7 +1147,7 @@ attempt_context_impl::get_with_query(const core::document_id& id, bool optional,
 void
 attempt_context_impl::insert_raw_with_query(const core::document_id& id, const std::vector<std::byte>& content, Callback&& cb)
 {
-    cache_error_async(std::move(cb), [&]() {
+    cache_error_async(cb, [&]() {
         std::vector<std::byte> content_copy = content;
         auto params = make_params(id, std::move(content_copy));
         couchbase::transactions::transaction_query_options opts;
@@ -1158,7 +1189,7 @@ attempt_context_impl::insert_raw_with_query(const core::document_id& id, const s
 void
 attempt_context_impl::replace_raw_with_query(const transaction_get_result& document, const std::vector<std::byte>& content, Callback&& cb)
 {
-    cache_error_async(std::move(cb), [&]() {
+    cache_error_async(cb, [&]() {
         std::vector<std::byte> content_copy = content;
         auto params = make_params(document.id(), std::move(content_copy));
         couchbase::transactions::transaction_query_options opts;
@@ -1201,7 +1232,7 @@ attempt_context_impl::replace_raw_with_query(const transaction_get_result& docum
 void
 attempt_context_impl::remove_with_query(const transaction_get_result& document, VoidCallback&& cb)
 {
-    cache_error_async(std::move(cb), [&]() {
+    cache_error_async(cb, [&]() {
         auto params = make_params(document.id(), {});
         couchbase::transactions::transaction_query_options opts;
         return wrap_query(
@@ -2081,7 +2112,7 @@ attempt_context_impl::do_get(const core::document_id& id, const std::optional<st
 void
 attempt_context_impl::get_doc(
   const core::document_id& id,
-  utils::movable_function<void(std::optional<error_class>, std::optional<std::string>, std::optional<transaction_get_result>)>&& cb)
+  std::function<void(std::optional<error_class>, std::optional<std::string>, std::optional<transaction_get_result>)>&& cb)
 {
     core::operations::lookup_in_request req{ id };
     req.specs =

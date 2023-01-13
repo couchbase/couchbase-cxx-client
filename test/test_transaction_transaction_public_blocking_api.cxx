@@ -374,3 +374,90 @@ TEST_CASE("can query from a scope", "[transactions]")
     CHECK_FALSE(result.ctx.ec());
     CHECK_FALSE(result.transaction_id.empty());
 }
+
+TEST_CASE("can get doc from bucket not yet opened", "[transactions]")
+{
+    auto id = TransactionsTestEnvironment::get_document_id();
+    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    // now make new virginal public cluster
+    auto connection = conn(TransactionsTestEnvironment::get_conf(), false);
+    couchbase::cluster c(connection.c);
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    auto result = c.transactions()->run([&id, &coll](couchbase::transactions::attempt_context& ctx) {
+        auto doc = ctx.get(coll, id.key());
+        CHECK_FALSE(doc->ctx().ec());
+        CHECK(doc->content<tao::json::value>() == content);
+    });
+    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(result.transaction_id.empty());
+    CHECK_FALSE(result.unstaging_complete); //  no mutations = no unstaging
+}
+
+TEST_CASE("can insert doc into bucket not yet opened", "[transactions]")
+{
+    auto id = TransactionsTestEnvironment::get_document_id();
+    // now make new virginal public cluster
+    auto connection = conn(TransactionsTestEnvironment::get_conf(), false);
+    couchbase::cluster c(connection.c);
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    auto result = c.transactions()->run([&id, &coll](couchbase::transactions::attempt_context& ctx) {
+        auto doc = ctx.insert(coll, id.key(), content);
+        CHECK_FALSE(doc->ctx().ec());
+        CHECK_FALSE(doc->cas().empty());
+    });
+    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(result.transaction_id.empty());
+    CHECK(result.unstaging_complete);
+    CHECK(TransactionsTestEnvironment::get_doc(id).cas != 0);
+}
+
+TEST_CASE("can replace doc in bucket not yet opened", "[transactions]")
+{
+    auto id = TransactionsTestEnvironment::get_document_id();
+    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    // now make new virginal public cluster
+    conn connection(TransactionsTestEnvironment::get_conf(), false);
+    couchbase::cluster c(connection.c);
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    tao::json::value new_content = { { "some", "new content" } };
+    auto result = c.transactions()->run([&id, &coll, new_content](couchbase::transactions::attempt_context& ctx) {
+        auto get_doc = ctx.get(coll, id.key());
+        CHECK_FALSE(get_doc->ctx().ec());
+        auto doc = ctx.replace(get_doc, new_content);
+        CHECK_FALSE(doc->ctx().ec());
+        CHECK_FALSE(doc->cas().empty());
+    });
+    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(result.transaction_id.empty());
+    CHECK(result.unstaging_complete);
+    CHECK(TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>() == new_content);
+}
+
+TEST_CASE("can remove doc in bucket not yet opened", "[transactions]")
+{
+    auto id = TransactionsTestEnvironment::get_document_id();
+    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    // now make new virginal public cluster
+    auto connection = conn(TransactionsTestEnvironment::get_conf(), false);
+    couchbase::cluster c(connection.c);
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    tao::json::value new_content = { { "some", "new content" } };
+    auto result = c.transactions()->run([&id, &coll, new_content](couchbase::transactions::attempt_context& ctx) {
+        auto get_doc = ctx.get(coll, id.key());
+        CHECK_FALSE(get_doc->ctx().ec());
+        auto res = ctx.remove(get_doc);
+        CHECK_FALSE(res.ec());
+    });
+    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(result.transaction_id.empty());
+    CHECK(result.unstaging_complete);
+    try {
+        auto removed_doc = TransactionsTestEnvironment::get_doc(id);
+        FAIL("expected removed doc to not be present");
+
+    } catch (const couchbase::core::transactions::client_error& e) {
+        REQUIRE(e.res()->ec == couchbase::errc::key_value::document_not_found);
+    } catch (...) {
+        FAIL("Unexpected error");
+    }
+}
