@@ -248,7 +248,7 @@ transactions_cleanup::create_client_record(const couchbase::transactions::transa
               couchbase::mutate_in_specs::insert(FIELD_CLIENTS, tao::json::empty_object).xattr().create_path(),
               // subdoc::opcode::set_doc used in replace w/ empty path
               // ExtBinaryMetadata
-              couchbase::mutate_in_specs::replace({}, std::string({ 0x00 })),
+              couchbase::mutate_in_specs::replace_raw({}, std::vector<std::byte>{ std::byte{ 0x00 } }),
           }
             .specs();
         wrap_durable_request(req, config_);

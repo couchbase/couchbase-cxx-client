@@ -52,14 +52,14 @@ namespace transactions
 class transactions_cleanup;
 
 /** @brief Transaction logic should be contained in a lambda of this form */
-using logic = utils::movable_function<void(attempt_context&)>;
+using logic = std::function<void(attempt_context&)>;
 
 /** @brief AsyncTransaction logic should be contained in a lambda of this form */
-using async_logic = utils::movable_function<void(async_attempt_context&)>;
+using async_logic = std::function<void(async_attempt_context&)>;
 
 /** @brief AsyncTransaction callback when transaction has completed */
 using txn_complete_callback =
-  utils::movable_function<void(std::optional<transaction_exception>, std::optional<::couchbase::transactions::transaction_result>)>;
+  std::function<void(std::optional<transaction_exception>, std::optional<::couchbase::transactions::transaction_result>)>;
 
 /**
  * @brief set log level for transactions

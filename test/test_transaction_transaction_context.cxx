@@ -374,7 +374,7 @@ TEST_CASE("transactions: can see some query errors but no transactions failed", 
     tx.query("jkjkjl;kjlk;  jfjjffjfj",
              opts,
              [&barrier](std::exception_ptr err, std::optional<couchbase::core::operations::query_response> payload) {
-                 // this should result in a query_exception since the query isn't parseable.
+                 // this should result in a op_exception since the query isn't parseable.
                  CHECK(err);
                  CHECK_FALSE(payload);
                  if (err) {
@@ -386,12 +386,12 @@ TEST_CASE("transactions: can see some query errors but no transactions failed", 
     try {
         f.get();
         FAIL("expected future to throw exception");
-    } catch (const query_exception&) {
+    } catch (const op_exception&) {
 
     } catch (...) {
         auto e = std::current_exception();
         std::cout << "got " << typeid(e).name() << std::endl;
-        FAIL("expected query_exception to be thrown from the future");
+        FAIL("expected op_exception to be thrown from the future");
     }
     REQUIRE_NOTHROW(tx.existing_error());
 }
