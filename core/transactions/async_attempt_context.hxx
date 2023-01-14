@@ -22,7 +22,6 @@
 #include "transaction_get_result.hxx"
 
 #include "core/operations/document_query.hxx"
-#include "core/utils/movable_function.hxx"
 #include <future>
 #include <optional>
 #include <string>
@@ -39,8 +38,8 @@ class transaction_operation_failed;
 class async_attempt_context
 {
   public:
-    using Callback = utils::movable_function<void(std::exception_ptr, std::optional<transaction_get_result>)>;
-    using VoidCallback = utils::movable_function<void(std::exception_ptr)>;
+    using Callback = std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>;
+    using VoidCallback = std::function<void(std::exception_ptr)>;
     using QueryCallback = std::function<void(std::exception_ptr, std::optional<core::operations::query_response>)>;
     virtual ~async_attempt_context() = default;
     /**

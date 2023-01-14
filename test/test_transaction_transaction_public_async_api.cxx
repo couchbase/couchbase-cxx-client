@@ -158,7 +158,7 @@ TEST_CASE("can async insert", "[transactions]")
     f.get();
 }
 
-TEST_CASE("async insert fails when doc already exists", "[transactions]")
+TEST_CASE("async insert fails when doc already exists, but doesn't rollback", "[transactions]")
 {
     auto id = TransactionsTestEnvironment::get_document_id();
     REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
@@ -175,9 +175,8 @@ TEST_CASE("async insert fails when doc already exists", "[transactions]")
       },
       [barrier](couchbase::transactions::transaction_result res) {
           CHECK_FALSE(res.transaction_id.empty());
-          CHECK_FALSE(res.unstaging_complete);
-          CHECK(res.ctx.ec() == couchbase::errc::transaction::failed);
-          CHECK(res.ctx.cause() == couchbase::errc::transaction_op::document_exists_exception);
+          CHECK(res.unstaging_complete);
+          CHECK_FALSE(res.ctx.ec());
           barrier->set_value();
       },
       async_options());
