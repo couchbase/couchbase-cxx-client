@@ -26,3 +26,4 @@
 #include "user_get.hxx"
 #include "user_get_all.hxx"
 #include "user_upsert.hxx"
+#include "change_password.hxx"
