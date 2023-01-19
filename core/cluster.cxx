@@ -112,7 +112,7 @@ cluster::do_ping(std::optional<std::string> report_id,
               }
           } else {
               if (services.find(service_type::key_value) != services.end()) {
-                  if (!cluster->session_) {
+                  if (cluster->session_) {
                       cluster->session_->ping(collector->build_reporter());
                   }
                   cluster->for_each_bucket([&collector](auto& bucket) { bucket->ping(collector); });
