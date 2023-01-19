@@ -46,14 +46,13 @@ query_index_create_request::encode_to(encoded_request_type& encoded, http_contex
         with_clause = fmt::format("WITH {}", utils::json::generate(with));
     }
     std::string keyspace = fmt::format("{}:`{}`", namespace_id, bucket_name);
-    std::string query_context = keyspace;
+    auto query_context = keyspace;
     if (!scope_name.empty()) {
         keyspace += ".`" + scope_name + "`";
         query_context += ".`" + scope_name + "`";
     } else {
-        query_context += ".`_default`";
+        query_context += fmt::format(".`{}`", couchbase::scope::default_name);
     }
-
     if (!collection_name.empty()) {
         keyspace += ".`" + collection_name + "`";
     }
@@ -68,10 +67,8 @@ query_index_create_request::encode_to(encoded_request_type& encoded, http_contex
                                                       utils::join_strings(fields, ", "),
                                                       where_clause,
                                                       with_clause) },
-                           { "client_context_id", encoded.client_context_id } };
-    if (!scope_name.empty() || !collection_name.empty()) {
-        body["query_context"] = query_context;
-    }
+                           { "client_context_id", encoded.client_context_id },
+                           { "query_context", query_context } };
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);

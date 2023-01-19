@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <core/cluster.hxx>
 #include <couchbase/transactions/async_attempt_context.hxx>
 #include <couchbase/transactions/attempt_context.hxx>
 #include <couchbase/transactions/transaction_query_options.hxx>
@@ -137,7 +138,7 @@ class attempt_context_impl
     void commit_with_query(VoidCallback&& cb);
     void rollback_with_query(VoidCallback&& cb);
 
-    void query_begin_work(utils::movable_function<void(std::exception_ptr)>&& cb);
+    void query_begin_work(std::function<void(std::exception_ptr)>&& cb);
 
     void do_query(const std::string& statement, const couchbase::transactions::transaction_query_options& opts, QueryCallback&& cb);
     std::exception_ptr handle_query_error(const core::operations::query_response& resp);
@@ -147,7 +148,7 @@ class attempt_context_impl
                     const tao::json::value& txdata,
                     const std::string& hook_point,
                     bool check_expiry,
-                    utils::movable_function<void(std::exception_ptr, core::operations::query_response)>&& cb);
+                    std::function<void(std::exception_ptr, core::operations::query_response)>&& cb);
 
     void handle_err_from_callback(std::exception_ptr e)
     {
@@ -161,9 +162,10 @@ class attempt_context_impl
         } catch (const async_operation_conflict& op_ex) {
             // the count isn't changed when this is thrown, so just swallow it and log
             txn_log->error("op callback called a txn operation that threw exception {}", op_ex.what());
-        } catch (const query_exception& query_ex) {
-            txn_log->warn("op callback called a txn operation that threw (and didn't handle) a query_exception {}", query_ex.what());
-            errors_.push_back(transaction_operation_failed(FAIL_OTHER, query_ex.what()).cause(query_ex.cause()));
+        } catch (const op_exception& op_ex) {
+            txn_log->warn("op callback called a txn operation that threw (and didn't handle) a op_exception {}", op_ex.what());
+            errors_.push_back(
+              transaction_operation_failed(error_class_from_external_exception(op_ex.cause()), op_ex.what()).cause(op_ex.cause()));
             op_list_.decrement_ops();
         } catch (const std::exception& std_ex) {
             // if the callback throws something which wasn't handled
@@ -284,7 +286,7 @@ class attempt_context_impl
     }
 
     template<typename Handler>
-    void cache_error_async(Handler&& cb, std::function<void()> func)
+    void cache_error_async(Handler cb, std::function<void()> func)
     {
         try {
             op_list_.increment_ops();
@@ -302,6 +304,8 @@ class attempt_context_impl
             if (e.cause() == PREVIOUS_OPERATION_FAILED) {
                 op_completed_with_error(std::move(cb), e);
             }
+        } catch (const op_exception& e) {
+            op_completed_with_error(std::move(cb), e);
         } catch (const std::exception& e) {
             op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
         }
@@ -399,7 +403,7 @@ class attempt_context_impl
                       std::rethrow_exception(err);
                   } catch (const transaction_operation_failed& e) {
                       return handler(std::make_shared<couchbase::transactions::transaction_query_result>(e.get_error_ctx()));
-                  } catch (const query_exception& ex) {
+                  } catch (const op_exception& ex) {
                       return handler(std::make_shared<couchbase::transactions::transaction_query_result>(ex.ctx()));
                   } catch (...) {
                       // just in case...
@@ -504,15 +508,13 @@ class attempt_context_impl
 
     void atr_rollback_complete();
 
-    void select_atr_if_needed_unlocked(const core::document_id id,
-                                       utils::movable_function<void(std::optional<transaction_operation_failed>)>&& cb);
+    void select_atr_if_needed_unlocked(const core::document_id id, std::function<void(std::optional<transaction_operation_failed>)>&& cb);
 
     template<typename Handler>
     void do_get(const core::document_id& id, const std::optional<std::string> resolving_missing_atr_entry, Handler&& cb);
 
-    void get_doc(
-      const core::document_id& id,
-      utils::movable_function<void(std::optional<error_class>, std::optional<std::string>, std::optional<transaction_get_result>)>&& cb);
+    void get_doc(const core::document_id& id,
+                 std::function<void(std::optional<error_class>, std::optional<std::string>, std::optional<transaction_get_result>)>&& cb);
 
     core::operations::mutate_in_request create_staging_request(const core::document_id& in,
                                                                const transaction_get_result* document,
@@ -544,6 +546,8 @@ class attempt_context_impl
             return std::make_shared<transaction_get_result>(handler());
         } catch (const transaction_operation_failed& e) {
             return std::make_shared<transaction_get_result>(e.get_error_ctx());
+        } catch (const op_exception& ex) {
+            return std::make_shared<transaction_get_result>(ex.ctx());
         } catch (...) {
             // the handler should catch everything else, but just in case...
             return std::make_shared<transaction_get_result>(transaction_op_error_context(errc::transaction_op::unknown));
@@ -573,6 +577,8 @@ class attempt_context_impl
         if (err) {
             try {
                 std::rethrow_exception(err);
+            } catch (const op_exception& e) {
+                return cb(std::make_shared<transaction_get_result>(e.ctx()));
             } catch (const transaction_operation_failed& e) {
                 return cb(std::make_shared<transaction_get_result>(e.get_error_ctx()));
             } catch (...) {
@@ -594,6 +600,11 @@ class attempt_context_impl
             }
         }
         return cb({});
+    }
+
+    void ensure_open_bucket(std::string bucket_name, std::function<void(std::error_code)>&& handler)
+    {
+        cluster_ref()->open_bucket(bucket_name, [handler = std::move(handler)](std::error_code ec) { handler(ec); });
     }
 };
 

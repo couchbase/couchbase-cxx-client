@@ -405,12 +405,16 @@ class mcbp_session_impl
       private:
         std::shared_ptr<mcbp_session_impl> session_;
         asio::steady_timer heartbeat_timer_;
+        std::chrono::milliseconds heartbeat_interval_;
         std::atomic_bool stopped_{ false };
 
       public:
         explicit message_handler(std::shared_ptr<mcbp_session_impl> session)
           : session_(std::move(session))
           , heartbeat_timer_(session_->ctx_)
+          , heartbeat_interval_{ session_->origin_.options().config_poll_floor > session_->origin_.options().config_poll_interval
+                                   ? session_->origin_.options().config_poll_floor
+                                   : session_->origin_.options().config_poll_interval }
         {
         }
 
@@ -557,7 +561,7 @@ class mcbp_session_impl
             protocol::client_request<protocol::get_cluster_config_request_body> req;
             req.opaque(session_->next_opaque());
             session_->write_and_flush(req.data());
-            heartbeat_timer_.expires_after(std::chrono::milliseconds(2500));
+            heartbeat_timer_.expires_after(heartbeat_interval_);
             heartbeat_timer_.async_wait([self = shared_from_this()](std::error_code e) {
                 if (e == asio::error::operation_aborted) {
                     return;

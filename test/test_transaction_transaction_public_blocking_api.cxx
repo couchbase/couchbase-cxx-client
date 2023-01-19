@@ -75,7 +75,7 @@ TEST_CASE("can insert", "[transactions]")
     CHECK(final_doc.content_as<tao::json::value>() == content);
 }
 
-TEST_CASE("insert fails as expected when doc already exists", "[transactions]")
+TEST_CASE("insert has error as expected when doc already exists", "[transactions]")
 {
     auto id = TransactionsTestEnvironment::get_document_id();
     tao::json::value new_content{ { "something", "else" } };
@@ -89,9 +89,9 @@ TEST_CASE("insert fails as expected when doc already exists", "[transactions]")
         CHECK(doc->ctx().ec() == couchbase::errc::transaction_op::document_exists_exception);
     });
     CHECK_FALSE(result.transaction_id.empty());
-    CHECK_FALSE(result.unstaging_complete);
-    CHECK(result.ctx.ec() == couchbase::errc::transaction::failed);
-    CHECK(result.ctx.cause() == couchbase::errc::transaction_op::document_exists_exception);
+    // but the txn is successful
+    CHECK(result.unstaging_complete);
+    CHECK_FALSE(result.ctx.ec());
     // check that it is really unchanged too.
     auto final_doc = TransactionsTestEnvironment::get_doc(id);
     CHECK(final_doc.content_as<tao::json::value>() == content);
@@ -246,11 +246,10 @@ TEST_CASE("can pass per-transaction configs", "[transactions]")
     CHECK(elapsed > *cfg.expiration_time());
     // but not by too much (default is 15 seconds, we wanted 2, 2x that is plenty)
     CHECK(elapsed < (2 * *cfg.expiration_time()));
-    // and of course the txn should have expired
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
+    // could have failed in rollback, which returns fail rather than expired
     CHECK(result.ctx.ec());
-    CHECK(result.ctx.ec() == couchbase::errc::transaction::expired);
 }
 
 TEST_CASE("can do simple query", "[transactions]")
@@ -374,4 +373,91 @@ TEST_CASE("can query from a scope", "[transactions]")
     });
     CHECK_FALSE(result.ctx.ec());
     CHECK_FALSE(result.transaction_id.empty());
+}
+
+TEST_CASE("can get doc from bucket not yet opened", "[transactions]")
+{
+    auto id = TransactionsTestEnvironment::get_document_id();
+    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    // now make new virginal public cluster
+    auto connection = conn(TransactionsTestEnvironment::get_conf(), false);
+    couchbase::cluster c(connection.c);
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    auto result = c.transactions()->run([&id, &coll](couchbase::transactions::attempt_context& ctx) {
+        auto doc = ctx.get(coll, id.key());
+        CHECK_FALSE(doc->ctx().ec());
+        CHECK(doc->content<tao::json::value>() == content);
+    });
+    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(result.transaction_id.empty());
+    CHECK_FALSE(result.unstaging_complete); //  no mutations = no unstaging
+}
+
+TEST_CASE("can insert doc into bucket not yet opened", "[transactions]")
+{
+    auto id = TransactionsTestEnvironment::get_document_id();
+    // now make new virginal public cluster
+    auto connection = conn(TransactionsTestEnvironment::get_conf(), false);
+    couchbase::cluster c(connection.c);
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    auto result = c.transactions()->run([&id, &coll](couchbase::transactions::attempt_context& ctx) {
+        auto doc = ctx.insert(coll, id.key(), content);
+        CHECK_FALSE(doc->ctx().ec());
+        CHECK_FALSE(doc->cas().empty());
+    });
+    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(result.transaction_id.empty());
+    CHECK(result.unstaging_complete);
+    CHECK(TransactionsTestEnvironment::get_doc(id).cas != 0);
+}
+
+TEST_CASE("can replace doc in bucket not yet opened", "[transactions]")
+{
+    auto id = TransactionsTestEnvironment::get_document_id();
+    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    // now make new virginal public cluster
+    conn connection(TransactionsTestEnvironment::get_conf(), false);
+    couchbase::cluster c(connection.c);
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    tao::json::value new_content = { { "some", "new content" } };
+    auto result = c.transactions()->run([&id, &coll, new_content](couchbase::transactions::attempt_context& ctx) {
+        auto get_doc = ctx.get(coll, id.key());
+        CHECK_FALSE(get_doc->ctx().ec());
+        auto doc = ctx.replace(get_doc, new_content);
+        CHECK_FALSE(doc->ctx().ec());
+        CHECK_FALSE(doc->cas().empty());
+    });
+    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(result.transaction_id.empty());
+    CHECK(result.unstaging_complete);
+    CHECK(TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>() == new_content);
+}
+
+TEST_CASE("can remove doc in bucket not yet opened", "[transactions]")
+{
+    auto id = TransactionsTestEnvironment::get_document_id();
+    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    // now make new virginal public cluster
+    auto connection = conn(TransactionsTestEnvironment::get_conf(), false);
+    couchbase::cluster c(connection.c);
+    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    tao::json::value new_content = { { "some", "new content" } };
+    auto result = c.transactions()->run([&id, &coll, new_content](couchbase::transactions::attempt_context& ctx) {
+        auto get_doc = ctx.get(coll, id.key());
+        CHECK_FALSE(get_doc->ctx().ec());
+        auto res = ctx.remove(get_doc);
+        CHECK_FALSE(res.ec());
+    });
+    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(result.transaction_id.empty());
+    CHECK(result.unstaging_complete);
+    try {
+        auto removed_doc = TransactionsTestEnvironment::get_doc(id);
+        FAIL("expected removed doc to not be present");
+
+    } catch (const couchbase::core::transactions::client_error& e) {
+        REQUIRE(e.res()->ec == couchbase::errc::key_value::document_not_found);
+    } catch (...) {
+        FAIL("Unexpected error");
+    }
 }
