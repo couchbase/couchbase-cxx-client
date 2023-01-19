@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "change_password.hxx"
 #include "group_drop.hxx"
 #include "group_get.hxx"
 #include "group_get_all.hxx"
@@ -26,4 +27,3 @@
 #include "user_get.hxx"
 #include "user_get_all.hxx"
 #include "user_upsert.hxx"
-#include "change_password.hxx"
