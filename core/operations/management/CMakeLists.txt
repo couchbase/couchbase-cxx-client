@@ -22,6 +22,7 @@ add_library(
         bucket_get.cxx
         bucket_get_all.cxx
         bucket_update.cxx
+        change_password.cxx
         cluster_describe.cxx
         cluster_developer_preview_enable.cxx
         collection_create.cxx

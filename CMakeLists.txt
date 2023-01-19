@@ -163,6 +163,7 @@ set(couchbase_cxx_client_FILES
     core/operations/management/bucket_get.cxx
     core/operations/management/bucket_get_all.cxx
     core/operations/management/bucket_update.cxx
+    core/operations/management/change_password.cxx
     core/operations/management/cluster_describe.cxx
     core/operations/management/cluster_developer_preview_enable.cxx
     core/operations/management/collection_create.cxx
