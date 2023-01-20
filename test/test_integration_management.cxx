@@ -885,64 +885,67 @@ TEST_CASE("integration: user management", "[integration]")
         REQUIRE(resp.roles.size() > 0);
     }
 
-    SECTION("change user password")
-    {
-        asio::io_context io;
-        auto guard = asio::make_work_guard(io);
-        std::thread io_thread([&io]() { io.run(); });
-        auto user_name = test::utils::uniq_id("newUser");
+    if (integration.cluster_version().is_enterprise()) {
 
-        // Create options
-        auto options_original = couchbase::cluster_options(integration.ctx.username, integration.ctx.password);
-        auto options_outdated = couchbase::cluster_options(user_name, integration.ctx.password);
-        auto options_updated = couchbase::cluster_options(user_name, "newPassword");
+        SECTION("change user password")
+        {
+            asio::io_context io;
+            auto guard = asio::make_work_guard(io);
+            std::thread io_thread([&io]() { io.run(); });
+            auto user_name = test::utils::uniq_id("newUser");
 
-        // Create new user and upsert
-        couchbase::core::management::rbac::user new_user{ user_name };
-        new_user.display_name = "change_password_user";
-        new_user.password = integration.ctx.password;
-        new_user.roles = {
-            couchbase::core::management::rbac::role{ "admin" },
-        };
-        auto [cluster, ec] = couchbase::cluster::connect(io, integration.ctx.connection_string, options_original).get();
-        auto coreCluster = cluster.core();
-        couchbase::core::operations::management::user_upsert_request upsertReq{};
-        upsertReq.user = new_user;
-        auto upsertResp = test::utils::execute(coreCluster, upsertReq);
-        REQUIRE_SUCCESS(upsertResp.ctx.ec);
-        test::utils::wait_until_user_present(integration.cluster, user_name);
-        cluster.close();
-        guard.reset();
-        io_thread.join();
+            // Create options
+            auto options_original = couchbase::cluster_options(integration.ctx.username, integration.ctx.password);
+            auto options_outdated = couchbase::cluster_options(user_name, integration.ctx.password);
+            auto options_updated = couchbase::cluster_options(user_name, "newPassword");
 
-        // Connect with new credentials and change password
-        asio::io_context io2;
-        auto guard2 = asio::make_work_guard(io2);
-        std::thread io_thread2([&io2]() { io2.run(); });
-        auto [cluster_new, ec_new] = couchbase::cluster::connect(io2, integration.ctx.connection_string, options_outdated).get();
-        auto coreCluster_new = cluster_new.core();
-        couchbase::core::operations::management::change_password_request changePasswordReq{};
-        changePasswordReq.newPassword = "newPassword";
-        auto changePasswordResp = test::utils::execute(coreCluster_new, changePasswordReq);
-        REQUIRE_SUCCESS(changePasswordResp.ctx.ec);
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        cluster_new.close();
-        guard2.reset();
-        io_thread2.join();
+            // Create new user and upsert
+            couchbase::core::management::rbac::user new_user{ user_name };
+            new_user.display_name = "change_password_user";
+            new_user.password = integration.ctx.password;
+            new_user.roles = {
+                couchbase::core::management::rbac::role{ "admin" },
+            };
+            auto [cluster, ec] = couchbase::cluster::connect(io, integration.ctx.connection_string, options_original).get();
+            auto coreCluster = cluster.core();
+            couchbase::core::operations::management::user_upsert_request upsertReq{};
+            upsertReq.user = new_user;
+            auto upsertResp = test::utils::execute(coreCluster, upsertReq);
+            REQUIRE_SUCCESS(upsertResp.ctx.ec);
+            test::utils::wait_until_user_present(integration.cluster, user_name);
+            cluster.close();
+            guard.reset();
+            io_thread.join();
 
-        // Connect with old credentials, should fail
-        asio::io_context io3;
-        auto guard3 = asio::make_work_guard(io3);
-        std::thread io_thread3([&io3]() { io3.run(); });
-        auto [cluster_fail, ec_fail] = couchbase::cluster::connect(io3, integration.ctx.connection_string, options_outdated).get();
-        REQUIRE(ec_fail == couchbase::errc::common::authentication_failure);
+            // Connect with new credentials and change password
+            asio::io_context io2;
+            auto guard2 = asio::make_work_guard(io2);
+            std::thread io_thread2([&io2]() { io2.run(); });
+            auto [cluster_new, ec_new] = couchbase::cluster::connect(io2, integration.ctx.connection_string, options_outdated).get();
+            auto coreCluster_new = cluster_new.core();
+            couchbase::core::operations::management::change_password_request changePasswordReq{};
+            changePasswordReq.newPassword = "newPassword";
+            auto changePasswordResp = test::utils::execute(coreCluster_new, changePasswordReq);
+            REQUIRE_SUCCESS(changePasswordResp.ctx.ec);
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            cluster_new.close();
+            guard2.reset();
+            io_thread2.join();
 
-        // Make connection with new credentials, should succeed
-        auto [cluster_success, ec_success] = couchbase::cluster::connect(io3, integration.ctx.connection_string, options_updated).get();
-        REQUIRE_SUCCESS(ec_success);
-        cluster_success.close();
-        guard3.reset();
-        io_thread3.join();
+            // Connect with old credentials, should fail
+            asio::io_context io3;
+            auto guard3 = asio::make_work_guard(io3);
+            std::thread io_thread3([&io3]() { io3.run(); });
+            auto [cluster_fail, ec_fail] = couchbase::cluster::connect(io3, integration.ctx.connection_string, options_outdated).get();
+            REQUIRE(ec_fail == couchbase::errc::common::authentication_failure);
+
+            // Make connection with new credentials, should succeed
+            auto [cluster_success, ec_success] = couchbase::cluster::connect(io3, integration.ctx.connection_string, options_updated).get();
+            REQUIRE_SUCCESS(ec_success);
+            cluster_success.close();
+            guard3.reset();
+            io_thread3.join();
+        }
     }
 }
 
