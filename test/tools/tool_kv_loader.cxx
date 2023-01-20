@@ -21,6 +21,7 @@
 
 #include "core/logger/logger.hxx"
 
+#include <fmt/format.h>
 #include <spdlog/details/os.h>
 
 #include <csignal>
@@ -34,6 +35,8 @@ enum class operation {
 namespace
 {
 volatile std::sig_atomic_t running{ 1 };
+std::size_t operations_limit{ 0 };
+
 } // namespace
 
 void
@@ -75,6 +78,10 @@ main()
             "YES", "Y", "TRUE", "T", "ON", "1", "yes", "y", "true", "t", "on",
         };
         send_queries = std::any_of(truth.begin(), truth.end(), [&val](auto& t) { return t == val; });
+    }
+
+    if (auto val = spdlog::details::os::getenv("TEST_OPERATIONS_LIMIT"); !val.empty()) {
+        operations_limit = std::stoul(val, nullptr, 10);
     }
 
     std::size_t number_of_io_threads = 4;
@@ -217,6 +224,9 @@ main()
                         std::scoped_lock lock(errors_mutex);
                         ++errors[resp.ctx.ec()];
                     }
+                    if (operations_limit > 0 && total >= operations_limit) {
+                        running = 0;
+                    }
                 });
             } break;
             case operation::upsert: {
@@ -226,6 +236,9 @@ main()
                     if (resp.ctx.ec()) {
                         std::scoped_lock lock(errors_mutex);
                         ++errors[resp.ctx.ec()];
+                    }
+                    if (operations_limit > 0 && total >= operations_limit) {
+                        running = 0;
                     }
                 });
             } break;
@@ -239,13 +252,16 @@ main()
                     std::scoped_lock lock(errors_mutex);
                     ++errors[resp.ctx.ec];
                 }
+                if (operations_limit > 0 && total > operations_limit) {
+                    running = 0;
+                }
             });
         }
     }
     const auto finish_time = std::chrono::system_clock::now();
     stats_timer.cancel();
 
-    fmt::print("total operations: {}\n", total);
+    fmt::print("\ntotal operations: {}\n", total);
     fmt::print("total keys used: {}\n", known_keys.size());
     const auto total_time = finish_time - start_time;
     fmt::print("total time: {}s ({}ms)\n",
