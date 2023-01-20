@@ -23,6 +23,7 @@
 #include "core/cluster.hxx"
 #include "core/operations/management/bucket.hxx"
 #include "core/operations/management/collections.hxx"
+#include "core/operations/management/user.hxx"
 
 namespace test::utils
 {
@@ -61,4 +62,6 @@ bool
 wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::core::cluster> cluster,
                                           const std::string& bucket_name,
                                           const std::uint64_t current_manifest_uid);
+bool
+wait_until_user_present(std::shared_ptr<couchbase::core::cluster> cluster, const std::string& username);
 } // namespace test::utils

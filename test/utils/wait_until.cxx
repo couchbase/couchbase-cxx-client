@@ -56,4 +56,20 @@ wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::core::clust
     }
     return propagated;
 }
+
+bool
+wait_until_user_present(std::shared_ptr<couchbase::core::cluster> cluster, const std::string& username)
+{
+    auto present = test::utils::wait_until([cluster, username]() {
+        couchbase::core::operations::management::user_get_request req{};
+        req.username = username;
+        auto resp = test::utils::execute(cluster, req);
+        return resp.user.username >= username;
+    });
+    if (present) {
+        // FIXME: The above check does not wait for all nodes to be up to date
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    return present;
+}
 } // namespace test::utils
