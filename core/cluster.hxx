@@ -102,6 +102,7 @@ class cluster : public std::enable_shared_from_this<cluster>
         session_manager_->set_tracer(tracer_);
         if (origin_.options().enable_dns_srv) {
             auto [hostname, _] = origin_.next_address();
+            CB_LOG_DEBUG("using \"{}:{}\" as DNS resolver", origin_.options().dns_config.nameserver(), origin_.options().dns_config.port());
             dns_srv_tracker_ =
               std::make_shared<impl::dns_srv_tracker>(ctx_, hostname, origin_.options().dns_config, origin_.options().enable_tls);
             return asio::post(asio::bind_executor(
