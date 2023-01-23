@@ -64,7 +64,7 @@ wait_until_user_present(std::shared_ptr<couchbase::core::cluster> cluster, const
         couchbase::core::operations::management::user_get_request req{};
         req.username = username;
         auto resp = test::utils::execute(cluster, req);
-        return resp.user.username >= username;
+        return resp.ctx.ec == couchbase::errc::management::user_exists;
     });
     if (present) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -84,7 +84,7 @@ wait_until_cluster_connected(const std::string& username, const std::string& pas
         resp.first.close();
         guard.reset();
         io_thread.join();
-        return resp.second != couchbase::errc::common::unambiguous_timeout;
+        return resp.second.value() == 0;
     });
     if (connected) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
