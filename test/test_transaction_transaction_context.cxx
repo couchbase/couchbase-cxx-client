@@ -19,8 +19,8 @@
 #include "core/transactions/attempt_context_impl.hxx"
 
 #include "core/transactions.hxx"
-#include "core/transactions/internal/utils.hxx"
 #include "core/transactions/internal/transaction_context.hxx"
+#include "core/transactions/internal/utils.hxx"
 
 #include <spdlog/spdlog.h>
 
@@ -30,7 +30,6 @@
 using namespace couchbase::core::transactions;
 static const tao::json::value tx_content{ { "some", "thing" } };
 static const std::vector<std::byte> tx_content_json = couchbase::core::utils::json::generate_binary(tx_content);
-
 
 void
 txn_completed(std::exception_ptr err, std::shared_ptr<std::promise<void>> barrier)
@@ -71,7 +70,8 @@ TEST_CASE("transactions: can do simple transaction with transaction wrapper", "[
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
+    couchbase::core::transactions::transactions txns(
+      cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -98,7 +98,7 @@ TEST_CASE("transactions: can do simple transaction with transaction wrapper", "[
     };
     auto result = simple_txn_wrapper(tx, txn_logic);
     {
-        couchbase::core::operations::get_request req {id};
+        couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.value == couchbase::core::utils::json::generate_binary(new_content));
@@ -110,12 +110,13 @@ TEST_CASE("transactions: can do simple transaction with finalize", "[transaction
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
+    couchbase::core::transactions::transactions txns(
+      cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
     tao::json::value new_content{
-      { "some", "thing else" },
+        { "some", "thing else" },
     };
     {
         couchbase::core::operations::upsert_request req{ id, tx_content_json };
@@ -137,13 +138,12 @@ TEST_CASE("transactions: can do simple transaction with finalize", "[transaction
                        CHECK_FALSE(err);
                    });
     });
-    tx.finalize(
-      [&barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> ) {
-          if (err) {
-              return barrier->set_exception(std::make_exception_ptr(*err));
-          }
-          return barrier->set_value();
-      });
+    tx.finalize([&barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result>) {
+        if (err) {
+            return barrier->set_exception(std::make_exception_ptr(*err));
+        }
+        return barrier->set_value();
+    });
     f.get();
     {
         couchbase::core::operations::get_request req{ id };
@@ -158,12 +158,13 @@ TEST_CASE("transactions: can do simple transaction explicit commit", "[transacti
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
+    couchbase::core::transactions::transactions txns(
+      cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
     tao::json::value new_content{
-      { "some", "thing else" },
+        { "some", "thing else" },
     };
     {
         couchbase::core::operations::upsert_request req{ id, tx_content_json };
@@ -203,12 +204,13 @@ TEST_CASE("transactions: can do rollback simple transaction", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
+    couchbase::core::transactions::transactions txns(
+      cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
     tao::json::value new_content{
-      { "some", "thing else" },
+        { "some", "thing else" },
     };
     {
         couchbase::core::operations::upsert_request req{ id, tx_content_json };
@@ -245,12 +247,13 @@ TEST_CASE("transactions: can get insert errors", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
+    couchbase::core::transactions::transactions txns(
+      cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
     tao::json::value new_content{
-      { "some", "thing else" },
+        { "some", "thing else" },
     };
     {
         couchbase::core::operations::upsert_request req{ id, tx_content_json };
@@ -284,12 +287,13 @@ TEST_CASE("transactions: can get remove errors", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
+    couchbase::core::transactions::transactions txns(
+      cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
     tao::json::value new_content{
-      { "some", "thing else" },
+        { "some", "thing else" },
     };
     {
         couchbase::core::operations::upsert_request req{ id, tx_content_json };
@@ -325,12 +329,13 @@ TEST_CASE("transactions: can get replace errors", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
+    couchbase::core::transactions::transactions txns(
+      cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
     tao::json::value new_content{
-      { "some", "thing else" },
+        { "some", "thing else" },
     };
     {
         couchbase::core::operations::upsert_request req{ id, tx_content_json };
@@ -370,7 +375,8 @@ TEST_CASE("transactions: RYOW get after insert", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
+    couchbase::core::transactions::transactions txns(
+      cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -402,7 +408,8 @@ TEST_CASE("transactions: can get get errors", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
+    couchbase::core::transactions::transactions txns(
+      cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -430,7 +437,8 @@ TEST_CASE("transactions: can do query", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
+    couchbase::core::transactions::transactions txns(
+      cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -466,7 +474,8 @@ TEST_CASE("transactions: can see some query errors but no transactions failed", 
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
+    couchbase::core::transactions::transactions txns(
+      cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -506,7 +515,8 @@ TEST_CASE("transactions: can set per transaction config", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
+    couchbase::core::transactions::transactions txns(
+      cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
 
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
@@ -527,7 +537,8 @@ TEST_CASE("transactions: can not per transactions config", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
+    couchbase::core::transactions::transactions txns(
+      cluster, couchbase::transactions::transactions_config().expiration_time(std::chrono::seconds(2)));
 
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
@@ -537,4 +548,3 @@ TEST_CASE("transactions: can not per transactions config", "[transactions]")
     REQUIRE(tx.config().expiration_time == txns.config().expiration_time);
     REQUIRE(tx.config().query_config.scan_consistency == txns.config().query_config.scan_consistency);
 }
-

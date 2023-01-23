@@ -14,9 +14,9 @@
  *   limitations under the License.
  */
 
+#include "core/transactions/internal/logging.hxx"
 #include "test_helper.hxx"
 #include <core/transactions.hxx>
-#include "core/transactions/internal/logging.hxx"
 
 #include <spdlog/sinks/base_sink.h>
 
@@ -24,7 +24,6 @@
 #include <iterator>
 
 using namespace couchbase::core::transactions;
-
 
 class TrivialFileSink : public spdlog::sinks::base_sink<std::mutex>
 {

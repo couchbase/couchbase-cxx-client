@@ -15,10 +15,10 @@
  */
 
 #include "test_helper_integration.hxx"
+#include <core/transactions/transaction_get_result.hxx>
 #include <couchbase/cluster.hxx>
 #include <couchbase/transactions.hxx>
 #include <couchbase/transactions/transaction_options.hxx>
-#include <core/transactions/transaction_get_result.hxx>
 #include <memory>
 
 static const tao::json::value async_content{ { "some_number", 0 } };
@@ -157,9 +157,8 @@ TEST_CASE("can async insert", "[transactions]")
     auto f = barrier->get_future();
     c.transactions()->run(
       [id, coll](couchbase::transactions::async_attempt_context& ctx) {
-          ctx.insert(coll, id, async_content, [coll, id](couchbase::transactions::transaction_get_result_ptr res) {
-              CHECK_FALSE(res->ctx().ec());
-          });
+          ctx.insert(
+            coll, id, async_content, [coll, id](couchbase::transactions::transaction_get_result_ptr res) { CHECK_FALSE(res->ctx().ec()); });
       },
       [barrier](couchbase::transactions::transaction_result res) {
           CHECK_FALSE(res.transaction_id.empty());
@@ -305,7 +304,6 @@ TEST_CASE("can set transaction options", "[transactions]")
     auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
     REQUIRE_SUCCESS(err.ec());
 
-
     auto begin = std::chrono::steady_clock::now();
     auto cfg = couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(2));
     auto barrier = std::make_shared<std::promise<void>>();
@@ -347,7 +345,7 @@ TEST_CASE("can do mutating query", "[transactions]")
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
-      [id, test_ctx=integration.ctx](couchbase::transactions::async_attempt_context& ctx) {
+      [id, test_ctx = integration.ctx](couchbase::transactions::async_attempt_context& ctx) {
           ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES("{}", {}))", test_ctx.bucket, id, async_content_json),
                     [](couchbase::transactions::transaction_query_result_ptr res) { CHECK_FALSE(res->ctx().ec()); });
       },
@@ -356,7 +354,8 @@ TEST_CASE("can do mutating query", "[transactions]")
           CHECK_FALSE(res.transaction_id.empty());
           CHECK(res.unstaging_complete);
           barrier->set_value();
-      }, async_options());
+      },
+      async_options());
     f.get();
 }
 
@@ -374,7 +373,7 @@ TEST_CASE("some query errors rollback", "[transactions]")
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
-      [id, id2, test_ctx=integration.ctx](couchbase::transactions::async_attempt_context& ctx) {
+      [id, id2, test_ctx = integration.ctx](couchbase::transactions::async_attempt_context& ctx) {
           ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES("{}", {}))", test_ctx.bucket, id2, async_content_json),
                     [id, &ctx, &test_ctx](couchbase::transactions::transaction_query_result_ptr res) {
                         CHECK_FALSE(res->ctx().ec());
@@ -387,6 +386,7 @@ TEST_CASE("some query errors rollback", "[transactions]")
           CHECK_FALSE(res.transaction_id.empty());
           CHECK_FALSE(res.unstaging_complete);
           barrier->set_value();
-      }, async_options());
+      },
+      async_options());
     f.get();
 }

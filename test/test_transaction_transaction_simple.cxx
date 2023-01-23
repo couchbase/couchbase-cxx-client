@@ -14,24 +14,25 @@
  *   limitations under the License.
  */
 
-#include <tao/json.hpp>
-#include <core/transactions.hxx>
 #include "../core/transactions/atr_ids.hxx"
 #include "simple_object.hxx"
 #include "test_helper_integration.hxx"
+#include <core/transactions.hxx>
+#include <tao/json.hpp>
 
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 
 using namespace couchbase::core::transactions;
 static const tao::json::value content{
-        { "some_number", 0 },
+    { "some_number", 0 },
 };
 static const std::vector<std::byte> content_json = couchbase::core::utils::json::generate_binary(content);
 
-couchbase::transactions::transactions_config get_conf()
+couchbase::transactions::transactions_config
+get_conf()
 {
-    couchbase::transactions::transactions_config cfg {};
+    couchbase::transactions::transactions_config cfg{};
     cfg.expiration_time(std::chrono::seconds(1));
     return cfg;
 }
@@ -325,7 +326,7 @@ TEST_CASE("transactions: quoted std::strings end up with 2 quotes (that's bad)",
         REQUIRE_SUCCESS(resp.ctx.ec());
         auto parsed_as_json = couchbase::core::utils::json::parse_binary(resp.value);
         // here the _parsed_ json string will still have quotes in it.
-        REQUIRE(parsed_as_json.get_string() ==  quoted_json_string);
+        REQUIRE(parsed_as_json.get_string() == quoted_json_string);
     }
 }
 
@@ -862,7 +863,7 @@ TEST_CASE("transactions: can rollback retry bad KV replace", "[transactions]")
           });
       }(txn, id, query),
       transaction_exception);
-   {
+    {
         couchbase::core::operations::get_request req{ id };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
