@@ -353,7 +353,7 @@ TEST_CASE("transactions: async replace fail", "[transactions]")
           });
         f.get();
         FAIL("expected exception");
-    } catch (const transaction_exception& e) {
+    } catch (const transaction_exception&) {
         REQUIRE(cb_called->load());
         {
             couchbase::core::operations::get_request req{ id };
@@ -428,7 +428,7 @@ TEST_CASE("transactions: async insert can be rolled back", "[transactions]")
           });
         f.get();
         FAIL("Expected exception");
-    } catch (const transaction_exception& e) {
+    } catch (const transaction_exception&) {
         REQUIRE(cb_called->load());
         {
             couchbase::core::operations::get_request req{ id };

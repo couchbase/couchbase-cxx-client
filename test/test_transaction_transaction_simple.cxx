@@ -33,7 +33,7 @@ couchbase::transactions::transactions_config
 get_conf()
 {
     couchbase::transactions::transactions_config cfg{};
-    cfg.expiration_time(std::chrono::seconds(1));
+    cfg.expiration_time(std::chrono::seconds(2));
     return cfg;
 }
 
@@ -144,9 +144,9 @@ TEST_CASE("transactions: can use custom metadata collections per transactions", 
     cfg.metadata_collection(couchbase::transactions::transaction_keyspace("secBucket"));
     txn.run(cfg, [id](attempt_context& ctx) {
         auto doc = ctx.get(id);
-        auto content = doc.content<tao::json::value>();
-        content["another one"] = 1;
-        ctx.replace(doc, content);
+        auto new_content = doc.content<tao::json::value>();
+        new_content["another one"] = 1;
+        ctx.replace(doc, new_content);
     });
 
     const tao::json::value expected{
@@ -177,9 +177,9 @@ TEST_CASE("transactions: can use custom metadata collections", "[transactions]")
     }
     txn.run([&](attempt_context& ctx) {
         auto doc = ctx.get(id);
-        auto content = doc.content<tao::json::value>();
-        content["another one"] = 1;
-        ctx.replace(doc, content);
+        auto new_content = doc.content<tao::json::value>();
+        new_content["another one"] = 1;
+        ctx.replace(doc, new_content);
     });
     // now add to the original content, and compare
     const tao::json::value expected{
@@ -229,9 +229,9 @@ TEST_CASE("transactions: non existent scope in custom metadata collections", "[t
     try {
         txn.run([&](attempt_context& ctx) {
             auto doc = ctx.get(id);
-            auto content = doc.content<tao::json::value>();
-            content["another one"] = 1;
-            ctx.replace(doc, content);
+            auto new_content = doc.content<tao::json::value>();
+            new_content["another one"] = 1;
+            ctx.replace(doc, new_content);
         });
         FAIL("expected txn to timeout");
     } catch (const transaction_exception& e) {
@@ -267,9 +267,9 @@ TEST_CASE("transactions: non existent collection in custom metadata collections"
     try {
         txn.run([&](attempt_context& ctx) {
             auto doc = ctx.get(id);
-            auto content = doc.content<tao::json::value>();
-            content["another one"] = 1;
-            ctx.replace(doc, content);
+            auto new_content = doc.content<tao::json::value>();
+            new_content["another one"] = 1;
+            ctx.replace(doc, new_content);
         });
         FAIL("expected txn to timeout");
     } catch (const transaction_exception& e) {
