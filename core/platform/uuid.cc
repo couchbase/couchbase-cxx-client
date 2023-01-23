@@ -26,11 +26,10 @@
 void
 couchbase::core::uuid::random(couchbase::core::uuid::uuid_t& uuid)
 {
-    std::random_device rd;
-    std::mt19937 gen(rd());
+    static thread_local std::minstd_rand gen{ std::random_device()() };
     std::uniform_int_distribution<std::uint64_t> dis;
 
-    // The uuid is 16 bytes, which is the same as two 64 bit integers
+    // The uuid is 16 bytes, which is the same as two 64-bit integers
     auto* ptr = reinterpret_cast<std::uint64_t*>(uuid.data());
     ptr[0] = dis(gen);
     ptr[1] = dis(gen);
@@ -57,8 +56,8 @@ couchbase::core::uuid::from_string(std::string_view str)
                                     " (expected: 36)");
     }
 
-    size_t jj = 0;
-    for (size_t ii = 0; ii < 36; ii += 2) {
+    std::size_t jj = 0;
+    for (std::size_t ii = 0; ii < 36; ii += 2) {
         switch (ii) {
             case 8:
             case 13:
