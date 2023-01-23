@@ -26,8 +26,7 @@
 #include "core/operations/management/query.hxx"
 #include "core/operations/management/search.hxx"
 #include "core/operations/management/user.hxx"
-
-#include <couchbase/cluster.hxx>
+#include "couchbase/cluster.hxx"
 
 static couchbase::core::operations::management::bucket_get_response
 wait_for_bucket_created(test::utils::integration_test_guard& integration, const std::string& bucket_name)
@@ -927,7 +926,7 @@ TEST_CASE("integration: user management", "[integration]")
             changePasswordReq.newPassword = "newPassword";
             auto changePasswordResp = test::utils::execute(coreCluster_new, changePasswordReq);
             REQUIRE_SUCCESS(changePasswordResp.ctx.ec);
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            test::utils::wait_until_cluster_connected(user_name, changePasswordReq.newPassword, integration.ctx.connection_string);
             cluster_new.close();
             guard2.reset();
             io_thread2.join();

@@ -67,9 +67,29 @@ wait_until_user_present(std::shared_ptr<couchbase::core::cluster> cluster, const
         return resp.user.username >= username;
     });
     if (present) {
-        // FIXME: The above check does not wait for all nodes to be up to date
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     return present;
+}
+bool
+wait_until_cluster_connected(const std::string& username, const std::string& password, const std::string& connection_string)
+{
+    auto cluster_options = couchbase::cluster_options(username, password);
+
+    auto connected = test::utils::wait_until([cluster_options, connection_string]() {
+        asio::io_context io;
+        auto guard = asio::make_work_guard(io);
+        std::thread io_thread([&io]() { io.run(); });
+        auto resp = couchbase::cluster::connect(io, connection_string, cluster_options).get();
+        resp.first.close();
+        guard.reset();
+        io_thread.join();
+        return resp.second != couchbase::errc::common::unambiguous_timeout;
+    });
+    if (connected) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    return connected;
 }
 } // namespace test::utils
