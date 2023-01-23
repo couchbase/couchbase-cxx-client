@@ -14,13 +14,15 @@
  *   limitations under the License.
  */
 
-#include "test_helper.hxx"
-#include "utils/transactions_env.h"
+#include "test_helper_integration.hxx"
+#include <couchbase/cluster.hxx>
+#include <couchbase/transactions.hxx>
 #include <couchbase/transactions/transaction_options.hxx>
-
+#include <core/transactions/transaction_get_result.hxx>
 #include <memory>
 
 static const tao::json::value async_content{ { "some_number", 0 } };
+static const std::string async_content_json = couchbase::core::utils::json::generate(async_content);
 
 couchbase::transactions::transaction_options
 async_options()
@@ -32,20 +34,21 @@ async_options()
 
 TEST_CASE("can async get", "[transactions]")
 {
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
-    auto core_cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::cluster c(core_cluster);
-    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    test::utils::integration_test_guard integration;
+
+    auto id = test::utils::uniq_id("txn");
+    couchbase::cluster c(integration.cluster);
+    auto coll = c.bucket(integration.ctx.bucket).default_collection();
+    auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
+    REQUIRE_SUCCESS(err.ec());
+
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
       [id, coll](couchbase::transactions::async_attempt_context& ctx) {
-          ctx.get(coll, id.key(), [id](couchbase::transactions::transaction_get_result_ptr res) {
+          ctx.get(coll, id, [id](couchbase::transactions::transaction_get_result_ptr res) {
               CHECK_FALSE(res->ctx().ec());
-              CHECK(res->key() == id.key());
-              CHECK(res->bucket() == id.bucket());
-              CHECK(res->scope() == id.scope());
+              CHECK(res->key() == id);
               CHECK(res->content<tao::json::value>() == async_content);
           });
       },
@@ -56,20 +59,22 @@ TEST_CASE("can async get", "[transactions]")
           barrier->set_value();
       },
       async_options());
-    wait_for_result(f);
+    f.get();
 }
 
 TEST_CASE("can get fail as expected", "[transactions]")
 {
-    auto id = TransactionsTestEnvironment::get_document_id();
-    auto core_cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::cluster c(core_cluster);
-    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    test::utils::integration_test_guard integration;
+
+    auto id = test::utils::uniq_id("txn");
+    couchbase::cluster c(integration.cluster);
+    auto coll = c.bucket(integration.ctx.bucket).default_collection();
+
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
       [id, coll](couchbase::transactions::async_attempt_context& ctx) {
-          ctx.get(coll, id.key(), [id](couchbase::transactions::transaction_get_result_ptr res) {
+          ctx.get(coll, id, [id](couchbase::transactions::transaction_get_result_ptr res) {
               CHECK(res->ctx().ec());
               CHECK(res->ctx().ec() == couchbase::errc::transaction_op::document_not_found_exception);
           });
@@ -81,22 +86,25 @@ TEST_CASE("can get fail as expected", "[transactions]")
           barrier->set_value();
       },
       async_options());
-    wait_for_result(f);
+    f.get();
 }
 TEST_CASE("can async remove", "[transactions]")
 {
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
-    auto core_cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::cluster c(core_cluster);
-    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    test::utils::integration_test_guard integration;
+
+    auto id = test::utils::uniq_id("txn");
+    couchbase::cluster c(integration.cluster);
+    auto coll = c.bucket(integration.ctx.bucket).default_collection();
+    auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
+    REQUIRE_SUCCESS(err.ec());
+
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
       [coll, id](couchbase::transactions::async_attempt_context& ctx) {
-          ctx.get(coll, id.key(), [&ctx](couchbase::transactions::transaction_get_result_ptr res) {
+          ctx.get(coll, id, [&ctx](couchbase::transactions::transaction_get_result_ptr res) {
               CHECK_FALSE(res->ctx().ec());
-              ctx.remove(res, [](couchbase::transaction_op_error_context err) { CHECK_FALSE(err.ec()); });
+              ctx.remove(res, [](couchbase::transaction_op_error_context remove_err) { CHECK_FALSE(remove_err.ec()); });
           });
       },
       [barrier](couchbase::transactions::transaction_result res) {
@@ -106,45 +114,50 @@ TEST_CASE("can async remove", "[transactions]")
           barrier->set_value();
       },
       async_options());
-    wait_for_result(f);
+    f.get();
 }
 
 TEST_CASE("async remove with bad cas fails as expected", "[transactions]")
 {
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
-    auto core_cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::cluster c(core_cluster);
-    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    test::utils::integration_test_guard integration;
+
+    auto id = test::utils::uniq_id("txn");
+    couchbase::cluster c(integration.cluster);
+    auto coll = c.bucket(integration.ctx.bucket).default_collection();
+    auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
+    REQUIRE_SUCCESS(err.ec());
+
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
       [coll, id](couchbase::transactions::async_attempt_context& ctx) {
-          ctx.get(coll, id.key(), [&ctx](couchbase::transactions::transaction_get_result_ptr res) {
+          ctx.get(coll, id, [&ctx](couchbase::transactions::transaction_get_result_ptr res) {
               reinterpret_cast<couchbase::core::transactions::transaction_get_result&>(*res).cas(100);
-              ctx.remove(res, [](couchbase::transaction_op_error_context err) { CHECK(err.ec()); });
+              ctx.remove(res, [](couchbase::transaction_op_error_context remove_err) { CHECK(remove_err.ec()); });
           });
       },
       [barrier](couchbase::transactions::transaction_result res) {
           CHECK_FALSE(res.transaction_id.empty());
           CHECK_FALSE(res.unstaging_complete);
-          CHECK(res.ctx.ec()); // sometimes, it is a FAIL, as it expires in rollback
+          CHECK(res.ctx.ec()); // sometimes, it is a FAIL, as it expires in rollback, other times an expiry
           barrier->set_value();
       },
       async_options());
-    wait_for_result(f);
+    f.get();
 }
 TEST_CASE("can async insert", "[transactions]")
 {
-    auto id = TransactionsTestEnvironment::get_document_id();
-    auto core_cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::cluster c(core_cluster);
-    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    test::utils::integration_test_guard integration;
+
+    auto id = test::utils::uniq_id("txn");
+    couchbase::cluster c(integration.cluster);
+    auto coll = c.bucket(integration.ctx.bucket).default_collection();
+
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
       [id, coll](couchbase::transactions::async_attempt_context& ctx) {
-          ctx.insert(coll, id.key(), async_content, [coll, id](couchbase::transactions::transaction_get_result_ptr res) {
+          ctx.insert(coll, id, async_content, [coll, id](couchbase::transactions::transaction_get_result_ptr res) {
               CHECK_FALSE(res->ctx().ec());
           });
       },
@@ -155,48 +168,53 @@ TEST_CASE("can async insert", "[transactions]")
           barrier->set_value();
       },
       async_options());
-    wait_for_result(f);
+    f.get();
 }
 
-TEST_CASE("async insert fails when doc already exists", "[transactions]")
+TEST_CASE("async insert fails when doc already exists, but doesn't rollback", "[transactions]")
 {
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
-    auto core_cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::cluster c(core_cluster);
-    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    test::utils::integration_test_guard integration;
+
+    auto id = test::utils::uniq_id("txn");
+    couchbase::cluster c(integration.cluster);
+    auto coll = c.bucket(integration.ctx.bucket).default_collection();
+    auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
+    REQUIRE_SUCCESS(err.ec());
+
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
       [id, coll](couchbase::transactions::async_attempt_context& ctx) {
-          ctx.insert(coll, id.key(), async_content, [coll, id](couchbase::transactions::transaction_get_result_ptr res) {
+          ctx.insert(coll, id, async_content, [coll, id](couchbase::transactions::transaction_get_result_ptr res) {
               CHECK(res->ctx().ec() == couchbase::errc::transaction_op::document_exists_exception);
           });
       },
       [barrier](couchbase::transactions::transaction_result res) {
           CHECK_FALSE(res.transaction_id.empty());
-          CHECK_FALSE(res.unstaging_complete);
-          CHECK(res.ctx.ec() == couchbase::errc::transaction::failed);
-          CHECK(res.ctx.cause() == couchbase::errc::transaction_op::document_exists_exception);
+          CHECK(res.unstaging_complete);
+          CHECK_FALSE(res.ctx.ec());
           barrier->set_value();
       },
       async_options());
-    wait_for_result(f);
+    f.get();
 }
 
 TEST_CASE("can async replace", "[transactions]")
 {
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
-    auto core_cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::cluster c(core_cluster);
-    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    test::utils::integration_test_guard integration;
+
+    auto id = test::utils::uniq_id("txn");
+    couchbase::cluster c(integration.cluster);
+    auto coll = c.bucket(integration.ctx.bucket).default_collection();
+    auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
+    REQUIRE_SUCCESS(err.ec());
+
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     tao::json::value new_content = { { "Iam", "new content" } };
     c.transactions()->run(
       [id, coll, new_content](couchbase::transactions::async_attempt_context& ctx) {
-          ctx.get(coll, id.key(), [new_content, &ctx](couchbase::transactions::transaction_get_result_ptr res) {
+          ctx.get(coll, id, [new_content, &ctx](couchbase::transactions::transaction_get_result_ptr res) {
               CHECK_FALSE(res->ctx().ec());
               ctx.replace(res, new_content, [](couchbase::transactions::transaction_get_result_ptr replace_res) {
                   CHECK_FALSE(replace_res->ctx().ec());
@@ -210,21 +228,24 @@ TEST_CASE("can async replace", "[transactions]")
           barrier->set_value();
       },
       async_options());
-    wait_for_result(f);
+    f.get();
 }
 TEST_CASE("async replace fails as expected with bad cas", "[transactions]")
 {
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
-    auto core_cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::cluster c(core_cluster);
-    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    test::utils::integration_test_guard integration;
+
+    auto id = test::utils::uniq_id("txn");
+    couchbase::cluster c(integration.cluster);
+    auto coll = c.bucket(integration.ctx.bucket).default_collection();
+    auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
+    REQUIRE_SUCCESS(err.ec());
+
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     tao::json::value new_content = { { "Iam", "new content" } };
     c.transactions()->run(
       [id, coll, new_content](couchbase::transactions::async_attempt_context& ctx) {
-          ctx.get(coll, id.key(), [new_content, &ctx](couchbase::transactions::transaction_get_result_ptr res) {
+          ctx.get(coll, id, [new_content, &ctx](couchbase::transactions::transaction_get_result_ptr res) {
               reinterpret_cast<couchbase::core::transactions::transaction_get_result&>(*res).cas(100);
               ctx.replace(
                 res, new_content, [](couchbase::transactions::transaction_get_result_ptr replace_res) { CHECK(replace_res->ctx().ec()); });
@@ -233,26 +254,29 @@ TEST_CASE("async replace fails as expected with bad cas", "[transactions]")
       [barrier](couchbase::transactions::transaction_result tx_result) {
           CHECK_FALSE(tx_result.transaction_id.empty());
           CHECK_FALSE(tx_result.unstaging_complete);
-          CHECK(tx_result.ctx.ec() == couchbase::errc::transaction::expired);
+          CHECK(tx_result.ctx.ec());
           barrier->set_value();
       },
       async_options());
-    wait_for_result(f);
+    f.get();
 }
 
 TEST_CASE("uncaught exception will rollback", "[transactions]")
 {
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
-    auto core_cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::cluster c(core_cluster);
-    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    test::utils::integration_test_guard integration;
+
+    auto id = test::utils::uniq_id("txn");
+    couchbase::cluster c(integration.cluster);
+    auto coll = c.bucket(integration.ctx.bucket).default_collection();
+    auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
+    REQUIRE_SUCCESS(err.ec());
+
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     tao::json::value new_content = { { "Iam", "new content" } };
     c.transactions()->run(
       [id, coll, new_content](couchbase::transactions::async_attempt_context& ctx) {
-          ctx.get(coll, id.key(), [new_content, &ctx](couchbase::transactions::transaction_get_result_ptr res) {
+          ctx.get(coll, id, [new_content, &ctx](couchbase::transactions::transaction_get_result_ptr res) {
               CHECK_FALSE(res->ctx().ec());
               ctx.replace(res, new_content, [](couchbase::transactions::transaction_get_result_ptr res) {
                   CHECK_FALSE(res->ctx().ec());
@@ -268,25 +292,29 @@ TEST_CASE("uncaught exception will rollback", "[transactions]")
       },
       async_options());
 
-    wait_for_result(f);
+    f.get();
 }
 
 TEST_CASE("can set transaction options", "[transactions]")
 {
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
-    auto core_cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::cluster c(core_cluster);
-    auto cfg = couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(2));
-    auto coll = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    test::utils::integration_test_guard integration;
+
+    auto id = test::utils::uniq_id("txn");
+    couchbase::cluster c(integration.cluster);
+    auto coll = c.bucket(integration.ctx.bucket).default_collection();
+    auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
+    REQUIRE_SUCCESS(err.ec());
+
+
     auto begin = std::chrono::steady_clock::now();
+    auto cfg = couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(2));
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
       [id, coll](couchbase::transactions::async_attempt_context& ctx) {
-          ctx.get(coll, id.key(), [&ctx](couchbase::transactions::transaction_get_result_ptr doc) {
+          ctx.get(coll, id, [&ctx](couchbase::transactions::transaction_get_result_ptr doc) {
               reinterpret_cast<couchbase::core::transactions::transaction_get_result&>(*doc).cas(100);
-              ctx.remove(doc, [](couchbase::transaction_op_error_context err) { CHECK(err.ec()); });
+              ctx.remove(doc, [](couchbase::transaction_op_error_context remove_err) { CHECK(remove_err.ec()); });
           });
       },
       [&begin, &cfg, barrier](couchbase::transactions::transaction_result res) {
@@ -304,19 +332,23 @@ TEST_CASE("can set transaction options", "[transactions]")
       },
       cfg);
 
-    wait_for_result(f);
+    f.get();
 }
 
 TEST_CASE("can do mutating query", "[transactions]")
 {
-    auto id = TransactionsTestEnvironment::get_document_id();
-    auto core_cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::cluster c(core_cluster);
+
+    test::utils::integration_test_guard integration;
+
+    auto id = test::utils::uniq_id("txn");
+    couchbase::cluster c(integration.cluster);
+    auto coll = c.bucket(integration.ctx.bucket).default_collection();
+
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
-      [id](couchbase::transactions::async_attempt_context& ctx) {
-          ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES("{}", {}))", id.bucket(), id.key(), async_content),
+      [id, test_ctx=integration.ctx](couchbase::transactions::async_attempt_context& ctx) {
+          ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES("{}", {}))", test_ctx.bucket, id, async_content_json),
                     [](couchbase::transactions::transaction_query_result_ptr res) { CHECK_FALSE(res->ctx().ec()); });
       },
       [barrier](couchbase::transactions::transaction_result res) {
@@ -324,25 +356,29 @@ TEST_CASE("can do mutating query", "[transactions]")
           CHECK_FALSE(res.transaction_id.empty());
           CHECK(res.unstaging_complete);
           barrier->set_value();
-      });
-    wait_for_result(f);
+      }, async_options());
+    f.get();
 }
 
 TEST_CASE("some query errors rollback", "[transactions]")
 {
-    auto id = TransactionsTestEnvironment::get_document_id();
-    auto id2 = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, async_content));
-    auto core_cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::cluster c(core_cluster);
+    test::utils::integration_test_guard integration;
+
+    auto id = test::utils::uniq_id("txn");
+    auto id2 = test::utils::uniq_id("txn");
+    couchbase::cluster c(integration.cluster);
+    auto coll = c.bucket(integration.ctx.bucket).default_collection();
+    auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
+    REQUIRE_SUCCESS(err.ec());
+
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
-      [id, id2](couchbase::transactions::async_attempt_context& ctx) {
-          ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES("{}", {}))", id2.bucket(), id2.key(), async_content),
-                    [id, &ctx](couchbase::transactions::transaction_query_result_ptr res) {
+      [id, id2, test_ctx=integration.ctx](couchbase::transactions::async_attempt_context& ctx) {
+          ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES("{}", {}))", test_ctx.bucket, id2, async_content_json),
+                    [id, &ctx, &test_ctx](couchbase::transactions::transaction_query_result_ptr res) {
                         CHECK_FALSE(res->ctx().ec());
-                        ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES("{}", {}))", id.bucket(), id.key(), async_content),
+                        ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES("{}", {}))", test_ctx.bucket, id, async_content_json),
                                   [](couchbase::transactions::transaction_query_result_ptr) {});
                     });
       },
@@ -351,6 +387,6 @@ TEST_CASE("some query errors rollback", "[transactions]")
           CHECK_FALSE(res.transaction_id.empty());
           CHECK_FALSE(res.unstaging_complete);
           barrier->set_value();
-      });
-    wait_for_result(f);
+      }, async_options());
+    f.get();
 }

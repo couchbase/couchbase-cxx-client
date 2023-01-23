@@ -137,11 +137,14 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
     if (check_scan_wait && scan_wait) {
         body["scan_wait"] = fmt::format("{}ms", scan_wait.value().count());
     }
+
     if (scope_qualifier) {
         body["query_context"] = scope_qualifier;
-    } else if (scope_name) {
-        if (bucket_name) {
+    } else if (bucket_name) {
+        if (scope_name) {
             body["query_context"] = fmt::format("default:`{}`.`{}`", *bucket_name, *scope_name);
+        } else {
+            body["query_context"] = fmt::format("default:`{}`", *bucket_name);
         }
     }
     for (const auto& [name, value] : raw) {

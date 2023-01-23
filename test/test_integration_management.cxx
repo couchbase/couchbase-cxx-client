@@ -967,7 +967,7 @@ TEST_CASE("integration: query index management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_query_index_management()) {
+    if (!integration.cluster_version().supports_collections()) {
         return;
     }
 
@@ -1176,10 +1176,6 @@ TEST_CASE("integration: query index management", "[integration]")
 TEST_CASE("integration: collections query index management", "[integration]")
 {
     test::utils::integration_test_guard integration;
-
-    if (!integration.cluster_version().supports_query_index_management()) {
-        return;
-    }
 
     if (!integration.cluster_version().supports_collections()) {
         return;

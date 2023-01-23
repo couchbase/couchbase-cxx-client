@@ -58,6 +58,9 @@ enum external_exception {
 couchbase::errc::transaction_op
 transaction_op_errc_from_external_exception(external_exception e);
 
+couchbase::core::transactions::error_class
+error_class_from_external_exception(external_exception e);
+
 /**
  * @brief Base class for all exceptions expected to be raised from a transaction.
  *
@@ -125,11 +128,14 @@ class transaction_exception : public std::runtime_error
         return { ec, transaction_op_errc_from_external_exception(cause_) };
     }
 };
-
-class query_exception : public std::runtime_error
+class op_exception : public std::runtime_error
 {
+  private:
+    external_exception cause_;
+    transaction_op_error_context ctx_;
+
   public:
-    query_exception(transaction_op_error_context ctx, external_exception cause = COUCHBASE_EXCEPTION)
+    op_exception(transaction_op_error_context ctx, external_exception cause = COUCHBASE_EXCEPTION)
       : std::runtime_error(ctx.ec().message())
       , cause_(cause)
       , ctx_(std::move(ctx))
@@ -143,65 +149,60 @@ class query_exception : public std::runtime_error
 
     [[nodiscard]] const transaction_op_error_context& ctx() const
     {
-
         return ctx_;
     }
-
-  private:
-    external_exception cause_;
-    transaction_op_error_context ctx_;
 };
 
-class query_document_not_found : public query_exception
+class document_not_found : public op_exception
 {
   public:
-    explicit query_document_not_found(transaction_op_error_context ctx)
-      : query_exception(ctx, DOCUMENT_NOT_FOUND_EXCEPTION)
+    explicit document_not_found(transaction_op_error_context ctx)
+      : op_exception(ctx, DOCUMENT_NOT_FOUND_EXCEPTION)
     {
     }
 };
 
-class query_document_exists : public query_exception
+class document_exists : public op_exception
 {
   public:
-    explicit query_document_exists(transaction_op_error_context ctx)
-      : query_exception(ctx, DOCUMENT_EXISTS_EXCEPTION)
+    explicit document_exists(transaction_op_error_context ctx)
+      : op_exception(ctx, DOCUMENT_EXISTS_EXCEPTION)
     {
     }
 };
 
-class query_attempt_not_found : public query_exception
+class query_attempt_not_found : public op_exception
 {
   public:
     query_attempt_not_found(transaction_op_error_context ctx)
-      : query_exception(ctx)
+      : op_exception(ctx)
     {
     }
 };
 
-class query_cas_mismatch : public query_exception
+class query_cas_mismatch : public op_exception
 {
   public:
     query_cas_mismatch(transaction_op_error_context ctx)
-      : query_exception(ctx)
+      : op_exception(ctx)
     {
     }
 };
 
-class query_attempt_expired : public query_exception
+class query_attempt_expired : public op_exception
 {
   public:
     query_attempt_expired(transaction_op_error_context ctx)
-      : query_exception(ctx)
+      : op_exception(ctx)
     {
     }
 };
 
-class query_parsing_failure : public query_exception
+class query_parsing_failure : public op_exception
 {
   public:
     query_parsing_failure(transaction_op_error_context ctx)
-      : query_exception(ctx, PARSING_FAILURE)
+      : op_exception(ctx, PARSING_FAILURE)
     {
     }
 };

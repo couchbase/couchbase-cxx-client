@@ -15,23 +15,16 @@
  */
 
 #include "test_helper.hxx"
-#include "utils/transactions_env.h"
-
+#include <core/transactions.hxx>
 #include "core/transactions/internal/logging.hxx"
 
-#include <spdlog/fwd.h>
 #include <spdlog/sinks/base_sink.h>
 
-#include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <iterator>
 
 using namespace couchbase::core::transactions;
 
-static const tao::json::value doc_content{
-    { "some", "thing" },
-};
 
 class TrivialFileSink : public spdlog::sinks::base_sink<std::mutex>
 {
@@ -58,6 +51,7 @@ class TrivialFileSink : public spdlog::sinks::base_sink<std::mutex>
 
 TEST_CASE("transactions: can use custom sink", "[unit]")
 {
+    couchbase::core::logger::create_blackhole_logger();
     std::string log_message = "I am a log";
     auto sink = std::make_shared<TrivialFileSink>();
     create_loggers(couchbase::core::logger::level::debug, sink);

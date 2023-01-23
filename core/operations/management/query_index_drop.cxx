@@ -23,29 +23,33 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-query_index_drop_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+query_index_drop_request::encode_to(encoded_request_type& encoded, http_context& /*context*/) const
 {
     if ((scope_name.empty() && !collection_name.empty()) || (!scope_name.empty() && collection_name.empty())) {
         return errc::common::invalid_argument;
     }
     encoded.headers["content-type"] = "application/json";
-    std::string keyspace = fmt::format("`{}`", bucket_name);
+    std::string query_context = fmt::format("{}:`{}`", namespace_id, bucket_name);
+    auto keyspace = query_context;
     if (!scope_name.empty()) {
+        query_context += ".`" + scope_name + "`";
         keyspace += ".`" + scope_name + "`";
+    } else {
+        query_context += fmt::format(".`{}`", couchbase::scope::default_name);
     }
     if (!collection_name.empty()) {
         keyspace += ".`" + collection_name + "`";
     }
-
     std::string drop_index_stmt;
     if (is_primary && index_name.empty()) {
         drop_index_stmt = fmt::format(R"(DROP PRIMARY INDEX ON {} USING GSI)", keyspace);
-    } else if (!scope_name.empty() || !collection_name.empty()) {
-        drop_index_stmt = fmt::format(R"(DROP INDEX `{}` ON {} USING GSI)", index_name, keyspace);
     } else {
-        drop_index_stmt = fmt::format(R"(DROP INDEX {}.`{}` USING GSI)", keyspace, index_name);
+        drop_index_stmt = fmt::format(R"(DROP INDEX `{}` ON {} USING GSI)", index_name, keyspace);
     }
-    tao::json::value body{ { "statement", drop_index_stmt }, { "client_context_id", encoded.client_context_id } };
+
+    tao::json::value body{ { "statement", drop_index_stmt },
+                           { "client_context_id", encoded.client_context_id },
+                           { "query_context", query_context } };
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);
