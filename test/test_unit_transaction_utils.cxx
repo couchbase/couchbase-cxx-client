@@ -15,12 +15,10 @@
  */
 
 #include "test_helper.hxx"
-#include "utils/transactions_env.h"
 
 #include "core/transactions/internal/exceptions_internal.hxx"
 #include "core/transactions/internal/utils.hxx"
 
-#include <future>
 #include <iostream>
 #include <limits>
 #include <thread>
