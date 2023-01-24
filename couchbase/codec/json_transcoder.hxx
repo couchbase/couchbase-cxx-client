@@ -38,7 +38,7 @@ class json_transcoder
     template<typename Document>
     static auto decode(const encoded_value& encoded) -> Document
     {
-        if (!codec_flags::has_common_flags(encoded.flags, codec_flags::json_common_flags)) {
+        if (encoded.flags != 0 && !codec_flags::has_common_flags(encoded.flags, codec_flags::json_common_flags)) {
             throw std::system_error(errc::common::decoding_failure,
                                     "json_transcoder excepts document to have JSON common flags, flags=" + std::to_string(encoded.flags));
         }

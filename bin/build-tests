@@ -39,7 +39,7 @@ CB_CXX=${CB_CXX:-$(which ${CB_DEFAULT_CXX})}
 CB_NUMBER_OF_JOBS=${CB_NUMBER_OF_JOBS:-1}
 CB_CMAKE_BUILD_TYPE=${CB_CMAKE_BUILD_TYPE:-Debug}
 CB_CACHE_OPTION=${CB_CACHE_OPTION:-ccache}
-CB_CMAKE_TARGET=${CB_CMAKE_TARGET:-}
+CB_TEST_SUITE=${CB_TEST_SUITE:-}
 
 echo "CB_CMAKE=${CB_CMAKE}"
 echo "CB_CC=${CB_CC}"
@@ -47,7 +47,7 @@ echo "CB_CXX=${CB_CXX}"
 echo "CB_NUMBER_OF_JOBS=${CB_NUMBER_OF_JOBS}"
 echo "CB_CMAKE_BUILD_TYPE=${CB_CMAKE_BUILD_TYPE}"
 echo "CB_CACHE_OPTION=${CB_CACHE_OPTION}"
-echo "CB_CMAKE_TARGET=${CB_CMAKE_TARGET}"
+echo "CB_TEST_SUITE=${CB_TEST_SUITE}"
 
 CB_CMAKE_EXTRAS=
 case "${CB_SANITIZER}" in
@@ -84,10 +84,11 @@ mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 
 CB_CMAKE_BUILD_EXTRAS=
-if [ "x${CB_CMAKE_TARGET}" != "x" ] ; then
-    CB_CMAKE_BUILD_EXTRAS="--target ${CB_CMAKE_TARGET}"
-    if [ "x${CB_CMAKE_TARGET}" != "xbuild_unit_tests" ]; then
-        CB_CMAKE_BUILD_EXTRAS="--target build_integration_tests"
+if [ "x${CB_TEST_SUITE}" != "x" ] ; then
+    CB_CMAKE_BUILD_EXTRAS="--target build_${CB_TEST_SUITE}_tests"
+    if [ "x${CB_TEST_SUITE}" = "xunit" ]; then
+        # always run integration tests if "unit" target selected
+        CB_CMAKE_BUILD_EXTRAS="${CB_CMAKE_BUILD_EXTRAS} --target build_integration_tests"
     fi
 fi
 
