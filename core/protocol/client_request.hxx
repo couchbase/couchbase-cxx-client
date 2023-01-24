@@ -110,8 +110,7 @@ class client_request
   private:
     [[nodiscard]] std::vector<std::byte> generate_payload(bool try_to_compress)
     {
-        std::vector<std::byte> payload;
-        payload.resize(header_size + body_.size(), std::byte{ 0 });
+        std::vector<std::byte> payload(header_size + body_.size());
         payload[0] = static_cast<std::byte>(magic_);
         payload[1] = static_cast<std::byte>(opcode_);
 
