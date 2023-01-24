@@ -492,8 +492,7 @@ class mcbp_session_impl
                             }
 
                             std::uint32_t opaque = utils::byte_swap(msg.header.opaque);
-                            if (session_->handle_request_legacy(opcode, status, opaque, msg) ||
-                                session_->handle_request(opcode, status, opaque, msg)) {
+                            if (session_->handle_request(opcode, status, opaque, std::move(msg))) {
                                 CB_LOG_TRACE("{} MCBP invoked operation handler: opcode={}, opaque={}, status={}",
                                              session_->log_prefix_,
                                              opcode,
@@ -879,8 +878,24 @@ class mcbp_session_impl
         operations_.try_emplace(opaque, std::move(request), std::move(handler));
     }
 
-    auto handle_request(protocol::client_opcode opcode, std::uint16_t status, std::uint32_t opaque, mcbp_message msg) -> bool
+    auto handle_request(protocol::client_opcode opcode, std::uint16_t status, std::uint32_t opaque, mcbp_message&& msg) -> bool
     {
+        // handle request old style
+        command_handler fun{};
+        {
+            std::scoped_lock lock(command_handlers_mutex_);
+            if (auto handler = command_handlers_.find(opaque); handler != command_handlers_.end() && handler->second) {
+                fun = std::move(handler->second);
+                command_handlers_.erase(handler);
+            }
+        }
+
+        if (fun) {
+            fun(protocol::map_status_code(opcode, status), retry_reason::do_not_retry, std::move(msg), decode_error_code(status));
+            return true;
+        }
+
+        // handle request new style
         std::shared_ptr<mcbp::queue_request> request{};
         std::shared_ptr<response_handler> handler{};
         std::scoped_lock lock(operations_mutex_);
@@ -899,24 +914,6 @@ class mcbp_session_impl
                                      retry_reason::do_not_retry,
                                      std::move(msg),
                                      decode_error_code(status));
-            return true;
-        }
-        return false;
-    }
-
-    auto handle_request_legacy(protocol::client_opcode opcode, std::uint16_t status, std::uint32_t opaque, mcbp_message msg) -> bool
-    {
-        command_handler fun{};
-        {
-            std::scoped_lock lock(command_handlers_mutex_);
-            if (auto handler = command_handlers_.find(opaque); handler != command_handlers_.end() && handler->second) {
-                fun = std::move(handler->second);
-                command_handlers_.erase(handler);
-            }
-        }
-
-        if (fun) {
-            fun(protocol::map_status_code(opcode, status), retry_reason::do_not_retry, std::move(msg), decode_error_code(status));
             return true;
         }
         return false;

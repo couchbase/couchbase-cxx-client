@@ -66,7 +66,7 @@ namespace io
 class mcbp_session_impl;
 
 using command_handler =
-  utils::movable_function<void(std::error_code, retry_reason, io::mcbp_message, std::optional<key_value_error_map_info>)>;
+  utils::movable_function<void(std::error_code, retry_reason, io::mcbp_message&&, std::optional<key_value_error_map_info>)>;
 
 class mcbp_session
 {

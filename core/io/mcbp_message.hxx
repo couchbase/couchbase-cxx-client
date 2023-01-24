@@ -49,6 +49,11 @@ struct mcbp_message {
     binary_header header;
     std::vector<std::byte> body;
 
+    mcbp_message(const mcbp_message& other) = delete;
+    mcbp_message& operator=(const mcbp_message& other) = delete;
+    mcbp_message(mcbp_message&& other) = default;
+    mcbp_message& operator=(mcbp_message&& other) = default;
+
     [[nodiscard]] protocol::header_buffer header_data() const;
 };
 } // namespace io

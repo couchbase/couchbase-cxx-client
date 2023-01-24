@@ -33,7 +33,7 @@ namespace couchbase::core::io
 mcbp_parser::result
 mcbp_parser::next(mcbp_message& msg)
 {
-    static const size_t header_size = 24;
+    static const std::size_t header_size = 24;
     if (buf.size() < header_size) {
         return result::need_data;
     }
@@ -57,7 +57,7 @@ mcbp_parser::next(mcbp_message& msg)
     bool use_raw_value = true;
     if (is_compressed) {
         std::string uncompressed;
-        size_t offset = header_size + prefix_size;
+        std::size_t offset = header_size + prefix_size;
         if (snappy::Uncompress(reinterpret_cast<const char*>(buf.data() + offset), body_size - prefix_size, &uncompressed)) {
             std::transform(uncompressed.begin(), uncompressed.end(), std::back_insert_iterator(msg.body), [](auto ch) {
                 return static_cast<std::byte>(ch);
