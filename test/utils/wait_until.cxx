@@ -58,7 +58,7 @@ wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::core::clust
 }
 
 bool
-wait_until_user_present(std::shared_ptr<couchbase::core::cluster> cluster, const std::string& username)
+wait_until_user_present(const std::shared_ptr<couchbase::core::cluster>& cluster, const std::string& username)
 {
     auto present = test::utils::wait_until([cluster, username]() {
         couchbase::core::operations::management::user_get_request req{};
