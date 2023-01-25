@@ -56,4 +56,40 @@ wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::core::clust
     }
     return propagated;
 }
+
+bool
+wait_until_user_present(const std::shared_ptr<couchbase::core::cluster>& cluster, const std::string& username)
+{
+    auto present = test::utils::wait_until([cluster, username]() {
+        couchbase::core::operations::management::user_get_request req{};
+        req.username = username;
+        auto resp = test::utils::execute(cluster, req);
+        return resp.ctx.ec == couchbase::errc::management::user_exists;
+    });
+    if (present) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    return present;
+}
+bool
+wait_until_cluster_connected(const std::string& username, const std::string& password, const std::string& connection_string)
+{
+    auto cluster_options = couchbase::cluster_options(username, password);
+
+    auto connected = test::utils::wait_until([cluster_options, connection_string]() {
+        asio::io_context io;
+        auto guard = asio::make_work_guard(io);
+        std::thread io_thread([&io]() { io.run(); });
+        auto resp = couchbase::cluster::connect(io, connection_string, cluster_options).get();
+        resp.first.close();
+        guard.reset();
+        io_thread.join();
+        return resp.second.value() == 0;
+    });
+    if (connected) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    return connected;
+}
 } // namespace test::utils

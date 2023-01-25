@@ -20,9 +20,11 @@
 #include "integration_shortcuts.hxx"
 #include "server_version.hxx"
 
-#include "core/cluster.hxx"
 #include "core/operations/management/bucket.hxx"
 #include "core/operations/management/collections.hxx"
+#include "core/operations/management/user.hxx"
+#include "couchbase/cluster.hxx"
+#include "couchbase/cluster_options.hxx"
 
 namespace test::utils
 {
@@ -61,4 +63,9 @@ bool
 wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::core::cluster> cluster,
                                           const std::string& bucket_name,
                                           const std::uint64_t current_manifest_uid);
+bool
+wait_until_user_present(const std::shared_ptr<couchbase::core::cluster>& cluster, const std::string& username);
+
+bool
+wait_until_cluster_connected(const std::string& username, const std::string& password, const std::string& connection_string);
 } // namespace test::utils
