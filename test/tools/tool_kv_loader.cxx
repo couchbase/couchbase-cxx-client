@@ -20,6 +20,7 @@
 #include "../utils/uniq_id.hxx"
 
 #include "core/logger/logger.hxx"
+#include "core/utils/json.hxx"
 
 #include <fmt/format.h>
 #include <spdlog/details/os.h>
@@ -27,127 +28,7 @@
 #include <csignal>
 #include <thread>
 
-enum class operation {
-    get,
-    upsert,
-};
-
-namespace
-{
-volatile std::sig_atomic_t running{ 1 };
-std::size_t operations_limit{ 0 };
-
-} // namespace
-
-void
-sigint_handler(int /* signal */)
-{
-    running = 0;
-}
-
-static void
-dump_stats(asio::steady_timer& timer, std::chrono::system_clock::time_point start_time, std::atomic_uint64_t& total)
-{
-    timer.expires_after(std::chrono::seconds{ 1 });
-    timer.async_wait([&timer, start_time, &total](std::error_code ec) {
-        if (ec == asio::error::operation_aborted) {
-            return;
-        }
-        auto diff = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time).count();
-        std::uint64_t ops = total;
-        fmt::print(stderr, "\rrate: {} ops/s, total: {}\r", diff == 0 ? ops : ops / static_cast<std::uint64_t>(diff), ops);
-        return dump_stats(timer, start_time, total);
-    });
-}
-
-int
-main()
-{
-    couchbase::core::logger::create_console_logger();
-    if (auto val = spdlog::details::os::getenv("TEST_LOG_LEVEL"); !val.empty()) {
-        couchbase::core::logger::set_log_levels(couchbase::core::logger::level_from_str(val));
-    } else {
-        couchbase::core::logger::set_log_levels(couchbase::core::logger::level::info);
-    }
-
-    auto ctx = test::utils::test_context::load_from_environment();
-
-    bool send_queries = false;
-    if (auto val = spdlog::details::os::getenv("TEST_SEND_QUERIES"); !val.empty()) {
-        std::vector<std::string> truth = {
-            "YES", "Y", "TRUE", "T", "ON", "1", "yes", "y", "true", "t", "on",
-        };
-        send_queries = std::any_of(truth.begin(), truth.end(), [&val](auto& t) { return t == val; });
-    }
-
-    if (auto val = spdlog::details::os::getenv("TEST_OPERATIONS_LIMIT"); !val.empty()) {
-        operations_limit = std::stoul(val, nullptr, 10);
-    }
-
-    std::size_t number_of_io_threads = 4;
-    if (auto val = spdlog::details::os::getenv("TEST_NUMBER_OF_IO_THREADS"); !val.empty()) {
-        number_of_io_threads = std::stoul(val, nullptr, 10);
-    }
-    CB_LOG_INFO("send_queries: {}, number_of_threads: {}, username: \"{}\", connection_string: \"{}\", bucket: \"{}\"",
-                send_queries,
-                number_of_io_threads,
-                ctx.username,
-                ctx.connection_string,
-                ctx.bucket);
-
-    auto connstr = couchbase::core::utils::parse_connection_string(ctx.connection_string);
-    couchbase::core::cluster_credentials auth{};
-    if (!ctx.certificate_path.empty()) {
-        auth.certificate_path = ctx.certificate_path;
-        auth.key_path = ctx.key_path;
-    } else {
-        auth.username = ctx.username;
-        auth.password = ctx.password;
-    }
-
-    asio::io_context io(static_cast<int>(number_of_io_threads));
-
-    auto origin = couchbase::core::origin(auth, connstr);
-    if (ctx.dns_nameserver || ctx.dns_port) {
-        origin.options().dns_config = couchbase::core::io::dns::dns_config{
-            ctx.dns_nameserver.value_or(couchbase::core::io::dns::dns_config::default_nameserver),
-            ctx.dns_port.value_or(couchbase::core::io::dns::dns_config::default_port),
-        };
-    }
-    auto cluster = couchbase::core::cluster::create(io);
-
-    std::vector<std::thread> io_pool{};
-    io_pool.reserve(number_of_io_threads);
-    for (std::size_t i = 0; i < number_of_io_threads; ++i) {
-        io_pool.emplace_back(std::thread([&io]() { io.run(); }));
-    }
-
-    test::utils::open_cluster(cluster, origin);
-    test::utils::open_bucket(cluster, ctx.bucket);
-
-    std::vector<std::string> known_keys{};
-
-    double chance_of_get = 0.6;
-    double hit_chance_for_upsert = 0.7;
-    double hit_chance_for_get = 1.0;
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<double> dist(0, 1);
-
-    std::atomic_uint64_t total{};
-    std::map<std::error_code, std::size_t> errors{};
-    std::mutex errors_mutex{};
-
-    std::signal(SIGINT, sigint_handler);
-    std::signal(SIGTERM, sigint_handler);
-
-    CB_LOG_INFO("start workload, chance_of_get: {}, hit_chance_for_upsert: {}, hit_chance_for_get: {}",
-                chance_of_get,
-                hit_chance_for_upsert,
-                hit_chance_for_get);
-
-    const auto json_doc = couchbase::core::utils::to_binary(R"({
+const char* default_json_doc = R"({
   "type": "fake_profile",
   "random": 91,
   "random float": 16.439,
@@ -186,14 +67,192 @@ main()
   "Mildrid": {
     "age": 33
   }
-})");
+})";
+
+enum class operation {
+    get,
+    upsert,
+};
+
+namespace
+{
+volatile std::sig_atomic_t running{ 1 };
+std::size_t operations_limit{ 0 };
+
+} // namespace
+
+void
+sigint_handler(int /* signal */)
+{
+    running = 0;
+}
+
+static void
+dump_stats(asio::steady_timer& timer, std::chrono::system_clock::time_point start_time, std::atomic_uint64_t& total)
+{
+    timer.expires_after(std::chrono::seconds{ 1 });
+    timer.async_wait([&timer, start_time, &total](std::error_code ec) {
+        if (ec == asio::error::operation_aborted) {
+            return;
+        }
+        auto diff = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time).count();
+        std::uint64_t ops = total;
+        fmt::print(stderr, "\rrate: {} ops/s, total: {}\r", diff == 0 ? ops : ops / static_cast<std::uint64_t>(diff), ops);
+        return dump_stats(timer, start_time, total);
+    });
+}
+
+static std::string
+random_text(std::size_t length)
+{
+    std::string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    static thread_local std::minstd_rand gen{ std::random_device()() };
+    std::uniform_int_distribution<std::size_t> dis(0, alphabet.size() - 1);
+    std::string text(length, '-');
+    for (std::size_t i = 0; i < length; ++i) {
+        text[i] = alphabet[dis(gen)];
+    }
+    return text;
+}
+
+static bool
+parse_boolean(std::string_view value)
+{
+    static std::vector<std::string> truth = {
+        "YES", "Y", "TRUE", "T", "ON", "1", "yes", "y", "true", "t", "on",
+    };
+    return std::any_of(truth.begin(), truth.end(), [&value](auto& t) { return t == value; });
+}
+
+int
+main()
+{
+    couchbase::core::logger::create_console_logger();
+    if (auto val = spdlog::details::os::getenv("TEST_LOG_LEVEL"); !val.empty()) {
+        couchbase::core::logger::set_log_levels(couchbase::core::logger::level_from_str(val));
+    } else {
+        couchbase::core::logger::set_log_levels(couchbase::core::logger::level::info);
+    }
+
+    auto ctx = test::utils::test_context::load_from_environment();
+
+    bool send_queries{ false };
+    if (auto val = spdlog::details::os::getenv("TEST_SEND_QUERIES"); !val.empty()) {
+        send_queries = parse_boolean(val);
+    }
+
+    if (auto val = spdlog::details::os::getenv("TEST_OPERATIONS_LIMIT"); !val.empty()) {
+        operations_limit = std::stoul(val, nullptr, 10);
+    }
+
+    bool incompressible_body{ true };
+    if (auto val = spdlog::details::os::getenv("TEST_INCOMPRESSIBLE_BODY"); !val.empty()) {
+        incompressible_body = parse_boolean(val);
+    }
+
+    std::vector<std::byte> json_doc{};
+    if (auto val = spdlog::details::os::getenv("TEST_DOCUMENT_SIZE"); !val.empty()) {
+        std::size_t document_size = std::stoul(val, nullptr, 10);
+        tao::json::value doc = {
+            { "size", document_size },
+            { "text", incompressible_body ? random_text(document_size) : std::string(document_size, 'x') },
+        };
+        json_doc = couchbase::core::utils::json::generate_binary(doc);
+    } else {
+        json_doc = couchbase::core::utils::to_binary(default_json_doc);
+    }
+
+    std::size_t number_of_io_threads = 4;
+    if (auto val = spdlog::details::os::getenv("TEST_NUMBER_OF_IO_THREADS"); !val.empty()) {
+        number_of_io_threads = std::stoul(val, nullptr, 10);
+    }
+    fmt::print("TEST_SEND_QUERIES={}\n"
+               "TEST_NUMBER_OF_IO_THREADS={}\n"
+               "TEST_OPERATIONS_LIMIT={}\n"
+               "TEST_INCOMPRESSIBLE_BODY={}\n"
+               "TEST_DOCUMENT_SIZE={}\n"
+               "TEST_USERNAME=\"{}\"\n"
+               "TEST_CONNECTION_STRING=\"{}\"\n"
+               "TEST_BUCKET=\"{}\"\n",
+               send_queries,
+               number_of_io_threads,
+               operations_limit > 0 ? std::to_string(operations_limit) : "unbounded",
+               incompressible_body,
+               json_doc.size(),
+               ctx.username,
+               ctx.connection_string,
+               ctx.bucket);
+
+    auto connstr = couchbase::core::utils::parse_connection_string(ctx.connection_string);
+    couchbase::core::cluster_credentials auth{};
+    if (!ctx.certificate_path.empty()) {
+        auth.certificate_path = ctx.certificate_path;
+        auth.key_path = ctx.key_path;
+    } else {
+        auth.username = ctx.username;
+        auth.password = ctx.password;
+    }
+
+    asio::io_context io(static_cast<int>(number_of_io_threads));
+
+    auto origin = couchbase::core::origin(auth, connstr);
+    if (ctx.dns_nameserver || ctx.dns_port) {
+        origin.options().dns_config = couchbase::core::io::dns::dns_config{
+            ctx.dns_nameserver.value_or(couchbase::core::io::dns::dns_config::default_nameserver),
+            ctx.dns_port.value_or(couchbase::core::io::dns::dns_config::default_port),
+        };
+    }
+    auto cluster = couchbase::core::cluster::create(io);
+
+    std::vector<std::thread> io_pool{};
+    io_pool.reserve(number_of_io_threads);
+    for (std::size_t i = 0; i < number_of_io_threads; ++i) {
+        io_pool.emplace_back(std::thread([&io]() { io.run(); }));
+    }
+
+    test::utils::open_cluster(cluster, origin);
+    test::utils::open_bucket(cluster, ctx.bucket);
+
+    std::vector<std::string> known_keys{};
+
+    double chance_of_get = 0.6;
+    if (auto val = spdlog::details::os::getenv("TEST_CHANCE_OF_GET"); !val.empty()) {
+        chance_of_get = std::stod(val, nullptr);
+    }
+
+    double hit_chance_for_upsert = 0.7;
+    if (auto val = spdlog::details::os::getenv("TEST_HIT_CHANCE_FOR_UPSERT"); !val.empty()) {
+        hit_chance_for_upsert = std::stod(val, nullptr);
+    }
+
+    double hit_chance_for_get = 1.0;
+    if (auto val = spdlog::details::os::getenv("TEST_HIT_CHANCE_FOR_GET"); !val.empty()) {
+        hit_chance_for_get = std::stod(val, nullptr);
+    }
+
+    static thread_local std::minstd_rand gen{ std::random_device()() };
+    std::uniform_real_distribution<double> dist(0, 1);
+
+    std::atomic_uint64_t total{};
+    std::map<std::error_code, std::size_t> errors{};
+    std::mutex errors_mutex{};
+
+    std::signal(SIGINT, sigint_handler);
+    std::signal(SIGTERM, sigint_handler);
+
+    fmt::print("TEST_CHANCE_OF_GET={}\n"
+               "TEST_HIT_CHANCE_FOR_UPSERT={}\n"
+               "TEST_HIT_CHANCE_FOR_GET={}\n",
+               chance_of_get,
+               hit_chance_for_upsert,
+               hit_chance_for_get);
 
     const auto start_time = std::chrono::system_clock::now();
 
     asio::steady_timer stats_timer(io);
     dump_stats(stats_timer, start_time, total);
     while (running != 0) {
-        auto opcode = chance_of_get >= dist(gen) ? operation::get : operation::upsert;
+        auto opcode = dist(gen) <= chance_of_get ? operation::get : operation::upsert;
         if (opcode == operation::get && known_keys.empty()) {
             opcode = operation::upsert;
         }
@@ -216,7 +275,7 @@ main()
 
         couchbase::core::document_id id{ ctx.bucket, "_default", "_default", current_key };
         switch (opcode) {
-            case operation::get: {
+            case operation::upsert: {
                 couchbase::core::operations::upsert_request req{ id, json_doc };
                 cluster->execute(req, [&total, &errors_mutex, &errors](const couchbase::core::operations::upsert_response& resp) {
                     ++total;
@@ -229,7 +288,7 @@ main()
                     }
                 });
             } break;
-            case operation::upsert: {
+            case operation::get: {
                 couchbase::core::operations::get_request req{ id };
                 cluster->execute(req, [&total, &errors_mutex, &errors](const couchbase::core::operations::get_response&& resp) {
                     ++total;
@@ -261,7 +320,7 @@ main()
     const auto finish_time = std::chrono::system_clock::now();
     stats_timer.cancel();
 
-    fmt::print("\ntotal operations: {}\n", total);
+    fmt::print("\n\ntotal operations: {}\n", total);
     fmt::print("total keys used: {}\n", known_keys.size());
     const auto total_time = finish_time - start_time;
     fmt::print("total time: {}s ({}ms)\n",

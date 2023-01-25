@@ -52,6 +52,10 @@ test_context::load_from_environment()
         ctx.bucket = var;
     }
 
+    if (auto var = spdlog::details::os::getenv("OTHER_TEST_BUCKET"); !var.empty()) {
+        ctx.other_bucket = var;
+    }
+
     if (auto var = spdlog::details::os::getenv("TEST_DNS_NAMESERVER"); !var.empty()) {
         ctx.dns_nameserver = var;
     }

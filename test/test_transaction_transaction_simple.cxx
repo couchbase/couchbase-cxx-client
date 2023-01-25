@@ -16,25 +16,41 @@
 
 #include "../core/transactions/atr_ids.hxx"
 #include "simple_object.hxx"
-#include "test_helper.hxx"
-#include "utils/transactions_env.h"
+#include "test_helper_integration.hxx"
+#include <core/transactions.hxx>
+#include <tao/json.hpp>
 
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 
 using namespace couchbase::core::transactions;
+static const tao::json::value content{
+    { "some_number", 0 },
+};
+static const std::vector<std::byte> content_json = couchbase::core::utils::json::generate_binary(content);
+
+couchbase::transactions::transactions_config
+get_conf()
+{
+    couchbase::transactions::transactions_config cfg{};
+    cfg.expiration_time(std::chrono::seconds(2));
+    return cfg;
+}
 
 TEST_CASE("transactions: arbitrary runtime error", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transactions_config cfg;
-    transactions txn(cluster, cfg);
-    auto id = TransactionsTestEnvironment::get_document_id();
-    const tao::json::value content{
-        { "some", "thing" },
-    };
+    test::utils::integration_test_guard integration;
 
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
     REQUIRE_THROWS_AS(
       [](auto& txn, auto& id) {
           try {
@@ -54,19 +70,17 @@ TEST_CASE("transactions: arbitrary runtime error", "[transactions]")
 
 TEST_CASE("transactions: arbitrary exception", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transactions_config cfg;
-    transactions txn(cluster, cfg);
-    auto id = TransactionsTestEnvironment::get_document_id();
+    test::utils::integration_test_guard integration;
+
+    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
 
     REQUIRE_THROWS_AS(
       [](auto& txn, auto& id) {
           try {
               txn.run([&id](attempt_context& ctx) {
-                  const tao::json::value content{
-                      { "some", "thing" },
-                  };
-
                   ctx.insert(id, content);
                   throw 3;
               });
@@ -82,105 +96,123 @@ TEST_CASE("transactions: arbitrary exception", "[transactions]")
 
 TEST_CASE("transactions: can get replica", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transactions_config cfg;
-    transactions txn(cluster, cfg);
-    // upsert initial doc
-    auto id = TransactionsTestEnvironment::get_document_id();
-    const tao::json::value initial{
-        { "some number", 0 },
-    };
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, initial));
+    test::utils::integration_test_guard integration;
+
+    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
     txn.run([id](attempt_context& ctx) {
         auto doc = ctx.get(id);
-        auto content = doc.content<tao::json::value>();
-        content["another one"] = 1;
-        ctx.replace(doc, content);
+        auto new_content = doc.content<tao::json::value>();
+        new_content["another one"] = 1;
+        ctx.replace(doc, new_content);
     });
     // now add to the initial content, and compare
     const tao::json::value expected{
-        { "some number", 0 },
+        { "some_number", 0 },
         { "another one", 1 },
     };
-    REQUIRE(expected == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>());
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.value == couchbase::core::utils::json::generate_binary(expected));
+    }
 }
 
 TEST_CASE("transactions: can use custom metadata collections per transactions", "[transactions]")
 {
-    const tao::json::value initial{
-        { "some number", 0 },
-    };
-    auto txn = TransactionsTestEnvironment::get_transactions();
+    test::utils::integration_test_guard integration;
 
-    // upsert initial doc
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, initial));
-    couchbase::cluster c(TransactionsTestEnvironment::get_cluster());
+    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
     couchbase::transactions::transaction_options cfg;
-    cfg.metadata_collection(c.bucket(TransactionsTestEnvironment::get_conf().extra_bucket).default_collection());
+    cfg.metadata_collection(couchbase::transactions::transaction_keyspace("secBucket"));
     txn.run(cfg, [id](attempt_context& ctx) {
         auto doc = ctx.get(id);
-        auto content = doc.content<tao::json::value>();
-        content["another one"] = 1;
-        ctx.replace(doc, content);
+        auto new_content = doc.content<tao::json::value>();
+        new_content["another one"] = 1;
+        ctx.replace(doc, new_content);
     });
 
     const tao::json::value expected{
-        { "some number", 0 },
+        { "some_number", 0 },
         { "another one", 1 },
     };
-    REQUIRE(expected == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>());
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.value == couchbase::core::utils::json::generate_binary(expected));
+    }
 }
 
 TEST_CASE("transactions: can use custom metadata collections", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transactions_config cfg;
-    cfg.metadata_collection(couchbase::transactions::transaction_keyspace{
-      TransactionsTestEnvironment::get_conf().extra_bucket,
-      couchbase::scope::default_name,
-      couchbase::collection::default_name,
-    });
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    auto cfg = get_conf().metadata_collection(couchbase::transactions::transaction_keyspace("secBucket"));
     transactions txn(cluster, cfg);
 
     // upsert initial doc
-    auto id = TransactionsTestEnvironment::get_document_id();
-    const tao::json::value initial{
-        { "some number", 0 },
-    };
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, initial));
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
     txn.run([&](attempt_context& ctx) {
         auto doc = ctx.get(id);
-        auto content = doc.content<tao::json::value>();
-        content["another one"] = 1;
-        ctx.replace(doc, content);
+        auto new_content = doc.content<tao::json::value>();
+        new_content["another one"] = 1;
+        ctx.replace(doc, new_content);
     });
     // now add to the original content, and compare
     const tao::json::value expected{
-        { "some number", 0 },
+        { "some_number", 0 },
         { "another one", 1 },
     };
-    REQUIRE(expected == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>());
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.value == couchbase::core::utils::json::generate_binary(expected));
+    }
 }
 
 TEST_CASE("transactions: non existent bucket in custom metadata collections", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transactions_config cfg;
-    cfg.metadata_collection(couchbase::transactions::transaction_keyspace{
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+    auto cfg = get_conf().metadata_collection(couchbase::transactions::transaction_keyspace{
       "i_dont_exist",
       couchbase::scope::default_name,
       couchbase::collection::default_name,
     });
+    // can't open bucket upon creation of txns, so throws here.
     REQUIRE_THROWS_AS([](auto cluster, auto cfg) { transactions txn(cluster, cfg); }(cluster, cfg), std::runtime_error);
 }
 
 TEST_CASE("transactions: non existent scope in custom metadata collections", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transactions_config cfg;
-    cfg.metadata_collection(couchbase::transactions::transaction_keyspace{
-      TransactionsTestEnvironment::get_conf().extra_bucket,
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+    auto cfg = get_conf().metadata_collection(couchbase::transactions::transaction_keyspace{
+      integration.ctx.bucket,
       "i_dont_exist",
       couchbase::collection::default_name,
     });
@@ -188,97 +220,122 @@ TEST_CASE("transactions: non existent scope in custom metadata collections", "[t
     transactions txn(cluster, cfg);
 
     // upsert initial doc
-    auto id = TransactionsTestEnvironment::get_document_id();
-    const tao::json::value initial{
-        { "some number", 0 },
-    };
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, initial));
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
     try {
         txn.run([&](attempt_context& ctx) {
             auto doc = ctx.get(id);
-            auto content = doc.content<tao::json::value>();
-            content["another one"] = 1;
-            ctx.replace(doc, content);
+            auto new_content = doc.content<tao::json::value>();
+            new_content["another one"] = 1;
+            ctx.replace(doc, new_content);
         });
         FAIL("expected txn to timeout");
     } catch (const transaction_exception& e) {
         // type could be expiry or fail, it seems.  The reason is a bit unclear.
         REQUIRE((e.type() == failure_type::EXPIRY || e.type() == failure_type::FAIL));
-        REQUIRE(initial == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>());
+        {
+            couchbase::core::operations::get_request req{ id };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_SUCCESS(resp.ctx.ec());
+            REQUIRE(resp.value == content_json);
+        }
     }
 }
 
 TEST_CASE("transactions: non existent collection in custom metadata collections", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transactions_config cfg;
-    cfg
-      .metadata_collection(couchbase::transactions::transaction_keyspace{
-        TransactionsTestEnvironment::get_conf().extra_bucket, couchbase::scope::default_name, "i_dont_exist" })
-      .cleanup_config(couchbase::transactions::transactions_cleanup_config().cleanup_lost_attempts(true));
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+    auto cfg =
+      get_conf()
+        .metadata_collection(couchbase::transactions::transaction_keyspace{ "secBucket", couchbase::scope::default_name, "i_dont_exist" })
+        .cleanup_config(couchbase::transactions::transactions_cleanup_config().cleanup_lost_attempts(true));
     cfg.expiration_time(std::chrono::seconds(2));
     transactions txn(cluster, cfg);
 
     // upsert initial doc
-    auto id = TransactionsTestEnvironment::get_document_id();
-    const tao::json::value initial{
-        { "some number", 0 },
-    };
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, initial));
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
     try {
         txn.run([&](attempt_context& ctx) {
             auto doc = ctx.get(id);
-            auto content = doc.content<tao::json::value>();
-            content["another one"] = 1;
-            ctx.replace(doc, content);
+            auto new_content = doc.content<tao::json::value>();
+            new_content["another one"] = 1;
+            ctx.replace(doc, new_content);
         });
         FAIL("expected txn to timeout");
     } catch (const transaction_exception& e) {
         REQUIRE((e.type() == failure_type::EXPIRY || e.type() == failure_type::FAIL));
-        REQUIRE(initial == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>());
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.value == content_json);
     }
 }
 
-TEST_CASE("transactions: can get replace raw strings", "[transactions]")
+TEST_CASE("transactions: raw std::strings become json strings", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transactions_config cfg;
-    transactions txn(cluster, cfg);
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
 
+    transactions txn(cluster, get_conf());
+    std::string new_content("I am an unquoted string");
     // upsert initial doc
-    auto id = TransactionsTestEnvironment::get_document_id();
-    const tao::json::value initial{
-        { "some number", 0 },
-    };
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, initial));
-    txn.run([id](attempt_context& ctx) {
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+    txn.run([id, new_content](attempt_context& ctx) {
         auto doc = ctx.get(id);
-        std::string new_content("{\"aaa\":\"bbb\"}");
         ctx.replace(doc, new_content);
     });
-    std::string expected("{\"aaa\":\"bbb\"}");
-    REQUIRE(expected == TransactionsTestEnvironment::get_doc(id).content_as<std::string>());
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        auto parsed_as_json = couchbase::core::utils::json::parse_binary(resp.value);
+        REQUIRE(parsed_as_json.get_string() == new_content);
+    }
 }
 
-TEST_CASE("transactions: can json string as content", "[transactions]")
+TEST_CASE("transactions: quoted std::strings end up with 2 quotes (that's bad)", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transactions_config cfg;
-    transactions txn(cluster, cfg);
-    std::string content = "\"imaquotedjsonstring\"";
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+    transactions txn(cluster, get_conf());
+    std::string quoted_json_string = "\"imaquotedjsonstring\"";
     // insert the doc
-    auto id = TransactionsTestEnvironment::get_document_id();
-    txn.run([id, content](attempt_context& ctx) {
-        ctx.insert(id, content);
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    txn.run([id, quoted_json_string](attempt_context& ctx) {
+        ctx.insert(id, quoted_json_string);
         auto doc = ctx.get(id);
     });
-    REQUIRE(content == TransactionsTestEnvironment::get_doc(id).content_as<std::string>());
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        auto parsed_as_json = couchbase::core::utils::json::parse_binary(resp.value);
+        // here the _parsed_ json string will still have quotes in it.
+        REQUIRE(parsed_as_json.get_string() == quoted_json_string);
+    }
 }
 
 TEST_CASE("transactions: query error can be handled", "[transactions]")
 {
-    auto txns = TransactionsTestEnvironment::get_transactions();
-    txns.run([](attempt_context& ctx) {
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+    transactions txn(cluster, get_conf());
+    txn.run([](attempt_context& ctx) {
         // the EXPECT_THROW will eat the exception, as long as there is one of the correct type.
         REQUIRE_THROWS_AS(ctx.query("wont parse"), query_parsing_failure);
         auto res = ctx.query("Select 'Yo' as greeting");
@@ -288,27 +345,34 @@ TEST_CASE("transactions: query error can be handled", "[transactions]")
 
 TEST_CASE("transactions: unhandled query error fails transaction", "[transactions]")
 {
-    auto txns = TransactionsTestEnvironment::get_transactions();
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+    transactions txn(cluster, get_conf());
     REQUIRE_THROWS_AS(
-      [](auto& txns) {
-          txns.run([&](attempt_context& ctx) {
+      [&](auto& txn) {
+          txn.run([&](attempt_context& ctx) {
               ctx.query("wont parse");
-              ctx.query("Select * from `" + TransactionsTestEnvironment::get_conf().bucket + "` limit 1");
+              ctx.query("Select * from `" + integration.ctx.bucket + "` limit 1");
           });
-      }(txns),
+      }(txn),
       transaction_exception);
 }
 
 TEST_CASE("transactions: query mode get optional", "[transactions]")
 {
-    auto txns = TransactionsTestEnvironment::get_transactions();
-    auto id = TransactionsTestEnvironment::get_document_id();
-    const tao::json::value content{
-        { "some", "thing" },
-    };
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+
+    transactions txn(cluster, get_conf());
+    // upsert initial doc
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
     auto query = fmt::format("SELECT * FROM `{}` USE KEYS '{}'", id.bucket(), id.key());
-    txns.run([&](attempt_context& ctx) {
+    txn.run([&](attempt_context& ctx) {
         ctx.query(query);
         auto doc = ctx.get_optional(id);
         REQUIRE(doc);
@@ -317,54 +381,72 @@ TEST_CASE("transactions: query mode get optional", "[transactions]")
 
 TEST_CASE("transactions: can get replace objects", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
+    test::utils::integration_test_guard integration;
     SimpleObject o{ "someone", 100 };
     SimpleObject o2{ "someone else", 200 };
-    couchbase::transactions::transactions_config cfg;
-    transactions txn(cluster, cfg);
+    auto cluster = integration.cluster;
 
+    transactions txn(cluster, get_conf());
     // upsert initial doc
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, o));
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
     txn.run([id, o2](attempt_context& ctx) {
         auto doc = ctx.get(id);
         ctx.replace(doc, o2);
     });
-    REQUIRE(o2 == TransactionsTestEnvironment::get_doc(id).content_as<SimpleObject>());
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        auto final_val = couchbase::core::utils::json::parse_binary(resp.value);
+        REQUIRE(final_val.as<SimpleObject>() == o2);
+    }
 }
 
 TEST_CASE("transactions: can get replace mixed object strings", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
+    test::utils::integration_test_guard integration;
     SimpleObject o{ "someone", 100 };
-    SimpleObject o2{ "someone else", 200 };
-    couchbase::transactions::transactions_config cfg;
-    transactions txn(cluster, cfg);
+    tao::json::value v2 = { { "name", "someone else" }, { "number", 200 } };
+    auto o2 = v2.as<SimpleObject>();
+    auto cluster = integration.cluster;
 
+    transactions txn(cluster, get_conf());
     // upsert initial doc
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, o));
-    txn.run([id, o2](attempt_context& ctx) {
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
+    txn.run([id, v2](attempt_context& ctx) {
         auto doc = ctx.get(id);
-        tao::json::value j2 = o2;
-        auto string_content = tao::json::to_string(j2);
-        std::vector<std::byte> binary_content;
-        binary_content.reserve(string_content.size());
-        std::transform(string_content.begin(), string_content.end(), std::back_insert_iterator(binary_content), [](auto e) {
-            return static_cast<std::byte>(e);
-        });
-        ctx.replace(doc, binary_content);
+        ctx.replace(doc, couchbase::core::utils::json::generate_binary(v2));
     });
-    REQUIRE(o2 == TransactionsTestEnvironment::get_doc(id).content_as<SimpleObject>());
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        auto final_val = couchbase::core::utils::json::parse_binary(resp.value);
+        REQUIRE(final_val.as<SimpleObject>() == o2);
+    }
 }
 
 TEST_CASE("transactions: can rollback insert", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transactions_config cfg;
-    transactions txn(cluster, cfg);
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
 
-    auto id = TransactionsTestEnvironment::get_document_id();
+    couchbase::transactions::transactions_config cfg;
+    transactions txn(cluster, get_conf());
+
     REQUIRE_THROWS_AS(
       [](auto& txn, auto id) {
           txn.run([id](attempt_context& ctx) {
@@ -374,26 +456,28 @@ TEST_CASE("transactions: can rollback insert", "[transactions]")
           });
       }(txn, id),
       transaction_exception);
-    try {
-        auto res = TransactionsTestEnvironment::get_doc(id);
-        FAIL("expect a client_error with document_not_found, got result instead");
-
-    } catch (const client_error& e) {
-        REQUIRE(e.res()->ec == couchbase::errc::key_value::document_not_found);
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
     }
 }
 
 TEST_CASE("transactions: can rollback remove", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    tao::json::value content{
-        { "some number", 0 },
-    };
-    couchbase::transactions::transactions_config cfg;
-    transactions txn(cluster, cfg);
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
 
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    couchbase::transactions::transactions_config cfg;
+    transactions txn(cluster, get_conf());
+    // upsert initial doc
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
     REQUIRE_THROWS_AS(
       [](auto& txn, auto id) {
           txn.run([id](attempt_context& ctx) {
@@ -403,20 +487,27 @@ TEST_CASE("transactions: can rollback remove", "[transactions]")
           });
       }(txn, id),
       transaction_exception);
-    REQUIRE(content == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>());
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
 }
 
 TEST_CASE("transactions: can rollback replace", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    tao::json::value content{
-        { "some number", 0 },
-    };
-    couchbase::transactions::transactions_config cfg;
-    transactions txn(cluster, cfg);
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
 
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    transactions txn(cluster, get_conf());
+    // upsert initial doc
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
     REQUIRE_THROWS_AS(
       [](auto& txn, auto id) {
           txn.run([id](attempt_context& ctx) {
@@ -429,24 +520,31 @@ TEST_CASE("transactions: can rollback replace", "[transactions]")
           });
       }(txn, id),
       transaction_exception);
-    REQUIRE(content == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>());
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.value == content_json);
+    }
 }
 
 TEST_CASE("transactions: can have trivial query in transaction", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    tao::json::value content{
-        { "some_number", 0 },
-    };
-    couchbase::transactions::transactions_config cfg;
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
 
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    transactions txn(cluster, get_conf());
+    // upsert initial doc
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
 
     std::ostringstream stream;
     stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
-    transactions txn(cluster, cfg);
-    txn.run([content, statement = stream.str()](attempt_context& ctx) {
+    txn.run([statement = stream.str()](attempt_context& ctx) {
         auto payload = ctx.query(statement);
         REQUIRE(1 == payload.rows.size());
         REQUIRE(content == tao::json::from_string(payload.rows.front())["default"]);
@@ -455,39 +553,49 @@ TEST_CASE("transactions: can have trivial query in transaction", "[transactions]
 
 TEST_CASE("transactions: can modify doc in query", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    tao::json::value content{
-        { "some_number", 0 },
-    };
-    couchbase::transactions::transactions_config cfg;
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+
+    transactions txn(cluster, get_conf());
+    // upsert initial doc
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
 
     std::ostringstream stream;
     stream << "UPDATE `" << id.bucket() << "` USE KEYS '" << id.key() << "' SET `some_number` = 10";
 
-    transactions txn(cluster, cfg);
     txn.run([statement = stream.str()](attempt_context& ctx) { ctx.query(statement); });
 
-    auto res = TransactionsTestEnvironment::get_doc(id);
-    auto j = res.content_as<tao::json::value>();
-    REQUIRE(10 == j["some_number"].as<int>());
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        auto value = couchbase::core::utils::json::parse_binary(resp.value);
+        REQUIRE(10 == value["some_number"].as<int>());
+    }
 }
 
 TEST_CASE("transactions: can rollback", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    tao::json::value content{
-        { "some_number", 0 },
-    };
-    couchbase::transactions::transactions_config cfg;
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+
+    transactions txn(cluster, get_conf());
+    // upsert initial doc
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
 
     std::ostringstream stream;
     stream << "UPDATE `" << id.bucket() << "` USE KEYS '" << id.key() << "' SET `some_number` = 10";
 
-    transactions txn(cluster, cfg);
     REQUIRE_THROWS_AS(
       [](auto& txn, std::string statement) {
           txn.run([&](attempt_context& ctx) {
@@ -497,109 +605,123 @@ TEST_CASE("transactions: can rollback", "[transactions]")
       }(txn, stream.str()),
       transaction_exception);
 
-    auto res = TransactionsTestEnvironment::get_doc(id);
-    REQUIRE(res.content_as<tao::json::value>() == content);
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.value == content_json);
+    }
 }
 
 TEST_CASE("transactions: query updates insert", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    tao::json::value content{
-        { "some_number", 0 },
-    };
-    couchbase::transactions::transactions_config cfg;
-    auto id = TransactionsTestEnvironment::get_document_id();
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+
+    transactions txn(cluster, get_conf());
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
     std::ostringstream stream;
     stream << "UPDATE `" << id.bucket() << "` USE KEYS '" << id.key() << "' SET `some_number` = 10";
-    transactions txn(cluster, cfg);
-    txn.run([id, content, statement = stream.str()](attempt_context& ctx) {
+    txn.run([id, statement = stream.str()](attempt_context& ctx) {
         ctx.insert(id, content);
         ctx.query(statement);
     });
 
-    auto res = TransactionsTestEnvironment::get_doc(id);
-    REQUIRE(10 == res.content_as<tao::json::value>()["some_number"].as<int>());
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(10 == couchbase::core::utils::json::parse_binary(resp.value)["some_number"].as<int>());
+    }
 }
 
 TEST_CASE("transactions: can KV get", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    tao::json::value content{
-        { "some_number", 0 },
-    };
-    couchbase::transactions::transactions_config cfg;
-    auto id = TransactionsTestEnvironment::get_document_id();
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+
+    transactions txn(cluster, get_conf());
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
     std::ostringstream stream;
     stream << "UPDATE `" << id.bucket() << "` USE KEYS '" << id.key() << "' SET `some_number` = 10";
-    transactions txn(cluster, cfg);
-    txn.run([id, content, statement = stream.str()](attempt_context& ctx) {
+    txn.run([id, statement = stream.str()](attempt_context& ctx) {
         ctx.insert(id, content);
         auto payload = ctx.query(statement);
         CHECK(payload.rows.empty());
         auto doc = ctx.get(id);
         CHECK(10 == doc.content<tao::json::value>()["some_number"].as<uint32_t>());
     });
-    auto res = TransactionsTestEnvironment::get_doc(id);
-    REQUIRE(10 == res.content_as<tao::json::value>()["some_number"]);
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(10 == couchbase::core::utils::json::parse_binary(resp.value)["some_number"].as<int>());
+    }
 }
 
 TEST_CASE("transactions: can KV insert", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    tao::json::value content{
-        { "some_number", 0 },
-    };
-    couchbase::transactions::transactions_config cfg;
-    auto id = TransactionsTestEnvironment::get_document_id();
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+
+    transactions txn(cluster, get_conf());
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+
     std::ostringstream stream;
     stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
-    transactions txn(cluster, cfg);
-    txn.run([id, content, statement = stream.str()](attempt_context& ctx) {
+    txn.run([id, statement = stream.str()](attempt_context& ctx) {
         auto payload = ctx.query(statement);
         ctx.insert(id, content);
     });
-    REQUIRE(content == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>());
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.value == content_json);
+    }
 }
 
 TEST_CASE("transactions: can rollback KV insert", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    couchbase::transactions::transactions_config cfg;
-    auto id = TransactionsTestEnvironment::get_document_id();
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+
+    transactions txn(cluster, get_conf());
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
     std::ostringstream stream;
     stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
-    transactions txn(cluster, cfg);
     REQUIRE_THROWS_AS(
       [](auto& txn, auto id, auto statement) {
           txn.run([&](attempt_context& ctx) {
               auto payload = ctx.query(statement);
-              tao::json::value content{ { "some_number", 0 } };
               ctx.insert(id, content);
               throw 3;
           });
       }(txn, id, stream.str()),
       transaction_exception);
-    try {
-        auto doc = TransactionsTestEnvironment::get_doc(id);
-        FAIL("expected doc to not exist");
-    } catch (const client_error& e) {
-        REQUIRE(e.res()->ec == couchbase::errc::key_value::document_not_found);
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
     }
 }
 
 TEST_CASE("transactions: can KV replace", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    tao::json::value content{
-        { "some_number", 0 },
-    };
-    couchbase::transactions::transactions_config cfg;
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+
+    transactions txn(cluster, get_conf());
+    // upsert initial doc
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
 
     std::ostringstream stream;
     stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
-    transactions txn(cluster, cfg);
     txn.run([id, statement = stream.str()](attempt_context& ctx) {
         auto payload = ctx.query(statement);
         auto doc = ctx.get(id);
@@ -609,22 +731,30 @@ TEST_CASE("transactions: can KV replace", "[transactions]")
         CHECK(replaced_doc.cas() != doc.cas());
         CHECK_FALSE(replaced_doc.cas().empty());
     });
-    REQUIRE(10 == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>()["some_number"].as<int>());
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(10 == couchbase::core::utils::json::parse_binary(resp.value)["some_number"].as<int>());
+    }
 }
 
 TEST_CASE("transactions: can rollback KV replace", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    tao::json::value content{
-        { "some_number", 0 },
-    };
-    couchbase::transactions::transactions_config cfg;
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+
+    transactions txn(cluster, get_conf());
+    // upsert initial doc
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
 
     std::ostringstream stream;
     stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
-    transactions txn(cluster, cfg);
     REQUIRE_THROWS_AS(
       [](auto& txn, auto id, auto statement) {
           txn.run([id, statement](attempt_context& ctx) {
@@ -639,50 +769,58 @@ TEST_CASE("transactions: can rollback KV replace", "[transactions]")
           });
       }(txn, id, stream.str()),
       transaction_exception);
-    REQUIRE(0 == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>()["some_number"].as<int>());
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.value == content_json);
+    }
 }
 
 TEST_CASE("transactions: can KV remove", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    tao::json::value content{
-        { "some_number", 0 },
-    };
-    couchbase::transactions::transactions_config cfg;
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+
+    transactions txn(cluster, get_conf());
+    // upsert initial doc
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
 
     std::ostringstream stream;
     stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
-    transactions txn(cluster, cfg);
     txn.run([id, statement = stream.str()](attempt_context& ctx) {
         auto payload = ctx.query(statement);
         auto doc = ctx.get(id);
         ctx.remove(doc);
     });
-    try {
-        auto doc = TransactionsTestEnvironment::get_doc(id);
-        FAIL("expected doc to not exist");
-    } catch (const client_error& e) {
-        REQUIRE(e.res()->ec == couchbase::errc::key_value::document_not_found);
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
     }
 }
 
 TEST_CASE("transactions: can rollback KV remove", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    tao::json::value content{
-        { "some_number", 0 },
-    };
-    couchbase::transactions::transactions_config cfg;
-    cfg.expiration_time(std::chrono::seconds(1));
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
 
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    transactions txn(cluster, get_conf());
+    // upsert initial doc
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
 
     std::ostringstream stream;
     stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
-    transactions txn(cluster, cfg);
     REQUIRE_THROWS_AS(
       [](auto& txn, auto id, auto statement) {
           txn.run([id, statement](attempt_context& ctx) {
@@ -693,23 +831,29 @@ TEST_CASE("transactions: can rollback KV remove", "[transactions]")
           });
       }(txn, id, stream.str()),
       transaction_exception);
-    REQUIRE(content == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>());
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.value == content_json);
+    }
 }
 
 TEST_CASE("transactions: can rollback retry bad KV replace", "[transactions]")
 {
-    auto cluster = TransactionsTestEnvironment::get_cluster();
-    tao::json::value content{
-        { "some_number", 0 },
-    };
-    couchbase::transactions::transactions_config cfg;
-    cfg.expiration_time(std::chrono::seconds(1));
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
 
-    auto id = TransactionsTestEnvironment::get_document_id();
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
+    transactions txn(cluster, get_conf());
+    // upsert initial doc
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
 
     auto query = fmt::format("UPDATE `{}` USE KEYS '{}' SET `some_number` = 10", id.bucket(), id.key());
-    transactions txn(cluster, cfg);
     REQUIRE_THROWS_AS(
       [](auto& txn, auto id, auto query) {
           txn.run([id, query](attempt_context& ctx) {
@@ -719,48 +863,37 @@ TEST_CASE("transactions: can rollback retry bad KV replace", "[transactions]")
           });
       }(txn, id, query),
       transaction_exception);
-    REQUIRE(content == TransactionsTestEnvironment::get_doc(id).content_as<tao::json::value>());
-}
-
-TEST_CASE("transactions: query can set any durability", "[transactions]")
-{
-    // Just be sure that the query service understood the durability
-    std::list<couchbase::durability_level> levels{ couchbase::durability_level::none,
-                                                   couchbase::durability_level::majority,
-                                                   couchbase::durability_level::majority_and_persist_to_active,
-                                                   couchbase::durability_level::persist_to_majority };
-    auto txns = TransactionsTestEnvironment::get_transactions();
-    auto id = TransactionsTestEnvironment::get_document_id();
-    tao::json::value content{
-        { "some_number", 0 },
-    };
-    REQUIRE(TransactionsTestEnvironment::upsert_doc(id, content));
-    // doesn't matter if the query is read-only or not, just check that there
-    // is no error making the query.
-    auto query = fmt::format("SELECT * FROM `{}` USE KEYS '{}'", id.bucket(), id.key());
-    for (auto durability : levels) {
-        txns.run([id, query, durability](attempt_context& ctx) {
-            // FIXME: actually pass durability to the query
-            (void)durability;
-            ctx.query(query);
-            auto doc = ctx.get_optional(id);
-            REQUIRE(doc);
-        });
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.value == content_json);
     }
 }
 
 TEST_CASE("transactions: atr and client_record are binary documents", "[transactions]")
 {
-    auto txns = TransactionsTestEnvironment::get_transactions();
-    auto id = TransactionsTestEnvironment::get_document_id();
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+
+    transactions txn(cluster, get_conf());
     std::vector<std::byte> binary_null{ std::byte(0) };
-    tao::json::value content{
-        { "some_number", 0 },
-    };
-    txns.run([id, content](attempt_context& ctx) { ctx.insert(id, content); });
-    auto client_record_id = TransactionsTestEnvironment::get_document_id("_txn:client-record");
-    REQUIRE(TransactionsTestEnvironment::get_doc(client_record_id).raw_value == binary_null);
-    auto atr_key = atr_ids::atr_id_for_vbucket(atr_ids::vbucket_for_key(id.key()));
-    auto atr_id = TransactionsTestEnvironment::get_document_id(atr_key);
-    REQUIRE(TransactionsTestEnvironment::get_doc(atr_id).raw_value == binary_null);
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+
+    txn.run([id](attempt_context& ctx) { ctx.insert(id, content); });
+    {
+        couchbase::core::document_id client_record_id{ integration.ctx.bucket, "_default", "_default", "_txn:client-record" };
+        couchbase::core::operations::get_request req{ client_record_id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.value == binary_null);
+    }
+    {
+        auto atr_key = atr_ids::atr_id_for_vbucket(atr_ids::vbucket_for_key(id.key()));
+        couchbase::core::document_id atr_id{ integration.ctx.bucket, "_default", "_default", atr_key };
+        couchbase::core::operations::get_request req{ atr_id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.value == binary_null);
+    }
 }

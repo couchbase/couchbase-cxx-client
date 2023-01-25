@@ -30,4 +30,5 @@ fi
 
 cd "${BUILD_DIR}"
 
-${CB_CTEST} --output-on-failure --label-regex 'transactions' --output-junit results.xml
+# see transaction_test() macro in cmake/Testing.cmake
+${CB_CTEST} --output-on-failure --label-regex 'transaction' --output-junit results.xml

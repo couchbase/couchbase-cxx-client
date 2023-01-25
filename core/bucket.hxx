@@ -81,7 +81,7 @@ class bucket
             return;
         }
         auto cmd = std::make_shared<operations::mcbp_command<bucket, Request>>(ctx_, shared_from_this(), request, default_timeout());
-        cmd->start([cmd, handler = std::forward<Handler>(handler)](std::error_code ec, std::optional<io::mcbp_message> msg) mutable {
+        cmd->start([cmd, handler = std::forward<Handler>(handler)](std::error_code ec, std::optional<io::mcbp_message>&& msg) mutable {
             using encoded_response_type = typename Request::encoded_response_type;
             std::uint16_t status_code = msg ? msg->header.status() : 0U;
             auto resp = msg ? encoded_response_type(std::move(*msg)) : encoded_response_type{};

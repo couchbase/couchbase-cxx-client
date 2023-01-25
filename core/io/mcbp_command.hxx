@@ -42,7 +42,7 @@
 namespace couchbase::core::operations
 {
 
-using mcbp_command_handler = utils::movable_function<void(std::error_code, std::optional<io::mcbp_message>)>;
+using mcbp_command_handler = utils::movable_function<void(std::error_code, std::optional<io::mcbp_message>&&)>;
 
 template<typename Manager, typename Request>
 struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, Request>> {
@@ -112,7 +112,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         invoke_handler(request.retries.idempotent() ? errc::common::unambiguous_timeout : errc::common::ambiguous_timeout);
     }
 
-    void invoke_handler(std::error_code ec, std::optional<io::mcbp_message> msg = {})
+    void invoke_handler(std::error_code ec, std::optional<io::mcbp_message>&& msg = {})
     {
         retry_backoff.cancel();
         deadline.cancel();
@@ -294,7 +294,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                   }
               }
               if (reason == retry_reason::do_not_retry) {
-                  self->invoke_handler(ec, msg);
+                  self->invoke_handler(ec, std::move(msg));
               } else {
                   io::retry_orchestrator::maybe_retry(self->manager_, self, reason, ec);
               }
