@@ -75,23 +75,29 @@ couchbase::core::uuid::from_string(std::string_view str)
     return ret;
 }
 
+inline char
+to_char(std::uint8_t c)
+{
+    if (c <= 9) {
+        return static_cast<char>('0' + c);
+    }
+    return static_cast<char>('a' + (c - 10));
+}
+
 std::string
 couchbase::core::uuid::to_string(const couchbase::core::uuid::uuid_t& uuid)
 {
-    std::stringstream ss;
-    ss << std::hex << std::setfill('0');
-    int ii = 0;
-    for (const auto& c : uuid) {
-        ss << std::setw(2) << static_cast<std::uint32_t>(c);
-        switch (++ii) {
-            case 4:
-            case 6:
-            case 8:
-            case 10:
-                ss << '-';
-            default:;
+    std::string ret(36, '-');
+    std::size_t i = 0;
+
+    for (const auto& byte : uuid) {
+        ret[i] = to_char(static_cast<std::uint8_t>(byte >> 4U) & 0x0fU);
+        ++i;
+        ret[i] = to_char(byte & 0x0fU);
+        ++i;
+        if (i == 6 || i == 11 || i == 16 || i == 21) {
+            ++i;
         }
     }
-
-    return ss.str();
+    return ret;
 }
