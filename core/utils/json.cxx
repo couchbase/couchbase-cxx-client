@@ -96,13 +96,13 @@ class to_byte_vector
     void write(tao::binary_view data)
     {
         buffer_.reserve(buffer_.size() + data.size());
-        std::copy(data.begin(), data.end(), std::back_inserter(buffer_));
+        buffer_.insert(buffer_.end(), data.begin(), data.end());
     }
 
     void write(std::string_view data)
     {
         buffer_.reserve(buffer_.size() + data.size());
-        std::transform(data.begin(), data.end(), std::back_inserter(buffer_), [](auto ch) { return static_cast<std::byte>(ch); });
+        buffer_.insert(buffer_.end(), reinterpret_cast<const std::byte*>(&data[0]), reinterpret_cast<const std::byte*>(&data[data.size()]));
     }
 
     inline void escape(const std::string_view s)
