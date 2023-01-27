@@ -30,7 +30,7 @@ struct mcbp_parser {
     void feed(Iterator begin, Iterator end)
     {
         buf.reserve(buf.size() + static_cast<std::size_t>(std::distance(begin, end)));
-        std::copy(begin, end, std::back_insert_iterator(buf));
+        buf.insert(buf.end(), begin, end);
     }
 
     void reset()
