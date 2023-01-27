@@ -61,7 +61,7 @@ mcbp_parser::next(mcbp_message& msg)
         if (snappy::Uncompress(reinterpret_cast<const char*>(buf.data() + offset), body_size - prefix_size, &uncompressed)) {
             msg.body.insert(msg.body.end(),
                             reinterpret_cast<std::byte*>(&uncompressed.data()[0]),
-                            reinterpret_cast<std::byte*>(&uncompressed.data()[uncompressed.size() - 1]));
+                            reinterpret_cast<std::byte*>(&uncompressed.data()[uncompressed.size()]));
             use_raw_value = false;
             // patch header with new body size
             msg.header.bodylen = utils::byte_swap(static_cast<std::uint32_t>(prefix_size + uncompressed.size()));
