@@ -851,7 +851,7 @@ class mcbp_session_impl
         if (stopped_) {
             return;
         }
-        do_write();
+        asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() { self->do_write(); }));
     }
 
     void write_and_flush(std::vector<std::byte>&& buf)
@@ -1397,8 +1397,10 @@ class mcbp_session_impl
                 std::scoped_lock inner_lock(self->writing_buffer_mutex_);
                 self->writing_buffer_.clear();
             }
-            self->do_write();
-            self->do_read();
+            asio::post(asio::bind_executor(self->ctx_, [self]() {
+                self->do_write();
+                self->do_read();
+            }));
         });
     }
 

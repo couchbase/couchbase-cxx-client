@@ -76,7 +76,7 @@ enum class operation {
 
 namespace
 {
-volatile std::sig_atomic_t running{ 1 };
+std::atomic_flag running{ 1 };
 std::size_t operations_limit{ 0 };
 
 } // namespace
@@ -84,7 +84,7 @@ std::size_t operations_limit{ 0 };
 void
 sigint_handler(int /* signal */)
 {
-    running = 0;
+    running.test_and_set();
 }
 
 static void
@@ -207,7 +207,7 @@ main()
     std::vector<std::thread> io_pool{};
     io_pool.reserve(number_of_io_threads);
     for (std::size_t i = 0; i < number_of_io_threads; ++i) {
-        io_pool.emplace_back(std::thread([&io]() { io.run(); }));
+        io_pool.emplace_back([&io]() { io.run(); });
     }
 
     test::utils::open_cluster(cluster, origin);
@@ -251,7 +251,7 @@ main()
 
     asio::steady_timer stats_timer(io);
     dump_stats(stats_timer, start_time, total);
-    while (running != 0) {
+    while (running.test_and_set()) {
         auto opcode = dist(gen) <= chance_of_get ? operation::get : operation::upsert;
         if (opcode == operation::get && known_keys.empty()) {
             opcode = operation::upsert;
@@ -284,7 +284,7 @@ main()
                         ++errors[resp.ctx.ec()];
                     }
                     if (operations_limit > 0 && total >= operations_limit) {
-                        running = 0;
+                        running.clear();
                     }
                 });
             } break;
@@ -297,7 +297,7 @@ main()
                         ++errors[resp.ctx.ec()];
                     }
                     if (operations_limit > 0 && total >= operations_limit) {
-                        running = 0;
+                        running.clear();
                     }
                 });
             } break;
@@ -312,7 +312,7 @@ main()
                     ++errors[resp.ctx.ec];
                 }
                 if (operations_limit > 0 && total > operations_limit) {
-                    running = 0;
+                    running.clear();
                 }
             });
         }
