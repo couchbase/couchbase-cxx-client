@@ -293,7 +293,7 @@ class http_session : public std::enable_shared_from_this<http_session>
         if (stopped_) {
             return;
         }
-        do_write();
+        asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() { self->do_write(); }));
     }
 
     template<typename Handler>
