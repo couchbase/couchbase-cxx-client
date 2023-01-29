@@ -57,6 +57,8 @@ sdk_build_info()
       fmt::format("{}.{}", txns_forward_compat.protocol_major, txns_forward_compat.protocol_minor);
     info["txns_forward_compat_extensions"] = utils::join_strings(txns_forward_compat.extensions, ",");
     info["platform"] = COUCHBASE_CXX_CLIENT_SYSTEM;
+    info["platform_name"] = COUCHBASE_CXX_CLIENT_SYSTEM_NAME;
+    info["platform_version"] = COUCHBASE_CXX_CLIENT_SYSTEM_VERSION;
     info["cpu"] = COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR;
     info["cc"] = COUCHBASE_CXX_CLIENT_C_COMPILER;
     info["cxx"] = COUCHBASE_CXX_CLIENT_CXX_COMPILER;
@@ -141,7 +143,8 @@ sdk_id()
     static const std::string identifier{ std::string("cxx/") + std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MAJOR) + "." +
                                          std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MINOR) + "." +
                                          std::to_string(COUCHBASE_CXX_CLIENT_VERSION_PATCH) + "/" +
-                                         COUCHBASE_CXX_CLIENT_GIT_REVISION_SHORT };
+                                         COUCHBASE_CXX_CLIENT_GIT_REVISION_SHORT + ";" + COUCHBASE_CXX_CLIENT_SYSTEM_NAME + "/" +
+                                         COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR };
     return identifier;
 }
 

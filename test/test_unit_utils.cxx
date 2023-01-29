@@ -85,15 +85,18 @@ TEST_CASE("unit: join strings (fmt version)", "[unit]")
 
 TEST_CASE("unit: user_agent string", "[unit]")
 {
-    std::string core_version = fmt::format("cxx/{}.{}.{}/{}",
+    std::string os_version = fmt::format(";{}/{}", COUCHBASE_CXX_CLIENT_SYSTEM_NAME, COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR);
+    std::string core_version = fmt::format("cxx/{}.{}.{}/{};{}/{}",
                                            COUCHBASE_CXX_CLIENT_VERSION_MAJOR,
                                            COUCHBASE_CXX_CLIENT_VERSION_MINOR,
                                            COUCHBASE_CXX_CLIENT_VERSION_PATCH,
-                                           COUCHBASE_CXX_CLIENT_GIT_REVISION_SHORT);
+                                           COUCHBASE_CXX_CLIENT_GIT_REVISION_SHORT,
+                                           COUCHBASE_CXX_CLIENT_SYSTEM_NAME,
+                                           COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR);
 
     auto simple_user_agent = couchbase::core::meta::user_agent_for_mcbp("0xDEADBEEF", "0xCAFEBEBE");
     REQUIRE(simple_user_agent == fmt::format(R"({{"a":"{}","i":"0xDEADBEEF/0xCAFEBEBE"}})", core_version));
-    REQUIRE(simple_user_agent.size() == 53);
+    REQUIRE(simple_user_agent.size() == 66);
 
     REQUIRE(couchbase::core::meta::user_agent_for_mcbp("0xDEADBEEF", "0xCAFEBEBE", "couchnode/1.2.3; openssl/1.1.1l") ==
             fmt::format(R"({{"a":"{};couchnode/1.2.3; openssl/1.1.1l","i":"0xDEADBEEF/0xCAFEBEBE"}})", core_version));
@@ -113,15 +116,17 @@ TEST_CASE("unit: user_agent string", "[unit]")
 
     auto trimmed_user_agent = couchbase::core::meta::user_agent_for_mcbp("0xDEADBEEF", "0xCAFEBEBE", long_extra, 250);
     REQUIRE(trimmed_user_agent.size() == 250);
-    REQUIRE(250 - simple_user_agent.size() == 197);
-    REQUIRE(trimmed_user_agent == fmt::format(R"({{"a":"{};{}","i":"0xDEADBEEF/0xCAFEBEBE"}})", core_version, long_extra.substr(0, 196)));
+    REQUIRE(250 - simple_user_agent.size() == 197 - os_version.size());
+    REQUIRE(trimmed_user_agent ==
+            fmt::format(R"({{"a":"{};{}","i":"0xDEADBEEF/0xCAFEBEBE"}})", core_version, long_extra.substr(0, 196 - os_version.size())));
 
-    auto long_extra_with_non_printable_characters = long_extra.substr(0, 193) + "\n\n";
+    auto long_extra_with_non_printable_characters = long_extra.substr(0, 193 - os_version.size()) + "\n\n";
     trimmed_user_agent =
       couchbase::core::meta::user_agent_for_mcbp("0xDEADBEEF", "0xCAFEBEBE", long_extra_with_non_printable_characters, 250);
     REQUIRE(trimmed_user_agent.size() == 249);
-    REQUIRE(trimmed_user_agent ==
-            fmt::format(R"({{"a":"{};{}","i":"0xDEADBEEF/0xCAFEBEBE"}})", core_version, long_extra.substr(0, 193) + "\\n"));
+    REQUIRE(trimmed_user_agent == fmt::format(R"({{"a":"{};{}","i":"0xDEADBEEF/0xCAFEBEBE"}})",
+                                              core_version,
+                                              long_extra.substr(0, 193 - os_version.size()) + "\\n"));
 
     auto long_and_weird_extra = "hello" + std::string(300, '\n');
     trimmed_user_agent = couchbase::core::meta::user_agent_for_mcbp("0xDEADBEEF", "0xCAFEBEBE", long_and_weird_extra, 250);
