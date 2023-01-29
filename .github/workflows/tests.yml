@@ -48,6 +48,7 @@ jobs:
         with:
           key: ${{ github.job }}
       - name: Build tests
+        timeout-minutes: 40
         env:
           CB_TEST_SUITE: ${{ matrix.suite }}
         run: ./bin/build-tests
