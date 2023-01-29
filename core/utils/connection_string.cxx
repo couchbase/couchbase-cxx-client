@@ -19,6 +19,7 @@
 #include "core/logger/logger.hxx"
 #include "core/meta/version.hxx"
 #include "duration_parser.hxx"
+#include "url_codec.hxx"
 
 #include <tao/pegtl.hpp>
 #include <tao/pegtl/contrib/uri.hpp>
@@ -174,6 +175,12 @@ struct action<bucket_name> {
 } // namespace priv
 
 void
+parse_option(std::string& receiver, const std::string& /* name */, const std::string& value)
+{
+    receiver = string_codec::url_decode(value);
+}
+
+void
 parse_option(bool& receiver, const std::string& /* name */, const std::string& value)
 {
     if (value == "true" || value == "yes" || value == "on") {
@@ -286,7 +293,7 @@ extract_options(connection_string& connstr)
              */
             parse_option(connstr.options.management_timeout, name, value);
         } else if (name == "trust_certificate") {
-            connstr.options.trust_certificate = value;
+            parse_option(connstr.options.trust_certificate, name, value);
         } else if (name == "enable_mutation_tokens") {
             /**
              * Request mutation tokens at connection negotiation time. Turning this off will save 16 bytes per operation response.
@@ -383,7 +390,7 @@ extract_options(connection_string& connstr)
              * string, that will be appended to identification fields of the server protocols (key in HELO packet for MCBP, "user-agent"
              * header for HTTP)
              */
-            connstr.options.user_agent_extra = value;
+            parse_option(connstr.options.user_agent_extra, name, value);
         } else {
             CB_LOG_WARNING(R"(unknown parameter "{}" in connection string (value "{}"))", name, value);
         }

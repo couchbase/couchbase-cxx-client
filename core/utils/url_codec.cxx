@@ -180,7 +180,7 @@ url_decode(Ti first, Ti last, To out, std::size_t& nout)
 std::string
 url_decode(const std::string& src)
 {
-    std::string dst{};
+    std::string dst(src.size(), '\0');
     std::size_t n = 0;
     if (url_decode(src.begin(), src.end(), dst.begin(), n)) {
         dst.resize(n);
