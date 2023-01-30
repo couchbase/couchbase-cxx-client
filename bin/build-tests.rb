@@ -102,5 +102,6 @@ Dir.chdir(BUILD_DIR) do
   run(CB_CMAKE,
       "--build", BUILD_DIR,
       "--parallel", CB_NUMBER_OF_JOBS,
+      "--config", CB_CMAKE_BUILD_TYPE,
       "--verbose")
 end
