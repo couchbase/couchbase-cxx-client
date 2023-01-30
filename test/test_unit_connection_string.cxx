@@ -362,6 +362,10 @@ TEST_CASE("unit: connection string", "[unit]")
                                    { "kv_timeout", "4s2ms" },
                                  });
             CHECK(spec.options.key_value_timeout == std::chrono::milliseconds(4002));
+
+            spec = couchbase::core::utils::parse_connection_string(
+              "couchbase://127.0.0.1?user_agent_extra=couchnode%2F4.1.1%20(node%2F12.11.1%3B%20v8%2F7.7.299.11-node.12%3B%20ssl%2F1.1.1c)");
+            CHECK(spec.options.user_agent_extra == "couchnode/4.1.1 (node/12.11.1; v8/7.7.299.11-node.12; ssl/1.1.1c)");
         }
     }
 
