@@ -25,6 +25,12 @@ namespace couchbase::core::meta
 const std::string&
 sdk_id();
 
+const std::string&
+sdk_version();
+
+const std::string&
+sdk_version_short();
+
 std::map<std::string, std::string>
 sdk_build_info();
 
