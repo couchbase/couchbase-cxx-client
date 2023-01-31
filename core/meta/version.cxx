@@ -140,12 +140,25 @@ sdk_build_info_short()
 const std::string&
 sdk_id()
 {
-    static const std::string identifier{ std::string("cxx/") + std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MAJOR) + "." +
-                                         std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MINOR) + "." +
-                                         std::to_string(COUCHBASE_CXX_CLIENT_VERSION_PATCH) + "/" +
-                                         COUCHBASE_CXX_CLIENT_GIT_REVISION_SHORT + ";" + COUCHBASE_CXX_CLIENT_SYSTEM_NAME + "/" +
+    static const std::string identifier{ sdk_version() + ";" + COUCHBASE_CXX_CLIENT_SYSTEM_NAME + "/" +
                                          COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR };
     return identifier;
+}
+
+const std::string&
+sdk_version()
+{
+    static const std::string version{ sdk_version_short() + "/" + COUCHBASE_CXX_CLIENT_GIT_REVISION_SHORT };
+    return version;
+}
+
+const std::string&
+sdk_version_short()
+{
+    static const std::string version{ std::string("cxx/") + std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MAJOR) + "." +
+                                      std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MINOR) + "." +
+                                      std::to_string(COUCHBASE_CXX_CLIENT_VERSION_PATCH) };
+    return version;
 }
 
 const std::string&
