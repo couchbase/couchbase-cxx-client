@@ -211,3 +211,19 @@ TEST_CASE("unit: base64", "[unit]")
     REQUIRE(couchbase::core::base64::encode(binary, false) == base64);
     REQUIRE(couchbase::core::base64::encode(binary, true) == base64_pretty);
 }
+
+namespace couchbase::core::meta
+{
+std::string
+parse_git_describe_output(const std::string& git_describe_output);
+}
+
+TEST_CASE("unit: semantic version string", "[unit]")
+{
+    REQUIRE(couchbase::core::meta::parse_git_describe_output("1.0.0-beta.4-16-gfbc9922") == "1.0.0-beta.4+16.fbc9922");
+    REQUIRE(couchbase::core::meta::parse_git_describe_output("1.0.0-16-gfbc9922") == "1.0.0+16.fbc9922");
+    REQUIRE(couchbase::core::meta::parse_git_describe_output("") == "");
+    REQUIRE(couchbase::core::meta::parse_git_describe_output("unknown") == "");
+    REQUIRE(couchbase::core::meta::parse_git_describe_output("invalid") == "");
+    REQUIRE(couchbase::core::meta::parse_git_describe_output("1.0.0.0.0") == "");
+}

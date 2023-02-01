@@ -26,6 +26,9 @@ const std::string&
 sdk_id();
 
 const std::string&
+sdk_semver();
+
+const std::string&
 sdk_version();
 
 const std::string&

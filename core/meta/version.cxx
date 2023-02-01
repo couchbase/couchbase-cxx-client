@@ -32,6 +32,8 @@
 #include <snappy-stubs-public.h>
 #include <spdlog/version.h>
 
+#include <regex>
+
 namespace couchbase::core::meta
 {
 std::map<std::string, std::string>
@@ -143,6 +145,44 @@ sdk_id()
     static const std::string identifier{ sdk_version() + ";" + COUCHBASE_CXX_CLIENT_SYSTEM_NAME + "/" +
                                          COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR };
     return identifier;
+}
+
+std::string
+parse_git_describe_output(const std::string& git_describe_output)
+{
+    if (git_describe_output.empty() || git_describe_output == "unknown") {
+        return "";
+    }
+
+    static const std::regex version_regex(R"(^(\d+(?:\.\d+)+)(?:-(\w+(?:\.\w+)*))?-(\d+)-g(\w+))");
+    std::smatch match;
+    if (std::regex_match(git_describe_output, match, version_regex)) {
+        auto version_core = match[1].str();
+        auto pre_release = match[2].str();
+        auto number_of_commits = std::stoi(match[3].str());
+        auto build = match[4].str();
+        if (pre_release.empty()) {
+            return fmt::format("{}+{}.{}", version_core, number_of_commits, build);
+        }
+        return fmt::format("{}-{}+{}.{}", version_core, pre_release, number_of_commits, build);
+    }
+
+    return "";
+}
+
+const std::string&
+sdk_semver()
+{
+    static const std::string simple_version{ std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MAJOR) + "." +
+                                             std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MINOR) + "." +
+                                             std::to_string(COUCHBASE_CXX_CLIENT_VERSION_PATCH) + "+" +
+                                             std::string(COUCHBASE_CXX_CLIENT_GIT_REVISION_SHORT) };
+    static const std::string git_describe_output{ COUCHBASE_CXX_CLIENT_GIT_DESCRIBE };
+    static const std::string semantic_version = parse_git_describe_output(git_describe_output);
+    if (semantic_version.empty()) {
+        return simple_version;
+    }
+    return semantic_version;
 }
 
 const std::string&
