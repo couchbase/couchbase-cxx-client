@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -154,17 +154,25 @@ parse_git_describe_output(const std::string& git_describe_output)
         return "";
     }
 
-    static const std::regex version_regex(R"(^(\d+(?:\.\d+)+)(?:-(\w+(?:\.\w+)*))?-(\d+)-g(\w+))");
+    static const std::regex version_regex(R"(^(\d+(?:\.\d+){2})(?:-(\w+(?:\.\w+)*))?(-(\d+)-g(\w+))?$)");
     std::smatch match;
     if (std::regex_match(git_describe_output, match, version_regex)) {
         auto version_core = match[1].str();
         auto pre_release = match[2].str();
-        auto number_of_commits = std::stoi(match[3].str());
-        auto build = match[4].str();
-        if (pre_release.empty()) {
-            return fmt::format("{}+{}.{}", version_core, number_of_commits, build);
+        auto number_of_commits{ 0 };
+        if (match[4].matched) {
+            number_of_commits = std::stoi(match[4].str());
         }
-        return fmt::format("{}-{}+{}.{}", version_core, pre_release, number_of_commits, build);
+        if (auto build = match[5].str(); !build.empty() && number_of_commits > 0) {
+            if (pre_release.empty()) {
+                return fmt::format("{}+{}.{}", version_core, number_of_commits, build);
+            }
+            return fmt::format("{}-{}+{}.{}", version_core, pre_release, number_of_commits, build);
+        }
+        if (pre_release.empty()) {
+            return fmt::format("{}", version_core);
+        }
+        return fmt::format("{}-{}", version_core, pre_release);
     }
 
     return "";

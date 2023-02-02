@@ -226,4 +226,6 @@ TEST_CASE("unit: semantic version string", "[unit]")
     REQUIRE(couchbase::core::meta::parse_git_describe_output("unknown") == "");
     REQUIRE(couchbase::core::meta::parse_git_describe_output("invalid") == "");
     REQUIRE(couchbase::core::meta::parse_git_describe_output("1.0.0.0.0") == "");
+    REQUIRE(couchbase::core::meta::parse_git_describe_output("1.0.0-beta.4-0-gfbc9922") == "1.0.0-beta.4");
+    REQUIRE(couchbase::core::meta::parse_git_describe_output("1.0.0-beta.4") == "1.0.0-beta.4");
 }
