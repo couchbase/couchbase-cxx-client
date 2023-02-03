@@ -15,6 +15,7 @@
  */
 #pragma once
 
+#include <fmt/format.h>
 #include <string>
 #include <vector>
 
@@ -56,5 +57,29 @@ struct client_record_details {
         return os;
     }
 };
-
 } // namespace couchbase::core::transactions
+template<>
+struct fmt::formatter<couchbase::core::transactions::client_record_details> {
+  public:
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(const couchbase::core::transactions::client_record_details& r, FormatContext& ctx) const
+    {
+        return format_to(ctx.out(),
+                         "(result:{{ client_uuid:: {}, active_clients: {}, index_of_this_client: {}, existing_clients: {}, "
+                         "expired_clients: {}, override_enabled: {}, override_expires: {}, cas_now_nanos: {} }}",
+                         r.client_uuid,
+                         r.num_active_clients,
+                         r.index_of_this_client,
+                         r.num_existing_clients,
+                         r.num_expired_clients,
+                         r.override_enabled,
+                         r.override_expires,
+                         r.cas_now_nanos);
+    }
+};

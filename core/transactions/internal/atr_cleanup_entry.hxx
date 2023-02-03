@@ -21,6 +21,7 @@
 #include "logging.hxx"
 
 #include <chrono>
+#include <fmt/format.h>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -65,19 +66,16 @@ class atr_cleanup_entry
 
     friend class compare_atr_entries;
 
-    void check_atr_and_cleanup(std::shared_ptr<spdlog::logger> logger, transactions_cleanup_attempt* result);
-    void cleanup_docs(std::shared_ptr<spdlog::logger> logger, durability_level dl);
-    void cleanup_entry(std::shared_ptr<spdlog::logger> logger, durability_level dl);
-    void commit_docs(std::shared_ptr<spdlog::logger> logger, std::optional<std::vector<doc_record>> docs, durability_level dl);
-    void remove_docs(std::shared_ptr<spdlog::logger> logger, std::optional<std::vector<doc_record>> docs, durability_level dl);
-    void remove_docs_staged_for_removal(std::shared_ptr<spdlog::logger> logger,
-                                        std::optional<std::vector<doc_record>> docs,
-                                        durability_level dl);
-    void remove_txn_links(std::shared_ptr<spdlog::logger> logger, std::optional<std::vector<doc_record>> docs, durability_level dl);
-    void do_per_doc(std::shared_ptr<spdlog::logger> logger,
-                    std::vector<doc_record> docs,
+    void check_atr_and_cleanup(transactions_cleanup_attempt* result);
+    void cleanup_docs(durability_level dl);
+    void cleanup_entry(durability_level dl);
+    void commit_docs(std::optional<std::vector<doc_record>> docs, durability_level dl);
+    void remove_docs(std::optional<std::vector<doc_record>> docs, durability_level dl);
+    void remove_docs_staged_for_removal(std::optional<std::vector<doc_record>> docs, durability_level dl);
+    void remove_txn_links(std::optional<std::vector<doc_record>> docs, durability_level dl);
+    void do_per_doc(std::vector<doc_record> docs,
                     bool require_crc_to_match,
-                    const std::function<void(std::shared_ptr<spdlog::logger>, transaction_get_result&, bool)>& call);
+                    const std::function<void(transaction_get_result&, bool)>& call);
 
   public:
     explicit atr_cleanup_entry(attempt_context& ctx);
@@ -88,8 +86,27 @@ class atr_cleanup_entry
 
     explicit atr_cleanup_entry(const core::document_id& atr_id, const std::string& attempt_id, const transactions_cleanup& cleanup);
 
-    void clean(std::shared_ptr<spdlog::logger> logger, transactions_cleanup_attempt* result = nullptr);
+    void clean(transactions_cleanup_attempt* result = nullptr);
     bool ready() const;
+    couchbase::core::document_id atr_id() const
+    {
+        return atr_id_;
+    }
+
+    std::string attempt_id() const
+    {
+        return attempt_id_;
+    }
+
+    bool check_if_expired() const
+    {
+        return check_if_expired_;
+    }
+
+    std::chrono::time_point<std::chrono::steady_clock> min_start_time() const
+    {
+        return min_start_time_;
+    };
 
     template<typename OStream>
     friend OStream& operator<<(OStream& os, const atr_cleanup_entry& e)
@@ -124,3 +141,24 @@ class atr_cleanup_queue
 };
 
 } // namespace couchbase::core::transactions
+
+template<>
+struct fmt::formatter<couchbase::core::transactions::atr_cleanup_entry> {
+  public:
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(const couchbase::core::transactions::atr_cleanup_entry& e, FormatContext& ctx) const
+    {
+        return format_to(ctx.out(),
+                         "(atr_cleanup_entry{{ atr_id: {}, attempt_id: {}, check_if_expired: {}, min_start_time: {} }}",
+                         e.atr_id(),
+                         e.attempt_id(),
+                         e.check_if_expired(),
+                         std::chrono::duration_cast<std::chrono::milliseconds>(e.min_start_time().time_since_epoch()).count());
+    }
+};

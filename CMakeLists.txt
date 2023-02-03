@@ -325,7 +325,6 @@ set(couchbase_cxx_client_FILES
         core/transactions/attempt_context_impl.cxx
         core/transactions/binary.cxx
         core/transactions/exceptions.cxx
-        core/transactions/logging.cxx
         core/transactions/result.cxx
         core/transactions/staged_mutation.cxx
         core/transactions/utils.cxx

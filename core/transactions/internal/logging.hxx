@@ -15,26 +15,71 @@
  */
 #pragma once
 
-#include <spdlog/fmt/ostr.h>
-#include <spdlog/logger.h>
-
-#define TXN_LOG "transactions"
-#define ATTEMPT_CLEANUP_LOG "attempt_cleanup"
-#define LOST_ATTEMPT_CLEANUP_LOG "lost_attempt_cleanup"
+#include <core/logger/logger.hxx>
 
 namespace couchbase::core::transactions
 {
-static const std::string attempt_format_string("[{}/{}]:");
+static const std::string txn_format_string("[transactions]");
+static const std::string attempt_format_string("[transactions]({}/{}):");
+static const std::string lost_attempt_format_string("[lost_attempt_cleanup]");
+static const std::string attempt_cleanup_format_string("[attempt_cleanup]");
 
-std::shared_ptr<spdlog::logger>
-init_txn_log();
-std::shared_ptr<spdlog::logger>
-init_attempt_cleanup_log();
-std::shared_ptr<spdlog::logger>
-init_lost_attempts_log();
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
 
-static std::shared_ptr<spdlog::logger> txn_log = init_txn_log();
-static std::shared_ptr<spdlog::logger> attempt_cleanup_log = init_attempt_cleanup_log();
-static std::shared_ptr<spdlog::logger> lost_attempts_cleanup_log = init_lost_attempts_log();
+#define CB_TXN_LOG(level, ...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, level, __VA_ARGS__)
+#define CB_ATTEMPT_CTX_LOG(level, ctx, msg, ...)                                                                                           \
+    COUCHBASE_LOG(                                                                                                                         \
+      __FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, level, attempt_format_string + msg, ctx->transaction_id(), ctx->id(), ##__VA_ARGS__)
+#define CB_ATTEMPT_CTX_LOG_TRACE(...) CB_ATTEMPT_CTX_LOG(couchbase::core::logger::level::trace, __VA_ARGS__)
+#define CB_ATTEMPT_CTX_LOG_DEBUG(...) CB_ATTEMPT_CTX_LOG(couchbase::core::logger::level::debug, __VA_ARGS__)
+#define CB_ATTEMPT_CTX_LOG_INFO(...) CB_ATTEMPT_CTX_LOG(couchbase::core::logger::level::info, __VA_ARGS__)
+#define CB_ATTEMPT_CTX_LOG_WARNING(...) CB_ATTEMPT_CTX_LOG(couchbase::core::logger::level::warn, __VA_ARGS__)
+#define CB_ATTEMPT_CTX_LOG_ERROR(...) CB_ATTEMPT_CTX_LOG(couchbase::core::logger::level::err, __VA_ARGS__)
+#define CB_ATTEMPT_CTX_LOG_CRITICAL(...) CB_ATTEMPT_CTX_LOG(couchbase::core::logger::level::critical, __VA_ARGS__)
+
+#define CB_TXN_LOG_WITH_PREFIX(level, prefix, msg, ...) CB_TXN_LOG(level, prefix + msg, ##__VA_ARGS__)
+
+#define CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE(...)                                                                                             \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::trace, couchbase::core::transactions::lost_attempt_format_string, __VA_ARGS__)
+#define CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG(...)                                                                                             \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::debug, couchbase::core::transactions::lost_attempt_format_string, __VA_ARGS__)
+#define CB_LOST_ATTEMPT_CLEANUP_LOG_INFO(...)                                                                                              \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::info, couchbase::core::transactions::lost_attempt_format_string, __VA_ARGS__)
+#define CB_LOST_ATTEMPT_CLEANUP_LOG_WARNING(...)                                                                                           \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::warn, couchbase::core::transactions::lost_attempt_format_string, __VA_ARGS__)
+#define CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR(...)                                                                                             \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::err, couchbase::core::transactions::lost_attempt_format_string, __VA_ARGS__)
+#define CB_LOST_ATTEMPT_CLEANUP_LOG_CRITICAL(...)                                                                                          \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::critical, couchbase::core::transactions::lost_attempt_format_string, __VA_ARGS__)
+
+#define CB_ATTEMPT_CLEANUP_LOG_TRACE(...)                                                                                                  \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::trace, couchbase::core::transactions::attempt_cleanup_format_string, __VA_ARGS__)
+#define CB_ATTEMPT_CLEANUP_LOG_DEBUG(...)                                                                                                  \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::debug, couchbase::core::transactions::attempt_cleanup_format_string, __VA_ARGS__)
+#define CB_ATTEMPT_CLEANUP_LOG_INFO(...)                                                                                                   \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::info, couchbase::core::transactions::attempt_cleanup_format_string, __VA_ARGS__)
+#define CB_ATTEMPT_CLEANUP_LOG_WARNING(...)                                                                                                \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::warn, couchbase::core::transactions::attempt_cleanup_format_string, __VA_ARGS__)
+#define CB_ATTEMPT_CLEANUP_LOG_ERROR(...)                                                                                                  \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::err, couchbase::core::transactions::attempt_cleanup_format_string, __VA_ARGS__)
+#define CB_ATTEMPT_CLEANUP_LOG_CRITICAL(...)                                                                                               \
+    CB_TXN_LOG_WITH_PREFIX(                                                                                                                \
+      couchbase::core::logger::level::critical, couchbase::core::transactions::attempt_cleanup_format_string, __VA_ARGS__)
+
+#define CB_TXN_LOG_TRACE(...)                                                                                                              \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::trace, couchbase::core::transactions::txn_format_string, __VA_ARGS__)
+#define CB_TXN_LOG_DEBUG(...)                                                                                                              \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::debug, couchbase::core::transactions::txn_format_string, __VA_ARGS__)
+#define CB_TXN_LOG_INFO(...)                                                                                                               \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::info, couchbase::core::transactions::txn_format_string, __VA_ARGS__)
+#define CB_TXN_LOG_WARNING(...)                                                                                                            \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::warn, couchbase::core::transactions::txn_format_string, __VA_ARGS__)
+#define CB_TXN_LOG_ERROR(...)                                                                                                              \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::err, couchbase::core::transactions::txn_format_string, __VA_ARGS__)
+#define CB_TXN_LOG_CRITICAL(...)                                                                                                           \
+    CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::critical, couchbase::core::transactions::txn_format_string, __VA_ARGS__)
+
+#pragma clang diagnostic pop
 
 } // namespace couchbase::core::transactions

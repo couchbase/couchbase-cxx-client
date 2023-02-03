@@ -65,13 +65,14 @@ transaction_context::has_expired_client_side()
     auto expired_millis = std::chrono::duration_cast<std::chrono::milliseconds>(expired_nanos);
     bool is_expired = expired_nanos > config_.expiration_time;
     if (is_expired) {
-        txn_log->info("has expired client side (now={}ns, start={}ns, deferred_elapsed={}ns, expired={}ns ({}ms), config={}ms)",
-                      now.time_since_epoch().count(),
-                      start_time_client_.time_since_epoch().count(),
-                      deferred_elapsed_.count(),
-                      expired_nanos.count(),
-                      expired_millis.count(),
-                      std::chrono::duration_cast<std::chrono::milliseconds>(config_.expiration_time).count());
+        CB_ATTEMPT_CTX_LOG_INFO(current_attempt_context_,
+                                "has expired client side (now={}ns, start={}ns, deferred_elapsed={}ns, expired={}ns ({}ms), config={}ms)",
+                                now.time_since_epoch().count(),
+                                start_time_client_.time_since_epoch().count(),
+                                deferred_elapsed_.count(),
+                                expired_nanos.count(),
+                                expired_millis.count(),
+                                std::chrono::duration_cast<std::chrono::milliseconds>(config_.expiration_time).count());
     }
     return is_expired;
 }
@@ -85,7 +86,8 @@ transaction_context::retry_delay()
     // stack, so using 50 in hopes that makes jenkins happy till we do this better.
     constexpr auto arbitrary_factor = 50;
     auto delay = config_.expiration_time / arbitrary_factor;
-    txn_log->trace("about to sleep for {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(delay).count());
+    CB_ATTEMPT_CTX_LOG_TRACE(
+      current_attempt_context_, "about to sleep for {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(delay).count());
     std::this_thread::sleep_for(delay);
 }
 
@@ -98,7 +100,8 @@ transaction_context::new_attempt_context(async_attempt_context::VoidCallback&& c
         try {
             (*delay_)();
             current_attempt_context_ = std::make_shared<attempt_context_impl>(*this);
-            txn_log->info("starting attempt {}/{}/{}/", num_attempts(), transaction_id(), current_attempt_context_->id());
+            CB_ATTEMPT_CTX_LOG_INFO(
+              current_attempt_context_, "starting attempt {}/{}/{}/", num_attempts(), transaction_id(), current_attempt_context_->id());
             cb(nullptr);
         } catch (...) {
             cb(std::current_exception());
@@ -206,14 +209,17 @@ transaction_context::handle_error(std::exception_ptr err, txn_complete_callback&
             throw transaction_operation_failed(FAIL_OTHER, e.what()).cause(e.cause());
         }
     } catch (const transaction_operation_failed& er) {
-        txn_log->error("got transaction_operation_failed {}", er.what());
+        CB_ATTEMPT_CTX_LOG_ERROR(current_attempt_context_, "got transaction_operation_failed {}", er.what());
         if (er.should_rollback()) {
-            txn_log->trace("got rollback-able exception, rolling back");
+            CB_ATTEMPT_CTX_LOG_TRACE(current_attempt_context_, "got rollback-able exception, rolling back");
             try {
                 current_attempt_context_->rollback();
             } catch (const std::exception& er_rollback) {
                 cleanup().add_attempt(*current_attempt_context_);
-                txn_log->trace("got error \"{}\" while auto rolling back, throwing original error", er_rollback.what(), er.what());
+                CB_ATTEMPT_CTX_LOG_TRACE(current_attempt_context_,
+                                         "got error \"{}\" while auto rolling back, throwing original error",
+                                         er_rollback.what(),
+                                         er.what());
                 auto final = er.get_final_exception(*this);
                 // if you get here, we didn't throw, yet we had an error.  Fall through in
                 // this case.  Note the current logic is such that rollback will not have a
@@ -222,7 +228,7 @@ transaction_context::handle_error(std::exception_ptr err, txn_complete_callback&
                 return callback(final, std::nullopt);
             }
             if (er.should_retry() && has_expired_client_side()) {
-                txn_log->trace("auto rollback succeeded, however we are expired so no retry");
+                CB_ATTEMPT_CTX_LOG_TRACE(current_attempt_context_, "auto rollback succeeded, however we are expired so no retry");
 
                 return callback(
                   transaction_operation_failed(FAIL_EXPIRY, "expired in auto rollback").no_rollback().expired().get_final_exception(*this),
@@ -230,7 +236,7 @@ transaction_context::handle_error(std::exception_ptr err, txn_complete_callback&
             }
         }
         if (er.should_retry()) {
-            txn_log->trace("got retryable exception, retrying");
+            CB_ATTEMPT_CTX_LOG_TRACE(current_attempt_context_, "got retryable exception, retrying");
             cleanup().add_attempt(*current_attempt_context_);
             return callback(std::nullopt, std::nullopt);
         }
@@ -244,11 +250,11 @@ transaction_context::handle_error(std::exception_ptr err, txn_complete_callback&
         }
         return callback(final, res);
     } catch (const std::exception& ex) {
-        txn_log->error("got runtime error \"{}\"", ex.what());
+        CB_ATTEMPT_CTX_LOG_ERROR(current_attempt_context_, "got runtime error \"{}\"", ex.what());
         try {
             current_attempt_context_->rollback();
         } catch (...) {
-            txn_log->error("got error rolling back \"{}\"", ex.what());
+            CB_ATTEMPT_CTX_LOG_ERROR(current_attempt_context_, "got error rolling back \"{}\"", ex.what());
         }
         cleanup().add_attempt(*current_attempt_context_);
         // the assumption here is this must come from the logic, not
@@ -256,11 +262,11 @@ transaction_context::handle_error(std::exception_ptr err, txn_complete_callback&
         auto op_failed = transaction_operation_failed(FAIL_OTHER, ex.what());
         return callback(op_failed.get_final_exception(*this), std::nullopt);
     } catch (...) {
-        txn_log->error("got unexpected error, rolling back");
+        CB_ATTEMPT_CTX_LOG_ERROR(current_attempt_context_, "got unexpected error, rolling back");
         try {
             current_attempt_context_->rollback();
         } catch (...) {
-            txn_log->error("got error rolling back unexpected error");
+            CB_ATTEMPT_CTX_LOG_ERROR(current_attempt_context_, "got error rolling back unexpected error");
         }
         cleanup().add_attempt(*current_attempt_context_);
         // the assumption here is this must come from the logic, not

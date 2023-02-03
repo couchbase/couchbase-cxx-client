@@ -15,13 +15,13 @@
  */
 
 #pragma once
-#include <couchbase/transactions/transaction_get_result.hxx>
-
 #include "core/document_id.hxx"
 #include "core/operations.hxx"
 #include "core/utils/json.hxx"
 #include "document_metadata.hxx"
 #include "transaction_links.hxx"
+#include <couchbase/fmt/cas.hxx>
+#include <couchbase/transactions/transaction_get_result.hxx>
 
 #include <ostream>
 #include <utility>
@@ -227,3 +227,19 @@ class transaction_get_result : public couchbase::transactions::transaction_get_r
     }
 };
 } // namespace couchbase::core::transactions
+
+template<>
+struct fmt::formatter<couchbase::core::transactions::transaction_get_result> {
+  public:
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    constexpr auto format(const couchbase::core::transactions::transaction_get_result& r, FormatContext& ctx) const
+    {
+        return format_to(ctx.out(), "result:{{ id: {}, cas: {}, links: }}", r.id(), r.cas(), r.links());
+    }
+};

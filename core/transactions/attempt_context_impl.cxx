@@ -57,9 +57,10 @@ attempt_context_impl::attempt_context_impl(transaction_context& transaction_ctx)
 {
     // put a new transaction_attempt in the context...
     overall_.add_attempt();
-    trace("added new attempt, state {}, expiration in {}ms",
-          attempt_state_name(state()),
-          std::chrono::duration_cast<std::chrono::milliseconds>(overall_.remaining()).count());
+    CB_ATTEMPT_CTX_LOG_TRACE(this,
+                             "added new attempt, state {}, expiration in {}ms",
+                             attempt_state_name(state()),
+                             std::chrono::duration_cast<std::chrono::milliseconds>(overall_.remaining()).count());
 }
 
 attempt_context_impl::~attempt_context_impl() = default;
@@ -73,11 +74,11 @@ attempt_context_impl::check_and_handle_blocking_transactions(const transaction_g
         // Check not just writing the same doc twice in the same transaction
         // NOTE: we check the transaction rather than attempt id. This is to handle [RETRY-ERR-AMBIG-REPLACE].
         if (doc.links().staged_transaction_id().value() == transaction_id()) {
-            debug("doc {} has been written by this transaction, ok to continue", doc.id());
+            CB_ATTEMPT_CTX_LOG_DEBUG(this, "doc {} has been written by this transaction, ok to continue", doc.id());
             return cb(std::nullopt);
         }
         if (doc.links().atr_id() && doc.links().atr_bucket_name() && doc.links().staged_attempt_id()) {
-            debug("doc {} in another txn, checking atr...", doc.id());
+            CB_ATTEMPT_CTX_LOG_DEBUG(this, "doc {} in another txn, checking atr...", doc.id());
             auto err = forward_compat::check(stage, doc.links().forward_compat());
             if (err) {
                 return cb(err);
@@ -85,10 +86,11 @@ attempt_context_impl::check_and_handle_blocking_transactions(const transaction_g
             exp_delay delay(std::chrono::milliseconds(50), std::chrono::milliseconds(500), std::chrono::seconds(1));
             return check_atr_entry_for_blocking_document(doc, delay, std::move(cb));
         }
-        debug("doc {} is in another transaction {}, but doesn't have enough info to check the atr. "
-              "probably a bug, proceeding to overwrite",
-              doc.id(),
-              *doc.links().staged_attempt_id());
+        CB_ATTEMPT_CTX_LOG_DEBUG(this,
+                                 "doc {} is in another transaction {}, but doesn't have enough info to check the atr. "
+                                 "probably a bug, proceeding to overwrite",
+                                 doc.id(),
+                                 *doc.links().staged_attempt_id());
     }
     return cb(std::nullopt);
 }
@@ -300,11 +302,11 @@ attempt_context_impl::replace_raw(const transaction_get_result& document, const 
                                                    transaction_operation_failed(FAIL_DOC_NOT_FOUND, "can't replace empty doc")
                                                      .cause(external_exception::DOCUMENT_NOT_FOUND_EXCEPTION));
                 }
-                trace("replacing {} with {}", document, to_string(content));
+                CB_ATTEMPT_CTX_LOG_TRACE(this, "replacing {} with {}", document, to_string(content));
                 check_if_done(cb);
                 staged_mutation* existing_sm = staged_mutations_->find_any(document.id());
                 if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::REMOVE) {
-                    debug("found existing REMOVE of {} while replacing", document);
+                    CB_ATTEMPT_CTX_LOG_DEBUG(this, "found existing REMOVE of {} while replacing", document);
                     return op_completed_with_error(
                       std::move(cb),
                       transaction_operation_failed(FAIL_DOC_NOT_FOUND,
@@ -334,7 +336,7 @@ attempt_context_impl::replace_raw(const transaction_get_result& document, const 
                                 return op_completed_with_error(std::move(cb), *e2);
                             }
                             if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::INSERT) {
-                                debug("found existing INSERT of {} while replacing", document);
+                                CB_ATTEMPT_CTX_LOG_DEBUG(this, "found existing INSERT of {} while replacing", document);
                                 exp_delay delay(
                                   std::chrono::milliseconds(5), std::chrono::milliseconds(300), overall_.config().expiration_time);
                                 create_staged_insert(document.id(), content, existing_sm->doc().cas().value(), delay, std::move(cb));
@@ -383,7 +385,8 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
     if (ec) {
         return error_handler(*ec, "before_staged_replace hook raised error", std::move(cb));
     }
-    trace("about to replace doc {} with cas {} in txn {}", document.id(), document.cas().value(), overall_.transaction_id());
+    CB_ATTEMPT_CTX_LOG_TRACE(
+      this, "about to replace doc {} with cas {} in txn {}", document.id(), document.cas().value(), overall_.transaction_id());
     overall_.cluster_ref()->execute(
       req,
       [this, document = std::move(document), content, cb = std::move(cb), error_handler = std::move(error_handler)](
@@ -398,7 +401,7 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
           transaction_get_result out = document;
           out.cas(resp.cas.value());
           out.content(content);
-          trace("replace staged content, result {}", out);
+          CB_ATTEMPT_CTX_LOG_TRACE(this, "replace staged content, result {}", out);
           staged_mutations_->add(staged_mutation(out, content, staged_mutation_type::REPLACE));
           return op_completed_with_callback(std::move(cb), std::optional<transaction_get_result>(out));
       });
@@ -449,7 +452,7 @@ attempt_context_impl::insert_raw(const core::document_id& id, const std::vector<
                 staged_mutation* existing_sm = staged_mutations_->find_any(id);
                 if ((existing_sm != nullptr) &&
                     (existing_sm->type() == staged_mutation_type::INSERT || existing_sm->type() == staged_mutation_type::REPLACE)) {
-                    debug("found existing insert or replace of {} while inserting", id);
+                    CB_ATTEMPT_CTX_LOG_DEBUG(this, "found existing insert or replace of {} while inserting", id);
                     return op_completed_with_error(
                       std::move(cb),
                       transaction_operation_failed(FAIL_DOC_ALREADY_EXISTS, "found existing insert or replace of same document"));
@@ -464,7 +467,7 @@ attempt_context_impl::insert_raw(const core::document_id& id, const std::vector<
                           return op_completed_with_error(std::move(cb), *err);
                       }
                       if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::REMOVE) {
-                          debug("found existing remove of {} while inserting", id);
+                          CB_ATTEMPT_CTX_LOG_DEBUG(this, "found existing remove of {} while inserting", id);
                           return create_staged_replace(existing_sm->doc(), content, std::move(cb));
                       }
                       uint64_t cas = 0;
@@ -485,7 +488,7 @@ attempt_context_impl::select_atr_if_needed_unlocked(const core::document_id id,
     try {
         std::unique_lock<std::mutex> lock(mutex_);
         if (atr_id_) {
-            trace("atr exists, moving on");
+            CB_ATTEMPT_CTX_LOG_TRACE(this, "atr exists, moving on");
             return cb(std::nullopt);
         }
         std::size_t vbucket_id = 0;
@@ -500,11 +503,12 @@ attempt_context_impl::select_atr_if_needed_unlocked(const core::document_id id,
         overall_.atr_collection(collection_spec_from_id(id));
         overall_.atr_id(atr_id_->key());
         state(attempt_state::NOT_STARTED);
-        trace(R"(first mutated doc in transaction is "{}" on vbucket {}, so using atr "{}")", id, vbucket_id, atr_id_.value());
+        CB_ATTEMPT_CTX_LOG_TRACE(
+          this, R"(first mutated doc in transaction is "{}" on vbucket {}, so using atr "{}")", id, vbucket_id, atr_id_.value());
         overall_.cleanup().add_collection({ atr_id_->bucket(), atr_id_->scope(), atr_id_->collection() });
         set_atr_pending_locked(id, std::move(lock), std::move(cb));
     } catch (const std::exception& e) {
-        error("unexpected error \"{}\" during select atr if needed", e.what());
+        CB_ATTEMPT_CTX_LOG_ERROR(this, "unexpected error \"{}\" during select atr if needed", e.what());
     }
 }
 template<typename Handler, typename Delay>
@@ -539,15 +543,17 @@ attempt_context_impl::check_atr_entry_for_blocking_document(const transaction_ge
                           switch (it->state()) {
                               case attempt_state::COMPLETED:
                               case attempt_state::ROLLED_BACK:
-                                  debug("existing atr entry can be ignored due to state {}", attempt_state_name(it->state()));
+                                  CB_ATTEMPT_CTX_LOG_DEBUG(
+                                    this, "existing atr entry can be ignored due to state {}", attempt_state_name(it->state()));
                                   return cb(std::nullopt);
                               default:
-                                  debug("existing atr entry found in state {}, retrying", attempt_state_name(it->state()));
+                                  CB_ATTEMPT_CTX_LOG_DEBUG(
+                                    this, "existing atr entry found in state {}, retrying", attempt_state_name(it->state()));
                           }
                           return check_atr_entry_for_blocking_document(doc, delay, std::move(cb));
                       }
                   }
-                  debug("no blocking atr entry");
+                  CB_ATTEMPT_CTX_LOG_DEBUG(this, "no blocking atr entry");
                   return cb(std::nullopt);
               }
               // if we are here, there is still a write-write conflict
@@ -592,10 +598,10 @@ attempt_context_impl::remove(const transaction_get_result& document, VoidCallbac
             if (check_expiry_pre_commit(STAGE_REMOVE, document.id().key())) {
                 return error_handler(FAIL_EXPIRY, "transaction expired", std::move(cb));
             }
-            debug("removing {}", document);
+            CB_ATTEMPT_CTX_LOG_DEBUG(this, "removing {}", document);
             if (existing_sm != nullptr) {
                 if (existing_sm->type() == staged_mutation_type::REMOVE) {
-                    debug("found existing REMOVE of {} while removing", document);
+                    CB_ATTEMPT_CTX_LOG_DEBUG(this, "found existing REMOVE of {} while removing", document);
                     return op_completed_with_error(
                       std::move(cb),
                       transaction_operation_failed(FAIL_DOC_NOT_FOUND,
@@ -627,7 +633,7 @@ attempt_context_impl::remove(const transaction_get_result& document, VoidCallbac
                         if (auto ec = hooks_.before_staged_remove(this, document.id().key())) {
                             return error_handler(*ec, "before_staged_remove hook raised error", std::move(cb));
                         }
-                        trace("about to remove doc {} with cas {}", document.id(), document.cas().value());
+                        CB_ATTEMPT_CTX_LOG_TRACE(this, "about to remove doc {} with cas {}", document.id(), document.cas().value());
                         auto req = create_staging_request(document.id(), &document, "remove");
                         req.cas = document.cas();
                         req.access_deleted = document.links().is_deleted();
@@ -640,7 +646,8 @@ attempt_context_impl::remove(const transaction_get_result& document, VoidCallbac
                                   ec = hooks_.after_staged_remove_complete(this, document.id().key());
                               }
                               if (!ec) {
-                                  trace("removed doc {} CAS={}, rc={}", document.id(), resp.cas.value(), resp.ctx.ec().message());
+                                  CB_ATTEMPT_CTX_LOG_TRACE(
+                                    this, "removed doc {} CAS={}, rc={}", document.id(), resp.cas.value(), resp.ctx.ec().message());
                                   // TODO: this copy...  can we do better?
                                   transaction_get_result new_res = document;
                                   new_res.cas(resp.cas.value());
@@ -672,7 +679,7 @@ attempt_context_impl::remove_staged_insert(const core::document_id& id, VoidCall
                 return op_completed_with_error(std::move(cb), err.retry());
         }
     };
-    debug("removing staged insert {}", id);
+    CB_ATTEMPT_CTX_LOG_DEBUG(this, "removing staged insert {}", id);
 
     if (auto err = hooks_.before_remove_staged_insert(this, id.key()); err) {
         return error_handler(*err, "before_remove_staged_insert hook returned error", std::move(cb));
@@ -701,7 +708,7 @@ attempt_context_impl::remove_staged_insert(const core::document_id& id, VoidCall
                                             op_completed_with_callback(std::move(cb));
                                             return;
                                         }
-                                        debug("remove_staged_insert got error {}", *ec);
+                                        CB_ATTEMPT_CTX_LOG_DEBUG(this, "remove_staged_insert got error {}", *ec);
                                         return error_handler(*ec, resp.ctx.ec().message(), std::move(cb));
                                     });
 }
@@ -784,7 +791,7 @@ attempt_context_impl::query_begin_work(std::function<void(std::exception_ptr)>&&
     }
     txdata["mutations"] = mutations;
     std::vector<core::json_string> params;
-    trace("begin_work using txdata: {}", core::utils::json::generate(txdata));
+    CB_ATTEMPT_CTX_LOG_TRACE(this, "begin_work using txdata: {}", core::utils::json::generate(txdata));
     wrap_query(BEGIN_WORK,
                opts,
                params,
@@ -793,10 +800,10 @@ attempt_context_impl::query_begin_work(std::function<void(std::exception_ptr)>&&
                false,
                [this, cb = std::move(cb)](std::exception_ptr err, core::operations::query_response resp) mutable {
                    if (resp.served_by_node.empty()) {
-                       trace("begin_work didn't reach a query node, resetting mode to kv");
+                       CB_ATTEMPT_CTX_LOG_TRACE(this, "begin_work didn't reach a query node, resetting mode to kv");
                        op_list_.reset_query_mode();
                    } else {
-                       trace("begin_work setting query node to {}", resp.served_by_node);
+                       CB_ATTEMPT_CTX_LOG_TRACE(this, "begin_work setting query node to {}", resp.served_by_node);
                        op_list_.set_query_node(resp.served_by_node);
                    }
                    // we check for expiry _after_ this call, so we always set the query node if we can.
@@ -841,7 +848,8 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
     }
     auto tx_resp = couchbase::core::impl::build_transaction_query_result(resp);
     // TODO: look at ambiguous and unambiguous timeout errors vs the codes, etc...
-    trace("handling query error {}, {} errors in meta_data", resp.ctx.ec.message(), resp.meta.errors ? "has" : "no");
+    CB_ATTEMPT_CTX_LOG_TRACE(
+      this, "handling query error {}, {} errors in meta_data", resp.ctx.ec.message(), resp.meta.errors ? "has" : "no");
     if (resp.ctx.ec == couchbase::errc::common::ambiguous_timeout || resp.ctx.ec == couchbase::errc::common::unambiguous_timeout) {
         return std::make_exception_ptr(query_attempt_expired(tx_resp.ctx()));
     }
@@ -860,7 +868,7 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
 
     // just chose first one, to start with...
     auto chosen_error = choose_error(errors);
-    trace("chosen query error: {}", jsonify(chosen_error));
+    CB_ATTEMPT_CTX_LOG_TRACE(this, "chosen query error: {}", jsonify(chosen_error));
     auto code = chosen_error.at("code").as<uint64_t>();
 
     // we have a fixed strategy for these errors...
@@ -907,7 +915,7 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
             } else if (raise == std::string("failed_post_commit")) {
                 err.failed_post_commit();
             } else if (raise != std::string("failed")) {
-                trace("unknown value in raise field: {}, raising failed", raise);
+                CB_ATTEMPT_CTX_LOG_TRACE(this, "unknown value in raise field: {}, raising failed", raise);
             }
             return std::make_exception_ptr(err);
         }
@@ -923,7 +931,7 @@ attempt_context_impl::do_query(const std::string& statement,
 {
     std::vector<core::json_string> params;
     tao::json::value txdata;
-    trace("do_query called with statement {}", statement);
+    CB_ATTEMPT_CTX_LOG_TRACE(this, "do_query called with statement {}", statement);
     wrap_query(statement,
                opts,
                params,
@@ -1003,9 +1011,9 @@ attempt_context_impl::wrap_query(const std::string& statement,
         }
         return cb(std::make_exception_ptr(transaction_operation_failed(*ec, "before_query hook raised error")), {});
     }
-    trace("http request: {}", dump_request(req));
+    CB_ATTEMPT_CTX_LOG_TRACE(this, "http request: {}", dump_request(req));
     overall_.cluster_ref()->execute(req, [this, cb = std::move(cb)](core::operations::query_response resp) mutable {
-        trace("response: {} status: {}", resp.ctx.http_body, resp.meta.status);
+        CB_ATTEMPT_CTX_LOG_TRACE(this, "response: {} status: {}", resp.ctx.http_body, resp.meta.status);
         if (auto ec = hooks_.after_query(this, resp.ctx.statement)) {
             auto err = std::make_exception_ptr(transaction_operation_failed(*ec, "after_query hook raised error"));
             return cb(err, {});
@@ -1121,7 +1129,7 @@ attempt_context_impl::get_with_query(const core::document_id& id, bool optional,
                                           return op_completed_with_error(
                                             std::move(cb), transaction_operation_failed(FAIL_DOC_NOT_FOUND, "document not found"));
                                       }
-                                      trace("get_with_query got: {}", resp.rows.front());
+                                      CB_ATTEMPT_CTX_LOG_TRACE(this, "get_with_query got: {}", resp.rows.front());
                                       transaction_get_result doc(id, core::utils::json::parse(resp.rows.front()));
                                       return op_completed_with_callback(std::move(cb), std::optional<transaction_get_result>(doc));
                                   } catch (const std::exception& e) {
@@ -1175,7 +1183,7 @@ attempt_context_impl::insert_raw_with_query(const core::document_id& id, const s
                               }
                               // make a transaction_get_result from the row...
                               try {
-                                  trace("insert_raw_with_query got: {}", resp.rows.front());
+                                  CB_ATTEMPT_CTX_LOG_TRACE(this, "insert_raw_with_query got: {}", resp.rows.front());
                                   transaction_get_result doc(id, core::utils::json::parse(resp.rows.front()));
                                   return op_completed_with_callback(std::move(cb), std::optional<transaction_get_result>(doc));
                               } catch (const std::exception& e) {
@@ -1218,7 +1226,7 @@ attempt_context_impl::replace_raw_with_query(const transaction_get_result& docum
               }
               // make a transaction_get_result from the row...
               try {
-                  trace("replace_raw_with_query got: {}", resp.rows.front());
+                  CB_ATTEMPT_CTX_LOG_TRACE(this, "replace_raw_with_query got: {}", resp.rows.front());
                   transaction_get_result doc(id, core::utils::json::parse(resp.rows.front()));
                   return op_completed_with_callback(std::move(cb), std::optional<transaction_get_result>(doc));
               } catch (const std::exception& e) {
@@ -1268,7 +1276,7 @@ void
 attempt_context_impl::commit_with_query(VoidCallback&& cb)
 {
     core::operations::query_request req;
-    trace("commit_with_query called");
+    CB_ATTEMPT_CTX_LOG_TRACE(this, "commit_with_query called");
     couchbase::transactions::transaction_query_options opts;
     std::vector<core::json_string> params;
     wrap_query(
@@ -1305,7 +1313,7 @@ void
 attempt_context_impl::rollback_with_query(VoidCallback&& cb)
 {
     core::operations::query_request req;
-    trace("rollback_with_query called");
+    CB_ATTEMPT_CTX_LOG_TRACE(this, "rollback_with_query called");
     couchbase::transactions::transaction_query_options opts;
     std::vector<core::json_string> params;
     wrap_query(ROLLBACK,
@@ -1322,13 +1330,14 @@ attempt_context_impl::rollback_with_query(VoidCallback&& cb)
                        } catch (const transaction_operation_failed&) {
                            return cb(std::current_exception());
                        } catch (const query_attempt_not_found& e) {
-                           debug("got query_attempt_not_found, assuming query was already rolled back successfullly: {}", e.what());
+                           CB_ATTEMPT_CTX_LOG_DEBUG(
+                             this, "got query_attempt_not_found, assuming query was already rolled back successfullly: {}", e.what());
                        } catch (const std::exception& e) {
                            return cb(std::make_exception_ptr(transaction_operation_failed(FAIL_OTHER, e.what()).no_rollback()));
                        }
                    }
                    state(attempt_state::ROLLED_BACK);
-                   trace("rollback successful");
+                   CB_ATTEMPT_CTX_LOG_TRACE(this, "rollback successful");
                    return cb({});
                });
 }
@@ -1358,7 +1367,7 @@ attempt_context_impl::atr_commit(bool ambiguity_resolution_mode)
             staged_mutations_->extract_to(prefix, req);
             auto barrier = std::make_shared<std::promise<result>>();
             auto f = barrier->get_future();
-            trace("updating atr {}, setting to {}", req.id, attempt_state_name(attempt_state::COMMITTED));
+            CB_ATTEMPT_CTX_LOG_TRACE(this, "updating atr {}, setting to {}", req.id, attempt_state_name(attempt_state::COMMITTED));
             overall_.cluster_ref()->execute(
               req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
             auto res = wrap_operation_future(f, false);
@@ -1381,7 +1390,7 @@ attempt_context_impl::atr_commit(bool ambiguity_resolution_mode)
                     throw out;
                 }
                 case FAIL_AMBIGUOUS:
-                    debug("atr_commit got FAIL_AMBIGUOUS, resolving ambiguity...");
+                    CB_ATTEMPT_CTX_LOG_DEBUG(this, "atr_commit got FAIL_AMBIGUOUS, resolving ambiguity...");
                     ambiguity_resolution_mode = true;
                     throw retry_operation(e.what());
                 case FAIL_TRANSIENT:
@@ -1427,11 +1436,12 @@ attempt_context_impl::atr_commit(bool ambiguity_resolution_mode)
                     throw out;
                 }
                 default: {
-                    error("failed to commit transaction {}, attempt {}, ambiguity_resolution_mode {}, with error {}",
-                          transaction_id(),
-                          id(),
-                          ambiguity_resolution_mode,
-                          e.what());
+                    CB_ATTEMPT_CTX_LOG_ERROR(this,
+                                             "failed to commit transaction {}, attempt {}, ambiguity_resolution_mode {}, with error {}",
+                                             transaction_id(),
+                                             id(),
+                                             ambiguity_resolution_mode,
+                                             e.what());
                     auto out = transaction_operation_failed(ec, e.what());
                     if (ambiguity_resolution_mode) {
                         out.no_rollback().ambiguous();
@@ -1464,7 +1474,7 @@ attempt_context_impl::atr_commit_ambiguity_resolution()
           req, [barrier](core::operations::lookup_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
         auto res = wrap_operation_future(f);
         auto atr_status_raw = res.values[0].content_as<std::string>();
-        debug("atr_commit_ambiguity_resolution read atr state {}", atr_status_raw);
+        CB_ATTEMPT_CTX_LOG_DEBUG(this, "atr_commit_ambiguity_resolution read atr state {}", atr_status_raw);
         auto atr_status = attempt_state_value(atr_status_raw);
         switch (atr_status) {
             case attempt_state::COMMITTED:
@@ -1510,7 +1520,7 @@ attempt_context_impl::atr_complete()
         if (!!(ec = error_if_expired_and_not_in_overtime(STAGE_ATR_COMPLETE, {}))) {
             throw client_error(*ec, "atr_complete threw error");
         }
-        debug("removing attempt {} from atr", atr_id_.value());
+        CB_ATTEMPT_CTX_LOG_DEBUG(this, "removing attempt {} from atr", atr_id_.value());
         std::string prefix(ATR_FIELD_ATTEMPTS + "." + id());
         core::operations::mutate_in_request req{ atr_id_.value() };
         req.specs =
@@ -1535,7 +1545,7 @@ attempt_context_impl::atr_complete()
             case FAIL_HARD:
                 throw transaction_operation_failed(ec, er.what()).no_rollback().failed_post_commit();
             default:
-                info("ignoring error in atr_complete {}", er.what());
+                CB_ATTEMPT_CTX_LOG_INFO(this, "ignoring error in atr_complete {}", er.what());
         }
     }
 }
@@ -1558,10 +1568,10 @@ attempt_context_impl::commit(VoidCallback&& cb)
 void
 attempt_context_impl::commit()
 {
-    debug("waiting on ops to finish...");
+    CB_ATTEMPT_CTX_LOG_DEBUG(this, "waiting on ops to finish...");
     op_list_.wait_and_block_ops();
     existing_error(false);
-    debug("commit {}", id());
+    CB_ATTEMPT_CTX_LOG_DEBUG(this, "commit {}", id());
     if (op_list_.get_mode().is_query()) {
         auto barrier = std::make_shared<std::promise<void>>();
         auto f = barrier->get_future();
@@ -1579,13 +1589,13 @@ attempt_context_impl::commit()
         }
         if (atr_id_ && !atr_id_->key().empty() && !is_done_) {
             retry_op_exp<void>([&]() { atr_commit(false); });
-            staged_mutations_->commit(*this);
+            staged_mutations_->commit(this);
             atr_complete();
             is_done_ = true;
         } else {
             // no mutation, no need to commit
             if (!is_done_) {
-                debug("calling commit on attempt that has got no mutations, skipping");
+                CB_ATTEMPT_CTX_LOG_DEBUG(this, "calling commit on attempt that has got no mutations, skipping");
                 is_done_ = true;
                 return;
             } // do not rollback or retry
@@ -1629,17 +1639,17 @@ attempt_context_impl::atr_abort()
         if (ec) {
             throw client_error(*ec, "after_atr_aborted hook threw error");
         }
-        debug("rollback completed atr abort phase");
+        CB_ATTEMPT_CTX_LOG_DEBUG(this, "rollback completed atr abort phase");
     } catch (const client_error& e) {
         auto ec = e.ec();
-        trace("atr_abort got {} {}", ec, e.what());
+        CB_ATTEMPT_CTX_LOG_TRACE(this, "atr_abort got {} {}", ec, e.what());
         if (expiry_overtime_mode_.load()) {
-            debug("atr_abort got error \"{}\" while in overtime mode", e.what());
+            CB_ATTEMPT_CTX_LOG_DEBUG(this, "atr_abort got error \"{}\" while in overtime mode", e.what());
             throw transaction_operation_failed(FAIL_EXPIRY, std::string("expired in atr_abort with {} ") + e.what())
               .no_rollback()
               .expired();
         }
-        debug("atr_abort got error {}", ec);
+        CB_ATTEMPT_CTX_LOG_DEBUG(this, "atr_abort got error {}", ec);
         switch (ec) {
             case FAIL_EXPIRY:
                 expiry_overtime_mode_ = true;
@@ -1692,28 +1702,28 @@ attempt_context_impl::atr_rollback_complete()
     } catch (const client_error& e) {
         auto ec = e.ec();
         if (expiry_overtime_mode_.load()) {
-            debug("atr_rollback_complete error while in overtime mode {}", e.what());
+            CB_ATTEMPT_CTX_LOG_DEBUG(this, "atr_rollback_complete error while in overtime mode {}", e.what());
             throw transaction_operation_failed(FAIL_EXPIRY, std::string("expired in atr_rollback_complete with {} ") + e.what())
               .no_rollback()
               .expired();
         }
-        debug("atr_rollback_complete got error {}", ec);
+        CB_ATTEMPT_CTX_LOG_DEBUG(this, "atr_rollback_complete got error {}", ec);
         switch (ec) {
             case FAIL_DOC_NOT_FOUND:
             case FAIL_PATH_NOT_FOUND:
-                debug("atr {} not found, ignoring", atr_id_->key());
+                CB_ATTEMPT_CTX_LOG_DEBUG(this, "atr {} not found, ignoring", atr_id_->key());
                 is_done_ = true;
                 break;
             case FAIL_ATR_FULL:
-                debug("atr {} full!", atr_id_->key());
+                CB_ATTEMPT_CTX_LOG_DEBUG(this, "atr {} full!", atr_id_->key());
                 throw retry_operation(e.what());
             case FAIL_HARD:
                 throw transaction_operation_failed(ec, e.what()).no_rollback();
             case FAIL_EXPIRY:
-                debug("timed out writing atr {}", atr_id_->key());
+                CB_ATTEMPT_CTX_LOG_DEBUG(this, "timed out writing atr {}", atr_id_->key());
                 throw transaction_operation_failed(ec, e.what()).no_rollback().expired();
             default:
-                debug("retrying atr_rollback_complete");
+                CB_ATTEMPT_CTX_LOG_DEBUG(this, "retrying atr_rollback_complete");
                 throw retry_operation(e.what());
         }
     }
@@ -1743,7 +1753,7 @@ void
 attempt_context_impl::rollback()
 {
     op_list_.wait_and_block_ops();
-    debug("rolling back {}", id());
+    CB_ATTEMPT_CTX_LOG_DEBUG(this, "rolling back {}", id());
     if (op_list_.get_mode().is_query()) {
         auto barrier = std::make_shared<std::promise<void>>();
         auto f = barrier->get_future();
@@ -1760,13 +1770,13 @@ attempt_context_impl::rollback()
     check_expiry_during_commit_or_rollback(STAGE_ROLLBACK, std::nullopt);
     if (!atr_id_ || atr_id_->key().empty() || state() == attempt_state::NOT_STARTED) {
         // TODO: check this, but if we try to rollback an empty txn, we should prevent a subsequent commit
-        debug("rollback called on txn with no mutations");
+        CB_ATTEMPT_CTX_LOG_DEBUG(this, "rollback called on txn with no mutations");
         is_done_ = true;
         return;
     }
     if (is_done()) {
         std::string msg("Transaction already done, cannot rollback");
-        error(msg);
+        CB_ATTEMPT_CTX_LOG_ERROR(this, msg);
         // need to raise a FAIL_OTHER which is not retryable or rollback-able
         throw transaction_operation_failed(FAIL_OTHER, msg).no_rollback();
     }
@@ -1774,14 +1784,14 @@ attempt_context_impl::rollback()
         // (1) atr_abort
         retry_op_exp<void>([&]() { atr_abort(); });
         // (2) rollback staged mutations
-        staged_mutations_->rollback(*this);
-        debug("rollback completed unstaging docs");
+        staged_mutations_->rollback(this);
+        CB_ATTEMPT_CTX_LOG_DEBUG(this, "rollback completed unstaging docs");
 
         // (3) atr_rollback
         retry_op_exp<void>([&]() { atr_rollback_complete(); });
     } catch (const client_error& e) {
         error_class ec = e.ec();
-        error("rollback transaction {}, attempt {} fail with error {}", transaction_id(), id(), e.what());
+        CB_ATTEMPT_CTX_LOG_ERROR(this, "rollback transaction {}, attempt {} fail with error {}", transaction_id(), id(), e.what());
         if (ec == FAIL_HARD) {
             throw transaction_operation_failed(ec, e.what()).no_rollback();
         }
@@ -1794,10 +1804,10 @@ attempt_context_impl::has_expired_client_side(std::string place, std::optional<c
     bool over = overall_.has_expired_client_side();
     bool hook = hooks_.has_expired_client_side(this, place, doc_id);
     if (over) {
-        debug("{} expired in {}", id(), place);
+        CB_ATTEMPT_CTX_LOG_DEBUG(this, "{} expired in {}", id(), place);
     }
     if (hook) {
-        debug("{} fake expiry in {}", id(), place);
+        CB_ATTEMPT_CTX_LOG_DEBUG(this, "{} fake expiry in {}", id(), place);
     }
     return over || hook;
 }
@@ -1806,7 +1816,8 @@ bool
 attempt_context_impl::check_expiry_pre_commit(std::string stage, std::optional<const std::string> doc_id)
 {
     if (has_expired_client_side(stage, std::move(doc_id))) {
-        debug("{} has expired in stage {}, entering expiry-overtime mode - will make one attempt to rollback", id(), stage);
+        CB_ATTEMPT_CTX_LOG_DEBUG(
+          this, "{} has expired in stage {}, entering expiry-overtime mode - will make one attempt to rollback", id(), stage);
 
         // [EXP-ROLLBACK] Combo of setting this mode and throwing AttemptExpired will result in an attempt to rollback, which will
         // ignore expiry, and bail out if anything fails
@@ -1820,11 +1831,11 @@ std::optional<error_class>
 attempt_context_impl::error_if_expired_and_not_in_overtime(const std::string& stage, std::optional<const std::string> doc_id)
 {
     if (expiry_overtime_mode_.load()) {
-        debug("not doing expired check in {} as already in expiry-overtime", stage);
+        CB_ATTEMPT_CTX_LOG_DEBUG(this, "not doing expired check in {} as already in expiry-overtime", stage);
         return {};
     }
     if (has_expired_client_side(stage, std::move(doc_id))) {
-        debug("expired in {}", stage);
+        CB_ATTEMPT_CTX_LOG_DEBUG(this, "expired in {}", stage);
         return FAIL_EXPIRY;
     }
     return {};
@@ -1836,11 +1847,12 @@ attempt_context_impl::check_expiry_during_commit_or_rollback(const std::string& 
     // [EXP-COMMIT-OVERTIME]
     if (!expiry_overtime_mode_.load()) {
         if (has_expired_client_side(stage, std::move(doc_id))) {
-            debug("{} has expired in stage {}, entering expiry-overtime mode (one attempt to complete commit)", id(), stage);
+            CB_ATTEMPT_CTX_LOG_DEBUG(
+              this, "{} has expired in stage {}, entering expiry-overtime mode (one attempt to complete commit)", id(), stage);
             expiry_overtime_mode_ = true;
         }
     } else {
-        debug("{} ignoring expiry in stage {}  as in expiry-overtime mode", id(), stage);
+        CB_ATTEMPT_CTX_LOG_DEBUG(this, "{} ignoring expiry in stage {}  as in expiry-overtime mode", id(), stage);
     }
 }
 template<typename Handler>
@@ -1859,7 +1871,7 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id, std::u
             auto error_handler =
               [this, &lock](error_class ec, const std::string& message, const core::document_id& doc_id, Handler&& fn) mutable {
                   transaction_operation_failed err(ec, message);
-                  trace("got {} trying to set atr to pending", message);
+                  CB_ATTEMPT_CTX_LOG_TRACE(this, "got {} trying to set atr to pending", message);
                   if (expiry_overtime_mode_.load()) {
                       return fn(err.no_rollback().expired());
                   }
@@ -1877,7 +1889,7 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id, std::u
                           // Retry just this
                           overall_.retry_delay();
                           // keep it locked!
-                          debug("got {}, retrying set atr pending", ec);
+                          CB_ATTEMPT_CTX_LOG_DEBUG(this, "got {}, retrying set atr pending", ec);
                           return set_atr_pending_locked(doc_id, std::move(lock), std::move(fn));
                       case FAIL_TRANSIENT:
                           // Retry txn
@@ -1891,7 +1903,7 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id, std::u
             if (auto ec = hooks_.before_atr_pending(this); ec) {
                 return error_handler(*ec, "before_atr_pending hook raised error", id, std::forward<Handler>(fn));
             }
-            debug("updating atr {}", atr_id_.value());
+            CB_ATTEMPT_CTX_LOG_DEBUG(this, "updating atr {}", atr_id_.value());
 
             // FIXME: do we need to capture "now" here?
             // std::chrono::time_point<std::chrono::steady_clock> now = std::chrono::steady_clock::now();
@@ -1935,7 +1947,7 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id, std::u
                   }
                   if (!ec) {
                       state(attempt_state::PENDING);
-                      debug("set ATR {} to Pending, got CAS (start time) {}", atr_id_.value(), resp.cas.value());
+                      CB_ATTEMPT_CTX_LOG_DEBUG(this, "set ATR {} to Pending, got CAS (start time) {}", atr_id_.value(), resp.cas.value());
                       return fn(std::nullopt);
                   }
                   return error_handler(*ec,
@@ -1945,7 +1957,7 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id, std::u
               });
         }
     } catch (const std::exception& e) {
-        error("unexpected error setting atr pending {}", e.what());
+        CB_ATTEMPT_CTX_LOG_ERROR(this, "unexpected error setting atr pending {}", e.what());
         return fn(transaction_operation_failed(FAIL_OTHER, "unexpected error setting atr pending"));
     }
 }
@@ -1986,13 +1998,13 @@ attempt_context_impl::do_get(const core::document_id& id, const std::optional<st
 
         staged_mutation* own_write = check_for_own_write(id);
         if (own_write) {
-            debug("found own-write of mutated doc {}", id);
+            CB_ATTEMPT_CTX_LOG_DEBUG(this, "found own-write of mutated doc {}", id);
             return cb(std::nullopt, std::nullopt, transaction_get_result::create_from(own_write->doc(), own_write->content()));
         }
         staged_mutation* own_remove = staged_mutations_->find_remove(id);
         if (own_remove) {
             auto msg = fmt::format("found own-write of removed doc {}", id);
-            debug(msg);
+            CB_ATTEMPT_CTX_LOG_DEBUG(this, msg);
             return cb(FAIL_DOC_NOT_FOUND, msg, std::nullopt);
         }
 
@@ -2010,11 +2022,12 @@ attempt_context_impl::do_get(const core::document_id& id, const std::optional<st
               }
               if (!ec) {
                   if (doc->links().is_document_in_transaction()) {
-                      debug("doc {} in transaction, resolving_missing_atr_entry={}", *doc, resolving_missing_atr_entry.value_or("-"));
+                      CB_ATTEMPT_CTX_LOG_DEBUG(
+                        this, "doc {} in transaction, resolving_missing_atr_entry={}", *doc, resolving_missing_atr_entry.value_or("-"));
 
                       if (resolving_missing_atr_entry.has_value() &&
                           resolving_missing_atr_entry.value() == doc->links().staged_attempt_id()) {
-                          debug("doc is in lost pending transaction");
+                          CB_ATTEMPT_CTX_LOG_DEBUG(this, "doc is in lost pending transaction");
 
                           if (doc->links().is_document_being_inserted()) {
                               // this document is being inserted, so should not be visible yet
@@ -2072,8 +2085,9 @@ attempt_context_impl::do_get(const core::document_id& id, const std::optional<st
                                     }
                                 } else {
                                     // failed to get the ATR entry
-                                    debug("could not get ATR entry, checking again with {}",
-                                          doc->links().staged_attempt_id().value_or("-"));
+                                    CB_ATTEMPT_CTX_LOG_DEBUG(this,
+                                                             "could not get ATR entry, checking again with {}",
+                                                             doc->links().staged_attempt_id().value_or("-"));
                                     return do_get(id, doc->links().staged_attempt_id(), cb);
                                 }
                                 if (ignore_doc) {
@@ -2083,13 +2097,14 @@ attempt_context_impl::do_get(const core::document_id& id, const std::optional<st
 
                             } else {
                                 // failed to get the ATR
-                                debug("could not get ATR, checking again with {}", doc->links().staged_attempt_id().value_or("-"));
+                                CB_ATTEMPT_CTX_LOG_DEBUG(
+                                  this, "could not get ATR, checking again with {}", doc->links().staged_attempt_id().value_or("-"));
                                 return do_get(id, doc->links().staged_attempt_id(), cb);
                             }
                         });
                   } else {
                       if (doc->links().is_deleted()) {
-                          debug("doc not in txn, and is_deleted, so not returning it.");
+                          CB_ATTEMPT_CTX_LOG_DEBUG(this, "doc not in txn, and is_deleted, so not returning it.");
                           // doc has been deleted, not in txn, so don't return it
                           return cb(std::nullopt, std::nullopt, std::nullopt);
                       }
@@ -2138,7 +2153,7 @@ attempt_context_impl::get_doc(
         overall_.cluster_ref()->execute(req, [this, id, cb = std::move(cb)](core::operations::lookup_in_response resp) {
             auto ec = error_class_from_response(resp);
             if (ec) {
-                trace("get_doc got error {} : {}", resp.ctx.ec().message(), *ec);
+                CB_ATTEMPT_CTX_LOG_TRACE(this, "get_doc got error {} : {}", resp.ctx.ec().message(), *ec);
                 switch (*ec) {
                     case FAIL_PATH_NOT_FOUND:
                         return cb(*ec, resp.ctx.ec().message(), transaction_get_result::create_from(resp));
@@ -2164,7 +2179,7 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
                                                          error_class ec,
                                                          const std::string& message)
 {
-    trace("create_staged_insert got error class {}: {}", ec, message);
+    CB_ATTEMPT_CTX_LOG_TRACE(this, "create_staged_insert got error class {}: {}", ec, message);
     if (expiry_overtime_mode_.load()) {
         return op_completed_with_error(std::forward<Handler>(cb), transaction_operation_failed(FAIL_EXPIRY, "attempt timed out").expired());
     }
@@ -2176,7 +2191,7 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
             return op_completed_with_error(std::forward<Handler>(cb),
                                            transaction_operation_failed(ec, "transient error in insert").retry());
         case FAIL_AMBIGUOUS:
-            debug("FAIL_AMBIGUOUS in create_staged_insert, retrying");
+            CB_ATTEMPT_CTX_LOG_DEBUG(this, "FAIL_AMBIGUOUS in create_staged_insert, retrying");
             delay();
             return create_staged_insert(id, content, cas, delay, std::forward<Handler>(cb));
         case FAIL_OTHER:
@@ -2187,9 +2202,10 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
         case FAIL_DOC_ALREADY_EXISTS:
         case FAIL_CAS_MISMATCH: {
             // special handling for doc already existing
-            debug("found existing doc {}, may still be able to insert", id);
+            CB_ATTEMPT_CTX_LOG_DEBUG(this, "found existing doc {}, may still be able to insert", id);
             auto error_handler = [this, id, content](error_class ec2, const std::string& err_message, Handler&& cb) mutable {
-                trace("after a CAS_MISMATCH or DOC_ALREADY_EXISTS, then got error {} in create_staged_insert", ec2);
+                CB_ATTEMPT_CTX_LOG_TRACE(
+                  this, "after a CAS_MISMATCH or DOC_ALREADY_EXISTS, then got error {} in create_staged_insert", ec2);
                 if (expiry_overtime_mode_.load()) {
                     return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_EXPIRY, "attempt timed out").expired());
                 }
@@ -2217,10 +2233,11 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
                 std::optional<error_class> ec3, std::optional<std::string> err_message, std::optional<transaction_get_result> doc) mutable {
                   if (!ec3) {
                       if (doc) {
-                          debug("document {} exists, is_in_transaction {}, is_deleted {} ",
-                                doc->id(),
-                                doc->links().is_document_in_transaction(),
-                                doc->links().is_deleted());
+                          CB_ATTEMPT_CTX_LOG_DEBUG(this,
+                                                   "document {} exists, is_in_transaction {}, is_deleted {} ",
+                                                   doc->id(),
+                                                   doc->links().is_document_in_transaction(),
+                                                   doc->links().is_deleted());
 
                           if (auto err = forward_compat::check(forward_compat_stage::WWC_INSERTING_GET, doc->links().forward_compat());
                               err) {
@@ -2228,13 +2245,14 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
                           }
                           if (!doc->links().is_document_in_transaction() && doc->links().is_deleted()) {
                               // it is just a deleted doc, so we are ok.  Let's try again, but with the cas
-                              debug("create staged insert found existing deleted doc, retrying with cas {}", doc->cas().value());
+                              CB_ATTEMPT_CTX_LOG_DEBUG(
+                                this, "create staged insert found existing deleted doc, retrying with cas {}", doc->cas().value());
                               delay();
                               return create_staged_insert(id, content, doc->cas().value(), delay, std::forward<Handler>(cb));
                           }
                           if (!doc->links().is_document_in_transaction()) {
                               // doc was inserted outside txn elsewhere
-                              trace("doc {} not in txn - was inserted outside txn", id);
+                              CB_ATTEMPT_CTX_LOG_TRACE(this, "doc {} not in txn - was inserted outside txn", id);
                               return op_completed_with_error(
                                 std::forward<Handler>(cb),
                                 document_exists({ couchbase::errc::transaction_op::document_exists_exception, key_value_error_context() }));
@@ -2254,13 +2272,14 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
                                 if (err) {
                                     return op_completed_with_error(std::move(cb), *err);
                                 }
-                                debug("doc ok to overwrite, retrying create_staged_insert with cas {}", doc->cas().value());
+                                CB_ATTEMPT_CTX_LOG_DEBUG(
+                                  this, "doc ok to overwrite, retrying create_staged_insert with cas {}", doc->cas().value());
                                 delay();
                                 return create_staged_insert(id, content, doc->cas().value(), delay, std::forward<Handler>(cb));
                             });
                       } else {
                           // no doc now, just retry entire txn
-                          trace("got {} from get_doc in exists during staged insert", *ec3);
+                          CB_ATTEMPT_CTX_LOG_TRACE(this, "got {} from get_doc in exists during staged insert", *ec3);
                           return op_completed_with_error(
                             std::move(cb),
                             transaction_operation_failed(FAIL_DOC_NOT_FOUND, "insert failed as the doc existed, but now seems to not exist")
@@ -2295,7 +2314,7 @@ attempt_context_impl::create_staged_insert(const core::document_id& id,
         return create_staged_insert_error_handler(
           id, content, cas, std::forward<Delay>(delay), std::forward<Handler>(cb), *ec, "before_staged_insert hook threw error");
     }
-    debug("about to insert staged doc {} with cas {}", id, cas);
+    CB_ATTEMPT_CTX_LOG_DEBUG(this, "about to insert staged doc {} with cas {}", id, cas);
     auto req = create_staging_request(id, nullptr, "insert", content);
     req.access_deleted = true;
     req.create_as_deleted = true;
@@ -2311,7 +2330,7 @@ attempt_context_impl::create_staged_insert(const core::document_id& id,
                 id, content, cas, std::forward<Delay>(delay), std::forward<Handler>(cb), *ec, "after_staged_insert hook threw error");
           }
           if (!resp.ctx.ec()) {
-              debug("inserted doc {} CAS={}, {}", id, resp.cas.value(), resp.ctx.ec().message());
+              CB_ATTEMPT_CTX_LOG_DEBUG(this, "inserted doc {} CAS={}, {}", id, resp.cas.value(), resp.ctx.ec().message());
 
               // TODO: clean this up (do most of this in transactions_document(...))
               transaction_links links(atr_id_->key(),

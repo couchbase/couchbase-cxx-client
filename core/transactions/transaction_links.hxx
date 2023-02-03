@@ -16,11 +16,11 @@
 
 #pragma once
 
-#include <tao/json/value.hpp>
-
+#include <fmt/format.h>
 #include <optional>
 #include <ostream>
 #include <string>
+#include <tao/json/value.hpp>
 
 namespace couchbase::core::transactions
 {
@@ -227,3 +227,26 @@ class transaction_links
 std::ostream&
 operator<<(std::ostream& os, const transaction_links& links);
 } // namespace couchbase::core::transactions
+
+template<>
+struct fmt::formatter<couchbase::core::transactions::transaction_links> {
+  public:
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    constexpr auto format(const couchbase::core::transactions::transaction_links& r, FormatContext& ctx) const
+    {
+        return format_to(ctx.out(),
+                         "result:{{ atr: {}.{}.{}.{}, txn_id: {}, attempt_id: {}, crc32_of_staging: {} }}",
+                         r.atr_bucket_name().value_or("none"),
+                         r.atr_scope_name().value_or("none"),
+                         r.atr_collection_name().value_or("none"),
+                         r.atr_id().value_or("none"),
+                         r.staged_attempt_id().value_or("none"),
+                         r.crc32_of_staging().value_or("none"));
+    }
+};

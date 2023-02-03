@@ -192,12 +192,12 @@ class forward_compat
                 auto behavior = b->check(supported);
                 switch (behavior.behavior) {
                     case forward_compat_behavior::FAIL_FAST_TXN:
-                        txn_log->trace("forward compatiblity FAIL_FAST_TXN");
+                        CB_TXN_LOG_TRACE("forward compatiblity FAIL_FAST_TXN");
                         return ex;
                     case forward_compat_behavior::RETRY_TXN:
-                        txn_log->trace("forward compatibility RETRY_TXN");
+                        CB_TXN_LOG_TRACE("forward compatibility RETRY_TXN");
                         if (behavior.retry_delay) {
-                            txn_log->trace("delay {}ms before retrying", behavior.retry_delay->count());
+                            CB_TXN_LOG_TRACE("delay {}ms before retrying", behavior.retry_delay->count());
                             std::this_thread::sleep_for(*behavior.retry_delay);
                         }
                         return ex.retry();
@@ -213,7 +213,7 @@ class forward_compat
     forward_compat(tao::json::value& json)
       : json_(json)
     {
-        txn_log->trace("creating forward_compat from {}", core::utils::json::generate(json_));
+        CB_TXN_LOG_TRACE("creating forward_compat from {}", core::utils::json::generate(json_));
         // parse it into the map
         for (const auto& [key, value] : json_.get_object()) {
             auto stage = create_forward_compat_stage(key);

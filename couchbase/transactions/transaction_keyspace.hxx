@@ -18,6 +18,7 @@
 #include "couchbase/collection.hxx"
 #include "couchbase/scope.hxx"
 
+#include <fmt/format.h>
 #include <string>
 #include <utility>
 
@@ -83,3 +84,18 @@ struct transaction_keyspace {
     }
 };
 } // namespace couchbase::transactions
+template<>
+struct fmt::formatter<couchbase::transactions::transaction_keyspace> {
+  public:
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(const couchbase::transactions::transaction_keyspace& k, FormatContext& ctx) const
+    {
+        return format_to(ctx.out(), "(result:{{ bucket: {}, scope: {}, collection: {} }}", k.bucket, k.scope, k.collection);
+    }
+};
