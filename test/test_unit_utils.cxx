@@ -229,3 +229,36 @@ TEST_CASE("unit: semantic version string", "[unit]")
     REQUIRE(couchbase::core::meta::parse_git_describe_output("1.0.0-beta.4-0-gfbc9922") == "1.0.0-beta.4");
     REQUIRE(couchbase::core::meta::parse_git_describe_output("1.0.0-beta.4") == "1.0.0-beta.4");
 }
+
+#if 0
+// This test is commented out because, it is not necessary to run it with the suite, but it still useful for debugging.
+
+#include "core/platform/uuid.h"
+
+TEST_CASE("unit: uuid collision", "[unit]")
+{
+    std::array<std::set<std::string>, 10> uuids{};
+    std::vector<std::thread> threads{};
+    threads.reserve(10);
+
+    for (std::size_t t = 0; t < 10; ++t) {
+        threads.emplace_back([&uuids, t]() {
+            for (std::size_t i = 0; i < 1'000'000; ++i) {
+                auto uuid = couchbase::core::uuid::to_string(couchbase::core::uuid::random());
+                uuids[t].insert(uuid);
+            }
+        });
+    }
+    for (std::size_t t = 0; t < 10; ++t) {
+        threads[t].join();
+        REQUIRE(uuids[t].size() == 1'000'000);
+    }
+
+    std::set<std::string> all_uuids{};
+    for (std::size_t t = 0; t < 10; ++t) {
+        for (const auto& uuid : uuids[t]) {
+            REQUIRE(all_uuids.insert(uuid).second);
+        }
+    }
+}
+#endif

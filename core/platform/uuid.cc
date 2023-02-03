@@ -21,12 +21,11 @@
 
 #include <iomanip>
 #include <random>
-#include <sstream>
 
 void
 couchbase::core::uuid::random(couchbase::core::uuid::uuid_t& uuid)
 {
-    static thread_local std::minstd_rand gen{ std::random_device()() };
+    static thread_local std::mt19937_64 gen{ std::random_device()() };
     std::uniform_int_distribution<std::uint64_t> dis;
 
     // The uuid is 16 bytes, which is the same as two 64-bit integers

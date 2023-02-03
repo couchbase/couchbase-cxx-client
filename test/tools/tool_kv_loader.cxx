@@ -106,7 +106,7 @@ static std::string
 random_text(std::size_t length)
 {
     std::string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-    static thread_local std::minstd_rand gen{ std::random_device()() };
+    static thread_local std::mt19937_64 gen{ std::random_device()() };
     std::uniform_int_distribution<std::size_t> dis(0, alphabet.size() - 1);
     std::string text(length, '-');
     for (std::size_t i = 0; i < length; ++i) {
@@ -230,7 +230,7 @@ main()
         hit_chance_for_get = std::stod(val, nullptr);
     }
 
-    static thread_local std::minstd_rand gen{ std::random_device()() };
+    static thread_local std::mt19937_64 gen{ std::random_device()() };
     std::uniform_real_distribution<double> dist(0, 1);
 
     std::atomic_uint64_t total{};
