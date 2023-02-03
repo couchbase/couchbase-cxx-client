@@ -193,7 +193,7 @@ main()
         auth.password = ctx.password;
     }
 
-    asio::io_context io(static_cast<int>(number_of_io_threads));
+    asio::io_context io{ ASIO_CONCURRENCY_HINT_SAFE | static_cast<int>(number_of_io_threads) };
 
     auto origin = couchbase::core::origin(auth, connstr);
     if (ctx.dns_nameserver || ctx.dns_port) {
