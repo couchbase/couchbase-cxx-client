@@ -32,7 +32,7 @@ static const std::string attempt_cleanup_format_string("[attempt_cleanup]");
 #define CB_TXN_LOG(level, ...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, level, __VA_ARGS__)
 #define CB_ATTEMPT_CTX_LOG(level, ctx, msg, ...)                                                                                           \
     COUCHBASE_LOG(                                                                                                                         \
-      __FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, level, attempt_format_string + msg, ctx->transaction_id(), ctx->id(), ##__VA_ARGS__)
+      __FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, level, attempt_format_string + msg, ctx->transaction_id(), ctx->id(),##__VA_ARGS__)
 #define CB_ATTEMPT_CTX_LOG_TRACE(...) CB_ATTEMPT_CTX_LOG(couchbase::core::logger::level::trace, __VA_ARGS__)
 #define CB_ATTEMPT_CTX_LOG_DEBUG(...) CB_ATTEMPT_CTX_LOG(couchbase::core::logger::level::debug, __VA_ARGS__)
 #define CB_ATTEMPT_CTX_LOG_INFO(...) CB_ATTEMPT_CTX_LOG(couchbase::core::logger::level::info, __VA_ARGS__)
@@ -40,7 +40,7 @@ static const std::string attempt_cleanup_format_string("[attempt_cleanup]");
 #define CB_ATTEMPT_CTX_LOG_ERROR(...) CB_ATTEMPT_CTX_LOG(couchbase::core::logger::level::err, __VA_ARGS__)
 #define CB_ATTEMPT_CTX_LOG_CRITICAL(...) CB_ATTEMPT_CTX_LOG(couchbase::core::logger::level::critical, __VA_ARGS__)
 
-#define CB_TXN_LOG_WITH_PREFIX(level, prefix, msg, ...) CB_TXN_LOG(level, prefix + msg, ##__VA_ARGS__)
+#define CB_TXN_LOG_WITH_PREFIX(level, prefix, msg, ...) CB_TXN_LOG(level, prefix + msg,##__VA_ARGS__)
 
 #define CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE(...)                                                                                             \
     CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::trace, couchbase::core::transactions::lost_attempt_format_string, __VA_ARGS__)
