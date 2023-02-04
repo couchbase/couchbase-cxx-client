@@ -29,11 +29,6 @@ static const std::string attempt_cleanup_format_string("[attempt_cleanup]");
 #pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
 #endif
 
-#if defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
-#endif
-
 #define CB_TXN_LOG(level, ...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, level, __VA_ARGS__)
 #define CB_ATTEMPT_CTX_LOG(level, ctx, msg, ...)                                                                                           \
     COUCHBASE_LOG(                                                                                                                         \
@@ -89,9 +84,5 @@ static const std::string attempt_cleanup_format_string("[attempt_cleanup]");
 
 #if defined(__APPLE__)
 #pragma clang diagnostic pop
-#endif
-
-#if defined(__GNUC__)
-#pragma GCC diagnostic pop
 #endif
 } // namespace couchbase::core::transactions
