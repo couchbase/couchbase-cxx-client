@@ -24,7 +24,7 @@ static const std::string attempt_format_string("[transactions]({}/{}):");
 static const std::string lost_attempt_format_string("[lost_attempt_cleanup]");
 static const std::string attempt_cleanup_format_string("[attempt_cleanup]");
 
-#if defined(__APPLE__)
+#if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
 #endif
@@ -82,7 +82,7 @@ static const std::string attempt_cleanup_format_string("[attempt_cleanup]");
 #define CB_TXN_LOG_CRITICAL(...)                                                                                                           \
     CB_TXN_LOG_WITH_PREFIX(couchbase::core::logger::level::critical, couchbase::core::transactions::txn_format_string, __VA_ARGS__)
 
-#if defined(__APPLE__)
+#if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 } // namespace couchbase::core::transactions
