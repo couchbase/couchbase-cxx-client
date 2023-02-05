@@ -90,7 +90,7 @@ struct fmt::formatter<couchbase::core::transactions::doc_record> {
     constexpr auto format(const couchbase::core::transactions::doc_record& r, FormatContext& ctx) const
     {
         return format_to(ctx.out(),
-                         "result:{{ bucket: {}, scope: {}, collection: {}, key: {} }}",
+                         "doc_record:{{ bucket: {}, scope: {}, collection: {}, key: {} }}",
                          r.document_id().bucket(),
                          r.document_id().scope(),
                          r.document_id().collection(),

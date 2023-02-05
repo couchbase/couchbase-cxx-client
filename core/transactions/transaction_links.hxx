@@ -241,7 +241,7 @@ struct fmt::formatter<couchbase::core::transactions::transaction_links> {
     constexpr auto format(const couchbase::core::transactions::transaction_links& r, FormatContext& ctx) const
     {
         return format_to(ctx.out(),
-                         "result:{{ atr: {}.{}.{}.{}, txn_id: {}, attempt_id: {}, crc32_of_staging: {} }}",
+                         "transaction_links:{{ atr: {}.{}.{}.{}, txn_id: {}, attempt_id: {}, crc32_of_staging: {} }}",
                          r.atr_bucket_name().value_or("none"),
                          r.atr_scope_name().value_or("none"),
                          r.atr_collection_name().value_or("none"),

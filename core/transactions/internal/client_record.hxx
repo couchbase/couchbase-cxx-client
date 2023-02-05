@@ -71,7 +71,7 @@ struct fmt::formatter<couchbase::core::transactions::client_record_details> {
     auto format(const couchbase::core::transactions::client_record_details& r, FormatContext& ctx) const
     {
         return format_to(ctx.out(),
-                         "(result:{{ client_uuid:: {}, active_clients: {}, index_of_this_client: {}, existing_clients: {}, "
+                         "client_record:{{ client_uuid:: {}, active_clients: {}, index_of_this_client: {}, existing_clients: {}, "
                          "expired_clients: {}, override_enabled: {}, override_expires: {}, cas_now_nanos: {} }}",
                          r.client_uuid,
                          r.num_active_clients,

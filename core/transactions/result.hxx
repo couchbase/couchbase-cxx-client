@@ -283,7 +283,7 @@ struct fmt::formatter<couchbase::core::transactions::result> {
     constexpr auto format(const couchbase::core::transactions::result& r, FormatContext& ctx) const
     {
         return format_to(ctx.out(),
-                         "(result:{{ rc: {}, strerror: {}, cas: {}, is_deleted: {}, datatype: {}, flags: {}, raw_value: {:.{}} }}",
+                         "result:{{ rc: {}, strerror: {}, cas: {}, is_deleted: {}, datatype: {}, flags: {}, raw_value: {:.{}} }}",
                          r.rc,
                          r.strerror(),
                          r.cas,

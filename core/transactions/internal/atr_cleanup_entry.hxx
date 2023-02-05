@@ -155,7 +155,7 @@ struct fmt::formatter<couchbase::core::transactions::atr_cleanup_entry> {
     auto format(const couchbase::core::transactions::atr_cleanup_entry& e, FormatContext& ctx) const
     {
         return format_to(ctx.out(),
-                         "(atr_cleanup_entry{{ atr_id: {}, attempt_id: {}, check_if_expired: {}, min_start_time: {} }}",
+                         "atr_cleanup_entry{{ atr_id: {}, attempt_id: {}, check_if_expired: {}, min_start_time: {} }}",
                          e.atr_id(),
                          e.attempt_id(),
                          e.check_if_expired(),

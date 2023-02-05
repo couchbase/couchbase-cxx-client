@@ -96,6 +96,6 @@ struct fmt::formatter<couchbase::transactions::transaction_keyspace> {
     template<typename FormatContext>
     auto format(const couchbase::transactions::transaction_keyspace& k, FormatContext& ctx) const
     {
-        return format_to(ctx.out(), "(result:{{ bucket: {}, scope: {}, collection: {} }}", k.bucket, k.scope, k.collection);
+        return format_to(ctx.out(), "transaction_keyspace:{{ bucket: {}, scope: {}, collection: {} }}", k.bucket, k.scope, k.collection);
     }
 };

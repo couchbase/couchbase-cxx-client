@@ -240,6 +240,6 @@ struct fmt::formatter<couchbase::core::transactions::transaction_get_result> {
     template<typename FormatContext>
     constexpr auto format(const couchbase::core::transactions::transaction_get_result& r, FormatContext& ctx) const
     {
-        return format_to(ctx.out(), "result:{{ id: {}, cas: {}, links: }}", r.id(), r.cas(), r.links());
+        return format_to(ctx.out(), "transaction_get_result:{{ id: {}, cas: {}, links: }}", r.id(), r.cas(), r.links());
     }
 };
