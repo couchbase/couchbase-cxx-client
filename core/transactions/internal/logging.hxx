@@ -33,12 +33,12 @@ static const std::string attempt_cleanup_format_string("[attempt_cleanup]");
 
 // it is tempting to scream an expletive when examining this workaround.   Feel free to do so.
 #if defined(_MSC_VER)
-#define CB_ATTEMPT_CTX_LOG(level, ctx, msg, ...)                                                                                            \
-      COUCHBASE_LOG(                                                                                                                        \
+#define CB_ATTEMPT_CTX_LOG(level, ctx, msg, ...)                                                                                           \
+    COUCHBASE_LOG(                                                                                                                         \
       __FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, level, attempt_format_string + msg, ctx->transaction_id(), ctx->id(), __VA_ARGS__)
 #else
-#define CB_ATTEMPT_CTX_LOG(level, ctx, msg, ...) \
-    COUCHBASE_LOG(\
+#define CB_ATTEMPT_CTX_LOG(level, ctx, msg, ...)                                                                                           \
+    COUCHBASE_LOG(                                                                                                                         \
       __FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, level, attempt_format_string + msg, ctx->transaction_id(), ctx->id(), ##__VA_ARGS__)
 #endif
 
@@ -53,7 +53,7 @@ static const std::string attempt_cleanup_format_string("[attempt_cleanup]");
 #if defined(_MSC_VER)
 #define CB_TXN_LOG_WITH_PREFIX(level, prefix, msg, ...) CB_TXN_LOG(level, prefix + msg, __VA_ARGS__)
 #else
-#define CB_TXN_LOG_WITH_PREFIX(level, prefix, msg, ...) CB_TXN_LOG(level, prefix + msg, ##q__VA_ARGS__)
+#define CB_TXN_LOG_WITH_PREFIX(level, prefix, msg, ...) CB_TXN_LOG(level, prefix + msg, ##__VA_ARGS__)
 #endif
 
 #define CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE(...)                                                                                             \
