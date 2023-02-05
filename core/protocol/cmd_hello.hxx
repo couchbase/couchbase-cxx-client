@@ -59,7 +59,6 @@ class hello_request_body
     std::vector<std::byte> key_;
     std::vector<hello_feature> features_{
         hello_feature::tcp_nodelay,
-        hello_feature::mutation_seqno,
         hello_feature::xattr,
         hello_feature::xerror,
         hello_feature::select_bucket,
@@ -91,6 +90,11 @@ class hello_request_body
     void enable_compression()
     {
         features_.emplace_back(hello_feature::snappy);
+    }
+
+    void enable_mutation_tokens()
+    {
+        features_.emplace_back(hello_feature::mutation_seqno);
     }
 
     [[nodiscard]] const std::vector<hello_feature>& features() const

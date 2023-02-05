@@ -127,6 +127,9 @@ class mcbp_session_impl
             if (session_->origin_.options().enable_compression) {
                 hello_req.body().enable_compression();
             }
+            if (session_->origin_.options().enable_mutation_tokens) {
+                hello_req.body().enable_mutation_tokens();
+            }
             hello_req.opaque(session_->next_opaque());
             auto user_agent =
               meta::user_agent_for_mcbp(session_->client_id_, session_->id_, session_->origin_.options().user_agent_extra, 250);
