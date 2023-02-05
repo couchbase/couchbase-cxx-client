@@ -30,8 +30,10 @@ using namespace couchbase::core::transactions;
 class TrivialFileSink : public spdlog::sinks::base_sink<std::mutex>
 {
   public:
-    std::string output() const
+    std::string output()
     {
+        // prevent data race if sink_it_ is called
+        std::lock_guard<std::mutex> lock(mut_);
         return out_.str();
     }
 
@@ -40,6 +42,8 @@ class TrivialFileSink : public spdlog::sinks::base_sink<std::mutex>
     {
         spdlog::memory_buf_t formatted;
         base_sink<std::mutex>::formatter_->format(msg, formatted);
+        // prevent data race when calling output()
+        std::lock_guard<std::mutex> lock(mut_);
         out_ << formatted.data();
     }
     void flush_() override
@@ -48,6 +52,8 @@ class TrivialFileSink : public spdlog::sinks::base_sink<std::mutex>
 
   private:
     std::stringstream out_;
+    // needed since we examine the internal state of this object
+    std::mutex mut_;
 };
 
 bool
