@@ -41,5 +41,18 @@ endif()
 
 if(MSVC)
   add_definitions(/bigobj)
+
+  # /Zc:preprocessor enables a token-based preprocessor that conforms to C99 and C++11 and later standards
+  # /Zc:preprocessor option is available starting with VS2019 version 16.5
+  # (according to https://docs.microsoft.com/en-us/cpp/build/reference/zc-preprocessor)
+  # That version is equivalent to _MSC_VER==1925
+  # (according to https://docs.microsoft.com/en-us/cpp/preprocessor/predefined-macros)
+  # CMake's ${MSVC_VERSION} is equivalent to _MSC_VER
+  # (according to https://cmake.org/cmake/help/latest/variable/MSVC_VERSION.html#variable:MSVC_VERSION)
+  if (MSVC_VERSION GREATER_EQUAL 1925)
+    add_compile_options(/Zc:preprocessor)
+  else()
+    message(FATAL_ERROR "MSVC compiler before VS2019 Update5 are not supported")
+  endif()
 endif()
 
