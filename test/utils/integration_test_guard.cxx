@@ -90,6 +90,7 @@ integration_test_guard::integration_test_guard(const couchbase::core::cluster_op
     // for now, lets _only_ add a tracer or meter from the incoming options
     connstr.options.meter = opts.meter;
     connstr.options.tracer = opts.tracer;
+    connstr.options.enable_mutation_tokens = opts.enable_mutation_tokens;
     couchbase::core::origin orig(auth, connstr);
     io_threads = spawn_io_threads(io, ctx.number_of_io_threads);
     open_cluster(cluster, orig);

@@ -29,6 +29,32 @@ static const tao::json::value basic_doc = {
 };
 static const std::vector<std::byte> basic_doc_json = couchbase::core::utils::json::generate_binary(basic_doc);
 
+TEST_CASE("integration: switching off mutation token", "[integration]")
+{
+    couchbase::core::cluster_options opts{};
+    opts.enable_mutation_tokens = false;
+    test::utils::integration_test_guard integration(opts);
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
+
+    {
+        couchbase::core::operations::insert_request req{ id, basic_doc_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(!resp.cas.empty());
+        REQUIRE(resp.token.sequence_number() == 0);
+        REQUIRE(resp.token.partition_uuid() == 0);
+        REQUIRE_FALSE(resp.token.partition_id() == 0);
+        REQUIRE_FALSE(resp.token.bucket_name().empty());
+    }
+    {
+        couchbase::core::operations::get_request req{ id };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.value == basic_doc_json);
+    }
+}
+
 TEST_CASE("integration: crud on default collection", "[integration]")
 {
     test::utils::integration_test_guard integration;
