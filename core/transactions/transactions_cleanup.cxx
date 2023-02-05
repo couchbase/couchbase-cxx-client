@@ -129,12 +129,11 @@ transactions_cleanup::clean_collection(const couchbase::transactions::transactio
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (collections_.end() == std::find(collections_.begin(), collections_.end(), keyspace)) {
-                CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG(
-                  "{} cleanup for {} ending, no longer in collection cleanup list", fmt::ptr(this), keyspace);
+                CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("cleanup for {} ending, no longer in collection cleanup list", keyspace);
                 return;
             }
         }
-        CB_LOST_ATTEMPT_CLEANUP_LOG_INFO("{} cleanup for {} starting", fmt::ptr(this), keyspace);
+        CB_LOST_ATTEMPT_CLEANUP_LOG_INFO("cleanup for {} starting", keyspace);
         // we are running, and collection is in the list, so lets clean it.
         try {
             auto details = get_active_clients(keyspace, client_uuid_);
@@ -144,8 +143,7 @@ transactions_cleanup::clean_collection(const couchbase::transactions::transactio
             std::chrono::microseconds cleanup_window =
               std::chrono::duration_cast<std::chrono::microseconds>(config_.cleanup_config.cleanup_window);
             auto start = std::chrono::steady_clock::now();
-            CB_LOST_ATTEMPT_CLEANUP_LOG_INFO("{} {} active clients (including this one), {} ATRs to check in {}ms",
-                                             fmt::ptr(this),
+            CB_LOST_ATTEMPT_CLEANUP_LOG_INFO("{} active clients (including this one), {} ATRs to check in {}ms",
                                              details.num_active_clients,
                                              all_atrs.size(),
                                              config_.cleanup_config.cleanup_window.count());
@@ -161,14 +159,14 @@ transactions_cleanup::clean_collection(const couchbase::transactions::transactio
                 // clean the ATR entry
                 std::string atr_id = *it;
                 if (!running_.load()) {
-                    CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("{} cleanup of {} complete", fmt::ptr(this), keyspace);
+                    CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("cleanup of {} complete", keyspace);
                     return;
                 }
 
                 try {
                     handle_atr_cleanup({ keyspace.bucket, keyspace.scope, keyspace.collection, atr_id });
                 } catch (const std::exception& e) {
-                    CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR("{} cleanup of atr {} failed with {}, moving on", fmt::ptr(this), atr_id, e.what());
+                    CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR("cleanup of atr {} failed with {}, moving on", atr_id, e.what());
                 }
 
                 auto atr_end = std::chrono::steady_clock::now();
@@ -192,7 +190,7 @@ transactions_cleanup::clean_collection(const couchbase::transactions::transactio
                 }
             }
         } catch (const std::exception& ex) {
-            CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR("{} cleanup failed with {}, trying again in 3 sec...", fmt::ptr(this), ex.what());
+            CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR("cleanup failed with {}, trying again in 3 sec...", ex.what());
             // we must have gotten an exception trying to get the client records.   Let's wait 3 sec and try again
             std::this_thread::sleep_for(std::chrono::seconds(3));
         }
@@ -222,7 +220,7 @@ transactions_cleanup::handle_atr_cleanup(const core::document_id& atr_id, std::v
                     results->back().success(true);
                 }
             } catch (const std::exception& e) {
-                CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR("{} cleanup of {} failed: {}, moving on", fmt::ptr(this), cleanup_entry, e.what());
+                CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR("cleanup of {} failed: {}, moving on", cleanup_entry, e.what());
                 if (results) {
                     results->back().success(false);
                 }
@@ -260,11 +258,11 @@ transactions_cleanup::create_client_record(const couchbase::transactions::transa
         wrap_operation_future(f);
 
     } catch (const client_error& e) {
-        CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("{} create_client_record got error {}", fmt::ptr(this), e.what());
+        CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("create_client_record got error {}", e.what());
         auto ec = e.ec();
         switch (ec) {
             case FAIL_DOC_ALREADY_EXISTS:
-                CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("{} client record already exists, moving on", fmt::ptr(this));
+                CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("client record already exists, moving on");
                 return;
             default:
                 throw;
@@ -349,9 +347,9 @@ transactions_cleanup::get_active_clients(const couchbase::transactions::transact
               details.client_uuid = uuid;
               details.cas_now_nanos = now_ms * 1000000;
               details.override_active = (details.override_enabled && details.override_expires > details.cas_now_nanos);
-              CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("{} client details {}", fmt::ptr(this), details);
+              CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("client details {}", details);
               if (details.override_active) {
-                  CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("{} override enabled, will not update record", fmt::ptr(this));
+                  CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("override enabled, will not update record");
                   return details;
               }
 
@@ -390,13 +388,13 @@ transactions_cleanup::get_active_clients(const couchbase::transactions::transact
 
               // just update the cas, and return the details
               details.cas_now_nanos = res.cas;
-              CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("{} get_active_clients found {}", fmt::ptr(this), details);
+              CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("get_active_clients found {}", details);
               return details;
           } catch (const client_error& e) {
               auto ec = e.ec();
               switch (ec) {
                   case FAIL_DOC_NOT_FOUND:
-                      CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("{} client record not found, creating new one", fmt::ptr(this));
+                      CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("client record not found, creating new one");
                       create_client_record(keyspace);
                       throw retry_operation("Client record didn't exist. Creating and retrying");
                   default:
@@ -435,17 +433,16 @@ transactions_cleanup::remove_client_record_from_all_buckets(const std::string& u
                           barrier->set_value(result::create_from_subdoc_response(resp));
                       });
                       wrap_operation_future(f);
-                      CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("{} removed {} from {}", fmt::ptr(this), uuid, keyspace);
+                      CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("removed {} from {}", uuid, keyspace);
                   } catch (const client_error& e) {
-                      CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("{} error removing client records {}", fmt::ptr(this), e.what());
+                      CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("error removing client records {}", e.what());
                       auto ec = e.ec();
                       switch (ec) {
                           case FAIL_DOC_NOT_FOUND:
-                              CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("{} no client record in {}, ignoring", fmt::ptr(this), keyspace);
+                              CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("no client record in {}, ignoring", keyspace);
                               return;
                           case FAIL_PATH_NOT_FOUND:
-                              CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG(
-                                "{} client {} not in client record for {}, ignoring", fmt::ptr(this), uuid, keyspace);
+                              CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("client {} not in client record for {}, ignoring", uuid, keyspace);
                               return;
                           default:
                               throw retry_operation("retry remove until timeout");
@@ -453,7 +450,7 @@ transactions_cleanup::remove_client_record_from_all_buckets(const std::string& u
                   }
               });
         } catch (const std::exception& e) {
-            CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR("{} Error removing client record {} from {}: {}", fmt::ptr(this), uuid, keyspace, e.what());
+            CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR("Error removing client record {} from {}: {}", uuid, keyspace, e.what());
         }
     }
 }
@@ -461,7 +458,7 @@ transactions_cleanup::remove_client_record_from_all_buckets(const std::string& u
 const atr_cleanup_stats
 transactions_cleanup::force_cleanup_atr(const core::document_id& atr_id, std::vector<transactions_cleanup_attempt>& results)
 {
-    CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("{} starting force_cleanup_atr: atr_id {}", fmt::ptr(this), atr_id);
+    CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("starting force_cleanup_atr: atr_id {}", atr_id);
     return handle_atr_cleanup(atr_id, &results);
 }
 
@@ -577,7 +574,7 @@ transactions_cleanup::close()
         CB_ATTEMPT_CLEANUP_LOG_DEBUG("cleanup attempt thread closed");
     }
     for (auto& t : lost_attempt_cleanup_workers_) {
-        CB_ATTEMPT_CLEANUP_LOG_DEBUG("shutting down all lost attempt threads...");
+        CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("shutting down all lost attempt threads...");
         if (t.joinable()) {
             t.join();
         }

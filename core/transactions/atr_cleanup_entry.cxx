@@ -117,7 +117,7 @@ atr_cleanup_entry::check_atr_and_cleanup(transactions_cleanup_attempt* result)
         durability_level = store_string_to_durability_level(durability_level_raw.value());
     }
     if (check_if_expired_ && !atr_entry_->has_expired(safety_margin_ms_)) {
-        CB_ATTEMPT_CLEANUP_LOG_TRACE("{} not expired, nothing to clean", *this);
+        CB_ATTEMPT_CLEANUP_LOG_TRACE("not expired, nothing to clean");
         return;
     }
     if (result) {
