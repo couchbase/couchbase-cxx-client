@@ -62,18 +62,6 @@ using txn_complete_callback =
   std::function<void(std::optional<transaction_exception>, std::optional<::couchbase::transactions::transaction_result>)>;
 
 /**
- * @brief set log level for transactions
- */
-void
-set_transactions_log_level(core::logger::level level);
-
-/**
- * @brief create the loggers, using a custom spdlog::sink, if desired.
- */
-void
-create_loggers(core::logger::level level = core::logger::level::off, spdlog::sink_ptr = nullptr);
-
-/**
  * @mainpage
  * A transaction consists of a lambda containing all the operations you wish to perform within a transaction.
  * The @ref transactions.run() call yields an @ref attempt_context which you use for those operations.
