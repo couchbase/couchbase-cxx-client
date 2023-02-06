@@ -34,7 +34,7 @@ to_binary(const T* data, const std::size_t size) noexcept
     static_assert(sizeof(T) == 1);
     binary copy;
     copy.reserve(size);
-    std::transform(data, data + size, std::back_insert_iterator(copy), [](auto e) { return static_cast<std::byte>(e); });
+    copy.insert(copy.end(), reinterpret_cast<const std::byte*>(data), reinterpret_cast<const std::byte*>(data + size));
     return copy;
 }
 

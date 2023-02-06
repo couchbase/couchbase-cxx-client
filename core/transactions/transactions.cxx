@@ -37,7 +37,7 @@ transactions::transactions(std::shared_ptr<core::cluster> cluster, const couchba
   , config_(config)
   , cleanup_(new transactions_cleanup(cluster_, config_))
 {
-    txn_log->info(
+    CB_TXN_LOG_DEBUG(
       "couchbase transactions {} ({}) creating new transaction object", couchbase::core::meta::sdk_id(), couchbase::core::meta::os());
     // if the config specifies custom metadata collection, lets be sure to open that bucket
     // on the cluster before we start.  NOTE: we actually do call get_and_open_buckets which opens all the buckets
@@ -59,7 +59,7 @@ transactions::transactions(std::shared_ptr<core::cluster> cluster, const couchba
         if (err) {
             auto err_msg =
               fmt::format("error opening metadata_collection bucket '{}' specified in the config!", config_.metadata_collection->bucket);
-            txn_log->error(err_msg);
+            CB_TXN_LOG_DEBUG(err_msg);
             throw std::runtime_error(err_msg);
         }
     }
@@ -176,8 +176,8 @@ transactions::run(async_logic&& code, txn_complete_callback&& cb)
 void
 transactions::close()
 {
-    txn_log->info("closing transactions");
+    CB_TXN_LOG_DEBUG("closing transactions");
     cleanup_->close();
-    txn_log->info("transactions closed");
+    CB_TXN_LOG_DEBUG("transactions closed");
 }
 } // namespace couchbase::core::transactions

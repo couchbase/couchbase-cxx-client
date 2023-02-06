@@ -33,13 +33,22 @@ txn_opts()
     opts.expiration_time(std::chrono::seconds(2));
     return opts;
 }
-
+void
+with_new_guard(std::function<void(test::utils::integration_test_guard&)> fn)
+{
+    test::utils::integration_test_guard integration;
+    try {
+        fn(integration);
+    } catch (...) {
+        // noop
+    }
+}
 void
 with_new_cluster(test::utils::integration_test_guard& integration, std::function<void(couchbase::cluster&)> fn)
 {
     // make new virginal public cluster
+
     asio::io_context io;
-    auto guard = asio::make_work_guard(io);
     std::thread io_thread([&io]() { io.run(); });
     auto options = couchbase::cluster_options(integration.ctx.username, integration.ctx.password);
     auto [cluster, ec] = couchbase::cluster::connect(io, integration.ctx.connection_string, options).get();
@@ -52,8 +61,10 @@ with_new_cluster(test::utils::integration_test_guard& integration, std::function
         // noop, just eat it.
     }
     cluster.close();
-    guard.reset();
-    io_thread.join();
+    io.stop();
+    if (io_thread.joinable()) {
+        io_thread.join();
+    }
 }
 
 void
@@ -512,19 +523,20 @@ TEST_CASE("can query from a scope", "[transactions]")
 
 TEST_CASE("can get doc from bucket not yet opened", "[transactions]")
 {
-    test::utils::integration_test_guard integration;
 
     auto id = test::utils::uniq_id("txn");
     {
+        test::utils::integration_test_guard integration;
         couchbase::cluster c(integration.cluster);
         auto coll = c.bucket(integration.ctx.bucket).default_collection();
         auto [err, upsert_res] = coll.upsert(id, content, {}).get();
         REQUIRE_SUCCESS(err.ec());
     }
 
-    with_new_cluster(integration, [&](couchbase::cluster& cluster) {
-        auto coll = cluster.bucket(integration.ctx.bucket).default_collection();
-        auto result = cluster.transactions()->run(
+    with_new_guard([&](test::utils::integration_test_guard& integration) {
+        couchbase::cluster c(integration.cluster);
+        auto coll = c.bucket(integration.ctx.bucket).default_collection();
+        auto result = c.transactions()->run(
           [&id, &coll](couchbase::transactions::attempt_context& ctx) {
               auto doc = ctx.get(coll, id);
               CHECK_FALSE(doc->ctx().ec());
@@ -543,10 +555,11 @@ TEST_CASE("can insert doc into bucket not yet opened", "[transactions]")
 
     auto id = test::utils::uniq_id("txn");
 
-    with_new_cluster(integration, [&](couchbase::cluster& cluster) {
-        auto coll = cluster.bucket(integration.ctx.bucket).default_collection();
+    with_new_guard([&](test::utils::integration_test_guard& guard) {
+        couchbase::cluster c(guard.cluster);
+        auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
-        auto result = cluster.transactions()->run(
+        auto result = c.transactions()->run(
           [&id, &coll](couchbase::transactions::attempt_context& ctx) {
               auto doc = ctx.insert(coll, id, content);
               CHECK_FALSE(doc->ctx().ec());
@@ -564,21 +577,22 @@ TEST_CASE("can insert doc into bucket not yet opened", "[transactions]")
 
 TEST_CASE("can replace doc in bucket not yet opened", "[transactions]")
 {
-    test::utils::integration_test_guard integration;
 
     auto id = test::utils::uniq_id("txn");
     {
+        test::utils::integration_test_guard integration;
         couchbase::cluster c(integration.cluster);
         auto coll = c.bucket(integration.ctx.bucket).default_collection();
         auto [err, upsert_res] = coll.upsert(id, content, {}).get();
         REQUIRE_SUCCESS(err.ec());
     }
 
-    with_new_cluster(integration, [&](couchbase::cluster& cluster) {
-        auto coll = cluster.bucket(integration.ctx.bucket).default_collection();
+    with_new_guard([&](test::utils::integration_test_guard& guard) {
+        couchbase::cluster c(guard.cluster);
+        auto coll = c.bucket(guard.ctx.bucket).default_collection();
         tao::json::value new_content = { { "some", "new content" } };
 
-        auto result = cluster.transactions()->run(
+        auto result = c.transactions()->run(
           [&id, &coll, new_content](couchbase::transactions::attempt_context& ctx) {
               auto get_doc = ctx.get(coll, id);
               CHECK_FALSE(get_doc->ctx().ec());
@@ -598,20 +612,21 @@ TEST_CASE("can replace doc in bucket not yet opened", "[transactions]")
 
 TEST_CASE("can remove doc in bucket not yet opened", "[transactions]")
 {
-    test::utils::integration_test_guard integration;
 
     auto id = test::utils::uniq_id("txn");
     {
+        test::utils::integration_test_guard integration;
         couchbase::cluster c(integration.cluster);
         auto coll = c.bucket(integration.ctx.bucket).default_collection();
         auto [err, upsert_res] = coll.upsert(id, content, {}).get();
         REQUIRE_SUCCESS(err.ec());
     }
 
-    with_new_cluster(integration, [&](couchbase::cluster& cluster) {
-        auto coll = cluster.bucket(integration.ctx.bucket).default_collection();
+    with_new_guard([&](test::utils::integration_test_guard& guard) {
+        couchbase::cluster c(guard.cluster);
+        auto coll = c.bucket(guard.ctx.bucket).default_collection();
         tao::json::value new_content = { { "some", "new content" } };
-        auto result = cluster.transactions()->run(
+        auto result = c.transactions()->run(
           [&id, &coll, new_content](couchbase::transactions::attempt_context& ctx) {
               auto get_doc = ctx.get(coll, id);
               CHECK_FALSE(get_doc->ctx().ec());

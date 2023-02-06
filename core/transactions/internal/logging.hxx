@@ -15,26 +15,48 @@
  */
 #pragma once
 
-#include <spdlog/fmt/ostr.h>
-#include <spdlog/logger.h>
-
-#define TXN_LOG "transactions"
-#define ATTEMPT_CLEANUP_LOG "attempt_cleanup"
-#define LOST_ATTEMPT_CLEANUP_LOG "lost_attempt_cleanup"
+#include <core/logger/logger.hxx>
 
 namespace couchbase::core::transactions
 {
-static const std::string attempt_format_string("[{}/{}]:");
+static const std::string txn_format_string("[transactions] - ");
+static const std::string attempt_format_string("[transactions]({}/{}) - ");
+static const std::string lost_attempt_format_string("[lost_attempt_cleanup]({}) - ");
+static const std::string attempt_cleanup_format_string("[attempt_cleanup] - ");
 
-std::shared_ptr<spdlog::logger>
-init_txn_log();
-std::shared_ptr<spdlog::logger>
-init_attempt_cleanup_log();
-std::shared_ptr<spdlog::logger>
-init_lost_attempts_log();
+#define CB_TXN_LOG(level, ...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, level, __VA_ARGS__)
 
-static std::shared_ptr<spdlog::logger> txn_log = init_txn_log();
-static std::shared_ptr<spdlog::logger> attempt_cleanup_log = init_attempt_cleanup_log();
-static std::shared_ptr<spdlog::logger> lost_attempts_cleanup_log = init_lost_attempts_log();
+#define ADD_CTX(ctx, ...) fmt::format(attempt_format_string, ctx->transaction_id(), ctx->id()) + __VA_ARGS__
+#define ADD_LOST_ATTEMPT(ctx, ...) fmt::format(couchbase::core::transactions::lost_attempt_format_string, fmt::ptr(ctx)) + __VA_ARGS__
+#define ADD_ATTEMPT_CLEANUP(...) couchbase::core::transactions::attempt_cleanup_format_string + __VA_ARGS__
+#define ADD_TXN(...) couchbase::core::transactions::txn_format_string + __VA_ARGS__
+
+#define CB_ATTEMPT_CTX_LOG_TRACE(ctx, ...) CB_TXN_LOG(couchbase::core::logger::level::trace, ADD_CTX(ctx, __VA_ARGS__))
+#define CB_ATTEMPT_CTX_LOG_DEBUG(ctx, ...) CB_TXN_LOG(couchbase::core::logger::level::debug, ADD_CTX(ctx, __VA_ARGS__))
+#define CB_ATTEMPT_CTX_LOG_INFO(ctx, ...) CB_TXN_LOG(couchbase::core::logger::level::info, ADD_CTX(ctx, __VA_ARGS__))
+#define CB_ATTEMPT_CTX_LOG_WARNING(ctx, ...) CB_TXN_LOG(couchbase::core::logger::level::warn, ADD_CTX(ctx, __VA_ARGS__))
+#define CB_ATTEMPT_CTX_LOG_ERROR(ctx, ...) CB_TXN_LOG(couchbase::core::logger::level::err, ADD_CTX(ctx, __VA_ARGS__))
+#define CB_ATTEMPT_CTX_LOG_CRITICAL(ctx, ...) CB_TXN_LOG(couchbase::core::logger::level::critical, ADD_CTX(ctx, __VA_ARGS__))
+
+#define CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE(...) CB_TXN_LOG(couchbase::core::logger::level::trace, ADD_LOST_ATTEMPT(this, __VA_ARGS__))
+#define CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG(...) CB_TXN_LOG(couchbase::core::logger::level::debug, ADD_LOST_ATTEMPT(this, __VA_ARGS__))
+#define CB_LOST_ATTEMPT_CLEANUP_LOG_INFO(...) CB_TXN_LOG(couchbase::core::logger::level::info, ADD_LOST_ATTEMPT(this, __VA_ARGS__))
+#define CB_LOST_ATTEMPT_CLEANUP_LOG_WARNING(...) CB_TXN_LOG(couchbase::core::logger::level::warn, ADD_LOST_ATTEMPT(this, __VA_ARGS__))
+#define CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR(...) CB_TXN_LOG(couchbase::core::logger::level::err, ADD_LOST_ATTEMPT(this, __VA_ARGS__))
+#define CB_LOST_ATTEMPT_CLEANUP_LOG_CRITICAL(...) CB_TXN_LOG(couchbase::core::logger::level::critical, ADD_LOST_ATTEMPT(this, __VA_ARGS__))
+
+#define CB_ATTEMPT_CLEANUP_LOG_TRACE(...) CB_TXN_LOG(couchbase::core::logger::level::trace, ADD_ATTEMPT_CLEANUP(__VA_ARGS__))
+#define CB_ATTEMPT_CLEANUP_LOG_DEBUG(...) CB_TXN_LOG(couchbase::core::logger::level::debug, ADD_ATTEMPT_CLEANUP(__VA_ARGS__))
+#define CB_ATTEMPT_CLEANUP_LOG_INFO(...) CB_TXN_LOG(couchbase::core::logger::level::info, ADD_ATTEMPT_CLEANUP(__VA_ARGS__))
+#define CB_ATTEMPT_CLEANUP_LOG_WARNING(...) CB_TXN_LOG(couchbase::core::logger::level::warn, ADD_ATTEMPT_CLEANUP(__VA_ARGS__))
+#define CB_ATTEMPT_CLEANUP_LOG_ERROR(...) CB_TXN_LOG(couchbase::core::logger::level::err, ADD_ATTEMPT_CLEANUP(__VA_ARGS__))
+#define CB_ATTEMPT_CLEANUP_LOG_CRITICAL(...) CB_TXN_LOG(couchbase::core::logger::level::critical, ADD_ATTEMPT_CLEANUP(__VA_ARGS__))
+
+#define CB_TXN_LOG_TRACE(...) CB_TXN_LOG(couchbase::core::logger::level::trace, ADD_TXN(__VA_ARGS__))
+#define CB_TXN_LOG_DEBUG(...) CB_TXN_LOG(couchbase::core::logger::level::debug, ADD_TXN(__VA_ARGS__))
+#define CB_TXN_LOG_INFO(...) CB_TXN_LOG(couchbase::core::logger::level::info, ADD_TXN(__VA_ARGS__))
+#define CB_TXN_LOG_WARNING(...) CB_TXN_LOG(couchbase::core::logger::level::warn, ADD_TXN(__VA_ARGS__))
+#define CB_TXN_LOG_ERROR(...) CB_TXN_LOG(couchbase::core::logger::level::err, ADD_TXN(__VA_ARGS__))
+#define CB_TXN_LOG_CRITICAL(...) CB_TXN_LOG(couchbase::core::logger::level::critical, ADD_TXN(__VA_ARGS__))
 
 } // namespace couchbase::core::transactions

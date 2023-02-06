@@ -151,9 +151,9 @@ staged_mutation_queue::iterate(std::function<void(staged_mutation&)> op)
 }
 
 void
-staged_mutation_queue::commit(attempt_context_impl& ctx)
+staged_mutation_queue::commit(attempt_context_impl* ctx)
 {
-    ctx.trace("staged mutations committing...");
+    CB_ATTEMPT_CTX_LOG_TRACE(ctx, "staged mutations committing...");
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto& item : queue_) {
         switch (item.type()) {
@@ -169,7 +169,7 @@ staged_mutation_queue::commit(attempt_context_impl& ctx)
 }
 
 void
-staged_mutation_queue::rollback(attempt_context_impl& ctx)
+staged_mutation_queue::rollback(attempt_context_impl* ctx)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto& item : queue_) {
@@ -186,15 +186,15 @@ staged_mutation_queue::rollback(attempt_context_impl& ctx)
 }
 
 void
-staged_mutation_queue::rollback_insert(attempt_context_impl& ctx, const staged_mutation& item)
+staged_mutation_queue::rollback_insert(attempt_context_impl* ctx, const staged_mutation& item)
 {
     try {
-        ctx.trace("rolling back staged insert for {} with cas {}", item.doc().id(), item.doc().cas().value());
-        auto ec = ctx.error_if_expired_and_not_in_overtime(STAGE_DELETE_INSERTED, item.doc().id().key());
+        CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rolling back staged insert for {} with cas {}", item.doc().id(), item.doc().cas().value());
+        auto ec = ctx->error_if_expired_and_not_in_overtime(STAGE_DELETE_INSERTED, item.doc().id().key());
         if (ec) {
             throw client_error(*ec, "expired in rollback and not in overtime mode");
         }
-        ec = ctx.hooks_.before_rollback_delete_inserted(&ctx, item.doc().id().key());
+        ec = ctx->hooks_.before_rollback_delete_inserted(ctx, item.doc().id().key());
         if (ec) {
             throw client_error(*ec, "before_rollback_delete_insert hook threw error");
         }
@@ -206,21 +206,21 @@ staged_mutation_queue::rollback_insert(attempt_context_impl& ctx, const staged_m
             .specs();
         req.access_deleted = true;
         req.cas = item.doc().cas();
-        wrap_durable_request(req, ctx.overall_.config());
+        wrap_durable_request(req, ctx->overall_.config());
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
-        ctx.cluster_ref()->execute(
+        ctx->cluster_ref()->execute(
           req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
         auto res = wrap_operation_future(f);
-        ctx.trace("rollback result {}", res);
-        ec = ctx.hooks_.after_rollback_delete_inserted(&ctx, item.doc().id().key());
+        CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rollback result {}", res);
+        ec = ctx->hooks_.after_rollback_delete_inserted(ctx, item.doc().id().key());
         if (ec) {
             throw client_error(*ec, "after_rollback_delete_insert hook threw error");
         }
     } catch (const client_error& e) {
         auto ec = e.ec();
-        if (ctx.expiry_overtime_mode_.load()) {
-            ctx.trace("rollback_insert for {} error while in overtime mode {}", item.doc().id(), e.what());
+        if (ctx->expiry_overtime_mode_.load()) {
+            CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rollback_insert for {} error while in overtime mode {}", item.doc().id(), e.what());
             throw transaction_operation_failed(FAIL_EXPIRY, std::string("expired while rolling back insert with {} ") + e.what())
               .no_rollback()
               .expired();
@@ -230,8 +230,8 @@ staged_mutation_queue::rollback_insert(attempt_context_impl& ctx, const staged_m
             case FAIL_CAS_MISMATCH:
                 throw transaction_operation_failed(ec, e.what()).no_rollback();
             case FAIL_EXPIRY:
-                ctx.expiry_overtime_mode_ = true;
-                ctx.trace("rollback_insert in expiry overtime mode, retrying...");
+                ctx->expiry_overtime_mode_ = true;
+                CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rollback_insert in expiry overtime mode, retrying...");
                 throw retry_operation("retry rollback_insert");
             case FAIL_DOC_NOT_FOUND:
             case FAIL_PATH_NOT_FOUND:
@@ -244,15 +244,15 @@ staged_mutation_queue::rollback_insert(attempt_context_impl& ctx, const staged_m
 }
 
 void
-staged_mutation_queue::rollback_remove_or_replace(attempt_context_impl& ctx, const staged_mutation& item)
+staged_mutation_queue::rollback_remove_or_replace(attempt_context_impl* ctx, const staged_mutation& item)
 {
     try {
-        ctx.trace("rolling back staged remove/replace for {} with cas {}", item.doc().id(), item.doc().cas().value());
-        auto ec = ctx.error_if_expired_and_not_in_overtime(STAGE_ROLLBACK_DOC, item.doc().id().key());
+        CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rolling back staged remove/replace for {} with cas {}", item.doc().id(), item.doc().cas().value());
+        auto ec = ctx->error_if_expired_and_not_in_overtime(STAGE_ROLLBACK_DOC, item.doc().id().key());
         if (ec) {
             throw client_error(*ec, "expired in rollback_remove_or_replace and not in expiry overtime");
         }
-        ec = ctx.hooks_.before_doc_rolled_back(&ctx, item.doc().id().key());
+        ec = ctx->hooks_.before_doc_rolled_back(ctx, item.doc().id().key());
         if (ec) {
             throw client_error(*ec, "before_doc_rolled_back hook threw error");
         }
@@ -263,20 +263,20 @@ staged_mutation_queue::rollback_remove_or_replace(attempt_context_impl& ctx, con
           }
             .specs();
         req.cas = item.doc().cas();
-        wrap_durable_request(req, ctx.overall_.config());
+        wrap_durable_request(req, ctx->overall_.config());
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
-        ctx.cluster_ref()->execute(
+        ctx->cluster_ref()->execute(
           req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
         auto res = wrap_operation_future(f);
-        ctx.trace("rollback result {}", res);
-        ec = ctx.hooks_.after_rollback_replace_or_remove(&ctx, item.doc().id().key());
+        CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rollback result {}", res);
+        ec = ctx->hooks_.after_rollback_replace_or_remove(ctx, item.doc().id().key());
         if (ec) {
             throw client_error(*ec, "after_rollback_replace_or_remove hook threw error");
         }
     } catch (const client_error& e) {
         auto ec = e.ec();
-        if (ctx.expiry_overtime_mode_.load()) {
+        if (ctx->expiry_overtime_mode_.load()) {
             throw transaction_operation_failed(FAIL_EXPIRY, std::string("expired while handling ") + e.what()).no_rollback();
         }
         switch (ec) {
@@ -285,8 +285,8 @@ staged_mutation_queue::rollback_remove_or_replace(attempt_context_impl& ctx, con
             case FAIL_CAS_MISMATCH:
                 throw transaction_operation_failed(ec, e.what()).no_rollback();
             case FAIL_EXPIRY:
-                ctx.expiry_overtime_mode_ = true;
-                ctx.trace("setting expiry overtime mode in {}", STAGE_ROLLBACK_DOC);
+                ctx->expiry_overtime_mode_ = true;
+                CB_ATTEMPT_CTX_LOG_TRACE(ctx, "setting expiry overtime mode in {}", STAGE_ROLLBACK_DOC);
                 throw retry_operation("retry rollback_remove_or_replace");
             case FAIL_PATH_NOT_FOUND:
                 // already cleaned up?
@@ -297,29 +297,30 @@ staged_mutation_queue::rollback_remove_or_replace(attempt_context_impl& ctx, con
     }
 }
 void
-staged_mutation_queue::commit_doc(attempt_context_impl& ctx, staged_mutation& item, bool ambiguity_resolution_mode, bool cas_zero_mode)
+staged_mutation_queue::commit_doc(attempt_context_impl* ctx, staged_mutation& item, bool ambiguity_resolution_mode, bool cas_zero_mode)
 {
     retry_op<void>([&]() {
-        ctx.trace(
-          "commit doc {}, cas_zero_mode {}, ambiguity_resolution_mode {}", item.doc().id(), cas_zero_mode, ambiguity_resolution_mode);
+        CB_ATTEMPT_CTX_LOG_TRACE(
+          ctx, "commit doc {}, cas_zero_mode {}, ambiguity_resolution_mode {}", item.doc().id(), cas_zero_mode, ambiguity_resolution_mode);
         try {
-            ctx.check_expiry_during_commit_or_rollback(STAGE_COMMIT_DOC, std::optional<const std::string>(item.doc().id().key()));
-            auto ec = ctx.hooks_.before_doc_committed(&ctx, item.doc().id().key());
+            ctx->check_expiry_during_commit_or_rollback(STAGE_COMMIT_DOC, std::optional<const std::string>(item.doc().id().key()));
+            auto ec = ctx->hooks_.before_doc_committed(ctx, item.doc().id().key());
             if (ec) {
                 throw client_error(*ec, "before_doc_committed hook threw error");
             }
 
             // move staged content into doc
-            ctx.trace("commit doc id {}, content {}, cas {}", item.doc().id(), to_string(item.content()), item.doc().cas().value());
+            CB_ATTEMPT_CTX_LOG_TRACE(
+              ctx, "commit doc id {}, content {}, cas {}", item.doc().id(), to_string(item.content()), item.doc().cas().value());
 
             result res;
             if (item.type() == staged_mutation_type::INSERT && !cas_zero_mode) {
                 core::operations::insert_request req{ item.doc().id(), item.doc().content() };
                 req.flags = couchbase::codec::codec_flags::json_common_flags;
-                wrap_durable_request(req, ctx.overall_.config());
+                wrap_durable_request(req, ctx->overall_.config());
                 auto barrier = std::make_shared<std::promise<result>>();
                 auto f = barrier->get_future();
-                ctx.cluster_ref()->execute(req, [barrier](core::operations::insert_response resp) {
+                ctx->cluster_ref()->execute(req, [barrier](core::operations::insert_response resp) {
                     barrier->set_value(result::create_from_mutation_response(resp));
                 });
                 res = wrap_operation_future(f);
@@ -334,28 +335,28 @@ staged_mutation_queue::commit_doc(attempt_context_impl& ctx, staged_mutation& it
                     .specs();
                 req.store_semantics = couchbase::store_semantics::replace;
                 req.cas = couchbase::cas(cas_zero_mode ? 0 : item.doc().cas().value());
-                wrap_durable_request(req, ctx.overall_.config());
+                wrap_durable_request(req, ctx->overall_.config());
                 auto barrier = std::make_shared<std::promise<result>>();
                 auto f = barrier->get_future();
-                ctx.cluster_ref()->execute(req, [barrier](core::operations::mutate_in_response resp) {
+                ctx->cluster_ref()->execute(req, [barrier](core::operations::mutate_in_response resp) {
                     barrier->set_value(result::create_from_subdoc_response(resp));
                 });
                 res = wrap_operation_future(f);
             }
-            ctx.trace("commit doc result {}", res);
+            CB_ATTEMPT_CTX_LOG_TRACE(ctx, "commit doc result {}", res);
             // TODO: mutation tokens
-            ec = ctx.hooks_.after_doc_committed_before_saving_cas(&ctx, item.doc().id().key());
+            ec = ctx->hooks_.after_doc_committed_before_saving_cas(ctx, item.doc().id().key());
             if (ec) {
                 throw client_error(*ec, "after_doc_committed_before_saving_cas threw error");
             }
             item.doc().cas(res.cas);
-            ec = ctx.hooks_.after_doc_committed(&ctx, item.doc().id().key());
+            ec = ctx->hooks_.after_doc_committed(ctx, item.doc().id().key());
             if (ec) {
                 throw client_error(*ec, "after_doc_committed threw error");
             }
         } catch (const client_error& e) {
             error_class ec = e.ec();
-            if (ctx.expiry_overtime_mode_.load()) {
+            if (ctx->expiry_overtime_mode_.load()) {
                 throw transaction_operation_failed(FAIL_EXPIRY, "expired during commit").no_rollback().failed_post_commit();
             }
             switch (ec) {
@@ -378,29 +379,29 @@ staged_mutation_queue::commit_doc(attempt_context_impl& ctx, staged_mutation& it
 }
 
 void
-staged_mutation_queue::remove_doc(attempt_context_impl& ctx, const staged_mutation& item)
+staged_mutation_queue::remove_doc(attempt_context_impl* ctx, const staged_mutation& item)
 {
     retry_op<void>([&] {
         try {
-            ctx.check_expiry_during_commit_or_rollback(STAGE_REMOVE_DOC, std::optional<const std::string>(item.doc().id().key()));
-            auto ec = ctx.hooks_.before_doc_removed(&ctx, item.doc().id().key());
+            ctx->check_expiry_during_commit_or_rollback(STAGE_REMOVE_DOC, std::optional<const std::string>(item.doc().id().key()));
+            auto ec = ctx->hooks_.before_doc_removed(ctx, item.doc().id().key());
             if (ec) {
                 throw client_error(*ec, "before_doc_removed hook threw error");
             }
             core::operations::remove_request req{ item.doc().id() };
-            wrap_durable_request(req, ctx.overall_.config());
+            wrap_durable_request(req, ctx->overall_.config());
             auto barrier = std::make_shared<std::promise<result>>();
             auto f = barrier->get_future();
-            ctx.cluster_ref()->execute(
+            ctx->cluster_ref()->execute(
               req, [barrier](core::operations::remove_response resp) { barrier->set_value(result::create_from_mutation_response(resp)); });
             wrap_operation_future(f);
-            ec = ctx.hooks_.after_doc_removed_pre_retry(&ctx, item.doc().id().key());
+            ec = ctx->hooks_.after_doc_removed_pre_retry(ctx, item.doc().id().key());
             if (ec) {
                 throw client_error(*ec, "after_doc_removed_pre_retry threw error");
             }
         } catch (const client_error& e) {
             error_class ec = e.ec();
-            if (ctx.expiry_overtime_mode_.load()) {
+            if (ctx->expiry_overtime_mode_.load()) {
                 throw transaction_operation_failed(ec, e.what()).no_rollback().failed_post_commit();
             }
             switch (ec) {

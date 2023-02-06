@@ -56,6 +56,7 @@ class logging_meter : public couchbase::metrics::meter
       : emit_report_(ctx)
       , options_(options)
     {
+        rearm_reporter();
     }
 
     ~logging_meter() override

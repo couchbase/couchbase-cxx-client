@@ -155,27 +155,28 @@ class attempt_context_impl
         try {
             throw e;
         } catch (const transaction_operation_failed& ex) {
-            txn_log->error("op callback called a txn operation that threw exception {}", ex.what());
+            CB_ATTEMPT_CTX_LOG_ERROR(this, "op callback called a txn operation that threw exception {}", ex.what());
             op_list_.decrement_ops();
             // presumably that op called op_completed_with_error already, so
             // don't do anything here but swallow it.
         } catch (const async_operation_conflict& op_ex) {
             // the count isn't changed when this is thrown, so just swallow it and log
-            txn_log->error("op callback called a txn operation that threw exception {}", op_ex.what());
+            CB_ATTEMPT_CTX_LOG_ERROR(this, "op callback called a txn operation that threw exception {}", op_ex.what());
         } catch (const op_exception& op_ex) {
-            txn_log->warn("op callback called a txn operation that threw (and didn't handle) a op_exception {}", op_ex.what());
+            CB_ATTEMPT_CTX_LOG_WARNING(
+              this, "op callback called a txn operation that threw (and didn't handle) a op_exception {}", op_ex.what());
             errors_.push_back(
               transaction_operation_failed(error_class_from_external_exception(op_ex.cause()), op_ex.what()).cause(op_ex.cause()));
             op_list_.decrement_ops();
         } catch (const std::exception& std_ex) {
             // if the callback throws something which wasn't handled
             // we just want to handle as a rollback
-            txn_log->error("op callback threw exception {}", std_ex.what());
+            CB_ATTEMPT_CTX_LOG_ERROR(this, "op callback threw exception {}", std_ex.what());
             errors_.push_back(transaction_operation_failed(FAIL_OTHER, std_ex.what()));
             op_list_.decrement_ops();
         } catch (...) {
             // could be something really arbitrary, still...
-            txn_log->error("op callback threw unexpected exception");
+            CB_ATTEMPT_CTX_LOG_ERROR(this, "op callback threw unexpected exception");
             errors_.push_back(transaction_operation_failed(FAIL_OTHER, "unexpected error"));
             op_list_.decrement_ops();
         }
@@ -294,7 +295,7 @@ class attempt_context_impl
             return func();
         } catch (const async_operation_conflict& e) {
             // can't do anything here but log and eat it.
-            error("Attempted to perform txn operation after commit/rollback started: {}", e.what());
+            CB_ATTEMPT_CTX_LOG_ERROR(this, "Attempted to perform txn operation after commit/rollback started: {}", e.what());
             // you cannot call op_completed_with_error, as it tries to decrement
             // the op count, however it didn't successfully increment it, so...
             op_completed_with_error_no_cache(std::move(cb), std::current_exception());
@@ -309,30 +310,6 @@ class attempt_context_impl
         } catch (const std::exception& e) {
             op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
         }
-    }
-
-    template<typename... Args>
-    void trace(const std::string& fmt, Args... args)
-    {
-        txn_log->trace(attempt_format_string + fmt, this->transaction_id(), this->id(), args...);
-    }
-
-    template<typename... Args>
-    void debug(const std::string& fmt, Args... args)
-    {
-        txn_log->debug(attempt_format_string + fmt, this->transaction_id(), this->id(), args...);
-    }
-
-    template<typename... Args>
-    void info(const std::string& fmt, Args... args)
-    {
-        txn_log->info(attempt_format_string + fmt, this->transaction_id(), this->id(), args...);
-    }
-
-    template<typename... Args>
-    void error(const std::string& fmt, Args... args)
-    {
-        txn_log->error(attempt_format_string + fmt, this->transaction_id(), this->id(), args...);
     }
 
     std::shared_ptr<core::cluster> cluster_ref();

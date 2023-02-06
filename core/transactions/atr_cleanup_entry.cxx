@@ -16,13 +16,11 @@
 
 #include "active_transaction_record.hxx"
 #include "attempt_context_impl.hxx"
-#include "attempt_context_testing_hooks.hxx"
 #include "cleanup_testing_hooks.hxx"
 #include "durability_level.hxx"
 #include "forward_compat.hxx"
 
 #include "core/transactions.hxx"
-#include "exceptions.hxx"
 #include "internal/atr_cleanup_entry.hxx"
 #include "internal/logging.hxx"
 #include "internal/transactions_cleanup.hxx"
@@ -83,9 +81,9 @@ atr_cleanup_entry::atr_cleanup_entry(attempt_context& ctx)
 }
 
 void
-atr_cleanup_entry::clean(std::shared_ptr<spdlog::logger> logger, transactions_cleanup_attempt* result)
+atr_cleanup_entry::clean(transactions_cleanup_attempt* result)
 {
-    logger->trace("cleaning {}", *this);
+    CB_ATTEMPT_CLEANUP_LOG_TRACE("cleaning {}", *this);
     // get atr entry if needed
     atr_entry entry;
     if (nullptr == atr_entry_) {
@@ -96,21 +94,21 @@ atr_cleanup_entry::clean(std::shared_ptr<spdlog::logger> logger, transactions_cl
               std::find_if(atr->entries().begin(), atr->entries().end(), [&](const atr_entry& e) { return e.attempt_id() == attempt_id_; });
             if (it != atr->entries().end()) {
                 atr_entry_ = &(*it);
-                return check_atr_and_cleanup(logger, result);
+                return check_atr_and_cleanup(result);
             } else {
-                logger->trace("could not find attempt {}, nothing to clean", attempt_id_);
+                CB_ATTEMPT_CLEANUP_LOG_TRACE("could not find attempt {}, nothing to clean", attempt_id_);
                 return;
             }
         } else {
-            logger->trace("could not find atr {}, nothing to clean", atr_id_);
+            CB_ATTEMPT_CLEANUP_LOG_TRACE("could not find atr {}, nothing to clean", atr_id_);
             return;
         }
     }
-    check_atr_and_cleanup(logger, result);
+    check_atr_and_cleanup(result);
 }
 
 void
-atr_cleanup_entry::check_atr_and_cleanup(std::shared_ptr<spdlog::logger> logger, transactions_cleanup_attempt* result)
+atr_cleanup_entry::check_atr_and_cleanup(transactions_cleanup_attempt* result)
 {
     // ExtStoreDurability: this is the first point where we're guaranteed to have the ATR entry
     auto durability_level_raw = atr_entry_->durability_level();
@@ -118,12 +116,8 @@ atr_cleanup_entry::check_atr_and_cleanup(std::shared_ptr<spdlog::logger> logger,
     if (durability_level_raw.has_value()) {
         durability_level = store_string_to_durability_level(durability_level_raw.value());
     }
-    // Too verbose to log, but leaving here commented as it may be useful later for internal debugging
-    // logger->trace("found attempt {}/{} check_if_expired_={} has_expired={} safety_margin_ms_={}", atr_entry_->atr_id(),
-    // atr_entry_->attempt_id(),
-    //              check_if_expired_, atr_entry_->has_expired(safety_margin_ms_),safety_margin_ms_);
     if (check_if_expired_ && !atr_entry_->has_expired(safety_margin_ms_)) {
-        logger->trace("{} not expired, nothing to clean", *this);
+        CB_ATTEMPT_CLEANUP_LOG_TRACE("not expired, nothing to clean");
         return;
     }
     if (result) {
@@ -133,12 +127,12 @@ atr_cleanup_entry::check_atr_and_cleanup(std::shared_ptr<spdlog::logger> logger,
     if (err) {
         throw *err;
     }
-    cleanup_docs(logger, durability_level);
+    cleanup_docs(durability_level);
     auto ec = cleanup_->config().cleanup_hooks->on_cleanup_docs_completed();
     if (ec) {
         throw client_error(*ec, "on_cleanup_docs_completed hook threw error");
     }
-    cleanup_entry(logger, durability_level);
+    cleanup_entry(durability_level);
     ec = cleanup_->config().cleanup_hooks->on_cleanup_completed();
     if (ec) {
         throw client_error(*ec, "on_cleanup_completed hook threw error");
@@ -147,31 +141,30 @@ atr_cleanup_entry::check_atr_and_cleanup(std::shared_ptr<spdlog::logger> logger,
 }
 
 void
-atr_cleanup_entry::cleanup_docs(std::shared_ptr<spdlog::logger> logger, durability_level dl)
+atr_cleanup_entry::cleanup_docs(durability_level dl)
 {
     switch (atr_entry_->state()) {
         case attempt_state::COMMITTED:
-            commit_docs(logger, atr_entry_->inserted_ids(), dl);
-            commit_docs(logger, atr_entry_->replaced_ids(), dl);
-            remove_docs_staged_for_removal(logger, atr_entry_->removed_ids(), dl);
+            commit_docs(atr_entry_->inserted_ids(), dl);
+            commit_docs(atr_entry_->replaced_ids(), dl);
+            remove_docs_staged_for_removal(atr_entry_->removed_ids(), dl);
             break;
         // half-finished commit
         case attempt_state::ABORTED:
             // half finished rollback
-            remove_docs(logger, atr_entry_->inserted_ids(), dl);
-            remove_txn_links(logger, atr_entry_->replaced_ids(), dl);
-            remove_txn_links(logger, atr_entry_->removed_ids(), dl);
+            remove_docs(atr_entry_->inserted_ids(), dl);
+            remove_txn_links(atr_entry_->replaced_ids(), dl);
+            remove_txn_links(atr_entry_->removed_ids(), dl);
             break;
         default:
-            logger->trace("attempt in {}, nothing to do in cleanup_docs", attempt_state_name(atr_entry_->state()));
+            CB_ATTEMPT_CLEANUP_LOG_TRACE("attempt in {}, nothing to do in cleanup_docs", attempt_state_name(atr_entry_->state()));
     }
 }
 
 void
-atr_cleanup_entry::do_per_doc(std::shared_ptr<spdlog::logger> logger,
-                              std::vector<doc_record> docs,
+atr_cleanup_entry::do_per_doc(std::vector<doc_record> docs,
                               bool require_crc_to_match,
-                              const std::function<void(std::shared_ptr<spdlog::logger>, transaction_get_result&, bool)>& call)
+                              const std::function<void(transaction_get_result&, bool)>& call)
 {
     for (const auto& dr : docs) {
         try {
@@ -203,40 +196,40 @@ atr_cleanup_entry::do_per_doc(std::shared_ptr<spdlog::logger> logger,
             auto res = wrap_operation_future(f);
 
             if (res.values.empty()) {
-                logger->trace("cannot create a transaction document from {}, ignoring", res);
+                CB_ATTEMPT_CLEANUP_LOG_TRACE("cannot create a transaction document from {}, ignoring", res);
                 continue;
             }
             auto doc = transaction_get_result::create_from(dr.document_id(), res);
             // now let's decide if we call the function or not
             if (!(doc.links().has_staged_content() || doc.links().is_document_being_removed()) || !doc.links().has_staged_write()) {
-                logger->trace("document {} has no staged content - assuming it was "
-                              "committed and skipping",
-                              dr.id());
+                CB_ATTEMPT_CLEANUP_LOG_TRACE("document {} has no staged content - assuming it was "
+                                             "committed and skipping",
+                                             dr.id());
                 continue;
             } else if (doc.links().staged_attempt_id() != attempt_id_) {
-                logger->trace(
+                CB_ATTEMPT_CLEANUP_LOG_TRACE(
                   "document {} staged for different attempt {}, skipping", dr.id(), doc.links().staged_attempt_id().value_or("<none>)"));
                 continue;
             }
             if (require_crc_to_match) {
                 if (!doc.metadata()->crc32() || !doc.links().crc32_of_staging() ||
                     doc.links().crc32_of_staging() != doc.metadata()->crc32()) {
-                    logger->trace("document {} crc32 {} doesn't match staged value {}, skipping",
-                                  dr.id(),
-                                  doc.metadata()->crc32().value_or("<none>"),
-                                  doc.links().crc32_of_staging().value_or("<none>"));
+                    CB_ATTEMPT_CLEANUP_LOG_TRACE("document {} crc32 {} doesn't match staged value {}, skipping",
+                                                 dr.id(),
+                                                 doc.metadata()->crc32().value_or("<none>"),
+                                                 doc.links().crc32_of_staging().value_or("<none>"));
                     continue;
                 }
             }
-            call(logger, doc, res.is_deleted);
+            call(doc, res.is_deleted);
         } catch (const client_error& e) {
             error_class ec = e.ec();
             switch (ec) {
                 case FAIL_DOC_NOT_FOUND:
-                    logger->error("document {} not found - ignoring ", dr);
+                    CB_ATTEMPT_CLEANUP_LOG_ERROR("document {} not found - ignoring ", dr);
                     break;
                 default:
-                    logger->error("got error \"{}\", not ignoring this", e.what());
+                    CB_ATTEMPT_CLEANUP_LOG_ERROR("got error \"{}\", not ignoring this", e.what());
                     throw;
             }
         }
@@ -244,10 +237,10 @@ atr_cleanup_entry::do_per_doc(std::shared_ptr<spdlog::logger> logger,
 }
 
 void
-atr_cleanup_entry::commit_docs(std::shared_ptr<spdlog::logger> logger, std::optional<std::vector<doc_record>> docs, durability_level dl)
+atr_cleanup_entry::commit_docs(std::optional<std::vector<doc_record>> docs, durability_level dl)
 {
     if (docs) {
-        do_per_doc(logger, *docs, true, [&](std::shared_ptr<spdlog::logger> log, transaction_get_result& doc, bool) {
+        do_per_doc(*docs, true, [&](transaction_get_result& doc, bool) {
             if (doc.links().has_staged_content()) {
                 auto content = doc.links().staged_content();
                 auto ec = cleanup_->config().cleanup_hooks->before_commit_doc(doc.id().key());
@@ -281,18 +274,18 @@ atr_cleanup_entry::commit_docs(std::shared_ptr<spdlog::logger> logger, std::opti
                     });
                     wrap_operation_future(f);
                 }
-                log->trace("commit_docs replaced content of doc {} with {}", doc.id(), to_string(content));
+                CB_ATTEMPT_CLEANUP_LOG_TRACE("commit_docs replaced content of doc {} with {}", doc.id(), to_string(content));
             } else {
-                log->trace("commit_docs skipping document {}, no staged content", doc.id());
+                CB_ATTEMPT_CLEANUP_LOG_TRACE("commit_docs skipping document {}, no staged content", doc.id());
             }
         });
     }
 }
 void
-atr_cleanup_entry::remove_docs(std::shared_ptr<spdlog::logger> logger, std::optional<std::vector<doc_record>> docs, durability_level dl)
+atr_cleanup_entry::remove_docs(std::optional<std::vector<doc_record>> docs, durability_level dl)
 {
     if (docs) {
-        do_per_doc(logger, *docs, true, [&](std::shared_ptr<spdlog::logger> log, transaction_get_result& doc, bool is_deleted) {
+        do_per_doc(*docs, true, [&](transaction_get_result& doc, bool is_deleted) {
             auto ec = cleanup_->config().cleanup_hooks->before_remove_doc(doc.id().key());
             if (ec) {
                 throw client_error(*ec, "before_remove_doc hook threw error");
@@ -324,18 +317,16 @@ atr_cleanup_entry::remove_docs(std::shared_ptr<spdlog::logger> logger, std::opti
                 });
                 wrap_operation_future(f);
             }
-            log->trace("remove_docs removed doc {}", doc.id());
+            CB_ATTEMPT_CLEANUP_LOG_TRACE("remove_docs removed doc {}", doc.id());
         });
     }
 }
 
 void
-atr_cleanup_entry::remove_docs_staged_for_removal(std::shared_ptr<spdlog::logger> logger,
-                                                  std::optional<std::vector<doc_record>> docs,
-                                                  durability_level dl)
+atr_cleanup_entry::remove_docs_staged_for_removal(std::optional<std::vector<doc_record>> docs, durability_level dl)
 {
     if (docs) {
-        do_per_doc(logger, *docs, true, [&](std::shared_ptr<spdlog::logger> log, transaction_get_result& doc, bool) {
+        do_per_doc(*docs, true, [&](transaction_get_result& doc, bool) {
             if (doc.links().is_document_being_removed()) {
                 auto ec = cleanup_->config().cleanup_hooks->before_remove_doc_staged_for_removal(doc.id().key());
                 if (ec) {
@@ -350,23 +341,21 @@ atr_cleanup_entry::remove_docs_staged_for_removal(std::shared_ptr<spdlog::logger
                     barrier->set_value(result::create_from_mutation_response(resp));
                 });
                 wrap_operation_future(f);
-                log->trace("remove_docs_staged_for_removal removed doc {}", doc.id());
+                CB_ATTEMPT_CLEANUP_LOG_TRACE("remove_docs_staged_for_removal removed doc {}", doc.id());
             } else {
-                log->trace("remove_docs_staged_for_removal found document {} not "
-                           "marked for removal, skipping",
-                           doc.id());
+                CB_ATTEMPT_CLEANUP_LOG_TRACE("remove_docs_staged_for_removal found document {} not "
+                                             "marked for removal, skipping",
+                                             doc.id());
             }
         });
     }
 }
 
 void
-atr_cleanup_entry::remove_txn_links(std::shared_ptr<spdlog::logger> logger,
-                                    std::optional<std::vector<doc_record>> docs,
-                                    durability_level dl)
+atr_cleanup_entry::remove_txn_links(std::optional<std::vector<doc_record>> docs, durability_level dl)
 {
     if (docs) {
-        do_per_doc(logger, *docs, false, [&](std::shared_ptr<spdlog::logger> log, transaction_get_result& doc, bool) {
+        do_per_doc(*docs, false, [&](transaction_get_result& doc, bool) {
             auto ec = cleanup_->config().cleanup_hooks->before_remove_links(doc.id().key());
             if (ec) {
                 throw client_error(*ec, "before_remove_links hook threw error");
@@ -385,13 +374,13 @@ atr_cleanup_entry::remove_txn_links(std::shared_ptr<spdlog::logger> logger,
             cleanup_->cluster_ref()->execute(
               req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
             wrap_operation_future(f);
-            log->trace("remove_txn_links removed links for doc {}", doc.id());
+            CB_ATTEMPT_CLEANUP_LOG_TRACE("remove_txn_links removed links for doc {}", doc.id());
         });
     }
 }
 
 void
-atr_cleanup_entry::cleanup_entry(std::shared_ptr<spdlog::logger> logger, durability_level dl)
+atr_cleanup_entry::cleanup_entry(durability_level dl)
 {
     try {
         auto ec = cleanup_->config().cleanup_hooks->before_atr_remove();
@@ -412,15 +401,15 @@ atr_cleanup_entry::cleanup_entry(std::shared_ptr<spdlog::logger> logger, durabil
         cleanup_->cluster_ref()->execute(
           req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
         wrap_operation_future(f);
-        logger->trace("successfully removed attempt {}", attempt_id_);
+        CB_ATTEMPT_CLEANUP_LOG_TRACE("successfully removed attempt {}", attempt_id_);
     } catch (const client_error& e) {
         error_class ec = e.ec();
         switch (ec) {
             case FAIL_PATH_NOT_FOUND:
-                logger->trace("found attempt {} has also inserted 'p' field indicating collision with main algo");
+                CB_ATTEMPT_CLEANUP_LOG_TRACE("found attempt {} has also inserted 'p' field indicating collision with main algo");
                 return;
             default:
-                logger->error("cleanup couldn't remove attempt {} due to {} {}", attempt_id_, ec, e.what());
+                CB_ATTEMPT_CLEANUP_LOG_ERROR("cleanup couldn't remove attempt {} due to {} {}", attempt_id_, ec, e.what());
                 throw;
         }
     }

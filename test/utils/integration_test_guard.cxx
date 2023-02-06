@@ -99,6 +99,7 @@ integration_test_guard::integration_test_guard(const couchbase::core::cluster_op
 integration_test_guard::~integration_test_guard()
 {
     close_cluster(cluster);
+    io.stop();
     for (auto& thread : io_threads) {
         thread.join();
     }
