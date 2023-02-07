@@ -59,7 +59,7 @@ initiate_get_operation(std::shared_ptr<couchbase::core::cluster> core,
       },
       [handler = std::move(handler)](operations::get_projected_response&& resp) mutable {
           std::optional<std::chrono::system_clock::time_point> expiry_time{};
-          if (resp.expiry) {
+          if (resp.expiry && resp.expiry.value() > 0) {
               expiry_time.emplace(std::chrono::seconds{ resp.expiry.value() });
           }
           return handler(std::move(resp.ctx), get_result{ resp.cas, { std::move(resp.value), resp.flags }, expiry_time });

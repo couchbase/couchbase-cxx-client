@@ -894,3 +894,49 @@ TEST_CASE("integration: exists with public API", "[integration]")
         REQUIRE_FALSE(resp.exists());
     }
 }
+
+TEST_CASE("integration: get with expiry with public API", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    auto collection = couchbase::cluster(integration.cluster)
+                        .bucket(integration.ctx.bucket)
+                        .scope(couchbase::scope::default_name)
+                        .collection(couchbase::collection::default_name);
+
+    auto id = test::utils::uniq_id("get_expiry");
+
+    auto get_options = couchbase::get_options{}.with_expiry(true);
+
+    SECTION("no expiry set on the document")
+    {
+        {
+            auto [ctx, resp] = collection.insert(id, basic_doc, {}).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        {
+            auto [ctx, resp] = collection.get(id, get_options).get();
+            REQUIRE_SUCCESS(ctx.ec());
+            REQUIRE_FALSE(resp.expiry_time().has_value());
+        }
+    }
+
+    SECTION("some expiry is set on the document")
+    {
+        auto the_expiry = std::chrono::system_clock::from_time_t(1878422400);
+        auto insert_options = couchbase::insert_options{}.expiry(the_expiry);
+        {
+            auto [ctx, resp] = collection.insert(id, basic_doc, insert_options).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        {
+            auto [ctx, resp] = collection.get(id, get_options).get();
+            REQUIRE_SUCCESS(ctx.ec());
+            REQUIRE(resp.expiry_time().has_value());
+            REQUIRE(resp.expiry_time().value() == the_expiry);
+        }
+    }
+}
