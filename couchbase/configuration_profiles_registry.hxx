@@ -21,6 +21,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace couchbase
 {
@@ -54,5 +55,7 @@ class configuration_profiles_registry
      * @internal
      */
     static void apply_profile(const std::string& name, couchbase::cluster_options& options);
+
+    static auto available_profiles() -> std::vector<std::string>;
 };
 } // namespace couchbase

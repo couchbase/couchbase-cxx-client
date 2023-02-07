@@ -59,4 +59,15 @@ configuration_profiles_registry::apply_profile(const std::string& name, couchbas
 
     profile->apply(options);
 }
+
+auto
+configuration_profiles_registry::available_profiles() -> std::vector<std::string>
+{
+    std::vector<std::string> profile_names;
+    std::scoped_lock lock(registry::store_mutex);
+    for (const auto& [name, _] : registry::store) {
+        profile_names.push_back(name);
+    }
+    return profile_names;
+}
 } // namespace couchbase
