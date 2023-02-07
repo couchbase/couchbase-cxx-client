@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include <couchbase/cas.hxx>
+#include <couchbase/tls_verify_mode.hxx>
 
 #include <fmt/core.h>
 
 template<>
-struct fmt::formatter<couchbase::cas> {
+struct fmt::formatter<couchbase::tls_verify_mode> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext& ctx)
     {
@@ -30,8 +30,17 @@ struct fmt::formatter<couchbase::cas> {
     }
 
     template<typename FormatContext>
-    auto format(const couchbase::cas& cas, FormatContext& ctx) const
+    auto format(couchbase::tls_verify_mode mode, FormatContext& ctx) const
     {
-        return format_to(ctx.out(), "{:016x}", cas.value());
+        string_view name = "unknown";
+        switch (mode) {
+            case couchbase::tls_verify_mode::none:
+                name = "none";
+                break;
+            case couchbase::tls_verify_mode::peer:
+                name = "peer";
+                break;
+        }
+        return format_to(ctx.out(), "{}", name);
     }
 };
