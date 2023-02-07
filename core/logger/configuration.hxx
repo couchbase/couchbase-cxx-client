@@ -10,7 +10,10 @@
  */
 #pragma once
 
+#include "level.hxx"
+
 #include <spdlog/common.h>
+
 #include <string>
 
 namespace couchbase::core::logger

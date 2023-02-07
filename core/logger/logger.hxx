@@ -25,20 +25,18 @@
 
 #pragma once
 
+#include "level.hxx"
+
 #include <fmt/core.h>
+#include <spdlog/fwd.h>
+
 #include <memory>
 #include <optional>
-#include <spdlog/fwd.h>
 #include <string>
 
 namespace couchbase::core::logger
 {
 struct configuration;
-
-/**
- * the various severity levels we can log at
- */
-enum class level { trace, debug, info, warn, err, critical, off };
 
 level
 level_from_str(const std::string& str);
