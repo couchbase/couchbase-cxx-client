@@ -224,8 +224,9 @@ get_projected_request::make_response(key_value_error_context&& ctx, const encode
                         return response;
                     }
                     subdoc_apply_projection(new_doc, projection, value_to_apply, preserve_array_indexes);
-                } else {
-                    response.ctx.override_ec(errc::key_value::path_not_found);
+                } else if (field.status != key_value_status_code::subdoc_path_not_found) {
+                    response.ctx.override_ec(
+                      protocol::map_status_code(protocol::client_opcode::subdoc_multi_lookup, static_cast<std::uint16_t>(field.status)));
                     return response;
                 }
             }
