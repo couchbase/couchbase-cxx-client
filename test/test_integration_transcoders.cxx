@@ -282,8 +282,22 @@ TEST_CASE("integration: get with projections and json transcoder", "[integration
         REQUIRE(resp.mutation_token().has_value());
     }
 
+    SECTION("all fields present")
     {
         auto [ctx, resp] = collection.get(id, couchbase::get_options{}.project({ "username", "full_name" })).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        auto light_albert = resp.content_as<profile>();
+        REQUIRE_FALSE(light_albert == albert);
+        REQUIRE(light_albert.username == albert.username);
+        REQUIRE(light_albert.full_name == albert.full_name);
+        REQUIRE(light_albert.birth_year != albert.birth_year);
+        REQUIRE(light_albert.birth_year == 0);
+    }
+
+    SECTION("with non-existent field in projections")
+    {
+        auto [ctx, resp] = collection.get(id, couchbase::get_options{}.project({ "username", "full_name", "non_existent_field" })).get();
         REQUIRE_SUCCESS(ctx.ec());
         REQUIRE_FALSE(resp.cas().empty());
         auto light_albert = resp.content_as<profile>();
