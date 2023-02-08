@@ -166,16 +166,20 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
     if (!prep.is_string()) {
         prep = false;
     }
+    body.erase("statement");
+    body.erase("prepared");
     if (ctx_->options.show_queries) {
-        CB_LOG_INFO("QUERY: client_context_id=\"{}\", prep={}, {}",
+        CB_LOG_INFO("QUERY: client_context_id=\"{}\", prep={}, {}, options={}",
                     encoded.client_context_id,
                     utils::json::generate(prep),
-                    utils::json::generate(stmt));
+                    utils::json::generate(stmt),
+                    utils::json::generate(body));
     } else {
-        CB_LOG_DEBUG("QUERY: client_context_id=\"{}\", prep={}, {}",
+        CB_LOG_DEBUG("QUERY: client_context_id=\"{}\", prep={}, {}, options={}",
                      encoded.client_context_id,
                      utils::json::generate(prep),
-                     utils::json::generate(stmt));
+                     utils::json::generate(stmt),
+                     utils::json::generate(body));
     }
     if (row_callback) {
         encoded.streaming.emplace(couchbase::core::io::streaming_settings{

@@ -54,6 +54,7 @@ sdk_build_info()
 #else
     info["snapshot"] = "false";
 #endif
+    info["semver"] = sdk_semver();
     auto txns_forward_compat = core::transactions::forward_compat_supported{};
     info["txns_forward_compat_protocol_version"] =
       fmt::format("{}.{}", txns_forward_compat.protocol_major, txns_forward_compat.protocol_minor);
