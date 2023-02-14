@@ -23,7 +23,8 @@
 namespace couchbase::core::utils
 {
 template<typename Request>
-static bool check_query_management_request(const Request& req)
+static bool
+check_query_management_request(const Request& req)
 {
     // if there is a query_context, then bucket, scope should not be specified, but collection should be.
     // collection should be.
@@ -32,7 +33,8 @@ static bool check_query_management_request(const Request& req)
     }
     // otherwise, both scope and collection must be specified, if one is
     // and bucket _must_ be there as well.
-    return !req.bucket_name.empty() && ((req.scope_name.empty() && req.collection_name.empty()) || (!req.scope_name.empty() && !req.collection_name.empty()));
+    return !req.bucket_name.empty() &&
+           ((req.scope_name.empty() && req.collection_name.empty()) || (!req.scope_name.empty() && !req.collection_name.empty()));
 }
 
 template<typename Request>
@@ -50,4 +52,4 @@ build_keyspace(const Request& req)
     return fmt::format("{}:`{}`.`{}`.`{}`", req.namespace_id, req.bucket_name, req.scope_name, req.collection_name);
 }
 
-}// namespace couchbase::core::utils
+} // namespace couchbase::core::utils

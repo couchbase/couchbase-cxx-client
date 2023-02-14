@@ -72,7 +72,7 @@ class query_context
     }
 
   private:
-    std::string namespace_id_ { "default" };
+    std::string namespace_id_{ "default" };
     std::optional<std::string> bucket_name_;
     std::optional<std::string> scope_name_;
 };
