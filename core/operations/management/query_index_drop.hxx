@@ -21,6 +21,7 @@
 #include "core/io/http_context.hxx"
 #include "core/io/http_message.hxx"
 #include "core/platform/uuid.h"
+#include "core/query_context.hxx"
 #include "core/timeout_defaults.hxx"
 
 namespace couchbase::core::operations::management
@@ -48,6 +49,7 @@ struct query_index_drop_request {
     std::string scope_name;
     std::string collection_name;
     std::string index_name;
+    query_context query_context;
     bool is_primary{ false };
     bool ignore_if_does_not_exist{ false };
 

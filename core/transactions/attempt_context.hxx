@@ -129,16 +129,20 @@ class attempt_context
      *         rethrown if it is caught.
      */
     virtual void remove(const transaction_get_result& document) = 0;
+
     /**
      * Performs a Query, within the current transaction.
      *
      * @param statement query statement to execute.
      * @param options options to apply to the query.
+     * @param query_context query context, if any.
      * @returns result of the query.
      */
-    core::operations::query_response query(const std::string& statement, const couchbase::transactions::transaction_query_options& opts)
+    core::operations::query_response query(const std::string& statement,
+                                           const couchbase::transactions::transaction_query_options& opts,
+                                           std::optional<std::string> query_context = {})
     {
-        return do_core_query(statement, opts);
+        return do_core_query(statement, opts, query_context);
     };
     /**
      * Performs a Query, within the current transaction.
@@ -184,7 +188,8 @@ class attempt_context
     virtual transaction_get_result replace_raw(const transaction_get_result& document, const std::vector<std::byte>& content) = 0;
 
     virtual core::operations::query_response do_core_query(const std::string&,
-                                                           const couchbase::transactions::transaction_query_options& opts) = 0;
+                                                           const couchbase::transactions::transaction_query_options& opts,
+                                                           std::optional<std::string> query_context) = 0;
 };
 
 } // namespace couchbase::core::transactions

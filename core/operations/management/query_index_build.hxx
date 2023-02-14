@@ -21,6 +21,7 @@
 #include "core/io/http_context.hxx"
 #include "core/io/http_message.hxx"
 #include "core/platform/uuid.h"
+#include "core/query_context.hxx"
 #include "core/timeout_defaults.hxx"
 
 namespace couchbase::core::operations::management
@@ -47,7 +48,7 @@ struct query_index_build_request {
     std::string bucket_name;
     std::string scope_name;
     std::string collection_name;
-
+    query_context query_context;
     std::vector<std::string> index_names;
 
     std::optional<std::string> client_context_id{};

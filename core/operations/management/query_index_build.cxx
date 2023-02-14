@@ -19,6 +19,7 @@
 
 #include "core/utils/join_strings.hxx"
 #include "core/utils/json.hxx"
+#include "core/utils/keyspace.hxx"
 #include "error_utils.hxx"
 
 namespace couchbase::core::operations::management
@@ -44,23 +45,16 @@ quote_and_join_strings(const Range& values, const std::string& sep)
 std::error_code
 query_index_build_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
-    if ((scope_name.empty() && !collection_name.empty()) || (!scope_name.empty() && collection_name.empty()) || index_names.empty()) {
+    if (!utils::check_query_management_request(*this)) {
         return errc::common::invalid_argument;
     }
-    std::string query_context = fmt::format("{}:`{}`", namespace_id, bucket_name);
-    std::string statement;
-    if (!scope_name.empty() && !collection_name.empty()) {
-        statement = fmt::format(
-          R"(BUILD INDEX ON `{}`.`{}`.`{}` ({}))", bucket_name, scope_name, collection_name, quote_and_join_strings(index_names, ","));
-        query_context += ".`" + scope_name + "`";
-    } else {
-        statement = fmt::format(R"(BUILD INDEX ON {} ({}))", query_context, quote_and_join_strings(index_names, ","));
-        query_context += fmt::format(".`{}`", couchbase::scope::default_name);
-    }
+    auto keyspace = core::utils::build_keyspace(*this);
+    std::string statement = fmt::format(R"(BUILD INDEX ON {} ({}))", keyspace, quote_and_join_strings(index_names, ","));
     encoded.headers["content-type"] = "application/json";
-    tao::json::value body{ { "statement", statement },
-                           { "client_context_id", encoded.client_context_id },
-                           { "query_context", query_context } };
+    tao::json::value body{ { "statement", statement }, { "client_context_id", encoded.client_context_id } };
+    if (query_context.has_value()) {
+        body["query_context"] = query_context.value();
+    }
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);

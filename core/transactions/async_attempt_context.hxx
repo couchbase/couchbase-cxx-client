@@ -113,6 +113,11 @@ class async_attempt_context
      */
     virtual void remove(const transaction_get_result& document, VoidCallback&& cb) = 0;
 
+    virtual void query(const std::string& statement,
+                       const couchbase::transactions::transaction_query_options& options,
+                       std::optional<std::string> query_context,
+                       QueryCallback&& cb) = 0;
+
     /**
      * Performs a Query, within the current transaction.
      *
@@ -120,9 +125,10 @@ class async_attempt_context
      * @param options options to apply to the query.
      * @param cb callback which is called when the query completes.
      */
-    virtual void query(const std::string& statement,
-                       const couchbase::transactions::transaction_query_options& options,
-                       QueryCallback&& cb) = 0;
+    void query(const std::string& statement, const couchbase::transactions::transaction_query_options& options, QueryCallback&& cb)
+    {
+        return query(statement, options, {}, std::move(cb));
+    }
 
     /**
      * Performs a Query, within the current transaction.
@@ -133,7 +139,7 @@ class async_attempt_context
     void query(const std::string& statement, QueryCallback&& cb)
     {
         couchbase::transactions::transaction_query_options opts;
-        return query(statement, opts, std::move(cb));
+        return query(statement, opts, {}, std::move(cb));
     }
 
     /**

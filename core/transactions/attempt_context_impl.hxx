@@ -138,9 +138,12 @@ class attempt_context_impl
     void commit_with_query(VoidCallback&& cb);
     void rollback_with_query(VoidCallback&& cb);
 
-    void query_begin_work(std::function<void(std::exception_ptr)>&& cb);
+    void query_begin_work(std::optional<std::string> query_context, std::function<void(std::exception_ptr)>&& cb);
 
-    void do_query(const std::string& statement, const couchbase::transactions::transaction_query_options& opts, QueryCallback&& cb);
+    void do_query(const std::string& statement,
+                  const couchbase::transactions::transaction_query_options& opts,
+                  std::optional<std::string> query_context,
+                  QueryCallback&& cb);
     std::exception_ptr handle_query_error(const core::operations::query_response& resp);
     void wrap_query(const std::string& statement,
                     const couchbase::transactions::transaction_query_options& opts,
@@ -148,6 +151,7 @@ class attempt_context_impl
                     const tao::json::value& txdata,
                     const std::string& hook_point,
                     bool check_expiry,
+                    std::optional<std::string> query_context,
                     std::function<void(std::exception_ptr, core::operations::query_response)>&& cb);
 
     void handle_err_from_callback(std::exception_ptr e)
@@ -359,22 +363,28 @@ class attempt_context_impl
     };
 
     core::operations::query_response do_core_query(const std::string& statement,
-                                                   const couchbase::transactions::transaction_query_options& options) override;
+                                                   const couchbase::transactions::transaction_query_options& options,
+                                                   std::optional<std::string> query_context) override;
 
-    couchbase::transactions::transaction_query_result_ptr do_public_query(
-      const std::string& statement,
-      const couchbase::transactions::transaction_query_options& opts) override;
+    couchbase::transactions::transaction_query_result_ptr do_public_query(const std::string& statement,
+                                                                          const couchbase::transactions::transaction_query_options& opts,
+                                                                          std::optional<std::string> query_context) override;
 
     void query(const std::string& statement,
                const couchbase::transactions::transaction_query_options& options,
+               std::optional<std::string> query_context,
                QueryCallback&& cb) override;
 
     void query(std::string statement,
                couchbase::transactions::transaction_query_options opts,
+               std::optional<std::string> query_context,
                couchbase::transactions::async_query_handler&& handler) override
     {
         query(
-          statement, opts, [handler = std::move(handler)](std::exception_ptr err, std::optional<core::operations::query_response> resp) {
+          statement,
+          opts,
+          query_context,
+          [handler = std::move(handler)](std::exception_ptr err, std::optional<core::operations::query_response> resp) {
               if (err) {
                   try {
                       std::rethrow_exception(err);

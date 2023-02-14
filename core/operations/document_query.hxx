@@ -92,9 +92,7 @@ struct query_request {
     std::optional<std::uint64_t> pipeline_cap{};
     std::optional<query_scan_consistency> scan_consistency{};
     std::vector<mutation_token> mutation_state{};
-    std::optional<std::string> bucket_name{};
-    std::optional<std::string> scope_name{};
-    std::optional<std::string> scope_qualifier{};
+    std::optional<std::string> query_context{};
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
 

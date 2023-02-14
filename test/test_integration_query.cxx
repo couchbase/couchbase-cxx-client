@@ -127,8 +127,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
     {
         couchbase::core::operations::query_request req{ fmt::format(
           R"(SELECT a, b FROM {} WHERE META().id = "{}")", collection_name, key) };
-        req.bucket_name = integration.ctx.bucket;
-        req.scope_name = scope_name;
+        req.query_context = fmt::format("default:`{}`.`{}`", integration.ctx.bucket, scope_name);
         req.mutation_state = { mutation_token };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
@@ -140,8 +139,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
     {
         couchbase::core::operations::query_request req{ fmt::format(
           R"(SELECT a, b FROM {} WHERE META().id = "{}")", collection_name, key) };
-        req.bucket_name = integration.ctx.bucket;
-        req.scope_name = "missing_scope";
+        req.query_context = fmt::format("default:`{}`.`{}`", integration.ctx.bucket, "missing_scope");
         req.mutation_state = { mutation_token };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::errc::query::index_failure);
@@ -150,8 +148,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
     SECTION("missing collection")
     {
         couchbase::core::operations::query_request req{ fmt::format(R"(SELECT a, b FROM missing_collection WHERE META().id = "{}")", key) };
-        req.bucket_name = integration.ctx.bucket;
-        req.scope_name = scope_name;
+        req.query_context = fmt::format("default:`{}`.`{}`", integration.ctx.bucket, scope_name);
         req.mutation_state = { mutation_token };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE(resp.ctx.ec == couchbase::errc::query::index_failure);
@@ -161,8 +158,7 @@ TEST_CASE("integration: query on a collection", "[integration]")
     {
         couchbase::core::operations::query_request req{ fmt::format(
           R"(SELECT a, b FROM {} WHERE META().id = "{}")", collection_name, key) };
-        req.bucket_name = integration.ctx.bucket;
-        req.scope_name = scope_name;
+        req.query_context = fmt::format("default:`{}`.`{}`", integration.ctx.bucket, scope_name);
         req.mutation_state = { mutation_token };
         req.adhoc = false;
         auto resp = test::utils::execute(integration.cluster, req);

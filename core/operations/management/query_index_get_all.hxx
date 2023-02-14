@@ -20,16 +20,17 @@
 #include "core/error_context/http.hxx"
 #include "core/io/http_context.hxx"
 #include "core/io/http_message.hxx"
-#include "core/management/query_index.hxx"
 #include "core/platform/uuid.h"
+#include "core/query_context.hxx"
 #include "core/timeout_defaults.hxx"
+#include "couchbase/management/query_index.hxx"
 
 namespace couchbase::core::operations::management
 {
 struct query_index_get_all_response {
     error_context::http ctx;
     std::string status{};
-    std::vector<couchbase::core::management::query::index> indexes{};
+    std::vector<couchbase::management::query::index> indexes{};
 };
 
 struct query_index_get_all_request {
@@ -44,7 +45,7 @@ struct query_index_get_all_request {
     std::string bucket_name;
     std::string scope_name;
     std::string collection_name;
-
+    query_context query_context;
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
 

@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-namespace couchbase::core::management::query
+namespace couchbase::management::query
 {
 struct index {
     bool is_primary{ false };
@@ -36,4 +36,4 @@ struct index {
     std::optional<std::string> collection_name{};
 };
 
-} // namespace couchbase::core::management::query
+} // namespace couchbase::management::query
