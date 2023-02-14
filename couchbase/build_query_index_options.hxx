@@ -83,7 +83,7 @@ void
 initiate_build_deferred_indexes(std::shared_ptr<couchbase::core::cluster> resp1,
                                 std::string bucket_name,
                                 build_query_index_options::built options,
-                                query_context query_context,
+                                query_context query_ctx,
                                 std::string collection_name,
                                 build_deferred_query_indexes_handler&& handler);
 

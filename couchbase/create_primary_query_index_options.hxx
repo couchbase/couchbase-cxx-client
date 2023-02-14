@@ -151,7 +151,7 @@ void
 initiate_create_primary_query_index(std::shared_ptr<couchbase::core::cluster> core,
                                     std::string bucket_name,
                                     couchbase::create_primary_query_index_options::built options,
-                                    query_context query_context,
+                                    query_context query_ctx,
                                     std::string collection_name,
                                     create_primary_query_index_handler&& handler);
 void

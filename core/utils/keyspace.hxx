@@ -28,7 +28,7 @@ check_query_management_request(const Request& req)
 {
     // if there is a query_context, then bucket, scope should not be specified, but collection should be.
     // collection should be.
-    if (req.query_context.has_value()) {
+    if (req.query_ctx.has_value()) {
         return !req.collection_name.empty() && req.bucket_name.empty() && req.scope_name.empty();
     }
     // otherwise, both scope and collection must be specified, if one is
@@ -42,10 +42,10 @@ static std::string
 build_keyspace(const Request& req)
 {
     // keyspace is just the collection if we have a query_context.
-    if (req.query_context.has_value()) {
-        return fmt::format("{}.`{}`", req.query_context.value(), req.collection_name);
+    if (req.query_ctx.has_value()) {
+        return fmt::format("{}.`{}`", req.query_ctx.value(), req.collection_name);
     }
-    // otherwise, w
+    // otherwise, build from the bucket, scope and collection names in request...
     if (req.scope_name.empty() && req.collection_name.empty()) {
         return fmt::format("{}:`{}`", req.namespace_id, req.bucket_name);
     }

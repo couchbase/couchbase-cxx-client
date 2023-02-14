@@ -162,7 +162,7 @@ initiate_create_query_index(std::shared_ptr<couchbase::core::cluster> core,
                             std::string index_name,
                             std::vector<std::string> fields,
                             couchbase::create_query_index_options::built options,
-                            query_context query_context,
+                            query_context query_ctx,
                             std::string collection_name,
                             create_query_index_handler&& handler);
 

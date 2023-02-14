@@ -59,8 +59,8 @@ query_index_create_request::encode_to(encoded_request_type& encoded, http_contex
                                                       where_clause,
                                                       with_clause) },
                            { "client_context_id", encoded.client_context_id } };
-    if (query_context.has_value()) {
-        body["query_context"] = query_context.value();
+    if (query_ctx.has_value()) {
+        body["query_context"] = query_ctx.value();
     }
     encoded.method = "POST";
     encoded.path = "/query/service";

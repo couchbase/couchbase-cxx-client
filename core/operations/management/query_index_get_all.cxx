@@ -52,12 +52,12 @@ query_index_get_all_request::encode_to(encoded_request_type& encoded, couchbase:
     encoded.headers["content-type"] = "application/json";
     tao::json::value body{ { "statement", statement },
                            { "client_context_id", encoded.client_context_id },
-                           { "$bucket_name", query_context.has_value() ? query_context.bucket_name() : bucket_name },
-                           { "$scope_name", query_context.has_value() ? query_context.scope_name() : scope_name },
+                           { "$bucket_name", query_ctx.has_value() ? query_ctx.bucket_name() : bucket_name },
+                           { "$scope_name", query_ctx.has_value() ? query_ctx.scope_name() : scope_name },
                            { "$collection_name", collection_name } };
 
-    if (query_context.has_value()) {
-        body["query_context"] = query_context.value();
+    if (query_ctx.has_value()) {
+        body["query_context"] = query_ctx.value();
     }
     encoded.method = "POST";
     encoded.path = "/query/service";

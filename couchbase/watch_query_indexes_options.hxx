@@ -99,7 +99,7 @@ initiate_watch_query_indexes(std::shared_ptr<couchbase::core::cluster> core,
                              std::string bucket_name,
                              std::vector<std::string> index_names,
                              couchbase::watch_query_indexes_options::built options,
-                             query_context query_context,
+                             query_context query_ctx,
                              std::string collection_name,
                              watch_query_indexes_handler&& handler);
 void

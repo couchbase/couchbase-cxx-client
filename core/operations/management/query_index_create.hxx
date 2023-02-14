@@ -50,7 +50,7 @@ struct query_index_create_request {
     std::string collection_name;
     std::string index_name{};
     std::vector<std::string> fields;
-    query_context query_context;
+    query_context query_ctx;
     bool is_primary{ false };
     bool ignore_if_exists{ false };
     std::optional<std::string> condition{};

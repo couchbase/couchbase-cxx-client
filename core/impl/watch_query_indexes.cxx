@@ -42,7 +42,7 @@ class watch_context : public std::enable_shared_from_this<watch_context>
     std::string bucket_name_;
     std::vector<std::string> index_names_;
     couchbase::watch_query_indexes_options::built options_;
-    query_context query_context_;
+    query_context query_ctx_;
     std::string collection_name_;
     watch_query_indexes_handler handler_;
     asio::steady_timer timer_{ core_->io_context() };
@@ -61,7 +61,7 @@ class watch_context : public std::enable_shared_from_this<watch_context>
     }
     operations::management::query_index_get_all_request make_request()
     {
-        return { bucket_name_, "", collection_name_, query_context_, {}, remaining() };
+        return { bucket_name_, "", collection_name_, query_ctx_, {}, remaining() };
     }
 
     bool check(couchbase::core::operations::management::query_index_get_all_response resp)
@@ -99,14 +99,14 @@ class watch_context : public std::enable_shared_from_this<watch_context>
                   std::string bucket_name,
                   std::vector<std::string> index_names,
                   couchbase::watch_query_indexes_options::built options,
-                  query_context query_context,
+                  query_context query_ctx,
                   std::string collection_name,
                   watch_query_indexes_handler&& handler)
       : core_(core)
       , bucket_name_(bucket_name)
       , index_names_(index_names)
       , options_(options)
-      , query_context_(query_context)
+      , query_ctx_(query_ctx)
       , collection_name_(collection_name)
       , handler_(std::move(handler))
       , attempts_(0)
@@ -117,7 +117,7 @@ class watch_context : public std::enable_shared_from_this<watch_context>
       , bucket_name_(std::move(other.bucket_name_))
       , index_names_(std::move(other.index_names_))
       , options_(std::move(other.options_))
-      , query_context_(std::move(other.query_context_))
+      , query_ctx_(std::move(other.query_ctx_))
       , collection_name_(std::move(other.collection_name_))
       , handler_(std::move(other.handler_))
       , timer_(std::move(other.timer_))
@@ -147,11 +147,11 @@ initiate_watch_query_indexes(std::shared_ptr<couchbase::core::cluster> core,
                              std::string bucket_name,
                              std::vector<std::string> index_names,
                              couchbase::watch_query_indexes_options::built options,
-                             query_context query_context,
+                             query_context query_ctx,
                              std::string collection_name,
                              watch_query_indexes_handler&& handler)
 {
-    auto ctx = std::make_shared<watch_context>(core, bucket_name, index_names, options, query_context, collection_name, std::move(handler));
+    auto ctx = std::make_shared<watch_context>(core, bucket_name, index_names, options, query_ctx, collection_name, std::move(handler));
     ctx->execute();
 }
 

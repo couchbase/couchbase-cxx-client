@@ -43,7 +43,7 @@ void
 initiate_build_deferred_indexes(std::shared_ptr<couchbase::core::cluster> core,
                                 std::string bucket_name,
                                 build_query_index_options::built options,
-                                query_context query_context,
+                                query_context query_ctx,
                                 std::string collection_name,
                                 build_deferred_query_indexes_handler&& handler)
 {
@@ -52,11 +52,11 @@ initiate_build_deferred_indexes(std::shared_ptr<couchbase::core::cluster> core,
         bucket_name,
         "",
         collection_name,
-        query_context,
+        query_ctx,
         {},
         options.timeout,
       },
-      [core, bucket_name, collection_name, options = std::move(options), query_context, handler = std::move(handler)](
+      [core, bucket_name, collection_name, options = std::move(options), query_ctx, handler = std::move(handler)](
         operations::management::query_index_get_all_deferred_response resp1) mutable {
           auto list_resp = std::move(resp1);
           if (list_resp.ctx.ec) {
@@ -70,7 +70,7 @@ initiate_build_deferred_indexes(std::shared_ptr<couchbase::core::cluster> core,
               std::move(bucket_name),
               "",
               collection_name,
-              query_context,
+              query_ctx,
               std::move(list_resp.index_names),
               {},
               options.timeout,

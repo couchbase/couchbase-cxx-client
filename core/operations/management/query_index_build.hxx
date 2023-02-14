@@ -48,7 +48,7 @@ struct query_index_build_request {
     std::string bucket_name;
     std::string scope_name;
     std::string collection_name;
-    query_context query_context;
+    query_context query_ctx;
     std::vector<std::string> index_names;
 
     std::optional<std::string> client_context_id{};

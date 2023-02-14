@@ -113,7 +113,7 @@ void
 initiate_drop_primary_query_index(std::shared_ptr<couchbase::core::cluster> core,
                                   std::string bucket_name,
                                   couchbase::drop_primary_query_index_options::built options,
-                                  query_context query_context,
+                                  query_context query_ctx,
                                   std::string collection_name,
                                   drop_primary_query_index_handler&& handler);
 

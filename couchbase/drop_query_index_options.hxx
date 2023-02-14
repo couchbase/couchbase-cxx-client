@@ -100,7 +100,7 @@ initiate_drop_query_index(std::shared_ptr<couchbase::core::cluster> core,
                           std::string bucket_name,
                           std::string index_name,
                           couchbase::drop_query_index_options::built options,
-                          query_context query_context,
+                          query_context query_ctx,
                           std::string collection_name,
                           drop_query_index_handler&& handler);
 void

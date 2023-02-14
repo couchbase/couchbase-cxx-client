@@ -45,7 +45,7 @@ struct query_index_get_all_request {
     std::string bucket_name;
     std::string scope_name;
     std::string collection_name;
-    query_context query_context;
+    query_context query_ctx;
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
 

@@ -49,7 +49,7 @@ struct query_index_build_deferred_request {
     std::string bucket_name;
     std::optional<std::string> scope_name;
     std::optional<std::string> collection_name;
-    query_context query_context;
+    query_context query_ctx;
 
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
@@ -81,13 +81,13 @@ struct query_index_build_deferred_request {
     {
         core->execute(
           query_index_get_all_deferred_request{
-            bucket_name, scope_name.value_or(""), collection_name.value_or(""), query_context, client_context_id, timeout },
+            bucket_name, scope_name.value_or(""), collection_name.value_or(""), query_ctx, client_context_id, timeout },
           [core,
            handler = std::move(handler),
            bucket_name = bucket_name,
            scope_name = scope_name.value_or(""),
            collection_name = collection_name.value_or(""),
-           query_context = query_context,
+           query_ctx = query_ctx,
            client_context_id = client_context_id,
            timeout = timeout](query_index_get_all_deferred_response resp1) mutable {
               auto list_resp = std::move(resp1);
@@ -97,7 +97,7 @@ struct query_index_build_deferred_request {
               core->execute(query_index_build_request{ std::move(bucket_name),
                                                        scope_name,
                                                        collection_name,
-                                                       query_context,
+                                                       query_ctx,
                                                        std::move(list_resp.index_names),
                                                        client_context_id,
                                                        timeout },

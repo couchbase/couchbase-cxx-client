@@ -39,8 +39,8 @@ query_index_drop_request::encode_to(encoded_request_type& encoded, http_context&
     }
 
     tao::json::value body{ { "statement", drop_index_stmt }, { "client_context_id", encoded.client_context_id } };
-    if (query_context.has_value()) {
-        body["query_context"] = query_context.value();
+    if (query_ctx.has_value()) {
+        body["query_context"] = query_ctx.value();
     }
     encoded.method = "POST";
     encoded.path = "/query/service";

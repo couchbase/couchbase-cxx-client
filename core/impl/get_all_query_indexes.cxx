@@ -43,7 +43,7 @@ void
 initiate_get_all_query_indexes(std::shared_ptr<couchbase::core::cluster> core,
                                std::string bucket_name,
                                couchbase::get_all_query_indexes_options::built options,
-                               query_context query_context,
+                               query_context query_ctx,
                                std::string collection_name,
                                get_all_indexes_handler&& handler)
 {
@@ -52,7 +52,7 @@ initiate_get_all_query_indexes(std::shared_ptr<couchbase::core::cluster> core,
         bucket_name,
         "",
         collection_name,
-        query_context,
+        query_ctx,
         {},
         options.timeout,
       },
