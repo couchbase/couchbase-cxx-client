@@ -31,7 +31,7 @@ struct cluster_credentials {
     std::string password{};
     std::string certificate_path{};
     std::string key_path{};
-    std::vector<std::string> allowed_sasl_mechanisms{ "SCRAM-SHA512", "SCRAM-SHA256", "SCRAM-SHA1", "PLAIN" };
+    std::optional<std::vector<std::string>> allowed_sasl_mechanisms{};
 
     [[nodiscard]] bool uses_certificate() const
     {

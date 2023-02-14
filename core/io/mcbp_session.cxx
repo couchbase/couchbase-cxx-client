@@ -111,11 +111,20 @@ class mcbp_session_impl
             stopped_.compare_exchange_strong(expected_state, true);
         }
 
+        static auto sasl_mechanisms(const std::shared_ptr<mcbp_session_impl>& session) -> std::vector<std::string>
+        {
+            if (session->is_tls_) {
+                return { "PLAIN" };
+            }
+            static const std::vector<std::string> default_scram_mechanisms{ "SCRAM-SHA512", "SCRAM-SHA256", "SCRAM-SHA1" };
+            return session->origin_.credentials().allowed_sasl_mechanisms.value_or(default_scram_mechanisms);
+        }
+
         explicit bootstrap_handler(std::shared_ptr<mcbp_session_impl> session)
           : session_(std::move(session))
           , sasl_([origin = session_->origin_]() { return origin.username(); },
                   [origin = session_->origin_]() { return origin.password(); },
-                  session_->origin_.credentials().allowed_sasl_mechanisms)
+                  sasl_mechanisms(session_))
         {
             protocol::client_request<protocol::hello_request_body> hello_req;
             if (session_->origin_.options().enable_unordered_execution) {
