@@ -38,7 +38,7 @@ query_index_drop_request::encode_to(encoded_request_type& encoded, http_context&
         drop_index_stmt = fmt::format(R"(DROP INDEX `{}` ON {})", index_name, keyspace);
     } else {
         // this works on 6.6 and earlier
-        drop_index_stmt = fmt::format(R"(DROP INDEX {}.`{}`)", bucket_name, index_name);
+        drop_index_stmt = fmt::format(R"(DROP INDEX `{}`.`{}`)", bucket_name, index_name);
     }
 
     tao::json::value body{ { "statement", drop_index_stmt }, { "client_context_id", encoded.client_context_id } };
