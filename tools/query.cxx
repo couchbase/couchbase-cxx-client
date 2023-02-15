@@ -58,7 +58,6 @@ Options:
   --profile=MODE                 Request the service to profile the query and return report (allowed values: off, phases, timings).
   --bucket-name=STRING           Name of the bucket where the scope is defined (see --scope-name).
   --scope-name=STRING            Name of the scope.
-  --scope-qualifier=STRING       Full scope qualifier.
   --client-context-id=STRING     Override client context ID for the query(-ies).
   --flex-index                   Tell query service to utilize flex index (full text search).
   --maximum-parallelism=INTEGER  Parallelism for query execution (0 to disable).
