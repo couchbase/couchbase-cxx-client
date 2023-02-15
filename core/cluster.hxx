@@ -88,17 +88,18 @@ class cluster : public std::enable_shared_from_this<cluster>
                 tracer_ = std::make_shared<tracing::noop_tracer>();
             }
         }
+        tracer_->start();
         // ignore the metrics options if a meter was passed in.
         if (nullptr != origin_.options().meter) {
             meter_ = origin_.options().meter;
         } else {
-
             if (origin_.options().enable_metrics) {
                 meter_ = std::make_shared<metrics::logging_meter>(ctx_, origin_.options().metrics_options);
             } else {
                 meter_ = std::make_shared<metrics::noop_meter>();
             }
         }
+        meter_->start();
         session_manager_->set_tracer(tracer_);
         if (origin_.options().enable_dns_srv) {
             auto [hostname, _] = origin_.next_address();
@@ -141,7 +142,13 @@ class cluster : public std::enable_shared_from_this<cluster>
             self->session_manager_->close();
             handler();
             self->work_.reset();
+            if (self->tracer_) {
+                self->tracer_->stop();
+            }
             self->tracer_.reset();
+            if (self->meter_) {
+                self->meter_->stop();
+            }
             self->meter_.reset();
         }));
     }

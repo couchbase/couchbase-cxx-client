@@ -29,7 +29,9 @@ namespace couchbase::core::metrics
 {
 class logging_value_recorder;
 
-class logging_meter : public couchbase::metrics::meter
+class logging_meter
+  : public couchbase::metrics::meter
+  , public std::enable_shared_from_this<logging_meter>
 {
   private:
     asio::steady_timer emit_report_;
@@ -42,12 +44,12 @@ class logging_meter : public couchbase::metrics::meter
     void rearm_reporter()
     {
         emit_report_.expires_after(options_.emit_interval);
-        emit_report_.async_wait([this](std::error_code ec) {
+        emit_report_.async_wait([self = shared_from_this()](std::error_code ec) {
             if (ec == asio::error::operation_aborted) {
                 return;
             }
-            log_report();
-            rearm_reporter();
+            self->log_report();
+            self->rearm_reporter();
         });
     }
 
@@ -56,7 +58,6 @@ class logging_meter : public couchbase::metrics::meter
       : emit_report_(ctx)
       , options_(options)
     {
-        rearm_reporter();
     }
 
     ~logging_meter() override
@@ -65,9 +66,14 @@ class logging_meter : public couchbase::metrics::meter
         log_report();
     }
 
-    void start()
+    void start() override
     {
         rearm_reporter();
+    }
+
+    void stop() override
+    {
+        emit_report_.cancel();
     }
 
     std::shared_ptr<couchbase::metrics::value_recorder> get_value_recorder(const std::string& name,

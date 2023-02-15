@@ -17,12 +17,16 @@
 
 #include "logging_meter.hxx"
 
+#include "couchbase/build_info.hxx"
+
 #include "core/logger/logger.hxx"
 #include "core/utils/json.hxx"
 #include "noop_meter.hxx"
 
-#include "third_party/hdr_histogram_c/src/hdr_histogram.h"
+#include <hdr_histogram.h>
+
 #include <gsl/assert>
+
 #include <memory>
 #include <utility>
 
@@ -142,7 +146,7 @@ logging_meter::log_report() const
           {
 
             { "emit_interval_s", std::chrono::duration_cast<std::chrono::seconds>(options_.emit_interval).count() },
-#if BACKEND_DEBUG_BUILD
+#if COUCHBASE_CXX_CLIENT_DEBUG_BUILD
             { "emit_interval_ms", options_.emit_interval.count() },
 #endif
           },
