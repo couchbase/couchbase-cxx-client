@@ -1587,7 +1587,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
                 REQUIRE(indexes[0].is_primary);
             }
             {
-                auto ctx = manager.watch_indexes({index_name}, {});
+                auto ctx = manager.watch_indexes({ index_name }, {});
             }
             {
                 auto ctx = manager.drop_primary_index(couchbase::drop_primary_query_index_options().index_name(index_name)).get();
