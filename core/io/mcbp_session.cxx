@@ -113,11 +113,13 @@ class mcbp_session_impl
 
         static auto sasl_mechanisms(const std::shared_ptr<mcbp_session_impl>& session) -> std::vector<std::string>
         {
+            if (const auto user_mechanisms = session->origin_.credentials().allowed_sasl_mechanisms; user_mechanisms.has_value()) {
+                return user_mechanisms.value();
+            }
             if (session->is_tls_) {
                 return { "PLAIN" };
             }
-            static const std::vector<std::string> default_scram_mechanisms{ "SCRAM-SHA512", "SCRAM-SHA256", "SCRAM-SHA1" };
-            return session->origin_.credentials().allowed_sasl_mechanisms.value_or(default_scram_mechanisms);
+            return { "SCRAM-SHA512", "SCRAM-SHA256", "SCRAM-SHA1" };
         }
 
         explicit bootstrap_handler(std::shared_ptr<mcbp_session_impl> session)
