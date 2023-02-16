@@ -25,11 +25,25 @@ namespace couchbase::core::operations::management
 std::error_code
 query_index_get_all_deferred_request::encode_to(encoded_request_type& encoded, couchbase::core::http_context& /* context */) const
 {
+
+    // essentially same as query_index_get_all_request::encode_to, except for the state condition.   If you
+    // change this, you probably need to change that as well.
+    std::string bucket_cond = "bucket_id = $bucket_name";
+    std::string scope_cond = "(" + bucket_cond + " AND scope_id = $scope_name)";
+    std::string collection_cond = "(" + scope_cond + " AND keyspace_id = $collection_name)";
+
     std::string where;
-    if (collection_name.empty()) {
-        where = "(keyspace_id = $bucket_name AND bucket_id IS MISSING)";
+    if (!collection_name.empty()) {
+        where = collection_cond;
+    } else if (!scope_name.empty()) {
+        where = scope_cond;
     } else {
-        where = "(bucket_id = $bucket_name AND scope_id = $scope_name AND keyspace_id = $collection_name)";
+        where = bucket_cond;
+    }
+
+    if (collection_name == "_default" || collection_name.empty()) {
+        std::string default_collection_cond = "(bucket_id IS MISSING AND keyspace_id = $bucket_name)";
+        where = "(" + where + " OR " + default_collection_cond + ")";
     }
 
     std::string statement = "SELECT RAW name FROM system:indexes"
