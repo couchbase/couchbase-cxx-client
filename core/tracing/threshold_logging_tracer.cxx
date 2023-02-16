@@ -17,6 +17,8 @@
 
 #include "threshold_logging_tracer.hxx"
 
+#include "couchbase/build_info.hxx"
+
 #include "constants.hxx"
 #include "core/logger/logger.hxx"
 #include "core/meta/version.hxx"
@@ -25,10 +27,11 @@
 #include "core/utils/json.hxx"
 
 #include <asio/steady_timer.hpp>
+#include <tao/json/value.hpp>
+
 #include <chrono>
 #include <mutex>
 #include <queue>
-#include <tao/json/value.hpp>
 
 namespace couchbase::core::tracing
 {
@@ -285,6 +288,12 @@ class threshold_logging_tracer_impl
         rearm_threshold_reporter();
     }
 
+    void stop()
+    {
+        emit_orphan_report_.cancel();
+        emit_threshold_report_.cancel();
+    }
+
     void add_orphan(std::shared_ptr<threshold_logging_span> span)
     {
         orphan_queue_.emplace(convert(std::move(span)));
@@ -338,7 +347,7 @@ class threshold_logging_tracer_impl
         tao::json::value report
         {
             { "count", queue.size() },
-#if BACKEND_DEBUG_BUILD
+#if COUCHBASE_CXX_CLIENT_DEBUG_BUILD
               { "emit_interval_ms", options_.orphaned_emit_interval.count() }, { "sample_size", options_.orphaned_sample_size },
 #endif
         };
@@ -361,7 +370,7 @@ class threshold_logging_tracer_impl
             tao::json::value report
             {
                 { "count", queue.size() }, { "service", fmt::format("{}", service) },
-#if BACKEND_DEBUG_BUILD
+#if COUCHBASE_CXX_CLIENT_DEBUG_BUILD
                   { "emit_interval_ms", options_.threshold_emit_interval.count() }, { "sample_size", options_.threshold_sample_size },
                   { "threshold_ms",
                     std::chrono::duration_cast<std::chrono::microseconds>(options_.threshold_for_service(service)).count() },
@@ -403,14 +412,20 @@ threshold_logging_tracer::report(std::shared_ptr<threshold_logging_span> span)
 
 threshold_logging_tracer::threshold_logging_tracer(asio::io_context& ctx, threshold_logging_options options)
   : options_{ options }
+  , impl_(std::make_shared<threshold_logging_tracer_impl>(options_, ctx))
 {
-    impl_ = std::make_shared<threshold_logging_tracer_impl>(options_, ctx);
 }
 
 void
 threshold_logging_tracer::start()
 {
     impl_->start();
+}
+
+void
+threshold_logging_tracer::stop()
+{
+    impl_->stop();
 }
 
 void

@@ -6,4 +6,6 @@ target_link_libraries(
           project_warnings
           fmt::fmt
           spdlog::spdlog)
-target_include_directories(couchbase_tracing PRIVATE ../..)
+target_include_directories(couchbase_tracing PRIVATE
+        ${PROJECT_BINARY_DIR}/generated
+        ${PROJECT_SOURCE_DIR})
