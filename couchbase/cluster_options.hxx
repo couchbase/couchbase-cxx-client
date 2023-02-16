@@ -72,8 +72,10 @@ class cluster_options
     explicit cluster_options(password_authenticator authenticator)
       : username_{ std::move(authenticator.username_) }
       , password_{ std::move(authenticator.password_) }
-      , ldap_compatible_{ authenticator.ldap_compatible_ }
     {
+        if (authenticator.ldap_compatible_) {
+            sasl_mechanisms_ = { { "PLAIN" } };
+        }
     }
 
     /**
@@ -246,7 +248,7 @@ class cluster_options
         std::string password;
         std::string certificate_path;
         std::string key_path;
-        std::vector<std::string> allowed_sasl_mechanisms;
+        std::optional<std::vector<std::string>> allowed_sasl_mechanisms;
         compression_options::built compression;
         timeout_options::built timeouts;
         dns_options::built dns;
@@ -261,15 +263,12 @@ class cluster_options
 
     [[nodiscard]] auto build() const -> built
     {
-        static const std::vector<std::string> default_sasl_mechanisms{ "SCRAM-SHA512", "SCRAM-SHA256", "SCRAM-SHA1" };
-        static const std::vector<std::string> ldap_sasl_mechanisms{ "PLAIN" };
-
         return {
             username_,
             password_,
             certificate_path_,
             key_path_,
-            ldap_compatible_ ? ldap_sasl_mechanisms : default_sasl_mechanisms,
+            sasl_mechanisms_,
             compression_.build(),
             timeouts_.build(),
             dns_.build(),
@@ -288,7 +287,7 @@ class cluster_options
     std::string password_{};
     std::string certificate_path_{};
     std::string key_path_{};
-    bool ldap_compatible_{ false };
+    std::optional<std::vector<std::string>> sasl_mechanisms_{};
 
     compression_options compression_{};
     timeout_options timeouts_{};
