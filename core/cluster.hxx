@@ -111,7 +111,7 @@ class cluster : public std::enable_shared_from_this<cluster>
                     [self, hostname = std::move(hostname), handler = std::forward<Handler>(handler)](origin::node_list nodes,
                                                                                                      std::error_code ec) mutable {
                         if (ec) {
-                            return handler(ec);
+                            return self->close([ec, handler = std::forward<Handler>(handler)]() mutable { handler(ec); });
                         }
                         if (!nodes.empty()) {
                             self->origin_.set_nodes(std::move(nodes));
@@ -402,7 +402,7 @@ class cluster : public std::enable_shared_from_this<cluster>
                 tls_.load_verify_file(origin_.options().trust_certificate, ec);
                 if (ec) {
                     CB_LOG_ERROR("[{}]: unable to load verify file \"{}\": {}", id_, origin_.options().trust_certificate, ec.message());
-                    return handler(ec);
+                    return close([ec, handler = std::forward<Handler>(handler)]() mutable { return handler(ec); });
                 }
             }
 #ifdef COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE
@@ -421,13 +421,13 @@ class cluster : public std::enable_shared_from_this<cluster>
                 tls_.use_certificate_chain_file(origin_.certificate_path(), ec);
                 if (ec) {
                     CB_LOG_ERROR("[{}]: unable to load certificate chain \"{}\": {}", id_, origin_.certificate_path(), ec.message());
-                    return handler(ec);
+                    return close([ec, handler = std::forward<Handler>(handler)]() mutable { return handler(ec); });
                 }
                 CB_LOG_DEBUG(R"([{}]: use TLS private key: "{}")", id_, origin_.key_path());
                 tls_.use_private_key_file(origin_.key_path(), asio::ssl::context::file_format::pem, ec);
                 if (ec) {
                     CB_LOG_ERROR("[{}]: unable to load private key \"{}\": {}", id_, origin_.key_path(), ec.message());
-                    return handler(ec);
+                    return close([ec, handler = std::forward<Handler>(handler)]() mutable { return handler(ec); });
                 }
             }
             session_ = io::mcbp_session(id_, ctx_, tls_, origin_, dns_srv_tracker_);
@@ -471,6 +471,9 @@ class cluster : public std::enable_shared_from_this<cluster>
                         self->session_.reset();
                     }
                 });
+            }
+            if (ec) {
+                return self->close([ec, handler = std::forward<Handler>(handler)]() mutable { handler(ec); });
             }
             handler(ec);
         });

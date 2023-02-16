@@ -37,44 +37,21 @@ class logging_meter
     asio::steady_timer emit_report_;
     logging_meter_options options_;
     std::mutex recorders_mutex_{};
+    // service name -> operation name -> recorder
     std::map<std::string, std::map<std::string, std::shared_ptr<logging_value_recorder>>> recorders_{};
 
     void log_report() const;
 
-    void rearm_reporter()
-    {
-        emit_report_.expires_after(options_.emit_interval);
-        emit_report_.async_wait([self = shared_from_this()](std::error_code ec) {
-            if (ec == asio::error::operation_aborted) {
-                return;
-            }
-            self->log_report();
-            self->rearm_reporter();
-        });
-    }
+    void rearm_reporter();
 
   public:
-    logging_meter(asio::io_context& ctx, logging_meter_options options)
-      : emit_report_(ctx)
-      , options_(options)
-    {
-    }
+    logging_meter(asio::io_context& ctx, logging_meter_options options);
 
-    ~logging_meter() override
-    {
-        emit_report_.cancel();
-        log_report();
-    }
+    ~logging_meter() override;
 
-    void start() override
-    {
-        rearm_reporter();
-    }
+    void start() override;
 
-    void stop() override
-    {
-        emit_report_.cancel();
-    }
+    void stop() override;
 
     std::shared_ptr<couchbase::metrics::value_recorder> get_value_recorder(const std::string& name,
                                                                            const std::map<std::string, std::string>& tags) override;

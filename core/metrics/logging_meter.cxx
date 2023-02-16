@@ -162,22 +162,59 @@ logging_meter::log_report() const
     }
 }
 
+logging_meter::logging_meter(asio::io_context& ctx, logging_meter_options options)
+  : emit_report_(ctx)
+  , options_(options)
+{
+}
+
+logging_meter::~logging_meter()
+{
+    emit_report_.cancel();
+    log_report();
+}
+
+void
+logging_meter::rearm_reporter()
+{
+    emit_report_.expires_after(options_.emit_interval);
+    emit_report_.async_wait([self = shared_from_this()](std::error_code ec) {
+        if (ec == asio::error::operation_aborted) {
+            return;
+        }
+        self->log_report();
+        self->rearm_reporter();
+    });
+}
+
+void
+logging_meter::start()
+{
+    rearm_reporter();
+}
+
+void
+logging_meter::stop()
+{
+    emit_report_.cancel();
+}
+
 std::shared_ptr<couchbase::metrics::value_recorder>
 logging_meter::get_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags)
 {
     static std::shared_ptr<noop_value_recorder> noop_recorder{ std::make_shared<noop_value_recorder>() };
 
-    if (static std::string meter_name = "db.couchbase.operations"; name != meter_name) {
+    if (static const std::string meter_name = "db.couchbase.operations"; name != meter_name) {
         return noop_recorder;
     }
 
-    static std::string service_tag = "db.couchbase.service";
+    static const std::string service_tag = "db.couchbase.service";
     auto service = tags.find(service_tag);
     if (service == tags.end()) {
         return noop_recorder;
     }
 
-    static std::string operation_tag = "db.operation";
+    static const std::string operation_tag = "db.operation";
     auto operation = tags.find(operation_tag);
     if (operation == tags.end()) {
         return noop_recorder;
