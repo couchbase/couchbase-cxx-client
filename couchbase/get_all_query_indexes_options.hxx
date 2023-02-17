@@ -19,6 +19,7 @@
 
 #include <couchbase/common_options.hxx>
 #include <couchbase/error_codes.hxx>
+#include <couchbase/management/query_index.hxx>
 #include <couchbase/manager_error_context.hxx>
 
 #include <functional>
@@ -28,18 +29,16 @@
 
 namespace couchbase
 {
-/**
- * Options for query_index_manager#build_deferred_indexes().
- *
- * @since 1.0.0
- * @committed
- */
-class build_query_index_options : public common_options<build_query_index_options>
+class get_all_query_indexes_options : public common_options<get_all_query_indexes_options>
 {
   public:
-    struct built : public common_options<build_query_index_options>::built {
-        const std::optional<std::string> scope_name{};
-        const std::optional<std::string> collection_name{};
+    /**
+     * Immutable value object representing consistent options.
+     *
+     * @since 1.0.0
+     * @internal
+     */
+    struct built : public common_options<get_all_query_indexes_options>::built {
     };
 
     /**
@@ -54,18 +53,20 @@ class build_query_index_options : public common_options<build_query_index_option
      */
     [[nodiscard]] auto build() const -> built
     {
-
         return { build_common_options() };
     }
+
+  private:
 };
 
 /**
- * The signature for the handler of the @ref query_index_manager#build_deferred_indexes() operation
+ * The signature for the handler of the @ref query_index_manager#get_all_indexes() operation
  *
  * @since 1.0.0
  * @uncommitted
  */
-using build_deferred_query_indexes_handler = std::function<void(couchbase::manager_error_context)>;
+
+using get_all_indexes_handler = std::function<void(couchbase::manager_error_context, std::vector<couchbase::management::query::index>)>;
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace core
@@ -80,18 +81,18 @@ namespace impl
  * @internal
  */
 void
-initiate_build_deferred_indexes(std::shared_ptr<couchbase::core::cluster> resp1,
-                                std::string bucket_name,
-                                build_query_index_options::built options,
-                                query_context query_ctx,
-                                std::string collection_name,
-                                build_deferred_query_indexes_handler&& handler);
+initiate_get_all_query_indexes(std::shared_ptr<couchbase::core::cluster> core,
+                               std::string bucket_name,
+                               couchbase::get_all_query_indexes_options::built options,
+                               get_all_indexes_handler&& handler);
 
 void
-initiate_build_deferred_indexes(std::shared_ptr<couchbase::core::cluster> resp1,
-                                std::string bucket_name,
-                                build_query_index_options::built options,
-                                build_deferred_query_indexes_handler&& handler);
+initiate_get_all_query_indexes(std::shared_ptr<couchbase::core::cluster> core,
+                               std::string bucket_name,
+                               couchbase::get_all_query_indexes_options::built options,
+                               query_context query_ctx,
+                               std::string collection_name,
+                               get_all_indexes_handler&& handler);
 
 #endif
 } // namespace impl

@@ -19,6 +19,7 @@
 
 #include <couchbase/binary_collection.hxx>
 #include <couchbase/codec/default_json_transcoder.hxx>
+#include <couchbase/collection_query_index_manager.hxx>
 #include <couchbase/exists_options.hxx>
 #include <couchbase/expiry.hxx>
 #include <couchbase/get_all_replicas_options.hxx>
@@ -31,12 +32,14 @@
 #include <couchbase/lookup_in_specs.hxx>
 #include <couchbase/mutate_in_options.hxx>
 #include <couchbase/mutate_in_specs.hxx>
+#include <couchbase/query_options.hxx>
 #include <couchbase/remove_options.hxx>
 #include <couchbase/replace_options.hxx>
 #include <couchbase/touch_options.hxx>
 #include <couchbase/unlock_options.hxx>
 #include <couchbase/upsert_options.hxx>
 
+#include <fmt/format.h>
 #include <future>
 #include <memory>
 
@@ -989,6 +992,11 @@ class collection
             barrier->set_value({ std::move(ctx), std::move(result) });
         });
         return future;
+    }
+
+    [[nodiscard]] auto query_indexes() const -> collection_query_index_manager
+    {
+        return collection_query_index_manager(core_, bucket_name_, scope_name_, name_);
     }
 
   private:

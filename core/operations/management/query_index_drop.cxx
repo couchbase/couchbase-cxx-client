@@ -18,6 +18,7 @@
 #include "query_index_drop.hxx"
 
 #include "core/utils/json.hxx"
+#include "core/utils/keyspace.hxx"
 #include "error_utils.hxx"
 
 namespace couchbase::core::operations::management
@@ -25,31 +26,25 @@ namespace couchbase::core::operations::management
 std::error_code
 query_index_drop_request::encode_to(encoded_request_type& encoded, http_context& /*context*/) const
 {
-    if ((scope_name.empty() && !collection_name.empty()) || (!scope_name.empty() && collection_name.empty())) {
+    if (!utils::check_query_management_request(*this)) {
         return errc::common::invalid_argument;
     }
     encoded.headers["content-type"] = "application/json";
-    std::string query_context = fmt::format("{}:`{}`", namespace_id, bucket_name);
-    auto keyspace = query_context;
-    if (!scope_name.empty()) {
-        query_context += ".`" + scope_name + "`";
-        keyspace += ".`" + scope_name + "`";
-    } else {
-        query_context += fmt::format(".`{}`", couchbase::scope::default_name);
-    }
-    if (!collection_name.empty()) {
-        keyspace += ".`" + collection_name + "`";
-    }
+    auto keyspace = utils::build_keyspace(*this);
     std::string drop_index_stmt;
     if (is_primary && index_name.empty()) {
         drop_index_stmt = fmt::format(R"(DROP PRIMARY INDEX ON {} USING GSI)", keyspace);
-    } else {
+    } else if (bucket_name.empty() || (!collection_name.empty() && !scope_name.empty())) {
         drop_index_stmt = fmt::format(R"(DROP INDEX `{}` ON {} USING GSI)", index_name, keyspace);
+    } else {
+        // this works on 6.6 and earlier
+        drop_index_stmt = fmt::format(R"(DROP INDEX `{}`.`{}` USING GSI)", bucket_name, index_name);
     }
 
-    tao::json::value body{ { "statement", drop_index_stmt },
-                           { "client_context_id", encoded.client_context_id },
-                           { "query_context", query_context } };
+    tao::json::value body{ { "statement", drop_index_stmt }, { "client_context_id", encoded.client_context_id } };
+    if (query_ctx.has_value()) {
+        body["query_context"] = query_ctx.value();
+    }
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);

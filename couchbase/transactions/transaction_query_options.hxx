@@ -114,12 +114,6 @@ class transaction_query_options
         return *this;
     }
 
-    transaction_query_options& scope_qualifier(const std::string& scope)
-    {
-        opts_.scope_qualifier(scope);
-        return *this;
-    }
-
     transaction_query_options& metrics(bool metrics)
     {
         opts_.metrics(metrics);

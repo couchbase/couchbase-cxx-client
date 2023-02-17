@@ -168,10 +168,8 @@ build_query_request(query_options::built options)
         options.pipeline_cap,
         options.scan_consistency,
         std::move(options.mutation_state),
-        {},
-        {},
-        std::move(options.scope_qualifier),
         std::move(options.client_context_id),
+        {}, // we put the query_context in later, if one was specified.
         options.timeout,
         options.profile,
     };
@@ -227,15 +225,15 @@ build_transaction_query_request(query_options::built opts)
 void
 initiate_query_operation(std::shared_ptr<couchbase::core::cluster> core,
                          std::string statement,
-                         std::optional<std::string> bucket_name,
-                         std::optional<std::string> scope_name,
+                         std::optional<std::string> query_context,
                          query_options::built options,
                          query_handler&& handler)
 {
     auto request = build_query_request(options);
     request.statement = std::move(statement);
-    request.bucket_name = std::move(bucket_name);
-    request.scope_name = std::move(scope_name);
+    if (query_context) {
+        request.query_context = std::move(query_context);
+    }
 
     core->execute(std::move(request), [core, handler = std::move(handler)](operations::query_response resp) mutable {
         auto r = std::move(resp);

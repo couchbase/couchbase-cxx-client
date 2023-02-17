@@ -57,7 +57,6 @@ struct query_options : public common_options<query_options> {
         std::optional<std::chrono::milliseconds> scan_wait;
         std::optional<std::uint64_t> pipeline_batch;
         std::optional<std::uint64_t> pipeline_cap;
-        std::optional<std::string> scope_qualifier;
         std::optional<std::string> client_context_id;
         std::optional<query_scan_consistency> scan_consistency;
         std::vector<mutation_token> mutation_state;
@@ -91,7 +90,6 @@ struct query_options : public common_options<query_options> {
             scan_wait_,
             pipeline_batch_,
             pipeline_cap_,
-            scope_qualifier_,
             client_context_id_,
             scan_consistency_,
             mutation_state_,
@@ -343,19 +341,6 @@ struct query_options : public common_options<query_options> {
     }
 
     /**
-     * @param scope_qualifier
-     * @return this options builder for chaining purposes.
-     *
-     * @since 1.0.0
-     * @volatile
-     */
-    auto scope_qualifier(std::string scope_qualifier) -> query_options&
-    {
-        scope_qualifier_ = std::move(scope_qualifier);
-        return self();
-    }
-
-    /**
      * Customizes the consistency guarantees for this query.
      *
      * Tuning the scan consistency allows to trade data "freshness" for latency and vice versa. By default
@@ -549,7 +534,6 @@ struct query_options : public common_options<query_options> {
     std::optional<std::uint64_t> scan_cap_{};
     std::optional<std::uint64_t> pipeline_batch_{};
     std::optional<std::uint64_t> pipeline_cap_{};
-    std::optional<std::string> scope_qualifier_{};
     std::optional<std::string> client_context_id_{};
     std::optional<std::chrono::milliseconds> scan_wait_{};
     std::optional<query_scan_consistency> scan_consistency_{};
@@ -582,8 +566,7 @@ namespace impl
 void
 initiate_query_operation(std::shared_ptr<couchbase::core::cluster> core,
                          std::string statement,
-                         std::optional<std::string> bucket_name,
-                         std::optional<std::string> scope_name,
+                         std::optional<std::string> query_context,
                          query_options::built options,
                          query_handler&& handler);
 #endif

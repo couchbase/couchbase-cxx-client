@@ -21,6 +21,7 @@
 #include "core/io/http_context.hxx"
 #include "core/io/http_message.hxx"
 #include "core/platform/uuid.h"
+#include "core/query_context.hxx"
 #include "core/timeout_defaults.hxx"
 
 namespace couchbase::core::operations::management
@@ -49,6 +50,7 @@ struct query_index_create_request {
     std::string collection_name;
     std::string index_name{};
     std::vector<std::string> fields;
+    query_context query_ctx;
     bool is_primary{ false };
     bool ignore_if_exists{ false };
     std::optional<std::string> condition{};

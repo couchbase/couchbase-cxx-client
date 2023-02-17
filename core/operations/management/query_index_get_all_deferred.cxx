@@ -25,18 +25,25 @@ namespace couchbase::core::operations::management
 std::error_code
 query_index_get_all_deferred_request::encode_to(encoded_request_type& encoded, couchbase::core::http_context& /* context */) const
 {
+
+    // essentially same as query_index_get_all_request::encode_to, except for the state condition.   If you
+    // change this, you probably need to change that as well.
+    std::string bucket_cond = "bucket_id = $bucket_name";
+    std::string scope_cond = "(" + bucket_cond + " AND scope_id = $scope_name)";
+    std::string collection_cond = "(" + scope_cond + " AND keyspace_id = $collection_name)";
+
     std::string where;
-    if (collection_name.empty()) {
-        where = "(keyspace_id = $bucket_name AND bucket_id IS MISSING)";
+    if (!collection_name.empty()) {
+        where = collection_cond;
+    } else if (!scope_name.empty()) {
+        where = scope_cond;
     } else {
-        where = "(bucket_id = $bucket_name AND scope_id = $scope_name AND keyspace_id = $collection_name)";
+        where = bucket_cond;
     }
 
-    std::string query_context = fmt::format("{}:`{}`", namespace_id, bucket_name);
-    if (!scope_name.empty()) {
-        query_context += ".`" + scope_name + "`";
-    } else {
-        query_context += fmt::format(".`{}`", couchbase::scope::default_name);
+    if (collection_name == "_default" || collection_name.empty()) {
+        std::string default_collection_cond = "(bucket_id IS MISSING AND keyspace_id = $bucket_name)";
+        where = "(" + where + " OR " + default_collection_cond + ")";
     }
 
     std::string statement = "SELECT RAW name FROM system:indexes"
@@ -48,10 +55,12 @@ query_index_get_all_deferred_request::encode_to(encoded_request_type& encoded, c
     encoded.headers["content-type"] = "application/json";
     tao::json::value body{ { "statement", statement },
                            { "client_context_id", encoded.client_context_id },
-                           { "$bucket_name", bucket_name },
-                           { "$scope_name", scope_name },
-                           { "$collection_name", collection_name },
-                           { "query_context", query_context } };
+                           { "$bucket_name", query_ctx.has_value() ? query_ctx.bucket_name() : bucket_name },
+                           { "$scope_name", query_ctx.has_value() ? query_ctx.scope_name() : scope_name },
+                           { "$collection_name", collection_name } };
+    if (query_ctx.has_value()) {
+        body["query_context"] = query_ctx.value();
+    }
     encoded.method = "POST";
     encoded.path = "/query/service";
     encoded.body = utils::json::generate(body);

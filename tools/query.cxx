@@ -58,7 +58,6 @@ Options:
   --profile=MODE                 Request the service to profile the query and return report (allowed values: off, phases, timings).
   --bucket-name=STRING           Name of the bucket where the scope is defined (see --scope-name).
   --scope-name=STRING            Name of the scope.
-  --scope-qualifier=STRING       Full scope qualifier.
   --client-context-id=STRING     Override client context ID for the query(-ies).
   --flex-index                   Tell query service to utilize flex index (full text search).
   --maximum-parallelism=INTEGER  Parallelism for query execution (0 to disable).
@@ -121,9 +120,6 @@ print_result_json_line(const std::optional<scope_with_bucket>& scope_id,
     if (scope_id) {
         meta["bucket_name"] = scope_id->bucket_name;
         meta["scope_name"] = scope_id->scope_name;
-    }
-    if (built_options.scope_qualifier && !built_options.scope_qualifier->empty()) {
-        meta["scope_qualifier"] = built_options.scope_qualifier.value();
     }
     if (ctx.parameters()) {
         try {
@@ -220,10 +216,6 @@ print_result(const std::optional<scope_with_bucket>& scope_id,
     auto header = fmt::memory_buffer();
     if (scope_id) {
         fmt::format_to(std::back_inserter(header), "bucket_name: {}, scope_name: {}", scope_id->bucket_name, scope_id->scope_name);
-    }
-    if (built_options.scope_qualifier && !built_options.scope_qualifier->empty()) {
-        fmt::format_to(
-          std::back_inserter(header), "{}scope_qualifier: {}", header.size() == 0 ? "" : ", ", built_options.scope_qualifier.value());
     }
     fmt::format_to(
       std::back_inserter(header), "{}statement: \"{}\"", header.size() == 0 ? "" : ", ", tao::json::internal::escape(statement));
@@ -369,7 +361,6 @@ cbc::query::execute(const std::vector<std::string>& argv)
         parse_integer_option(query_options.pipeline_batch, "--pipeline-batch");
         parse_integer_option(query_options.pipeline_cap, "--pipeline-cap");
         parse_duration_option(query_options.scan_wait, "--scan-wait");
-        parse_string_option(query_options.scope_qualifier, "--scope-qualifier");
         parse_string_option(query_options.client_context_id, "--client-context-id");
 
         if (options.find("--scan-consistency") != options.end() && options.at("--scan-consistency")) {

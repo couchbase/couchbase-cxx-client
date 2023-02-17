@@ -259,11 +259,14 @@ set(couchbase_cxx_client_FILES
         core/impl/append.cxx
         core/impl/best_effort_retry_strategy.cxx
         core/impl/build_deferred_query_indexes.cxx
+        core/impl/collection_query_index_manager.cxx
         core/impl/cluster.cxx
         core/impl/common_error_category.cxx
         core/impl/configuration_profiles_registry.cxx
+        core/impl/create_query_index.cxx
         core/impl/decrement.cxx
         core/impl/dns_srv_tracker.cxx
+        core/impl/drop_query_index.cxx
         core/impl/exists.cxx
         core/impl/expiry.cxx
         core/impl/fail_fast_retry_strategy.cxx
@@ -272,6 +275,7 @@ set(couchbase_cxx_client_FILES
         core/impl/get_all_replicas.cxx
         core/impl/get_and_lock.cxx
         core/impl/get_and_touch.cxx
+        core/impl/get_all_query_indexes.cxx
         core/impl/get_any_replica.cxx
         core/impl/get_replica.cxx
         core/impl/increment.cxx
@@ -293,6 +297,7 @@ set(couchbase_cxx_client_FILES
         core/impl/search_error_category.cxx
         core/impl/streaming_json_lexter_error_category.cxx
         core/impl/unlock.cxx
+        core/impl/watch_query_indexes.cxx
         core/impl/subdoc/array_add_unique.cxx
         core/impl/subdoc/array_append.cxx
         core/impl/subdoc/array_insert.cxx

@@ -151,6 +151,11 @@ class transaction_context
 
     void query(const std::string& statement,
                const couchbase::transactions::transaction_query_options& opts,
+               std::optional<std::string> query_context,
+               async_attempt_context::QueryCallback&& cb);
+
+    void query(const std::string& statement,
+               const couchbase::transactions::transaction_query_options& opts,
                async_attempt_context::QueryCallback&& cb);
 
     void commit(async_attempt_context::VoidCallback&& cb);

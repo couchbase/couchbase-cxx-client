@@ -745,7 +745,7 @@ wrap_query_request(const couchbase::transactions::transaction_query_options& opt
 }
 
 void
-attempt_context_impl::query_begin_work(std::function<void(std::exception_ptr)>&& cb)
+attempt_context_impl::query_begin_work(std::optional<std::string> query_context, std::function<void(std::exception_ptr)>&& cb)
 {
     // construct the txn_data and query options for the existing transaction
     couchbase::transactions::transaction_query_options opts;
@@ -798,6 +798,7 @@ attempt_context_impl::query_begin_work(std::function<void(std::exception_ptr)>&&
                txdata,
                STAGE_QUERY_BEGIN_WORK,
                false,
+               query_context,
                [this, cb = std::move(cb)](std::exception_ptr err, core::operations::query_response resp) mutable {
                    if (resp.served_by_node.empty()) {
                        CB_ATTEMPT_CTX_LOG_TRACE(this, "begin_work didn't reach a query node, resetting mode to kv");
@@ -927,6 +928,7 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
 void
 attempt_context_impl::do_query(const std::string& statement,
                                const couchbase::transactions::transaction_query_options& opts,
+                               std::optional<std::string> query_context,
                                QueryCallback&& cb)
 {
     std::vector<core::json_string> params;
@@ -938,6 +940,7 @@ attempt_context_impl::do_query(const std::string& statement,
                txdata,
                STAGE_QUERY,
                true,
+               query_context,
                [this, cb = std::move(cb)](std::exception_ptr err, core::operations::query_response resp) mutable {
                    if (err) {
                        return op_completed_with_error(std::move(cb), err);
@@ -969,6 +972,7 @@ attempt_context_impl::wrap_query(const std::string& statement,
                                  const tao::json::value& txdata,
                                  const std::string& hook_point,
                                  bool check_expiry,
+                                 std::optional<std::string> query_context,
                                  std::function<void(std::exception_ptr, core::operations::query_response)>&& cb)
 {
     auto req = wrap_query_request(opts, overall_);
@@ -980,8 +984,10 @@ attempt_context_impl::wrap_query(const std::string& statement,
         }
     }
     // set the query_context, if one has been set, unless this query already has one
-    if (!req.scope_qualifier && !query_context_.empty()) {
-        req.scope_qualifier = query_context_;
+    if (!query_context && !query_context_.empty()) {
+        req.query_context = query_context_;
+    } else if (query_context) {
+        req.query_context = query_context;
     }
 
     if (check_expiry) {
@@ -1025,34 +1031,38 @@ attempt_context_impl::wrap_query(const std::string& statement,
 void
 attempt_context_impl::query(const std::string& statement,
                             const couchbase::transactions::transaction_query_options& options,
+                            std::optional<std::string> query_context,
                             QueryCallback&& cb)
 {
     return cache_error_async(cb, [&]() {
         check_if_done(cb);
         // decrement in_flight, as we just incremented it in cache_error_async.
         op_list_.set_query_mode(
-          [this, statement, options, cb]() mutable {
-              // set query context if set in query options.
-              if (auto query_context = options.get_query_options().build().scope_qualifier; query_context) {
+          [this, statement, options, query_context, cb]() mutable {
+              // set query context if set
+              if (query_context) {
                   query_context_ = query_context.value();
               }
-              query_begin_work([this, statement, options, cb = std::move(cb)](std::exception_ptr err) mutable {
-                  if (err) {
-                      return op_completed_with_error(std::move(cb), err);
-                  }
-                  return do_query(statement, options, std::move(cb));
-              });
+              query_begin_work(query_context,
+                               [this, statement, query_context, options, cb = std::move(cb)](std::exception_ptr err) mutable {
+                                   if (err) {
+                                       return op_completed_with_error(std::move(cb), err);
+                                   }
+                                   return do_query(statement, options, query_context, std::move(cb));
+                               });
           },
-          [this, statement, options, cb]() mutable { return do_query(statement, options, std::move(cb)); });
+          [this, statement, options, query_context, cb]() mutable { return do_query(statement, options, query_context, std::move(cb)); });
     });
 }
 
 core::operations::query_response
-attempt_context_impl::do_core_query(const std::string& statement, const couchbase::transactions::transaction_query_options& options)
+attempt_context_impl::do_core_query(const std::string& statement,
+                                    const couchbase::transactions::transaction_query_options& options,
+                                    std::optional<std::string> query_context)
 {
     auto barrier = std::make_shared<std::promise<core::operations::query_response>>();
     auto f = barrier->get_future();
-    query(statement, options, [barrier](std::exception_ptr err, std::optional<core::operations::query_response> resp) {
+    query(statement, options, query_context, [barrier](std::exception_ptr err, std::optional<core::operations::query_response> resp) {
         if (err) {
             return barrier->set_exception(err);
         }
@@ -1062,10 +1072,12 @@ attempt_context_impl::do_core_query(const std::string& statement, const couchbas
 }
 
 couchbase::transactions::transaction_query_result_ptr
-attempt_context_impl::do_public_query(const std::string& statement, const couchbase::transactions::transaction_query_options& opts)
+attempt_context_impl::do_public_query(const std::string& statement,
+                                      const couchbase::transactions::transaction_query_options& opts,
+                                      std::optional<std::string> query_context)
 {
     try {
-        auto result = do_core_query(statement, opts);
+        auto result = do_core_query(statement, opts, query_context);
         return std::make_shared<couchbase::transactions::transaction_query_result>(core::impl::build_transaction_query_result(result));
     } catch (const transaction_operation_failed& e) {
         return std::make_shared<couchbase::transactions::transaction_query_result>(e.get_error_ctx());
@@ -1118,6 +1130,7 @@ attempt_context_impl::get_with_query(const core::document_id& id, bool optional,
                           make_kv_txdata(),
                           STAGE_QUERY_KV_GET,
                           true,
+                          {},
                           [this, id, optional, cb = std::move(cb)](std::exception_ptr err, core::operations::query_response resp) mutable {
                               if (resp.ctx.ec == couchbase::errc::key_value::document_not_found) {
                                   return op_completed_with_callback(std::move(cb), std::optional<transaction_get_result>());
@@ -1165,6 +1178,7 @@ attempt_context_impl::insert_raw_with_query(const core::document_id& id, const s
                           make_kv_txdata(),
                           STAGE_QUERY_KV_INSERT,
                           true,
+                          {},
                           [this, id, cb = std::move(cb)](std::exception_ptr err, core::operations::query_response resp) mutable {
                               if (err) {
                                   try {
@@ -1208,6 +1222,7 @@ attempt_context_impl::replace_raw_with_query(const transaction_get_result& docum
           make_kv_txdata(document),
           STAGE_QUERY_KV_REPLACE,
           true,
+          {},
           [this, id = document.id(), cb = std::move(cb)](std::exception_ptr err, core::operations::query_response resp) mutable {
               if (err) {
                   try {
@@ -1250,6 +1265,7 @@ attempt_context_impl::remove_with_query(const transaction_get_result& document, 
           make_kv_txdata(document),
           STAGE_QUERY_KV_REMOVE,
           true,
+          {},
           [this, id = document.id(), cb = std::move(cb)](std::exception_ptr err, core::operations::query_response /* resp */) mutable {
               if (err) {
                   try {
@@ -1286,6 +1302,7 @@ attempt_context_impl::commit_with_query(VoidCallback&& cb)
       make_kv_txdata(std::nullopt),
       STAGE_QUERY_COMMIT,
       true,
+      {},
       [this, cb = std::move(cb)](std::exception_ptr err, core::operations::query_response /* resp */) mutable {
           is_done_ = true;
           if (err) {
@@ -1322,6 +1339,7 @@ attempt_context_impl::rollback_with_query(VoidCallback&& cb)
                make_kv_txdata(std::nullopt),
                STAGE_QUERY_ROLLBACK,
                true,
+               {},
                [this, cb = std::move(cb)](std::exception_ptr err, core::operations::query_response /* resp */) mutable {
                    is_done_ = true;
                    if (err) {

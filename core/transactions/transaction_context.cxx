@@ -163,14 +163,22 @@ transaction_context::remove(const transaction_get_result& doc, async_attempt_con
 void
 transaction_context::query(const std::string& statement,
                            const couchbase::transactions::transaction_query_options& opts,
+                           std::optional<std::string> query_context,
                            async_attempt_context::QueryCallback&& cb)
 {
     if (current_attempt_context_) {
-        return current_attempt_context_->query(statement, opts, std::move(cb));
+        return current_attempt_context_->query(statement, opts, query_context, std::move(cb));
     }
     throw(transaction_operation_failed(FAIL_OTHER, "no current attempt context"));
 }
 
+void
+transaction_context::query(const std::string& statement,
+                           const couchbase::transactions::transaction_query_options& opts,
+                           async_attempt_context::QueryCallback&& cb)
+{
+    query(statement, opts, {}, std::move(cb));
+}
 void
 transaction_context::commit(async_attempt_context::VoidCallback&& cb)
 {

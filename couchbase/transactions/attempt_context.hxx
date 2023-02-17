@@ -50,13 +50,13 @@ class attempt_context
 
     transaction_query_result_ptr query(const std::string& statement, const transaction_query_options& options = {})
     {
-        return do_public_query(statement, options);
+        return do_public_query(statement, options, {});
     }
 
     transaction_query_result_ptr query(const scope& scope, std::string& statement, const transaction_query_options& opts = {})
     {
         auto new_opts = opts;
-        return query(statement, new_opts.scope_qualifier(fmt::format("{}.{}", scope.bucket_name(), scope.name())));
+        return do_public_query(statement, opts, fmt::format("{}.{}", scope.bucket_name(), scope.name()));
     }
 
     virtual ~attempt_context() = default;
@@ -66,6 +66,8 @@ class attempt_context
     virtual transaction_get_result_ptr insert_raw(const couchbase::collection& coll,
                                                   const std::string& id,
                                                   std::vector<std::byte> content) = 0;
-    virtual transaction_query_result_ptr do_public_query(const std::string& statement, const transaction_query_options& options) = 0;
+    virtual transaction_query_result_ptr do_public_query(const std::string& statement,
+                                                         const transaction_query_options& options,
+                                                         std::optional<std::string> query_context) = 0;
 };
 } // namespace couchbase::transactions

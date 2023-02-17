@@ -104,8 +104,11 @@ class scope
     template<typename Handler>
     void query(std::string statement, const query_options& options, Handler&& handler) const
     {
-        return core::impl::initiate_query_operation(
-          core_, std::move(statement), bucket_name_, name_, options.build(), std::forward<Handler>(handler));
+        return core::impl::initiate_query_operation(core_,
+                                                    std::move(statement),
+                                                    fmt::format("default:`{}`.`{}`", bucket_name_, name_),
+                                                    options.build(),
+                                                    std::forward<Handler>(handler));
     }
 
     /**
