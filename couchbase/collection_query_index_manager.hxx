@@ -118,7 +118,6 @@ class collection_query_index_manager
     /**
      * Drop primary index on a collection.
      *
-     * @param bucket_name name of the bucket in which to drop the primary index
      * @param options optional parameters
      * @param handler the handler that implements @ref drop_query_index_handler
      *
@@ -157,7 +156,7 @@ class collection_query_index_manager
     /**
      * Builds all currently deferred indexes in this collection.
      *
-     * By default, this method will build the indexes on the bucket.
+     * By default, this method will build the indexes on the collection.
      *
      * @param options the custom options
      * @param handler the handler that implements @ref build_deferred_query_indexes_handler
@@ -178,7 +177,6 @@ class collection_query_index_manager
     /**
      * Polls the state of a set of indexes, until they all are online.
      *
-     * @param bucket_name name of the bucket in which to look for the indexes
      * @param index_names names of the indexes to watch
      * @param options optional parameters
      * @param handler handler that implements @ref watch_query_indexes_handler
