@@ -244,7 +244,6 @@ TEST_CASE("async replace fails as expected with bad cas", "[transactions]")
       [id, coll, new_content](couchbase::transactions::async_attempt_context& ctx) {
           ctx.get(coll, id, [new_content, &ctx](auto, auto res) {
               // all this to change the cas...
-
               couchbase::core::transactions::transaction_get_result temp_doc(res);
               temp_doc.cas(100);
               ctx.replace(temp_doc.to_public_result(), new_content, [](auto replace_e, auto) { CHECK(replace_e.ec()); });

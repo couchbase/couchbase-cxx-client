@@ -188,7 +188,7 @@ class GameServer
                             Player player_new_body = player_body;
                             player_new_body.experience = player_new_experience;
                             player_new_body.level = player_new_level;
-                            ctx.replace(player, player_new_body, [](auto e, [[maybe_unused]] auto res) {
+                            ctx.replace(player, player_new_body, [](auto e, auto) {
                                 if (e.ec()) {
                                     std::cout << "Error updating player :" << e.ec().message() << std::endl;
                                 }
