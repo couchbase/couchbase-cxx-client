@@ -847,15 +847,15 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
     if (!resp.ctx.ec && !resp.meta.errors) {
         return {};
     }
-    auto tx_resp = couchbase::core::impl::build_transaction_query_result(resp);
+    auto [tx_err, query_result] = couchbase::core::impl::build_transaction_query_result(resp);
     // TODO: look at ambiguous and unambiguous timeout errors vs the codes, etc...
     CB_ATTEMPT_CTX_LOG_TRACE(
       this, "handling query error {}, {} errors in meta_data", resp.ctx.ec.message(), resp.meta.errors ? "has" : "no");
     if (resp.ctx.ec == couchbase::errc::common::ambiguous_timeout || resp.ctx.ec == couchbase::errc::common::unambiguous_timeout) {
-        return std::make_exception_ptr(query_attempt_expired(tx_resp.ctx()));
+        return std::make_exception_ptr(query_attempt_expired(tx_err));
     }
     if (resp.ctx.ec == couchbase::errc::common::parsing_failure) {
-        return std::make_exception_ptr(query_parsing_failure(tx_resp.ctx()));
+        return std::make_exception_ptr(query_parsing_failure(tx_err));
     }
     if (!resp.meta.errors) {
         // can't choose an error, map using the ec...
@@ -883,16 +883,16 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
               transaction_operation_failed(FAIL_OTHER, "This couchbase server requires all queries use a scope.")
                 .cause(FEATURE_NOT_AVAILABLE_EXCEPTION));
         case 17004:
-            return std::make_exception_ptr(query_attempt_not_found(tx_resp.ctx()));
+            return std::make_exception_ptr(query_attempt_not_found(tx_err));
         case 1080:
         case 17010:
             return std::make_exception_ptr(transaction_operation_failed(FAIL_EXPIRY, "transaction expired").expired());
         case 17012:
-            return std::make_exception_ptr(document_exists(tx_resp.ctx()));
+            return std::make_exception_ptr(document_exists(tx_err));
         case 17014:
-            return std::make_exception_ptr(document_not_found(tx_resp.ctx()));
+            return std::make_exception_ptr(document_not_found(tx_err));
         case 17015:
-            return std::make_exception_ptr(query_cas_mismatch(tx_resp.ctx()));
+            return std::make_exception_ptr(query_cas_mismatch(tx_err));
     }
 
     // For these errors, we will create a transaction_operation_failed from the info in it.
@@ -922,7 +922,7 @@ attempt_context_impl::handle_query_error(const core::operations::query_response&
         }
     }
 
-    return { std::make_exception_ptr(op_exception(tx_resp.ctx())) };
+    return { std::make_exception_ptr(op_exception(tx_err)) };
 }
 
 void
@@ -1071,22 +1071,22 @@ attempt_context_impl::do_core_query(const std::string& statement,
     return f.get();
 }
 
-couchbase::transactions::transaction_query_result_ptr
+std::pair<couchbase::transaction_op_error_context, couchbase::transactions::transaction_query_result>
 attempt_context_impl::do_public_query(const std::string& statement,
                                       const couchbase::transactions::transaction_query_options& opts,
                                       std::optional<std::string> query_context)
 {
     try {
         auto result = do_core_query(statement, opts, query_context);
-        return std::make_shared<couchbase::transactions::transaction_query_result>(core::impl::build_transaction_query_result(result));
+        return core::impl::build_transaction_query_result(result);
     } catch (const transaction_operation_failed& e) {
-        return std::make_shared<couchbase::transactions::transaction_query_result>(e.get_error_ctx());
+        return { e.get_error_ctx(), {} };
     } catch (const op_exception& qe) {
-        return std::make_shared<couchbase::transactions::transaction_query_result>(qe.ctx());
+        return { qe.ctx(), {} };
     } catch (...) {
         // should not be necessary, but just in case...
         transaction_op_error_context ctx(couchbase::errc::transaction_op::unknown);
-        return std::make_shared<couchbase::transactions::transaction_query_result>(ctx);
+        return { ctx, {} };
     }
 }
 

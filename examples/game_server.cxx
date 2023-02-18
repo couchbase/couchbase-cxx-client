@@ -141,14 +141,14 @@ class GameServer
                              const std::string& monster_id,
                              std::atomic<bool>& exists)
     {
-        auto result = transactions_->run([&](attempt_context& ctx) {
-            auto monster = ctx.get(collection, monster_id);
-            if (monster->ctx().ec() == couchbase::errc::transaction_op::document_not_found_exception) {
+        auto [err, result] = transactions_->run([&](attempt_context& ctx) {
+            auto [e, monster] = ctx.get(collection, monster_id);
+            if (e.ec() == couchbase::errc::transaction_op::document_not_found_exception) {
                 std::cout << "monster no longer exists" << std::endl;
                 exists = false;
                 return;
             }
-            const Monster& monster_body = monster->content<Monster>();
+            const Monster& monster_body = monster.content<Monster>();
 
             int monster_hitpoints = monster_body.hitpoints;
             int monster_new_hitpoints = monster_hitpoints - damage_;
@@ -156,8 +156,8 @@ class GameServer
             std::cout << "Monster " << monster_id << " had " << monster_hitpoints << " hitpoints, took " << damage_ << " damage, now has "
                       << monster_new_hitpoints << " hitpoints" << std::endl;
 
-            auto player = ctx.get(collection, player_id);
-            if (player->ctx().ec()) {
+            auto [e2, player] = ctx.get(collection, player_id);
+            if (e2.ec()) {
                 // rollback
                 throw std::runtime_error(fmt::format("error getting player {}", player_id));
             }
@@ -166,7 +166,7 @@ class GameServer
                 // Monster is killed. The remove is just for demoing, and a more realistic examples would set a "dead" flag or similar.
                 ctx.remove(monster);
 
-                const Player& player_body = player->content<Player>();
+                const Player& player_body = player.content<Player>();
 
                 // the player earns experience for killing the monster
                 int experience_for_killing_monster = monster_body.experience_when_killed;
@@ -189,9 +189,8 @@ class GameServer
                 ctx.replace(monster, monster_new_body);
             }
         });
-        if (result.ctx.ec()) {
-            std::cout << "txn error during player_hits_monster: " << result.ctx.ec().message() << ", " << result.ctx.cause().message()
-                      << std::endl;
+        if (err.ec()) {
+            std::cout << "txn error during player_hits_monster: " << err.ec().message() << ", " << err.cause().message() << std::endl;
         }
     }
 };

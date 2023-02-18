@@ -28,13 +28,14 @@ namespace couchbase::transactions
 {
 using txn_logic = std::function<void(attempt_context&)>;
 using async_txn_logic = std::function<void(async_attempt_context&)>;
-using async_txn_complete_logic = std::function<void(transaction_result)>;
+using async_txn_complete_logic = std::function<void(couchbase::transaction_error_context, transaction_result)>;
 
 class transactions
 {
   public:
     virtual ~transactions() = default;
-    virtual transaction_result run(txn_logic&& logic, const transaction_options& cfg = transaction_options()) = 0;
+    virtual std::pair<transaction_error_context, transaction_result> run(txn_logic&& logic,
+                                                                         const transaction_options& cfg = transaction_options()) = 0;
     virtual void run(async_txn_logic&& logic,
                      async_txn_complete_logic&& complete_callback,
                      const transaction_options& cfg = transaction_options()) = 0;

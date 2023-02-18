@@ -103,7 +103,6 @@ transaction_exception::transaction_exception(const std::runtime_error& cause, co
     if (nullptr != txn_op) {
         cause_ = txn_op->cause();
     }
-    result_.ctx = error_context();
 }
 
 errc::transaction_op

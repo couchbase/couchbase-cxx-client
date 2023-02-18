@@ -157,7 +157,7 @@ class transactions : public couchbase::transactions::transactions
 
     couchbase::transactions::transaction_result run(const couchbase::transactions::transaction_options& config, logic&& code);
 
-    couchbase::transactions::transaction_result run(
+    std::pair<couchbase::transaction_error_context, couchbase::transactions::transaction_result> run(
       ::couchbase::transactions::txn_logic&& code,
       const couchbase::transactions::transaction_options& cfg = couchbase::transactions::transaction_options()) override;
 

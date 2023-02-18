@@ -105,17 +105,17 @@ TEST_CASE("can get", "[transactions]")
     REQUIRE_SUCCESS(err.ec());
     REQUIRE_FALSE(upsert_res.cas().empty());
 
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [id, &coll](couchbase::transactions::attempt_context& ctx) {
-          auto doc = ctx.get(coll, id);
-          CHECK_FALSE(doc->ctx().ec());
-          CHECK(doc->key() == id);
-          CHECK_FALSE(doc->cas().empty());
-          CHECK(doc->content<tao::json::value>() == content);
+          auto [e, doc] = ctx.get(coll, id);
+          CHECK_FALSE(e.ec());
+          CHECK(doc.key() == id);
+          CHECK_FALSE(doc.cas().empty());
+          CHECK(doc.content<tao::json::value>() == content);
       },
       txn_opts());
     CHECK_FALSE(result.transaction_id.empty());
-    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(tx_err.ec());
 }
 
 TEST_CASE("get returns error if doc doesn't exist", "[transactions]")
@@ -126,16 +126,15 @@ TEST_CASE("get returns error if doc doesn't exist", "[transactions]")
     couchbase::cluster c(integration.cluster);
     auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [id, coll](couchbase::transactions::attempt_context& ctx) {
-          auto doc = ctx.get(coll, id);
-          CHECK(doc->ctx().ec());
-          CHECK(doc->ctx().ec() == couchbase::errc::transaction_op::document_not_found_exception);
+          auto [e, doc] = ctx.get(coll, id);
+          CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found_exception);
       },
       txn_opts());
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
-    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(tx_err.ec());
 }
 
 TEST_CASE("can insert", "[transactions]")
@@ -146,18 +145,20 @@ TEST_CASE("can insert", "[transactions]")
     couchbase::cluster c(integration.cluster);
     auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [id, coll](couchbase::transactions::attempt_context& ctx) {
-          auto doc = ctx.insert(coll, id, content);
-          CHECK_FALSE(doc->ctx().ec());
-          CHECK(doc->key() == id);
-          CHECK_FALSE(doc->cas().empty());
-          CHECK(doc->content<tao::json::value>() == content);
+          auto [e, doc] = ctx.insert(coll, id, content);
+          CHECK_FALSE(e.ec());
+          CHECK(doc.key() == id);
+          CHECK_FALSE(doc.cas().empty());
+          auto [e2, inserted_doc] = ctx.get(coll, id);
+          CHECK_FALSE(e2.ec());
+          CHECK(inserted_doc.content<tao::json::value>() == content);
       },
       txn_opts());
     REQUIRE_FALSE(result.transaction_id.empty());
     REQUIRE(result.unstaging_complete);
-    REQUIRE_FALSE(result.ctx.ec());
+    REQUIRE_FALSE(tx_err.ec());
     // check that it is really there now
     auto [err, final_doc] = coll.get(id, {}).get();
     REQUIRE_SUCCESS(err.ec());
@@ -176,16 +177,16 @@ TEST_CASE("insert has error as expected when doc already exists", "[transactions
     REQUIRE_SUCCESS(err.ec());
 
     tao::json::value new_content{ { "something", "else" } };
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [id, coll, new_content](couchbase::transactions::attempt_context& ctx) {
-          auto doc = ctx.insert(coll, id, new_content);
-          CHECK(doc->ctx().ec() == couchbase::errc::transaction_op::document_exists_exception);
+          auto [e, doc] = ctx.insert(coll, id, new_content);
+          CHECK(e.ec() == couchbase::errc::transaction_op::document_exists_exception);
       },
       txn_opts());
     CHECK_FALSE(result.transaction_id.empty());
     // but the txn is successful
     CHECK(result.unstaging_complete);
-    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(tx_err.ec());
     // check that it is really unchanged too.
     auto [final_err, final_doc] = coll.get(id, {}).get();
     REQUIRE_SUCCESS(final_err.ec());
@@ -203,23 +204,25 @@ TEST_CASE("can replace", "[transactions]")
     REQUIRE_SUCCESS(err.ec());
 
     tao::json::value new_content = { { "some_other_number", 3 } };
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [id, coll, new_content](couchbase::transactions::attempt_context& ctx) {
-          auto doc = ctx.get(coll, id);
-          auto replaced_doc = ctx.replace(doc, new_content);
-          CHECK(doc->key() == replaced_doc->key());
-          CHECK(doc->cas() != replaced_doc->cas());
-          CHECK(doc->content<tao::json::value>() == content);
-          CHECK(replaced_doc->content<tao::json::value>() == new_content);
+          auto [_, doc] = ctx.get(coll, id);
+          auto [e, replaced_doc] = ctx.replace(doc, new_content);
+          CHECK_FALSE(e.ec());
+          CHECK(doc.key() == replaced_doc.key());
+          CHECK(doc.cas() != replaced_doc.cas());
+          CHECK(doc.content<tao::json::value>() == content);
+          CHECK(replaced_doc.content<tao::json::value>() == new_content);
       },
       txn_opts());
     CHECK_FALSE(result.transaction_id.empty());
     CHECK(result.unstaging_complete);
-    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(tx_err.ec());
     // check that it is really replaced
     auto [final_err, final_doc] = coll.get(id, {}).get();
     REQUIRE_SUCCESS(final_err.ec());
-    REQUIRE(final_doc.content_as<tao::json::value>() == new_content);
+    REQUIRE(couchbase::core::utils::json::generate_binary(final_doc.content_as<tao::json::value>()) ==
+            couchbase::core::utils::json::generate_binary(new_content));
 }
 
 TEST_CASE("replace fails as expected with bad cas", "[transactions]")
@@ -234,17 +237,18 @@ TEST_CASE("replace fails as expected with bad cas", "[transactions]")
     REQUIRE_SUCCESS(err.ec());
 
     tao::json::value new_content = { { "some_other_number", 3 } };
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [id, coll, new_content](couchbase::transactions::attempt_context& ctx) {
-          auto doc = ctx.get(coll, id);
-          reinterpret_cast<couchbase::core::transactions::transaction_get_result&>(*doc).cas(100);
-          auto replaced_doc = ctx.replace(doc, new_content);
+          auto [_, doc] = ctx.get(coll, id);
+          // all this to change the cas...
+          couchbase::core::transactions::transaction_get_result temp_doc(doc);
+          temp_doc.cas(100);
+          auto replaced_doc = ctx.replace(temp_doc.to_public_result(), new_content);
       },
       txn_opts());
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
-    CHECK(result.ctx.ec());
-    CHECK(result.ctx.ec());
+    CHECK(tx_err.ec());
     // check that it is unchanged
     auto [final_err, final_doc] = coll.get(id, {}).get();
     REQUIRE_SUCCESS(final_err.ec());
@@ -261,14 +265,15 @@ TEST_CASE("can remove", "[transactions]")
     auto [err, upsert_res] = coll.upsert(id, content, {}).get();
     REQUIRE_SUCCESS(err.ec());
 
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [id, coll](couchbase::transactions::attempt_context& ctx) {
-          auto doc = ctx.get(coll, id);
+          auto [_, doc] = ctx.get(coll, id);
           auto removed_doc = ctx.remove(doc);
       },
       txn_opts());
     CHECK_FALSE(result.transaction_id.empty());
     CHECK(result.unstaging_complete);
+    CHECK_FALSE(tx_err.ec());
     // make sure it is really gone...
 
     auto [final_err, final_doc] = coll.get(id, {}).get();
@@ -286,18 +291,20 @@ TEST_CASE("remove fails as expected with bad cas", "[transactions]")
     auto [err, upsert_res] = coll.upsert(id, content, {}).get();
     REQUIRE_SUCCESS(err.ec());
 
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [id, coll](couchbase::transactions::attempt_context& ctx) {
-          auto doc = ctx.get(coll, id);
+          auto [e, doc] = ctx.get(coll, id);
           // change cas, so remove will fail and retry
-          reinterpret_cast<couchbase::core::transactions::transaction_get_result&>(*doc).cas(100);
-          auto remove_err = ctx.remove(doc);
+          // all this to change the cas...
+          couchbase::core::transactions::transaction_get_result temp_doc(doc);
+          temp_doc.cas(100);
+          auto remove_err = ctx.remove(temp_doc.to_public_result());
           CHECK(remove_err.ec());
       },
       txn_opts());
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
-    CHECK(result.ctx.ec());
+    CHECK(tx_err.ec());
 }
 
 TEST_CASE("remove fails as expected with missing doc", "[transactions]")
@@ -308,10 +315,10 @@ TEST_CASE("remove fails as expected with missing doc", "[transactions]")
     couchbase::cluster c(integration.cluster);
     auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [id, coll](couchbase::transactions::attempt_context& ctx) {
-          auto doc = ctx.get(coll, id);
-          CHECK(doc->ctx().ec() == couchbase::errc::transaction_op::document_not_found_exception);
+          auto [e, doc] = ctx.get(coll, id);
+          CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found_exception);
           // the doc is 'blank', so trying to use it results in failure
           auto err = ctx.remove(doc);
           CHECK(err.ec());
@@ -320,9 +327,8 @@ TEST_CASE("remove fails as expected with missing doc", "[transactions]")
       txn_opts());
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
-    CHECK(result.ctx.ec());
-    CHECK(result.ctx.ec() == couchbase::errc::transaction::failed);
-    CHECK(result.ctx.cause() == couchbase::errc::transaction_op::unknown);
+    CHECK(tx_err.ec() == couchbase::errc::transaction::failed);
+    CHECK(tx_err.cause() == couchbase::errc::transaction_op::unknown);
 }
 
 TEST_CASE("uncaught exception in lambda will rollback without retry", "[transactions]")
@@ -333,18 +339,17 @@ TEST_CASE("uncaught exception in lambda will rollback without retry", "[transact
     couchbase::cluster c(integration.cluster);
     auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [id, coll](couchbase::transactions::attempt_context& ctx) {
-          auto doc = ctx.insert(coll, id, content);
-          CHECK_FALSE(doc->ctx().ec());
+          auto [e, doc] = ctx.insert(coll, id, content);
+          CHECK_FALSE(e.ec());
           throw std::runtime_error("some exception");
       },
       txn_opts());
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
-    CHECK(result.ctx.ec());
-    CHECK(result.ctx.ec() == couchbase::errc::transaction::failed);
-    CHECK(result.ctx.cause() == couchbase::errc::transaction_op::unknown);
+    CHECK(tx_err.ec() == couchbase::errc::transaction::failed);
+    CHECK(tx_err.cause() == couchbase::errc::transaction_op::unknown);
 }
 
 TEST_CASE("can pass per-transaction configs", "[transactions]")
@@ -359,11 +364,13 @@ TEST_CASE("can pass per-transaction configs", "[transactions]")
 
     auto opts = couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(2));
     auto begin = std::chrono::steady_clock::now();
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [id, coll](couchbase::transactions::attempt_context& ctx) {
-          auto doc = ctx.get(coll, id);
-          reinterpret_cast<couchbase::core::transactions::transaction_get_result&>(*doc).cas(100);
-          auto remove_err = ctx.remove(doc);
+          auto [e, doc] = ctx.get(coll, id);
+          // all this to change the cas...
+          couchbase::core::transactions::transaction_get_result temp_doc(doc);
+          temp_doc.cas(100);
+          auto remove_err = ctx.remove(temp_doc.to_public_result());
           CHECK(remove_err.ec());
       },
       opts);
@@ -376,7 +383,7 @@ TEST_CASE("can pass per-transaction configs", "[transactions]")
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
     // could have failed in rollback, which returns fail rather than expired
-    CHECK(result.ctx.ec());
+    CHECK(tx_err.ec());
 }
 
 TEST_CASE("can do simple query", "[transactions]")
@@ -388,14 +395,14 @@ TEST_CASE("can do simple query", "[transactions]")
     auto coll = c.bucket(integration.ctx.bucket).default_collection();
     auto [err, upsert_res] = coll.upsert(id, content, {}).get();
     REQUIRE_SUCCESS(err.ec());
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [id, coll, test_ctx = integration.ctx](couchbase::transactions::attempt_context& ctx) {
-          auto res = ctx.query(fmt::format("SELECT * FROM `{}` USE KEYS '{}'", test_ctx.bucket, id));
-          CHECK_FALSE(res->ctx().ec());
-          CHECK(content == res->rows_as_json().front()["default"]);
+          auto [e, res] = ctx.query(fmt::format("SELECT * FROM `{}` USE KEYS '{}'", test_ctx.bucket, id));
+          CHECK_FALSE(e.ec());
+          CHECK(content == res.rows_as_json().front()["default"]);
       },
       couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(10)));
-    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(tx_err.ec());
     CHECK(result.unstaging_complete);
     CHECK_FALSE(result.transaction_id.empty());
 }
@@ -410,13 +417,13 @@ TEST_CASE("can do simple mutating query", "[transactions]")
     auto [err, upsert_res] = coll.upsert(id, content, {}).get();
     REQUIRE_SUCCESS(err.ec());
 
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [id, coll, test_ctx = integration.ctx](couchbase::transactions::attempt_context& ctx) {
-          auto res = ctx.query(fmt::format("UPDATE `{}` USE KEYS '{}' SET `some_number` = 10", test_ctx.bucket, id));
-          CHECK_FALSE(res->ctx().ec());
+          auto [e, res] = ctx.query(fmt::format("UPDATE `{}` USE KEYS '{}' SET `some_number` = 10", test_ctx.bucket, id));
+          CHECK_FALSE(e.ec());
       },
       couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(10)));
-    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(tx_err.ec());
     CHECK(result.unstaging_complete);
     CHECK_FALSE(result.transaction_id.empty());
     auto [final_err, final_doc] = coll.get(id, {}).get();
@@ -431,16 +438,17 @@ TEST_CASE("some query errors don't force rollback", "[transactions]")
     couchbase::cluster c(integration.cluster);
     auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [id, coll, test_ctx = integration.ctx](couchbase::transactions::attempt_context& ctx) {
-          auto get_res = ctx.query(fmt::format("SELECT * FROM `{}` USE KEYS '{}'", test_ctx.bucket, id));
-          CHECK_FALSE(get_res->ctx().ec());
-          CHECK(get_res->rows_as_json().size() == 0);
-          auto insert_res = ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES ("{}", {}))", test_ctx.bucket, id, content_json));
-          CHECK_FALSE(insert_res->ctx().ec());
+          auto [get_err, get_res] = ctx.query(fmt::format("SELECT * FROM `{}` USE KEYS '{}'", test_ctx.bucket, id));
+          CHECK_FALSE(get_err.ec());
+          CHECK(get_res.rows_as_json().size() == 0);
+          auto [insert_err, _] =
+            ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES ("{}", {}))", test_ctx.bucket, id, content_json));
+          CHECK_FALSE(insert_err.ec());
       },
       couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(10)));
-    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(tx_err.ec());
     CHECK(result.unstaging_complete);
     CHECK_FALSE(result.transaction_id.empty());
     auto [final_err, final_doc] = coll.get(id, {}).get();
@@ -458,15 +466,17 @@ TEST_CASE("some query errors do rollback", "[transactions]")
     auto [err, upsert_res] = coll.upsert(id, content, {}).get();
     REQUIRE_SUCCESS(err.ec());
 
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [id, id2, coll, test_ctx = integration.ctx](couchbase::transactions::attempt_context& ctx) {
           // this one works.
-          ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES ("{}", {}))", test_ctx.bucket, id2, content_json));
+          auto [e, _] = ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES ("{}", {}))", test_ctx.bucket, id2, content_json));
+          CHECK_FALSE(e.ec());
           // but not this one. But the query server doesn't notice until commit, so this _appears_ to succeed
-          ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES ("{}", {}))", test_ctx.bucket, id, content_json));
+          auto [e2, __] = ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES ("{}", {}))", test_ctx.bucket, id, content_json));
+          CHECK_FALSE(e2.ec());
       },
       couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(10)));
-    CHECK(result.ctx.ec() == couchbase::errc::transaction::failed);
+    CHECK(tx_err.ec() == couchbase::errc::transaction::failed);
 
     // id2 should not exist, since the txn should have rolled back.
     auto [doc2_err, doc2] = coll.get(id2, {}).get();
@@ -481,14 +491,14 @@ TEST_CASE("some query errors are seen immediately", "[transactions]")
     couchbase::cluster c(integration.cluster);
     auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [](couchbase::transactions::attempt_context& ctx) {
-          auto res = ctx.query("I am not a valid n1ql query");
-          CHECK(res->ctx().ec());
-          CHECK(std::holds_alternative<couchbase::query_error_context>(res->ctx().cause()));
+          auto [e, res] = ctx.query("I am not a valid n1ql query");
+          CHECK(e.ec());
+          CHECK(std::holds_alternative<couchbase::query_error_context>(e.cause()));
       },
       couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(10)));
-    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(tx_err.ec());
     CHECK_FALSE(result.transaction_id.empty());
     CHECK(result.unstaging_complete);
 }
@@ -509,15 +519,15 @@ TEST_CASE("can query from a scope", "[transactions]")
     REQUIRE_SUCCESS(err.ec());
 
     auto statement = fmt::format("SELECT * FROM `{}` USE KEYS '{}'", new_coll_name, id);
-    auto result = c.transactions()->run(
+    auto [tx_err, result] = c.transactions()->run(
       [&](couchbase::transactions::attempt_context& ctx) {
-          auto res = ctx.query(new_scope, statement);
-          CHECK_FALSE(res->ctx().ec());
-          CHECK(res->rows_as_json().size() > 0);
-          CHECK(res->rows_as_json().front()[new_coll_name] == content);
+          auto [e, res] = ctx.query(new_scope, statement);
+          CHECK_FALSE(e.ec());
+          CHECK(res.rows_as_json().size() > 0);
+          CHECK(res.rows_as_json().front()[new_coll_name] == content);
       },
       txn_opts());
-    CHECK_FALSE(result.ctx.ec());
+    CHECK_FALSE(tx_err.ec());
     CHECK_FALSE(result.transaction_id.empty());
 }
 
@@ -536,14 +546,14 @@ TEST_CASE("can get doc from bucket not yet opened", "[transactions]")
     with_new_guard([&](test::utils::integration_test_guard& integration) {
         couchbase::cluster c(integration.cluster);
         auto coll = c.bucket(integration.ctx.bucket).default_collection();
-        auto result = c.transactions()->run(
+        auto [tx_err, result] = c.transactions()->run(
           [&id, &coll](couchbase::transactions::attempt_context& ctx) {
-              auto doc = ctx.get(coll, id);
-              CHECK_FALSE(doc->ctx().ec());
-              CHECK(doc->content<tao::json::value>() == content);
+              auto [e, doc] = ctx.get(coll, id);
+              CHECK_FALSE(e.ec());
+              CHECK(doc.content<tao::json::value>() == content);
           },
           txn_opts());
-        CHECK_FALSE(result.ctx.ec());
+        CHECK_FALSE(tx_err.ec());
         CHECK_FALSE(result.transaction_id.empty());
         CHECK_FALSE(result.unstaging_complete); //  no mutations = no unstaging
     });
@@ -559,14 +569,14 @@ TEST_CASE("can insert doc into bucket not yet opened", "[transactions]")
         couchbase::cluster c(guard.cluster);
         auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
-        auto result = c.transactions()->run(
+        auto [tx_err, result] = c.transactions()->run(
           [&id, &coll](couchbase::transactions::attempt_context& ctx) {
-              auto doc = ctx.insert(coll, id, content);
-              CHECK_FALSE(doc->ctx().ec());
-              CHECK_FALSE(doc->cas().empty());
+              auto [e, doc] = ctx.insert(coll, id, content);
+              CHECK_FALSE(e.ec());
+              CHECK_FALSE(doc.cas().empty());
           },
           txn_opts());
-        CHECK_FALSE(result.ctx.ec());
+        CHECK_FALSE(tx_err.ec());
         CHECK_FALSE(result.transaction_id.empty());
         CHECK(result.unstaging_complete);
         auto [err, get_res] = coll.get(id, {}).get();
@@ -592,16 +602,16 @@ TEST_CASE("can replace doc in bucket not yet opened", "[transactions]")
         auto coll = c.bucket(guard.ctx.bucket).default_collection();
         tao::json::value new_content = { { "some", "new content" } };
 
-        auto result = c.transactions()->run(
+        auto [tx_err, result] = c.transactions()->run(
           [&id, &coll, new_content](couchbase::transactions::attempt_context& ctx) {
-              auto get_doc = ctx.get(coll, id);
-              CHECK_FALSE(get_doc->ctx().ec());
-              auto doc = ctx.replace(get_doc, new_content);
-              CHECK_FALSE(doc->ctx().ec());
-              CHECK_FALSE(doc->cas().empty());
+              auto [get_err, get_doc] = ctx.get(coll, id);
+              CHECK_FALSE(get_err.ec());
+              auto [e, doc] = ctx.replace(get_doc, new_content);
+              CHECK_FALSE(e.ec());
+              CHECK_FALSE(doc.cas().empty());
           },
           txn_opts());
-        CHECK_FALSE(result.ctx.ec());
+        CHECK_FALSE(tx_err.ec());
         CHECK_FALSE(result.transaction_id.empty());
         CHECK(result.unstaging_complete);
         auto [err, get_res] = coll.get(id, {}).get();
@@ -626,15 +636,15 @@ TEST_CASE("can remove doc in bucket not yet opened", "[transactions]")
         couchbase::cluster c(guard.cluster);
         auto coll = c.bucket(guard.ctx.bucket).default_collection();
         tao::json::value new_content = { { "some", "new content" } };
-        auto result = c.transactions()->run(
+        auto [tx_err, result] = c.transactions()->run(
           [&id, &coll, new_content](couchbase::transactions::attempt_context& ctx) {
-              auto get_doc = ctx.get(coll, id);
-              CHECK_FALSE(get_doc->ctx().ec());
+              auto [e, get_doc] = ctx.get(coll, id);
+              CHECK_FALSE(e.ec());
               auto res = ctx.remove(get_doc);
               CHECK_FALSE(res.ec());
           },
           txn_opts());
-        CHECK_FALSE(result.ctx.ec());
+        CHECK_FALSE(tx_err.ec());
         CHECK_FALSE(result.transaction_id.empty());
         CHECK(result.unstaging_complete);
         auto [get_err, get_res] = coll.get(id, {}).get();

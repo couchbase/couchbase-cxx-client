@@ -119,7 +119,7 @@ class transaction_context
 
     [[nodiscard]] ::couchbase::transactions::transaction_result get_transaction_result() const
     {
-        return couchbase::transactions::transaction_result{ transaction_id(), current_attempt().state == attempt_state::COMPLETED, {} };
+        return couchbase::transactions::transaction_result{ transaction_id(), current_attempt().state == attempt_state::COMPLETED };
     }
     void new_attempt_context()
     {

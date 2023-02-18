@@ -19,6 +19,9 @@
 #include "core/transactions/internal/exceptions_internal.hxx"
 #include "core/transactions/internal/utils.hxx"
 
+#include <core/transactions/transaction_get_result.hxx>
+#include <couchbase/transactions/transaction_get_result.hxx>
+
 #include <iostream>
 #include <limits>
 #include <thread>
@@ -210,5 +213,49 @@ TEST_CASE("retryable op: can have constant delay", "[unit]")
         FAIL("expected exception");
     } catch (const retry_operation_retries_exhausted&) {
         REQUIRE(state.timings.size() == 10);
+    }
+}
+
+TEST_CASE("transaction_get_result: can convert core transaction_get_result to public, and visa-versa", "[unit]")
+{
+    const tao::json::value content{ { "some_number", 0 } };
+    const auto binary_content = couchbase::core::utils::json::generate_binary(content);
+    const std::string bucket = "bucket";
+    const std::string scope = "scope";
+    const std::string collection = "collection";
+    const std::string key = "key";
+    const couchbase::cas cas(100ULL);
+
+    SECTION("public to core")
+    {
+        couchbase::transactions::transaction_get_result public_result(bucket, scope, collection, key, cas, binary_content);
+        couchbase::core::transactions::transaction_get_result core_result(public_result);
+        REQUIRE(core_result.collection() == collection);
+        REQUIRE(core_result.bucket() == bucket);
+        REQUIRE(core_result.scope() == scope);
+        REQUIRE(core_result.cas() == cas);
+        REQUIRE(core_result.content() == binary_content);
+        REQUIRE(public_result.collection() == collection);
+        REQUIRE(public_result.bucket() == bucket);
+        REQUIRE(public_result.scope() == scope);
+        REQUIRE(public_result.cas() == cas);
+        REQUIRE(public_result.content() == binary_content);
+    }
+    SECTION("core to public")
+    {
+        couchbase::core::transactions::transaction_get_result core_result(
+          { bucket, scope, collection, key }, binary_content, cas.value(), {}, {});
+        auto public_result = core_result.to_public_result();
+        REQUIRE(public_result.collection() == collection);
+        REQUIRE(public_result.bucket() == bucket);
+        REQUIRE(public_result.scope() == scope);
+        REQUIRE(public_result.cas() == cas);
+        REQUIRE(public_result.content() == binary_content);
+        REQUIRE(core_result.collection() == collection);
+        REQUIRE(core_result.bucket() == bucket);
+        REQUIRE(core_result.scope() == scope);
+        REQUIRE(core_result.cas() == cas);
+        // the content is _moved_ when creating the public_result
+        REQUIRE(core_result.content().empty());
     }
 }

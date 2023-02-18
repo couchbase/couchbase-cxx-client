@@ -29,23 +29,31 @@ namespace couchbase::transactions
 class transaction_get_result
 {
   protected:
-    std::vector<std::byte> value_{};
-    transaction_op_error_context ctx_{};
-
-    transaction_get_result() = default;
-    transaction_get_result(std::vector<std::byte> content)
-      : value_(content)
-    {
-    }
-
-    transaction_get_result(const transaction_op_error_context& ctx)
-      : ctx_(ctx)
-    {
-    }
-
-    virtual ~transaction_get_result() = default;
+    std::string bucket_{};
+    std::string scope_{};
+    std::string collection_{};
+    std::string key_{};
+    cas cas_{};
+    std::vector<std::byte> content_{};
 
   public:
+    transaction_get_result() = default;
+
+    transaction_get_result(std::string bucket,
+                           std::string scope,
+                           std::string collection,
+                           std::string key,
+                           couchbase::cas cas,
+                           std::vector<std::byte> content)
+      : bucket_(std::move(bucket))
+      , scope_(std::move(scope))
+      , collection_(std::move(collection))
+      , key_(std::move(key))
+      , cas_(std::move(cas))
+      , content_(std::move(content))
+    {
+    }
+
     /**
      * Content of the document.
      *
@@ -54,7 +62,7 @@ class transaction_get_result
     template<typename Content>
     [[nodiscard]] Content content() const
     {
-        return codec::tao_json_serializer::deserialize<Content>(value_);
+        return codec::tao_json_serializer::deserialize<Content>(content_);
     }
 
     /**
@@ -64,37 +72,71 @@ class transaction_get_result
      */
     [[nodiscard]] const std::vector<std::byte>& content() const
     {
-        return value_;
+        return content_;
     }
-
-    // TODO: move to core
-    void content(const std::vector<std::byte>& content)
+    /**
+     * Copy content into document
+     * @param content
+     */
+    void content(std::vector<std::byte> content)
     {
-        value_ = content;
+        content_ = std::move(content);
     }
-
-    [[nodiscard]] const transaction_op_error_context& ctx() const
+    /**
+     * Move content into document
+     *
+     * @param content
+     */
+    void content(std::vector<std::byte>&& content)
     {
-        return ctx_;
+        content_ = std::move(content);
     }
 
     /**
-     * @brief Get document id.
+     * Get document id.
      *
      * @return the id of this document.
      */
-    [[nodiscard]] virtual const std::string& key() const = 0;
+    [[nodiscard]] const std::string& key() const
+    {
+        return key_;
+    }
 
     /**
-     * @brief Get document CAS.
+     * Get document CAS.
      *
      * @return the CAS for this document.
      */
-    [[nodiscard]] virtual couchbase::cas cas() const = 0;
-
-    [[nodiscard]] virtual const std::string& bucket() const = 0;
-    [[nodiscard]] virtual const std::string& scope() const = 0;
-    [[nodiscard]] virtual const std::string& collection() const = 0;
+    [[nodiscard]] const couchbase::cas& cas() const
+    {
+        return cas_;
+    }
+    /**
+     * Get the name of the bucket this document is in.
+     *
+     * @return name of the bucket which contains the document.
+     */
+    [[nodiscard]] const std::string& bucket() const
+    {
+        return bucket_;
+    }
+    /**
+     * Get the name of the scope this document is in.
+     *
+     * @return name of the scope which contains the document.
+     */
+    [[nodiscard]] const std::string& scope() const
+    {
+        return scope_;
+    }
+    /**
+     * Get the name of the collection this document is in.
+     *
+     * @return name of the collection which contains the document.
+     */
+    [[nodiscard]] const std::string& collection() const
+    {
+        return collection_;
+    }
 };
-using transaction_get_result_ptr = std::shared_ptr<transaction_get_result>;
 } // namespace couchbase::transactions

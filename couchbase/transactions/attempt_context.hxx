@@ -24,10 +24,13 @@ namespace couchbase::transactions
 class attempt_context
 {
   public:
-    virtual transaction_get_result_ptr get(const couchbase::collection& coll, const std::string& id) = 0;
+    virtual std::pair<transaction_op_error_context, transaction_get_result> get(const couchbase::collection& coll,
+                                                                                const std::string& id) = 0;
 
     template<typename Content>
-    transaction_get_result_ptr insert(const couchbase::collection& coll, const std::string& id, const Content& content)
+    std::pair<transaction_op_error_context, transaction_get_result> insert(const couchbase::collection& coll,
+                                                                           const std::string& id,
+                                                                           const Content& content)
     {
         if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
             return insert_raw(content, id, content);
@@ -37,7 +40,7 @@ class attempt_context
     }
 
     template<typename Content>
-    transaction_get_result_ptr replace(const transaction_get_result_ptr doc, const Content& content)
+    std::pair<transaction_op_error_context, transaction_get_result> replace(const transaction_get_result& doc, const Content& content)
     {
         if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
             return replace_raw(doc, content);
@@ -46,14 +49,17 @@ class attempt_context
         }
     }
 
-    virtual transaction_op_error_context remove(transaction_get_result_ptr doc) = 0;
+    virtual transaction_op_error_context remove(const transaction_get_result& doc) = 0;
 
-    transaction_query_result_ptr query(const std::string& statement, const transaction_query_options& options = {})
+    std::pair<transaction_op_error_context, transaction_query_result> query(const std::string& statement,
+                                                                            const transaction_query_options& options = {})
     {
         return do_public_query(statement, options, {});
     }
 
-    transaction_query_result_ptr query(const scope& scope, std::string& statement, const transaction_query_options& opts = {})
+    std::pair<transaction_op_error_context, transaction_query_result> query(const scope& scope,
+                                                                            std::string& statement,
+                                                                            const transaction_query_options& opts = {})
     {
         auto new_opts = opts;
         return do_public_query(statement, opts, fmt::format("{}.{}", scope.bucket_name(), scope.name()));
@@ -62,12 +68,13 @@ class attempt_context
     virtual ~attempt_context() = default;
 
   protected:
-    virtual transaction_get_result_ptr replace_raw(const transaction_get_result_ptr doc, std::vector<std::byte> content) = 0;
-    virtual transaction_get_result_ptr insert_raw(const couchbase::collection& coll,
-                                                  const std::string& id,
-                                                  std::vector<std::byte> content) = 0;
-    virtual transaction_query_result_ptr do_public_query(const std::string& statement,
-                                                         const transaction_query_options& options,
+    virtual std::pair<transaction_op_error_context, transaction_get_result> replace_raw(const transaction_get_result& doc,
+                                                                                        std::vector<std::byte> content) = 0;
+    virtual std::pair<transaction_op_error_context, transaction_get_result> insert_raw(const couchbase::collection& coll,
+                                                                                       const std::string& id,
+                                                                                       std::vector<std::byte> content) = 0;
+    virtual std::pair<transaction_op_error_context, transaction_query_result> do_public_query(const std::string& statement,
+                                                                                              const transaction_query_options& options,
                                                          std::optional<std::string> query_context) = 0;
 };
 } // namespace couchbase::transactions
