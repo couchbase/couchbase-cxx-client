@@ -21,19 +21,19 @@
 #include <couchbase/cas.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/collection.hxx>
+#include <couchbase/result.hxx>
 #include <couchbase/transaction_op_error_context.hxx>
 
 namespace couchbase::transactions
 {
 
-class transaction_get_result
+class transaction_get_result : public result
 {
   protected:
     std::string bucket_{};
     std::string scope_{};
     std::string collection_{};
     std::string key_{};
-    cas cas_{};
     std::vector<std::byte> content_{};
 
   public:
@@ -45,11 +45,11 @@ class transaction_get_result
                            std::string key,
                            couchbase::cas cas,
                            std::vector<std::byte> content)
-      : bucket_(std::move(bucket))
+      : result(cas)
+      , bucket_(std::move(bucket))
       , scope_(std::move(scope))
       , collection_(std::move(collection))
       , key_(std::move(key))
-      , cas_(std::move(cas))
       , content_(std::move(content))
     {
     }
@@ -97,26 +97,17 @@ class transaction_get_result
      *
      * @return the id of this document.
      */
-    [[nodiscard]] const std::string& key() const
+    [[nodiscard]] const std::string key() const
     {
         return key_;
     }
 
     /**
-     * Get document CAS.
-     *
-     * @return the CAS for this document.
-     */
-    [[nodiscard]] const couchbase::cas& cas() const
-    {
-        return cas_;
-    }
-    /**
      * Get the name of the bucket this document is in.
      *
      * @return name of the bucket which contains the document.
      */
-    [[nodiscard]] const std::string& bucket() const
+    [[nodiscard]] const std::string bucket() const
     {
         return bucket_;
     }
@@ -125,7 +116,7 @@ class transaction_get_result
      *
      * @return name of the scope which contains the document.
      */
-    [[nodiscard]] const std::string& scope() const
+    [[nodiscard]] const std::string scope() const
     {
         return scope_;
     }
@@ -134,7 +125,7 @@ class transaction_get_result
      *
      * @return name of the collection which contains the document.
      */
-    [[nodiscard]] const std::string& collection() const
+    [[nodiscard]] const std::string collection() const
     {
         return collection_;
     }
