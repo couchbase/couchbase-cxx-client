@@ -75,6 +75,6 @@ class attempt_context
                                                                                        std::vector<std::byte> content) = 0;
     virtual std::pair<transaction_op_error_context, transaction_query_result> do_public_query(const std::string& statement,
                                                                                               const transaction_query_options& options,
-                                                         std::optional<std::string> query_context) = 0;
+                                                                                              std::optional<std::string> query_context) = 0;
 };
 } // namespace couchbase::transactions

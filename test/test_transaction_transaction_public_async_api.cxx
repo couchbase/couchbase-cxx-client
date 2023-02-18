@@ -216,7 +216,8 @@ TEST_CASE("can async replace", "[transactions]")
           ctx.get(coll, id, [new_content, &ctx](auto, auto res) {
               ctx.replace(res, new_content, [](auto replace_e, auto replace_result) {
                   CHECK(!replace_result.cas().empty());
-                  CHECK_FALSE(replace_e.ec()); });
+                  CHECK_FALSE(replace_e.ec());
+              });
           });
       },
       [barrier](auto e, auto tx_result) {
