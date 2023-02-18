@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 
 #include <couchbase/retry_reason.hxx>
 
+#include <cstdint>
 #include <optional>
 #include <set>
 #include <string>
