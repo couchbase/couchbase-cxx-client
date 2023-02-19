@@ -58,10 +58,9 @@ class attempt_context
     }
 
     std::pair<transaction_op_error_context, transaction_query_result> query(const scope& scope,
-                                                                            std::string& statement,
+                                                                            const std::string& statement,
                                                                             const transaction_query_options& opts = {})
     {
-        auto new_opts = opts;
         return do_public_query(statement, opts, fmt::format("{}.{}", scope.bucket_name(), scope.name()));
     }
 
