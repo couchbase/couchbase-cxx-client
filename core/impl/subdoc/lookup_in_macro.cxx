@@ -18,6 +18,7 @@
 #include <couchbase/error_codes.hxx>
 #include <couchbase/subdoc/lookup_in_macro.hxx>
 
+#include <cstdint>
 #include <string>
 
 namespace couchbase::subdoc

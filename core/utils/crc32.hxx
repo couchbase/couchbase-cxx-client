@@ -5,6 +5,8 @@
  * src/usr.bin/cksum/crc32.c.
  */
 
+#include <cstdint>
+
 namespace couchbase::core::utils
 {
 static const std::uint32_t crc32tab[256] = {
@@ -37,10 +39,9 @@ static const std::uint32_t crc32tab[256] = {
 static inline std::uint32_t
 hash_crc32(const char* key, size_t key_length)
 {
-    std::uint64_t x;
     std::uint32_t crc = UINT32_MAX;
 
-    for (x = 0; x < key_length; x++) {
+    for (std::uint64_t x = 0; x < key_length; x++) {
         crc = (crc >> 8) ^ crc32tab[(crc ^ static_cast<std::uint64_t>(key[x])) & 0xff];
     }
 
