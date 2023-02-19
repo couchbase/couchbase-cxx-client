@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ execute(std::shared_ptr<couchbase::core::cluster> cluster, Request request)
     auto barrier = std::make_shared<std::promise<response_type>>();
     auto f = barrier->get_future();
     cluster->execute(request, [barrier](response_type resp) { barrier->set_value(std::move(resp)); });
-    return std::move(f.get());
+    return f.get();
 }
 
 void

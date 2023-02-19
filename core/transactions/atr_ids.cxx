@@ -218,7 +218,7 @@ std::size_t
 atr_ids::vbucket_for_key(const std::string& key)
 {
     static const int num_vbuckets = 1024;
-    uint32_t digest = core::utils::hash_crc32(key.data(), key.size());
+    std::uint32_t digest = core::utils::hash_crc32(key.data(), key.size());
     return static_cast<std::size_t>(digest % num_vbuckets);
 }
 
