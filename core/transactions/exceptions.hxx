@@ -88,9 +88,9 @@ class transaction_exception : public std::runtime_error
      *
      * @returns Internal state of transaction.
      */
-    ::couchbase::transactions::transaction_result get_transaction_result() const
+    std::pair<couchbase::transaction_error_context, couchbase::transactions::transaction_result> get_transaction_result() const
     {
-        return { result_.transaction_id, result_.unstaging_complete, error_context() };
+        return { error_context(), { result_.transaction_id, result_.unstaging_complete } };
     }
 
     /**

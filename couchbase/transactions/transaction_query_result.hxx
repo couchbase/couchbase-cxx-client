@@ -23,33 +23,14 @@ namespace couchbase::transactions
 class transaction_query_result : public query_result
 {
   public:
-    transaction_query_result(query_meta_data meta_data, std::vector<codec::binary> rows, transaction_op_error_context ctx)
+    transaction_query_result(query_meta_data meta_data, std::vector<codec::binary> rows)
       : query_result(std::move(meta_data), std::move(rows))
-      , ctx_(std::move(ctx))
     {
     }
 
-    transaction_query_result(query_meta_data meta_data, std::vector<codec::binary> rows, query_error_context ctx)
-      : query_result(std::move(meta_data), std::move(rows))
-      , ctx_({}, std::move(ctx))
-    {
-    }
-
-    explicit transaction_query_result(transaction_op_error_context ctx)
+    transaction_query_result()
       : query_result()
-      , ctx_(std::move(ctx))
     {
     }
-
-    [[nodiscard]] const transaction_op_error_context& ctx() const
-    {
-        return ctx_;
-    }
-
-  private:
-    transaction_op_error_context ctx_{};
 };
-
-// convenient to have a shared ptr for results
-using transaction_query_result_ptr = std::shared_ptr<transaction_query_result>;
 } // namespace couchbase::transactions

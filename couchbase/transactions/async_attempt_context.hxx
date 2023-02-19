@@ -21,33 +21,33 @@
 
 namespace couchbase::transactions
 {
-using async_result_handler = std::function<void(transaction_get_result_ptr)>;
-using async_query_handler = std::function<void(transaction_query_result_ptr)>;
+using async_result_handler = std::function<void(transaction_op_error_context, transaction_get_result)>;
+using async_query_handler = std::function<void(transaction_op_error_context, transaction_query_result)>;
 using async_err_handler = std::function<void(transaction_op_error_context)>;
 class async_attempt_context
 {
 
   public:
     virtual void get(const collection& coll, std::string id, async_result_handler&& handler) = 0;
-    virtual void remove(transaction_get_result_ptr doc, async_err_handler&& handler) = 0;
+    virtual void remove(transaction_get_result doc, async_err_handler&& handler) = 0;
 
     template<typename Content>
     void insert(const collection& coll, std::string id, Content&& content, async_result_handler&& handler)
     {
         if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
-            return insert_raw(content, id, content, std::move(handler));
+            return insert_raw(std::forward<std::vector<std::byte>>(content), std::move(id), content, std::move(handler));
         } else {
-            return insert_raw(coll, id, codec::tao_json_serializer::serialize(content), std::move(handler));
+            return insert_raw(coll, std::move(id), codec::tao_json_serializer::serialize(content), std::move(handler));
         }
     }
 
     template<typename Content>
-    void replace(transaction_get_result_ptr doc, Content&& content, async_result_handler&& handler)
+    void replace(transaction_get_result doc, Content&& content, async_result_handler&& handler)
     {
         if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
-            return replace_raw(doc, content, std::move(handler));
+            return replace_raw(std::move(doc), std::forward<std::vector<std::byte>>(content), std::move(handler));
         } else {
-            return replace_raw(doc, codec::tao_json_serializer::serialize(content), std::move(handler));
+            return replace_raw(std::move(doc), codec::tao_json_serializer::serialize(content), std::move(handler));
         }
     }
 
@@ -63,13 +63,13 @@ class async_attempt_context
 
     void query(std::string statement, async_query_handler&& handler)
     {
-        return query(statement, {}, {}, std::move(handler));
+        return query(std::move(statement), {}, std::move(handler));
     }
     virtual ~async_attempt_context() = default;
 
   protected:
     virtual void insert_raw(const collection& coll, std::string id, std::vector<std::byte> content, async_result_handler&& handler) = 0;
-    virtual void replace_raw(transaction_get_result_ptr doc, std::vector<std::byte> content, async_result_handler&& handler) = 0;
+    virtual void replace_raw(transaction_get_result doc, std::vector<std::byte> content, async_result_handler&& handler) = 0;
     virtual void query(std::string statement,
                        transaction_query_options opts,
                        std::optional<std::string> query_context,

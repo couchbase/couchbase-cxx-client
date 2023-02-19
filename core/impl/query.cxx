@@ -191,7 +191,7 @@ build_query_request(query_options::built options)
     return request;
 }
 
-couchbase::transactions::transaction_query_result
+std::pair<couchbase::transaction_op_error_context, couchbase::transactions::transaction_query_result>
 build_transaction_query_result(operations::query_response resp, std::error_code txn_ec /*defaults to 0*/)
 {
     if (resp.ctx.ec) {
@@ -204,17 +204,19 @@ build_transaction_query_result(operations::query_response resp, std::error_code 
             txn_ec = errc::transaction_op::not_set;
         }
     }
-    return { query_meta_data{
-               std::move(resp.meta.request_id),
-               std::move(resp.meta.client_context_id),
-               map_status(resp.meta.status),
-               map_warnings(resp),
-               map_metrics(resp),
-               map_signature(resp),
-               map_profile(resp),
-             },
-             map_rows(resp),
-             { txn_ec, build_context(resp) } };
+    return {
+        { txn_ec, build_context(resp) },
+        { query_meta_data{
+            std::move(resp.meta.request_id),
+            std::move(resp.meta.client_context_id),
+            map_status(resp.meta.status),
+            map_warnings(resp),
+            map_metrics(resp),
+            map_signature(resp),
+            map_profile(resp),
+          },
+          map_rows(resp) },
+    };
 }
 
 core::operations::query_request

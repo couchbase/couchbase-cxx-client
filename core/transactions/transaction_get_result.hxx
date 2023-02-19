@@ -33,12 +33,13 @@ struct result;
  * @brief Encapsulates results of an individual transaction operation
  *
  */
-class transaction_get_result : public couchbase::transactions::transaction_get_result
+class transaction_get_result
 {
   private:
     couchbase::cas cas_{};
     core::document_id document_id_{};
     transaction_links links_{};
+    std::vector<std::byte> content_;
 
     /** This is needed for provide {BACKUP-FIELDS}.  It is only needed from the get to the staged mutation, hence Optional. */
     std::optional<document_metadata> metadata_{};
@@ -55,11 +56,11 @@ class transaction_get_result : public couchbase::transactions::transaction_get_r
     transaction_get_result(const transaction_get_result& doc) = default;
     transaction_get_result(transaction_get_result&& doc) = default;
 
-    /** @internal */
+    /*
     transaction_get_result(const transaction_op_error_context& ctx)
       : couchbase::transactions::transaction_get_result(ctx)
     {
-    }
+    }*/
 
     /** @internal */
     template<typename Content>
@@ -68,18 +69,28 @@ class transaction_get_result : public couchbase::transactions::transaction_get_r
                            std::uint64_t cas,
                            transaction_links links,
                            std::optional<document_metadata> metadata)
-      : couchbase::transactions::transaction_get_result(content)
-      , cas_(cas)
+      : cas_(cas)
       , document_id_(id)
       , links_(std::move(links))
+      , content_(std::move(content))
       , metadata_(std::move(metadata))
     {
     }
 
-    /** @internal */
+    transaction_get_result(const couchbase::transactions::transaction_get_result& res)
+      : cas_(res.cas())
+      , document_id_(res.bucket(), res.scope(), res.collection(), res.key())
+      , content_(res.content())
+    {
+    }
+
+    couchbase::transactions::transaction_get_result to_public_result()
+    {
+        return { document_id_.bucket(), document_id_.scope(), document_id_.collection(), document_id_.key(), cas_, std::move(content_) };
+    }
+
     transaction_get_result(core::document_id id, const tao::json::value& json)
-      : couchbase::transactions::transaction_get_result()
-      , document_id_(id)
+      : document_id_(id)
       , links_(json)
       , metadata_(json.optional<std::string>("scas").value_or(""))
     {
@@ -90,7 +101,7 @@ class transaction_get_result : public couchbase::transactions::transaction_get_r
             cas_ = couchbase::cas(stoull(cas->as<std::string>()));
         }
         if (const auto* doc = json.find("doc"); doc != nullptr) {
-            value_ = core::utils::json::generate_binary(doc->get_object());
+            content_ = core::utils::json::generate_binary(doc->get_object());
         }
     }
 
@@ -98,7 +109,7 @@ class transaction_get_result : public couchbase::transactions::transaction_get_r
     {
         if (this != &o) {
             document_id_ = o.document_id_;
-            value_ = o.value_;
+            content_ = o.content_;
             cas_ = o.cas_;
             links_ = o.links_;
         }
@@ -139,7 +150,7 @@ class transaction_get_result : public couchbase::transactions::transaction_get_r
     {
         if (this != &other) {
             document_id_ = other.document_id_;
-            value_ = other.value_;
+            content_ = other.content_;
             cas_ = other.cas_;
             links_ = other.links_;
         }
@@ -156,22 +167,22 @@ class transaction_get_result : public couchbase::transactions::transaction_get_r
         return document_id_;
     }
 
-    [[nodiscard]] const std::string& bucket() const override
+    [[nodiscard]] const std::string& bucket() const
     {
         return document_id_.bucket();
     }
 
-    [[nodiscard]] const std::string& key() const override
+    [[nodiscard]] const std::string& key() const
     {
         return document_id_.key();
     }
 
-    [[nodiscard]] const std::string& scope() const override
+    [[nodiscard]] const std::string& scope() const
     {
         return document_id_.scope();
     }
 
-    [[nodiscard]] const std::string& collection() const override
+    [[nodiscard]] const std::string& collection() const
     {
         return document_id_.collection();
     }
@@ -207,14 +218,9 @@ class transaction_get_result : public couchbase::transactions::transaction_get_r
      *
      * @return the CAS for this document.
      */
-    [[nodiscard]] couchbase::cas cas() const override
+    [[nodiscard]] couchbase::cas cas() const
     {
         return cas_;
-    }
-
-    void ctx(transaction_op_error_context ctx)
-    {
-        ctx_ = std::move(ctx);
     }
 
     /** @internal */
@@ -224,6 +230,44 @@ class transaction_get_result : public couchbase::transactions::transaction_get_r
         os << "transaction_get_result{id: " << document.id().key() << ", cas: " << document.cas_.value() << ", links_: " << document.links_
            << "}";
         return os;
+    }
+
+    /**
+     * Content of the document.
+     *
+     * @return content of the document.
+     */
+    template<typename Content>
+    [[nodiscard]] Content content() const
+    {
+        return codec::tao_json_serializer::deserialize<Content>(content_);
+    }
+
+    /**
+     * Content of the document as raw byte vector
+     *
+     * @return content
+     */
+    [[nodiscard]] const std::vector<std::byte>& content() const
+    {
+        return content_;
+    }
+    /**
+     * Copy content into document
+     * @param content
+     */
+    void content(std::vector<std::byte> content)
+    {
+        content_ = std::move(content);
+    }
+    /**
+     * Move content into document
+     *
+     * @param content
+     */
+    void content(std::vector<std::byte>&& content)
+    {
+        content_ = std::move(content);
     }
 };
 } // namespace couchbase::core::transactions
