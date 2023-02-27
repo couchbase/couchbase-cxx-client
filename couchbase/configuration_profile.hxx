@@ -25,7 +25,7 @@ class cluster_options;
 /**
  * Base class for all defined configuration profiles
  *
- * Just implement the apply function, and register it.  See @ref configuration_profiles_registry#register()
+ * Just implement the apply function, and register it.  See @ref configuration_profiles_registry#register_profile()
  */
 class configuration_profile
 {

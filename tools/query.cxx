@@ -40,7 +40,7 @@ usage() -> std::string
     static const std::string default_bucket_name{ "default" };
 
     static const std::string usage_string = fmt::format(
-      R"(Display version information.
+      R"(Perform N1QL query.
 
 Usage:
   cbc query [options] <statement>...
@@ -67,7 +67,7 @@ Options:
   --pipeline-batch=INTEGER       Number of items execution operators can batch for fetch from the Key/Value service.
   --pipeline-cap=INTEGER         Maximum number of items each execution operator can buffer between various operators.
   --raw=NAME=VALUE               Set any query option for the query. Read the documentation: https://docs.couchbase.com/server/current/n1ql/n1ql-rest-api.
-  --json-lines                   Use JSON Lines format (https://jsonlines.org/) to print results.
+  --json-lines                   Use JSON Lines format (https://jsonlines.org) to print results.
 
 {logger_options}{cluster_options}
 

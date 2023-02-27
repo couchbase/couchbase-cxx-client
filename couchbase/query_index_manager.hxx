@@ -59,10 +59,12 @@ class query_index_manager
      * @since 1.0.0
      * @committed
      */
-    void get_all_indexes(std::string bucket_name, const get_all_query_indexes_options& options, get_all_indexes_handler&& handler) const
+    void get_all_indexes(std::string bucket_name,
+                         const get_all_query_indexes_options& options,
+                         get_all_query_indexes_handler&& handler) const
     {
         return core::impl::initiate_get_all_query_indexes(
-          core_, std::move(bucket_name), options.build(), std::forward<get_all_indexes_handler>(handler));
+          core_, std::move(bucket_name), options.build(), std::forward<get_all_query_indexes_handler>(handler));
     }
     [[nodiscard]] auto get_all_indexes(std::string bucket_name, const get_all_query_indexes_options& options) const
       -> std::future<std::pair<manager_error_context, std::vector<couchbase::management::query::index>>>

@@ -25,6 +25,37 @@ if(NOT COUCHBASE_CXX_CLIENT_GIT_DESCRIBE)
 endif()
 
 string(TIMESTAMP COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP "%Y-%m-%d %H:%M:%S" UTC)
+string(TIMESTAMP COUCHBASE_CXX_CLIENT_BUILD_DATE "%Y-%m-%d" UTC)
+
+# set(couchbase_cxx_client_BUILD_NUMBER 142)
+# set(COUCHBASE_CXX_CLIENT_GIT_DESCRIBE "1.0.0-beta.4-27-g6807da0") #-> "couchbase_cxx_client-1.0.0-beta.4+142.27.6807da0"
+# set(COUCHBASE_CXX_CLIENT_GIT_DESCRIBE "1.0.0-beta.4-0-g6807da0")  #-> "couchbase_cxx_client-1.0.0-beta.4"
+# set(COUCHBASE_CXX_CLIENT_GIT_DESCRIBE "1.0.0-27-g6807da0")        #-> "couchbase_cxx_client-1.0.0+142.27.6807da0"
+# set(COUCHBASE_CXX_CLIENT_GIT_DESCRIBE "1.0.0-0-g6807da0")         #-> "couchbase_cxx_client-1.0.0"
+# set(COUCHBASE_CXX_CLIENT_GIT_DESCRIBE "1.0.0")                    #-> "couchbase_cxx_client-1.0.0"
+set(COUCHBASE_CXX_CLIENT_SEMVER "${couchbase_cxx_client_VERSION}")
+set(COUCHBASE_CXX_CLIENT_PACKAGE_VERSION "${couchbase_cxx_client_VERSION}")
+set(COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE "${couchbase_cxx_client_BUILD_NUMBER}")
+if(COUCHBASE_CXX_CLIENT_GIT_DESCRIBE MATCHES
+   "^([0-9]+\\.[0-9]+\\.[0-9]+)(-([a-zA-Z0-9\\.]+))?(-([0-9]+)-g([a-zA-Z0-9]+))?$")
+  set(COUCHBASE_CXX_CLIENT_SEMVER "${CMAKE_MATCH_1}")
+  set(COUCHBASE_CXX_CLIENT_PACKAGE_VERSION "${CMAKE_MATCH_1}")
+  if(CMAKE_MATCH_3) # pre-release
+    set(COUCHBASE_CXX_CLIENT_SEMVER "${COUCHBASE_CXX_CLIENT_SEMVER}-${CMAKE_MATCH_3}")
+    set(COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE "${CMAKE_MATCH_3}.${couchbase_cxx_client_BUILD_NUMBER}")
+  endif()
+  if(CMAKE_MATCH_5 AND CMAKE_MATCH_5 GREATER 0) # number_of_commits.build_number.sha1
+    set(COUCHBASE_CXX_CLIENT_SEMVER
+        "${COUCHBASE_CXX_CLIENT_SEMVER}+${CMAKE_MATCH_5}.${couchbase_cxx_client_BUILD_NUMBER}.${CMAKE_MATCH_6}")
+    if(CMAKE_MATCH_3) # pre-release
+      set(COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE
+          "${CMAKE_MATCH_3}.${CMAKE_MATCH_5}.${couchbase_cxx_client_BUILD_NUMBER}.${CMAKE_MATCH_6}")
+    else()
+      set(COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE "${CMAKE_MATCH_5}.${couchbase_cxx_client_BUILD_NUMBER}.${CMAKE_MATCH_6}")
+    endif()
+  endif()
+endif()
+
 configure_file(${PROJECT_SOURCE_DIR}/cmake/build_version.hxx.in
                ${PROJECT_BINARY_DIR}/generated/couchbase/build_version.hxx @ONLY)
 configure_file(${PROJECT_SOURCE_DIR}/cmake/build_config.hxx.in

@@ -143,7 +143,7 @@ Transactions options:
 
 Metrics options:
   --disable-metrics                 Disable collecting and reporting metrics.
-  --metrics-emit-interval=DURATION  Interval to emit metrics report on INFO log level. [default:{metrics_emit_interval}]
+  --metrics-emit-interval=DURATION  Interval to emit metrics report on INFO log level. [default: {metrics_emit_interval}]
 
 Tracing options:
   --disable-tracing                           Disable collecting and reporting trace information.

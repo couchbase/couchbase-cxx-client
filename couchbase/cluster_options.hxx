@@ -54,7 +54,7 @@ class cluster_options
      * @param password
      *
      * @since 1.0.0
-     * @comitted
+     * @committed
      */
     cluster_options(std::string username, std::string password)
       : username_{ std::move(username) }
@@ -67,7 +67,7 @@ class cluster_options
      * @param authenticator
      *
      * @since 1.0.0
-     * @comitted
+     * @committed
      */
     explicit cluster_options(password_authenticator authenticator)
       : username_{ std::move(authenticator.username_) }
@@ -83,7 +83,7 @@ class cluster_options
      * @param authenticator
      *
      * @since 1.0.0
-     * @comitted
+     * @committed
      */
     explicit cluster_options(certificate_authenticator authenticator)
       : certificate_path_{ std::move(authenticator.certificate_path_) }
@@ -115,7 +115,7 @@ class cluster_options
      * @return compression options
      *
      * @since 1.0.0
-     * @comitted
+     * @committed
      */
     [[nodiscard]] auto compression() -> compression_options&
     {
@@ -128,7 +128,7 @@ class cluster_options
      * @return timeout options
      *
      * @since 1.0.0
-     * @comitted
+     * @committed
      */
     [[nodiscard]] auto timeouts() -> timeout_options&
     {
@@ -141,7 +141,7 @@ class cluster_options
      * @return DNS options
      *
      * @since 1.0.0
-     * @comitted
+     * @committed
      */
     [[nodiscard]] auto dns() -> dns_options&
     {
@@ -154,7 +154,7 @@ class cluster_options
      * @return security options
      *
      * @since 1.0.0
-     * @comitted
+     * @committed
      */
     [[nodiscard]] auto security() -> security_options&
     {
@@ -167,7 +167,7 @@ class cluster_options
      * @return network options
      *
      * @since 1.0.0
-     * @comitted
+     * @committed
      */
     [[nodiscard]] auto network() -> network_options&
     {
@@ -180,7 +180,7 @@ class cluster_options
      * @return metrics options
      *
      * @since 1.0.0
-     * @comitted
+     * @committed
      */
     [[nodiscard]] auto metrics() -> metrics_options&
     {
@@ -193,7 +193,7 @@ class cluster_options
      * @return tracing options
      *
      * @since 1.0.0
-     * @comitted
+     * @committed
      */
     [[nodiscard]] auto tracing() -> tracing_options&
     {

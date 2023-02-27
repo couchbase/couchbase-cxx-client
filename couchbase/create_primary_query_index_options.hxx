@@ -32,7 +32,7 @@ class create_primary_query_index_options : public common_options<create_primary_
     /**
      * Give the primary index a name
      *
-     * defaults to #primary
+     * defaults to `#primary`
      *
      * @param index_name
      * @return reference to this object, for use in chaining.

@@ -34,7 +34,7 @@ class drop_query_index_options : public common_options<drop_query_index_options>
      *
      * The default is to not ignore the error.
      *
-     * @param ignore_if_exists  if true, we don't return an error if the index already exists
+     * @param ignore_if_not_exists  if true, we don't return an error if the index already exists
      * @return reference to this object, for use in chaining.
      *
      * @since 1.0.0

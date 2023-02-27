@@ -46,13 +46,13 @@ class transaction_op_error_context
     }
 
     /**
-     * The error_code associated with this error context.   This will always be a @ref transaction_op_error_code
+     * The error_code associated with this error context.
      *
      * Note that some query errors are not _transaction_ errors, so this error code will be 0, but there will be
-     * a @ref transaction_op_error_code#cause() with a query_error_context in it.  These errors do not rollback a
+     * a @ref cause() with a @ref query_error_context in it.  These errors do not rollback a
      * transaction.   If you want to roll it back, raise an exception.
      *
-     * @return a transaction_op_error_code, if any.
+     * @return a error code, if any.
      */
     [[nodiscard]] std::error_code ec() const
     {
@@ -60,7 +60,7 @@ class transaction_op_error_context
     }
 
     /**
-     * The underlying cause of this error.   This can be either a @ref key_value_error_code or a @ref query_error_context.
+     * The underlying cause of this error.   This can be either a @ref key_value_error_context or a @ref query_error_context.
      *
      * @return the error_context associated with the underlying cause of this error.
      */
