@@ -90,7 +90,7 @@ class transaction_context
 
     [[nodiscard]] bool has_expired_client_side();
 
-    void retry_delay();
+    void after_delay(std::chrono::milliseconds delay, std::function<void()> fn);
 
     [[nodiscard]] std::chrono::time_point<std::chrono::steady_clock> start_time_client() const
     {

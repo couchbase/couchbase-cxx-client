@@ -17,9 +17,9 @@
 #pragma once
 
 #include "attempt_context_impl.hxx"
-
 #include "internal/utils.hxx"
 #include "transaction_get_result.hxx"
+#include "uid_generator.hxx"
 
 #include <mutex>
 #include <string>
@@ -35,13 +35,18 @@ class staged_mutation
     transaction_get_result doc_;
     staged_mutation_type type_;
     std::vector<std::byte> content_;
+    std::string operation_id_;
 
   public:
     template<typename Content>
-    staged_mutation(transaction_get_result& doc, Content content, staged_mutation_type type)
+    staged_mutation(transaction_get_result& doc,
+                    Content content,
+                    staged_mutation_type type,
+                    std::string operation_id = uid_generator::next())
       : doc_(doc)
       , type_(type)
       , content_(std::move(content))
+      , operation_id_(std::move(operation_id))
     {
     }
 
@@ -96,6 +101,11 @@ class staged_mutation
                 return "REPLACE";
         }
         throw std::runtime_error("unknown type of staged mutation");
+    }
+
+    [[nodiscard]] const std::string& operation_id() const
+    {
+        return operation_id_;
     }
 };
 

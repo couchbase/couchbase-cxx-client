@@ -389,26 +389,25 @@ class attempt_context_impl
                std::optional<std::string> query_context,
                couchbase::transactions::async_query_handler&& handler) override
     {
-        query(
-          statement,
-          opts,
-          query_context,
-          [handler = std::move(handler)](std::exception_ptr err, std::optional<core::operations::query_response> resp) {
-              if (err) {
-                  try {
-                      std::rethrow_exception(err);
-                  } catch (const transaction_operation_failed& e) {
-                      return handler(e.get_error_ctx(), {});
-                  } catch (const op_exception& ex) {
-                      return handler(ex.ctx(), {});
-                  } catch (...) {
-                      // just in case...
-                      return handler(transaction_op_error_context(couchbase::errc::transaction_op::unknown), {});
+        query(statement,
+              opts,
+              query_context,
+              [handler = std::move(handler)](std::exception_ptr err, std::optional<core::operations::query_response> resp) {
+                  if (err) {
+                      try {
+                          std::rethrow_exception(err);
+                      } catch (const transaction_operation_failed& e) {
+                          return handler(e.get_error_ctx(), {});
+                      } catch (const op_exception& ex) {
+                          return handler(ex.ctx(), {});
+                      } catch (...) {
+                          // just in case...
+                          return handler(transaction_op_error_context(couchbase::errc::transaction_op::unknown), {});
+                      }
                   }
-              }
-              auto [ctx, res] = core::impl::build_transaction_query_result(*resp);
-              handler(ctx, res);
-          });
+                  auto [ctx, res] = core::impl::build_transaction_query_result(*resp);
+                  handler(ctx, res);
+              });
     }
 
     void commit() override;
@@ -514,6 +513,7 @@ class attempt_context_impl
     core::operations::mutate_in_request create_staging_request(const core::document_id& in,
                                                                const transaction_get_result* document,
                                                                const std::string type,
+                                                               const std::string op_id,
                                                                std::optional<std::vector<std::byte>> content = std::nullopt);
 
     template<typename Handler, typename Delay>
@@ -521,16 +521,21 @@ class attempt_context_impl
                               const std::vector<std::byte>& content,
                               uint64_t cas,
                               Delay&& delay,
+                              const std::string& op_id,
                               Handler&& cb);
 
     template<typename Handler>
-    void create_staged_replace(const transaction_get_result& document, const std::vector<std::byte>& content, Handler&& cb);
+    void create_staged_replace(const transaction_get_result& document,
+                               const std::vector<std::byte>& content,
+                               const std::string& op_id,
+                               Handler&& cb);
 
     template<typename Handler, typename Delay>
     void create_staged_insert_error_handler(const core::document_id& id,
                                             const std::vector<std::byte>& content,
                                             uint64_t cas,
                                             Delay&& delay,
+                                            const std::string& op_id,
                                             Handler&& cb,
                                             error_class ec,
                                             const std::string& message);
@@ -601,6 +606,10 @@ class attempt_context_impl
 
     void ensure_open_bucket(std::string bucket_name, std::function<void(std::error_code)>&& handler)
     {
+        if (bucket_name.empty()) {
+            CB_LOG_DEBUG("ensure_open_bucket called with empty bucket_name");
+            return handler(couchbase::errc::common::bucket_not_found);
+        }
         cluster_ref()->open_bucket(bucket_name, [handler = std::move(handler)](std::error_code ec) { handler(ec); });
     }
 };

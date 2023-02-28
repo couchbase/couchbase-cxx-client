@@ -77,16 +77,19 @@ class transaction_get_result
     {
     }
 
-    transaction_get_result(const couchbase::transactions::transaction_get_result& res)
+    explicit transaction_get_result(const couchbase::transactions::transaction_get_result& res)
       : cas_(res.cas())
       , document_id_(res.bucket(), res.scope(), res.collection(), res.key())
-      , content_(res.content())
+      , links_(res.base_->links())
+      , content_(std::move(res.content()))
+      , metadata_(res.base_->metadata_)
     {
     }
 
     couchbase::transactions::transaction_get_result to_public_result()
     {
-        return { document_id_.bucket(), document_id_.scope(), document_id_.collection(), document_id_.key(), cas_, std::move(content_) };
+        return couchbase::transactions::transaction_get_result(
+          std::make_shared<transaction_get_result>(document_id_, std::move(content_), cas_.value(), links_, metadata_));
     }
 
     transaction_get_result(core::document_id id, const tao::json::value& json)
@@ -126,6 +129,7 @@ class transaction_get_result
                                 document.links().atr_collection_name(),
                                 document.links().staged_transaction_id(),
                                 document.links().staged_attempt_id(),
+                                document.links().staged_operation_id(),
                                 document.links().staged_content(),
                                 document.links().cas_pre_txn(),
                                 document.links().revid_pre_txn(),

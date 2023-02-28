@@ -296,8 +296,6 @@ set(couchbase_cxx_client_FILES
         core/impl/retry_reason.cxx
         core/impl/search_error_category.cxx
         core/impl/streaming_json_lexter_error_category.cxx
-        core/impl/unlock.cxx
-        core/impl/watch_query_indexes.cxx
         core/impl/subdoc/array_add_unique.cxx
         core/impl/subdoc/array_append.cxx
         core/impl/subdoc/array_insert.cxx
@@ -317,9 +315,12 @@ set(couchbase_cxx_client_FILES
         core/impl/subdoc/upsert.cxx
         core/impl/touch.cxx
         core/impl/transaction_error_category.cxx
+        core/impl/transaction_get_result.cxx
         core/impl/transaction_op_error_category.cxx
+        core/impl/unlock.cxx
         core/impl/upsert.cxx
         core/impl/view_error_category.cxx
+        core/impl/watch_query_indexes.cxx
         core/io/dns_config.cxx
         core/io/http_parser.cxx
         core/io/mcbp_message.cxx

@@ -35,6 +35,7 @@ class transaction_links
     // id of the transaction that has staged content
     std::optional<std::string> staged_transaction_id_;
     std::optional<std::string> staged_attempt_id_;
+    std::optional<std::string> staged_operation_id_;
     std::optional<std::vector<std::byte>> staged_content_;
 
     // for {BACKUP_FIELDS}
@@ -54,6 +55,7 @@ class transaction_links
                       std::optional<std::string> atr_collection_name,
                       std::optional<std::string> staged_transaction_id,
                       std::optional<std::string> staged_attempt_id,
+                      std::optional<std::string> staged_operation_id,
                       std::optional<std::vector<std::byte>> staged_content,
                       std::optional<std::string> cas_pre_txn,
                       std::optional<std::string> revid_pre_txn,
@@ -68,6 +70,7 @@ class transaction_links
       , atr_collection_name_(std::move(atr_collection_name))
       , staged_transaction_id_(std::move(staged_transaction_id))
       , staged_attempt_id_(std::move(staged_attempt_id))
+      , staged_operation_id_(std::move(staged_operation_id))
       , staged_content_(std::move(staged_content))
       , cas_pre_txn_(std::move(cas_pre_txn))
       , revid_pre_txn_(std::move(revid_pre_txn))
@@ -110,6 +113,9 @@ class transaction_links
         }
         if (staged_transaction_id_) {
             obj["txnMeta"]["txn"] = staged_transaction_id_.value();
+        }
+        if (staged_operation_id_) {
+            obj["txnMeta"]["txn"] = staged_operation_id_.value();
         }
         if (atr_id_) {
             obj["txnMeta"]["atr"]["key"] = atr_id_.value();
@@ -181,6 +187,11 @@ class transaction_links
         return staged_attempt_id_;
     }
 
+    [[nodiscard]] std::optional<std::string> staged_operation_id() const
+    {
+        return staged_operation_id_;
+    }
+
     [[nodiscard]] std::optional<std::string> cas_pre_txn() const
     {
         return cas_pre_txn_;
@@ -241,12 +252,13 @@ struct fmt::formatter<couchbase::core::transactions::transaction_links> {
     constexpr auto format(const couchbase::core::transactions::transaction_links& r, FormatContext& ctx) const
     {
         return format_to(ctx.out(),
-                         "transaction_links:{{ atr: {}.{}.{}.{}, txn_id: {}, attempt_id: {}, crc32_of_staging: {} }}",
+                         "transaction_links:{{ atr: {}.{}.{}.{}, txn_id: {}, attempt_id: {}, operation_id: {}, crc32_of_staging: {} }}",
                          r.atr_bucket_name().value_or("none"),
                          r.atr_scope_name().value_or("none"),
                          r.atr_collection_name().value_or("none"),
                          r.atr_id().value_or("none"),
                          r.staged_attempt_id().value_or("none"),
+                         r.staged_operation_id().value_or("none"),
                          r.crc32_of_staging().value_or("none"));
     }
 };
