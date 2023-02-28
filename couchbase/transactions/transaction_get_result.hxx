@@ -30,7 +30,7 @@ namespace couchbase::core::transactions
 class transaction_get_result;
 class transaction_links;
 class document_metadata;
-}; // namespace couchbase::core::transactions
+} // namespace couchbase::core::transactions
 
 namespace couchbase::transactions
 {
