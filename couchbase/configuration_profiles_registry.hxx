@@ -30,7 +30,6 @@ class cluster_options;
 /**
  *  Registry for defining configuration profiles.
  */
-
 class configuration_profiles_registry
 {
   public:

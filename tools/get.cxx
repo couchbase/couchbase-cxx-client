@@ -38,7 +38,7 @@ usage() -> std::string
     static const std::string default_bucket_name{ "default" };
 
     static const std::string usage_string = fmt::format(
-      R"(Display version information.
+      R"(Retrieve document from the server.
 
 Usage:
   cbc get [options] <id>...
@@ -55,7 +55,7 @@ Options:
   --project=STRING          Return only part of the document, that corresponds given JSON-pointer (could be used multiple times, up to {max_projections}).
   --hexdump                 Print value using hexdump encoding (safe for binary data on STDOUT).
   --pretty-json             Try to pretty-print as JSON value (prints AS-IS is the document is not a JSON).
-  --json-lines              Use JSON Lines format (https://jsonlines.org/) to print results.
+  --json-lines              Use JSON Lines format (https://jsonlines.org) to print results.
 
 {logger_options}{cluster_options}
 )",

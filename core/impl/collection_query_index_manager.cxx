@@ -22,14 +22,14 @@ namespace couchbase
 {
 
 void
-collection_query_index_manager::get_all_indexes(const get_all_query_indexes_options& options, get_all_indexes_handler&& handler) const
+collection_query_index_manager::get_all_indexes(const get_all_query_indexes_options& options, get_all_query_indexes_handler&& handler) const
 {
     return core::impl::initiate_get_all_query_indexes(core_,
                                                       "",
                                                       options.build(),
                                                       core::query_context(bucket_name_, scope_name_),
                                                       collection_name_,
-                                                      std::forward<get_all_indexes_handler>(handler));
+                                                      std::forward<get_all_query_indexes_handler>(handler));
 }
 
 void

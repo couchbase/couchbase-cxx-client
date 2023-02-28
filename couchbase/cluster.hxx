@@ -59,7 +59,7 @@ class cluster
      * @param handler the handler that implements @ref cluster_connect_handler
      *
      * @since 1.0.0
-     * @comitted
+     * @committed
      */
     template<typename Handler>
     static void connect(asio::io_context& io, const std::string& connection_string, const cluster_options& options, Handler&& handler)
@@ -77,7 +77,7 @@ class cluster
      * @return future object that carries cluster object and operation status
      *
      * @since 1.0.0
-     * @comitted
+     * @committed
      */
     [[nodiscard]] static auto connect(asio::io_context& io, const std::string& connection_string, const cluster_options& options)
       -> std::future<std::pair<cluster, std::error_code>>

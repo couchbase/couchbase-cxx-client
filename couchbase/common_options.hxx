@@ -55,7 +55,7 @@ class common_options
     }
 
     /**
-     * Specifies a custom {@link retry_strategy} for this operation.
+     * Specifies a custom {@link couchbase::retry_strategy} for this operation.
      *
      * @param strategy the retry strategy to use for this operation.
      * @return this options builder for chaining purposes.

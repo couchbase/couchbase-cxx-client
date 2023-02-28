@@ -45,7 +45,7 @@ initiate_get_all_query_indexes(std::shared_ptr<couchbase::core::cluster> core,
                                couchbase::get_all_query_indexes_options::built options,
                                query_context query_ctx,
                                std::string collection_name,
-                               get_all_indexes_handler&& handler)
+                               get_all_query_indexes_handler&& handler)
 {
     core->execute(
       operations::management::query_index_get_all_request{
@@ -68,7 +68,7 @@ void
 initiate_get_all_query_indexes(std::shared_ptr<couchbase::core::cluster> core,
                                std::string bucket_name,
                                couchbase::get_all_query_indexes_options::built options,
-                               get_all_indexes_handler&& handler)
+                               get_all_query_indexes_handler&& handler)
 {
     initiate_get_all_query_indexes(core, std::move(bucket_name), options, {}, "", std::move(handler));
 }
