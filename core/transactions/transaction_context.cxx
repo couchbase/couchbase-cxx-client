@@ -17,7 +17,7 @@
 #include "attempt_context_impl.hxx"
 #include "uid_generator.hxx"
 #include <asio/post.hpp>
-#include <core/cluster.hxx>
+#include <asio/steady_timer.hpp>
 
 #include "internal/logging.hxx"
 #include "internal/transaction_context.hxx"
@@ -78,17 +78,14 @@ transaction_context::has_expired_client_side()
 }
 
 void
-transaction_context::retry_delay()
+transaction_context::after_delay(std::chrono::milliseconds delay, std::function<void()> fn)
 {
-    // when we retry an operation, we typically call that function recursively.  So, we need to
-    // limit total number of times we do it.  CXXCBC-263 will address this, and no longer make the
-    // recursive calls that lead to hacks like this. No way to know how many calls will blow up the
-    // stack, so using 50 in hopes that makes jenkins happy till we do this better.
-    constexpr auto arbitrary_factor = 50;
-    auto delay = config_.expiration_time / arbitrary_factor;
-    CB_ATTEMPT_CTX_LOG_TRACE(
-      current_attempt_context_, "about to sleep for {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(delay).count());
-    std::this_thread::sleep_for(delay);
+    auto timer = std::make_shared<asio::steady_timer>(this->transactions_.cluster_ref()->io_context());
+    timer->expires_after(delay);
+    timer->async_wait([timer, fn](std::error_code) {
+        // have to always call the function, even if timer was canceled.
+        fn();
+    });
 }
 
 void

@@ -50,6 +50,7 @@ static const std::string TRANSACTION_RESTORE_PREFIX_ONLY = TRANSACTION_INTERFACE
 static const std::string TRANSACTION_RESTORE_PREFIX = TRANSACTION_RESTORE_PREFIX_ONLY + ".";
 static const std::string TRANSACTION_ID = TRANSACTION_INTERFACE_PREFIX + "id.txn";
 static const std::string ATTEMPT_ID = TRANSACTION_INTERFACE_PREFIX + "id.atmpt";
+static const std::string OPERATION_ID = TRANSACTION_INTERFACE_PREFIX + "id.op";
 static const std::string ATR_ID = TRANSACTION_INTERFACE_PREFIX + "atr.id";
 static const std::string ATR_BUCKET_NAME = TRANSACTION_INTERFACE_PREFIX + "atr.bkt";
 

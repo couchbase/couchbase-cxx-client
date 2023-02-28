@@ -225,37 +225,94 @@ TEST_CASE("transaction_get_result: can convert core transaction_get_result to pu
     const std::string collection = "collection";
     const std::string key = "key";
     const couchbase::cas cas(100ULL);
+    const auto fwd_compat = tao::json::value::array({ "xxx", "yyy" });
+    const couchbase::core::transactions::transaction_links links("atr_id",
+                                                                 "atr_bucket",
+                                                                 "atr_scope",
+                                                                 "atr_collection",
+                                                                 "txn_id",
+                                                                 "attempt_id",
+                                                                 "op_id",
+                                                                 binary_content,
+                                                                 "cas_pre_txn",
+                                                                 "rev_pre_txn",
+                                                                 0,
+                                                                 "crc",
+                                                                 "op",
+                                                                 fwd_compat,
+                                                                 false);
+    const couchbase::core::transactions::document_metadata metadata("cas", "revid", 0, "crc32");
 
-    SECTION("public to core")
-    {
-        couchbase::transactions::transaction_get_result public_result(bucket, scope, collection, key, cas, binary_content);
-        couchbase::core::transactions::transaction_get_result core_result(public_result);
-        REQUIRE(core_result.collection() == collection);
-        REQUIRE(core_result.bucket() == bucket);
-        REQUIRE(core_result.scope() == scope);
-        REQUIRE(core_result.cas() == cas);
-        REQUIRE(core_result.content() == binary_content);
-        REQUIRE(public_result.collection() == collection);
-        REQUIRE(public_result.bucket() == bucket);
-        REQUIRE(public_result.scope() == scope);
-        REQUIRE(public_result.cas() == cas);
-        REQUIRE(public_result.content() == binary_content);
-    }
-    SECTION("core to public")
+    SECTION("core->public")
     {
         couchbase::core::transactions::transaction_get_result core_result(
-          { bucket, scope, collection, key }, binary_content, cas.value(), {}, {});
+          { bucket, scope, collection, key }, binary_content, cas.value(), links, metadata);
         auto public_result = core_result.to_public_result();
         REQUIRE(public_result.collection() == collection);
         REQUIRE(public_result.bucket() == bucket);
         REQUIRE(public_result.scope() == scope);
         REQUIRE(public_result.cas() == cas);
+        REQUIRE(public_result.key() == key);
         REQUIRE(public_result.content() == binary_content);
+        REQUIRE(public_result.content<tao::json::value>() == content);
         REQUIRE(core_result.collection() == collection);
         REQUIRE(core_result.bucket() == bucket);
         REQUIRE(core_result.scope() == scope);
         REQUIRE(core_result.cas() == cas);
-        // the content is _moved_ when creating the public_result
-        REQUIRE(core_result.content().empty());
+        REQUIRE(core_result.key() == key);
+        // the content is _moved_ when creating the public_result, so lets not touch the
+        // core_result.content() since it can be anything.  The std::vector is _valid_, so we
+        // can manipulate it, but the contents are not guaranteed.
+    }
+    SECTION("core->public->core")
+    {
+        couchbase::core::transactions::transaction_get_result core_result(
+          { bucket, scope, collection, key }, binary_content, cas.value(), links, metadata);
+        auto public_result = core_result.to_public_result();
+        couchbase::core::transactions::transaction_get_result final_core_result(public_result);
+        REQUIRE(core_result.collection() == final_core_result.collection());
+        REQUIRE(core_result.bucket() == final_core_result.bucket());
+        REQUIRE(core_result.scope() == final_core_result.scope());
+        REQUIRE(core_result.cas() == final_core_result.cas());
+        REQUIRE(final_core_result.content() == binary_content);
+        REQUIRE(core_result.key() == final_core_result.key());
+        REQUIRE(final_core_result.cas() == cas);
+        REQUIRE(final_core_result.bucket() == bucket);
+        REQUIRE(final_core_result.scope() == scope);
+        REQUIRE(final_core_result.collection() == collection);
+        REQUIRE(final_core_result.key() == key);
+        REQUIRE(final_core_result.content() == binary_content);
+        REQUIRE(final_core_result.links().staged_operation_id() == links.staged_operation_id());
+        REQUIRE(final_core_result.links().staged_attempt_id() == links.staged_attempt_id());
+        REQUIRE(final_core_result.links().crc32_of_staging() == links.crc32_of_staging());
+        REQUIRE(final_core_result.links().atr_collection_name() == links.atr_collection_name());
+        REQUIRE(final_core_result.links().atr_scope_name() == links.atr_scope_name());
+        REQUIRE(final_core_result.links().atr_bucket_name() == links.atr_bucket_name());
+        REQUIRE(final_core_result.links().is_deleted() == links.is_deleted());
+        REQUIRE(final_core_result.links().forward_compat() == links.forward_compat());
+        REQUIRE(final_core_result.links().atr_id() == links.atr_id());
+        REQUIRE(final_core_result.links().cas_pre_txn() == links.cas_pre_txn());
+        REQUIRE(final_core_result.links().exptime_pre_txn() == links.exptime_pre_txn());
+        REQUIRE(final_core_result.links().op() == links.op());
+        REQUIRE(final_core_result.links().revid_pre_txn() == links.revid_pre_txn());
+        REQUIRE(final_core_result.links().staged_content() == links.staged_content());
+        REQUIRE(final_core_result.links().staged_transaction_id() == links.staged_transaction_id());
+        REQUIRE(final_core_result.metadata()->cas() == metadata.cas());
+        REQUIRE(final_core_result.metadata()->crc32() == metadata.crc32());
+        REQUIRE(final_core_result.metadata()->exptime() == metadata.exptime());
+        REQUIRE(final_core_result.metadata()->revid() == metadata.revid());
+    }
+    SECTION("default constructed core->public")
+    {
+        couchbase::core::transactions::transaction_get_result core_result{};
+        auto final_public_result = core_result.to_public_result();
+        REQUIRE(final_public_result.cas().empty());
+    }
+    SECTION("default constructed public->core->public")
+    {
+        couchbase::transactions::transaction_get_result public_res;
+        couchbase::core::transactions::transaction_get_result core_res(public_res);
+        auto final_public_res = core_res.to_public_result();
+        REQUIRE(final_public_res.cas().empty());
     }
 }

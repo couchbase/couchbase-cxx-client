@@ -24,36 +24,31 @@
 #include <couchbase/result.hxx>
 #include <couchbase/transaction_op_error_context.hxx>
 
+// forward declarations...
+namespace couchbase::core::transactions
+{
+class transaction_get_result;
+class transaction_links;
+class document_metadata;
+} // namespace couchbase::core::transactions
+
 namespace couchbase::transactions
 {
 
-class transaction_get_result : public result
+class transaction_get_result
 {
-  protected:
-    std::string bucket_{};
-    std::string scope_{};
-    std::string collection_{};
-    std::string key_{};
-    std::vector<std::byte> content_{};
+    friend class couchbase::core::transactions::transaction_get_result;
 
-  public:
-    transaction_get_result() = default;
+  private:
+    std::shared_ptr<couchbase::core::transactions::transaction_get_result> base_{};
 
-    transaction_get_result(std::string bucket,
-                           std::string scope,
-                           std::string collection,
-                           std::string key,
-                           couchbase::cas cas,
-                           std::vector<std::byte> content)
-      : result(cas)
-      , bucket_(std::move(bucket))
-      , scope_(std::move(scope))
-      , collection_(std::move(collection))
-      , key_(std::move(key))
-      , content_(std::move(content))
+    transaction_get_result(std::shared_ptr<couchbase::core::transactions::transaction_get_result> base)
+      : base_(base)
     {
     }
 
+  public:
+    transaction_get_result();
     /**
      * Content of the document.
      *
@@ -62,7 +57,7 @@ class transaction_get_result : public result
     template<typename Content>
     [[nodiscard]] Content content() const
     {
-        return codec::tao_json_serializer::deserialize<Content>(content_);
+        return codec::tao_json_serializer::deserialize<Content>(content());
     }
 
     /**
@@ -70,64 +65,54 @@ class transaction_get_result : public result
      *
      * @return content
      */
-    [[nodiscard]] const std::vector<std::byte>& content() const
-    {
-        return content_;
-    }
+    [[nodiscard]] const std::vector<std::byte>& content() const;
+
     /**
      * Copy content into document
      * @param content
      */
-    void content(std::vector<std::byte> content)
-    {
-        content_ = std::move(content);
-    }
+    void content(std::vector<std::byte> content);
+
     /**
      * Move content into document
      *
      * @param content
      */
-    void content(std::vector<std::byte>&& content)
-    {
-        content_ = std::move(content);
-    }
+    void content(std::vector<std::byte>&& content);
 
     /**
      * Get document id.
      *
      * @return the id of this document.
      */
-    [[nodiscard]] const std::string key() const
-    {
-        return key_;
-    }
+    [[nodiscard]] const std::string key() const;
 
     /**
      * Get the name of the bucket this document is in.
      *
      * @return name of the bucket which contains the document.
      */
-    [[nodiscard]] const std::string bucket() const
-    {
-        return bucket_;
-    }
+    [[nodiscard]] const std::string bucket() const;
+
     /**
      * Get the name of the scope this document is in.
      *
      * @return name of the scope which contains the document.
      */
-    [[nodiscard]] const std::string scope() const
-    {
-        return scope_;
-    }
+    [[nodiscard]] const std::string scope() const;
+
     /**
      * Get the name of the collection this document is in.
      *
      * @return name of the collection which contains the document.
      */
-    [[nodiscard]] const std::string collection() const
-    {
-        return collection_;
-    }
+    [[nodiscard]] const std::string collection() const;
+
+    /**
+     * Get the CAS fot this document
+     *
+     * @return the CAS of the document.
+     */
+    [[nodiscard]] const couchbase::cas cas() const;
 };
 } // namespace couchbase::transactions

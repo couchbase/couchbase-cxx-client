@@ -119,6 +119,7 @@ class waitable_op_list
         // calling the callback).  So wait for that.
         CB_TXN_LOG_TRACE("set_query_mode: mode already query, waiting for node to be set...");
         cv_query_.wait(lock, [this]() { return !mode_.query_node.empty(); });
+        cv_in_flight_.wait(lock, [this]() { return 0 == in_flight_; });
         in_flight_++;
         CB_TXN_LOG_TRACE("set_query_mode: node set, continuing...");
         lock.unlock();
