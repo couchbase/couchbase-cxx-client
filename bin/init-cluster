@@ -15,7 +15,9 @@
 #  limitations under the License.
 
 require "set"
+require "timeout"
 require "optparse"
+require "openssl"
 
 class Object
   def to_b
@@ -117,6 +119,24 @@ class API
     data = JSON.generate(object)
     puts "# POST #{url(path)} #{data}"
     req = Net::HTTP::Post.new(path)
+    req['content-type'] = "application/json"
+    setup_request(req)
+    res = @client.request(req, data)
+    decode_response(res)
+  rescue EOFError
+    connect
+    retry
+  rescue => ex
+    puts "#{__method__}: #{ex}, sleep for 1 second and retry"
+    sleep(1)
+    retry
+  end
+
+  def put_json(path, object)
+    data = JSON.generate(object)
+    puts "# PUT #{url(path)} #{data}"
+    req = Net::HTTP::Put.new(path)
+    req['content-type'] = "application/json"
     setup_request(req)
     res = @client.request(req, data)
     decode_response(res)
@@ -219,21 +239,46 @@ api.post_json("/sampleBuckets/install", options[:sample_buckets].to_a) if option
 
 api.post_form("/settings/developerPreview", enabled: true) if options[:enable_developer_preview]
 
-def query_port_for_bucket(api, name, options)
-  query_port_key = options[:strict_encryption] ? "n1qlSSL" : "n1ql"
-  query_port = 0
-  while query_port.zero?
-    config = api.get("/pools/default/b/#{name}")
-    query_port = config["nodesExt"][0]["services"][query_port_key].to_i
+def service_port_for_bucket(api, service, bucket, options)
+  port_key = options[:strict_encryption] ? "#{service}SSL" : service
+  port = 0
+  while port.zero?
+    config = api.get("/pools/default/b/#{bucket}")
+    port = config["nodesExt"].find{|n| n["services"].key?(port_key)}["services"][port_key].to_i rescue 0
     sleep 1
   end
-  query_port
+  port
 end
 
-
-query_api = API.new(options.merge(port: query_port_for_bucket(api, options[:bucket], options)))
+query_api = API.new(options.merge(port: service_port_for_bucket(api, "n1ql", options[:bucket], options)))
 query_api.post_form("/query/service", statement: "CREATE PRIMARY INDEX ON `#{options[:bucket]}` USING GSI")
 options[:sample_buckets].each do |bucket|
-  query_port_for_bucket(api, bucket, options)
+  service_port_for_bucket(api, "n1ql", bucket, options)
   query_api.post_form("/query/service", statement: "CREATE PRIMARY INDEX ON `#{bucket}` USING GSI")
 end
+
+puts service_port_for_bucket(api, "fts", options[:bucket], options)
+
+if options[:sample_buckets].include?("travel-sample") && services.include?("fts")
+  search_api = API.new(options.merge(port: service_port_for_bucket(api, "fts", options[:bucket], options)))
+
+  has_v6_nodes = 
+    api.get("/pools/default")["nodes"]
+    .any? { |node| node["version"] =~ /^6\./ && node["services"].include?("fts") }
+
+  index_definition_path = File.join(__dir__, "travel-sample-index#{"-v6" if has_v6_nodes}.json")
+  puts "using index definition: #{File.basename(index_definition_path)}"
+  index_definition = JSON.load(File.read(index_definition_path))
+  search_api.put_json("/api/index/travel-sample-index", index_definition)
+
+  expected_number_of_the_documents = 1000
+  indexed_documents = 0
+  Timeout.timeout(10 * 60) do # give it 10 minutes to index
+    while indexed_documents < expected_number_of_the_documents
+      resp = search_api.get("/api/index/travel-sample-index/count")
+      indexed_documents = resp['count'].to_i
+      sleep 1
+    end
+  end
+end
+

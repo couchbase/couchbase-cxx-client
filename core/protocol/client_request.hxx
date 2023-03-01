@@ -29,6 +29,8 @@
 #include <cstring>
 #include <gsl/util>
 
+#include <iostream>
+
 namespace couchbase::core::protocol
 {
 std::pair<bool, std::uint32_t>
@@ -110,10 +112,17 @@ class client_request
   private:
     [[nodiscard]] std::vector<std::byte> generate_payload(bool try_to_compress)
     {
-        std::vector<std::byte> payload(header_size + body_.size());
+        // SA: for some reason GCC 8.5.0 on CentOS 8 sees here null-pointer dereference
+#if defined(__GNUC__) && __GNUC__ == 8
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnull-dereference"
+#endif
+        std::vector<std::byte> payload(header_size + body_.size(), std::byte{});
         payload[0] = static_cast<std::byte>(magic_);
         payload[1] = static_cast<std::byte>(opcode_);
-
+#if defined(__GNUC__) && __GNUC__ == 8
+#pragma GCC diagnostic pop
+#endif
         const auto& framing_extras = body_.framing_extras();
 
         std::uint16_t key_size = gsl::narrow_cast<std::uint16_t>(body_.key().size());

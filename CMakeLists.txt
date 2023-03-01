@@ -257,41 +257,73 @@ set(couchbase_cxx_client_FILES
         core/utils/split_string.cxx
         core/utils/url_codec.cxx
         core/impl/analytics.cxx
+        core/impl/search.cxx
         core/impl/analytics_error_category.cxx
         core/impl/append.cxx
         core/impl/best_effort_retry_strategy.cxx
+        core/impl/boolean_field_query.cxx
+        core/impl/boolean_query.cxx
         core/impl/build_deferred_query_indexes.cxx
-        core/impl/collection_query_index_manager.cxx
         core/impl/cluster.cxx
+        core/impl/collection_query_index_manager.cxx
         core/impl/common_error_category.cxx
         core/impl/configuration_profiles_registry.cxx
+        core/impl/conjunction_query.cxx
         core/impl/create_query_index.cxx
+        core/impl/date_range.cxx
+        core/impl/date_range_facet.cxx
+        core/impl/date_range_facet_result.cxx
+        core/impl/date_range_query.cxx
         core/impl/decrement.cxx
+        core/impl/disjunction_query.cxx
         core/impl/dns_srv_tracker.cxx
         core/impl/drop_query_index.cxx
         core/impl/exists.cxx
         core/impl/expiry.cxx
         core/impl/fail_fast_retry_strategy.cxx
         core/impl/field_level_encryption_error_category.cxx
+        core/impl/geo_bounding_box_query.cxx
+        core/impl/geo_distance_query.cxx
+        core/impl/geo_polygon_query.cxx
         core/impl/get.cxx
+        core/impl/get_all_query_indexes.cxx
         core/impl/get_all_replicas.cxx
         core/impl/get_and_lock.cxx
         core/impl/get_and_touch.cxx
-        core/impl/get_all_query_indexes.cxx
         core/impl/get_any_replica.cxx
         core/impl/get_replica.cxx
         core/impl/increment.cxx
         core/impl/insert.cxx
+        core/impl/internal_date_range_facet_result.cxx
+        core/impl/internal_numeric_range_facet_result.cxx
+        core/impl/internal_search_error_context.cxx
+        core/impl/internal_search_meta_data.cxx
+        core/impl/internal_search_result.cxx
+        core/impl/internal_search_row.cxx
+        core/impl/internal_search_row_locations.cxx
+        core/impl/internal_term_facet_result.cxx
         core/impl/key_value_error_category.cxx
         core/impl/lookup_in.cxx
         core/impl/management_error_category.cxx
+        core/impl/match_all_query.cxx
+        core/impl/match_none_query.cxx
+        core/impl/match_phrase_query.cxx
+        core/impl/match_query.cxx
         core/impl/mutate_in.cxx
         core/impl/network_error_category.cxx
+        core/impl/numeric_range.cxx
+        core/impl/numeric_range_facet.cxx
+        core/impl/numeric_range_facet_result.cxx
+        core/impl/numeric_range_query.cxx
         core/impl/observe_poll.cxx
         core/impl/observe_seqno.cxx
+        core/impl/phrase_query.cxx
+        core/impl/prefix_query.cxx
         core/impl/prepend.cxx
         core/impl/query.cxx
         core/impl/query_error_category.cxx
+        core/impl/query_string_query.cxx
+        core/impl/regexp_query.cxx
         core/impl/remove.cxx
         core/impl/replace.cxx
         core/impl/retry_action.cxx
@@ -315,6 +347,20 @@ set(couchbase_cxx_client_FILES
         core/impl/subdoc/remove.cxx
         core/impl/subdoc/replace.cxx
         core/impl/subdoc/upsert.cxx
+        core/impl/search.cxx
+        core/impl/search_error_context.cxx
+        core/impl/search_meta_data.cxx
+        core/impl/search_result.cxx
+        core/impl/search_row.cxx
+        core/impl/search_row_location.cxx
+        core/impl/search_row_locations.cxx
+        core/impl/search_sort_field.cxx
+        core/impl/search_sort_id.cxx
+        core/impl/search_sort_score.cxx
+        core/impl/term_facet.cxx
+        core/impl/term_facet_result.cxx
+        core/impl/term_query.cxx
+        core/impl/term_range_query.cxx
         core/impl/touch.cxx
         core/impl/transaction_error_category.cxx
         core/impl/transaction_get_result.cxx
@@ -323,6 +369,7 @@ set(couchbase_cxx_client_FILES
         core/impl/upsert.cxx
         core/impl/view_error_category.cxx
         core/impl/watch_query_indexes.cxx
+        core/impl/wildcard_query.cxx
         core/io/dns_client.cxx
         core/io/dns_config.cxx
         core/io/http_parser.cxx
@@ -406,9 +453,9 @@ endif ()
 if (NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
     if (TARGET PkgConfig::PKG_CONFIG_OPENSSL)
         target_link_libraries(couchbase_cxx_client PUBLIC PkgConfig::PKG_CONFIG_OPENSSL)
-    else()
+    else ()
         target_link_libraries(couchbase_cxx_client PUBLIC OpenSSL::SSL OpenSSL::Crypto)
-    endif()
+    endif ()
 endif ()
 
 option(COUCHBASE_CXX_CLIENT_BUILD_TESTS "Build test programs" TRUE)

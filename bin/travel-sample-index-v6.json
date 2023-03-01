@@ -1,0 +1,184 @@
+{
+    "name": "travel-sample-index",
+    "type": "fulltext-index",
+    "params": {
+        "doc_config": {
+            "docid_prefix_delim": "",
+            "docid_regexp": "",
+            "mode": "type_field",
+            "type_field": "type"
+        },
+        "mapping": {
+            "default_analyzer": "standard",
+            "default_datetime_parser": "dateTimeOptional",
+            "default_field": "_all",
+            "default_mapping": {
+                "dynamic": true,
+                "enabled": true
+            },
+            "default_type": "_default",
+            "docvalues_dynamic": true,
+            "index_dynamic": true,
+            "store_dynamic": false,
+            "type_field": "_type",
+            "types": {
+                "airline": {
+                    "dynamic": true,
+                    "enabled": true,
+                    "properties": {
+                        "country": {
+                            "enabled": true,
+                            "dynamic": false,
+                            "fields": [
+                                {
+                                    "docvalues": true,
+                                    "include_in_all": true,
+                                    "include_term_vectors": true,
+                                    "index": true,
+                                    "name": "country",
+                                    "store": true,
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "name": {
+                            "enabled": true,
+                            "dynamic": false,
+                            "fields": [
+                                {
+                                    "docvalues": true,
+                                    "include_in_all": true,
+                                    "include_term_vectors": true,
+                                    "index": true,
+                                    "name": "name",
+                                    "store": true,
+                                    "type": "text"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "hotel": {
+                    "dynamic": true,
+                    "enabled": true,
+                    "properties": {
+                        "reviews": {
+                            "dynamic": true,
+                            "enabled": true,
+                            "properties": {
+                                "ratings": {
+                                    "dynamic": true,
+                                    "enabled": true,
+                                    "properties": {
+                                        "Overall": {
+                                            "enabled": true,
+                                            "dynamic": false,
+                                            "fields": [
+                                                {
+                                                    "docvalues": true,
+                                                    "include_in_all": true,
+                                                    "include_term_vectors":
+                                                      true,
+                                                    "index": true,
+                                                    "name": "Overall",
+                                                    "store": true,
+                                                    "type": "number"
+                                                }
+                                            ]
+                                        }
+                                    }
+                                },
+                                "content": {
+                                    "enabled": true,
+                                    "dynamic": false,
+                                    "fields": [
+                                        {
+                                            "docvalues": true,
+                                            "include_in_all": true,
+                                            "include_term_vectors": true,
+                                            "index": true,
+                                            "name": "content",
+                                            "store": true,
+                                            "type": "text"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "city": {
+                            "enabled": true,
+                            "dynamic": false,
+                            "fields": [
+                                {
+                                    "docvalues": true,
+                                    "include_in_all": true,
+                                    "include_term_vectors": true,
+                                    "index": true,
+                                    "name": "city",
+                                    "store": true,
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "country": {
+                            "enabled": true,
+                            "dynamic": false,
+                            "fields": [
+                                {
+                                    "docvalues": true,
+                                    "include_in_all": true,
+                                    "include_term_vectors": true,
+                                    "index": true,
+                                    "name": "country",
+                                    "store": true,
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "description": {
+                            "enabled": true,
+                            "dynamic": false,
+                            "fields": [
+                                {
+                                    "docvalues": true,
+                                    "include_in_all": true,
+                                    "include_term_vectors": true,
+                                    "index": true,
+                                    "name": "description",
+                                    "store": true,
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "title": {
+                            "enabled": true,
+                            "dynamic": false,
+                            "fields": [
+                                {
+                                    "docvalues": true,
+                                    "include_in_all": true,
+                                    "include_term_vectors": true,
+                                    "index": true,
+                                    "name": "title",
+                                    "store": true,
+                                    "type": "text"
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "store": {
+            "indexType": "scorch"
+        }
+    },
+    "sourceType": "couchbase",
+    "sourceName": "travel-sample",
+    "sourceParams": {},
+    "planParams": {
+        "maxPartitionsPerPIndex": 171,
+        "indexPartitions": 6,
+        "numReplicas": 0
+    }
+}

@@ -72,7 +72,7 @@ class collection_cache
         if (auto ptr = cid_map_.find(path); ptr != cid_map_.end()) {
             return ptr->second;
         }
-        return {};
+        return std::nullopt;
     }
 
     void update(const std::string& path, std::uint32_t id)

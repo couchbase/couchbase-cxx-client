@@ -17,6 +17,7 @@
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/error_codes.hxx>
+#include <couchbase/scope.hxx>
 
 #include "core/cluster.hxx"
 #include "core/operations/document_analytics.hxx"
