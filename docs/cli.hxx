@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-Present Couchbase, Inc.
+ *   Copyright 2023-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -18,10 +18,12 @@
 #pragma once
 
 /**
- * @mainpage
+ * @page cli Command Line Tools
+ * @brief Indexes of the API grouped by stability.
  *
- * @note You may read about related Couchbase software at https://docs.couchbase.com/
+ * @subpage cbc. CLI tools entry point.
  *
- * This is API reference for C++ library for connecting to a Couchbase Server and performing data operations and queries.
+ * @subpage cbc-get. Retrieve documents from the server by ID.
  *
+ * @subpage cbc-query. Execute N1QL queries.
  */
