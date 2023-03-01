@@ -66,3 +66,18 @@
  *
  * @warning Use at your own risk
  */
+
+/**
+ * @page api_stability Interfaces by Stability
+ * @brief Indexes of the API grouped by stability.
+ *
+ * We use interface stability taxonomy to categorize publicly visible API. See the following pages for more details:
+ *
+ * @subpage stability_committed considered as generally available (GA) API and should be preferred in production applications.
+ *
+ * @subpage stability_volatile might be changed in the future, and eventually promoted to committed.
+ *
+ * @subpage stability_uncommitted should not be used in production application, and the library does not give any guarantees on them.
+ *
+ * @subpage stability_internal like volatile, but they might be used by other project maintained by Couchbase.
+ */
