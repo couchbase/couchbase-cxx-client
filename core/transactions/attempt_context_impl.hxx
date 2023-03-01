@@ -301,11 +301,23 @@ class attempt_context_impl
             existing_error();
             return func();
         } catch (const async_operation_conflict& e) {
-            // can't do anything here but log and eat it.
             CB_ATTEMPT_CTX_LOG_ERROR(this, "Attempted to perform txn operation after commit/rollback started: {}", e.what());
             // you cannot call op_completed_with_error, as it tries to decrement
             // the op count, however it didn't successfully increment it, so...
-            op_completed_with_error_no_cache(std::move(cb), std::current_exception());
+            auto err = transaction_operation_failed(FAIL_OTHER, "async operation conflict");
+            switch (state()) {
+                case attempt_state::ABORTED:
+                case attempt_state::ROLLED_BACK:
+                    err.cause(TRANSACTION_ALREADY_ABORTED);
+                    break;
+                case attempt_state::COMMITTED:
+                case attempt_state::COMPLETED:
+                    err.cause(TRANSACTION_ALREADY_COMMITTED);
+                    break;
+                default:
+                    err.cause(UNKNOWN);
+            }
+            op_completed_with_error_no_cache(std::move(cb), std::make_exception_ptr(err));
         } catch (const transaction_operation_failed& e) {
             // thrown only from call_func when previous error exists, so eat it, unless
             // it has PREVIOUS_OP_FAILED cause
