@@ -22,6 +22,15 @@
  *
  * @note You may read about related Couchbase software at https://docs.couchbase.com/
  *
- * This is API reference for C++ library for connecting to a Couchbase Server and performing data operations and queries.
+ * ### Start Using
  *
+ * The following example shows the most basic usage of the library. It performs the following operations:
+ * * connect to local cluster (location and credentials given in program arguments),
+ * * in lines <a href="#l00071">70-78</a>, persists document to the collection using @ref couchbase::collection#upsert(),
+ * * in lines <a href="#l00081">80-89</a>, retrieves document back with @ref couchbase::collection#get(), extracts content as generic JSON
+ * value, and prints one of the fields,
+ * * in lines <a href="#l00092">91-102</a>, performs N1QL query with @ref couchbase::scope#query() and prints the result.
+ * * close the cluster and deallocate resources
+ *
+ * @snippetlineno test_integration_examples.cxx start-using
  */

@@ -21,6 +21,12 @@
 
 #include <fmt/core.h>
 
+/**
+ * Helper for fmtlib to format @ref couchbase::key_value_status_code objects.
+ *
+ * @since 1.0.0
+ * @committed
+ */
 template<>
 struct fmt::formatter<couchbase::key_value_status_code> {
     template<typename ParseContext>

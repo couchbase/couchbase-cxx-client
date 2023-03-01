@@ -71,7 +71,9 @@ class upsert
     }
 
   private:
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
     friend couchbase::mutate_in_specs;
+#endif
 
     upsert(std::string path, std::vector<std::byte> value)
       : path_(std::move(path))

@@ -54,7 +54,9 @@ class remove
     }
 
   private:
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
     friend couchbase::mutate_in_specs;
+#endif
 
     explicit remove(std::string path)
       : path_(std::move(path))

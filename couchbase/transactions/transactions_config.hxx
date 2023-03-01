@@ -115,7 +115,7 @@ class transactions_config
     /**
      * @brief Set the expiration time for transactions.
      *
-     * @param duration desired expiration for transactions. see @expiration_time().
+     * @param duration desired expiration for transactions. see @ref expiration_time().
      * @return reference to this, so calls can be chained.
      */
     template<typename T>

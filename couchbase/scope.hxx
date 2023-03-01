@@ -121,7 +121,7 @@ class scope
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto query(std::string statement, const query_options& options) const
+    [[nodiscard]] auto query(std::string statement, const query_options& options = {}) const
       -> std::future<std::pair<query_error_context, query_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<query_error_context, query_result>>>();
