@@ -315,7 +315,7 @@ staged_mutation_queue::commit_doc(attempt_context_impl* ctx, staged_mutation& it
 
             result res;
             if (item.type() == staged_mutation_type::INSERT && !cas_zero_mode) {
-                core::operations::insert_request req{ item.doc().id(), item.doc().content() };
+                core::operations::insert_request req{ item.doc().id(), item.content() };
                 req.flags = couchbase::codec::codec_flags::json_common_flags;
                 wrap_durable_request(req, ctx->overall_.config());
                 auto barrier = std::make_shared<std::promise<result>>();
