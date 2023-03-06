@@ -96,6 +96,10 @@ search_request::encode_to(search_request::encoded_request_type& encoded, http_co
         body["collections"] = collections;
     }
 
+    for (const auto& [key, value] : raw) {
+        body[key] = utils::json::parse(value);
+    }
+
     encoded.type = type;
     encoded.headers["content-type"] = "application/json";
     encoded.method = "POST";
