@@ -21,6 +21,12 @@
 
 #include <fmt/core.h>
 
+/**
+ * Helper for fmtlib to format @ref couchbase::tls_verify_mode objects.
+ *
+ * @since 1.0.0
+ * @committed
+ */
 template<>
 struct fmt::formatter<couchbase::tls_verify_mode> {
     template<typename ParseContext>

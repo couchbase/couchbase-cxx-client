@@ -21,6 +21,12 @@
 
 #include <fmt/core.h>
 
+/**
+ * Helper for fmtlib to format @ref couchbase::query_status objects.
+ *
+ * @since 1.0.0
+ * @committed
+ */
 template<>
 struct fmt::formatter<couchbase::query_status> {
     template<typename ParseContext>

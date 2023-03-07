@@ -21,6 +21,12 @@
 
 #include <fmt/core.h>
 
+/**
+ * Helper for fmtlib to format @ref couchbase::durability_level objects.
+ *
+ * @since 1.0.0
+ * @committed
+ */
 template<>
 struct fmt::formatter<couchbase::durability_level> {
     template<typename ParseContext>

@@ -71,7 +71,9 @@ class array_insert
     }
 
   private:
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
     friend couchbase::mutate_in_specs;
+#endif
 
     array_insert(std::string path, std::vector<std::vector<std::byte>> values)
       : path_(std::move(path))

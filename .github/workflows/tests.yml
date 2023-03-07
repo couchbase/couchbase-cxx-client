@@ -42,6 +42,8 @@ jobs:
         run: ./bin/init-cluster
       - name: Initialize couchbase for non-transactions testing
         if: ${{ matrix.suite != 'transaction' }}
+        env:
+          CB_TRAVEL_SAMPLE: yes
         run: ./bin/init-cluster
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2

@@ -21,6 +21,18 @@
 
 #include <fmt/core.h>
 
+#ifdef COUCHBASE_CXX_CLIENT_DOXYGEN
+namespace fmt
+{
+}
+#endif
+
+/**
+ * Helper for fmtlib to format @ref couchbase::cas objects.
+ *
+ * @since 1.0.0
+ * @committed
+ */
 template<>
 struct fmt::formatter<couchbase::cas> {
     template<typename ParseContext>

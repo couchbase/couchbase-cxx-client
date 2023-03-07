@@ -161,7 +161,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto get(std::string document_id, const get_options& options) const
+    [[nodiscard]] auto get(std::string document_id, const get_options& options = {}) const
       -> std::future<std::pair<key_value_error_context, get_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
@@ -220,7 +220,9 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto get_and_touch(std::string document_id, std::chrono::seconds duration, const get_and_touch_options& options) const
+    [[nodiscard]] auto get_and_touch(std::string document_id,
+                                     std::chrono::seconds duration,
+                                     const get_and_touch_options& options = {}) const
       -> std::future<std::pair<key_value_error_context, get_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
@@ -281,7 +283,7 @@ class collection
      */
     [[nodiscard]] auto get_and_touch(std::string document_id,
                                      std::chrono::system_clock::time_point time_point,
-                                     const get_and_touch_options& options) const
+                                     const get_and_touch_options& options = {}) const
       -> std::future<std::pair<key_value_error_context, get_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
@@ -337,7 +339,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto touch(std::string document_id, std::chrono::seconds duration, const touch_options& options) const
+    [[nodiscard]] auto touch(std::string document_id, std::chrono::seconds duration, const touch_options& options = {}) const
       -> std::future<std::pair<key_value_error_context, result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, result>>>();
@@ -396,8 +398,9 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto touch(std::string document_id, std::chrono::system_clock::time_point time_point, const touch_options& options) const
-      -> std::future<std::pair<key_value_error_context, result>>
+    [[nodiscard]] auto touch(std::string document_id,
+                             std::chrono::system_clock::time_point time_point,
+                             const touch_options& options = {}) const -> std::future<std::pair<key_value_error_context, result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, result>>>();
         auto future = barrier->get_future();
@@ -450,7 +453,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto get_any_replica(std::string document_id, const get_any_replica_options& options) const
+    [[nodiscard]] auto get_any_replica(std::string document_id, const get_any_replica_options& options = {}) const
       -> std::future<std::pair<key_value_error_context, get_replica_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_replica_result>>>();
@@ -502,7 +505,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto get_all_replicas(std::string document_id, const get_all_replicas_options& options) const
+    [[nodiscard]] auto get_all_replicas(std::string document_id, const get_all_replicas_options& options = {}) const
       -> std::future<std::pair<key_value_error_context, get_all_replicas_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_all_replicas_result>>>();
@@ -562,7 +565,7 @@ class collection
      * @committed
      */
     template<typename Transcoder = codec::default_json_transcoder, typename Document>
-    [[nodiscard]] auto upsert(std::string document_id, const Document& document, const upsert_options& options) const
+    [[nodiscard]] auto upsert(std::string document_id, const Document& document, const upsert_options& options = {}) const
       -> std::future<std::pair<key_value_error_context, mutation_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
@@ -624,7 +627,7 @@ class collection
      * @committed
      */
     template<typename Transcoder = codec::default_json_transcoder, typename Document>
-    [[nodiscard]] auto insert(std::string document_id, const Document& document, const insert_options& options) const
+    [[nodiscard]] auto insert(std::string document_id, const Document& document, const insert_options& options = {}) const
       -> std::future<std::pair<key_value_error_context, mutation_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
@@ -688,7 +691,7 @@ class collection
      * @committed
      */
     template<typename Transcoder = codec::default_json_transcoder, typename Document>
-    [[nodiscard]] auto replace(std::string document_id, const Document& document, const replace_options& options) const
+    [[nodiscard]] auto replace(std::string document_id, const Document& document, const replace_options& options = {}) const
       -> std::future<std::pair<key_value_error_context, mutation_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
@@ -738,7 +741,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto remove(std::string document_id, const remove_options& options) const
+    [[nodiscard]] auto remove(std::string document_id, const remove_options& options = {}) const
       -> std::future<std::pair<key_value_error_context, mutation_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
@@ -792,7 +795,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto mutate_in(std::string document_id, mutate_in_specs specs, const mutate_in_options& options) const
+    [[nodiscard]] auto mutate_in(std::string document_id, mutate_in_specs specs, const mutate_in_options& options = {}) const
       -> std::future<std::pair<subdocument_error_context, mutate_in_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, mutate_in_result>>>();
@@ -842,7 +845,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto lookup_in(std::string document_id, lookup_in_specs specs, const lookup_in_options& options) const
+    [[nodiscard]] auto lookup_in(std::string document_id, lookup_in_specs specs, const lookup_in_options& options = {}) const
       -> std::future<std::pair<subdocument_error_context, lookup_in_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, lookup_in_result>>>();
@@ -887,7 +890,9 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto get_and_lock(std::string document_id, std::chrono::seconds lock_duration, const get_and_lock_options& options) const
+    [[nodiscard]] auto get_and_lock(std::string document_id,
+                                    std::chrono::seconds lock_duration,
+                                    const get_and_lock_options& options = {}) const
       -> std::future<std::pair<key_value_error_context, get_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
@@ -939,7 +944,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto unlock(std::string document_id, couchbase::cas cas, const unlock_options& options) const
+    [[nodiscard]] auto unlock(std::string document_id, couchbase::cas cas, const unlock_options& options = {}) const
       -> std::future<key_value_error_context>
     {
         auto barrier = std::make_shared<std::promise<key_value_error_context>>();
@@ -983,7 +988,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto exists(std::string document_id, const exists_options& options) const
+    [[nodiscard]] auto exists(std::string document_id, const exists_options& options = {}) const
       -> std::future<std::pair<key_value_error_context, exists_result>>
     {
         auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, exists_result>>>();

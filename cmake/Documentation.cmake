@@ -11,7 +11,7 @@ if(DOXYGEN_FOUND AND DOT)
   file(
     GLOB_RECURSE
     COUCHBASE_CXX_CLIENT_PUBLIC_HEADERS
-    ${PROJECT_SOURCE_DIR}/couchbase/*.hxx
+    ${PROJECT_SOURCE_DIR}/couchbase/**/*.hxx
     ${PROJECT_SOURCE_DIR}/docs/*.hxx
     ${PROJECT_SOURCE_DIR}/docs/*.md)
 

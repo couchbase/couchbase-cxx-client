@@ -21,6 +21,12 @@
 
 #include <fmt/core.h>
 
+/**
+ * Helper for fmtlib to format @ref couchbase::mutation_token objects.
+ *
+ * @since 1.0.0
+ * @committed
+ */
 template<>
 struct fmt::formatter<couchbase::mutation_token> {
     template<typename ParseContext>

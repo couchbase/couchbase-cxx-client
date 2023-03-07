@@ -54,7 +54,9 @@ class exists
     }
 
   private:
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
     friend couchbase::lookup_in_specs;
+#endif
 
     explicit exists(std::string path)
       : path_(std::move(path))

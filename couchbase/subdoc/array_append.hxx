@@ -70,7 +70,9 @@ class array_append
     }
 
   private:
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
     friend couchbase::mutate_in_specs;
+#endif
 
     array_append(std::string path, std::vector<std::vector<std::byte>> values)
       : path_(std::move(path))

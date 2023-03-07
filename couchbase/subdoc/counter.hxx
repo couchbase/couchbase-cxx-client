@@ -69,7 +69,9 @@ class counter
     }
 
   private:
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
     friend couchbase::mutate_in_specs;
+#endif
 
     counter(std::string path, std::int64_t value)
       : path_(std::move(path))
