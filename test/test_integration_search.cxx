@@ -68,6 +68,12 @@ TEST_CASE("integration: search query")
         index.type = "fulltext-index";
         index.source_name = integration.ctx.bucket;
         index.source_type = "couchbase";
+        if (integration.cluster_version().requires_search_replicas()) {
+            index.plan_params_json = couchbase::core::utils::json::generate({
+              { "indexPartitions", 1 },
+              { "numReplicas", 1 },
+            });
+        }
         couchbase::core::operations::management::search_index_upsert_request req{};
         req.index = index;
 
@@ -371,9 +377,12 @@ TEST_CASE("integration: search query consistency", "[integration]")
         index.type = "fulltext-index";
         index.source_name = integration.ctx.bucket;
         index.source_type = "couchbase";
-        // TODO: there seems to be a server bug related to default number of partitions
-        // remove when it is identified and fixed
-        index.plan_params_json = R"({"indexPartitions": 1})";
+        if (integration.cluster_version().requires_search_replicas()) {
+            index.plan_params_json = couchbase::core::utils::json::generate({
+              { "indexPartitions", 1 },
+              { "numReplicas", 1 },
+            });
+        }
         couchbase::core::operations::management::search_index_upsert_request req{};
         req.index = index;
         auto resp = test::utils::execute(integration.cluster, req);
@@ -488,6 +497,12 @@ TEST_CASE("integration: search query collections")
         index.type = "fulltext-index";
         index.source_name = integration.ctx.bucket;
         index.source_type = "couchbase";
+        if (integration.cluster_version().requires_search_replicas()) {
+            index.plan_params_json = couchbase::core::utils::json::generate({
+              { "indexPartitions", 1 },
+              { "numReplicas", 1 },
+            });
+        }
         couchbase::core::operations::management::search_index_upsert_request req{};
         req.index = index;
         auto resp = test::utils::execute(integration.cluster, req);

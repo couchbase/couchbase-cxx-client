@@ -175,6 +175,11 @@ struct server_version {
         return deployment == deployment_type::on_prem;
     }
 
+    [[nodiscard]] bool requires_search_replicas() const
+    {
+        return deployment == deployment_type::capella;
+    }
+
     [[nodiscard]] bool supports_views() const
     {
         return deployment == deployment_type::on_prem && (major < 7 || (major == 7 && minor < 2));
