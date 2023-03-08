@@ -103,6 +103,14 @@ sdk_build_info()
 #endif
     info["openssl_default_cert_dir"] = X509_get_default_cert_dir();
     info["openssl_default_cert_file"] = X509_get_default_cert_file();
+    info["openssl_ssl_interface_include_directories"] = OPENSSL_SSL_INTERFACE_INCLUDE_DIRECTORIES;
+    info["openssl_ssl_interface_link_libraries"] = OPENSSL_SSL_INTERFACE_LINK_LIBRARIES;
+    info["openssl_ssl_imported_location"] = OPENSSL_SSL_IMPORTED_LOCATION;
+    info["openssl_crypto_interface_imported_location"] = OPENSSL_CRYPTO_IMPORTED_LOCATION;
+    info["openssl_crypto_interface_include_directories"] = OPENSSL_CRYPTO_INTERFACE_INCLUDE_DIRECTORIES;
+    info["openssl_crypto_interface_link_libraries"] = OPENSSL_CRYPTO_INTERFACE_LINK_LIBRARIES;
+    info["openssl_pkg_config_interface_include_directories"] = OPENSSL_PKG_CONFIG_INTERFACE_INCLUDE_DIRECTORIES;
+    info["openssl_pkg_config_interface_link_libraries"] = OPENSSL_PKG_CONFIG_INTERFACE_LINK_LIBRARIES;
     info["__cplusplus"] = fmt::format("{}", __cplusplus);
 #if defined(_MSC_VER)
     info["_MSC_VER"] = fmt::format("{}", _MSC_VER);

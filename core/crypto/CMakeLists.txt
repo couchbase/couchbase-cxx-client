@@ -4,7 +4,11 @@ target_link_libraries(couchbase_crypto PRIVATE project_options project_warnings)
 target_include_directories(couchbase_crypto PRIVATE ../..)
 
 if(NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
-  target_link_libraries(couchbase_crypto PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+  if (TARGET PkgConfig::PKG_CONFIG_OPENSSL)
+    target_link_libraries(couchbase_crypto PUBLIC PkgConfig::PKG_CONFIG_OPENSSL)
+  else()
+    target_link_libraries(couchbase_crypto PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+  endif()
 endif()
 
 if(WIN32)

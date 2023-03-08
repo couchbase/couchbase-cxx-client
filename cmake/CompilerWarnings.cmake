@@ -67,8 +67,8 @@ function(set_project_warnings project_name)
       -Wuseless-cast # warn if you perform a cast to the same type
       -Wdeprecated-declarations # warn if [[deprecated]] elements being used
   )
-  set(CLANG_WARNINGS ${COMMON_WARNINGS}
-      -Wshadow # warn the user if a variable declaration shadows one from a parent context
+  set(CLANG_WARNINGS ${COMMON_WARNINGS} -Wshadow # warn the user if a variable declaration shadows one from a parent
+                                                 # context
   )
 
   if(MSVC)
@@ -76,9 +76,17 @@ function(set_project_warnings project_name)
   elseif(CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
     set(PROJECT_WARNINGS ${CLANG_WARNINGS})
   elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "12.0.0" AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11.0.0"
+       AND NOT
+           CMAKE_BUILD_TYPE
+           STREQUAL
+           "Debug")
       # One of the occurrences: https://github.com/chriskohlhoff/asio/pull/1176
-      set(GCC_WARNINGS ${GCC_WARNINGS} -Wno-error=null-dereference -Wno-error=array-bounds)
+      set(GCC_WARNINGS
+          ${GCC_WARNINGS}
+          -Wno-error=null-dereference
+          -Wno-error=array-bounds
+          -Wno-error=stringop-overflow)
     endif()
     set(PROJECT_WARNINGS ${GCC_WARNINGS})
   else()

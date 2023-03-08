@@ -399,7 +399,11 @@ if (WIN32)
 endif ()
 
 if (NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
-    target_link_libraries(couchbase_cxx_client PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+    if (TARGET PkgConfig::PKG_CONFIG_OPENSSL)
+        target_link_libraries(couchbase_cxx_client PUBLIC PkgConfig::PKG_CONFIG_OPENSSL)
+    else()
+        target_link_libraries(couchbase_cxx_client PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+    endif()
 endif ()
 
 option(COUCHBASE_CXX_CLIENT_BUILD_TESTS "Build test programs" TRUE)
