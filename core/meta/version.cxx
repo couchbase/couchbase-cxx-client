@@ -101,6 +101,17 @@ sdk_build_info()
 #elif defined(SSLEAY_VERSION)
     info["openssl_runtime"] = SSLeay_version(SSLEAY_VERSION);
 #endif
+#if defined(OPENSSL_INFO_CONFIG_DIR)
+    info["openssl_config_dir"] = OPENSSL_info(OPENSSL_INFO_CONFIG_DIR);
+#elif defined(OPENSSL_DIR)
+    if (std::string config_dir(OpenSSL_version(OPENSSL_DIR)); !config_dir.empty()) {
+        if (auto quote = config_dir.find('"'); quote != std::string::npos && quote + 2 < config_dir.size()) {
+            info["openssl_config_dir"] = config_dir.substr(quote + 1, config_dir.size() - quote - 2);
+        } else {
+            info["openssl_config_dir"] = config_dir;
+        }
+    }
+#endif
     info["openssl_default_cert_dir"] = X509_get_default_cert_dir();
     info["openssl_default_cert_file"] = X509_get_default_cert_file();
     info["openssl_ssl_interface_include_directories"] = OPENSSL_SSL_INTERFACE_INCLUDE_DIRECTORIES;
