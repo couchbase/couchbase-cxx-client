@@ -105,3 +105,5 @@ Dir.chdir(BUILD_DIR) do
       "--config", CB_CMAKE_BUILD_TYPE,
       "--verbose")
 end
+
+run("#{BUILD_DIR}/tools/cbc version --json")
