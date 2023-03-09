@@ -117,9 +117,14 @@ class API
   end
 end
 
-sleep(1)
-
-api = API.new(options)
+api = 
+  begin
+    API.new(options)
+  rescue => ex
+    puts "#{ex}, sleep for 1 second and retry"
+    sleep(1)
+    retry
+  end
 
 resp = api.get("/pools")
 services = resp['allowedServices']
