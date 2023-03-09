@@ -14,11 +14,21 @@ else()
   if(NOT OPENSSL_ROOT_DIR)
     if(APPLE AND COUCHBASE_CXX_CLIENT_USE_HOMEBREW_TO_DETECT_OPENSSL)
       execute_process(
-        COMMAND brew --prefix openssl@1.1
+        COMMAND brew --prefix openssl
         OUTPUT_VARIABLE OPENSSL_ROOT_DIR
+        ERROR_VARIABLE HOMEBREW_STDERR
         ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
       if(OPENSSL_ROOT_DIR)
-        message(STATUS "Found OpenSSL prefix using homebrew: ${OPENSSL_ROOT_DIR}")
+        message(STATUS "Found OpenSSL prefix using Homebrew: ${OPENSSL_ROOT_DIR}")
+      else()
+        execute_process(
+          COMMAND brew --prefix openssl@1.1
+          OUTPUT_VARIABLE OPENSSL_ROOT_DIR
+          ERROR_VARIABLE HOMEBREW_STDERR
+          ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
+        if(OPENSSL_ROOT_DIR)
+          message(STATUS "Found OpenSSL 1.1 prefix using Homebrew: ${OPENSSL_ROOT_DIR}")
+        endif()
       endif()
     endif()
     if(MSVC AND COUCHBASE_CXX_CLIENT_USE_SCOOP_TO_DETECT_OPENSSL)

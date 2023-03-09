@@ -106,4 +106,11 @@ Dir.chdir(BUILD_DIR) do
       "--verbose")
 end
 
-run("#{BUILD_DIR}/tools/cbc version --json")
+if RUBY_PLATFORM =~ /mswin|mingw/
+  cbc = Dir["#{BUILD_DIR}/**/cbc.exe"].first
+  if File.exist?(cbc)
+    run("#{cbc} version --json")
+  end
+else
+  run("#{BUILD_DIR}/tools/cbc version --json")
+end
