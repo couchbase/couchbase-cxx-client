@@ -7,11 +7,13 @@ target_link_libraries(
           snappy
           fmt::fmt
           spdlog::spdlog)
-target_include_directories(couchbase_meta PRIVATE
-        ${PROJECT_BINARY_DIR}/generated
-        ${PROJECT_SOURCE_DIR}
-        ${PROJECT_SOURCE_DIR}/third_party/http_parser)
+target_include_directories(couchbase_meta PRIVATE ${PROJECT_BINARY_DIR}/generated ${PROJECT_SOURCE_DIR}
+                                                  ${PROJECT_SOURCE_DIR}/third_party/http_parser)
 
 if(NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
-  target_link_libraries(couchbase_meta PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+  if (TARGET PkgConfig::PKG_CONFIG_OPENSSL)
+    target_link_libraries(couchbase_meta PUBLIC PkgConfig::PKG_CONFIG_OPENSSL)
+  else()
+    target_link_libraries(couchbase_meta PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+  endif()
 endif()

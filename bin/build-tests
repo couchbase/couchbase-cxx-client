@@ -105,3 +105,6 @@ ${CB_CMAKE}  \
     -S "${PROJECT_ROOT}"
 
 ${CB_CMAKE} --build "${BUILD_DIR}" --parallel ${CB_NUMBER_OF_JOBS} --verbose ${CB_CMAKE_BUILD_EXTRAS}
+
+${CB_CMAKE} --build "${BUILD_DIR}" --parallel ${CB_NUMBER_OF_JOBS} --verbose --target cbc
+${BUILD_DIR}/tools/cbc version --json

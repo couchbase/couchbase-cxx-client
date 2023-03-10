@@ -105,3 +105,12 @@ Dir.chdir(BUILD_DIR) do
       "--config", CB_CMAKE_BUILD_TYPE,
       "--verbose")
 end
+
+if RUBY_PLATFORM =~ /mswin|mingw/
+  cbc = Dir["#{BUILD_DIR}/**/cbc.exe"].first
+  if File.exist?(cbc)
+    run("#{cbc} version --json")
+  end
+else
+  run("#{BUILD_DIR}/tools/cbc version --json")
+end
