@@ -19,25 +19,9 @@
 
 #include "core/operations/management/collection_create.hxx"
 #include "core/operations/management/search_index_drop.hxx"
-#include "core/operations/management/search_index_get_documents_count.hxx"
 #include "core/operations/management/search_index_upsert.hxx"
 
 using Catch::Matchers::StartsWith;
-
-static void
-wait_until_indexed(std::shared_ptr<couchbase::core::cluster> cluster, const std::string& index_name, std::uint64_t expected_count)
-{
-    auto indexed = test ::utils::wait_until(
-      [cluster = std::move(cluster), &index_name, &expected_count]() {
-          couchbase::core::operations::management::search_index_get_documents_count_request req{};
-          req.index_name = index_name;
-          req.timeout = std::chrono::seconds{ 1 };
-          auto resp = test::utils::execute(cluster, req);
-          return resp.count >= expected_count;
-      },
-      std::chrono::minutes(5));
-    REQUIRE(indexed);
-}
 
 TEST_CASE("integration: search query")
 {
@@ -86,7 +70,7 @@ TEST_CASE("integration: search query")
     std::uint64_t beer_sample_doc_count = 5;
     // Wait until expected documents are indexed
     {
-        wait_until_indexed(integration.cluster, index_name, beer_sample_doc_count);
+        REQUIRE(test::utils::wait_until_indexed(integration.cluster, index_name, beer_sample_doc_count));
         auto ok = test::utils::wait_until(
           [&]() {
               couchbase::core::operations::search_request req{};
@@ -363,7 +347,8 @@ TEST_CASE("integration: search query consistency", "[integration]")
                     "default_field": "_all"
                 },
                 "doc_config": {
-                    "mode": "type_field"
+                    "mode": "type_field",
+                    "type_field": "_type"
                 }
             }
         )";
@@ -391,33 +376,59 @@ TEST_CASE("integration: search query consistency", "[integration]")
 
     REQUIRE(test::utils::wait_for_search_pindexes_ready(integration.cluster, integration.ctx.bucket, index_name));
 
-    auto key = test::utils::uniq_id("key");
-    auto id = couchbase::core::document_id(integration.ctx.bucket, "_default", "_default", key);
     auto value = test::utils::uniq_id("value");
-    auto doc = couchbase::core::utils::json::generate_binary(tao::json::value{
-      { "value", value },
-    });
+    auto id = couchbase::core::document_id(integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("key"));
 
-    couchbase::mutation_token token;
+    /*
+     * Retry query with consistency check until it will succeed or reach 20 attempts.
+     *
+     * FTS might return empty results. See MB-55920.
+     */
+    int attempt = 0;
+    bool done = false;
+    while (!done) {
+        couchbase::mutation_token token;
+        {
+            // now update the document and use its mutation token in query later
+            auto resp = test::utils::execute(integration.cluster,
+                                             couchbase::core::operations::upsert_request{
+                                               id,
+                                               couchbase::core::utils::json::generate_binary(tao::json::value{
+                                                 { "_type", "test_doc" },
+                                                 { "value", value },
+                                               }),
+                                             });
+            REQUIRE_SUCCESS(resp.ctx.ec());
+            token = resp.token;
+        }
 
-    {
-        couchbase::core::operations::upsert_request req{ id, doc };
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_SUCCESS(resp.ctx.ec());
-        token = resp.token;
-    }
+        tao::json::value query{ { "query", fmt::format("value:{}", value) } };
+        auto query_json = couchbase::core::json_string(couchbase::core::utils::json::generate(query));
 
-    tao::json::value query{ { "query", fmt::format("value:{}", value) } };
-    auto query_json = couchbase::core::json_string(couchbase::core::utils::json::generate(query));
+        {
+            couchbase::core::operations::search_request req{};
+            req.index_name = index_name;
+            req.query = query_json;
+            req.mutation_state.emplace_back(token);
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_SUCCESS(resp.ctx.ec);
+            switch (resp.rows.size()) {
+                case 1:
+                    done = true;
+                    break;
 
-    {
-        couchbase::core::operations::search_request req{};
-        req.index_name = index_name;
-        req.query = query_json;
-        req.mutation_state.emplace_back(token);
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_SUCCESS(resp.ctx.ec);
-        REQUIRE(resp.rows.size() == 1);
+                case 0:
+                    if (attempt > 20) {
+                        FAIL("Unable to use search query with consistency. Giving up.");
+                    }
+                    ++attempt;
+                    break;
+
+                default:
+                    REQUIRE(resp.rows.size() == 1);
+                    break;
+            }
+        }
     }
 
     {
@@ -509,11 +520,11 @@ TEST_CASE("integration: search query collections")
         REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
-    wait_until_indexed(integration.cluster, index_name, 2);
+    REQUIRE(test::utils::wait_until_indexed(integration.cluster, index_name, 2));
 
     couchbase::core::json_string simple_query(R"({"query": "name:test"})");
 
-    // no collections parameter - both docs returned
+    // no collection parameter - both docs returned
     {
         couchbase::core::operations::search_request req{};
         req.index_name = index_name;

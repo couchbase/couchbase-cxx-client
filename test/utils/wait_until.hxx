@@ -74,4 +74,6 @@ wait_for_search_pindexes_ready(std::shared_ptr<couchbase::core::cluster> cluster
                                const std::string& bucket_name,
                                const std::string& index_name);
 
+bool
+wait_until_indexed(std::shared_ptr<couchbase::core::cluster> cluster, const std::string& index_name, std::uint64_t expected_count);
 } // namespace test::utils

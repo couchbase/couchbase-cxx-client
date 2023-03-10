@@ -20,6 +20,7 @@
 #include "core/operations/management/bucket_get.hxx"
 #include "core/operations/management/collections_manifest_get.hxx"
 #include "core/operations/management/search_get_stats.hxx"
+#include "core/operations/management/search_index_get_documents_count.hxx"
 #include "core/utils/json.hxx"
 
 namespace test::utils
@@ -104,22 +105,39 @@ wait_for_search_pindexes_ready(std::shared_ptr<couchbase::core::cluster> cluster
                                const std::string& bucket_name,
                                const std::string& index_name)
 {
-    return test::utils::wait_until([&]() {
-        couchbase::core::operations::management::search_index_stats_request req{};
-        auto resp = test::utils::execute(cluster, req);
-        if (resp.ctx.ec || resp.stats.empty()) {
-            return false;
-        }
-        auto stats = couchbase::core::utils::json::parse(resp.stats);
-        const auto* num_pindexes_actual = stats.find(fmt::format("{}:{}:num_pindexes_actual", bucket_name, index_name));
-        if (num_pindexes_actual == nullptr || !num_pindexes_actual->is_number()) {
-            return false;
-        }
-        const auto* num_pindexes_target = stats.find(fmt::format("{}:{}:num_pindexes_target", bucket_name, index_name));
-        if (num_pindexes_target == nullptr || !num_pindexes_target->is_number()) {
-            return false;
-        }
-        return num_pindexes_actual->get_unsigned() == num_pindexes_target->get_unsigned();
-    });
+    return test::utils::wait_until(
+      [&]() {
+          couchbase::core::operations::management::search_index_stats_request req{};
+          auto resp = test::utils::execute(cluster, req);
+          if (resp.ctx.ec || resp.stats.empty()) {
+              return false;
+          }
+          auto stats = couchbase::core::utils::json::parse(resp.stats);
+          const auto* num_pindexes_actual = stats.find(fmt::format("{}:{}:num_pindexes_actual", bucket_name, index_name));
+          if (num_pindexes_actual == nullptr || !num_pindexes_actual->is_number()) {
+              return false;
+          }
+          const auto* num_pindexes_target = stats.find(fmt::format("{}:{}:num_pindexes_target", bucket_name, index_name));
+          if (num_pindexes_target == nullptr || !num_pindexes_target->is_number()) {
+              return false;
+          }
+          return num_pindexes_actual->get_unsigned() == num_pindexes_target->get_unsigned();
+      },
+      std::chrono::minutes(5));
 }
+
+bool
+wait_until_indexed(std::shared_ptr<couchbase::core::cluster> cluster, const std::string& index_name, std::uint64_t expected_count)
+{
+    return test ::utils::wait_until(
+      [cluster = std::move(cluster), &index_name, &expected_count]() {
+          couchbase::core::operations::management::search_index_get_documents_count_request req{};
+          req.index_name = index_name;
+          req.timeout = std::chrono::seconds{ 1 };
+          auto resp = test::utils::execute(cluster, req);
+          return resp.count >= expected_count;
+      },
+      std::chrono::minutes(5));
+}
+
 } // namespace test::utils
