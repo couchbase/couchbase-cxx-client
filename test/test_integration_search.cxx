@@ -53,7 +53,7 @@ TEST_CASE("integration: search query")
             couchbase::core::document_id id(integration.ctx.bucket, "_default", "_default", key);
             couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::json::generate_binary(value) };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
         }
     }
 
@@ -93,7 +93,7 @@ TEST_CASE("integration: search query")
               req.index_name = index_name;
               req.query = simple_query;
               auto resp = test::utils::execute(integration.cluster, req);
-              REQUIRE_FALSE(resp.ctx.ec);
+              REQUIRE_SUCCESS(resp.ctx.ec);
               return resp.rows.size() == beer_sample_doc_count;
           },
           std::chrono::minutes(5));
@@ -107,7 +107,7 @@ TEST_CASE("integration: search query")
         req.query = simple_query;
         req.sort_specs.emplace_back(couchbase::core::utils::json::generate("_id"));
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 5);
         REQUIRE(resp.rows[0].id == "avery_brewing_company-reverend_the");
         REQUIRE(resp.rows[0].score > 0);
@@ -128,7 +128,7 @@ TEST_CASE("integration: search query")
         req.query = simple_query;
         req.limit = 1;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 1);
     }
 
@@ -140,7 +140,7 @@ TEST_CASE("integration: search query")
         req.skip = 1;
         req.sort_specs.emplace_back(couchbase::core::utils::json::generate("_id"));
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == beer_sample_doc_count - 1);
         REQUIRE(resp.rows[0].id == "bear_republic_brewery-red_rocket_ale");
     }
@@ -152,7 +152,7 @@ TEST_CASE("integration: search query")
         req.query = simple_query;
         req.explain = true;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE_FALSE(resp.rows[0].explanation.empty());
     }
 
@@ -164,7 +164,7 @@ TEST_CASE("integration: search query")
             req.query = simple_query;
             req.disable_scoring = true;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE_SUCCESS(resp.ctx.ec);
             REQUIRE(resp.rows[0].score == 0);
             REQUIRE(resp.meta.metrics.max_score == 0);
         }
@@ -177,7 +177,7 @@ TEST_CASE("integration: search query")
         req.query = simple_query;
         req.include_locations = true;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows[0].locations.size() == 1);
         REQUIRE(resp.rows[0].locations[0].field == "description");
         REQUIRE(resp.rows[0].locations[0].term == "belgian");
@@ -193,7 +193,7 @@ TEST_CASE("integration: search query")
         req.query = simple_query;
         req.highlight_fields = { "description" };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows[0].fragments["description"][0] == "A <mark>Belgian</mark> Double Abbey.");
     }
 
@@ -206,7 +206,7 @@ TEST_CASE("integration: search query")
             req.highlight_fields = { "description" };
             req.highlight_style = couchbase::core::search_highlight_style::html;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE_SUCCESS(resp.ctx.ec);
             REQUIRE(resp.rows[0].fragments["description"][0] == "A <mark>Belgian</mark> Double Abbey.");
         }
 
@@ -217,7 +217,7 @@ TEST_CASE("integration: search query")
             req.highlight_fields = { "description" };
             req.highlight_style = couchbase::core::search_highlight_style::ansi;
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE_SUCCESS(resp.ctx.ec);
             // TODO: is there a better way to compare ansi strings?
             std::string snippet = resp.rows[0].fragments["description"][0];
             std::string open = "\x1b[43m";
@@ -235,7 +235,7 @@ TEST_CASE("integration: search query")
         req.query = simple_query;
         req.fields.emplace_back("description");
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         auto fields = couchbase::core::utils::json::parse(resp.rows[0].fields).get_object();
         REQUIRE(fields.at("description").get_string() == "A Belgian Double Abbey.");
     }
@@ -248,7 +248,7 @@ TEST_CASE("integration: search query")
         req.sort_specs.emplace_back(couchbase::core::utils::json::generate("_score"));
         req.timeout = std::chrono::seconds(1);
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows[0].id == "bear_republic_brewery-red_rocket_ale");
     }
 
@@ -259,7 +259,7 @@ TEST_CASE("integration: search query")
         req.query = simple_query;
         req.facets.insert(std::make_pair("type", R"({"field": "type", "size": 1})"));
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.facets.size() == 1);
         REQUIRE(resp.facets[0].name == "type");
         REQUIRE(resp.facets[0].field == "type");
@@ -280,7 +280,7 @@ TEST_CASE("integration: search query")
           "updated",
           R"({"field": "updated", "size": 2, "date_ranges": [{"name": "old", "end": "2010-08-01"},{"name": "new", "start": "2010-08-01"}]})"));
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.facets.size() == 1);
         REQUIRE(resp.facets[0].name == "updated");
         REQUIRE(resp.facets[0].field == "updated");
@@ -306,7 +306,7 @@ TEST_CASE("integration: search query")
         req.facets.insert(std::make_pair(
           "abv", R"({"field": "abv", "size": 2, "numeric_ranges": [{"name": "high", "min": 7},{"name": "low", "max": 7}]})"));
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.facets.size() == 1);
         REQUIRE(resp.facets[0].name == "abv");
         REQUIRE(resp.facets[0].field == "abv");
@@ -339,7 +339,7 @@ TEST_CASE("integration: search query")
         raw.insert(std::make_pair("size", couchbase::core::json_string("1")));
         req.raw = raw;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 1);
     }
 }
@@ -386,7 +386,7 @@ TEST_CASE("integration: search query consistency", "[integration]")
         couchbase::core::operations::management::search_index_upsert_request req{};
         req.index = index;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
     REQUIRE(test::utils::wait_for_search_pindexes_ready(integration.cluster, integration.ctx.bucket, index_name));
@@ -403,7 +403,7 @@ TEST_CASE("integration: search query consistency", "[integration]")
     {
         couchbase::core::operations::upsert_request req{ id, doc };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec());
+        REQUIRE_SUCCESS(resp.ctx.ec());
         token = resp.token;
     }
 
@@ -416,7 +416,7 @@ TEST_CASE("integration: search query consistency", "[integration]")
         req.query = query_json;
         req.mutation_state.emplace_back(token);
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 1);
     }
 
@@ -446,7 +446,7 @@ TEST_CASE("integration: search query collections")
         {
             couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket, "_default", collection };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec);
+            REQUIRE_SUCCESS(resp.ctx.ec);
             auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
             REQUIRE(created);
         }
@@ -456,7 +456,7 @@ TEST_CASE("integration: search query collections")
             auto id = couchbase::core::document_id(integration.ctx.bucket, "_default", collection, key);
             couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary(doc) };
             auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_FALSE(resp.ctx.ec());
+            REQUIRE_SUCCESS(resp.ctx.ec());
         }
     }
 
@@ -506,7 +506,7 @@ TEST_CASE("integration: search query collections")
         couchbase::core::operations::management::search_index_upsert_request req{};
         req.index = index;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
     wait_until_indexed(integration.cluster, index_name, 2);
@@ -519,7 +519,7 @@ TEST_CASE("integration: search query collections")
         req.index_name = index_name;
         req.query = simple_query;
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 2);
     }
 
@@ -530,7 +530,7 @@ TEST_CASE("integration: search query collections")
         req.query = simple_query;
         req.collections.emplace_back(collection1_name);
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 1);
     }
 
@@ -542,7 +542,7 @@ TEST_CASE("integration: search query collections")
         req.collections.emplace_back(collection1_name);
         req.collections.emplace_back(collection2_name);
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_FALSE(resp.ctx.ec);
+        REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 2);
     }
 }
