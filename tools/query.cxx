@@ -296,7 +296,7 @@ print_result(const std::optional<scope_with_bucket>& scope_id,
 
 static void
 do_work(const std::string& connection_string,
-        couchbase::cluster_options& cluster_options,
+        const couchbase::cluster_options& cluster_options,
         const std::vector<std::string>& statements,
         const std::optional<scope_with_bucket>& scope_id,
         const couchbase::query_options& query_options,
@@ -308,6 +308,9 @@ do_work(const std::string& connection_string,
 
     auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, cluster_options).get();
     if (ec) {
+        guard.reset();
+        io_thread.join();
+
         throw std::system_error(ec);
     }
 
@@ -336,106 +339,99 @@ do_work(const std::string& connection_string,
 void
 cbc::query::execute(const std::vector<std::string>& argv)
 {
-    try {
-
-        auto options = cbc::parse_options(usage(), argv);
-        if (options["--help"].asBool()) {
-            fmt::print(stdout, usage());
-            return;
-        }
-
-        cbc::apply_logger_options(options);
-
-        couchbase::cluster_options cluster_options{ cbc::default_cluster_options() };
-        std::string connection_string{ cbc::default_connection_string() };
-        cbc::fill_cluster_options(options, cluster_options, connection_string);
-
-        couchbase::query_options query_options{};
-        parse_disable_option(query_options.adhoc, "--prepare");
-        parse_enable_option(query_options.readonly, "--read-only");
-        parse_enable_option(query_options.preserve_expiry, "--preserve-expiry");
-        parse_disable_option(query_options.metrics, "--disable-metrics");
-        parse_enable_option(query_options.flex_index, "--flex-index");
-        parse_integer_option(query_options.max_parallelism, "--maximum-parallelism");
-        parse_integer_option(query_options.scan_cap, "--scan-cap");
-        parse_integer_option(query_options.pipeline_batch, "--pipeline-batch");
-        parse_integer_option(query_options.pipeline_cap, "--pipeline-cap");
-        parse_duration_option(query_options.scan_wait, "--scan-wait");
-        parse_string_option(query_options.client_context_id, "--client-context-id");
-
-        if (options.find("--scan-consistency") != options.end() && options.at("--scan-consistency")) {
-            if (auto value = options.at("--scan-consistency").asString(); value == "not_bounded") {
-                query_options.scan_consistency(couchbase::query_scan_consistency::not_bounded);
-            } else if (value == "request_plus") {
-                query_options.scan_consistency(couchbase::query_scan_consistency::request_plus);
-            } else {
-                throw docopt::DocoptArgumentError(fmt::format("unexpected value '{}' for --scan-consistency", value));
-            }
-        }
-
-        if (options.find("--profile") != options.end() && options.at("--profile")) {
-            if (auto value = options.at("--profile").asString(); value == "off") {
-                query_options.profile(couchbase::query_profile::off);
-            } else if (value == "phases") {
-                query_options.profile(couchbase::query_profile::phases);
-            } else if (value == "timings") {
-                query_options.profile(couchbase::query_profile::phases);
-            } else {
-                throw docopt::DocoptArgumentError(fmt::format("unexpected value '{}' for --profile", value));
-            }
-        }
-
-        std::optional<scope_with_bucket> scope{};
-        if (options.find("--bucket-name") != options.end() && options.at("--bucket-name") &&
-            options.find("--scope-name") != options.end() && options.at("--scope-name")) {
-            scope = { options.at("--bucket-name").asString(), options.at("--scope-name").asString() };
-        }
-
-        static const std::regex named_param_regex{ R"(^([\w\d_]+)=(.*)$)" };
-        if (options.find("--param") != options.end() && options.at("--param")) {
-            std::vector<couchbase::codec::binary> positional_params{};
-            std::map<std::string, couchbase::codec::binary, std::less<>> named_params{};
-
-            for (const auto& param : options.at("--param").asStringList()) {
-                if (std::smatch match; std::regex_match(param, match, named_param_regex)) {
-                    named_params[match[1].str()] = std::move(couchbase::core::utils::to_binary(match[2].str()));
-                } else {
-                    positional_params.push_back(couchbase::core::utils::to_binary(param));
-                }
-            }
-            if (!positional_params.empty() && !named_params.empty()) {
-                throw docopt::DocoptArgumentError("mixing positional and named parameters is not allowed (parameters must be specified "
-                                                  "either as --param=VALUE or --param=NAME=VALUE)");
-            }
-            if (!positional_params.empty()) {
-                query_options.encoded_positional_parameters(std::move(positional_params));
-            } else if (!named_params.empty()) {
-                query_options.encoded_named_parameters(std::move(named_params));
-            }
-        }
-        if (options.find("--raw") != options.end() && options.at("--raw")) {
-            std::map<std::string, couchbase::codec::binary, std::less<>> raw_params{};
-            for (const auto& param : options.at("--raw").asStringList()) {
-                if (std::smatch match; std::regex_match(param, match, named_param_regex)) {
-                    raw_params.emplace(match[1].str(), couchbase::core::utils::to_binary(match[2].str()));
-                } else {
-                    throw docopt::DocoptArgumentError("raw parameters should be in NAME=VALUE form, (i.e. --raw=NAME=VALUE)");
-                }
-            }
-            if (!raw_params.empty()) {
-                query_options.encoded_raw_options(raw_params);
-            }
-        }
-
-        console_output_options output_options{};
-        output_options.json_lines = cbc::get_bool_option(options, "--json-lines");
-
-        auto statements{ options["<statement>"].asStringList() };
-        do_work(connection_string, cluster_options, statements, scope, query_options, output_options);
-    } catch (const docopt::DocoptArgumentError& e) {
-        fmt::print(stderr, "Error: {}\n", e.what());
-    } catch (const std::system_error& e) {
-        fmt::print(stderr, "Error: {}\n", e.what());
+    auto options = cbc::parse_options(usage(), argv);
+    if (options["--help"].asBool()) {
+        fmt::print(stdout, "{}", usage());
+        return;
     }
+
+    cbc::apply_logger_options(options);
+
+    couchbase::cluster_options cluster_options{ cbc::default_cluster_options() };
+    std::string connection_string{ cbc::default_connection_string() };
+    cbc::fill_cluster_options(options, cluster_options, connection_string);
+
+    couchbase::query_options query_options{};
+    parse_disable_option(query_options.adhoc, "--prepare");
+    parse_enable_option(query_options.readonly, "--read-only");
+    parse_enable_option(query_options.preserve_expiry, "--preserve-expiry");
+    parse_disable_option(query_options.metrics, "--disable-metrics");
+    parse_enable_option(query_options.flex_index, "--flex-index");
+    parse_integer_option(query_options.max_parallelism, "--maximum-parallelism");
+    parse_integer_option(query_options.scan_cap, "--scan-cap");
+    parse_integer_option(query_options.pipeline_batch, "--pipeline-batch");
+    parse_integer_option(query_options.pipeline_cap, "--pipeline-cap");
+    parse_duration_option(query_options.scan_wait, "--scan-wait");
+    parse_string_option(query_options.client_context_id, "--client-context-id");
+
+    if (options.find("--scan-consistency") != options.end() && options.at("--scan-consistency")) {
+        if (auto value = options.at("--scan-consistency").asString(); value == "not_bounded") {
+            query_options.scan_consistency(couchbase::query_scan_consistency::not_bounded);
+        } else if (value == "request_plus") {
+            query_options.scan_consistency(couchbase::query_scan_consistency::request_plus);
+        } else {
+            throw docopt::DocoptArgumentError(fmt::format("unexpected value '{}' for --scan-consistency", value));
+        }
+    }
+
+    if (options.find("--profile") != options.end() && options.at("--profile")) {
+        if (auto value = options.at("--profile").asString(); value == "off") {
+            query_options.profile(couchbase::query_profile::off);
+        } else if (value == "phases") {
+            query_options.profile(couchbase::query_profile::phases);
+        } else if (value == "timings") {
+            query_options.profile(couchbase::query_profile::phases);
+        } else {
+            throw docopt::DocoptArgumentError(fmt::format("unexpected value '{}' for --profile", value));
+        }
+    }
+
+    std::optional<scope_with_bucket> scope{};
+    if (options.find("--bucket-name") != options.end() && options.at("--bucket-name") && options.find("--scope-name") != options.end() &&
+        options.at("--scope-name")) {
+        scope = { options.at("--bucket-name").asString(), options.at("--scope-name").asString() };
+    }
+
+    static const std::regex named_param_regex{ R"(^([\w\d_]+)=(.*)$)" };
+    if (options.find("--param") != options.end() && options.at("--param")) {
+        std::vector<couchbase::codec::binary> positional_params{};
+        std::map<std::string, couchbase::codec::binary, std::less<>> named_params{};
+
+        for (const auto& param : options.at("--param").asStringList()) {
+            if (std::smatch match; std::regex_match(param, match, named_param_regex)) {
+                named_params[match[1].str()] = std::move(couchbase::core::utils::to_binary(match[2].str()));
+            } else {
+                positional_params.push_back(couchbase::core::utils::to_binary(param));
+            }
+        }
+        if (!positional_params.empty() && !named_params.empty()) {
+            throw docopt::DocoptArgumentError("mixing positional and named parameters is not allowed (parameters must be specified "
+                                              "either as --param=VALUE or --param=NAME=VALUE)");
+        }
+        if (!positional_params.empty()) {
+            query_options.encoded_positional_parameters(std::move(positional_params));
+        } else if (!named_params.empty()) {
+            query_options.encoded_named_parameters(std::move(named_params));
+        }
+    }
+    if (options.find("--raw") != options.end() && options.at("--raw")) {
+        std::map<std::string, couchbase::codec::binary, std::less<>> raw_params{};
+        for (const auto& param : options.at("--raw").asStringList()) {
+            if (std::smatch match; std::regex_match(param, match, named_param_regex)) {
+                raw_params[match[1].str()] = couchbase::core::utils::to_binary(match[2].str());
+            } else {
+                throw docopt::DocoptArgumentError("raw parameters should be in NAME=VALUE form, (i.e. --raw=NAME=VALUE)");
+            }
+        }
+        if (!raw_params.empty()) {
+            query_options.encoded_raw_options(raw_params);
+        }
+    }
+
+    console_output_options output_options{};
+    output_options.json_lines = cbc::get_bool_option(options, "--json-lines");
+
+    auto statements{ options["<statement>"].asStringList() };
+    do_work(connection_string, cluster_options, statements, scope, query_options, output_options);
 }
 } // namespace cbc

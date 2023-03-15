@@ -415,4 +415,16 @@ get_bool_option(const docopt::Options& options, const std::string& name)
 {
     return options.find(name) != options.end() && options.at(name) && options.at(name).asBool();
 }
+
+double
+get_double_option(const docopt::Options& options, const std::string& name)
+{
+    auto value = options.at(name).asString();
+    std::size_t pos;
+    const double ret = std::stod(value, &pos);
+    if (pos != value.length()) {
+        throw std::runtime_error(value + " contains non-numeric characters.");
+    }
+    return ret;
+}
 } // namespace cbc

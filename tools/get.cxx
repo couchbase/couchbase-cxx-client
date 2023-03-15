@@ -175,7 +175,7 @@ print_result(const std::string& bucket_name,
 
 static void
 do_work(const std::string& connection_string,
-        couchbase::cluster_options& cluster_options,
+        const couchbase::cluster_options& cluster_options,
         const std::vector<std::string>& ids,
         const command_options& cmd_options)
 {
@@ -185,6 +185,9 @@ do_work(const std::string& connection_string,
 
     auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, cluster_options).get();
     if (ec) {
+        guard.reset();
+        io_thread.join();
+
         throw std::system_error(ec);
     }
 
@@ -231,37 +234,30 @@ do_work(const std::string& connection_string,
 void
 cbc::get::execute(const std::vector<std::string>& argv)
 {
-    try {
-
-        auto options = cbc::parse_options(usage(), argv);
-        if (options["--help"].asBool()) {
-            fmt::print(stdout, usage());
-            return;
-        }
-
-        cbc::apply_logger_options(options);
-
-        couchbase::cluster_options cluster_options{ cbc::default_cluster_options() };
-        std::string connection_string{ cbc::default_connection_string() };
-        cbc::fill_cluster_options(options, cluster_options, connection_string);
-
-        command_options cmd_options{};
-        cmd_options.bucket_name = options["--bucket-name"].asString();
-        cmd_options.scope_name = options["--scope-name"].asString();
-        cmd_options.collection_name = options["--collection-name"].asString();
-        cmd_options.inlined_keyspace = options["--inlined-keyspace"].asBool();
-        cmd_options.with_expiry = options["--with-expiry"].asBool();
-        cmd_options.hexdump = options["--hexdump"].asBool();
-        cmd_options.pretty_json = options["--pretty-json"].asBool();
-        cmd_options.projections = options["--project"].asStringList();
-        cmd_options.json_lines = options["--json-lines"].asBool();
-        auto ids{ options["<id>"].asStringList() };
-
-        do_work(connection_string, cluster_options, ids, cmd_options);
-    } catch (const docopt::DocoptArgumentError& e) {
-        fmt::print(stderr, "Error: {}\n", e.what());
-    } catch (const std::system_error& e) {
-        fmt::print(stderr, "Error: {}\n", e.what());
+    auto options = cbc::parse_options(usage(), argv);
+    if (options["--help"].asBool()) {
+        fmt::print(stdout, "{}", usage());
+        return;
     }
+
+    cbc::apply_logger_options(options);
+
+    couchbase::cluster_options cluster_options{ cbc::default_cluster_options() };
+    std::string connection_string{ cbc::default_connection_string() };
+    cbc::fill_cluster_options(options, cluster_options, connection_string);
+
+    command_options cmd_options{};
+    cmd_options.bucket_name = options["--bucket-name"].asString();
+    cmd_options.scope_name = options["--scope-name"].asString();
+    cmd_options.collection_name = options["--collection-name"].asString();
+    cmd_options.inlined_keyspace = options["--inlined-keyspace"].asBool();
+    cmd_options.with_expiry = options["--with-expiry"].asBool();
+    cmd_options.hexdump = options["--hexdump"].asBool();
+    cmd_options.pretty_json = options["--pretty-json"].asBool();
+    cmd_options.projections = options["--project"].asStringList();
+    cmd_options.json_lines = options["--json-lines"].asBool();
+    auto ids{ options["<id>"].asStringList() };
+
+    do_work(connection_string, cluster_options, ids, cmd_options);
 }
 } // namespace cbc

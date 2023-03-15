@@ -4,6 +4,7 @@ add_executable(
   utils.cxx
   command_registry.cxx
   get.cxx
+  pillowfight.cxx
   query.cxx
   version.cxx)
 target_include_directories(cbc PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/private)

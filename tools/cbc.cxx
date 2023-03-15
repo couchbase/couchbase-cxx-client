@@ -28,9 +28,10 @@ Usage:
 
 Available commands:
 
-  version  Display version information.
-  get      Retrieve document from the server.
-  query    Perform N1QL query.
+  version      Display version information.
+  get          Retrieve document from the server.
+  query        Perform N1QL query.
+  pillowfight  Run workload generator.
 
 Options:
   -h --help  Show this screen.
@@ -52,7 +53,12 @@ main(int argc, const char** argv)
 
         auto command_name = options["<command>"].asString();
         if (auto command = commands.get(command_name); command) {
-            command->execute(args);
+            try {
+                command->execute(args);
+            } catch (const std::exception& e) {
+                fmt::print(stderr, "Error: {}\n", e.what());
+                return 1;
+            }
             return 0;
         }
         fmt::print(stderr, "Error: unrecognized command 'cbc {}'\n", command_name);

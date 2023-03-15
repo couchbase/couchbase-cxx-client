@@ -15,17 +15,12 @@
  *   limitations under the License.
  */
 
-#pragma once
+#include "command.hxx"
 
-/**
- * @page cli Command Line Tools
- * @brief Indexes of the API grouped by stability.
- *
- * @subpage cbc. CLI tools entry point.
- *
- * @subpage cbc-get. Retrieve documents from the server by ID.
- *
- * @subpage cbc-query. Execute N1QL queries.
- *
- * @subpage cbc-pillowfight. Run simple workload generator.
- */
+namespace cbc
+{
+class pillowfight : public command
+{
+    void execute(const std::vector<std::string>& argv);
+};
+} // namespace cbc

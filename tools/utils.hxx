@@ -74,6 +74,9 @@ struct passthrough_transcoder {
 
 [[nodiscard]] bool
 get_bool_option(const docopt::Options& options, const std::string& name);
+
+[[nodiscard]] double
+get_double_option(const docopt::Options& options, const std::string& name);
 } // namespace cbc
 
 template<>

@@ -944,6 +944,7 @@ INPUT                  = ${DOXYGEN_INPUT_DIR} \
                          ${PROJECT_SOURCE_DIR}/docs/cli.hxx \
                          ${PROJECT_SOURCE_DIR}/docs/cbc.md \
                          ${PROJECT_SOURCE_DIR}/docs/cbc-get.md \
+                         ${PROJECT_SOURCE_DIR}/docs/cbc-pillowfight.md \
                          ${PROJECT_SOURCE_DIR}/docs/cbc-query.md
 
 # This tag can be used to specify the character encoding of the source files
