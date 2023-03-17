@@ -49,29 +49,28 @@ class transaction_context
 
     [[nodiscard]] std::size_t num_attempts() const
     {
+        std::lock_guard<std::mutex> lock(mutex_);
         return attempts_.size();
-    }
-    [[nodiscard]] const std::vector<transaction_attempt>& attempts() const
-    {
-        return attempts_;
-    }
-    [[nodiscard]] std::vector<transaction_attempt>& attempts()
-    {
-        return const_cast<std::vector<transaction_attempt>&>(const_cast<const transaction_context*>(this)->attempts());
     }
     [[nodiscard]] const transaction_attempt& current_attempt() const
     {
+        std::lock_guard<std::mutex> lock(mutex_);
         if (attempts_.empty()) {
             throw std::runtime_error("transaction context has no attempts yet");
         }
         return attempts_.back();
     }
-    [[nodiscard]] transaction_attempt& current_attempt()
-    {
-        return const_cast<transaction_attempt&>(const_cast<const transaction_context*>(this)->current_attempt());
-    }
 
     void add_attempt();
+
+    void current_attempt_state(attempt_state s)
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (attempts_.empty()) {
+            throw std::runtime_error("transaction_context has no attempts yet");
+        }
+        attempts_.back().state = s;
+    }
 
     [[nodiscard]] std::shared_ptr<core::cluster> cluster_ref()
     {
@@ -191,6 +190,7 @@ class transaction_context
     std::string atr_collection_;
     transactions_cleanup& cleanup_;
     std::shared_ptr<attempt_context_impl> current_attempt_context_;
+    mutable std::mutex mutex_;
 
     std::unique_ptr<exp_delay> delay_;
 };
