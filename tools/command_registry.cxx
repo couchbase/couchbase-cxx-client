@@ -18,6 +18,7 @@
 #include "command_registry.hxx"
 
 #include "get.hxx"
+#include "pillowfight.hxx"
 #include "query.hxx"
 #include "version.hxx"
 
@@ -28,6 +29,7 @@ command_registry::command_registry()
       { "version", std::make_shared<cbc::version>() },
       { "get", std::make_shared<cbc::get>() },
       { "query", std::make_shared<cbc::query>() },
+      { "pillowfight", std::make_shared<cbc::pillowfight>() },
   }
 {
 }

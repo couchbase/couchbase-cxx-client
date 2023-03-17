@@ -2851,11 +2851,23 @@ wait_for_search_pindexes_ready(test::utils::integration_test_guard& integration,
               return false;
           }
           auto stats = couchbase::core::utils::json::parse(resp.stats);
-          const auto* num_pindexes_actual = stats.find(fmt::format("{}:{}:num_pindexes_actual", integration.ctx.bucket, index_name));
+
+          const auto num_pindexes_actual_key = fmt::format("{}:{}:num_pindexes_actual", integration.ctx.bucket, index_name);
+          const auto num_pindexes_target_key = fmt::format("{}:{}:num_pindexes_target", integration.ctx.bucket, index_name);
+          const auto* num_pindexes_actual = stats.find(num_pindexes_actual_key);
+          const auto* num_pindexes_target = stats.find(num_pindexes_target_key);
+          CB_LOG_DEBUG(
+            "wait_for_search_pindexes_ready: {}={}, {}={}",
+            num_pindexes_actual_key,
+            (num_pindexes_actual == nullptr || !num_pindexes_actual->is_number()) ? "missing"
+                                                                                  : std::to_string(num_pindexes_actual->get_unsigned()),
+            num_pindexes_target_key,
+            (num_pindexes_target == nullptr || !num_pindexes_target->is_number()) ? "missing"
+                                                                                  : std::to_string(num_pindexes_target->get_unsigned()));
+
           if (num_pindexes_actual == nullptr || !num_pindexes_actual->is_number()) {
               return false;
           }
-          const auto* num_pindexes_target = stats.find(fmt::format("{}:{}:num_pindexes_target", integration.ctx.bucket, index_name));
           if (num_pindexes_target == nullptr || !num_pindexes_target->is_number()) {
               return false;
           }

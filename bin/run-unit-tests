@@ -70,16 +70,15 @@ then
              rm -rf $crash /tmp/the_crash
            fi
         done
-    else
-        for core in /tmp/core.* "${PWD}/core*"
-        do
-            echo $core
-            executable=$(file $core | ruby -e "print ARGF.read[/execfn: '([^']+)'/, 1]")
-            echo $executable
-            gdb $executable $core --batch -ex "thread apply all bt"
-            rm -f $core
-        done
     fi
+    for core in /tmp/core.* "${PWD}/core*"
+    do
+        echo $core
+        executable=$(file $core | ruby -e "print ARGF.read[/execfn: '([^']+)'/, 1]")
+        echo $executable
+        gdb $executable $core --batch -ex "thread apply all bt"
+        rm -f $core
+    done
 fi
 
 exit $STATUS
