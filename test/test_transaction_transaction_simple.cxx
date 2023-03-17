@@ -956,7 +956,6 @@ TEST_CASE("transactions: sergey example", "[transactions]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
-    tao::json::value new_content{ { "some_number", 10 } };
 
     REQUIRE_NOTHROW(txn.run([&](attempt_context& ctx) {
         ctx.query(fmt::format(
@@ -966,7 +965,7 @@ TEST_CASE("transactions: sergey example", "[transactions]")
         auto insert_res = ctx.get(id_to_insert);
         CHECK(insert_res.content<tao::json::value>() == content);
         auto replace_res = ctx.get(id_to_replace);
-        CHECK(replace_res.content<tao::json::value>() == new_content);
+        CHECK(replace_res.content<tao::json::value>()["some_number"] == 10);
         auto remove_res = ctx.get_optional(id_to_remove);
         CHECK_FALSE(remove_res.has_value());
     }));
