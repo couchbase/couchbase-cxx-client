@@ -259,3 +259,218 @@ TEST_CASE("unit: analytics query")
         REQUIRE(http_req.headers.find("analytics-priority") == http_req.headers.end());
     }
 }
+
+TEST_CASE("integration: public API analytics query")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_analytics()) {
+        return;
+    }
+
+    auto cluster = couchbase::cluster(integration.cluster);
+    auto bucket = cluster.bucket(integration.ctx.bucket);
+    auto collection = bucket.default_collection();
+
+    auto dataset_name = test::utils::uniq_id("dataset");
+
+    {
+        couchbase::core::operations::management::analytics_dataset_create_request req{};
+        req.dataset_name = dataset_name;
+        req.bucket_name = integration.ctx.bucket;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
+    }
+
+    {
+        couchbase::core::operations::management::analytics_link_connect_request req{};
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
+    }
+
+    auto key = test::utils::uniq_id("key");
+    auto test_value = test::utils::uniq_id("value");
+    tao::json::value document = {
+        { "testkey", test_value },
+    };
+    {
+        auto [ctx, resp] = collection.upsert(key, document).get();
+        REQUIRE_SUCCESS(ctx.ec());
+    }
+
+    SECTION("simple query")
+    {
+        couchbase::analytics_result resp{};
+        couchbase::analytics_error_context ctx{};
+        CHECK(test::utils::wait_until([&]() {
+            std::tie(ctx, resp) =
+              cluster.analytics_query(fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = "{}")", dataset_name, test_value))
+                .get();
+            return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
+        }));
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE(resp.rows_as_json()[0] == document);
+        REQUIRE_FALSE(resp.meta_data().request_id().empty());
+        REQUIRE_FALSE(resp.meta_data().client_context_id().empty());
+        REQUIRE(resp.meta_data().status() == couchbase::analytics_status::success);
+    }
+
+    SECTION("positional params")
+    {
+        couchbase::analytics_result resp{};
+        couchbase::analytics_error_context ctx{};
+        CHECK(test::utils::wait_until([&]() {
+            std::tie(ctx, resp) = cluster
+                                    .analytics_query(fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = ?)", dataset_name),
+                                                     couchbase::analytics_options{}.positional_parameters(test_value))
+                                    .get();
+            return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
+        }));
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE(resp.rows_as_json()[0] == document);
+    }
+
+    SECTION("named params")
+    {
+        couchbase::analytics_result resp{};
+        couchbase::analytics_error_context ctx{};
+        CHECK(test::utils::wait_until([&]() {
+            std::tie(ctx, resp) =
+              cluster
+                .analytics_query(fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = $testkey)", dataset_name),
+                                 couchbase::analytics_options{}.named_parameters(std::pair{ "testkey", test_value }))
+                .get();
+            return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
+        }));
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE(resp.rows_as_json()[0] == document);
+    }
+
+    SECTION("named params preformatted")
+    {
+        couchbase::analytics_result resp{};
+        couchbase::analytics_error_context ctx{};
+        CHECK(test::utils::wait_until([&]() {
+            std::tie(ctx, resp) =
+              cluster
+                .analytics_query(fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = $testkey)", dataset_name),
+                                 couchbase::analytics_options{}.encoded_named_parameters(
+                                   { { "testkey", couchbase::core::utils::json::generate_binary(test_value) } }))
+                .get();
+            return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
+        }));
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE(resp.rows_as_json()[0] == document);
+    }
+
+    SECTION("raw")
+    {
+        couchbase::analytics_result resp{};
+        couchbase::analytics_error_context ctx{};
+        CHECK(test::utils::wait_until([&]() {
+            std::tie(ctx, resp) =
+              cluster
+                .analytics_query(fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = $testkey)", dataset_name),
+                                 couchbase::analytics_options{}.raw("$testkey", test_value))
+                .get();
+            return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
+        }));
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE(resp.rows_as_json()[0] == document);
+    }
+
+    SECTION("consistency")
+    {
+        auto [ctx, resp] =
+          cluster
+            .analytics_query(fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = "{}")", dataset_name, test_value),
+                             couchbase::analytics_options{}.scan_consistency(couchbase::analytics_scan_consistency::request_plus))
+            .get();
+
+        REQUIRE_SUCCESS(ctx.ec());
+        auto rows = resp.rows_as_json();
+        REQUIRE(rows.size() == 1);
+        REQUIRE(rows[0] == document);
+    }
+
+    SECTION("readonly")
+    {
+        auto [ctx, resp] =
+          cluster.analytics_query(fmt::format("DROP DATASET Default.`{}`", dataset_name), couchbase::analytics_options{}.readonly(true))
+            .get();
+
+        REQUIRE(ctx.ec() == couchbase::errc::common::internal_server_failure);
+        REQUIRE(resp.meta_data().status() == couchbase::analytics_status::fatal);
+    }
+
+    {
+        couchbase::core::operations::management::analytics_dataset_drop_request req{};
+        req.dataset_name = dataset_name;
+        test::utils::execute(integration.cluster, req);
+    }
+}
+
+TEST_CASE("integration: public API analytics scope query")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_analytics() || !integration.cluster_version().supports_collections()) {
+        return;
+    }
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    auto scope_name = test::utils::uniq_id("scope");
+    auto collection_name = test::utils::uniq_id("collection");
+
+    {
+        couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+        REQUIRE(created);
+    }
+
+    {
+        couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+        REQUIRE(created);
+    }
+
+    {
+        couchbase::core::operations::analytics_request req{};
+        req.statement =
+          fmt::format("ALTER COLLECTION `{}`.`{}`.`{}` ENABLE ANALYTICS", integration.ctx.bucket, scope_name, collection_name);
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
+    }
+
+    auto key = test::utils::uniq_id("key");
+    auto test_value = test::utils::uniq_id("value");
+    auto value = couchbase::core::utils::json::generate({ { "testkey", test_value } });
+    {
+        auto id = couchbase::core::document_id(integration.ctx.bucket, scope_name, collection_name, key);
+        couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary(value) };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
+    couchbase::core::operations::analytics_response resp{};
+    REQUIRE(test::utils::wait_until([&]() {
+        couchbase::core::operations::analytics_request req{};
+        req.statement = fmt::format(R"(SELECT testkey FROM `{}` WHERE testkey = "{}")", collection_name, test_value);
+        req.bucket_name = integration.ctx.bucket;
+        req.scope_name = scope_name;
+        resp = test::utils::execute(integration.cluster, req);
+        return resp.rows.size() == 1;
+    }));
+    REQUIRE_SUCCESS(resp.ctx.ec);
+    REQUIRE(resp.rows[0] == value);
+
+    {
+        couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket, scope_name };
+        test::utils::execute(integration.cluster, req);
+    }
+}

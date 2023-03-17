@@ -15,13 +15,13 @@
  *   limitations under the License.
  */
 
-#include "query.hxx"
+#include "analytics.hxx"
 #include "core/utils/binary.hxx"
 #include "utils.hxx"
 
 #include <core/logger/logger.hxx>
 #include <couchbase/cluster.hxx>
-#include <couchbase/fmt/query_status.hxx>
+#include <couchbase/fmt/analytics_status.hxx>
 
 #include <asio/io_context.hpp>
 #include <fmt/chrono.h>
@@ -40,33 +40,25 @@ usage() -> std::string
     static const std::string default_bucket_name{ "default" };
 
     static const std::string usage_string = fmt::format(
-      R"(Perform N1QL query.
+      R"(Perform Analytics query.
 
 Usage:
-  cbc query [options] <statement>...
-  cbc query [options] --param=NAME=VALUE... <statement>...
-  cbc query [options] --raw=NAME=VALUE... <statement>...
-  cbc query (-h|--help)
+  cbc analytics [options] <statement>...
+  cbc analytics [options] --param=NAME=VALUE... <statement>...
+  cbc analytics [options] --raw=NAME=VALUE... <statement>...
+  cbc analytics (-h|--help)
 
 Options:
   -h --help                      Show this screen.
   --param=NAME=VALUE             Parameters for the query. Without '=' sign value will be treated as positional parameter.
-  --prepare                      Prepare statement.
+  --boost-priority               Prioritize this query among the others.
   --read-only                    Mark query as read only. Any mutations will fail.
-  --preserve-expiry              Ensure that expiry will be preserved after mutations.
-  --disable-metrics              Do not request metrics.
-  --profile=MODE                 Request the service to profile the query and return report (allowed values: off, phases, timings).
   --bucket-name=STRING           Name of the bucket where the scope is defined (see --scope-name).
   --scope-name=STRING            Name of the scope.
   --client-context-id=STRING     Override client context ID for the query(-ies).
-  --flex-index                   Tell query service to utilize flex index (full text search).
-  --maximum-parallelism=INTEGER  Parallelism for query execution (0 to disable).
-  --scan-cap=INTEGER             Maximum buffer size between indexer and query service.
   --scan-wait=DURATION           How long query engine will wait for indexer to catch up on scan consistency.
   --scan-consistency=MODE        Set consistency guarantees for the query (allowed values: not_bounded, request_plus).
-  --pipeline-batch=INTEGER       Number of items execution operators can batch for fetch from the Key/Value service.
-  --pipeline-cap=INTEGER         Maximum number of items each execution operator can buffer between various operators.
-  --raw=NAME=VALUE               Set any query option for the query. Read the documentation: https://docs.couchbase.com/server/current/n1ql/n1ql-rest-api.
+  --raw=NAME=VALUE               Set any query option for the query. Read the documentation: https://docs.couchbase.com/server/current/analytics/rest-analytics.html.
   --json-lines                   Use JSON Lines format (https://jsonlines.org) to print results.
 
 {logger_options}{cluster_options}
@@ -75,11 +67,11 @@ Examples:
 
 1. Query with positional parameters:
 
-  cbc query --param 1 --param 2 'SELECT $1 + $2'
+  cbc analytics --param 1 --param 2 'SELECT $1 + $2'
 
 2. Query with named parameters:
 
-  cbc query --param a=1 --param b=2 'SELECT $a + $b'
+  cbc analytics --param a=1 --param b=2 'SELECT $a + $b'
 )",
       fmt::arg("logger_options", usage_block_for_logger()),
       fmt::arg("cluster_options", usage_block_for_cluster_options()));
@@ -98,19 +90,19 @@ struct scope_with_bucket {
 
 template<typename QueryEndpoint>
 auto
-do_query(QueryEndpoint& endpoint, std::string statement, const couchbase::query_options& options)
+do_analytics(QueryEndpoint& endpoint, std::string statement, const couchbase::analytics_options& options)
 {
-    return endpoint.query(std::move(statement), options);
+    return endpoint.analytics_query(std::move(statement), options);
 }
 
 void
 print_result_json_line(const std::optional<scope_with_bucket>& scope_id,
                        const std::string& statement,
-                       const couchbase::query_error_context& ctx,
-                       const couchbase::query_result& resp,
-                       const couchbase::query_options& query_options)
+                       const couchbase::analytics_error_context& ctx,
+                       const couchbase::analytics_result& resp,
+                       const couchbase::analytics_options& analytics_options)
 {
-    auto built_options = query_options.build();
+    auto built_options = analytics_options.build();
 
     tao::json::value line = tao::json::empty_object;
 
@@ -153,39 +145,22 @@ print_result_json_line(const std::optional<scope_with_bucket>& scope_id,
                 meta["signature"] = signature.value();
             }
         }
-        if (const auto& metrics = resp.meta_data().metrics(); metrics.has_value()) {
-            meta["metrics"] = {
-                { "elapsed_time", fmt::format("{}", metrics->elapsed_time()) },
-                { "execution_time", fmt::format("{}", metrics->execution_time()) },
-                { "result_count", metrics->result_count() },
-                { "result_size", metrics->result_size() },
-                { "sort_count", metrics->sort_count() },
-                { "mutation_count", metrics->mutation_count() },
-                { "error_count", metrics->error_count() },
-                { "warning_count", metrics->warning_count() },
-            };
-        }
-        if (const auto& profile = resp.meta_data().profile(); profile) {
-            try {
-                meta["profile"] = couchbase::core::utils::json::parse_binary(profile.value());
-            } catch (const tao::pegtl::parse_error&) {
-                meta["profile"] = profile.value();
-            }
-        }
+        meta["metrics"] = {
+            { "elapsed_time", fmt::format("{}", resp.meta_data().metrics().elapsed_time()) },
+            { "execution_time", fmt::format("{}", resp.meta_data().metrics().execution_time()) },
+            { "result_count", resp.meta_data().metrics().result_count() },
+            { "result_size", resp.meta_data().metrics().result_size() },
+            { "processed_objects", resp.meta_data().metrics().processed_objects() },
+            { "error_count", resp.meta_data().metrics().error_count() },
+            { "warning_count", resp.meta_data().metrics().warning_count() },
+        };
         if (!resp.meta_data().warnings().empty()) {
             tao::json::value warnings = tao::json::empty_array;
             for (const auto& item : resp.meta_data().warnings()) {
-                tao::json::value warning = {
-                    { "message", item.message() },
-                    { "code", item.code() },
-                };
-                if (item.reason()) {
-                    warning["reason"] = item.reason().value();
-                }
-                if (item.retry()) {
-                    warning["retry"] = item.retry().value();
-                }
-                warnings.emplace_back(warning);
+                warnings.emplace_back(tao::json::value{
+                  { "message", item.message() },
+                  { "code", item.code() },
+                });
             }
             meta["warnings"] = warnings;
         }
@@ -207,11 +182,11 @@ print_result_json_line(const std::optional<scope_with_bucket>& scope_id,
 void
 print_result(const std::optional<scope_with_bucket>& scope_id,
              const std::string& statement,
-             const couchbase::query_error_context& ctx,
-             const couchbase::query_result& resp,
-             const couchbase::query_options& query_options)
+             const couchbase::analytics_error_context& ctx,
+             const couchbase::analytics_result& resp,
+             const couchbase::analytics_options& analytics_options)
 {
-    auto built_options = query_options.build();
+    auto built_options = analytics_options.build();
 
     auto header = fmt::memory_buffer();
     if (scope_id) {
@@ -245,42 +220,23 @@ print_result(const std::optional<scope_with_bucket>& scope_id,
             }
         }
     } else {
-        auto meta = fmt::memory_buffer();
-        fmt::format_to(std::back_inserter(meta),
-                       R"(status: {}, client_context_id: "{}", request_id: "{}")",
-                       resp.meta_data().status(),
-                       resp.meta_data().client_context_id(),
-                       resp.meta_data().request_id());
-        if (const auto& metrics = resp.meta_data().metrics(); metrics.has_value()) {
-            fmt::format_to(std::back_inserter(meta),
-                           ", elapsed: {}, execution: {}, result: {}, sort: {}, mutations: {}, errors: {}, warnings: {}",
-                           metrics->elapsed_time(),
-                           metrics->execution_time(),
-                           metrics->result_count(),
-                           metrics->sort_count(),
-                           metrics->mutation_count(),
-                           metrics->error_count(),
-                           metrics->warning_count());
-        }
-        fmt::print(stdout, "{}\n", std::string_view{ meta.data(), meta.size() });
+        fmt::print(stdout,
+                   "status: {}, client_context_id: \"{}\", request_id: \"{}\", elapsed: {} ({}), execution: {} ({}), result: {}, "
+                   "processed_objects: {}, errors: {}, warnings: {}\n",
+                   resp.meta_data().status(),
+                   resp.meta_data().client_context_id(),
+                   resp.meta_data().request_id(),
+                   std::chrono::duration_cast<std::chrono::milliseconds>(resp.meta_data().metrics().elapsed_time()),
+                   resp.meta_data().metrics().elapsed_time(),
+                   std::chrono::duration_cast<std::chrono::milliseconds>(resp.meta_data().metrics().execution_time()),
+                   resp.meta_data().metrics().execution_time(),
+                   resp.meta_data().metrics().result_count(),
+                   resp.meta_data().metrics().processed_objects(),
+                   resp.meta_data().metrics().error_count(),
+                   resp.meta_data().metrics().warning_count());
         if (!resp.meta_data().warnings().empty()) {
             for (const auto& item : resp.meta_data().warnings()) {
-                auto warning = fmt::memory_buffer();
-                fmt::format_to(std::back_inserter(warning), "WARNING. code: {}, message: \"{}\"", item.code(), item.message());
-                if (item.reason()) {
-                    fmt::format_to(std::back_inserter(warning), ", reason: {}", item.reason().value());
-                }
-                if (item.retry()) {
-                    fmt::format_to(std::back_inserter(warning), ", retry: {}", item.retry().value());
-                }
-                fmt::print(stdout, "{}\n", std::string_view{ warning.data(), warning.size() });
-            }
-        }
-        if (const auto& profile = resp.meta_data().profile(); profile) {
-            try {
-                fmt::print("{}\n", tao::json::to_string(couchbase::core::utils::json::parse_binary(profile.value()), 2));
-            } catch (const tao::pegtl::parse_error&) {
-                fmt::print("{:a}\n", spdlog::to_hex(profile.value()));
+                fmt::print(stdout, "WARNING. code: {}, message: \"{}\"\n", item.code(), item.message());
             }
         }
         for (const auto& row : resp.rows_as_binary()) {
@@ -299,7 +255,7 @@ do_work(const std::string& connection_string,
         const couchbase::cluster_options& cluster_options,
         const std::vector<std::string>& statements,
         const std::optional<scope_with_bucket>& scope_id,
-        const couchbase::query_options& query_options,
+        const couchbase::analytics_options& analytics_options,
         const console_output_options& output_options)
 {
     asio::io_context io;
@@ -320,12 +276,13 @@ do_work(const std::string& connection_string,
     }
 
     for (const auto& statement : statements) {
-        auto [ctx, resp] = (scope ? do_query(scope.value(), statement, query_options) : do_query(cluster, statement, query_options)).get();
+        auto [ctx, resp] =
+          (scope ? do_analytics(scope.value(), statement, analytics_options) : do_analytics(cluster, statement, analytics_options)).get();
 
         if (output_options.json_lines) {
-            print_result_json_line(scope_id, statement, ctx, resp, query_options);
+            print_result_json_line(scope_id, statement, ctx, resp, analytics_options);
         } else {
-            print_result(scope_id, statement, ctx, resp, query_options);
+            print_result(scope_id, statement, ctx, resp, analytics_options);
         }
     }
 
@@ -337,7 +294,7 @@ do_work(const std::string& connection_string,
 } // namespace
 
 void
-cbc::query::execute(const std::vector<std::string>& argv)
+cbc::analytics::execute(const std::vector<std::string>& argv)
 {
     auto options = cbc::parse_options(usage(), argv);
     if (options["--help"].asBool()) {
@@ -351,38 +308,19 @@ cbc::query::execute(const std::vector<std::string>& argv)
     std::string connection_string{ cbc::default_connection_string() };
     cbc::fill_cluster_options(options, cluster_options, connection_string);
 
-    couchbase::query_options query_options{};
-    parse_disable_option(query_options.adhoc, "--prepare");
-    parse_enable_option(query_options.readonly, "--read-only");
-    parse_enable_option(query_options.preserve_expiry, "--preserve-expiry");
-    parse_disable_option(query_options.metrics, "--disable-metrics");
-    parse_enable_option(query_options.flex_index, "--flex-index");
-    parse_integer_option(query_options.max_parallelism, "--maximum-parallelism");
-    parse_integer_option(query_options.scan_cap, "--scan-cap");
-    parse_integer_option(query_options.pipeline_batch, "--pipeline-batch");
-    parse_integer_option(query_options.pipeline_cap, "--pipeline-cap");
-    parse_duration_option(query_options.scan_wait, "--scan-wait");
-    parse_string_option(query_options.client_context_id, "--client-context-id");
+    couchbase::analytics_options analytics_options{};
+    parse_enable_option(analytics_options.priority, "--boost-priority");
+    parse_enable_option(analytics_options.readonly, "--read-only");
+    parse_duration_option(analytics_options.scan_wait, "--scan-wait");
+    parse_string_option(analytics_options.client_context_id, "--client-context-id");
 
     if (options.find("--scan-consistency") != options.end() && options.at("--scan-consistency")) {
         if (auto value = options.at("--scan-consistency").asString(); value == "not_bounded") {
-            query_options.scan_consistency(couchbase::query_scan_consistency::not_bounded);
+            analytics_options.scan_consistency(couchbase::analytics_scan_consistency::not_bounded);
         } else if (value == "request_plus") {
-            query_options.scan_consistency(couchbase::query_scan_consistency::request_plus);
+            analytics_options.scan_consistency(couchbase::analytics_scan_consistency::request_plus);
         } else {
             throw docopt::DocoptArgumentError(fmt::format("unexpected value '{}' for --scan-consistency", value));
-        }
-    }
-
-    if (options.find("--profile") != options.end() && options.at("--profile")) {
-        if (auto value = options.at("--profile").asString(); value == "off") {
-            query_options.profile(couchbase::query_profile::off);
-        } else if (value == "phases") {
-            query_options.profile(couchbase::query_profile::phases);
-        } else if (value == "timings") {
-            query_options.profile(couchbase::query_profile::phases);
-        } else {
-            throw docopt::DocoptArgumentError(fmt::format("unexpected value '{}' for --profile", value));
         }
     }
 
@@ -409,9 +347,9 @@ cbc::query::execute(const std::vector<std::string>& argv)
                                               "either as --param=VALUE or --param=NAME=VALUE)");
         }
         if (!positional_params.empty()) {
-            query_options.encoded_positional_parameters(std::move(positional_params));
+            analytics_options.encoded_positional_parameters(std::move(positional_params));
         } else if (!named_params.empty()) {
-            query_options.encoded_named_parameters(std::move(named_params));
+            analytics_options.encoded_named_parameters(std::move(named_params));
         }
     }
     if (options.find("--raw") != options.end() && options.at("--raw")) {
@@ -424,7 +362,7 @@ cbc::query::execute(const std::vector<std::string>& argv)
             }
         }
         if (!raw_params.empty()) {
-            query_options.encoded_raw_options(raw_params);
+            analytics_options.encoded_raw_options(raw_params);
         }
     }
 
@@ -432,6 +370,6 @@ cbc::query::execute(const std::vector<std::string>& argv)
     output_options.json_lines = cbc::get_bool_option(options, "--json-lines");
 
     auto statements{ options["<statement>"].asStringList() };
-    do_work(connection_string, cluster_options, statements, scope, query_options, output_options);
+    do_work(connection_string, cluster_options, statements, scope, analytics_options, output_options);
 }
 } // namespace cbc

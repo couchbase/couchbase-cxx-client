@@ -152,10 +152,10 @@ build_result(operations::query_response& resp)
 }
 
 static core::operations::query_request
-build_query_request(query_options::built options)
+build_query_request(std::string statement, query_options::built options)
 {
     operations::query_request request{
-        "",
+        std::move(statement),
         options.adhoc,
         options.metrics,
         options.readonly,
@@ -222,8 +222,9 @@ build_transaction_query_result(operations::query_response resp, std::error_code 
 core::operations::query_request
 build_transaction_query_request(query_options::built opts)
 {
-    return build_query_request(opts);
+    return build_query_request("", opts);
 }
+
 void
 initiate_query_operation(std::shared_ptr<couchbase::core::cluster> core,
                          std::string statement,
@@ -231,8 +232,7 @@ initiate_query_operation(std::shared_ptr<couchbase::core::cluster> core,
                          query_options::built options,
                          query_handler&& handler)
 {
-    auto request = build_query_request(options);
-    request.statement = std::move(statement);
+    auto request = build_query_request(std::move(statement), options);
     if (query_context) {
         request.query_context = std::move(query_context);
     }

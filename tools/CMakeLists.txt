@@ -3,6 +3,7 @@ add_executable(
   cbc.cxx
   utils.cxx
   command_registry.cxx
+  analytics.cxx
   get.cxx
   pillowfight.cxx
   query.cxx

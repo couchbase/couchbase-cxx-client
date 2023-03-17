@@ -21,6 +21,6 @@ namespace cbc
 {
 class pillowfight : public command
 {
-    void execute(const std::vector<std::string>& argv);
+    void execute(const std::vector<std::string>& argv) override;
 };
 } // namespace cbc

@@ -17,13 +17,12 @@
 
 #pragma once
 
+#include <couchbase/analytics_error_context.hxx>
+#include <couchbase/analytics_result.hxx>
+#include <couchbase/analytics_scan_consistency.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/common_options.hxx>
 #include <couchbase/mutation_state.hxx>
-#include <couchbase/query_error_context.hxx>
-#include <couchbase/query_profile.hxx>
-#include <couchbase/query_result.hxx>
-#include <couchbase/query_scan_consistency.hxx>
 
 #include <chrono>
 #include <functional>
@@ -33,33 +32,25 @@
 namespace couchbase
 {
 /**
- * Options for cluster#query() and scope#query().
+ * Options for cluster#analytics_query() and scope#analytics_query().
  *
  * @since 1.0.0
  * @committed
  */
-struct query_options : public common_options<query_options> {
+struct analytics_options : public common_options<analytics_options> {
     /**
      * Immutable value object representing consistent options.
      *
      * @since 1.0.0
      * @internal
      */
-    struct built : public common_options<query_options>::built {
-        const bool adhoc;
-        const bool metrics;
-        const bool readonly;
-        const bool flex_index;
-        const bool preserve_expiry;
-        std::optional<std::uint64_t> max_parallelism;
-        std::optional<std::uint64_t> scan_cap;
-        std::optional<std::chrono::milliseconds> scan_wait;
-        std::optional<std::uint64_t> pipeline_batch;
-        std::optional<std::uint64_t> pipeline_cap;
+    struct built : public common_options<analytics_options>::built {
         std::optional<std::string> client_context_id;
-        std::optional<query_scan_consistency> scan_consistency;
+        const bool priority;
+        const bool readonly;
+        std::optional<analytics_scan_consistency> scan_consistency;
+        std::optional<std::chrono::milliseconds> scan_wait;
         std::vector<mutation_token> mutation_state;
-        const query_profile profile;
         std::vector<codec::binary> positional_parameters;
         std::map<std::string, codec::binary, std::less<>> named_parameters;
         std::map<std::string, codec::binary, std::less<>> raw;
@@ -78,88 +69,23 @@ struct query_options : public common_options<query_options> {
     [[nodiscard]] auto build() const -> built
     {
         return {
-            build_common_options(),
-            adhoc_,
-            metrics_,
-            readonly_,
-            flex_index_,
-            preserve_expiry_,
-            max_parallelism_,
-            scan_cap_,
-            scan_wait_,
-            pipeline_batch_,
-            pipeline_cap_,
-            client_context_id_,
-            scan_consistency_,
-            mutation_state_,
-            profile_,
-            positional_parameters_,
-            named_parameters_,
-            raw_,
+            build_common_options(), client_context_id_,     priority_,         readonly_, scan_consistency_, scan_wait_,
+            mutation_state_,        positional_parameters_, named_parameters_, raw_,
         };
     }
 
     /**
-     * Allows turning this request into a prepared statement query.
+     * Allows to give certain requests higher priority than others.
      *
-     * If set to `false`, the SDK will transparently perform "prepare and execute" logic the first time this
-     * query is seen and then subsequently reuse the prepared statement name when sending it to the server. If a query
-     * is executed frequently, this is a good way to speed it up since it will save the server the task of re-parsing
-     * and analyzing the query.
-     *
-     * If you are using prepared statements, make sure that if certain parts of the query string change you are using
-     * #named_parameters() or #positional_parameters(). If the statement string itself changes it cannot be cached.
-     *
-     * @param adhoc if set to false this query will be turned into a prepared statement query.
+     * @param prioritized if set to true this query will be treated with a higher priority by the service.
      * @return this options builder for chaining purposes.
      *
      * @since 1.0.0
      * @committed
      */
-    auto adhoc(bool adhoc) -> query_options&
+    auto priority(bool prioritized) -> analytics_options&
     {
-        adhoc_ = adhoc;
-        return self();
-    }
-
-    /**
-     * Enables per-request metrics in the trailing section of the query.
-     *
-     * If this method is set to true, the server will send metrics back to the client which are available through the
-     * {@link query_meta_data#metrics()} section. As opposed to {@link #profile(query_profile)}, returning metrics is rather
-     * cheap and can also be enabled in production if needed.
-     *
-     * @param metrics set to true if the server should return simple query metrics.
-     * @return this options builder for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto metrics(bool metrics) -> query_options&
-    {
-        metrics_ = metrics;
-        return self();
-    }
-
-    /**
-     * Customizes the server profiling level for this query.
-     *
-     * @note that you only want to tune this if you want to gather profiling/performance metrics for debugging. Turning
-     * this on in production (depending on the level) will likely have performance impact on the server query engine
-     * as a whole and on this query in particular!
-     *
-     * This is an Enterprise Edition feature. On Community Edition the parameter will be accepted, but no profiling
-     * information returned.
-     *
-     * @param profile the custom query profile level for this query.
-     * @return this options builder for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto profile(query_profile profile) -> query_options&
-    {
-        profile_ = profile;
+        priority_ = prioritized;
         return self();
     }
 
@@ -170,92 +96,15 @@ struct query_options : public common_options<query_options> {
      * client to more proactively retry and re-dispatch a query since then it can be sure it is idempotent. As a result, if your query is
      * readonly then it is a good idea to set this flag.
      *
-     * If set to true, then (at least) the following statements are not allowed:
-     * <ol>
-     *  <li>CREATE INDEX</li>
-     *  <li>DROP INDEX</li>
-     *  <li>INSERT</li>
-     *  <li>MERGE</li>
-     *  <li>UPDATE</li>
-     *  <li>UPSERT</li>
-     *  <li>DELETE</li>
-     * </ol>
-     *
      * @param readonly true if readonly should be set, false is the default and will use the server side default.
      * @return this options builder for chaining purposes.
      *
      * @since 1.0.0
      * @committed
      */
-    auto readonly(bool readonly) -> query_options&
+    auto readonly(bool readonly) -> analytics_options&
     {
         readonly_ = readonly;
-        return self();
-    }
-
-    /**
-     * Tells the query engine to use a flex index (utilizing the search service).
-     *
-     * @param flex_index if a flex index should be used, false is the default.
-     * @return this options builder for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto flex_index(bool flex_index) -> query_options&
-    {
-        flex_index_ = flex_index;
-        return self();
-    }
-
-    /**
-     * Tells the query engine to preserve expiration values set on any documents modified by this query.
-     *
-     * This feature works from Couchbase Server 7.1.0 onwards.
-     *
-     * @param preserve_expiry whether expiration values should be preserved, the default is false.
-     * @return this options builder for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto preserve_expiry(bool preserve_expiry) -> query_options&
-    {
-        preserve_expiry_ = preserve_expiry;
-        return self();
-    }
-
-    /**
-     * Allows overriding the default maximum parallelism for the query execution on the server side.
-     *
-     * If 0 value is set, the parallelism is disabled. If not provided, the server default will be used.
-     *
-     * @param max_parallelism the maximum parallelism for this query, 0 value disable it.
-     * @return this options builder for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto max_parallelism(std::uint64_t max_parallelism) -> query_options&
-    {
-        max_parallelism_ = max_parallelism;
-        return self();
-    }
-
-    /**
-     * Supports customizing the maximum buffered channel size between the indexer and the query service.
-     *
-     * This is an advanced API and should only be tuned with care. Use 0 to disable.
-     *
-     * @param scan_cap the scan cap size, use 0 value to disable.
-     * @return this options builder for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto scan_cap(std::uint64_t scan_cap) -> query_options&
-    {
-        scan_cap_ = scan_cap;
         return self();
     }
 
@@ -263,8 +112,8 @@ struct query_options : public common_options<query_options> {
      * Allows customizing how long the query engine is willing to wait until the index catches up to whatever scan
      * consistency is asked for in this query.
      *
-     * @note that if {@link query_scan_consistency::not_bounded} is used, this method doesn't do anything at all. If no value is provided to
-     * this method, the server default is used.
+     * @note that if {@link analytics_scan_consistency::not_bounded} is used, this method doesn't do anything at all. If no value is
+     * provided to this method, the server default is used.
      *
      * @param wait the maximum duration the query engine is willing to wait before failing.
      * @return this options builder for chaining purposes.
@@ -272,48 +121,13 @@ struct query_options : public common_options<query_options> {
      * @since 1.0.0
      * @committed
      */
-    auto scan_wait(std::chrono::milliseconds wait) -> query_options&
+    auto scan_wait(std::chrono::milliseconds wait) -> analytics_options&
     {
-        if (scan_consistency_ == query_scan_consistency::not_bounded) {
+        if (scan_consistency_ == analytics_scan_consistency::not_bounded) {
             scan_wait_.reset();
         } else {
             scan_wait_ = wait;
         }
-        return self();
-    }
-
-    /**
-     * Supports customizing the number of items execution operators can batch for fetch from the KV layer on the server.
-     *
-     * This is an advanced API and should only be tuned with care.
-     *
-     * @param pipeline_batch the pipeline batch size.
-     * @return this options builder for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto pipeline_batch(std::uint64_t pipeline_batch) -> query_options&
-    {
-        pipeline_batch_ = pipeline_batch;
-        return self();
-    }
-
-    /**
-     *
-     * Allows customizing the maximum number of items each execution operator can buffer between various operators on the server.
-     *
-     * This is an advanced API and should only be tuned with care.
-     *
-     * @param pipeline_cap the pipeline cap size.
-     * @return this options builder for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto pipeline_cap(std::uint64_t pipeline_cap) -> query_options&
-    {
-        pipeline_cap_ = pipeline_cap;
         return self();
     }
 
@@ -329,7 +143,7 @@ struct query_options : public common_options<query_options> {
      * @since 1.0.0
      * @committed
      */
-    auto client_context_id(std::string client_context_id) -> query_options&
+    auto client_context_id(std::string client_context_id) -> analytics_options&
     {
         if (client_context_id.empty()) {
             client_context_id_.reset();
@@ -343,14 +157,14 @@ struct query_options : public common_options<query_options> {
      * Customizes the consistency guarantees for this query.
      *
      * Tuning the scan consistency allows to trade data "freshness" for latency and vice versa. By default
-     * {@link query_scan_consistency::not_bounded} is used, which means that the server returns the data it has in the index right away.
+     * {@link analytics_scan_consistency::not_bounded} is used, which means that the server returns the data it has in the index right away.
      * This is fast, but might not include the most recent mutations. If you want to include all the mutations up to the point of the query,
-     * use {@link query_scan_consistency::request_plus}.
+     * use {@link analytics_scan_consistency::request_plus}.
      *
      * Note that you cannot use this method and {@link #consistent_with(const mutation_state&)} at the same time, since they are mutually
      * exclusive. As a rule of thumb, if you only care to be consistent with the mutation you just wrote on the same thread/app, use
      * {@link #consistent_with(const mutation_state&)}. If you need "global" scan consistency, use
-     * {@link query_scan_consistency::request_plus} on this method.
+     * {@link analytics_scan_consistency::request_plus} on this method.
      *
      * @param scan_consistency the index scan consistency to be used for this query
      * @return this options builder for chaining purposes.
@@ -358,7 +172,7 @@ struct query_options : public common_options<query_options> {
      * @since 1.0.0
      * @committed
      */
-    auto scan_consistency(query_scan_consistency scan_consistency) -> query_options&
+    auto scan_consistency(analytics_scan_consistency scan_consistency) -> analytics_options&
     {
         scan_consistency_ = scan_consistency;
         mutation_state_.clear();
@@ -371,10 +185,10 @@ struct query_options : public common_options<query_options> {
      * These mutation tokens are returned from mutations (i.e. as part of a {@link mutation_result}) and if you want your
      * N1QL query to include those you need to pass the mutation tokens into a {@link mutation_state}.
      *
-     * Note that you cannot use this method and {@link #scan_consistency(query_scan_consistency)} at the same time, since
+     * Note that you cannot use this method and {@link #scan_consistency(analytics_scan_consistency)} at the same time, since
      * they are mutually exclusive. As a rule of thumb, if you only care to be consistent with the mutation you just wrote
      * on the same thread/app, use this method. If you need "global" scan consistency, use
-     * {@link query_scan_consistency#request_plus} on {@link #scan_consistency(query_scan_consistency)}.
+     * {@link analytics_scan_consistency#request_plus} on {@link #scan_consistency(analytics_scan_consistency)}.
      *
      * @param state the mutation state containing the mutation tokens.
      * @return this options builder for chaining purposes.
@@ -382,7 +196,7 @@ struct query_options : public common_options<query_options> {
      * @since 1.0.0
      * @committed
      */
-    auto consistent_with(const mutation_state& state) -> query_options&
+    auto consistent_with(const mutation_state& state) -> analytics_options&
     {
         mutation_state_ = state.tokens();
         scan_consistency_.reset();
@@ -400,7 +214,7 @@ struct query_options : public common_options<query_options> {
      * @committed
      */
     template<typename Value>
-    auto raw(std::string name, const Value& value) -> query_options&
+    auto raw(std::string name, const Value& value) -> analytics_options&
     {
         raw_[std::move(name)] = std::move(codec::tao_json_serializer::serialize(value));
         return self();
@@ -417,7 +231,7 @@ struct query_options : public common_options<query_options> {
      * @committed
      */
     template<typename... Parameters>
-    auto positional_parameters(const Parameters&... parameters) -> query_options&
+    auto positional_parameters(const Parameters&... parameters) -> analytics_options&
     {
         named_parameters_.clear();
         positional_parameters_.clear();
@@ -436,7 +250,7 @@ struct query_options : public common_options<query_options> {
      * @committed
      */
     template<typename... Parameters>
-    auto named_parameters(const Parameters&... parameters) -> query_options&
+    auto named_parameters(const Parameters&... parameters) -> analytics_options&
     {
         named_parameters_.clear();
         positional_parameters_.clear();
@@ -458,7 +272,7 @@ struct query_options : public common_options<query_options> {
      * @since 1.0.0
      * @uncommitted
      */
-    auto encoded_raw_options(std::map<std::string, codec::binary, std::less<>> options) -> query_options&
+    auto encoded_raw_options(std::map<std::string, codec::binary, std::less<>> options) -> analytics_options&
     {
         raw_ = std::move(options);
         return self();
@@ -477,7 +291,7 @@ struct query_options : public common_options<query_options> {
      * @since 1.0.0
      * @uncommitted
      */
-    auto encoded_positional_parameters(std::vector<codec::binary> parameters) -> query_options&
+    auto encoded_positional_parameters(std::vector<codec::binary> parameters) -> analytics_options&
     {
         named_parameters_.clear();
         positional_parameters_ = std::move(parameters);
@@ -498,7 +312,7 @@ struct query_options : public common_options<query_options> {
      * @since 1.0.0
      * @uncommitted
      */
-    auto encoded_named_parameters(std::map<std::string, codec::binary, std::less<>> parameters) -> query_options&
+    auto encoded_named_parameters(std::map<std::string, codec::binary, std::less<>> parameters) -> analytics_options&
     {
         named_parameters_ = std::move(parameters);
         positional_parameters_.clear();
@@ -524,51 +338,22 @@ struct query_options : public common_options<query_options> {
         }
     }
 
-    bool adhoc_{ true };
-    bool metrics_{ false };
+    bool priority_{ true };
     bool readonly_{ false };
-    bool flex_index_{ false };
-    bool preserve_expiry_{ false };
-    std::optional<std::uint64_t> max_parallelism_{};
-    std::optional<std::uint64_t> scan_cap_{};
-    std::optional<std::uint64_t> pipeline_batch_{};
-    std::optional<std::uint64_t> pipeline_cap_{};
     std::optional<std::string> client_context_id_{};
     std::optional<std::chrono::milliseconds> scan_wait_{};
-    std::optional<query_scan_consistency> scan_consistency_{};
+    std::optional<analytics_scan_consistency> scan_consistency_{};
     std::vector<mutation_token> mutation_state_{};
-    query_profile profile_{ query_profile::off };
     std::vector<codec::binary> positional_parameters_{};
     std::map<std::string, codec::binary, std::less<>> raw_{};
     std::map<std::string, codec::binary, std::less<>> named_parameters_{};
 };
 
 /**
- * The signature for the handler of the @ref cluster#query() and @ref scope#query() operations
+ * The signature for the handler of the @ref cluster#analytics_query() and @ref scope#analytics_query() operations
  *
  * @since 1.0.0
  * @uncommitted
  */
-using query_handler = std::function<void(couchbase::query_error_context, query_result)>;
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core
-{
-class cluster;
-namespace impl
-{
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_query_operation(std::shared_ptr<couchbase::core::cluster> core,
-                         std::string statement,
-                         std::optional<std::string> query_context,
-                         query_options::built options,
-                         query_handler&& handler);
-#endif
-} // namespace impl
-} // namespace core
+using analytics_handler = std::function<void(couchbase::analytics_error_context, analytics_result)>;
 } // namespace couchbase
