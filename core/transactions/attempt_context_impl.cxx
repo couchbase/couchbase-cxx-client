@@ -1147,6 +1147,9 @@ attempt_context_impl::get_with_query(const core::document_id& id, bool optional,
                                   // make a transaction_get_result from the row...
                                   try {
                                       if (resp.rows.empty()) {
+                                          if (optional) {
+                                              return op_completed_with_callback(std::move(cb), std::optional<transaction_get_result>());
+                                          }
                                           return op_completed_with_error(
                                             std::move(cb), transaction_operation_failed(FAIL_DOC_NOT_FOUND, "document not found"));
                                       }
