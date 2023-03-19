@@ -897,3 +897,76 @@ TEST_CASE("transactions: atr and client_record are binary documents", "[transact
         REQUIRE(resp.value == binary_null);
     }
 }
+TEST_CASE("transactions: get non-existent doc fails txn", "[transactions]")
+{
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+    transactions txn(cluster, get_conf());
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    REQUIRE_THROWS_AS(txn.run([id](attempt_context& ctx) { ctx.get(id); }), transaction_exception);
+}
+
+TEST_CASE("transactions: get_optional on non-existent doc doesn't fail txn", "[transactions]")
+{
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+    transactions txn(cluster, get_conf());
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    REQUIRE_NOTHROW(txn.run([id](attempt_context& ctx) { ctx.get_optional(id); }));
+}
+TEST_CASE("transactions: get after query behaves same as before a query", "[transactions]")
+{
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+    transactions txn(cluster, get_conf());
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    REQUIRE_THROWS_AS(txn.run([id](attempt_context& ctx) {
+        ctx.query("select * from `default` limit 1");
+        ctx.get(id);
+    }),
+                      transaction_exception);
+}
+
+TEST_CASE("transactions: get_optional after query behaves same as before a query", "[transactions]")
+{
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+    transactions txn(cluster, get_conf());
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    REQUIRE_NOTHROW(txn.run([id](attempt_context& ctx) {
+        ctx.query("select * from `default` limit 1");
+        ctx.get_optional(id);
+    }));
+}
+TEST_CASE("transactions: sergey example", "[transactions]")
+{
+    test::utils::integration_test_guard integration;
+    auto cluster = integration.cluster;
+    transactions txn(cluster, get_conf());
+    couchbase::core::document_id id_to_remove{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    couchbase::core::document_id id_to_replace{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    couchbase::core::document_id id_to_insert{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
+    {
+        couchbase::core::operations::upsert_request req{ id_to_remove, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+    {
+        couchbase::core::operations::upsert_request req{ id_to_replace, content_json };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
+    REQUIRE_NOTHROW(txn.run([&](attempt_context& ctx) {
+        ctx.query(fmt::format(
+          "INSERT INTO `default` (KEY, VALUE) VALUES ('{}', {})", id_to_insert.key(), couchbase::core::utils::json::generate(content)));
+        ctx.query(fmt::format("UPDATE `default` USE KEYS '{}' SET `some_number` = 10 ", id_to_replace.key()));
+        ctx.query(fmt::format("DELETE FROM `default` WHERE META().id = '{}'", id_to_remove.key()));
+        auto insert_res = ctx.get(id_to_insert);
+        CHECK(insert_res.content<tao::json::value>() == content);
+        auto replace_res = ctx.get(id_to_replace);
+        CHECK(replace_res.content<tao::json::value>()["some_number"] == 10);
+        auto remove_res = ctx.get_optional(id_to_remove);
+        CHECK_FALSE(remove_res.has_value());
+    }));
+}
