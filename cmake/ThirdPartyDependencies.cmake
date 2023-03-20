@@ -18,6 +18,10 @@ set(PEGTL_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(PEGTL_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(${PROJECT_SOURCE_DIR}/third_party/snappy)
 set_target_properties(snappy PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(NOT MSVC)
+  # https://github.com/google/snappy/pull/156
+  target_compile_options(snappy PRIVATE -Wno-sign-compare)
+endif()
 
 set(HDR_LOG_REQUIRED OFF CACHE BOOL "" FORCE)
 set(HDR_HISTOGRAM_BUILD_SHARED OFF CACHE BOOL "" FORCE)
