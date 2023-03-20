@@ -53,7 +53,6 @@ struct cluster_options {
     std::chrono::milliseconds analytics_timeout = timeout_defaults::analytics_timeout;
     std::chrono::milliseconds search_timeout = timeout_defaults::search_timeout;
     std::chrono::milliseconds management_timeout = timeout_defaults::management_timeout;
-    std::chrono::milliseconds dns_srv_timeout = timeout_defaults::dns_srv_timeout;
 
     bool enable_tls{ false };
     std::string trust_certificate{};

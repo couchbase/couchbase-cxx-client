@@ -23,3 +23,25 @@ couchbase::core::known_profiles()
     static couchbase::core::config_profiles profiles{};
     return profiles;
 }
+
+void
+couchbase::core::development_profile::apply(couchbase::core::cluster_options& opts)
+{
+    opts.key_value_timeout = std::chrono::seconds(20);
+    opts.key_value_durable_timeout = std::chrono::seconds(20);
+    opts.connect_timeout = std::chrono::seconds(20);
+    opts.view_timeout = std::chrono::minutes(2);
+    opts.query_timeout = std::chrono::minutes(2);
+    opts.analytics_timeout = std::chrono::minutes(2);
+    opts.search_timeout = std::chrono::minutes(2);
+    opts.management_timeout = std::chrono::minutes(2);
+
+    // C++SDK specific
+    opts.dns_config = couchbase::core::io::dns::dns_config{
+        opts.dns_config.nameserver(),
+        opts.dns_config.port(),
+        std::chrono::seconds(20), // timeout to make DNS-SRV query
+    };
+    opts.resolve_timeout = std::chrono::seconds(20);  // timeout to resolve hostnames
+    opts.bootstrap_timeout = std::chrono::minutes(2); // overall timeout to bootstrap
+}
