@@ -456,7 +456,7 @@ class attempt_context_impl
 
     void state(attempt_state s)
     {
-        overall_.current_attempt().state = s;
+        overall_.current_attempt_state(s);
     }
 
     [[nodiscard]] const std::string atr_id()

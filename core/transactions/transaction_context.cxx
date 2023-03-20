@@ -45,6 +45,7 @@ void
 transaction_context::add_attempt()
 {
     transaction_attempt attempt{};
+    std::lock_guard<std::mutex> lock(mutex_);
     attempts_.push_back(attempt);
 }
 
