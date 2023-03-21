@@ -95,7 +95,6 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
     if (opts.dns.nameserver) {
         user_options.dns_config =
           io::dns::dns_config(opts.dns.nameserver.value(), opts.dns.port.value_or(io::dns::dns_config::default_port), opts.dns.timeout);
-        user_options.dns_srv_timeout = opts.dns.timeout;
     }
     user_options.enable_clustermap_notification = opts.behavior.enable_clustermap_notification;
     user_options.show_queries = opts.behavior.show_queries;

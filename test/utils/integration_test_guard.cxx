@@ -53,6 +53,22 @@ spawn_io_threads(asio::io_context& io, std::size_t number_of_threads) -> std::ve
     return threads;
 }
 
+static auto
+build_origin(const test_context& ctx,
+             const couchbase::core::cluster_credentials& auth,
+             const couchbase::core::utils::connection_string& connstr) -> couchbase::core::origin
+{
+    couchbase::core::origin origin(auth, connstr);
+    origin.options().dns_config = couchbase::core::io::dns::dns_config{
+        ctx.dns_nameserver.value_or(couchbase::core::io::dns::dns_config::default_nameserver),
+        ctx.dns_port.value_or(couchbase::core::io::dns::dns_config::default_port),
+    };
+    if (ctx.deployment == deployment_type::capella) {
+        origin.options().apply_profile("wan_development");
+    }
+    return origin;
+}
+
 integration_test_guard::integration_test_guard()
   : ctx(test_context::load_from_environment())
   , io(static_cast<int>(ctx.number_of_io_threads))
@@ -69,13 +85,7 @@ integration_test_guard::integration_test_guard()
         auth.password = ctx.password;
     }
     io_threads = spawn_io_threads(io, ctx.number_of_io_threads);
-    origin = couchbase::core::origin(auth, connstr);
-    if (ctx.dns_nameserver || ctx.dns_port) {
-        origin.options().dns_config = couchbase::core::io::dns::dns_config{
-            ctx.dns_nameserver.value_or(couchbase::core::io::dns::dns_config::default_nameserver),
-            ctx.dns_port.value_or(couchbase::core::io::dns::dns_config::default_port),
-        };
-    }
+    origin = build_origin(ctx, auth, connstr);
     open_cluster(cluster, origin);
 }
 
@@ -91,9 +101,9 @@ integration_test_guard::integration_test_guard(const couchbase::core::cluster_op
     connstr.options.meter = opts.meter;
     connstr.options.tracer = opts.tracer;
     connstr.options.enable_mutation_tokens = opts.enable_mutation_tokens;
-    couchbase::core::origin orig(auth, connstr);
+    origin = build_origin(ctx, auth, connstr);
     io_threads = spawn_io_threads(io, ctx.number_of_io_threads);
-    open_cluster(cluster, orig);
+    open_cluster(cluster, origin);
 }
 
 integration_test_guard::~integration_test_guard()

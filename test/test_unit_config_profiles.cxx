@@ -52,14 +52,17 @@ TEST_CASE("unit: can apply wan_development profile", "[unit]")
     // for details and latest info on expectations.
     couchbase::core::cluster_options opts{};
     opts.apply_profile("wan_development");
-    CHECK(opts.key_value_timeout.count() == 20000);
-    CHECK(opts.key_value_durable_timeout.count() == 20000);
-    CHECK(opts.connect_timeout.count() == 20000);
-    CHECK(opts.view_timeout.count() == 120000);
-    CHECK(opts.query_timeout.count() == 120000);
-    CHECK(opts.analytics_timeout.count() == 120000);
-    CHECK(opts.search_timeout.count() == 120000);
-    CHECK(opts.management_timeout.count() == 120000);
+    CHECK(opts.key_value_timeout.count() == 20'000);
+    CHECK(opts.key_value_durable_timeout.count() == 20'000);
+    CHECK(opts.connect_timeout.count() == 20'000);
+    CHECK(opts.view_timeout.count() == 120'000);
+    CHECK(opts.query_timeout.count() == 120'000);
+    CHECK(opts.analytics_timeout.count() == 120'000);
+    CHECK(opts.search_timeout.count() == 120'000);
+    CHECK(opts.management_timeout.count() == 120'000);
+    CHECK(opts.bootstrap_timeout.count() == 120'000);
+    CHECK(opts.resolve_timeout.count() == 20'000);
+    CHECK(opts.dns_config.timeout().count() == 20'000);
 }
 
 TEST_CASE("unit: all other options remain unchanged", "[unit]")
@@ -71,11 +74,9 @@ TEST_CASE("unit: all other options remain unchanged", "[unit]")
     // we'd expect default_opts to be equal to opts:
     CHECK(opts.tracer == default_opts.tracer);
     CHECK(opts.meter == default_opts.meter);
-    CHECK(opts.bootstrap_timeout == default_opts.bootstrap_timeout);
     CHECK(opts.config_idle_redial_timeout == default_opts.config_idle_redial_timeout);
     CHECK(opts.config_poll_floor == default_opts.config_poll_floor);
     CHECK(opts.config_poll_interval == default_opts.config_poll_interval);
-    CHECK(opts.dns_srv_timeout == default_opts.dns_srv_timeout);
     CHECK(opts.enable_clustermap_notification == opts.enable_clustermap_notification);
     CHECK(opts.enable_compression == default_opts.enable_compression);
     CHECK(opts.enable_dns_srv == default_opts.enable_dns_srv);
@@ -88,7 +89,6 @@ TEST_CASE("unit: all other options remain unchanged", "[unit]")
     CHECK(opts.idle_http_connection_timeout == default_opts.idle_http_connection_timeout);
     CHECK(opts.max_http_connections == default_opts.max_http_connections);
     CHECK(opts.network == default_opts.network);
-    CHECK(opts.resolve_timeout == default_opts.resolve_timeout);
     CHECK(opts.show_queries == default_opts.show_queries);
     CHECK(opts.tcp_keep_alive_interval == default_opts.tcp_keep_alive_interval);
     CHECK(opts.tls_verify == default_opts.tls_verify);

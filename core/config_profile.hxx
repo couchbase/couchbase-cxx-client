@@ -36,17 +36,7 @@ class config_profile
 class development_profile : public config_profile
 {
   public:
-    void apply(couchbase::core::cluster_options& opts) override
-    {
-        opts.key_value_timeout = std::chrono::milliseconds(20000); // 20 sec kv timeout.
-        opts.key_value_durable_timeout = std::chrono::milliseconds(20000); // 20 sec durable kv timeout.
-        opts.connect_timeout = std::chrono::milliseconds(20000);           // 20 sec connect timeout.
-        opts.view_timeout = std::chrono::milliseconds(120000);             // 2 minute view timeout
-        opts.query_timeout = std::chrono::milliseconds(120000);            // 2 minute query timeout
-        opts.analytics_timeout = std::chrono::milliseconds(120000);        // 2 minute analytics timeout
-        opts.search_timeout = std::chrono::milliseconds(120000);           // 2 minute search timeout
-        opts.management_timeout = std::chrono::milliseconds(120000);       // 2 minute management timeout
-    }
+    void apply(couchbase::core::cluster_options& opts) override;
 };
 
 // this class just registers the known profiles defined above, and allows access to them.
