@@ -33,7 +33,7 @@ class attempt_context
                                                                            const Content& content)
     {
         if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
-            return insert_raw(content, id, content);
+            return insert_raw(coll, id, content);
         } else {
             return insert_raw(coll, id, codec::tao_json_serializer::serialize(content));
         }
