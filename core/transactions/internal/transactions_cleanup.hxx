@@ -145,6 +145,12 @@ class transactions_cleanup
 
     void attempts_loop();
 
+    bool is_running()
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        return running_;
+    }
+
     template<class R, class P>
     bool interruptable_wait(std::chrono::duration<R, P> time);
 
@@ -153,7 +159,7 @@ class transactions_cleanup
     void create_client_record(const couchbase::transactions::transaction_keyspace& keyspace);
     const atr_cleanup_stats handle_atr_cleanup(const core::document_id& atr_id,
                                                std::vector<transactions_cleanup_attempt>* result = nullptr);
-    std::atomic<bool> running_{ false };
+    bool running_{ false };
 };
 } // namespace transactions
 } // namespace couchbase::core

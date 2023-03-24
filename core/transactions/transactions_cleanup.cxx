@@ -46,9 +46,8 @@ transactions_cleanup::transactions_cleanup(std::shared_ptr<core::cluster> cluste
   : cluster_(cluster)
   , config_(config)
   , client_uuid_(uid_generator::next())
-  , running_(false)
+  , running_(config.cleanup_config.cleanup_client_attempts || config.cleanup_config.cleanup_lost_attempts)
 {
-    running_ = config.cleanup_config.cleanup_client_attempts || config.cleanup_config.cleanup_lost_attempts;
     if (config.cleanup_config.cleanup_client_attempts) {
         cleanup_thr_ = std::thread(std::bind(&transactions_cleanup::attempts_loop, this));
     }
@@ -61,14 +60,14 @@ transactions_cleanup::transactions_cleanup(std::shared_ptr<core::cluster> cluste
     }
 }
 
-static uint64_t
-byteswap64(uint64_t val)
+static std::uint64_t
+byteswap64(std::uint64_t val)
 {
-    uint64_t ret = 0;
-    for (std::size_t ii = 0; ii < sizeof(uint64_t); ii++) {
-        ret <<= 8ull;
-        ret |= val & 0xffull;
-        val >>= 8ull;
+    std::uint64_t ret = 0;
+    for (std::size_t ii = 0; ii < sizeof(std::uint64_t); ii++) {
+        ret <<= 8ULL;
+        ret |= val & 0xffULL;
+        val >>= 8ULL;
     }
     return ret;
 }
@@ -86,7 +85,7 @@ byteswap64(uint64_t val)
  * Want:        0x155CD21DA7580000   (1539336197457313792 in base10, an epoch
  * time in millionths of a second)
  */
-static uint64_t
+static std::uint64_t
 parse_mutation_cas(const std::string& cas)
 {
     if (cas.empty()) {
@@ -114,18 +113,18 @@ transactions_cleanup::interruptable_wait(std::chrono::duration<R, P> delay)
 {
     // wait for specified time, _or_ until the condition variable changes
     std::unique_lock<std::mutex> lock(mutex_);
-    if (!running_.load()) {
+    if (!running_) {
         return false;
     }
-    cv_.wait_for(lock, delay, [&]() { return !running_.load(); });
-    return running_.load();
+    cv_.wait_for(lock, delay, [&]() { return !running_; });
+    return running_;
 }
 
 void
 transactions_cleanup::clean_collection(const couchbase::transactions::transaction_keyspace& keyspace)
 {
     // first make sure the collection is in the list
-    while (running_.load()) {
+    while (is_running()) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (collections_.end() == std::find(collections_.begin(), collections_.end(), keyspace)) {
@@ -158,7 +157,7 @@ transactions_cleanup::clean_collection(const couchbase::transactions::transactio
                   remaining_in_cleanup_window.count() / std::max<decltype(it)::difference_type>(1, atrs_left_for_this_client));
                 // clean the ATR entry
                 std::string atr_id = *it;
-                if (!running_.load()) {
+                if (!is_running()) {
                     CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("cleanup of {} complete", keyspace);
                     return;
                 }
@@ -186,7 +185,9 @@ transactions_cleanup::clean_collection(const couchbase::transactions::transactio
                                             atr_left.count());*/
 
                 if (atr_left.count() > 0 && atr_left.count() < 1000000000) { // safety check protects against bugs
-                    std::this_thread::sleep_for(atr_left);
+                    if (!interruptable_wait(atr_left)) {
+                        return;
+                    }
                 }
             }
         } catch (const std::exception& ex) {
@@ -212,16 +213,16 @@ transactions_cleanup::handle_atr_cleanup(const core::document_id& atr_id, std::v
             // check_if_expired to false.
             atr_cleanup_entry cleanup_entry(entry, atr_id, *this, results == nullptr);
             try {
-                if (results) {
+                if (results != nullptr) {
                     results->emplace_back(cleanup_entry);
                 }
-                cleanup_entry.clean(results ? &results->back() : nullptr);
-                if (results) {
+                cleanup_entry.clean(results != nullptr ? &results->back() : nullptr);
+                if (results != nullptr) {
                     results->back().success(true);
                 }
             } catch (const std::exception& e) {
                 CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR("cleanup of {} failed: {}, moving on", cleanup_entry, e.what());
-                if (results) {
+                if (results != nullptr) {
                     results->back().success(false);
                 }
             }
@@ -273,135 +274,127 @@ transactions_cleanup::create_client_record(const couchbase::transactions::transa
 const client_record_details
 transactions_cleanup::get_active_clients(const couchbase::transactions::transaction_keyspace& keyspace, const std::string& uuid)
 {
-    std::chrono::milliseconds min_retry(1000);
-    if (config_.cleanup_config.cleanup_window < min_retry) {
-        min_retry = config_.cleanup_config.cleanup_window;
-    }
-    return retry_op_exponential_backoff_timeout<client_record_details>(
-      min_retry, std::chrono::seconds(1), config_.cleanup_config.cleanup_window, [this, keyspace, uuid]() -> client_record_details {
-          client_record_details details;
-          // Write our client record, return details.
-          try {
-              auto id = document_id{ keyspace.bucket, keyspace.scope, keyspace.collection, CLIENT_RECORD_DOC_ID };
-              core::operations::lookup_in_request req{ id };
-              req.specs =
-                lookup_in_specs{
-                    lookup_in_specs::get(FIELD_RECORDS).xattr(),
-                    lookup_in_specs::get(subdoc::lookup_in_macro::vbucket).xattr(),
-                }
-                  .specs();
-              wrap_request(req, config_);
-              auto barrier = std::make_shared<std::promise<result>>();
-              auto f = barrier->get_future();
-              auto ec = config_.cleanup_hooks->client_record_before_get(keyspace.bucket);
-              if (ec) {
-                  throw client_error(*ec, "client_record_before_get hook raised error");
-              }
-              cluster_->execute(req, [barrier](core::operations::lookup_in_response resp) {
-                  barrier->set_value(result::create_from_subdoc_response(resp));
-              });
-              auto res = wrap_operation_future(f);
-              std::vector<std::string> active_client_uids;
-              auto hlc = res.values[1].content_as();
-              auto now_ms = now_ns_from_vbucket(hlc) / 1000000;
-              details.override_enabled = false;
-              details.override_expires = 0;
-              if (res.values[0].status == subdoc_result::status_type::success) {
-                  auto records = res.values[0].content_as();
-                  CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("client records: {}", core::utils::json::generate(records));
-                  for (const auto& [key, value] : records.get_object()) {
-                      if (key == FIELD_OVERRIDE) {
-                          for (const auto& [override, param] : value.get_object()) {
-                              if (override == FIELD_OVERRIDE_ENABLED) {
-                                  details.override_enabled = param.get_boolean();
-                              } else if (override == FIELD_OVERRIDE_EXPIRES) {
-                                  details.override_expires = param.as<std::uint64_t>();
-                              }
-                          }
-                      } else if (key == FIELD_CLIENTS_ONLY) {
-                          for (const auto& [other_client_uuid, cl] : value.get_object()) {
-                              uint64_t heartbeat_ms = parse_mutation_cas(cl.at(FIELD_HEARTBEAT).get_string());
-                              auto expires_ms = cl.at(FIELD_EXPIRES).as<std::uint64_t>();
-                              auto expired_period = static_cast<int64_t>(now_ms) - static_cast<int64_t>(heartbeat_ms);
-                              bool has_expired = expired_period >= static_cast<int64_t>(expires_ms) && now_ms > heartbeat_ms;
-                              if (has_expired && other_client_uuid != uuid) {
-                                  details.expired_client_ids.push_back(other_client_uuid);
-                              } else {
-                                  active_client_uids.push_back(other_client_uuid);
-                              }
-                          }
-                      }
-                  }
-              }
-              if (std::find(active_client_uids.begin(), active_client_uids.end(), uuid) == active_client_uids.end()) {
-                  active_client_uids.push_back(uuid);
-              }
-              std::sort(active_client_uids.begin(), active_client_uids.end());
-              auto this_idx =
-                std::distance(active_client_uids.begin(), std::find(active_client_uids.begin(), active_client_uids.end(), uuid));
-              details.num_active_clients = static_cast<std::uint32_t>(active_client_uids.size());
-              details.index_of_this_client = static_cast<std::uint32_t>(this_idx);
-              details.num_active_clients = static_cast<std::uint32_t>(active_client_uids.size());
-              details.num_expired_clients = static_cast<std::uint32_t>(details.expired_client_ids.size());
-              details.num_existing_clients = details.num_expired_clients + details.num_active_clients;
-              details.client_uuid = uuid;
-              details.cas_now_nanos = now_ms * 1000000;
-              details.override_active = (details.override_enabled && details.override_expires > details.cas_now_nanos);
-              CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("client details {}", details);
-              if (details.override_active) {
-                  CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("override enabled, will not update record");
-                  return details;
-              }
-
-              // update client record, maybe cleanup some as well...
-              core::operations::mutate_in_request mutate_req{ id };
-              auto mut_specs = couchbase::mutate_in_specs{
-                  couchbase::mutate_in_specs::upsert(FIELD_CLIENTS + "." + uuid + "." + FIELD_HEARTBEAT, subdoc::mutate_in_macro::cas)
-                    .xattr()
-                    .create_path(),
-                  couchbase::mutate_in_specs::upsert(FIELD_CLIENTS + "." + uuid + "." + FIELD_EXPIRES,
-                                                     config_.cleanup_config.cleanup_window.count() / 2 + SAFETY_MARGIN_EXPIRY_MS)
-                    .xattr()
-                    .create_path(),
-                  couchbase::mutate_in_specs::upsert(FIELD_CLIENTS + "." + uuid + "." + FIELD_NUM_ATRS, atr_ids::all().size())
-                    .xattr()
-                    .create_path(),
-              };
-              for (std::size_t idx = 0; idx < std::min(details.expired_client_ids.size(), static_cast<std::size_t>(12)); idx++) {
-                  CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("adding {} to list of clients to be removed when updating this client",
-                                                    details.expired_client_ids[idx]);
-                  mut_specs.push_back(couchbase::mutate_in_specs::remove(FIELD_CLIENTS + "." + details.expired_client_ids[idx]).xattr());
-              }
-              mutate_req.specs = mut_specs.specs();
-              ec = config_.cleanup_hooks->client_record_before_update(keyspace.bucket);
-              if (ec) {
-                  throw client_error(*ec, "client_record_before_update hook raised error");
-              }
-              wrap_durable_request(mutate_req, config_);
-              auto mutate_barrier = std::make_shared<std::promise<result>>();
-              auto mutate_f = mutate_barrier->get_future();
-              CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("updating record");
-              cluster_->execute(mutate_req, [mutate_barrier](core::operations::mutate_in_response resp) {
-                  mutate_barrier->set_value(result::create_from_subdoc_response(resp));
-              });
-              res = wrap_operation_future(mutate_f);
-
-              // just update the cas, and return the details
-              details.cas_now_nanos = res.cas;
-              CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("get_active_clients found {}", details);
-              return details;
-          } catch (const client_error& e) {
-              auto ec = e.ec();
-              switch (ec) {
-                  case FAIL_DOC_NOT_FOUND:
-                      CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("client record not found, creating new one");
-                      create_client_record(keyspace);
-                      throw retry_operation("Client record didn't exist. Creating and retrying");
-                  default:
-                      throw;
-              }
+    client_record_details details;
+    // Write our client record, return details.
+    try {
+        auto id = document_id{ keyspace.bucket, keyspace.scope, keyspace.collection, CLIENT_RECORD_DOC_ID };
+        core::operations::lookup_in_request req{ id };
+        req.specs =
+          lookup_in_specs{
+              lookup_in_specs::get(FIELD_RECORDS).xattr(),
+              lookup_in_specs::get(subdoc::lookup_in_macro::vbucket).xattr(),
           }
-      });
+            .specs();
+        wrap_request(req, config_);
+        auto barrier = std::make_shared<std::promise<result>>();
+        auto f = barrier->get_future();
+        auto ec = config_.cleanup_hooks->client_record_before_get(keyspace.bucket);
+        if (ec) {
+            throw client_error(*ec, "client_record_before_get hook raised error");
+        }
+        cluster_->execute(
+          req, [barrier](core::operations::lookup_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
+        auto res = wrap_operation_future(f);
+
+        std::vector<std::string> active_client_uids;
+        auto hlc = res.values[1].content_as();
+        auto now_ms = now_ns_from_vbucket(hlc) / 1000000;
+        details.override_enabled = false;
+        details.override_expires = 0;
+        if (res.values[0].status == subdoc_result::status_type::success) {
+            auto records = res.values[0].content_as();
+            CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("client records: {}", core::utils::json::generate(records));
+            for (const auto& [key, value] : records.get_object()) {
+                if (key == FIELD_OVERRIDE) {
+                    for (const auto& [over_ride, param] : value.get_object()) {
+                        if (over_ride == FIELD_OVERRIDE_ENABLED) {
+                            details.override_enabled = param.get_boolean();
+                        } else if (over_ride == FIELD_OVERRIDE_EXPIRES) {
+                            details.override_expires = param.as<std::uint64_t>();
+                        }
+                    }
+                } else if (key == FIELD_CLIENTS_ONLY) {
+                    for (const auto& [other_client_uuid, cl] : value.get_object()) {
+                        std::uint64_t heartbeat_ms = parse_mutation_cas(cl.at(FIELD_HEARTBEAT).get_string());
+                        auto expires_ms = cl.at(FIELD_EXPIRES).as<std::uint64_t>();
+                        auto expired_period = static_cast<std::int64_t>(now_ms) - static_cast<std::int64_t>(heartbeat_ms);
+                        bool has_expired = expired_period >= static_cast<std::int64_t>(expires_ms) && now_ms > heartbeat_ms;
+                        if (has_expired && other_client_uuid != uuid) {
+                            details.expired_client_ids.push_back(other_client_uuid);
+                        } else {
+                            active_client_uids.push_back(other_client_uuid);
+                        }
+                    }
+                }
+            }
+        }
+        if (std::find(active_client_uids.begin(), active_client_uids.end(), uuid) == active_client_uids.end()) {
+            active_client_uids.push_back(uuid);
+        }
+        std::sort(active_client_uids.begin(), active_client_uids.end());
+        auto this_idx = std::distance(active_client_uids.begin(), std::find(active_client_uids.begin(), active_client_uids.end(), uuid));
+        details.num_active_clients = static_cast<std::uint32_t>(active_client_uids.size());
+        details.index_of_this_client = static_cast<std::uint32_t>(this_idx);
+        details.num_active_clients = static_cast<std::uint32_t>(active_client_uids.size());
+        details.num_expired_clients = static_cast<std::uint32_t>(details.expired_client_ids.size());
+        details.num_existing_clients = details.num_expired_clients + details.num_active_clients;
+        details.client_uuid = uuid;
+        details.cas_now_nanos = now_ms * 1000000;
+        details.override_active = (details.override_enabled && details.override_expires > details.cas_now_nanos);
+        CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("client details {}", details);
+        if (details.override_active) {
+            CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("override enabled, will not update record");
+            return details;
+        }
+
+        // update client record, maybe cleanup some as well...
+        core::operations::mutate_in_request mutate_req{ id };
+        auto mut_specs = couchbase::mutate_in_specs{
+            couchbase::mutate_in_specs::upsert(FIELD_CLIENTS + "." + uuid + "." + FIELD_HEARTBEAT, subdoc::mutate_in_macro::cas)
+              .xattr()
+              .create_path(),
+            couchbase::mutate_in_specs::upsert(FIELD_CLIENTS + "." + uuid + "." + FIELD_EXPIRES,
+                                               config_.cleanup_config.cleanup_window.count() / 2 + SAFETY_MARGIN_EXPIRY_MS)
+              .xattr()
+              .create_path(),
+            couchbase::mutate_in_specs::upsert(FIELD_CLIENTS + "." + uuid + "." + FIELD_NUM_ATRS, atr_ids::all().size())
+              .xattr()
+              .create_path(),
+        };
+        for (std::size_t idx = 0; idx < std::min(details.expired_client_ids.size(), static_cast<std::size_t>(12)); idx++) {
+            CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("adding {} to list of clients to be removed when updating this client",
+                                              details.expired_client_ids[idx]);
+            mut_specs.push_back(couchbase::mutate_in_specs::remove(FIELD_CLIENTS + "." + details.expired_client_ids[idx]).xattr());
+        }
+        mutate_req.specs = mut_specs.specs();
+        ec = config_.cleanup_hooks->client_record_before_update(keyspace.bucket);
+        if (ec) {
+            throw client_error(*ec, "client_record_before_update hook raised error");
+        }
+        wrap_durable_request(mutate_req, config_);
+        auto mutate_barrier = std::make_shared<std::promise<result>>();
+        auto mutate_f = mutate_barrier->get_future();
+        CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("updating record");
+        cluster_->execute(mutate_req, [mutate_barrier](core::operations::mutate_in_response resp) {
+            mutate_barrier->set_value(result::create_from_subdoc_response(resp));
+        });
+        res = wrap_operation_future(mutate_f);
+
+        // just update the cas, and return the details
+        details.cas_now_nanos = res.cas;
+        CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("get_active_clients found {}", details);
+        return details;
+    } catch (const client_error& e) {
+        auto ec = e.ec();
+        switch (ec) {
+            case FAIL_DOC_NOT_FOUND:
+                CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("client record not found, creating new one");
+                create_client_record(keyspace);
+                return get_active_clients(keyspace, uuid);
+            default:
+                throw;
+        }
+    }
 }
 
 void
@@ -412,9 +405,7 @@ transactions_cleanup::remove_client_record_from_all_buckets(const std::string& u
             retry_op_exponential_backoff_timeout<void>(
               std::chrono::milliseconds(10), std::chrono::milliseconds(250), std::chrono::milliseconds(500), [this, keyspace, uuid]() {
                   try {
-                      // insure a client record document exists...
-                      create_client_record(keyspace);
-                      // now, proceed to remove the client uuid if it exists
+                      // proceed to remove the client uuid if it exists
                       auto ec = config_.cleanup_hooks->client_record_before_remove_client(keyspace.bucket);
                       if (ec) {
                           throw client_error(*ec, "client_record_before_remove_client hook raised error");
@@ -502,7 +493,7 @@ transactions_cleanup::attempts_loop()
         CB_ATTEMPT_CLEANUP_LOG_DEBUG("cleanup attempts loop starting...");
         while (interruptable_wait(cleanup_loop_delay_)) {
             while (auto entry = atr_queue_.pop()) {
-                if (!running_.load()) {
+                if (!is_running()) {
                     CB_ATTEMPT_CLEANUP_LOG_DEBUG("loop stopping - {} entries on queue", atr_queue_.size());
                     return;
                 }
@@ -580,9 +571,7 @@ transactions_cleanup::close()
         }
     }
     CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("all lost attempt cleanup threads closed");
-    if (true) {
-        remove_client_record_from_all_buckets(client_uuid_);
-    }
+    remove_client_record_from_all_buckets(client_uuid_);
 }
 
 transactions_cleanup::~transactions_cleanup()
