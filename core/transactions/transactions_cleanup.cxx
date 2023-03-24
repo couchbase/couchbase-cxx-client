@@ -60,11 +60,11 @@ transactions_cleanup::transactions_cleanup(std::shared_ptr<core::cluster> cluste
     }
 }
 
-static uint64_t
-byteswap64(uint64_t val)
+static std::uint64_t
+byteswap64(std::uint64_t val)
 {
-    uint64_t ret = 0;
-    for (std::size_t ii = 0; ii < sizeof(uint64_t); ii++) {
+    std::uint64_t ret = 0;
+    for (std::size_t ii = 0; ii < sizeof(std::uint64_t); ii++) {
         ret <<= 8ULL;
         ret |= val & 0xffULL;
         val >>= 8ULL;
@@ -85,7 +85,7 @@ byteswap64(uint64_t val)
  * Want:        0x155CD21DA7580000   (1539336197457313792 in base10, an epoch
  * time in millionths of a second)
  */
-static uint64_t
+static std::uint64_t
 parse_mutation_cas(const std::string& cas)
 {
     if (cas.empty()) {
@@ -306,19 +306,19 @@ transactions_cleanup::get_active_clients(const couchbase::transactions::transact
             CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("client records: {}", core::utils::json::generate(records));
             for (const auto& [key, value] : records.get_object()) {
                 if (key == FIELD_OVERRIDE) {
-                    for (const auto& [override, param] : value.get_object()) {
-                        if (override == FIELD_OVERRIDE_ENABLED) {
+                    for (const auto& [over_ride, param] : value.get_object()) {
+                        if (over_ride == FIELD_OVERRIDE_ENABLED) {
                             details.override_enabled = param.get_boolean();
-                        } else if (override == FIELD_OVERRIDE_EXPIRES) {
+                        } else if (over_ride == FIELD_OVERRIDE_EXPIRES) {
                             details.override_expires = param.as<std::uint64_t>();
                         }
                     }
                 } else if (key == FIELD_CLIENTS_ONLY) {
                     for (const auto& [other_client_uuid, cl] : value.get_object()) {
-                        uint64_t heartbeat_ms = parse_mutation_cas(cl.at(FIELD_HEARTBEAT).get_string());
+                        std::uint64_t heartbeat_ms = parse_mutation_cas(cl.at(FIELD_HEARTBEAT).get_string());
                         auto expires_ms = cl.at(FIELD_EXPIRES).as<std::uint64_t>();
-                        auto expired_period = static_cast<int64_t>(now_ms) - static_cast<int64_t>(heartbeat_ms);
-                        bool has_expired = expired_period >= static_cast<int64_t>(expires_ms) && now_ms > heartbeat_ms;
+                        auto expired_period = static_cast<std::int64_t>(now_ms) - static_cast<std::int64_t>(heartbeat_ms);
+                        bool has_expired = expired_period >= static_cast<std::int64_t>(expires_ms) && now_ms > heartbeat_ms;
                         if (has_expired && other_client_uuid != uuid) {
                             details.expired_client_ids.push_back(other_client_uuid);
                         } else {
@@ -517,7 +517,7 @@ transactions_cleanup::attempts_loop()
 void
 transactions_cleanup::add_attempt(attempt_context& ctx)
 {
-    auto& ctx_impl = dynamic_cast<attempt_context_impl&>(ctx);
+    auto& ctx_impl = static_cast<attempt_context_impl&>(ctx);
     switch (ctx_impl.state()) {
         case attempt_state::NOT_STARTED:
         case attempt_state::COMPLETED:
