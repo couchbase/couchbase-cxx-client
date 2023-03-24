@@ -16,11 +16,13 @@
  */
 
 #include "dns_srv_tracker.hxx"
-#include "../logger/logger.hxx"
-#include "../topology/configuration.hxx"
+
+#include "core/logger/logger.hxx"
+#include "core/utils/join_strings.hxx"
 
 #include <asio/bind_executor.hpp>
 #include <asio/io_context.hpp>
+#include <asio/post.hpp>
 
 #include <memory>
 
@@ -44,7 +46,7 @@ dns_srv_tracker::get_srv_nodes(utils::movable_function<void(origin::node_list, s
       address_,
       service_,
       config_,
-      [self = shared_from_this(), callback = std::move(callback)](couchbase::core::io::dns::dns_client::dns_srv_response&& resp) mutable {
+      [self = shared_from_this(), callback = std::move(callback)](couchbase::core::io::dns::dns_srv_response&& resp) mutable {
           origin::node_list nodes;
           if (resp.ec) {
               CB_LOG_WARNING("failed to fetch DNS SRV records for \"{}\" ({}), assuming that cluster is listening this address",
