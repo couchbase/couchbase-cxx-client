@@ -321,6 +321,7 @@ set(couchbase_cxx_client_FILES
         core/impl/upsert.cxx
         core/impl/view_error_category.cxx
         core/impl/watch_query_indexes.cxx
+        core/io/dns_client.cxx
         core/io/dns_config.cxx
         core/io/http_parser.cxx
         core/io/mcbp_message.cxx
