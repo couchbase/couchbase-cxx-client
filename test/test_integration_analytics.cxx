@@ -284,13 +284,14 @@ TEST_CASE("integration: public API analytics query")
 
     {
         couchbase::core::operations::management::analytics_link_connect_request req{};
+        req.force = true;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
     auto key = test::utils::uniq_id("key");
     auto test_value = test::utils::uniq_id("value");
-    tao::json::value document = {
+    const tao::json::value document = {
         { "testkey", test_value },
     };
     {
@@ -309,10 +310,12 @@ TEST_CASE("integration: public API analytics query")
             return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
         }));
         REQUIRE_SUCCESS(ctx.ec());
-        REQUIRE(resp.rows_as_json()[0] == document);
         REQUIRE_FALSE(resp.meta_data().request_id().empty());
         REQUIRE_FALSE(resp.meta_data().client_context_id().empty());
         REQUIRE(resp.meta_data().status() == couchbase::analytics_status::success);
+        auto rows = resp.rows_as_json();
+        REQUIRE(rows.size() == 1);
+        REQUIRE(rows[0] == document);
     }
 
     SECTION("positional params")
@@ -327,7 +330,9 @@ TEST_CASE("integration: public API analytics query")
             return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
         }));
         REQUIRE_SUCCESS(ctx.ec());
-        REQUIRE(resp.rows_as_json()[0] == document);
+        auto rows = resp.rows_as_json();
+        REQUIRE(rows.size() == 1);
+        REQUIRE(rows[0] == document);
     }
 
     SECTION("named params")
@@ -343,7 +348,9 @@ TEST_CASE("integration: public API analytics query")
             return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
         }));
         REQUIRE_SUCCESS(ctx.ec());
-        REQUIRE(resp.rows_as_json()[0] == document);
+        auto rows = resp.rows_as_json();
+        REQUIRE(rows.size() == 1);
+        REQUIRE(rows[0] == document);
     }
 
     SECTION("named params preformatted")
@@ -360,7 +367,9 @@ TEST_CASE("integration: public API analytics query")
             return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
         }));
         REQUIRE_SUCCESS(ctx.ec());
-        REQUIRE(resp.rows_as_json()[0] == document);
+        auto rows = resp.rows_as_json();
+        REQUIRE(rows.size() == 1);
+        REQUIRE(rows[0] == document);
     }
 
     SECTION("raw")
@@ -376,7 +385,9 @@ TEST_CASE("integration: public API analytics query")
             return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
         }));
         REQUIRE_SUCCESS(ctx.ec());
-        REQUIRE(resp.rows_as_json()[0] == document);
+        auto rows = resp.rows_as_json();
+        REQUIRE(rows.size() == 1);
+        REQUIRE(rows[0] == document);
     }
 
     SECTION("consistency")
@@ -418,13 +429,14 @@ TEST_CASE("integration: public API analytics scope query")
         return;
     }
 
-    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    auto cluster = couchbase::cluster(integration.cluster);
+    auto bucket = cluster.bucket(integration.ctx.bucket);
 
     auto scope_name = test::utils::uniq_id("scope");
     auto collection_name = test::utils::uniq_id("collection");
 
     {
-        couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
+        const couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
         auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
@@ -432,7 +444,7 @@ TEST_CASE("integration: public API analytics scope query")
     }
 
     {
-        couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
+        const couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
         auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
@@ -440,37 +452,41 @@ TEST_CASE("integration: public API analytics scope query")
     }
 
     {
-        couchbase::core::operations::analytics_request req{};
-        req.statement =
-          fmt::format("ALTER COLLECTION `{}`.`{}`.`{}` ENABLE ANALYTICS", integration.ctx.bucket, scope_name, collection_name);
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_SUCCESS(resp.ctx.ec);
+        auto [ctx, resp] = cluster
+                             .analytics_query(fmt::format(
+                               "ALTER COLLECTION `{}`.`{}`.`{}` ENABLE ANALYTICS", integration.ctx.bucket, scope_name, collection_name))
+                             .get();
+        REQUIRE_SUCCESS(ctx.ec());
     }
+
+    auto scope = bucket.scope(scope_name);
+    auto collection = scope.collection(collection_name);
 
     auto key = test::utils::uniq_id("key");
     auto test_value = test::utils::uniq_id("value");
-    auto value = couchbase::core::utils::json::generate({ { "testkey", test_value } });
+    const tao::json::value document = {
+        { "testkey", test_value },
+    };
     {
-        auto id = couchbase::core::document_id(integration.ctx.bucket, scope_name, collection_name, key);
-        couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary(value) };
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_SUCCESS(resp.ctx.ec());
+        auto [ctx, resp] = collection.upsert(key, document).get();
+        REQUIRE_SUCCESS(ctx.ec());
     }
 
-    couchbase::core::operations::analytics_response resp{};
-    REQUIRE(test::utils::wait_until([&]() {
-        couchbase::core::operations::analytics_request req{};
-        req.statement = fmt::format(R"(SELECT testkey FROM `{}` WHERE testkey = "{}")", collection_name, test_value);
-        req.bucket_name = integration.ctx.bucket;
-        req.scope_name = scope_name;
-        resp = test::utils::execute(integration.cluster, req);
-        return resp.rows.size() == 1;
+    couchbase::analytics_result resp{};
+    couchbase::analytics_error_context ctx{};
+    CHECK(test::utils::wait_until([&]() {
+        std::tie(ctx, resp) =
+          scope.analytics_query(fmt::format(R"(SELECT testkey FROM `{}` WHERE testkey = "{}")", collection_name, test_value)).get();
+        return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
     }));
-    REQUIRE_SUCCESS(resp.ctx.ec);
-    REQUIRE(resp.rows[0] == value);
+    REQUIRE_SUCCESS(ctx.ec());
+    REQUIRE(resp.rows_as_json()[0] == document);
+    REQUIRE_FALSE(resp.meta_data().request_id().empty());
+    REQUIRE_FALSE(resp.meta_data().client_context_id().empty());
+    REQUIRE(resp.meta_data().status() == couchbase::analytics_status::success);
 
     {
-        couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket, scope_name };
+        const couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket, scope_name };
         test::utils::execute(integration.cluster, req);
     }
 }
