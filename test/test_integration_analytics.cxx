@@ -205,13 +205,15 @@ TEST_CASE("integration: analytics scope query")
         REQUIRE(created);
     }
 
-    {
-        couchbase::core::operations::analytics_request req{};
-        req.statement =
-          fmt::format("ALTER COLLECTION `{}`.`{}`.`{}` ENABLE ANALYTICS", integration.ctx.bucket, scope_name, collection_name);
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_SUCCESS(resp.ctx.ec);
-    }
+    CHECK(test::utils::wait_until(
+      [&]() {
+          couchbase::core::operations::analytics_request req{};
+          req.statement =
+            fmt::format("ALTER COLLECTION `{}`.`{}`.`{}` ENABLE ANALYTICS", integration.ctx.bucket, scope_name, collection_name);
+          auto resp = test::utils::execute(integration.cluster, req);
+          return !resp.ctx.ec;
+      },
+      std::chrono::minutes{ 5 }));
 
     auto key = test::utils::uniq_id("key");
     auto test_value = test::utils::uniq_id("value");
@@ -492,13 +494,15 @@ TEST_CASE("integration: public API analytics scope query")
         REQUIRE(created);
     }
 
-    {
-        auto [ctx, resp] = cluster
-                             .analytics_query(fmt::format(
-                               "ALTER COLLECTION `{}`.`{}`.`{}` ENABLE ANALYTICS", integration.ctx.bucket, scope_name, collection_name))
-                             .get();
-        REQUIRE_SUCCESS(ctx.ec());
-    }
+    CHECK(test::utils::wait_until(
+      [&]() {
+          auto [ctx, resp] = cluster
+                               .analytics_query(fmt::format(
+                                 "ALTER COLLECTION `{}`.`{}`.`{}` ENABLE ANALYTICS", integration.ctx.bucket, scope_name, collection_name))
+                               .get();
+          return !ctx.ec();
+      },
+      std::chrono::minutes{ 5 }));
 
     auto scope = bucket.scope(scope_name);
     auto collection = scope.collection(collection_name);
