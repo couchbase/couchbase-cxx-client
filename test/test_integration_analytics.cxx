@@ -78,7 +78,7 @@ TEST_CASE("integration: analytics query")
         REQUIRE(test::utils::wait_until([&]() {
             couchbase::core::operations::analytics_request req{};
             req.statement = fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = ?)", dataset_name);
-            req.positional_parameters.emplace_back(couchbase::core::json_string(couchbase::core::utils::json::generate(test_value)));
+            req.positional_parameters.emplace_back(couchbase::core::utils::json::generate(test_value));
             resp = test::utils::execute(integration.cluster, req);
             return resp.rows.size() == 1;
         }));
@@ -130,10 +130,30 @@ TEST_CASE("integration: analytics query")
 
     SECTION("consistency")
     {
-        couchbase::core::operations::analytics_request req{};
-        req.statement = fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = "{}")", dataset_name, test_value);
-        req.scan_consistency = couchbase::core::analytics_scan_consistency::request_plus;
-        auto resp = test::utils::execute(integration.cluster, req);
+        couchbase::core::operations::analytics_response resp{};
+        CHECK(test::utils::wait_until([&]() {
+            /*
+             * In consistency test, always do fresh mutation
+             */
+            test_value = test::utils::uniq_id("value");
+            value = couchbase::core::utils::json::generate({ { "testkey", test_value } });
+            {
+                auto id = couchbase::core::document_id(integration.ctx.bucket, "_default", "_default", key);
+                couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary(value) };
+                REQUIRE_SUCCESS(test::utils::execute(integration.cluster, req).ctx.ec());
+            }
+
+            couchbase::core::operations::analytics_request req{};
+            req.statement = fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = "{}")", dataset_name, test_value);
+            req.scan_consistency = couchbase::core::analytics_scan_consistency::request_plus;
+            resp = test::utils::execute(integration.cluster, req);
+            /* Analytics might give us code 23027, ignore it here
+             *
+             * "errors": [{"code": 23027, "msg": "Bucket default on link Default.Local is not connected"} ],
+             */
+            return resp.ctx.first_error_code != 23027;
+        }));
+
         REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 1);
         REQUIRE(resp.rows[0] == value);
@@ -291,7 +311,7 @@ TEST_CASE("integration: public API analytics query")
 
     auto key = test::utils::uniq_id("key");
     auto test_value = test::utils::uniq_id("value");
-    const tao::json::value document = {
+    tao::json::value document = {
         { "testkey", test_value },
     };
     {
@@ -392,11 +412,32 @@ TEST_CASE("integration: public API analytics query")
 
     SECTION("consistency")
     {
-        auto [ctx, resp] =
-          cluster
-            .analytics_query(fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = "{}")", dataset_name, test_value),
-                             couchbase::analytics_options{}.scan_consistency(couchbase::analytics_scan_consistency::request_plus))
-            .get();
+        couchbase::analytics_result resp{};
+        couchbase::analytics_error_context ctx{};
+        CHECK(test::utils::wait_until([&]() {
+            /*
+             * In consistency test, always do fresh mutation
+             */
+            test_value = test::utils::uniq_id("value");
+            document = {
+                { "testkey", test_value },
+            };
+            {
+                auto [ctx2, _] = collection.upsert(key, document).get();
+                REQUIRE_SUCCESS(ctx2.ec());
+            }
+
+            std::tie(ctx, resp) =
+              cluster
+                .analytics_query(fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = "{}")", dataset_name, test_value),
+                                 couchbase::analytics_options{}.scan_consistency(couchbase::analytics_scan_consistency::request_plus))
+                .get();
+            /* Analytics might give us code 23027, ignore it here
+             *
+             * "errors": [{"code": 23027, "msg": "Bucket default on link Default.Local is not connected"} ],
+             */
+            return ctx.first_error_code() != 23027;
+        }));
 
         REQUIRE_SUCCESS(ctx.ec());
         auto rows = resp.rows_as_json();

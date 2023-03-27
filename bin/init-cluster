@@ -31,7 +31,7 @@ options = {
   password: ENV.fetch("CB_PASSWORD", "password"),
   bucket: ENV.fetch("CB_BUCKET", "default"),
   sec_bucket: ENV.fetch("CB_SEC_BUCKET", ""),
-  server_quota: ENV.fetch("CB_SERVER_QUOTA", 2048).to_i,
+  server_quota: ENV.fetch("CB_SERVER_QUOTA", 3072).to_i,
   index_quota: ENV.fetch("CB_INDEX_QUOTA", 256).to_i,
   bucket_quota: ENV.fetch("CB_BUCKET_QUOTA", 256).to_i,
   enable_developer_preview: ENV.fetch("CB_DEVELOPER_PREVIEW", false).to_b,
@@ -90,6 +90,10 @@ class API
   rescue EOFError
     connect
     retry
+  rescue => ex
+    puts "#{__method__}: #{ex}, sleep for 1 second and retry"
+    sleep(1)
+    retry
   end
 
   def post_form(path, fields = {})
@@ -102,6 +106,10 @@ class API
   rescue EOFError
     connect
     retry
+  rescue => ex
+    puts "#{__method__}: #{ex}, sleep for 1 second and retry"
+    sleep(1)
+    retry
   end
 
   def post_json(path, object)
@@ -113,6 +121,10 @@ class API
     decode_response(res)
   rescue EOFError
     connect
+    retry
+  rescue => ex
+    puts "#{__method__}: #{ex}, sleep for 1 second and retry"
+    sleep(1)
     retry
   end
 end
@@ -215,3 +227,6 @@ end
 
 query_api = API.new(options.merge(port: query_port))
 query_api.post_form("/query/service", statement: "CREATE PRIMARY INDEX ON `#{options[:bucket]}` USING GSI")
+options[:sample_buckets].each do |bucket|
+  query_api.post_form("/query/service", statement: "CREATE PRIMARY INDEX ON `#{bucket}` USING GSI")
+end
