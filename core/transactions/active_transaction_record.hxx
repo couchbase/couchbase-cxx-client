@@ -153,7 +153,7 @@ class active_transaction_record
                 if (const auto* compat = val.find(ATR_FIELD_FORWARD_COMPAT); compat != nullptr) {
                     forward_compat = *compat;
                 }
-
+                std::optional<uint32_t> expires_after_msec = std::max(val.optional<int32_t>(ATR_FIELD_EXPIRES_AFTER_MSECS).value_or(0), 0);
                 entries.emplace_back(resp.ctx.bucket(),
                                      resp.ctx.id(),
                                      key,
@@ -163,7 +163,7 @@ class active_transaction_record
                                      parse_mutation_cas(val.optional<std::string>(ATR_FIELD_TIMESTAMP_COMPLETE).value_or("")),
                                      parse_mutation_cas(val.optional<std::string>(ATR_FIELD_TIMESTAMP_ROLLBACK_START).value_or("")),
                                      parse_mutation_cas(val.optional<std::string>(ATR_FIELD_TIMESTAMP_ROLLBACK_COMPLETE).value_or("")),
-                                     val.optional<std::uint32_t>(ATR_FIELD_EXPIRES_AFTER_MSECS),
+                                     expires_after_msec,
                                      process_document_ids(val, ATR_FIELD_DOCS_INSERTED),
                                      process_document_ids(val, ATR_FIELD_DOCS_REPLACED),
                                      process_document_ids(val, ATR_FIELD_DOCS_REMOVED),
