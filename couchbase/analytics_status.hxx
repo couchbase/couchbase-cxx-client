@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2023-Present Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -15,12 +15,27 @@
  *   limitations under the License.
  */
 
-#include "command.hxx"
+#pragma once
 
-namespace cbc
+namespace couchbase
 {
-class version : public command
-{
-    void execute(const std::vector<std::string>& argv) override;
+/**
+ * Status of the Analytics Query
+ *
+ * @since 1.0.0
+ * @committed
+ */
+enum class analytics_status {
+    running,
+    success,
+    errors,
+    completed,
+    stopped,
+    timeout,
+    closed,
+    fatal,
+    aborted,
+    unknown,
 };
-} // namespace cbc
+
+} // namespace couchbase

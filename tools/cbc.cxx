@@ -31,6 +31,7 @@ Available commands:
   version      Display version information.
   get          Retrieve document from the server.
   query        Perform N1QL query.
+  analytics    Perform Analytics query.
   pillowfight  Run workload generator.
 
 Options:

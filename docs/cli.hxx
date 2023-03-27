@@ -27,5 +27,7 @@
  *
  * @subpage cbc-query. Execute N1QL queries.
  *
+ * @subpage cbc-analytics. Execute Analytics queries.
+ *
  * @subpage cbc-pillowfight. Run simple workload generator.
  */

@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <couchbase/analytics_options.hxx>
 #include <couchbase/bucket.hxx>
 #include <couchbase/cluster_options.hxx>
 #include <couchbase/query_index_manager.hxx>
@@ -164,6 +165,38 @@ class cluster
         });
         return future;
     }
+
+    /**
+     * Performs a query against the analytics services.
+     *
+     * @param statement the query statement.
+     * @param options options to customize the query request.
+     * @param handler the handler that implements @ref query_handler
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @see https://docs.couchbase.com/server/current/analytics/introduction.html
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    void analytics_query(std::string statement, const analytics_options& options, analytics_handler&& handler) const;
+
+    /**
+     * Performs a query against the analytics services.
+     *
+     * @param statement the query statement.
+     * @param options options to customize the query request.
+     * @return future object that carries result of the operation
+     *
+     * @see https://docs.couchbase.com/server/current/analytics/introduction.html
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto analytics_query(std::string statement, const analytics_options& options = {}) const
+      -> std::future<std::pair<analytics_error_context, analytics_result>>;
 
     /**
      * Provides access to the N1QL index management services.

@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-20.04
     services:
       couchbase:
-        image: couchbase:enterprise-7.0.3
+        image: couchbase:enterprise-7.1.4
         ports:
           - 8091-8096:8091-8096
           - 11210:11210
@@ -47,7 +47,7 @@ jobs:
         timeout-minutes: 30
         env:
           CB_SANITIZER: asan
-          TEST_SERVER_VERSION: 7.0.3
+          TEST_SERVER_VERSION: 7.1.4
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
           TEST_LOG_LEVEL: trace
         run: ./bin/run-unit-tests
@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-20.04
     services:
       couchbase:
-        image: couchbase:enterprise-7.0.3
+        image: couchbase:enterprise-7.1.4
         ports:
           - 8091-8096:8091-8096
           - 11210:11210
@@ -92,7 +92,7 @@ jobs:
         timeout-minutes: 30
         env:
           CB_SANITIZER: lsan
-          TEST_SERVER_VERSION: 7.0.3
+          TEST_SERVER_VERSION: 7.1.4
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
           TEST_LOG_LEVEL: trace
         run: ./bin/run-unit-tests
@@ -101,7 +101,7 @@ jobs:
     runs-on: ubuntu-20.04
     services:
       couchbase:
-        image: couchbase:enterprise-7.0.3
+        image: couchbase:enterprise-7.1.4
         ports:
           - 8091-8096:8091-8096
           - 11210:11210
@@ -137,7 +137,7 @@ jobs:
         timeout-minutes: 30
         env:
           CB_SANITIZER: ubsan
-          TEST_SERVER_VERSION: 7.0.3
+          TEST_SERVER_VERSION: 7.1.4
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
           TEST_LOG_LEVEL: trace
         run: ./bin/run-unit-tests
@@ -146,7 +146,7 @@ jobs:
     runs-on: ubuntu-20.04
     services:
       couchbase:
-        image: couchbase:enterprise-7.0.3
+        image: couchbase:enterprise-7.1.4
         ports:
           - 8091-8096:8091-8096
           - 11210:11210
@@ -183,7 +183,7 @@ jobs:
         env:
           CB_SANITIZER: tsan
           TSAN_OPTIONS: second_deadlock_stack=1
-          TEST_SERVER_VERSION: 7.0.3
+          TEST_SERVER_VERSION: 7.1.4
           TEST_CONNECTION_STRING: couchbase://127.0.0.1
           TEST_LOG_LEVEL: trace
         run: ./bin/run-unit-tests

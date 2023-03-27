@@ -255,6 +255,7 @@ set(couchbase_cxx_client_FILES
         core/utils/mutation_token.cxx
         core/utils/split_string.cxx
         core/utils/url_codec.cxx
+        core/impl/analytics.cxx
         core/impl/analytics_error_category.cxx
         core/impl/append.cxx
         core/impl/best_effort_retry_strategy.cxx
