@@ -19,7 +19,7 @@
 
 namespace cbc
 {
-class version : public command
+class analytics : public command
 {
     void execute(const std::vector<std::string>& argv) override;
 };

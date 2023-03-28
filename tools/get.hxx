@@ -21,6 +21,6 @@ namespace cbc
 {
 class get : public command
 {
-    void execute(const std::vector<std::string>& argv);
+    void execute(const std::vector<std::string>& argv) override;
 };
 } // namespace cbc
