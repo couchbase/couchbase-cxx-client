@@ -163,15 +163,16 @@ TEST_CASE("integration: search query")
         couchbase::core::operations::search_request req{};
         req.index_name = index_name;
         req.query = simple_query;
+        req.sort_specs.emplace_back(couchbase::core::utils::json::generate("_id"));
         req.include_locations = true;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows[0].locations.size() == 1);
         REQUIRE(resp.rows[0].locations[0].field == "description");
         REQUIRE(resp.rows[0].locations[0].term == "belgian");
-        REQUIRE(resp.rows[0].locations[0].position == 2);
-        REQUIRE(resp.rows[0].locations[0].start_offset == 2);
-        REQUIRE(resp.rows[0].locations[0].end_offset == 9);
+        REQUIRE(resp.rows[0].locations[0].position == 1);
+        REQUIRE(resp.rows[0].locations[0].start_offset == 0);
+        REQUIRE(resp.rows[0].locations[0].end_offset == 7);
     }
 
     SECTION("highlight fields default highlight style")
@@ -179,10 +180,11 @@ TEST_CASE("integration: search query")
         couchbase::core::operations::search_request req{};
         req.index_name = index_name;
         req.query = simple_query;
+        req.sort_specs.emplace_back(couchbase::core::utils::json::generate("_id"));
         req.highlight_fields = { "description" };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
-        REQUIRE(resp.rows[0].fragments["description"][0] == "A <mark>Belgian</mark> Double Abbey.");
+        REQUIRE(resp.rows[0].fragments["description"][0] == "<mark>Belgian</mark>-Style Quadrupel Ale");
     }
 
     SECTION("highlight style")
@@ -191,17 +193,19 @@ TEST_CASE("integration: search query")
             couchbase::core::operations::search_request req{};
             req.index_name = index_name;
             req.query = simple_query;
+            req.sort_specs.emplace_back(couchbase::core::utils::json::generate("_id"));
             req.highlight_fields = { "description" };
             req.highlight_style = couchbase::core::search_highlight_style::html;
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_SUCCESS(resp.ctx.ec);
-            REQUIRE(resp.rows[0].fragments["description"][0] == "A <mark>Belgian</mark> Double Abbey.");
+            REQUIRE(resp.rows[0].fragments["description"][0] == "<mark>Belgian</mark>-Style Quadrupel Ale");
         }
 
         {
             couchbase::core::operations::search_request req{};
             req.index_name = index_name;
             req.query = simple_query;
+            req.sort_specs.emplace_back(couchbase::core::utils::json::generate("_id"));
             req.highlight_fields = { "description" };
             req.highlight_style = couchbase::core::search_highlight_style::ansi;
             auto resp = test::utils::execute(integration.cluster, req);
@@ -212,7 +216,7 @@ TEST_CASE("integration: search query")
             std::string close = "\x1b[0m";
             snippet.replace(snippet.find(open), open.size(), "<mark>");
             snippet.replace(snippet.find(close), close.size(), "</mark>");
-            REQUIRE(snippet == "A <mark>Belgian</mark> Double Abbey.");
+            REQUIRE(snippet == "<mark>Belgian</mark>-Style Quadrupel Ale");
         }
     }
 
@@ -221,11 +225,12 @@ TEST_CASE("integration: search query")
         couchbase::core::operations::search_request req{};
         req.index_name = index_name;
         req.query = simple_query;
+        req.sort_specs.emplace_back(couchbase::core::utils::json::generate("_id"));
         req.fields.emplace_back("description");
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
         auto fields = couchbase::core::utils::json::parse(resp.rows[0].fields).get_object();
-        REQUIRE(fields.at("description").get_string() == "A Belgian Double Abbey.");
+        REQUIRE(fields.at("description").get_string() == "Belgian-Style Quadrupel Ale");
     }
 
     SECTION("sort")
@@ -330,6 +335,13 @@ TEST_CASE("integration: search query")
         REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 1);
     }
+
+    {
+        couchbase::core::operations::management::search_index_drop_request req{};
+        req.index_name = index_name;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
+    }
 }
 
 TEST_CASE("integration: search query consistency", "[integration]")
@@ -338,7 +350,7 @@ TEST_CASE("integration: search query consistency", "[integration]")
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    std::string params =
+    const std::string params =
       R"(
             {
                 "mapping": {
@@ -415,7 +427,7 @@ TEST_CASE("integration: search query consistency", "[integration]")
     int attempt = 0;
     bool done = false;
     while (!done) {
-        tao::json::value query{ { "query", fmt::format("value:{}", value) } };
+        const tao::json::value query{ { "query", fmt::format("value:{}", value) } };
         auto query_json = couchbase::core::json_string(couchbase::core::utils::json::generate(query));
 
         {
@@ -424,6 +436,12 @@ TEST_CASE("integration: search query consistency", "[integration]")
             req.query = query_json;
             req.mutation_state.emplace_back(token);
             auto resp = test::utils::execute(integration.cluster, req);
+            if (resp.ctx.ec == couchbase::errc::search::consistency_mismatch) {
+                // FIXME(MB-55920): ignore "err: bleve: pindex_consistency mismatched partition"
+                CB_LOG_INFO("ignore consistency_mismatch: {}", resp.ctx.http_body);
+                continue;
+            }
+            INFO(resp.ctx.http_body)
             REQUIRE_SUCCESS(resp.ctx.ec);
             switch (resp.rows.size()) {
                 case 1:
@@ -447,7 +465,8 @@ TEST_CASE("integration: search query consistency", "[integration]")
     {
         couchbase::core::operations::management::search_index_drop_request req{};
         req.index_name = index_name;
-        test::utils::execute(integration.cluster, req);
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
     }
 }
 
@@ -485,7 +504,6 @@ TEST_CASE("integration: search query collections")
     }
 
     {
-
         // clang-format off
         std::string params =
           R"(
@@ -572,5 +590,12 @@ TEST_CASE("integration: search query collections")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 2);
+    }
+
+    {
+        couchbase::core::operations::management::search_index_drop_request req{};
+        req.index_name = index_name;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
     }
 }
