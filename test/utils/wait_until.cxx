@@ -100,6 +100,15 @@ wait_until_cluster_connected(const std::string& username, const std::string& pas
     return connected;
 }
 
+static auto
+to_string(std::optional<std::uint64_t> value) -> std::string
+{
+    if (value) {
+        return std::to_string(*value);
+    }
+    return "(empty)";
+}
+
 bool
 wait_for_search_pindexes_ready(std::shared_ptr<couchbase::core::cluster> cluster,
                                const std::string& bucket_name,
@@ -113,15 +122,18 @@ wait_for_search_pindexes_ready(std::shared_ptr<couchbase::core::cluster> cluster
               return false;
           }
           auto stats = couchbase::core::utils::json::parse(resp.stats);
-          const auto* num_pindexes_actual = stats.find(fmt::format("{}:{}:num_pindexes_actual", bucket_name, index_name));
-          if (num_pindexes_actual == nullptr || !num_pindexes_actual->is_number()) {
-              return false;
+          auto num_pindexes_target = stats.optional<std::uint64_t>(fmt::format("{}:{}:num_pindexes_target", bucket_name, index_name));
+          auto num_pindexes_actual = stats.optional<std::uint64_t>(fmt::format("{}:{}:num_pindexes_actual", bucket_name, index_name));
+
+          CB_LOG_INFO("wait_for_search_pindexes_ready for \"{}\", target: {}, actual: {}",
+                      index_name,
+                      to_string(num_pindexes_target),
+                      to_string(num_pindexes_actual));
+
+          if (num_pindexes_actual && num_pindexes_target) {
+              return num_pindexes_actual.value() == num_pindexes_target.value();
           }
-          const auto* num_pindexes_target = stats.find(fmt::format("{}:{}:num_pindexes_target", bucket_name, index_name));
-          if (num_pindexes_target == nullptr || !num_pindexes_target->is_number()) {
-              return false;
-          }
-          return num_pindexes_actual->get_unsigned() == num_pindexes_target->get_unsigned();
+          return false;
       },
       std::chrono::minutes(5));
 }
@@ -135,6 +147,7 @@ wait_until_indexed(std::shared_ptr<couchbase::core::cluster> cluster, const std:
           req.index_name = index_name;
           req.timeout = std::chrono::seconds{ 1 };
           auto resp = test::utils::execute(cluster, req);
+          CB_LOG_INFO("wait_until_indexed for \"{}\", expected: {}, actual: {}", index_name, expected_count, resp.count);
           return resp.count >= expected_count;
       },
       std::chrono::minutes(5));

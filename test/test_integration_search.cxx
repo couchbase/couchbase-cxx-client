@@ -63,6 +63,10 @@ TEST_CASE("integration: search query")
 
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE((!resp.ctx.ec || resp.ctx.ec == couchbase::errc::common::index_exists));
+        if (index_name != resp.name) {
+            CB_LOG_INFO("update index name \"{}\" -> \"{}\"", index_name, resp.name);
+        }
+        index_name = resp.name;
     }
 
     couchbase::core::json_string simple_query(R"({"query": "description:belgian"})");
@@ -372,12 +376,36 @@ TEST_CASE("integration: search query consistency", "[integration]")
         req.index = index;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
+        if (index_name != resp.name) {
+            CB_LOG_INFO("update index name \"{}\" -> \"{}\"", index_name, resp.name);
+        }
+        index_name = resp.name;
     }
 
     REQUIRE(test::utils::wait_for_search_pindexes_ready(integration.cluster, integration.ctx.bucket, index_name));
 
     auto value = test::utils::uniq_id("value");
     auto id = couchbase::core::document_id(integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("key"));
+
+    // FIXME: MB-55920, consistency checks is broken in all known versions of the servers at the moment,
+    //                  it might return empty results without waiting for the mutation. We cannot workaround it in any way.
+    //                  We know that doing a mutation, and then query with consistency checks in the loop is not proper test,
+    //                  but at least it will check the payload format for now, and later when the issue is fixed, the loop
+    //                  has to be removed.
+    couchbase::mutation_token token;
+    {
+        // now update the document and use its mutation token in query later
+        auto resp = test::utils::execute(integration.cluster,
+                                         couchbase::core::operations::upsert_request{
+                                           id,
+                                           couchbase::core::utils::json::generate_binary(tao::json::value{
+                                             { "_type", "test_doc" },
+                                             { "value", value },
+                                           }),
+                                         });
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        token = resp.token;
+    }
 
     /*
      * Retry query with consistency check until it will succeed or reach 20 attempts.
@@ -387,21 +415,6 @@ TEST_CASE("integration: search query consistency", "[integration]")
     int attempt = 0;
     bool done = false;
     while (!done) {
-        couchbase::mutation_token token;
-        {
-            // now update the document and use its mutation token in query later
-            auto resp = test::utils::execute(integration.cluster,
-                                             couchbase::core::operations::upsert_request{
-                                               id,
-                                               couchbase::core::utils::json::generate_binary(tao::json::value{
-                                                 { "_type", "test_doc" },
-                                                 { "value", value },
-                                               }),
-                                             });
-            REQUIRE_SUCCESS(resp.ctx.ec());
-            token = resp.token;
-        }
-
         tao::json::value query{ { "query", fmt::format("value:{}", value) } };
         auto query_json = couchbase::core::json_string(couchbase::core::utils::json::generate(query));
 
@@ -518,6 +531,10 @@ TEST_CASE("integration: search query collections")
         req.index = index;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
+        if (index_name != resp.name) {
+            CB_LOG_INFO("update index name \"{}\" -> \"{}\"", index_name, resp.name);
+        }
+        index_name = resp.name;
     }
 
     REQUIRE(test::utils::wait_until_indexed(integration.cluster, index_name, 2));
