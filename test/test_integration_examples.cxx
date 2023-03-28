@@ -17,6 +17,10 @@
 
 #include "test_helper_integration.hxx"
 
+#include "core/operations/management/query_index_build.hxx"
+#include "core/operations/management/query_index_create.hxx"
+#include "core/operations/management/query_index_get_all.hxx"
+
 #include <couchbase/cluster.hxx>
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/mutation_token.hxx>
@@ -128,6 +132,43 @@ TEST_CASE("example: start using", "[integration]")
     if (!integration.cluster_version().supports_collections()) {
         return;
     }
+
+    {
+        couchbase::core::operations::management::query_index_create_request req{};
+        req.index_name = "def_inventory_airline_primary";
+        req.bucket_name = "travel-sample";
+        req.scope_name = "inventory";
+        req.collection_name = "airline";
+        req.is_primary = true;
+        req.ignore_if_exists = true;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+
+    {
+        couchbase::core::operations::management::query_index_build_request req{};
+        req.index_names = { "def_inventory_airline_primary" };
+        req.bucket_name = "travel-sample";
+        req.scope_name = "inventory";
+        req.collection_name = "airline";
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_FALSE(resp.ctx.ec);
+    }
+
+    CHECK(test::utils::wait_until(
+      [&integration]() {
+          couchbase::core::operations::management::query_index_get_all_request req{};
+          req.bucket_name = "travel-sample";
+          req.scope_name = "inventory";
+          auto resp = test::utils::execute(integration.cluster, req);
+          if (resp.ctx.ec) {
+              return false;
+          }
+          return std::any_of(resp.indexes.begin(), resp.indexes.end(), [](const auto& index) {
+              return index.collection_name == "airline" && index.is_primary && index.state == "online";
+          });
+      },
+      std::chrono::minutes{ 5 }));
 
     const auto env = test::utils::test_context::load_from_environment();
     const char* argv[] = {
