@@ -52,6 +52,8 @@ TEST_CASE("unit: connection string", "[unit]")
         CHECK(couchbase::core::utils::parse_connection_string("http://127.0.0.1").scheme == "http");
         CHECK(couchbase::core::utils::parse_connection_string("couchbase://").scheme == "couchbase");
         CHECK(couchbase::core::utils::parse_connection_string("my+scheme://").scheme == "my+scheme");
+        CHECK(couchbase::core::utils::parse_connection_string("127.0.0.1").scheme == "couchbase");
+        CHECK(couchbase::core::utils::parse_connection_string("127.0.0.1:8091").scheme == "couchbase");
 
         SECTION("default bootstrap mode")
         {
@@ -155,6 +157,13 @@ TEST_CASE("unit: connection string", "[unit]")
                       couchbase::core::utils::connection_string::address_type::dns,
                       couchbase::core::utils::connection_string::bootstrap_mode::unspecified },
                   });
+            CHECK(couchbase::core::utils::parse_connection_string("1.2.3.4").bootstrap_nodes ==
+                  std::vector<couchbase::core::utils::connection_string::node>{
+                    { "1.2.3.4",
+                      0,
+                      couchbase::core::utils::connection_string::address_type::ipv4,
+                      couchbase::core::utils::connection_string::bootstrap_mode::unspecified },
+                  });
         }
 
         SECTION("multiple nodes")
@@ -207,6 +216,17 @@ TEST_CASE("unit: connection string", "[unit]")
                       couchbase::core::utils::connection_string::address_type::ipv4,
                       couchbase::core::utils::connection_string::bootstrap_mode::unspecified },
                   });
+            CHECK(couchbase::core::utils::parse_connection_string("1.2.3.4,4.3.2.1").bootstrap_nodes ==
+                  std::vector<couchbase::core::utils::connection_string::node>{
+                    { "1.2.3.4",
+                      0,
+                      couchbase::core::utils::connection_string::address_type::ipv4,
+                      couchbase::core::utils::connection_string::bootstrap_mode::unspecified },
+                    { "4.3.2.1",
+                      0,
+                      couchbase::core::utils::connection_string::address_type::ipv4,
+                      couchbase::core::utils::connection_string::bootstrap_mode::unspecified },
+                  });
         }
 
         SECTION("custom ports")
@@ -245,6 +265,21 @@ TEST_CASE("unit: connection string", "[unit]")
                       couchbase::core::utils::connection_string::bootstrap_mode::unspecified },
                   });
             CHECK(couchbase::core::utils::parse_connection_string("couchbase://example.com:123,[::1]:456;127.0.0.1:789").bootstrap_nodes ==
+                  std::vector<couchbase::core::utils::connection_string::node>{
+                    { "example.com",
+                      123,
+                      couchbase::core::utils::connection_string::address_type::dns,
+                      couchbase::core::utils::connection_string::bootstrap_mode::unspecified },
+                    { "::1",
+                      456,
+                      couchbase::core::utils::connection_string::address_type::ipv6,
+                      couchbase::core::utils::connection_string::bootstrap_mode::unspecified },
+                    { "127.0.0.1",
+                      789,
+                      couchbase::core::utils::connection_string::address_type::ipv4,
+                      couchbase::core::utils::connection_string::bootstrap_mode::unspecified },
+                  });
+            CHECK(couchbase::core::utils::parse_connection_string("example.com:123,[::1]:456;127.0.0.1:789").bootstrap_nodes ==
                   std::vector<couchbase::core::utils::connection_string::node>{
                     { "example.com",
                       123,

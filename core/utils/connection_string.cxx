@@ -51,18 +51,22 @@ using opt_bucket_name = opt_must<one<'/'>, bucket_name>;
 using opt_params = opt_must<one<'?'>, list_must<param, one<'&'>>>;
 using opt_nodes = seq<list_must<node, one<',', ';'>>, opt_bucket_name>;
 
-using grammar = must<seq<uri::scheme, one<':'>, uri::dslash, opt_nodes, opt_params, tao::pegtl::eof>>;
+struct scheme : seq<uri::scheme, one<':'>, uri::dslash> {
+};
+using opt_scheme = opt<scheme>;
+
+using grammar = must<seq<opt_scheme, opt_nodes, opt_params, tao::pegtl::eof>>;
 
 template<typename Rule>
 struct action {
 };
 
 template<>
-struct action<uri::scheme> {
+struct action<scheme> {
     template<typename ActionInput>
     static void apply(const ActionInput& in, connection_string& cs, connection_string::node& /* cur_node */)
     {
-        cs.scheme = in.string();
+        cs.scheme = in.string().substr(0, in.string().rfind(':'));
         if (cs.scheme == "couchbase") {
             cs.default_port = 11210;
             cs.default_mode = connection_string::bootstrap_mode::gcccp;
@@ -79,6 +83,9 @@ struct action<uri::scheme> {
             cs.default_port = 18091;
             cs.default_mode = connection_string::bootstrap_mode::http;
             cs.tls = true;
+        } else {
+            cs.default_mode = connection_string::bootstrap_mode::unspecified;
+            cs.default_port = 0;
         }
     }
 };

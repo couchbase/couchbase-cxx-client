@@ -57,7 +57,7 @@ struct connection_string {
         }
     };
 
-    std::string scheme{};
+    std::string scheme{ "couchbase" };
     bool tls{ false };
     std::map<std::string, std::string> params{};
     cluster_options options{};
@@ -65,8 +65,8 @@ struct connection_string {
     std::vector<node> bootstrap_nodes{};
 
     std::optional<std::string> default_bucket_name{};
-    bootstrap_mode default_mode{ bootstrap_mode::unspecified };
-    std::uint16_t default_port{ 0 };
+    bootstrap_mode default_mode{ connection_string::bootstrap_mode::gcccp };
+    std::uint16_t default_port{ 11210 };
 
     std::optional<std::string> error{};
 };
