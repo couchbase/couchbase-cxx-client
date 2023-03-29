@@ -175,6 +175,11 @@ struct server_version {
         return deployment == deployment_type::on_prem;
     }
 
+    [[nodiscard]] bool requires_search_replicas() const
+    {
+        return deployment == deployment_type::capella || is_serverless_config_profile();
+    }
+
     [[nodiscard]] bool supports_views() const
     {
         return deployment == deployment_type::on_prem && (major < 7 || (major == 7 && minor < 2));
@@ -188,6 +193,11 @@ struct server_version {
     [[nodiscard]] bool is_serverless_config_profile() const
     {
         return profile == server_config_profile::serverless;
+    }
+
+    [[nodiscard]] bool supports_search_disable_scoring() const
+    {
+        return is_mad_hatter() || is_cheshire_cat() || is_neo();
     }
 };
 

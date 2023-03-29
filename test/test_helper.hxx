@@ -21,7 +21,7 @@
 
 #include "utils/binary.hxx"
 #include "utils/test_context.hxx"
-#include "utils/uniq_id.hxx"
+#include "utils/test_data.hxx"
 
 #include <catch2/catch.hpp>
 

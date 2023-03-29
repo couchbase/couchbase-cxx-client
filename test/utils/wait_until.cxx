@@ -17,6 +17,12 @@
 
 #include "wait_until.hxx"
 
+#include "core/operations/management/bucket_get.hxx"
+#include "core/operations/management/collections_manifest_get.hxx"
+#include "core/operations/management/search_get_stats.hxx"
+#include "core/operations/management/search_index_get_documents_count.hxx"
+#include "core/utils/json.hxx"
+
 namespace test::utils
 {
 bool
@@ -71,6 +77,7 @@ wait_until_user_present(const std::shared_ptr<couchbase::core::cluster>& cluster
     }
     return present;
 }
+
 bool
 wait_until_cluster_connected(const std::string& username, const std::string& password, const std::string& connection_string)
 {
@@ -92,4 +99,58 @@ wait_until_cluster_connected(const std::string& username, const std::string& pas
 
     return connected;
 }
+
+static auto
+to_string(std::optional<std::uint64_t> value) -> std::string
+{
+    if (value) {
+        return std::to_string(*value);
+    }
+    return "(empty)";
+}
+
+bool
+wait_for_search_pindexes_ready(std::shared_ptr<couchbase::core::cluster> cluster,
+                               const std::string& bucket_name,
+                               const std::string& index_name)
+{
+    return test::utils::wait_until(
+      [&]() {
+          couchbase::core::operations::management::search_index_stats_request req{};
+          auto resp = test::utils::execute(cluster, req);
+          if (resp.ctx.ec || resp.stats.empty()) {
+              return false;
+          }
+          auto stats = couchbase::core::utils::json::parse(resp.stats);
+          auto num_pindexes_target = stats.optional<std::uint64_t>(fmt::format("{}:{}:num_pindexes_target", bucket_name, index_name));
+          auto num_pindexes_actual = stats.optional<std::uint64_t>(fmt::format("{}:{}:num_pindexes_actual", bucket_name, index_name));
+
+          CB_LOG_INFO("wait_for_search_pindexes_ready for \"{}\", target: {}, actual: {}",
+                      index_name,
+                      to_string(num_pindexes_target),
+                      to_string(num_pindexes_actual));
+
+          if (num_pindexes_actual && num_pindexes_target) {
+              return num_pindexes_actual.value() == num_pindexes_target.value();
+          }
+          return false;
+      },
+      std::chrono::minutes(5));
+}
+
+bool
+wait_until_indexed(std::shared_ptr<couchbase::core::cluster> cluster, const std::string& index_name, std::uint64_t expected_count)
+{
+    return test ::utils::wait_until(
+      [cluster = std::move(cluster), &index_name, &expected_count]() {
+          couchbase::core::operations::management::search_index_get_documents_count_request req{};
+          req.index_name = index_name;
+          req.timeout = std::chrono::seconds{ 1 };
+          auto resp = test::utils::execute(cluster, req);
+          CB_LOG_INFO("wait_until_indexed for \"{}\", expected: {}, actual: {}", index_name, expected_count, resp.count);
+          return resp.count >= expected_count;
+      },
+      std::chrono::minutes(5));
+}
+
 } // namespace test::utils
