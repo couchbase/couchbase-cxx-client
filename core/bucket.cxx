@@ -589,10 +589,9 @@ class bucket_impl
                           self->update_config(std::move(cfg));
                           session.on_configuration_update(self);
                           session.on_stop(
-                            [index = session.index(), hostname = session.bootstrap_hostname(), port = session.bootstrap_port(), self](
-                              retry_reason reason) {
+                            [idx, hostname = session.bootstrap_hostname(), port = session.bootstrap_port(), self](retry_reason reason) {
                                 if (reason == retry_reason::socket_closed_while_in_flight) {
-                                    self->restart_node(index, hostname, port);
+                                    self->restart_node(idx, hostname, port);
                                 }
                             });
                           self->drain_deferred_queue();
