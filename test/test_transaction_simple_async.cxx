@@ -596,16 +596,15 @@ TEST_CASE("transactions: async KV get", "[transactions]")
       [get_called, &id](async_attempt_context& ctx) {
           ctx.get(id, [get_called, &id, &ctx](std::exception_ptr, std::optional<transaction_get_result>) {
               auto query = fmt::format("UPDATE `{}` USE KEYS '{}' SET `some` = 'thing else'", id.bucket(), id.key());
-              ctx.query(
-                query, [get_called, &id, &ctx](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
-                    if (!err) {
-                        ctx.get(id, [get_called](std::exception_ptr err, std::optional<transaction_get_result>) {
-                            if (!err) {
-                                get_called->store(true);
-                            }
-                        });
-                    }
-                });
+              ctx.query(query, [get_called, &id, &ctx](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
+                  if (!err) {
+                      ctx.get(id, [get_called](std::exception_ptr err, std::optional<transaction_get_result>) {
+                          if (!err) {
+                              get_called->store(true);
+                          }
+                      });
+                  }
+              });
           });
       },
       [get_called, barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> result) {
@@ -643,17 +642,16 @@ TEST_CASE("transactions: rollback async KV get", "[transactions]")
       [get_called, &id](async_attempt_context& ctx) {
           ctx.get(id, [&ctx, get_called, &id](std::exception_ptr, std::optional<transaction_get_result>) {
               auto query = fmt::format("UPDATE `{}` USE KEYS '{}' SET `some` = 'thing else'", id.bucket(), id.key());
-              ctx.query(
-                query, [&ctx, get_called, &id](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
-                    if (!err) {
-                        ctx.get(id, [get_called](std::exception_ptr err, std::optional<transaction_get_result>) {
-                            if (!err) {
-                                get_called->store(true);
-                                throw 3;
-                            }
-                        });
-                    }
-                });
+              ctx.query(query, [&ctx, get_called, &id](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
+                  if (!err) {
+                      ctx.get(id, [get_called](std::exception_ptr err, std::optional<transaction_get_result>) {
+                          if (!err) {
+                              get_called->store(true);
+                              throw 3;
+                          }
+                      });
+                  }
+              });
           });
       },
       [&get_called, barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> result) {

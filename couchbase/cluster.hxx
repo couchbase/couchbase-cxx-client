@@ -214,7 +214,9 @@ class cluster
     /**
      * Provides access to transaction services.
      *
-     * @return
+     * See {@link transactions} for details on using the transactions object.
+     *
+     * @return an {@link transactions} object
      *
      * @since 1.0.0
      * @committed

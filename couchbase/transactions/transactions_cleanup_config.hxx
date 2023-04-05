@@ -21,7 +21,9 @@
 #include <couchbase/transactions/transaction_keyspace.hxx>
 namespace couchbase::transactions
 {
-
+/**
+ * Configuration parameters for the background transaction cleanup threads.
+ */
 class transactions_cleanup_config
 {
   public:
@@ -117,7 +119,7 @@ class transactions_cleanup_config
         return *this;
     }
 
-    /** @internal */
+    /** @private */
     struct built {
         bool cleanup_lost_attempts;
         bool cleanup_client_attempts;
@@ -125,7 +127,7 @@ class transactions_cleanup_config
         std::list<couchbase::transactions::transaction_keyspace> collections;
     };
 
-    /** @internal */
+    /** @private */
     [[nodiscard]] auto build() const -> built
     {
         return { cleanup_lost_attempts_, cleanup_client_attempts_, cleanup_window_, collections_ };

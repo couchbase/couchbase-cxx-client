@@ -19,11 +19,14 @@
 
 namespace couchbase::transactions
 {
+/**
+ * The transactions_query_config sets the defaults for all queries in the transactions.
+ */
 class transactions_query_config
 {
   public:
     /**
-     * Set scan consistency for transactions.
+     * Set scan consistency for transactions.  @see query_options::scan_consistency for details.
      *
      * @param consistency the query_scan_consistency to use.
      * @return reference to this, so calls can be chained.
@@ -44,12 +47,12 @@ class transactions_query_config
         return scan_consistency_;
     }
 
-    /** @internal */
+    /** @private */
     struct built {
         query_scan_consistency scan_consistency;
     };
 
-    /** @internal */
+    /** @private */
     [[nodiscard]] auto build() const -> built
     {
         return { scan_consistency_ };

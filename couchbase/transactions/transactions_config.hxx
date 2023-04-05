@@ -53,6 +53,8 @@ class transactions_config
     /**
      * @brief Get the default durability level for all transaction operations
      *
+     * @see couchbase::durability_level for details.
+     *
      * @return The default durability level used for write operations.
      */
     [[nodiscard]] couchbase::durability_level durability_level() const
@@ -62,6 +64,8 @@ class transactions_config
 
     /**
      * @brief Set the default durability level for all transaction operations
+     *
+     * @see couchbase::durability_level for details.
      *
      * @param level The default durability level desired for write operations.
      * @return reference to this, so calls can be chained.
@@ -115,7 +119,7 @@ class transactions_config
     /**
      * @brief Set the expiration time for transactions.
      *
-     * @param duration desired expiration for transactions. see @ref expiration_time().
+     * @param duration desired expiration for transactions.
      * @return reference to this, so calls can be chained.
      */
     template<typename T>
@@ -206,7 +210,7 @@ class transactions_config
         return *this;
     }
 
-    /** @internal */
+    /** @private */
     transactions_config& test_factories(std::shared_ptr<core::transactions::attempt_context_testing_hooks> hooks,
                                         std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks)
     {
@@ -215,19 +219,19 @@ class transactions_config
         return *this;
     }
 
-    /** @internal */
+    /** @private */
     [[nodiscard]] core::transactions::attempt_context_testing_hooks& attempt_context_hooks() const
     {
         return *attempt_context_hooks_;
     }
 
-    /** @internal */
+    /** @private */
     [[nodiscard]] core::transactions::cleanup_testing_hooks& cleanup_hooks() const
     {
         return *cleanup_hooks_;
     }
 
-    /** @internal */
+    /** @private */
     struct built {
         couchbase::durability_level level;
         std::chrono::nanoseconds expiration_time;

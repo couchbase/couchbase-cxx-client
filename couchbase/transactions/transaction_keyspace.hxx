@@ -66,12 +66,20 @@ struct transaction_keyspace {
       : transaction_keyspace{ bucket_name, couchbase::scope::default_name, couchbase::collection::default_name }
     {
     }
-
+    /**
+     * Check if a keyspace is valid.
+     *
+     * A valid transaction_keyspace must have the bucket, scope, and collection all set.   Note that both the scope and collection default
+     * to _default, but there is no default for the bucket so it must be set.
+     *
+     * @return true if valid.
+     */
     bool valid()
     {
         return !bucket.empty() && !scope.empty() && !collection.empty();
     }
 
+    /** @private */
     template<typename OStream>
     friend OStream& operator<<(OStream& os, const transaction_keyspace& keyspace)
     {
@@ -84,6 +92,8 @@ struct transaction_keyspace {
     }
 };
 } // namespace couchbase::transactions
+
+/** @private */
 template<>
 struct fmt::formatter<couchbase::transactions::transaction_keyspace> {
   public:
