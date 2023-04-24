@@ -54,18 +54,26 @@ class behavior_options
         return *this;
     }
 
+    auto dump_configuration(bool enable) -> behavior_options&
+    {
+        dump_configuration_ = enable;
+        return *this;
+    }
+
     struct built {
         std::string user_agent_extra;
         bool show_queries;
         bool enable_clustermap_notification;
         bool enable_mutation_tokens;
         bool enable_unordered_execution;
+        bool dump_configuration;
     };
 
     [[nodiscard]] auto build() const -> built
     {
         return {
-            user_agent_extra_, show_queries_, enable_clustermap_notification_, enable_mutation_tokens_, enable_unordered_execution_,
+            user_agent_extra_,           show_queries_,       enable_clustermap_notification_, enable_mutation_tokens_,
+            enable_unordered_execution_, dump_configuration_,
         };
     }
 
@@ -75,5 +83,6 @@ class behavior_options
     bool enable_clustermap_notification_{ false };
     bool enable_mutation_tokens_{ true };
     bool enable_unordered_execution_{ true };
+    bool dump_configuration_{ false };
 };
 } // namespace couchbase

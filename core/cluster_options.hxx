@@ -86,6 +86,8 @@ struct cluster_options {
     couchbase::transactions::transactions_config::built transactions{};
 
     [[nodiscard]] std::chrono::milliseconds default_timeout_for(service_type type) const;
+
+    bool dump_configuration{ false };
     void apply_profile(std::string profile_name);
 };
 

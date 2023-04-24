@@ -165,6 +165,7 @@ Behavior options:
   --enable-clustermap-notifications  Allow server to send notifications when cluster configuration changes.
   --disable-mutation-tokens          Do not request Key/Value service to send mutation tokens.
   --disable-unordered-execution      Disable unordered execution for Key/Value service.
+  --dump-configuration               Dump every new configuration on TRACE log level.
 )",
       fmt::arg("connection_string", connection_string),
       fmt::arg("username", default_options.username),
@@ -340,6 +341,7 @@ fill_cluster_options(const docopt::Options& options, couchbase::cluster_options&
 
     parse_string_option(cluster_options.behavior().append_to_user_agent, "--user-agent-extra");
     parse_enable_option(cluster_options.behavior().show_queries, "--show-queries");
+    parse_enable_option(cluster_options.behavior().dump_configuration, "--dump-configuration");
     parse_enable_option(cluster_options.behavior().enable_clustermap_notification, "--enable-clustermap-notification");
     parse_disable_option(cluster_options.behavior().enable_mutation_tokens, "--disable-mutation-tokens");
     parse_disable_option(cluster_options.behavior().enable_unordered_execution, "--disable-disable-unordered-execution");
