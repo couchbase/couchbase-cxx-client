@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "core/cluster_options.hxx"
+#include "core/cluster_options_fwd.hxx"
 #include "core/topology/configuration.hxx"
 #include "query_cache.hxx"
 

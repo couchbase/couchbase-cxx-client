@@ -15,6 +15,7 @@
  */
 #pragma once
 
+#include <couchbase/scope.hxx>
 #include <couchbase/transactions/transaction_get_result.hxx>
 #include <couchbase/transactions/transaction_query_options.hxx>
 #include <couchbase/transactions/transaction_query_result.hxx>

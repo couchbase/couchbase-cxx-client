@@ -25,6 +25,7 @@
 #include "core/transactions/cleanup_testing_hooks.hxx"
 #include "service_type.hxx"
 #include "timeout_defaults.hxx"
+#include "tls_verify_mode.hxx"
 
 #include <couchbase/best_effort_retry_strategy.hxx>
 #include <couchbase/metrics/meter.hxx>
@@ -32,16 +33,10 @@
 #include <couchbase/transactions/transactions_config.hxx>
 
 #include <chrono>
-#include <list>
 #include <string>
 
 namespace couchbase::core
 {
-enum class tls_verify_mode {
-    none,
-    peer,
-};
-
 struct cluster_options {
     std::chrono::milliseconds bootstrap_timeout = timeout_defaults::bootstrap_timeout;
     std::chrono::milliseconds resolve_timeout = timeout_defaults::resolve_timeout;

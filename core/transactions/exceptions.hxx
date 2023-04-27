@@ -16,11 +16,14 @@
 
 #pragma once
 
-#include <core/error_context/query.hxx>
+#include "core/error_context/query.hxx"
+#include "error_class.hxx"
+
 #include <couchbase/error_codes.hxx>
 #include <couchbase/transactions/transaction_result.hxx>
-#include <optional>
+
 #include <stdexcept>
+#include <utility>
 
 namespace couchbase::core::transactions
 {
@@ -135,7 +138,7 @@ class op_exception : public std::runtime_error
     transaction_op_error_context ctx_;
 
   public:
-    op_exception(transaction_op_error_context ctx, external_exception cause = COUCHBASE_EXCEPTION)
+    explicit op_exception(transaction_op_error_context ctx, external_exception cause = COUCHBASE_EXCEPTION)
       : std::runtime_error(ctx.ec().message())
       , cause_(cause)
       , ctx_(std::move(ctx))
@@ -157,7 +160,7 @@ class document_not_found : public op_exception
 {
   public:
     explicit document_not_found(transaction_op_error_context ctx)
-      : op_exception(ctx, DOCUMENT_NOT_FOUND_EXCEPTION)
+      : op_exception(std::move(ctx), DOCUMENT_NOT_FOUND_EXCEPTION)
     {
     }
 };
@@ -166,7 +169,7 @@ class document_exists : public op_exception
 {
   public:
     explicit document_exists(transaction_op_error_context ctx)
-      : op_exception(ctx, DOCUMENT_EXISTS_EXCEPTION)
+      : op_exception(std::move(ctx), DOCUMENT_EXISTS_EXCEPTION)
     {
     }
 };
@@ -175,7 +178,7 @@ class query_attempt_not_found : public op_exception
 {
   public:
     query_attempt_not_found(transaction_op_error_context ctx)
-      : op_exception(ctx)
+      : op_exception(std::move(ctx))
     {
     }
 };
@@ -184,7 +187,7 @@ class query_cas_mismatch : public op_exception
 {
   public:
     query_cas_mismatch(transaction_op_error_context ctx)
-      : op_exception(ctx)
+      : op_exception(std::move(ctx))
     {
     }
 };
@@ -193,7 +196,7 @@ class query_attempt_expired : public op_exception
 {
   public:
     query_attempt_expired(transaction_op_error_context ctx)
-      : op_exception(ctx)
+      : op_exception(std::move(ctx))
     {
     }
 };
@@ -202,7 +205,7 @@ class query_parsing_failure : public op_exception
 {
   public:
     query_parsing_failure(transaction_op_error_context ctx)
-      : op_exception(ctx, PARSING_FAILURE)
+      : op_exception(std::move(ctx), PARSING_FAILURE)
     {
     }
 };

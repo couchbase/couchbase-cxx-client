@@ -17,51 +17,13 @@
 
 #pragma once
 
+#include "request_span.hxx"
+
 #include <memory>
 #include <string>
 
 namespace couchbase::tracing
 {
-
-class request_span
-{
-  public:
-    request_span() = default;
-    request_span(const request_span& other) = default;
-    request_span(request_span&& other) = default;
-    request_span& operator=(const request_span& other) = default;
-    request_span& operator=(request_span&& other) = default;
-    virtual ~request_span() = default;
-
-    explicit request_span(std::string name)
-      : name_(std::move(name))
-      , parent_(nullptr)
-    {
-    }
-    request_span(std::string name, std::shared_ptr<request_span> parent)
-      : name_(std::move(name))
-      , parent_(std::move(parent))
-    {
-    }
-    virtual void add_tag(const std::string& name, std::uint64_t value) = 0;
-    virtual void add_tag(const std::string& name, const std::string& value) = 0;
-    virtual void end() = 0;
-
-    [[nodiscard]] const std::string& name() const
-    {
-        return name_;
-    }
-
-    [[nodiscard]] std::shared_ptr<request_span> parent() const
-    {
-        return parent_;
-    }
-
-  private:
-    std::string name_{};
-    std::shared_ptr<request_span> parent_{ nullptr };
-};
-
 class request_tracer
 {
   public:

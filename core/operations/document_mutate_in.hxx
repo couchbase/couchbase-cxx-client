@@ -26,8 +26,8 @@
 #include "core/operations/operation_traits.hxx"
 #include "core/protocol/client_request.hxx"
 #include "core/protocol/cmd_mutate_in.hxx"
+#include "core/public_fwd.hxx"
 #include "core/timeout_defaults.hxx"
-#include "couchbase/tracing/request_tracer.hxx"
 
 #include <couchbase/durability_level.hxx>
 #include <couchbase/mutate_in_result.hxx>

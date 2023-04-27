@@ -16,6 +16,7 @@
  */
 
 #include "document_analytics.hxx"
+#include "core/cluster_options.hxx"
 #include "core/logger/logger.hxx"
 #include "core/utils/duration_parser.hxx"
 #include "core/utils/json.hxx"

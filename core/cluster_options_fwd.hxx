@@ -14,16 +14,13 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
+
 #pragma once
 
-#include "cluster_options_fwd.hxx"
-
-namespace couchbase::core
+namespace couchbase
 {
-class config_profile
+namespace core
 {
-  public:
-    virtual ~config_profile() = default;
-    virtual void apply(cluster_options&) = 0;
-};
-} // namespace couchbase::core
+struct cluster_options;
+} // namespace core
+} // namespace couchbase

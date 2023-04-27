@@ -16,6 +16,8 @@
  */
 
 #include "document_query.hxx"
+
+#include "core/cluster_options.hxx"
 #include "core/logger/logger.hxx"
 #include "core/operations/management/error_utils.hxx"
 #include "core/utils/duration_parser.hxx"

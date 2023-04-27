@@ -19,6 +19,8 @@
 
 #include <couchbase/cluster.hxx>
 
+#include <couchbase/best_effort_retry_strategy.hxx>
+
 #include <asio.hpp>
 #include <fmt/chrono.h>
 #include <fmt/format.h>

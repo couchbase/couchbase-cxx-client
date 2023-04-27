@@ -16,7 +16,7 @@
  */
 
 #include "cluster_options.hxx"
-#include "config_profile.hxx"
+#include "config_profiles.hxx"
 #include <stdexcept>
 
 namespace couchbase::core
@@ -45,6 +45,6 @@ cluster_options::default_timeout_for(service_type type) const
 void
 cluster_options::apply_profile(std::string profile_name)
 {
-    couchbase::core::known_profiles().apply(profile_name, *this);
+    known_profiles().apply(profile_name, *this);
 }
 } // namespace couchbase::core

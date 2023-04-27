@@ -24,8 +24,8 @@
 #include "core/io/retry_context.hxx"
 #include "core/protocol/client_request.hxx"
 #include "core/protocol/cmd_lookup_in.hxx"
+#include "core/public_fwd.hxx"
 #include "core/timeout_defaults.hxx"
-#include "couchbase/tracing/request_tracer.hxx"
 
 #include <couchbase/lookup_in_result.hxx>
 
