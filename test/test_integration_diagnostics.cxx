@@ -326,9 +326,9 @@ TEST_CASE("integration: fetch diagnostics after N1QL query", "[integration]")
         couchbase::core::operations::query_request req{ "SELECT 'hello, couchbase' AS greetings" };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
-        INFO("rows.size() =" << resp.rows.size())
+        INFO("rows.size() =" << resp.rows.size());
         REQUIRE(resp.rows.size() == 1);
-        INFO("row=" << resp.rows[0])
+        INFO("row=" << resp.rows[0]);
         REQUIRE(resp.rows[0] == R"({"greetings":"hello, couchbase"})");
     }
     {
@@ -385,7 +385,7 @@ TEST_CASE("integration: ping", "[integration]")
         }
 
         REQUIRE(res.id == "my_report_id");
-        INFO(res.sdk)
+        INFO(res.sdk);
         REQUIRE(res.sdk.find("cxx/") == 0);
     }
 }

@@ -504,7 +504,7 @@ TEST_CASE("transactions: can see some query errors but no transactions failed", 
         // eat the expected op_exception
     } catch (...) {
         auto e = std::current_exception();
-        std::cout << "got " << typeid(e).name() << std::endl;
+        INFO(fmt::format("got {}", typeid(e).name()));
         FAIL("expected op_exception to be thrown from the future");
     }
     REQUIRE_NOTHROW(tx.existing_error());

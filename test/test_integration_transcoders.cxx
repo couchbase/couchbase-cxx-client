@@ -17,6 +17,10 @@
 
 #include "test_helper_integration.hxx"
 
+#include <catch2/matchers/catch_matchers.hpp>
+#include <catch2/matchers/catch_matchers_exception.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
 
@@ -24,7 +28,7 @@
 
 #include "profile.hxx"
 
-using Catch::Contains;
+using Catch::Matchers::ContainsSubstring;
 
 TEST_CASE("integration: upsert/get with json transcoder", "[integration]")
 {
@@ -497,10 +501,10 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
         REQUIRE(ctx.first_error_path().has_value());
         REQUIRE(ctx.first_error_path() == "missing_field");
         REQUIRE(resp.cas().empty());
-        REQUIRE_THROWS_WITH(resp.has_value(0), Contains("path_invalid"));
-        REQUIRE_THROWS_WITH(resp.has_value("views"), Contains("path_invalid"));
-        REQUIRE_THROWS_WITH(resp.content_as<std::uint32_t>(0), Contains("path_invalid"));
-        REQUIRE_THROWS_WITH(resp.content_as<std::uint32_t>("views"), Contains("path_invalid"));
+        REQUIRE_THROWS_WITH(resp.has_value(0), ContainsSubstring("path_invalid"));
+        REQUIRE_THROWS_WITH(resp.has_value("views"), ContainsSubstring("path_invalid"));
+        REQUIRE_THROWS_WITH(resp.content_as<std::uint32_t>(0), ContainsSubstring("path_invalid"));
+        REQUIRE_THROWS_WITH(resp.content_as<std::uint32_t>("views"), ContainsSubstring("path_invalid"));
     }
 
     {

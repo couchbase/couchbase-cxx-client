@@ -17,6 +17,8 @@
 
 #include "test_helper_integration.hxx"
 
+#include <catch2/generators/catch_generators.hpp>
+
 #include "core/platform/uuid.h"
 
 #include <couchbase/lookup_in_specs.hxx>

@@ -17,6 +17,8 @@
 
 #include "test_helper_integration.hxx"
 
+#include <catch2/catch_approx.hpp>
+
 #include "core/management/analytics_link.hxx"
 #include "core/operations/management/analytics.hxx"
 #include "core/operations/management/bucket.hxx"
@@ -31,6 +33,8 @@
 #include "couchbase/create_query_index_options.hxx"
 #include "couchbase/drop_query_index_options.hxx"
 #include "couchbase/watch_query_indexes_options.hxx"
+
+using Catch::Approx;
 
 static couchbase::core::operations::management::bucket_get_response
 wait_for_bucket_created(test::utils::integration_test_guard& integration, const std::string& bucket_name)
@@ -108,7 +112,7 @@ TEST_CASE("integration: bucket management", "[integration]")
         {
             couchbase::core::operations::management::bucket_get_all_request req{};
             auto resp = test::utils::execute(integration.cluster, req);
-            INFO(resp.ctx.http_body)
+            INFO(resp.ctx.http_body);
             REQUIRE_SUCCESS(resp.ctx.ec);
             bool found = false;
             for (const auto& bucket : resp.buckets) {
@@ -2943,7 +2947,7 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
             REQUIRE_SUCCESS(resp.ctx.ec);
             REQUIRE(resp.status == 200);
             REQUIRE_FALSE(resp.body.empty());
-            INFO(resp.body)
+            INFO(resp.body);
             auto result = couchbase::core::utils::json::parse(resp.body);
             REQUIRE(result.is_object());
         }
@@ -2973,7 +2977,7 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.status == 200);
         REQUIRE_FALSE(resp.body.empty());
-        INFO(resp.body)
+        INFO(resp.body);
         auto result = couchbase::core::utils::json::parse(resp.body);
         REQUIRE(result.is_object());
     }
@@ -2994,7 +2998,7 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
             REQUIRE(resp.status == 404);
             REQUIRE_FALSE(resp.body.empty());
             auto result = couchbase::core::utils::json::parse(resp.body);
-            INFO(resp.body)
+            INFO(resp.body);
             REQUIRE(result["error"].get_string() == "not_found");
         }
     }
@@ -3010,7 +3014,7 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         REQUIRE(resp.status == 200);
         REQUIRE_FALSE(resp.body.empty());
         auto result = couchbase::core::utils::json::parse(resp.body);
-        INFO(resp.body)
+        INFO(resp.body);
         REQUIRE(result.find("uuid") != nullptr);
     }
 
@@ -3049,7 +3053,7 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
             REQUIRE(resp.status == 200);
             REQUIRE_FALSE(resp.body.empty());
             auto result = couchbase::core::utils::json::parse(resp.body);
-            INFO(resp.body)
+            INFO(resp.body);
             REQUIRE(result.is_array());
         }
     }

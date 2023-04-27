@@ -30,7 +30,7 @@ assert_single_lookup_success(test::utils::integration_test_guard& integration,
     couchbase::core::operations::lookup_in_request req{ id };
     req.specs = couchbase::lookup_in_specs{ spec }.specs();
     auto resp = test::utils::execute(integration.cluster, req);
-    INFO(fmt::format("assert_single_lookup_success(\"{}\", \"{}\")", id, req.specs[0].path_))
+    INFO(fmt::format("assert_single_lookup_success(\"{}\", \"{}\")", id, req.specs[0].path_));
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE_FALSE(resp.cas.empty());
     REQUIRE(resp.fields.size() == 1);
@@ -54,7 +54,7 @@ assert_single_lookup_error(test::utils::integration_test_guard& integration,
     couchbase::core::operations::lookup_in_request req{ id };
     req.specs = couchbase::lookup_in_specs{ spec }.specs();
     auto resp = test::utils::execute(integration.cluster, req);
-    INFO(fmt::format("assert_single_lookup_error(\"{}\", \"{}\")", id, req.specs[0].path_))
+    INFO(fmt::format("assert_single_lookup_error(\"{}\", \"{}\")", id, req.specs[0].path_));
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE_FALSE(resp.cas.empty());
     REQUIRE(resp.fields.size() == 1);

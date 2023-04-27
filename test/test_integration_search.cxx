@@ -17,6 +17,8 @@
 
 #include "test_helper_integration.hxx"
 
+#include <catch2/matchers/catch_matchers_string.hpp>
+
 #include "core/operations/management/collection_create.hxx"
 #include "core/operations/management/search_index_drop.hxx"
 #include "core/operations/management/search_index_upsert.hxx"
@@ -441,7 +443,7 @@ TEST_CASE("integration: search query consistency", "[integration]")
                 CB_LOG_INFO("ignore consistency_mismatch: {}", resp.ctx.http_body);
                 continue;
             }
-            INFO(resp.ctx.http_body)
+            INFO(resp.ctx.http_body);
             REQUIRE_SUCCESS(resp.ctx.ec);
             switch (resp.rows.size()) {
                 case 1:

@@ -17,6 +17,6 @@
 
 #pragma once
 
-#define CATCH_CONFIG_ENABLE_BENCHMARKING
-
 #include "test_helper_integration.hxx"
+
+#include <catch2/benchmark/catch_benchmark.hpp>
