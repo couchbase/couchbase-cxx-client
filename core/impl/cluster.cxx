@@ -98,6 +98,7 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
     }
     user_options.enable_clustermap_notification = opts.behavior.enable_clustermap_notification;
     user_options.show_queries = opts.behavior.show_queries;
+    user_options.dump_configuration = opts.behavior.dump_configuration;
     user_options.enable_mutation_tokens = opts.behavior.enable_mutation_tokens;
     user_options.enable_unordered_execution = opts.behavior.enable_unordered_execution;
     user_options.user_agent_extra = opts.behavior.user_agent_extra;

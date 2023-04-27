@@ -398,6 +398,11 @@ extract_options(connection_string& connstr)
              * header for HTTP)
              */
             parse_option(connstr.options.user_agent_extra, name, value);
+        } else if (name == "dump_configuration") {
+            /**
+             * Whether to dump every new configuration on TRACE level
+             */
+            parse_option(connstr.options.dump_configuration, name, value);
         } else {
             CB_LOG_WARNING(R"(unknown parameter "{}" in connection string (value "{}"))", name, value);
         }

@@ -380,6 +380,16 @@ class mcbp_session_impl
                     switch (static_cast<protocol::server_opcode>(msg.header.opcode)) {
                         case protocol::server_opcode::cluster_map_change_notification: {
                             protocol::cmd_info info{ session_->endpoint_address_, session_->endpoint_.port() };
+                            if (session_->origin_.options().dump_configuration) {
+                                std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()), msg.body.size() };
+                                CB_LOG_TRACE(
+                                  "{} configuration from cluster_map_change_notification request (size={}, endpoint=\"{}:{}\"), {}",
+                                  session_->log_prefix_,
+                                  config_text.size(),
+                                  info.endpoint_address,
+                                  info.endpoint_port,
+                                  config_text);
+                            }
                             protocol::server_request<protocol::cluster_map_change_notification_request_body> req(std::move(msg), info);
                             std::optional<topology::configuration> config = req.body().config();
                             if (session_ && config.has_value()) {
@@ -464,6 +474,15 @@ class mcbp_session_impl
                     switch (auto opcode = static_cast<protocol::client_opcode>(msg.header.opcode)) {
                         case protocol::client_opcode::get_cluster_config: {
                             protocol::cmd_info info{ session_->endpoint_address_, session_->endpoint_.port() };
+                            if (session_->origin_.options().dump_configuration) {
+                                std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()), msg.body.size() };
+                                CB_LOG_TRACE("{} configuration from get_cluster_config response (size={}, endpoint=\"{}:{}\"), {}",
+                                             session_->log_prefix_,
+                                             config_text.size(),
+                                             info.endpoint_address,
+                                             info.endpoint_port,
+                                             config_text);
+                            }
                             protocol::client_response<protocol::get_cluster_config_response_body> resp(std::move(msg), info);
                             if (resp.status() == key_value_status_code::success) {
                                 if (session_) {
@@ -1138,6 +1157,14 @@ class mcbp_session_impl
             if (utils::byte_swap(msg.header.bodylen) - offset > 0) {
                 std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()) + offset,
                                               msg.body.size() - static_cast<std::size_t>(offset) };
+                if (origin_.options().dump_configuration) {
+                    CB_LOG_TRACE("{} configuration from not_my_vbucket response (size={}, endpoint=\"{}:{}\"), {}",
+                                 log_prefix_,
+                                 config_text.size(),
+                                 endpoint_address_,
+                                 endpoint_.port(),
+                                 config_text);
+                }
                 auto config = protocol::parse_config(config_text, endpoint_address_, endpoint_.port());
                 CB_LOG_DEBUG("{} received not_my_vbucket status for {}, opaque={} with config rev={} in the payload",
                              log_prefix_,
