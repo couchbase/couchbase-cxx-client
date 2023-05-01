@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/analytics_options.hxx>
+#include <couchbase/collection.hxx>
 #include <couchbase/query_options.hxx>
 
 #include <memory>

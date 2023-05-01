@@ -24,7 +24,6 @@
 #include "core/operations/management/collections.hxx"
 #include "core/operations/management/user.hxx"
 #include "couchbase/cluster.hxx"
-#include "couchbase/cluster_options.hxx"
 
 namespace test::utils
 {

@@ -17,6 +17,7 @@
 
 #include "document_search.hxx"
 
+#include "core/cluster_options.hxx"
 #include "core/logger/logger.hxx"
 #include "core/utils/json.hxx"
 

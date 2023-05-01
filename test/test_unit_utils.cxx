@@ -17,6 +17,10 @@
 
 #include "test_helper.hxx"
 
+#include <catch2/matchers/catch_matchers.hpp>
+#include <catch2/matchers/catch_matchers_exception.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+
 #include "core/meta/version.hxx"
 #include "core/platform/base64.h"
 #include "core/utils/join_strings.hxx"
@@ -32,14 +36,14 @@
 
 TEST_CASE("unit: transformer to deduplicate JSON keys", "[unit]")
 {
-    using Catch::Contains;
+    using Catch::Matchers::ContainsSubstring;
 
     std::string input{ R"({"answer":"wrong","answer":42})" };
 
-    CHECK_THROWS_WITH(tao::json::from_string(input), Contains("duplicate JSON object key \"answer\""));
+    CHECK_THROWS_WITH(tao::json::from_string(input), ContainsSubstring("duplicate JSON object key \"answer\""));
 
     auto result = couchbase::core::utils::json::parse(input);
-    INFO(couchbase::core::utils::json::generate(result))
+    INFO(couchbase::core::utils::json::generate(result));
     CHECK(result.is_object());
     CHECK(result.find("answer") != nullptr);
     CHECK(result["answer"].is_integer());
@@ -96,7 +100,7 @@ TEST_CASE("unit: user_agent string", "[unit]")
 
     auto simple_user_agent = couchbase::core::meta::user_agent_for_mcbp("0xDEADBEEF", "0xCAFEBEBE");
     REQUIRE(simple_user_agent == fmt::format(R"({{"a":"{}","i":"0xDEADBEEF/0xCAFEBEBE"}})", core_version));
-    REQUIRE(simple_user_agent.size() == 66);
+    REQUIRE(simple_user_agent.size() == 53 + os_version.size());
 
     REQUIRE(couchbase::core::meta::user_agent_for_mcbp("0xDEADBEEF", "0xCAFEBEBE", "couchnode/1.2.3; openssl/1.1.1l") ==
             fmt::format(R"({{"a":"{};couchnode/1.2.3; openssl/1.1.1l","i":"0xDEADBEEF/0xCAFEBEBE"}})", core_version));

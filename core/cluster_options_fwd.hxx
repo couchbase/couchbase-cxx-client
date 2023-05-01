@@ -17,6 +17,10 @@
 
 #pragma once
 
-#include "test_helper_integration.hxx"
-
-#include <catch2/benchmark/catch_benchmark.hpp>
+namespace couchbase
+{
+namespace core
+{
+struct cluster_options;
+} // namespace core
+} // namespace couchbase

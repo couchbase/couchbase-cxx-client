@@ -17,6 +17,10 @@
 
 #pragma once
 
-#include "test_helper_integration.hxx"
-
-#include <catch2/benchmark/catch_benchmark.hpp>
+namespace couchbase::core
+{
+enum class tls_verify_mode {
+    none,
+    peer,
+};
+} // namespace couchbase::core

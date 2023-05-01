@@ -18,7 +18,7 @@
 #include "test_helper.hxx"
 
 #include "core/cluster_options.hxx"
-#include "core/config_profile.hxx"
+#include "core/config_profiles.hxx"
 #include <stdexcept>
 
 class test_profile : public couchbase::core::config_profile

@@ -17,7 +17,7 @@ macro(integration_test name)
     test_integration_${name}
     project_options
     project_warnings
-    Catch2::Catch2
+    Catch2::Catch2WithMain
     Threads::Threads
     snappy
     couchbase_cxx_client
@@ -44,7 +44,7 @@ macro(transaction_test name)
     test_transaction_${name}
     project_options
     project_warnings
-    Catch2::Catch2
+    Catch2::Catch2WithMain
     Threads::Threads
     snappy
     couchbase_cxx_client
@@ -70,7 +70,7 @@ macro(unit_test name)
     test_unit_${name}
     project_options
     project_warnings
-    Catch2::Catch2
+    Catch2::Catch2WithMain
     Threads::Threads
     snappy
     couchbase_cxx_client
@@ -96,7 +96,7 @@ macro(integration_benchmark name)
     benchmark_integration_${name}
     project_options
     project_warnings
-    Catch2::Catch2
+    Catch2::Catch2WithMain
     Threads::Threads
     snappy
     couchbase_cxx_client

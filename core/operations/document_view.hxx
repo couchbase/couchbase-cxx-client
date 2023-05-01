@@ -23,6 +23,7 @@
 #include "core/io/http_message.hxx"
 #include "core/io/http_traits.hxx"
 #include "core/platform/uuid.h"
+#include "core/public_fwd.hxx"
 #include "core/timeout_defaults.hxx"
 #include "core/view_on_error.hxx"
 #include "core/view_scan_consistency.hxx"

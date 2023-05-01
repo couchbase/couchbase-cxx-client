@@ -26,6 +26,15 @@
 #include <limits>
 #include <thread>
 
+#if defined(__GNUC__)
+#if __GNUC__ <= 10
+#pragma GCC diagnostic ignored "-Wparentheses"
+#endif
+#if __GNUC__ < 9
+#pragma GCC diagnostic ignored "-Wuseless-cast"
+#endif
+#endif
+
 using namespace couchbase::core::transactions;
 using namespace std;
 

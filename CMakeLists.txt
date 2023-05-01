@@ -91,7 +91,7 @@ set(couchbase_cxx_client_FILES
         core/cluster_agent_config.cxx
         core/cluster_options.cxx
         core/collections_component.cxx
-        core/config_profile.cxx
+        core/config_profiles.cxx
         core/core_sdk_shim.cxx
         core/crud_component.cxx
         core/dispatcher.cxx

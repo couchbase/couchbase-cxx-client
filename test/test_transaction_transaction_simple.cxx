@@ -14,14 +14,26 @@
  *   limitations under the License.
  */
 
-#include "../core/transactions/atr_ids.hxx"
-#include "simple_object.hxx"
 #include "test_helper_integration.hxx"
-#include <core/transactions.hxx>
-#include <tao/json.hpp>
+
+#include "simple_object.hxx"
+
+#include "core/transactions.hxx"
+#include "core/transactions/atr_ids.hxx"
 
 #include <spdlog/spdlog.h>
+#include <tao/json.hpp>
+
 #include <stdexcept>
+
+#if defined(__GNUC__)
+#if __GNUC__ <= 10
+#pragma GCC diagnostic ignored "-Wparentheses"
+#endif
+#if __GNUC__ < 9
+#pragma GCC diagnostic ignored "-Wuseless-cast"
+#endif
+#endif
 
 using namespace couchbase::core::transactions;
 static const tao::json::value content{

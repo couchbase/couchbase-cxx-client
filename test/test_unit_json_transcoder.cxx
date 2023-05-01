@@ -17,9 +17,13 @@
 
 #include "test_helper.hxx"
 
+#include <catch2/catch_approx.hpp>
+
 #include <couchbase/codec/default_json_transcoder.hxx>
 
 #include <tao/json.hpp>
+
+using Catch::Approx;
 
 TEST_CASE("unit: default_json_transcoder encodes primitives", "[unit]")
 {

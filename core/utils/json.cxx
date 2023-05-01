@@ -20,6 +20,8 @@
 #include <tao/json.hpp>
 #include <tao/json/contrib/traits.hpp>
 
+#include <gsl/span>
+
 namespace couchbase::core::utils::json
 {
 /**
@@ -102,7 +104,8 @@ class to_byte_vector
     void write(std::string_view data)
     {
         buffer_.reserve(buffer_.size() + data.size());
-        buffer_.insert(buffer_.end(), reinterpret_cast<const std::byte*>(&data[0]), reinterpret_cast<const std::byte*>(&data[data.size()]));
+        const auto* begin = reinterpret_cast<const std::byte*>(data.data());
+        buffer_.insert(buffer_.end(), begin, begin + data.size());
     }
 
     inline void escape(const std::string_view s)

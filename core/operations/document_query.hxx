@@ -23,12 +23,18 @@
 #include "core/io/http_traits.hxx"
 #include "core/json_string.hxx"
 #include "core/platform/uuid.h"
+#include "core/public_fwd.hxx"
 #include "core/timeout_defaults.hxx"
 
 #include "couchbase/query_profile.hxx"
 #include "couchbase/query_scan_consistency.hxx"
 
 #include <couchbase/mutation_token.hxx>
+
+namespace couchbase::tracing
+{
+class request_span;
+}
 
 namespace couchbase::core::operations
 {
