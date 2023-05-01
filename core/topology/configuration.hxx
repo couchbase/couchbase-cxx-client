@@ -120,7 +120,11 @@ struct configuration {
     }
 
     [[nodiscard]] std::size_t index_for_this_node() const;
-    [[nodiscard]] bool has_node_with_hostname(const std::string& hostname) const;
+    [[nodiscard]] bool has_node(const std::string& network,
+                                service_type type,
+                                bool is_tls,
+                                const std::string& hostname,
+                                const std::string& port) const;
 
     template<typename Key>
     std::pair<std::uint16_t, std::optional<std::size_t>> map_key(const Key& key, std::size_t index)
