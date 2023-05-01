@@ -347,6 +347,16 @@ extract_options(connection_string& connstr)
              * The period of time an HTTP connection can be idle before it is forcefully disconnected.
              */
             parse_option(connstr.options.idle_http_connection_timeout, name, value);
+        } else if (name == "bootstrap_timeout") {
+            /**
+             * The period of time allocated to complete bootstrap
+             */
+            parse_option(connstr.options.bootstrap_timeout, name, value);
+        } else if (name == "resolve_timeout") {
+            /**
+             * The period of time to resolve DNS name of the node to IP address
+             */
+            parse_option(connstr.options.resolve_timeout, name, value);
         } else if (name == "enable_dns_srv") {
             if (connstr.bootstrap_nodes.size() == 1) {
                 parse_option(connstr.options.enable_dns_srv, name, value);
