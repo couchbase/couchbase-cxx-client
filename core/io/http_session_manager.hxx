@@ -61,8 +61,9 @@ class http_session_manager
         std::scoped_lock config_lock(config_mutex_, sessions_mutex_);
         config_ = std::move(config);
         for (auto& [type, sessions] : idle_sessions_) {
-            sessions.remove_if(
-              [&cfg = config_](const auto& session) { return session && !cfg.has_node_with_hostname(session->hostname()); });
+            sessions.remove_if([&opts = options_, &cfg = config_](const auto& session) {
+                return session && !cfg.has_node(opts.network, session->type(), opts.enable_tls, session->hostname(), session->port());
+            });
         }
     }
 
@@ -224,7 +225,8 @@ class http_session_manager
     {
         {
             std::scoped_lock lock(config_mutex_);
-            if (!session->keep_alive() || !config_.has_node_with_hostname(session->hostname())) {
+            if (!session->keep_alive() ||
+                !config_.has_node(options_.network, session->type(), options_.enable_tls, session->hostname(), session->port())) {
                 return asio::post(session->get_executor(), [session]() { session->stop(); });
             }
         }

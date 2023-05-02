@@ -20,6 +20,8 @@
 #include "core/logger/logger.hxx"
 #include "core/service_type_fmt.hxx"
 
+#include <gsl/narrow>
+
 #include <algorithm>
 #include <stdexcept>
 
@@ -162,9 +164,20 @@ configuration::node::endpoint(const std::string& network, service_type type, boo
 }
 
 bool
-configuration::has_node_with_hostname(const std::string& hostname) const
+configuration::has_node(const std::string& network, service_type type, bool is_tls, const std::string& hostname, const std::string& port)
+  const
 {
-    return std::any_of(nodes.begin(), nodes.end(), [&hostname](const auto& n) { return n.hostname == hostname; });
+    std::uint16_t port_number{ 0 };
+    try {
+        port_number = gsl::narrow_cast<std::uint16_t>(std::stoul(port, nullptr, 10));
+    } catch (const std::invalid_argument&) {
+        return false;
+    } catch (const std::out_of_range&) {
+        return false;
+    }
+    return std::any_of(nodes.begin(), nodes.end(), [&](const auto& n) {
+        return n.hostname_for(network) == hostname && n.port_or(network, type, is_tls, 0) == port_number;
+    });
 }
 
 std::string

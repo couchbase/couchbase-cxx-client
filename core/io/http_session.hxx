@@ -216,9 +216,19 @@ class http_session : public std::enable_shared_from_this<http_session>
         return id_;
     }
 
+    [[nodiscard]] service_type type() const
+    {
+        return type_;
+    }
+
     [[nodiscard]] const std::string& hostname() const
     {
         return hostname_;
+    }
+
+    [[nodiscard]] const std::string& port() const
+    {
+        return service_;
     }
 
     [[nodiscard]] const asio::ip::tcp::endpoint& endpoint()

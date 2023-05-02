@@ -315,11 +315,12 @@ class bucket_impl
         }
         {
             std::scoped_lock lock(config_mutex_);
-            if (!config_->has_node_with_hostname(hostname)) {
+            if (!config_->has_node(origin_.options().network, service_type::key_value, origin_.options().enable_tls, hostname, port)) {
                 CB_LOG_TRACE(
-                  R"({} requested to restart session, but the node has been ejected from current configuration already. idx={}, address="{}:{}")",
+                  R"({} requested to restart session, but the node has been ejected from current configuration already. idx={}, network={}, address="{}:{}")",
                   log_prefix_,
                   index,
+                  origin_.options().network,
                   hostname,
                   port);
                 return;
