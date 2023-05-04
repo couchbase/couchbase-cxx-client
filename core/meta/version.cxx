@@ -76,15 +76,21 @@ sdk_build_info()
     info["link_libraries"] = COUCHBASE_CXX_CLIENT_LINK_LIBRARIES;
     info["link_options"] = COUCHBASE_CXX_CLIENT_LINK_OPTIONS;
     info["static_stdlib"] =
-#if defined(STATIC_STDLIB)
+#if defined(COUCHBASE_CXX_CLIENT_STATIC_STDLIB)
       "true"
 #else
       "false"
 #endif
       ;
-    info["post_linked_openssl"] = COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL;
+    info["post_linked_openssl"] =
+#if defined(COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
+      "true"
+#else
+      "false"
+#endif
+      ;
     info["static_openssl"] =
-#if defined(STATIC_OPENSSL)
+#if defined(COUCHBASE_CXX_CLIENT_STATIC_STDLIB)
       "true"
 #else
       "false"
@@ -101,7 +107,7 @@ sdk_build_info()
 #elif defined(SSLEAY_VERSION)
     info["openssl_runtime"] = SSLeay_version(SSLEAY_VERSION);
 #endif
-#if defined(OPENSSL_INFO_CONFIG_DIR)
+#if defined(OPENSSL_INFO_CONFIG_DIR) && !defined(COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
     info["openssl_config_dir"] = OPENSSL_info(OPENSSL_INFO_CONFIG_DIR);
 #elif defined(OPENSSL_DIR)
     if (std::string config_dir(OpenSSL_version(OPENSSL_DIR)); !config_dir.empty()) {
