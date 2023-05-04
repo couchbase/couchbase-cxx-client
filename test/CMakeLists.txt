@@ -29,14 +29,15 @@ target_link_libraries(test_unit_jsonsl jsonsl)
 
 integration_benchmark(get)
 
-transaction_test(transaction_context)
-transaction_test(transaction_simple)
-transaction_test(transaction_simple_async)
-transaction_test(transaction_public_blocking_api)
-transaction_test(transaction_public_async_api)
+transaction_test(context)
+transaction_test(simple)
+transaction_test(simple_async)
+transaction_test(public_blocking_api)
+transaction_test(public_async_api)
 
 unit_test(transaction_logging)
 unit_test(transaction_utils)
 unit_test(waitable_op_list)
 
 integration_test(examples)
+transaction_test(examples)

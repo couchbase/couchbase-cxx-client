@@ -48,6 +48,8 @@ class transaction_get_result
     }
 
   public:
+    /** @private */
+
     transaction_get_result();
     /**
      * Content of the document.

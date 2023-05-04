@@ -331,11 +331,12 @@ set(couchbase_cxx_client_FILES
         core/transactions/atr_cleanup_entry.cxx
         core/transactions/atr_ids.cxx
         core/transactions/attempt_context_impl.cxx
+        core/transactions/attempt_context_testing_hooks.cxx
         core/transactions/binary.cxx
+        core/transactions/cleanup_testing_hooks.cxx
         core/transactions/exceptions.cxx
         core/transactions/result.cxx
         core/transactions/staged_mutation.cxx
-        core/transactions/utils.cxx
         core/transactions/transaction_attempt.cxx
         core/transactions/transaction_context.cxx
         core/transactions/transaction_get_result.cxx
@@ -344,7 +345,8 @@ set(couchbase_cxx_client_FILES
         core/transactions/transactions.cxx
         core/transactions/transactions_cleanup.cxx
         core/transactions/transactions_config.cxx
-        core/transactions/uid_generator.cxx)
+        core/transactions/uid_generator.cxx
+        core/transactions/utils.cxx)
 
 if (COUCHBASE_CXX_CLIENT_BUILD_SHARED)
     add_library(couchbase_cxx_client SHARED ${couchbase_cxx_client_FILES})
