@@ -76,7 +76,7 @@ sdk_build_info()
     info["link_libraries"] = COUCHBASE_CXX_CLIENT_LINK_LIBRARIES;
     info["link_options"] = COUCHBASE_CXX_CLIENT_LINK_OPTIONS;
     info["static_stdlib"] =
-#if defined(STATIC_STDLIB)
+#if defined(COUCHBASE_CXX_CLIENT_STATIC_STDLIB)
       "true"
 #else
       "false"
@@ -84,7 +84,7 @@ sdk_build_info()
       ;
     info["post_linked_openssl"] = COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL;
     info["static_openssl"] =
-#if defined(STATIC_OPENSSL)
+#if defined(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL)
       "true"
 #else
       "false"
