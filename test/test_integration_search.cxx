@@ -29,6 +29,10 @@ TEST_CASE("integration: search query")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_search()) {
+        SKIP("cluster does not support search");
+    }
+
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     {
@@ -350,6 +354,10 @@ TEST_CASE("integration: search query consistency", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_search()) {
+        SKIP("cluster does not support search");
+    }
+
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     const std::string params =
@@ -476,8 +484,12 @@ TEST_CASE("integration: search query collections")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_search()) {
+        SKIP("cluster does not support search");
+    }
+
     if (!integration.cluster_version().supports_collections()) {
-        return;
+        SKIP("cluster does not support collections");
     }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);

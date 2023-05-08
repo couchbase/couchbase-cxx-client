@@ -321,6 +321,10 @@ TEST_CASE("integration: fetch diagnostics after N1QL query", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_query()) {
+        SKIP("cluster does not support query");
+    }
+
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     {
         couchbase::core::operations::query_request req{ "SELECT 'hello, couchbase' AS greetings" };

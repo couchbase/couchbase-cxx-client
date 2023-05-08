@@ -37,7 +37,55 @@ fi
 
 cd "${BUILD_DIR}"
 
-cat /proc/sys/kernel/core_pattern
+CB_USE_GOCAVES=${CB_USE_GOCAVES:-""}
+GOCAVES_PID=
+GOCAVES_CONNECTION_STRING=
+if [ "$CB_USE_GOCAVES" = "yes" -o "$CB_USE_GOCAVES" = "1" ]
+then
+    GOCAVES=
+    case "$(uname -sm)" in
+        "Darwin x86_64")
+            GOCAVES="gocaves-macos"
+            ;;
+
+        "Darwin arm64")
+            GOCAVES="gocaves-macos-arm64"
+            ;;
+
+        "Linux x86_64")
+            GOCAVES="gocaves-linux-amd64"
+            ;;
+
+        "Linux aarch64")
+            GOCAVES="gocaves-linux-arm64"
+            ;;
+    esac
+    echo "GOCAVES=${GOCAVES}"
+    if [ "${GOCAVES}x" != "x" ]
+    then
+        GOCAVES_VERSION="v0.0.1-78"
+        echo "GOCAVES_VERSION=${GOCAVES_VERSION}"
+        GOCAVES_PATH="${BUILD_DIR}/${GOCAVES}-${GOCAVES_VERSION}"
+        if [ ! -e "${GOCAVES_PATH}" ]
+        then
+            curl -L -o "${GOCAVES_PATH}" https://github.com/couchbaselabs/gocaves/releases/download/${GOCAVES_VERSION}/${GOCAVES}
+            chmod u+x "${GOCAVES_PATH}"
+        fi
+        ${GOCAVES_PATH} -mock-only > gocaves.txt 2>&1 &
+        sleep 1
+        GOCAVES_PID=$!
+        GOCAVES_CONNECTION_STRING=$(grep -o 'couchbase://[^"]\+' gocaves.txt)
+        echo "GOCAVES_CONNECTION_STRING=${GOCAVES_CONNECTION_STRING}"
+        if [ ! -z "${GOCAVES_CONNECTION_STRING}" ]
+        then
+            export TEST_CONNECTION_STRING="${GOCAVES_CONNECTION_STRING}"
+            export TEST_USE_GOCAVES=1
+            trap "kill -9 ${GOCAVES_PID}" SIGINT SIGTERM
+        fi
+    fi
+fi
+
+[ -f /proc/sys/kernel/core_pattern ] && cat /proc/sys/kernel/core_pattern
 if [ -e /usr/bin/apport-unpack ]
 then
     mkdir -p $HOME/.config/apport
@@ -51,6 +99,11 @@ ulimit -c unlimited
 
 ${CB_CTEST} --output-on-failure --label-regex 'integration|unit' --output-junit results.xml
 STATUS=$?
+
+if [ ! -z "${GOCAVES_PID}" ]
+then
+    kill -9 ${GOCAVES_PID}
+fi
 
 if [ "x${STATUS}" != "x0" ]
 then
@@ -74,11 +127,14 @@ then
     fi
     for core in /tmp/core.* "${PWD}/core*"
     do
-        echo $core
-        executable=$(file $core | ruby -e "print ARGF.read[/execfn: '([^']+)'/, 1]")
-        echo $executable
-        gdb $executable $core --batch -ex "thread apply all bt"
-        rm -f $core
+        if [ -f $core ]
+        then
+            echo $core
+            executable=$(file $core | ruby -e "print ARGF.read[/execfn: '([^']+)'/, 1]")
+            echo $executable
+            gdb $executable $core --batch -ex "thread apply all bt"
+            rm -f $core
+        fi
     done
 fi
 

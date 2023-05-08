@@ -25,7 +25,7 @@ TEST_CASE("integration: analytics query")
     test::utils::integration_test_guard integration;
 
     if (!integration.cluster_version().supports_analytics()) {
-        return;
+        SKIP("cluster does not support analytics");
     }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -180,8 +180,11 @@ TEST_CASE("integration: analytics scope query")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_analytics() || !integration.cluster_version().supports_collections()) {
-        return;
+    if (!integration.cluster_version().supports_analytics()) {
+        SKIP("cluster does not support analytics");
+    }
+    if (!integration.cluster_version().supports_collections()) {
+        SKIP("cluster does not support collections");
     }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -287,7 +290,7 @@ TEST_CASE("integration: public API analytics query")
     test::utils::integration_test_guard integration;
 
     if (!integration.cluster_version().supports_analytics()) {
-        return;
+        SKIP("cluster does not support analytics");
     }
 
     auto cluster = couchbase::cluster(integration.cluster);
@@ -468,8 +471,11 @@ TEST_CASE("integration: public API analytics scope query")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_analytics() || !integration.cluster_version().supports_collections()) {
-        return;
+    if (!integration.cluster_version().supports_analytics()) {
+        SKIP("cluster does not support analytics");
+    }
+    if (!integration.cluster_version().supports_collections()) {
+        SKIP("cluster does not support collections");
     }
 
     auto cluster = couchbase::cluster(integration.cluster);

@@ -63,7 +63,7 @@ TEST_CASE("integration: bucket management", "[integration]")
     test::utils::integration_test_guard integration;
 
     if (!integration.cluster_version().supports_bucket_management()) {
-        return;
+        SKIP("cluster does not support bucket management");
     }
 
     if (!integration.cluster_version().supports_gcccp()) {
@@ -512,7 +512,7 @@ TEST_CASE("integration: collection management", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     if (!integration.cluster_version().supports_collections()) {
-        return;
+        SKIP("cluster does not support collections");
     }
 
     auto scope_name = test::utils::uniq_id("scope");
@@ -652,7 +652,7 @@ TEST_CASE("integration: user groups management", "[integration]")
     test::utils::integration_test_guard integration;
 
     if (!integration.cluster_version().supports_user_groups()) {
-        return;
+        SKIP("cluster does not support user groups");
     }
 
     SECTION("group crud")
@@ -863,7 +863,7 @@ TEST_CASE("integration: user management", "[integration]")
     test::utils::integration_test_guard integration;
 
     if (!integration.cluster_version().supports_user_management()) {
-        return;
+        SKIP("cluster does not support user management");
     }
 
     if (!integration.cluster_version().supports_gcccp()) {
@@ -961,9 +961,14 @@ TEST_CASE("integration: user management collections roles", "[integration]")
     test::utils::integration_test_guard integration;
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-    if (!integration.cluster_version().supports_user_management() || !integration.cluster_version().supports_collections() ||
-        integration.cluster_version().is_community()) {
-        return;
+    if (!integration.cluster_version().supports_user_management()) {
+        SKIP("cluster does not support user management");
+    }
+    if (!integration.cluster_version().supports_collections()) {
+        SKIP("cluster does not support collections");
+    }
+    if (integration.cluster_version().is_community()) {
+        SKIP("cluster is community edition");
     }
 
     auto scope_name = test::utils::uniq_id("scope");
@@ -1036,6 +1041,10 @@ TEST_CASE("integration: user management collections roles", "[integration]")
 TEST_CASE("integration: query index management", "[integration]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_query_index_management()) {
+        SKIP("cluster does not support query index management");
+    }
 
     if (integration.cluster_version().supports_bucket_management()) {
         SECTION("primary index")
@@ -1444,8 +1453,11 @@ TEST_CASE("integration: collections query index management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_query_index_management()) {
+        SKIP("cluster does not support query index management");
+    }
     if (!integration.cluster_version().supports_collections()) {
-        return;
+        SKIP("cluster does not support collections");
     }
 
     auto index_name = test::utils::uniq_id("collections_index");
@@ -1960,13 +1972,14 @@ TEST_CASE("integration: analytics index management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_analytics() || !integration.has_analytics_service()) {
-        return;
+    if (!integration.cluster_version().supports_analytics()) {
+        SKIP("cluster does not support analytics service");
     }
-
-    // MB-47718
+    if (!integration.has_analytics_service()) {
+        SKIP("cluster does not have analytics service");
+    }
     if (integration.storage_backend() == couchbase::core::management::cluster::bucket_storage_backend::magma) {
-        return;
+        SKIP("analytics does not work with magma storage backend, see MB-47718");
     }
 
     SECTION("crud")
@@ -2492,18 +2505,20 @@ TEST_CASE("integration: analytics external link management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_analytics_links() || !integration.has_analytics_service()) {
-        return;
+    if (!integration.cluster_version().supports_analytics()) {
+        SKIP("cluster does not support analytics service");
     }
-
-    // MB-47718
+    if (!integration.has_analytics_service()) {
+        SKIP("cluster does not have analytics service");
+    }
+    if (!integration.cluster_version().supports_analytics_links()) {
+        SKIP("analytics does not support analytics links");
+    }
     if (integration.storage_backend() == couchbase::core::management::cluster::bucket_storage_backend::magma) {
-        return;
+        SKIP("analytics does not work with magma storage backend, see MB-47718");
     }
-
-    // MB-40198
     if (!integration.cluster_version().supports_analytics_links_cert_auth() && integration.origin.credentials().uses_certificate()) {
-        return;
+        SKIP("certificate credentials selected, but analytics service does not support cert auth, see MB-40198");
     }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -2592,6 +2607,10 @@ const std::string serverless_plan_params = R"({ "indexPartition": 1, "numReplica
 TEST_CASE("integration: search index management", "[integration]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_search()) {
+        SKIP("cluster does not support search");
+    }
 
     if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -2884,8 +2903,12 @@ TEST_CASE("integration: search index management analyze document", "[integration
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_search()) {
+        SKIP("cluster does not support search");
+    }
+
     if (!integration.cluster_version().supports_search_analyze()) {
-        return;
+        SKIP("cluster does not support search analyze");
     }
 
     auto index_name = test::utils::uniq_id("index");
@@ -2936,25 +2959,34 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         REQUIRE(resp.ctx.ec == couchbase::errc::common::invalid_argument);
     }
 
-    if (integration.cluster_version().supports_analytics() && integration.has_analytics_service()) {
-        SECTION("analytics")
-        {
-            couchbase::core::operations::management::freeform_request req{};
-            req.type = couchbase::core::service_type::analytics;
-            req.method = "GET";
-            req.path = "/admin/ping";
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_SUCCESS(resp.ctx.ec);
-            REQUIRE(resp.status == 200);
-            REQUIRE_FALSE(resp.body.empty());
-            INFO(resp.body);
-            auto result = couchbase::core::utils::json::parse(resp.body);
-            REQUIRE(result.is_object());
+    SECTION("analytics")
+    {
+        if (!integration.cluster_version().supports_analytics()) {
+            SKIP("cluster does not support analytics");
         }
+        if (!integration.has_analytics_service()) {
+            SKIP("cluster does not have analytics service");
+        }
+
+        couchbase::core::operations::management::freeform_request req{};
+        req.type = couchbase::core::service_type::analytics;
+        req.method = "GET";
+        req.path = "/admin/ping";
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
+        REQUIRE(resp.status == 200);
+        REQUIRE_FALSE(resp.body.empty());
+        INFO(resp.body);
+        auto result = couchbase::core::utils::json::parse(resp.body);
+        REQUIRE(result.is_object());
     }
 
     SECTION("search")
     {
+        if (!integration.cluster_version().supports_search()) {
+            SKIP("cluster does not support search");
+        }
+
         couchbase::core::operations::management::freeform_request req{};
         req.type = couchbase::core::service_type::search;
         req.method = "GET";
@@ -2969,6 +3001,10 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
 
     SECTION("query")
     {
+        if (!integration.cluster_version().supports_query()) {
+            SKIP("cluster does not support query");
+        }
+
         couchbase::core::operations::management::freeform_request req{};
         req.type = couchbase::core::service_type::query;
         req.method = "GET";
@@ -2982,25 +3018,27 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         REQUIRE(result.is_object());
     }
 
-    if (integration.cluster_version().supports_views()) {
-        SECTION("view")
-        {
-            auto document_name = test::utils::uniq_id("design_document");
-            auto view_name = test::utils::uniq_id("view");
-
-            couchbase::core::operations::management::freeform_request req{};
-            req.type = couchbase::core::service_type::view;
-            req.method = "POST";
-            req.path = fmt::format("/{}/_design/{}/_view/{}", integration.ctx.bucket, document_name, view_name);
-            req.body = R"({"keys":["foo","bar"]})";
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_SUCCESS(resp.ctx.ec);
-            REQUIRE(resp.status == 404);
-            REQUIRE_FALSE(resp.body.empty());
-            auto result = couchbase::core::utils::json::parse(resp.body);
-            INFO(resp.body);
-            REQUIRE(result["error"].get_string() == "not_found");
+    SECTION("view")
+    {
+        if (!integration.cluster_version().supports_views()) {
+            SKIP("cluster does not support views");
         }
+
+        auto document_name = test::utils::uniq_id("design_document");
+        auto view_name = test::utils::uniq_id("view");
+
+        couchbase::core::operations::management::freeform_request req{};
+        req.type = couchbase::core::service_type::view;
+        req.method = "POST";
+        req.path = fmt::format("/{}/_design/{}/_view/{}", integration.ctx.bucket, document_name, view_name);
+        req.body = R"({"keys":["foo","bar"]})";
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
+        REQUIRE(resp.status == 404);
+        REQUIRE_FALSE(resp.body.empty());
+        auto result = couchbase::core::utils::json::parse(resp.body);
+        INFO(resp.body);
+        REQUIRE(result["error"].get_string() == "not_found");
     }
 
     SECTION("management")
@@ -3018,44 +3056,55 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
         REQUIRE(result.find("uuid") != nullptr);
     }
 
-    if (integration.cluster_version().supports_collections()) {
-        SECTION("create scope")
-        {
-            auto scope_name = test::utils::uniq_id("freeform_scope");
-
-            couchbase::core::operations::management::freeform_request req{};
-            req.type = couchbase::core::service_type::management;
-            req.method = "POST";
-            req.path = fmt::format("/pools/default/buckets/{}/scopes", integration.ctx.bucket);
-            req.headers["content-type"] = "application/x-www-form-urlencoded";
-            req.body = fmt::format("name={}", couchbase::core::utils::string_codec::form_encode(scope_name));
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_SUCCESS(resp.ctx.ec);
-            REQUIRE(resp.status == 200);
-            REQUIRE_FALSE(resp.headers.empty());
-            REQUIRE(resp.headers["content-type"].find("application/json") != std::string::npos);
-            auto result = couchbase::core::utils::json::parse(resp.body);
-            REQUIRE(result.is_object());
-            REQUIRE(result.find("uid") != nullptr);
+    SECTION("create scope")
+    {
+        if (!integration.cluster_version().supports_collections()) {
+            SKIP("cluster does not support collections");
         }
+
+        auto scope_name = test::utils::uniq_id("freeform_scope");
+
+        couchbase::core::operations::management::freeform_request req{};
+        req.type = couchbase::core::service_type::management;
+        req.method = "POST";
+        req.path = fmt::format("/pools/default/buckets/{}/scopes", integration.ctx.bucket);
+        req.headers["content-type"] = "application/x-www-form-urlencoded";
+        req.body = fmt::format("name={}", couchbase::core::utils::string_codec::form_encode(scope_name));
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
+        REQUIRE(resp.status == 200);
+        REQUIRE_FALSE(resp.headers.empty());
+        if (integration.cluster_version().is_mock()) {
+            REQUIRE(resp.headers["content-type"].find("application/json") == std::string::npos);
+            REQUIRE(resp.headers["content-type"].find("text/plain") != std::string::npos);
+        } else {
+            REQUIRE(resp.headers["content-type"].find("application/json") != std::string::npos);
+        }
+        auto result = couchbase::core::utils::json::parse(resp.body);
+        REQUIRE(result.is_object());
+        REQUIRE(result.find("uid") != nullptr);
     }
 
-    if (integration.cluster_version().supports_eventing_functions() && integration.has_eventing_service()) {
-        SECTION("eventing")
-        {
-
-            couchbase::core::operations::management::freeform_request req{};
-            req.type = couchbase::core::service_type::eventing;
-            req.method = "GET";
-            req.path = "/api/v1/functions";
-            auto resp = test::utils::execute(integration.cluster, req);
-            REQUIRE_SUCCESS(resp.ctx.ec);
-            REQUIRE(resp.status == 200);
-            REQUIRE_FALSE(resp.body.empty());
-            auto result = couchbase::core::utils::json::parse(resp.body);
-            INFO(resp.body);
-            REQUIRE(result.is_array());
+    SECTION("eventing")
+    {
+        if (!integration.cluster_version().supports_eventing_functions()) {
+            SKIP("cluster does not support eventing functions");
         }
+        if (!integration.has_eventing_service()) {
+            SKIP("cluster does not have eventing service");
+        }
+
+        couchbase::core::operations::management::freeform_request req{};
+        req.type = couchbase::core::service_type::eventing;
+        req.method = "GET";
+        req.path = "/api/v1/functions";
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
+        REQUIRE(resp.status == 200);
+        REQUIRE_FALSE(resp.body.empty());
+        auto result = couchbase::core::utils::json::parse(resp.body);
+        INFO(resp.body);
+        REQUIRE(result.is_array());
     }
 }
 
@@ -3098,8 +3147,11 @@ TEST_CASE("integration: eventing functions management", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_eventing_functions() || !integration.has_eventing_service()) {
-        return;
+    if (!integration.cluster_version().supports_eventing_functions()) {
+        SKIP("cluster does not support eventing service");
+    }
+    if (!integration.has_eventing_service()) {
+        SKIP("cluster does not have eventing service");
     }
 
     if (!integration.cluster_version().supports_gcccp()) {

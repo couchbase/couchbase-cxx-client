@@ -431,6 +431,10 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
+    if (integration.cluster_version().is_mock()) {
+        SKIP("GOCAVES incorrectly uses error indexes for subdoc mutations. See https://github.com/couchbaselabs/gocaves/issues/107");
+    }
+
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     auto collection = couchbase::cluster(integration.cluster)
