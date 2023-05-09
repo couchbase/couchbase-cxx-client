@@ -44,7 +44,7 @@ TEST_CASE("integration: connecting with unresponsive first node in bootstrap nod
     auto ctx = test::utils::test_context::load_from_environment();
     if (ctx.deployment == test::utils::deployment_type::capella) {
         // This breaks SRV assumptions (only one host in connection string)
-        return;
+        SKIP("capella deployment uses single host in the connection string, which assumed to be reachable");
     }
     auto connstr = couchbase::core::utils::parse_connection_string(ctx.connection_string);
     REQUIRE_FALSE(connstr.bootstrap_nodes.empty());
@@ -143,7 +143,7 @@ TEST_CASE("integration: destroy cluster without waiting for close completion", "
     }
 
     // hit Query
-    {
+    if (ctx.version.supports_query()) {
         couchbase::core::operations::query_request req{ R"(SELECT 42 AS the_answer)" };
         auto resp = test::utils::execute(cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);

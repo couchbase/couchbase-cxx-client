@@ -25,7 +25,7 @@ TEST_CASE("integration: durable operations", "[integration]")
 {
     test::utils::integration_test_guard integration;
     if (!integration.cluster_version().supports_enhanced_durability()) {
-        return;
+        SKIP("cluster does not support enhanced durability");
     }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -68,7 +68,7 @@ TEST_CASE("integration: durable operations", "[integration]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
-        REQUIRE(resp.value == couchbase::core::utils::to_binary(R"({"foo":"bar","baz":42})"));
+        REQUIRE(couchbase::core::utils::json::parse_binary(resp.value) == couchbase::core::utils::json::parse(R"({"foo":"bar","baz":42})"));
     }
     {
         couchbase::core::operations::remove_request req{ id };
@@ -83,8 +83,13 @@ TEST_CASE("integration: durable operations", "[integration]")
 TEST_CASE("integration: legacy durability persist to active and replicate to one", "[integration]")
 {
     test::utils::integration_test_guard integration;
-    if (integration.number_of_replicas() == 0 || integration.number_of_nodes() <= integration.number_of_replicas()) {
-        return;
+    if (integration.number_of_replicas() == 0) {
+        SKIP("bucket has zero replicas");
+    }
+    if (integration.number_of_nodes() <= integration.number_of_replicas()) {
+        SKIP(fmt::format("number of nodes ({}) is less or equal to number of replicas ({})",
+                         integration.number_of_nodes(),
+                         integration.number_of_replicas()));
     }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -124,7 +129,7 @@ TEST_CASE("integration: low level legacy durability impossible if number of node
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     if (integration.number_of_replicas() == 3) {
-        return;
+        SKIP("bucket has three replicas configured, so the test will not be applicable");
     }
 
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
@@ -159,7 +164,7 @@ TEST_CASE("integration: low level legacy durability persist to active and replic
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     if (integration.number_of_replicas() < 1) {
-        return;
+        SKIP("bucket does not have replicas configured");
     }
 
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
@@ -211,7 +216,7 @@ TEST_CASE("integration: low level legacy durability persist to active and replic
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(!resp.cas.empty());
-        REQUIRE(resp.value == couchbase::core::utils::to_binary(R"({"foo":"bar","baz":42})"));
+        REQUIRE(couchbase::core::utils::json::parse_binary(resp.value) == couchbase::core::utils::json::parse(R"({"foo":"bar","baz":42})"));
     }
     {
         couchbase::core::operations::remove_request_with_legacy_durability req{

@@ -120,7 +120,7 @@ TEST_CASE("integration: range scan large values", "[integration]")
     test::utils::integration_test_guard integration;
 
     if (!integration.has_bucket_capability("range_scan")) {
-        return;
+        SKIP("cluster does not support range_scan");
     }
 
     auto collection = couchbase::cluster(integration.cluster)
@@ -176,7 +176,7 @@ TEST_CASE("integration: range scan small values", "[integration]")
     test::utils::integration_test_guard integration;
 
     if (!integration.has_bucket_capability("range_scan")) {
-        return;
+        SKIP("cluster does not support range_scan");
     }
 
     auto collection = couchbase::cluster(integration.cluster)
@@ -274,7 +274,7 @@ TEST_CASE("integration: range scan collection retry", "[integration]")
     test::utils::integration_test_guard integration;
 
     if (!integration.has_bucket_capability("range_scan")) {
-        return;
+        SKIP("cluster does not support range_scan");
     }
 
     collection_guard new_collection(integration);
@@ -340,7 +340,7 @@ TEST_CASE("integration: range scan only keys", "[integration]")
     test::utils::integration_test_guard integration;
 
     if (!integration.has_bucket_capability("range_scan")) {
-        return;
+        SKIP("cluster does not support range_scan");
     }
 
     auto collection = couchbase::cluster(integration.cluster)
@@ -399,7 +399,7 @@ TEST_CASE("integration: range scan cancellation before continue", "[integration]
     test::utils::integration_test_guard integration;
 
     if (!integration.has_bucket_capability("range_scan")) {
-        return;
+        SKIP("cluster does not support range_scan");
     }
 
     auto collection = couchbase::cluster(integration.cluster)
@@ -503,7 +503,7 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
     test::utils::integration_test_guard integration;
 
     if (!integration.has_bucket_capability("range_scan")) {
-        return;
+        SKIP("cluster does not support range_scan");
     }
 
     auto collection = couchbase::cluster(integration.cluster)
@@ -615,7 +615,7 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
     test::utils::integration_test_guard integration;
 
     if (!integration.has_bucket_capability("range_scan")) {
-        return;
+        SKIP("cluster does not support range_scan");
     }
 
     auto collection = couchbase::cluster(integration.cluster)
@@ -717,7 +717,7 @@ TEST_CASE("integration: sampling scan keys only", "[integration]")
     test::utils::integration_test_guard integration;
 
     if (!integration.has_bucket_capability("range_scan")) {
-        return;
+        SKIP("cluster does not support range_scan");
     }
 
     auto collection = couchbase::cluster(integration.cluster)
@@ -788,7 +788,7 @@ TEST_CASE("integration: manager scan range without content", "[integration]")
     test::utils::integration_test_guard integration;
 
     if (!integration.has_bucket_capability("range_scan")) {
-        return;
+        SKIP("cluster does not support range_scan");
     }
 
     auto collection = couchbase::cluster(integration.cluster)
@@ -859,7 +859,7 @@ TEST_CASE("integration: manager scan range with content", "[integration]")
     test::utils::integration_test_guard integration;
 
     if (!integration.has_bucket_capability("range_scan")) {
-        return;
+        SKIP("cluster does not support range_scan");
     }
 
     auto collection = couchbase::cluster(integration.cluster)
@@ -930,7 +930,7 @@ TEST_CASE("integration: manager sampling scan with custom collection", "[integra
     test::utils::integration_test_guard integration;
 
     if (!integration.has_bucket_capability("range_scan")) {
-        return;
+        SKIP("cluster does not support range_scan");
     }
 
     collection_guard new_collection(integration);
@@ -1003,7 +1003,7 @@ TEST_CASE("integration: manager range scan with sort", "[integration]")
     test::utils::integration_test_guard integration;
 
     if (!integration.has_bucket_capability("range_scan")) {
-        return;
+        SKIP("cluster does not support range_scan");
     }
 
     collection_guard new_collection(integration);

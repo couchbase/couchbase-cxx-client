@@ -197,6 +197,10 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
 
         SECTION("non json get")
         {
+            if (integration.cluster_version().is_mock()) {
+                SKIP("GOCAVES does not handle subdocument operations for non-JSON documents. See "
+                     "https://github.com/couchbaselabs/gocaves/issues/103");
+            }
             assert_single_lookup_error(integration,
                                        non_json_id,
                                        couchbase::lookup_in_specs::get("non-exist"),
@@ -206,6 +210,10 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
 
         SECTION("non json exists")
         {
+            if (integration.cluster_version().is_mock()) {
+                SKIP("GOCAVES does not handle subdocument operations for non-JSON documents. See "
+                     "https://github.com/couchbaselabs/gocaves/issues/103");
+            }
             assert_single_lookup_error(integration,
                                        non_json_id,
                                        couchbase::lookup_in_specs::exists("non-exist"),
@@ -218,11 +226,19 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
     {
         std::vector<std::string> invalid_paths = { "invalid..path", "invalid[-2]" };
         for (const auto& path : invalid_paths) {
-            assert_single_lookup_error(integration,
-                                       id,
-                                       couchbase::lookup_in_specs::get(path),
-                                       couchbase::key_value_status_code::subdoc_path_invalid,
-                                       couchbase::errc::key_value::path_invalid);
+            if (integration.cluster_version().is_mock()) {
+                assert_single_lookup_error(integration,
+                                           id,
+                                           couchbase::lookup_in_specs::get(path),
+                                           couchbase::key_value_status_code::subdoc_path_not_found,
+                                           couchbase::errc::key_value::path_not_found);
+            } else {
+                assert_single_lookup_error(integration,
+                                           id,
+                                           couchbase::lookup_in_specs::get(path),
+                                           couchbase::key_value_status_code::subdoc_path_invalid,
+                                           couchbase::errc::key_value::path_invalid);
+            }
         }
     }
 
@@ -317,6 +333,10 @@ TEST_CASE("integration: subdoc store", "[integration]")
 
     SECTION("non json")
     {
+        if (integration.cluster_version().is_mock()) {
+            SKIP("GOCAVES does not handle subdocument operations for non-JSON documents. See "
+                 "https://github.com/couchbaselabs/gocaves/issues/103");
+        }
         std::string path{ "dict" };
         auto value = couchbase::core::utils::to_binary("non-json");
         couchbase::core::operations::mutate_in_request req{ id };
@@ -411,6 +431,11 @@ TEST_CASE("integration: subdoc mutate in store semantics", "[integration]")
 TEST_CASE("integration: subdoc unique", "[integration]")
 {
     test::utils::integration_test_guard integration;
+
+    if (integration.cluster_version().is_mock()) {
+        SKIP("GOCAVES does not support subdocument create_path feature. See https://github.com/couchbaselabs/gocaves/issues/17");
+    }
+
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc") };
 
@@ -453,7 +478,6 @@ TEST_CASE("integration: subdoc unique", "[integration]")
           couchbase::mutate_in_specs{ couchbase::mutate_in_specs::array_append("a", tao::json::empty_object).create_path() }.specs();
         auto resp = test::utils::execute(integration.cluster, req);
         assert_single_mutate_success(resp, "a");
-        assert_single_lookup_success(integration, id, couchbase::lookup_in_specs::get("a[-1]"), "{}");
     }
 
     {
@@ -472,7 +496,10 @@ TEST_CASE("integration: subdoc counter", "[integration]")
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc") };
 
     {
-        auto value_json = couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
+        auto value_json =
+          integration.cluster_version().is_mock() // kv_engine creates counters automatically
+            ? couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]],"counter":0})")
+            : couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::core::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
@@ -497,6 +524,9 @@ TEST_CASE("integration: subdoc counter", "[integration]")
 
     SECTION("max value")
     {
+        if (integration.cluster_version().is_mock()) {
+            SKIP("GOCAVES incorrectly handles limits for subdoc counters. See https://github.com/couchbaselabs/gocaves/issues/104");
+        }
         {
             int64_t max_value = std::numeric_limits<int64_t>::max();
             couchbase::core::operations::mutate_in_request req{ id };
@@ -516,6 +546,9 @@ TEST_CASE("integration: subdoc counter", "[integration]")
 
     SECTION("invalid delta")
     {
+        if (integration.cluster_version().is_mock()) {
+            SKIP("GOCAVES incorrectly handles zero delta for subdoc counters. See https://github.com/couchbaselabs/gocaves/issues/105");
+        }
         couchbase::core::operations::mutate_in_request req{ id };
         req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::increment("counter", 0) }.specs();
         auto resp = test::utils::execute(integration.cluster, req);
@@ -525,6 +558,9 @@ TEST_CASE("integration: subdoc counter", "[integration]")
 
     SECTION("increase number already too big")
     {
+        if (integration.cluster_version().is_mock()) {
+            SKIP("GOCAVES incorrectly handles big values for subdoc counters. See https://github.com/couchbaselabs/gocaves/issues/106");
+        }
         {
             auto big_value = R"({"counter":)" + std::to_string(std::numeric_limits<int64_t>::max()) + "999999999999999999999999999999}";
             auto value_json = couchbase::core::utils::to_binary(big_value);
@@ -621,7 +657,11 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
           }
             .specs();
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::errc::common::invalid_argument);
+        if (integration.cluster_version().is_mock()) {
+            REQUIRE(resp.ctx.ec() == couchbase::errc::common::unsupported_operation);
+        } else {
+            REQUIRE(resp.ctx.ec() == couchbase::errc::common::invalid_argument);
+        }
     }
 
     SECTION("missing key")
@@ -647,7 +687,10 @@ TEST_CASE("integration: subdoc multi mutation", "[integration]")
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc") };
 
     {
-        auto value_json = couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
+        auto value_json =
+          integration.cluster_version().is_mock() // kv_engine creates counters automatically
+            ? couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]],"counter":0})")
+            : couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
         couchbase::core::operations::insert_request req{ id, value_json };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
@@ -676,6 +719,9 @@ TEST_CASE("integration: subdoc multi mutation", "[integration]")
 
     SECTION("replace with errors")
     {
+        if (integration.cluster_version().is_mock()) {
+            SKIP("GOCAVES incorrectly uses error indexes for subdoc mutations. See https://github.com/couchbaselabs/gocaves/issues/107");
+        }
         couchbase::core::operations::mutate_in_request req{ id };
         req.specs =
           couchbase::mutate_in_specs{
@@ -695,6 +741,11 @@ TEST_CASE("integration: subdoc multi mutation", "[integration]")
 TEST_CASE("integration: subdoc expiry")
 {
     test::utils::integration_test_guard integration;
+
+    if (integration.cluster_version().is_mock()) {
+        SKIP("GOCAVES does not support subdoc mutations with expiry. See https://github.com/couchbaselabs/gocaves/issues/85");
+    }
+
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc") };
 

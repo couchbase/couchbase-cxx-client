@@ -165,7 +165,7 @@ TEST_CASE("example: start using", "[integration]")
 {
     test::utils::integration_test_guard integration;
     if (!integration.cluster_version().supports_collections()) {
-        return;
+        SKIP("cluter does not support collections");
     }
 
     const auto env = test::utils::test_context::load_from_environment();

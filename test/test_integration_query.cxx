@@ -31,6 +31,10 @@ TEST_CASE("integration: trivial non-data query", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_query()) {
+        SKIP("cluster does not support query");
+    }
+
     if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
@@ -45,6 +49,10 @@ TEST_CASE("integration: trivial non-data query", "[integration]")
 TEST_CASE("integration: query with handler capturing non-copyable object", "[integration]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_query()) {
+        SKIP("cluster does not support query");
+    }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
@@ -70,9 +78,14 @@ TEST_CASE("integration: query with handler capturing non-copyable object", "[int
 TEST_CASE("integration: query on a collection", "[integration]")
 {
     test::utils::integration_test_guard integration;
-    if (!integration.cluster_version().supports_collections()) {
-        return;
+
+    if (!integration.cluster_version().supports_query()) {
+        SKIP("cluster does not support query");
     }
+    if (!integration.cluster_version().supports_collections()) {
+        SKIP("cluster does not support collections");
+    }
+
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     auto scope_name = test::utils::uniq_id("scope");
@@ -172,6 +185,10 @@ TEST_CASE("integration: read only with no results", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_query()) {
+        SKIP("cluster does not support query");
+    }
+
     if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
@@ -188,6 +205,10 @@ TEST_CASE("integration: invalid query", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_query()) {
+        SKIP("cluster does not support query");
+    }
+
     if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
@@ -199,12 +220,16 @@ TEST_CASE("integration: invalid query", "[integration]")
     }
 }
 
-TEST_CASE("integration: preserve expiry for mutatation query", "[integration]")
+TEST_CASE("integration: preserve expiry for mutation query", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_query()) {
+        SKIP("cluster does not support query");
+    }
+
     if (!integration.cluster_version().supports_preserve_expiry_for_query()) {
-        return;
+        SKIP("cluster does not support support preserve expiry for query");
     }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -264,6 +289,10 @@ TEST_CASE("integration: streaming query results", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_query()) {
+        SKIP("cluster does not support query");
+    }
+
     if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
@@ -285,6 +314,10 @@ TEST_CASE("integration: streaming query results", "[integration]")
 TEST_CASE("integration: streaming query results with stop in the middle", "[integration]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_query()) {
+        SKIP("cluster does not support query");
+    }
 
     if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -315,8 +348,11 @@ TEST_CASE("integration: streaming analytics results", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_analytics() || !integration.has_analytics_service()) {
-        return;
+    if (!integration.cluster_version().supports_analytics()) {
+        SKIP("cluster does not support analytics");
+    }
+    if (!integration.has_analytics_service()) {
+        SKIP("cluster does not have analytics service");
     }
 
     if (!integration.cluster_version().supports_gcccp()) {
@@ -344,6 +380,10 @@ TEST_CASE("integration: streaming analytics results", "[integration]")
 TEST_CASE("integration: sticking query to the service node", "[integration]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_query()) {
+        SKIP("cluster does not support query");
+    }
 
     if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -412,10 +452,16 @@ TEST_CASE("analytics create dataset")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_analytics() || !integration.has_analytics_service() ||
-        !integration.cluster_version().supports_collections()) {
-        return;
+    if (!integration.cluster_version().supports_analytics()) {
+        SKIP("cluster does not support analytics");
     }
+    if (!integration.cluster_version().supports_collections()) {
+        SKIP("cluster does not support collections");
+    }
+    if (!integration.has_analytics_service()) {
+        SKIP("cluster does not have analytics service");
+    }
+
     if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
@@ -434,6 +480,11 @@ TEST_CASE("analytics create dataset")
 TEST_CASE("integration: prepared query", "[integration]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_query()) {
+        SKIP("cluster does not support query");
+    }
+
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     auto key = test::utils::uniq_id("foo");
     tao::json::value value = {
@@ -467,6 +518,10 @@ TEST_CASE("integration: prepared query", "[integration]")
 TEST_CASE("integration: query with public API", "[integration]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_query()) {
+        SKIP("cluster does not support query");
+    }
 
     if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -505,8 +560,11 @@ TEST_CASE("integration: query from scope with public API", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_query()) {
+        SKIP("cluster does not support query");
+    }
     if (!integration.cluster_version().supports_collections()) {
-        return;
+        SKIP("cluster does not support collections");
     }
 
     if (!integration.cluster_version().supports_gcccp()) {

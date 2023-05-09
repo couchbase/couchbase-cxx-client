@@ -63,8 +63,13 @@ TEST_CASE("integration: get any replica", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (integration.number_of_replicas() == 0 && integration.number_of_nodes() <= integration.number_of_replicas()) {
-        return;
+    if (integration.number_of_replicas() == 0) {
+        SKIP("bucket has zero replicas");
+    }
+    if (integration.number_of_nodes() <= integration.number_of_replicas()) {
+        SKIP(fmt::format("number of nodes ({}) is less or equal to number of replicas ({})",
+                         integration.number_of_nodes(),
+                         integration.number_of_replicas()));
     }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -95,8 +100,12 @@ TEST_CASE("integration: get all replicas", "[integration]")
     test::utils::integration_test_guard integration;
 
     auto number_of_replicas = integration.number_of_replicas();
-    if (number_of_replicas == 0 && integration.number_of_nodes() <= number_of_replicas) {
-        return;
+    if (number_of_replicas == 0) {
+        SKIP("bucket has zero replicas");
+    }
+    if (integration.number_of_nodes() <= number_of_replicas) {
+        SKIP(fmt::format(
+          "number of nodes ({}) is less or equal to number of replicas ({})", integration.number_of_nodes(), number_of_replicas));
     }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -109,8 +118,14 @@ TEST_CASE("integration: get all replicas", "[integration]")
         couchbase::core::document_id id{ integration.ctx.bucket, scope_name, collection_name, key };
 
         couchbase::core::operations::insert_request req{ id, basic_doc_json };
+        req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
+    if (integration.cluster_version().is_mock()) {
+        // GOCAVES does not implement syncDurability. See https://github.com/couchbaselabs/gocaves/issues/109
+        std::this_thread::sleep_for(std::chrono::seconds{ 1 });
     }
 
     {
@@ -128,8 +143,13 @@ TEST_CASE("integration: get all replicas with missing key", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (integration.number_of_replicas() == 0 && integration.number_of_nodes() <= integration.number_of_replicas()) {
-        return;
+    if (integration.number_of_replicas() == 0) {
+        SKIP("bucket has zero replicas");
+    }
+    if (integration.number_of_nodes() <= integration.number_of_replicas()) {
+        SKIP(fmt::format("number of nodes ({}) is less or equal to number of replicas ({})",
+                         integration.number_of_nodes(),
+                         integration.number_of_replicas()));
     }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -152,7 +172,9 @@ TEST_CASE("integration: get any replica with missing key", "[integration]")
     test::utils::integration_test_guard integration;
 
     if (integration.number_of_nodes() <= integration.number_of_replicas()) {
-        return;
+        SKIP(fmt::format("number of nodes ({}) is less or equal to number of replicas ({})",
+                         integration.number_of_nodes(),
+                         integration.number_of_replicas()));
     }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -173,8 +195,13 @@ TEST_CASE("integration: get any replica low-level version", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (integration.number_of_replicas() == 0 && integration.number_of_nodes() <= integration.number_of_replicas()) {
-        return;
+    if (integration.number_of_replicas() == 0) {
+        SKIP("bucket has zero replicas");
+    }
+    if (integration.number_of_nodes() <= integration.number_of_replicas()) {
+        SKIP(fmt::format("number of nodes ({}) is less or equal to number of replicas ({})",
+                         integration.number_of_nodes(),
+                         integration.number_of_replicas()));
     }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -204,8 +231,12 @@ TEST_CASE("integration: get all replicas low-level version", "[integration]")
     test::utils::integration_test_guard integration;
 
     auto number_of_replicas = integration.number_of_replicas();
-    if (number_of_replicas == 0 && integration.number_of_nodes() <= integration.number_of_replicas()) {
-        return;
+    if (number_of_replicas == 0) {
+        SKIP("bucket has zero replicas");
+    }
+    if (integration.number_of_nodes() <= number_of_replicas) {
+        SKIP(fmt::format(
+          "number of nodes ({}) is less or equal to number of replicas ({})", integration.number_of_nodes(), number_of_replicas));
     }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -217,8 +248,14 @@ TEST_CASE("integration: get all replicas low-level version", "[integration]")
             { "b", 2.0 },
         };
         couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::json::generate_binary(value) };
+        req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
+    if (integration.cluster_version().is_mock()) {
+        // GOCAVES does not implement syncDurability. See https://github.com/couchbaselabs/gocaves/issues/109
+        std::this_thread::sleep_for(std::chrono::seconds{ 1 });
     }
 
     {
