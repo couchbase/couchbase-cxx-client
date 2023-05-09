@@ -249,6 +249,9 @@ TEST_CASE("integration: enable external tracer", "[integration]")
     {
         SECTION("query")
         {
+            if (!guard.cluster_version().supports_query()) {
+                SKIP("cluster does not support query");
+            }
             tracer->reset();
             couchbase::core::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
             req.parent_span = parent_span;

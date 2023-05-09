@@ -25,7 +25,7 @@ TEST_CASE("integration: missing scope and collection", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     if (!integration.cluster_version().supports_collections()) {
-        return;
+        SKIP("cluster does not support collections");
     }
 
     SECTION("get missing scope")
@@ -77,7 +77,7 @@ TEST_CASE("integration: get and insert non default scope and collection", "[inte
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     if (!integration.cluster_version().supports_collections()) {
-        return;
+        SKIP("cluster does not support collections");
     }
 
     auto scope_name = test::utils::uniq_id("scope");
@@ -121,7 +121,7 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     if (!integration.cluster_version().supports_collections()) {
-        return;
+        SKIP("cluster does not support collections");
     }
 
     auto scope_name = test::utils::uniq_id("scope");
@@ -166,6 +166,10 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
         REQUIRE(dropped);
     }
 
+    if (integration.cluster_version().is_mock()) {
+        SKIP("GOCAVES does not generate error when inserting into dropped collection. See "
+             "https://github.com/couchbaselabs/gocaves/issues/108");
+    }
     {
         couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary(key) };
         auto resp = test::utils::execute(integration.cluster, req);

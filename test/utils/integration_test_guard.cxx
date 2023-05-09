@@ -213,6 +213,7 @@ integration_test_guard::cluster_version()
     auto parsed_version = server_version::parse(runtime_version, ctx.deployment);
     parsed_version.profile = runtime_pools_info.config_profile;
     parsed_version.developer_preview = runtime_pools_info.is_developer_preview;
+    parsed_version.use_gocaves = ctx.version.use_gocaves;
     if (parsed_version.major == 0) {
         /* the build does not specify version properly */
         return ctx.version;

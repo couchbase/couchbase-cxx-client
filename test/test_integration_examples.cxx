@@ -130,7 +130,10 @@ TEST_CASE("example: start using", "[integration]")
 {
     test::utils::integration_test_guard integration;
     if (!integration.cluster_version().supports_collections()) {
-        return;
+        SKIP("cluster does not support collections");
+    }
+    if (integration.cluster_version().is_mock()) {
+        SKIP("GOCAVES cannot load travel-sample bucket. See https://github.com/couchbaselabs/gocaves/issues/101");
     }
 
     {

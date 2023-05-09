@@ -92,6 +92,14 @@ test_context::load_from_environment()
         ctx.number_of_io_threads = std::stoul(var);
     }
 
+    if (auto var = spdlog::details::os::getenv("TEST_USE_GOCAVES"); !var.empty()) {
+        if (var == "true" || var == "yes" || var == "1") {
+            ctx.version.use_gocaves = true;
+        } else if (var == "false" || var == "no" || var == "0") {
+            ctx.version.use_gocaves = false;
+        }
+    }
+
     return ctx;
 }
 } // namespace test::utils

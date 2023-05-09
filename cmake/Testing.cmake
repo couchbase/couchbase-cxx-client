@@ -25,6 +25,8 @@ macro(integration_test name)
   catch_discover_tests(
     test_integration_${name}
     PROPERTIES
+    SKIP_REGULAR_EXPRESSION
+    "SKIP"
     LABELS
     "integration")
   set_property(GLOBAL APPEND PROPERTY COUCHBASE_INTEGRATION_TESTS "test_integration_${name}")
@@ -52,6 +54,8 @@ macro(transaction_test name)
   catch_discover_tests(
     test_transaction_${name}
     PROPERTIES
+    SKIP_REGULAR_EXPRESSION
+    "SKIP"
     LABELS
     "transaction")
   set_property(GLOBAL APPEND PROPERTY COUCHBASE_TRANSACTION_TESTS "test_transaction_${name}")
@@ -78,6 +82,8 @@ macro(unit_test name)
   catch_discover_tests(
     test_unit_${name}
     PROPERTIES
+    SKIP_REGULAR_EXPRESSION
+    "SKIP"
     LABELS
     "unit")
   set_property(GLOBAL APPEND PROPERTY COUCHBASE_UNIT_TESTS "test_unit_${name}")
@@ -104,6 +110,8 @@ macro(integration_benchmark name)
   catch_discover_tests(
     benchmark_integration_${name}
     PROPERTIES
+    SKIP_REGULAR_EXPRESSION
+    "SKIP"
     LABELS
     "benchmark")
   set_property(GLOBAL APPEND PROPERTY COUCHBASE_BENCHMARKS "benchmark_integration_${name}")

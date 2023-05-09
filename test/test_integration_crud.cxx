@@ -35,6 +35,10 @@ TEST_CASE("integration: switching off mutation token", "[integration]")
     opts.enable_mutation_tokens = false;
     test::utils::integration_test_guard integration(opts);
 
+    if (integration.cluster_version().is_mock()) {
+        SKIP("GOCAVES does not allow to switching off mutation tokens. See https://github.com/couchbaselabs/gocaves/issues/100");
+    }
+
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
 
@@ -489,7 +493,7 @@ TEST_CASE("integration: upsert preserve expiry", "[integration]")
     test::utils::integration_test_guard integration;
 
     if (!integration.cluster_version().supports_preserve_expiry()) {
-        return;
+        SKIP("cluster does not support preserve expiry");
     }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -669,6 +673,10 @@ TEST_CASE("integration: multi-threaded open/close bucket", "[integration]")
 TEST_CASE("integration: open bucket that does not exist", "[integration]")
 {
     test::utils::integration_test_guard integration;
+
+    if (integration.cluster_version().is_mock()) {
+        SKIP("GOCAVES returns not_found (0x01) instead of no_access (0x24). See https://github.com/couchbaselabs/gocaves/issues/102");
+    }
 
     auto bucket_name = test::utils::uniq_id("missing_bucket");
 

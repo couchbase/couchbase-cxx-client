@@ -90,7 +90,7 @@ sdk_build_info()
 #endif
       ;
     info["static_openssl"] =
-#if defined(COUCHBASE_CXX_CLIENT_STATIC_STDLIB)
+#if defined(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL)
       "true"
 #else
       "false"
