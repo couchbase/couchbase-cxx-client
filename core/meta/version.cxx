@@ -17,10 +17,12 @@
 
 #include "version.hxx"
 
+#include "core/mozilla_ca_bundle.hxx"
 #include "core/transactions/forward_compat.hxx"
 #include "core/utils/join_strings.hxx"
 #include "core/utils/json.hxx"
 
+#include <couchbase/build_config.hxx>
 #include <couchbase/build_info.hxx>
 #include <couchbase/build_version.hxx>
 
@@ -112,8 +114,19 @@ sdk_build_info()
         }
     }
 #endif
+
+#if defined(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE)
+    info["mozilla_ca_bundle_embedded"] = "true";
+    info["mozilla_ca_bundle_sha256"] = COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256;
+    info["mozilla_ca_bundle_date"] = COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_DATE;
+#else
+    info["mozilla_ca_bundle_embedded"] = "false";
+#endif
+    info["mozilla_ca_bundle_size"] = std::to_string(default_ca::mozilla_ca_certs().size());
     info["openssl_default_cert_dir"] = X509_get_default_cert_dir();
     info["openssl_default_cert_file"] = X509_get_default_cert_file();
+    info["openssl_default_cert_dir_env"] = X509_get_default_cert_dir_env();
+    info["openssl_default_cert_file_env"] = X509_get_default_cert_file_env();
     info["openssl_ssl_interface_include_directories"] = OPENSSL_SSL_INTERFACE_INCLUDE_DIRECTORIES;
     info["openssl_ssl_interface_link_libraries"] = OPENSSL_SSL_INTERFACE_LINK_LIBRARIES;
     info["openssl_ssl_imported_location"] = OPENSSL_SSL_IMPORTED_LOCATION;
@@ -138,9 +151,10 @@ sdk_build_info_json()
 {
     tao::json::value info;
     for (const auto& [name, value] : sdk_build_info()) {
-        if (name == "version_major" || name == "version_minor" || name == "version_patch" || name == "version_build") {
+        if (name == "version_major" || name == "version_minor" || name == "version_patch" || name == "version_build" ||
+            name == "mozilla_ca_bundle_size") {
             info[name] = std::stoi(value);
-        } else if (name == "snapshot" || name == "static_stdlib" || name == "static_openssl") {
+        } else if (name == "snapshot" || name == "static_stdlib" || name == "static_openssl" || name == "mozilla_ca_bundle_embedded") {
             info[name] = value == "true";
         } else {
             info[name] = value;

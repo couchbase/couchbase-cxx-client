@@ -80,6 +80,7 @@ add_subdirectory(core/tracing)
 add_subdirectory(core/metrics)
 
 set(couchbase_cxx_client_FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/generated/mozilla_ca_bundle.cxx
         core/agent.cxx
         core/agent_config.cxx
         core/agent_group.cxx

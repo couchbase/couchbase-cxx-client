@@ -83,6 +83,7 @@ struct cluster_options {
     [[nodiscard]] std::chrono::milliseconds default_timeout_for(service_type type) const;
 
     bool dump_configuration{ false };
+    bool disable_mozilla_ca_certificates{ false };
     void apply_profile(std::string profile_name);
 };
 

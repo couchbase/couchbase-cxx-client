@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,7 +17,23 @@
 
 #pragma once
 
-#cmakedefine TLS_KEY_LOG_FILE "@TLS_KEY_LOG_FILE@"
-#cmakedefine COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE
-#cmakedefine COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_DATE "@COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_DATE@"
-#cmakedefine COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256 "@COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256@"
+#include <array>
+#include <gsl/span>
+#include <string_view>
+
+namespace couchbase::core::default_ca
+{
+struct certificate {
+    std::string_view authority;
+    std::string_view body;
+};
+
+auto
+mozilla_ca_certs() -> gsl::span<const certificate>;
+
+auto
+mozilla_ca_certs_date() -> std::string_view;
+
+auto
+mozilla_ca_certs_sha256() -> std::string_view;
+} // namespace couchbase::core::default_ca
