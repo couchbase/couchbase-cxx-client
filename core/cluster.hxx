@@ -483,7 +483,7 @@ class cluster : public std::enable_shared_from_this<cluster>
                 }
                 self->session_manager_->set_configuration(config, self->origin_.options());
                 self->session_->on_configuration_update(self->session_manager_);
-                self->session_->on_stop([self](retry_reason) {
+                self->session_->on_stop([self]() {
                     if (self->session_) {
                         self->session_.reset();
                     }

@@ -22,7 +22,6 @@
 #include "core/mcbp/codec.hxx"
 #include "dispatcher.hxx"
 #include "impl/bootstrap_state_listener.hxx"
-#include "mcbp/completion_token.hxx"
 #include "mcbp/operation_queue.hxx"
 #include "mcbp/queue_request.hxx"
 #include "mcbp/queue_response.hxx"
@@ -303,82 +302,69 @@ class bucket_impl
         return config_->map_key(key, node_index);
     }
 
-    void restart_node(std::size_t index, const std::string& hostname, const std::string& port)
+    void restart_sessions()
     {
-        if (closed_) {
-            CB_LOG_DEBUG(R"({} requested to restart session, but the bucket has been closed already. idx={}, address="{}:{}")",
+        const std::scoped_lock lock(config_mutex_, sessions_mutex_);
+
+        for (const auto& node : config_->nodes) {
+            if (sessions_.find(node.index) != sessions_.end()) {
+                continue;
+            }
+
+            const auto& hostname = node.hostname_for(origin_.options().network);
+            auto port = node.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0);
+            if (port == 0) {
+                continue;
+            }
+
+            couchbase::core::origin origin(origin_.credentials(), hostname, port, origin_.options());
+            io::mcbp_session session = origin_.options().enable_tls
+                                         ? io::mcbp_session(client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_)
+                                         : io::mcbp_session(client_id_, ctx_, origin, state_listener_, name_, known_features_);
+            CB_LOG_DEBUG(R"({} rev={}, restart idx={}, session="{}", address="{}:{}")",
                          log_prefix_,
-                         index,
+                         node.index,
+                         config_->rev_str(),
+                         session.id(),
                          hostname,
                          port);
-            return;
+            session.bootstrap(
+              [self = shared_from_this(), session](std::error_code err, topology::configuration cfg) mutable {
+                  if (err) {
+                      return self->remove_session(session.id());
+                  }
+                  self->update_config(std::move(cfg));
+                  session.on_configuration_update(self);
+                  session.on_stop([id = session.id(), self]() { self->remove_session(id); });
+                  self->drain_deferred_queue();
+              },
+              true);
+            sessions_.insert_or_assign(node.index, std::move(session));
         }
-        {
-            std::scoped_lock lock(config_mutex_);
-            if (!config_->has_node(origin_.options().network, service_type::key_value, origin_.options().enable_tls, hostname, port)) {
-                CB_LOG_TRACE(
-                  R"({} requested to restart session, but the node has been ejected from current configuration already. idx={}, network={}, address="{}:{}")",
-                  log_prefix_,
-                  index,
-                  origin_.options().network,
-                  hostname,
-                  port);
-                return;
+    }
+
+    void remove_session(const std::string& id)
+    {
+        bool found{ false };
+        const std::scoped_lock lock(sessions_mutex_);
+        for (auto ptr = sessions_.cbegin(); ptr != sessions_.cend();) {
+            if (ptr->second.id() == id) {
+                CB_LOG_DEBUG(R"({} removed session id="{}", address="{}", bootstrap_address="{}:{}")",
+                             log_prefix_,
+                             ptr->second.id(),
+                             ptr->second.remote_address(),
+                             ptr->second.bootstrap_hostname(),
+                             ptr->second.bootstrap_port());
+                ptr = sessions_.erase(ptr);
+                found = true;
+            } else {
+                ptr = std::next(ptr);
             }
         }
-        couchbase::core::origin origin(origin_.credentials(), hostname, port, origin_.options());
 
-        io::mcbp_session session = origin_.options().enable_tls
-                                     ? io::mcbp_session(client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_)
-                                     : io::mcbp_session(client_id_, ctx_, origin, state_listener_, name_, known_features_);
-
-        std::scoped_lock lock(sessions_mutex_);
-        if (auto ptr = sessions_.find(index); ptr == sessions_.end()) {
-            CB_LOG_DEBUG(R"({} requested to restart session idx={}, which does not exist yet, initiate new one id="{}", address="{}:{}")",
-                         log_prefix_,
-                         index,
-                         session.id(),
-                         hostname,
-                         port);
-        } else {
-            const auto& old_session = ptr->second;
-            auto old_id = old_session.id();
-            sessions_.erase(ptr);
-            Expects(sessions_.count(index) == 0);
-            CB_LOG_DEBUG(R"({} restarting session idx={}, id=("{}" -> "{}"), address="{}:{}")",
-                         log_prefix_,
-                         index,
-                         old_id,
-                         session.id(),
-                         hostname,
-                         port);
+        if (found) {
+            asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() { return self->restart_sessions(); }));
         }
-
-        session.bootstrap(
-          [self = shared_from_this(), session, this_index = index, hostname, port](std::error_code ec,
-                                                                                   const topology::configuration& config) mutable {
-              if (self->closed_) {
-                  asio::post(asio::bind_executor(
-                    self->ctx_, [session = std::move(session)]() mutable { return session.stop(retry_reason::do_not_retry); }));
-                  return;
-              }
-              if (ec) {
-                  CB_LOG_WARNING(R"({} failed to restart session idx={}, ec={})", session.log_prefix(), this_index, ec.message());
-                  self->restart_node(this_index, hostname, port);
-                  return;
-              }
-              session.on_configuration_update(self);
-              session.on_stop([this_index, hostname, port, self](retry_reason reason) {
-                  if (reason == retry_reason::socket_closed_while_in_flight) {
-                      self->restart_node(this_index, hostname, port);
-                  }
-              });
-
-              self->update_config(config);
-              self->drain_deferred_queue();
-          },
-          true);
-        sessions_.insert_or_assign(index, std::move(session));
     }
 
     void bootstrap(utils::movable_function<void(std::error_code, topology::configuration)>&& handler)
@@ -396,12 +382,7 @@ class bucket_impl
             } else {
                 const std::size_t this_index = new_session.index();
                 new_session.on_configuration_update(self);
-                new_session.on_stop([this_index, hostname = new_session.bootstrap_hostname(), port = new_session.bootstrap_port(), self](
-                                      retry_reason reason) {
-                    if (reason == retry_reason::socket_closed_while_in_flight) {
-                        self->restart_node(this_index, hostname, port);
-                    }
-                });
+                new_session.on_stop([id = new_session.id(), self]() { self->remove_session(id); });
 
                 {
                     std::scoped_lock lock(self->sessions_mutex_);
@@ -589,16 +570,15 @@ class bucket_impl
                       if (!err) {
                           self->update_config(std::move(cfg));
                           session.on_configuration_update(self);
-                          session.on_stop(
-                            [index = session.index(), hostname = session.bootstrap_hostname(), port = session.bootstrap_port(), self](
-                              retry_reason reason) {
-                                if (reason == retry_reason::socket_closed_while_in_flight) {
-                                    self->restart_node(index, hostname, port);
-                                }
-                            });
+                          session.on_stop([id = session.id(), self]() { self->remove_session(id); });
                           self->drain_deferred_queue();
                       } else if (err == errc::common::unambiguous_timeout && forced_config) {
-                          self->restart_node(idx, session.bootstrap_hostname(), session.bootstrap_port());
+                          CB_LOG_WARNING(R"({} failed to bootstrap session idx={}, id="{}", ec={})",
+                                         session.log_prefix(),
+                                         idx,
+                                         session.id(),
+                                         err.message());
+                          self->remove_session(session.id());
                       }
                   },
                   true);

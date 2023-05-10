@@ -807,7 +807,7 @@ class mcbp_session_impl
         return stopped_;
     }
 
-    void on_stop(utils::movable_function<void(retry_reason)> handler)
+    void on_stop(utils::movable_function<void()> handler)
     {
         on_stop_handler_ = std::move(handler);
     }
@@ -863,7 +863,7 @@ class mcbp_session_impl
         config_listeners_.clear();
         state_ = diag::endpoint_state::disconnected;
         if (auto on_stop = std::move(on_stop_handler_); on_stop) {
-            on_stop(reason);
+            on_stop();
         }
     }
 
@@ -1462,7 +1462,7 @@ class mcbp_session_impl
     std::mutex command_handlers_mutex_{};
     std::map<std::uint32_t, command_handler> command_handlers_{};
     std::vector<std::shared_ptr<config_listener>> config_listeners_{};
-    utils::movable_function<void(retry_reason)> on_stop_handler_{};
+    utils::movable_function<void()> on_stop_handler_{};
 
     std::atomic_bool bootstrapped_{ false };
     std::atomic_bool stopped_{ false };
@@ -1582,22 +1582,10 @@ mcbp_session::supports_feature(protocol::hello_feature feature)
     return impl_->supports_feature(feature);
 }
 
-// const std::string&
-// mcbp_session::id() const
-// {
-//     return impl_->id();
-// }
-std::string
+const std::string&
 mcbp_session::id() const
 {
-    if (impl_) {
-        return fmt::format("{}, {}, {}, refcnt={}",
-                           reinterpret_cast<const void*>(this),
-                           reinterpret_cast<const void*>(impl_.get()),
-                           impl_->id(),
-                           impl_.use_count());
-    }
-    return fmt::format("{}, nullptr", reinterpret_cast<const void*>(this));
+    return impl_->id();
 }
 
 std::string
@@ -1637,7 +1625,7 @@ mcbp_session::bootstrap(utils::movable_function<void(std::error_code, topology::
 }
 
 void
-mcbp_session::on_stop(utils::movable_function<void(retry_reason)> handler)
+mcbp_session::on_stop(utils::movable_function<void()> handler)
 {
     return impl_->on_stop(std::move(handler));
 }

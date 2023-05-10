@@ -124,8 +124,11 @@ class bucket
             return defer_command([self = shared_from_this(), cmd]() { self->map_and_send(cmd); });
         }
         if (session->is_stopped()) {
-            CB_LOG_TRACE(
-              R"({} the session has been found, but it is stopped, retrying id={}, session={})", log_prefix(), cmd->id_, session->id());
+            CB_LOG_TRACE(R"({} the session has been found for idx={}, but it is stopped, retrying id={}, session={})",
+                         log_prefix(),
+                         index,
+                         cmd->id_,
+                         session->id());
             return io::retry_orchestrator::maybe_retry(
               cmd->manager_, cmd, retry_reason::node_not_available, errc::common::request_canceled);
         }
