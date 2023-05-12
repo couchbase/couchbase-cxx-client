@@ -49,9 +49,11 @@ cbc::version::execute(const std::vector<std::string>& argv)
         if (options["--json"].asBool()) {
             tao::json::value info;
             for (const auto& [name, value] : couchbase::core::meta::sdk_build_info()) {
-                if (name == "version_major" || name == "version_minor" || name == "version_patch" || name == "version_build") {
+                if (name == "version_major" || name == "version_minor" || name == "version_patch" || name == "version_build" ||
+                    name == "mozilla_ca_bundle_size") {
                     info[name] = std::stoi(value);
-                } else if (name == "snapshot" || name == "static_stdlib" || name == "static_openssl") {
+                } else if (name == "snapshot" || name == "static_stdlib" || name == "static_openssl" ||
+                           name == "mozilla_ca_bundle_embedded") {
                     info[name] = value == "true";
                 } else {
                     info[name] = value;

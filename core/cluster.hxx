@@ -33,6 +33,7 @@
 #include "diagnostics.hxx"
 #include "dispatcher.hxx"
 #include "impl/dns_srv_tracker.hxx"
+#include "mozilla_ca_bundle.hxx"
 #include "operations.hxx"
 #include "origin.hxx"
 
@@ -428,6 +429,22 @@ class cluster : public std::enable_shared_from_this<cluster>
                 if (ec) {
                     CB_LOG_ERROR("[{}]: unable to load private key \"{}\": {}", id_, origin_.key_path(), ec.message());
                     return close([ec, handler = std::forward<Handler>(handler)]() mutable { return handler(ec); });
+                }
+            }
+
+            if (const auto certificates = default_ca::mozilla_ca_certs();
+                !origin_.options().disable_mozilla_ca_certificates && !certificates.empty()) {
+                CB_LOG_DEBUG("[{}]: loading {} CA certificates from Mozilla bundle. Update date: \"{}\", SHA256: \"{}\"",
+                             id_,
+                             certificates.size(),
+                             default_ca::mozilla_ca_certs_date(),
+                             default_ca::mozilla_ca_certs_sha256());
+                for (const auto& cert : certificates) {
+                    std::error_code ec{};
+                    tls_.add_certificate_authority(asio::const_buffer(cert.body.data(), cert.body.size()), ec);
+                    if (ec) {
+                        CB_LOG_WARNING("[{}]: unable to load CA \"{}\" from Mozilla bundle: {}", id_, cert.authority, ec.message());
+                    }
                 }
             }
             session_ = io::mcbp_session(id_, ctx_, tls_, origin_, dns_srv_tracker_);

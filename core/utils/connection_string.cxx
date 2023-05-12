@@ -402,6 +402,8 @@ extract_options(connection_string& connstr)
             parse_option(connstr.options.enable_metrics, name, value);
         } else if (name == "tls_verify") {
             parse_option(connstr.options.tls_verify, name, value);
+        } else if (name == "disable_mozilla_ca_certificates") {
+            parse_option(connstr.options.disable_mozilla_ca_certificates, name, value);
         } else if (name == "user_agent_extra") {
             /**
              * string, that will be appended to identification fields of the server protocols (key in HELO packet for MCBP, "user-agent"

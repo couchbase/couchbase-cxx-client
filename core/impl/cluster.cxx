@@ -90,6 +90,7 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
                 user_options.tls_verify = core::tls_verify_mode::peer;
                 break;
         }
+        user_options.disable_mozilla_ca_certificates = opts.security.disable_mozilla_ca_certificates;
     }
 
     if (opts.dns.nameserver) {
