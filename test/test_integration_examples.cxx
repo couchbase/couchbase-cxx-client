@@ -21,9 +21,14 @@
 #include "core/operations/management/query_index_create.hxx"
 #include "core/operations/management/query_index_get_all.hxx"
 
+#include <couchbase/boolean_query.hxx>
 #include <couchbase/cluster.hxx>
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/mutation_token.hxx>
+#include <couchbase/match_query.hxx>
+#include <couchbase/numeric_range_query.hxx>
+#include <couchbase/query_string_query.hxx>
+#include <couchbase/term_facet.hxx>
 
 #include <tao/json.hpp>
 
@@ -44,9 +49,9 @@ main(int argc, const char* argv[])
         return 1;
     }
 
-    std::string connection_string{ argv[1] };
-    std::string username{ argv[2] };
-    std::string password{ argv[3] };
+    std::string connection_string{ argv[1] }; // "couchbase://127.0.0.1"
+    std::string username{ argv[2] };          // "Administrator"
+    std::string password{ argv[3] };          // "password"
     std::string bucket_name{ "travel-sample" };
 
     // run IO context on separate thread
@@ -182,4 +187,270 @@ TEST_CASE("example: start using", "[integration]")
     };
 
     REQUIRE(start_using::main(4, argv) == 0);
+}
+
+namespace example_search
+{
+//! [example-search]
+#include <couchbase/cluster.hxx>
+
+#include <couchbase/boolean_query.hxx>
+#include <couchbase/match_query.hxx>
+#include <couchbase/numeric_range_query.hxx>
+#include <couchbase/query_string_query.hxx>
+
+#include <couchbase/fmt/cas.hxx>
+#include <couchbase/fmt/mutation_token.hxx>
+
+#include <tao/json.hpp>
+
+int
+main(int argc, const char* argv[])
+{
+    if (argc != 4) {
+        fmt::print("USAGE: ./example_search couchbase://127.0.0.1 Administrator password\n");
+        return 1;
+    }
+
+    std::string connection_string{ argv[1] }; // "couchbase://127.0.0.1"
+    std::string username{ argv[2] };          // "Administrator"
+    std::string password{ argv[3] };          // "password"
+    std::string bucket_name{ "travel-sample" };
+
+    // run IO context on separate thread
+    asio::io_context io;
+    auto guard = asio::make_work_guard(io);
+    std::thread io_thread([&io]() { io.run(); });
+
+    auto options = couchbase::cluster_options(username, password);
+    // customize through the 'options'.
+    // For example, optimize timeouts for WAN
+    options.apply_profile("wan_development");
+
+    auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
+    if (ec) {
+        fmt::print("unable to connect to the cluster: {}\n", ec.message());
+        return 1;
+    }
+
+    {
+        fmt::print("--- simple query\n");
+        auto [ctx, result] = cluster.search_query("travel-sample-index", couchbase::query_string_query("nice bar")).get();
+
+        if (ctx.ec()) {
+            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+            return 1;
+        }
+        fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
+        for (const auto& row : result.rows()) {
+            fmt::print("id: {}, score: {}\n", row.id(), row.score());
+        }
+    }
+
+    {
+        fmt::print("--- simple query with fields\n");
+        auto [ctx, result] = cluster
+                               .search_query("travel-sample-index",
+                                             couchbase::query_string_query("nice bar"),
+                                             couchbase::search_options{}.fields({ "description" }))
+                               .get();
+
+        if (ctx.ec()) {
+            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+            return 1;
+        }
+        fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
+        for (const auto& row : result.rows()) {
+            auto fields = row.fields_as<couchbase::codec::tao_json_serializer>();
+            fmt::print("id: {}, score: {}, description: {}\n", row.id(), row.score(), fields["description"].as<std::string>());
+        }
+    }
+
+    {
+        fmt::print("--- simple query with limit\n");
+        auto [ctx, result] =
+          cluster
+            .search_query("travel-sample-index", couchbase::query_string_query("nice bar"), couchbase::search_options{}.skip(3).limit(4))
+            .get();
+
+        if (ctx.ec()) {
+            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+            return 1;
+        }
+        fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
+        for (const auto& row : result.rows()) {
+            fmt::print("id: {}, score: {}\n", row.id(), row.score());
+        }
+    }
+
+    {
+        fmt::print("--- simple query with highlight\n");
+        auto [ctx, result] =
+          cluster
+            .search_query("travel-sample-index",
+                          couchbase::query_string_query("nice bar"),
+                          couchbase::search_options{}.highlight(couchbase::highlight_style::html, { "description", "title" }))
+            .get();
+
+        if (ctx.ec()) {
+            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+            return 1;
+        }
+        fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
+        for (const auto& row : result.rows()) {
+            fmt::print("id: {}, score: {}\n", row.id(), row.score());
+            for (const auto& [field, fragments] : row.fragments()) {
+                fmt::print("- {}:\n", field);
+                for (const auto& fragment : fragments) {
+                    fmt::print("-- {}\n", fragment);
+                }
+            }
+        }
+    }
+
+    {
+        fmt::print("--- simple query with collections\n");
+        auto [ctx, result] = cluster
+                               .search_query("travel-sample-index",
+                                             couchbase::query_string_query("west"),
+                                             couchbase::search_options{}.collections({ "airline" }))
+                               .get();
+
+        if (ctx.ec()) {
+            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+            return 1;
+        }
+        fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
+        for (const auto& row : result.rows()) {
+            fmt::print("id: {}, score: {}\n", row.id(), row.score());
+        }
+    }
+
+    {
+        fmt::print("--- query with consistency requirements\n");
+
+        auto bucket = cluster.bucket(bucket_name);
+        auto collection = bucket.scope("inventory").collection("hotel");
+
+        couchbase::mutation_state state;
+
+        {
+            auto [ctx, upsert_result] =
+              collection
+                .upsert(
+                  "prancing-pony",
+                  tao::json::value{
+                    { "title", "The Prancing Pony" },
+                    { "type", "hotel" },
+                    { "description",
+                      "The inn was located just where the East Road bent round the foot of Bree-hill, within the dike that stretched "
+                      "around the town. The building was three stories tall with many windows. Its front faced the Road and it had two "
+                      "wings that ran back towards the elevated ground of the hill, such that in the rear the second floor was at ground "
+                      "level. " } })
+                .get();
+            if (ctx.ec()) {
+                fmt::print("unable to upsert the document \"{}\": {}\n", ctx.id(), ctx.ec().message());
+                return 1;
+            }
+            fmt::print("saved document \"{}\", cas={}, token={}\n",
+                       ctx.id(),
+                       upsert_result.cas(),
+                       upsert_result.mutation_token().value_or(couchbase::mutation_token{}));
+            state.add(upsert_result);
+        }
+
+        auto [ctx, result] =
+          cluster
+            .search_query("travel-sample-index", couchbase::query_string_query("bree"), couchbase::search_options{}.consistent_with(state))
+            .get();
+
+        if (ctx.ec()) {
+            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+            return 1;
+        }
+        fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
+        for (const auto& row : result.rows()) {
+            fmt::print("id: {}, score: {}\n", row.id(), row.score());
+        }
+    }
+
+    {
+        fmt::print("--- complex query\n");
+        auto [ctx, result] = cluster
+                               .search_query("travel-sample-index",
+                                             couchbase::boolean_query()
+                                               .must(couchbase::match_query("honeymoon").field("reviews.content"),
+                                                     couchbase::numeric_range_query().field("reviews.ratings.Overall").min(4))
+                                               .must_not(couchbase::match_query("San Francisco").field("city")),
+                                             couchbase::search_options{}.collections({ "hotel" }).highlight())
+                               .get();
+        if (ctx.ec()) {
+            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+            return 1;
+        }
+        fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
+        for (const auto& row : result.rows()) {
+            fmt::print("id: {}, score: {}\n", row.id(), row.score());
+        }
+    }
+
+    {
+        fmt::print("--- simple query with facets\n");
+        auto [ctx, result] =
+          cluster
+            .search_query("travel-sample-index",
+                          couchbase::query_string_query("honeymoon"),
+                          couchbase::search_options{}.collections({ "hotel" }).facet("by_country", couchbase::term_facet("country", 3)))
+            .get();
+        if (ctx.ec()) {
+            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+            return 1;
+        }
+        fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
+        for (const auto& [name, facet] : result.facets()) {
+            fmt::print("{} facet: total={}, missing={}\n", name, facet->total(), facet->missing());
+            if (name == "by_country") {
+                auto term_facet = std::static_pointer_cast<couchbase::term_facet_result>(facet);
+                for (const auto& group : term_facet->terms()) {
+                    fmt::print("* {}: {}\n", group.name(), group.count());
+                }
+            }
+        }
+    }
+
+    // close cluster connection
+    cluster.close();
+    guard.reset();
+
+    io_thread.join();
+    return 0;
+}
+
+/*
+
+$ ./example_search couchbase://127.0.0.1 Administrator password
+saved document "my-document", cas=17486a1722b20000
+retrieved document "my-document", name="mike"
+row: {"airline":{"callsign":"MILE-AIR","country":"United States","iata":"Q5","icao":"MLA","id":10,"name":"40-Mile Air","type":"airline"}}
+
+ */
+//! [example-search]
+} // namespace example_search
+
+TEST_CASE("example: search", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+    if (!integration.cluster_version().supports_collections()) {
+        return;
+    }
+
+    const auto env = test::utils::test_context::load_from_environment();
+    const char* argv[] = {
+        "example_search", // name of the "executable"
+        env.connection_string.c_str(),
+        env.username.c_str(),
+        env.password.c_str(),
+    };
+
+    REQUIRE(example_search::main(4, argv) == 0);
 }

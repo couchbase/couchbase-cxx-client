@@ -23,6 +23,8 @@
 #include "core/operations/management/search_index_drop.hxx"
 #include "core/operations/management/search_index_upsert.hxx"
 
+#include <couchbase/query_string_query.hxx>
+
 using Catch::Matchers::StartsWith;
 
 TEST_CASE("integration: search query")

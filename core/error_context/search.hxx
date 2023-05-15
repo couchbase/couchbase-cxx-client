@@ -32,7 +32,7 @@ struct search {
     std::error_code ec{};
     std::string client_context_id{};
     std::string index_name{};
-    std::optional<std::string> query{};
+    std::string query{};
     std::optional<std::string> parameters{};
 
     std::string method{};

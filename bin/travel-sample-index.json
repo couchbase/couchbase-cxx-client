@@ -1,0 +1,188 @@
+{
+    "type": "fulltext-index",
+    "name": "travel-sample-index",
+    "sourceType": "gocbcore",
+    "sourceName": "travel-sample",
+    "planParams": {
+        "maxPartitionsPerPIndex": 1024,
+        "indexPartitions": 1
+    },
+    "params": {
+        "doc_config": {
+            "docid_prefix_delim": "",
+            "docid_regexp": "",
+            "mode": "scope.collection.type_field",
+            "type_field": "type"
+        },
+        "mapping": {
+            "analysis": {},
+            "default_analyzer": "standard",
+            "default_datetime_parser": "dateTimeOptional",
+            "default_field": "_all",
+            "default_mapping": {
+                "dynamic": false,
+                "enabled": false
+            },
+            "default_type": "_default",
+            "docvalues_dynamic": false,
+            "index_dynamic": false,
+            "store_dynamic": false,
+            "type_field": "_type",
+            "types": {
+                "inventory.airline": {
+                    "dynamic": false,
+                    "enabled": true,
+                    "properties": {
+                        "country": {
+                            "dynamic": false,
+                            "enabled": true,
+                            "fields": [
+                                {
+                                    "analyzer": "keyword",
+                                    "docvalues": true,
+                                    "index": true,
+                                    "name": "country",
+                                    "store": true,
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "name": {
+                            "dynamic": false,
+                            "enabled": true,
+                            "fields": [
+                                {
+                                    "analyzer": "en",
+                                    "docvalues": true,
+                                    "include_in_all": true,
+                                    "include_term_vectors": true,
+                                    "index": true,
+                                    "name": "name",
+                                    "store": true,
+                                    "type": "text"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "inventory.hotel": {
+                    "dynamic": false,
+                    "enabled": true,
+                    "properties": {
+                        "city": {
+                            "dynamic": false,
+                            "enabled": true,
+                            "fields": [
+                                {
+                                    "analyzer": "en",
+                                    "docvalues": true,
+                                    "include_in_all": true,
+                                    "include_term_vectors": true,
+                                    "index": true,
+                                    "name": "city",
+                                    "store": true,
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "country": {
+                            "dynamic": false,
+                            "enabled": true,
+                            "fields": [
+                                {
+                                    "analyzer": "keyword",
+                                    "docvalues": true,
+                                    "include_in_all": true,
+                                    "include_term_vectors": true,
+                                    "index": true,
+                                    "name": "country",
+                                    "store": true,
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "description": {
+                            "dynamic": false,
+                            "enabled": true,
+                            "fields": [
+                                {
+                                    "analyzer": "en",
+                                    "docvalues": true,
+                                    "include_in_all": true,
+                                    "include_term_vectors": true,
+                                    "index": true,
+                                    "name": "description",
+                                    "store": true,
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "reviews": {
+                            "dynamic": false,
+                            "enabled": true,
+                            "properties": {
+                                "content": {
+                                    "dynamic": false,
+                                    "enabled": true,
+                                    "fields": [
+                                        {
+                                            "analyzer": "en",
+                                            "docvalues": true,
+                                            "include_in_all": true,
+                                            "include_term_vectors": true,
+                                            "index": true,
+                                            "name": "content",
+                                            "store": true,
+                                            "type": "text"
+                                        }
+                                    ]
+                                },
+                                "ratings": {
+                                    "dynamic": false,
+                                    "enabled": true,
+                                    "properties": {
+                                        "Overall": {
+                                            "dynamic": false,
+                                            "enabled": true,
+                                            "fields": [
+                                                {
+                                                    "docvalues": true,
+                                                    "include_in_all": true,
+                                                    "index": true,
+                                                    "name": "Overall",
+                                                    "store": true,
+                                                    "type": "number"
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "title": {
+                            "dynamic": false,
+                            "enabled": true,
+                            "fields": [
+                                {
+                                    "analyzer": "en",
+                                    "docvalues": true,
+                                    "include_in_all": true,
+                                    "include_term_vectors": true,
+                                    "index": true,
+                                    "name": "title",
+                                    "store": true,
+                                    "type": "text"
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "store": {
+            "indexType": "scorch",
+            "segmentVersion": 15
+        }
+    },
+    "sourceParams": {}
+}

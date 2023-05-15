@@ -1,0 +1,163 @@
+#!/usr/bin/env ruby
+
+#  Copyright 2020-2021 Couchbase, Inc.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+require "timeout"
+require "net/http"
+require "json"
+require "openssl"
+
+class API
+  def initialize(options)
+    @options = options
+    connect
+  end
+
+  def connect
+    @client = Net::HTTP.start(@options[:host], @options[:port],
+                              use_ssl: @options[:strict_encryption],
+                              verify_mode: OpenSSL::SSL::VERIFY_NONE)
+  end
+
+  def url(path)
+    "#{@client.use_ssl? ? 'https' : 'http'}://#{@options[:username]}@#{@options[:host]}:#{@options[:port]}#{path}"
+  end
+
+  def decode_response(response)
+    payload =
+      if response['content-type'] =~ /application\/json/
+        JSON.parse(response.body)
+      else
+        response.body
+      end
+    p payload if @options[:verbose]
+    payload
+  end
+
+  def setup_request(request)
+    request.basic_auth(@options[:username], @options[:password])
+    request['accept'] = "application/json"
+  end
+
+  def get(path)
+    puts "# GET #{url(path)}"
+    req = Net::HTTP::Get.new(path)
+    setup_request(req)
+    res = @client.request(req)
+    decode_response(res)
+  rescue EOFError
+    connect
+    retry
+  rescue => ex
+    puts "#{__method__}: #{ex}, sleep for 1 second and retry"
+    sleep(1)
+    retry
+  end
+
+  def post_form(path, fields = {})
+    puts "# POST #{url(path)} #{fields}"
+    req = Net::HTTP::Post.new(path)
+    setup_request(req)
+    req.form_data = fields
+    res = @client.request(req)
+    decode_response(res)
+  rescue EOFError
+    connect
+    retry
+  rescue => ex
+    puts "#{__method__}: #{ex}, sleep for 1 second and retry"
+    sleep(1)
+    retry
+  end
+
+  def post_json(path, object)
+    data = JSON.generate(object)
+    puts "# POST #{url(path)} #{data}"
+    req = Net::HTTP::Post.new(path)
+    req['content-type'] = "application/json"
+    setup_request(req)
+    res = @client.request(req, data)
+    decode_response(res)
+  rescue EOFError
+    connect
+    retry
+  rescue => ex
+    puts "#{__method__}: #{ex}, sleep for 1 second and retry"
+    sleep(1)
+    retry
+  end
+
+  def put_json(path, object)
+    data = JSON.generate(object)
+    puts "# PUT #{url(path)} #{data}"
+    req = Net::HTTP::Put.new(path)
+    req['content-type'] = "application/json"
+    setup_request(req)
+    res = @client.request(req, data)
+    decode_response(res)
+  rescue EOFError
+    connect
+    retry
+  rescue => ex
+    puts "#{__method__}: #{ex}, sleep for 1 second and retry"
+    sleep(1)
+    retry
+  end
+end
+
+def service_port_for_bucket(api, service, bucket, options)
+  port_key = options[:strict_encryption] ? "#{service}SSL" : service
+  port = 0
+  while port.zero?
+    config = api.get("/pools/default/b/#{bucket}")
+    port = config["nodesExt"].find{|n| n["services"].key?(port_key)}["services"][port_key].to_i rescue 0
+    sleep 1
+  end
+  port
+end
+
+options = {
+  host: ARGV[0] || "127.0.0.1",
+  strict_encryption: ARGV[1] == "true" || ARGV[1] == "1",
+  username: ARGV[2] || "Administrator",
+  password: ARGV[3] || "password",
+  bucket: "travel-sample",
+  verbose: true,
+}
+p options: options
+
+management_api = API.new(options.merge(port: options[:strict_encryption] ? 18091 : 8091))
+search_service_port = service_port_for_bucket(management_api, "fts", options[:bucket], options)
+
+has_v6_nodes = 
+  management_api.get("/pools/default")["nodes"]
+  .any? { |node| node["version"] =~ /^6\./ && node["services"].include?("fts") }
+
+search_api = API.new(options.merge(port: search_service_port))
+index_definition_path = File.join(__dir__, "travel-sample-index#{"-v6" if has_v6_nodes}.json")
+puts "using index definition: #{File.basename(index_definition_path)}"
+index_definition = JSON.load(File.read(index_definition_path))
+search_api.put_json("/api/index/travel-sample-index", index_definition)
+
+expected_number_of_the_documents = 1000
+indexed_documents = 0
+
+Timeout.timeout(10 * 60) do # give it 10 minutes to index
+  while indexed_documents < expected_number_of_the_documents
+    resp = search_api.get("/api/index/travel-sample-index/count")
+    indexed_documents = resp['count'].to_i
+    sleep 1
+  end
+end

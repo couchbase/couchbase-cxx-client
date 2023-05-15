@@ -22,6 +22,8 @@
 #include <couchbase/cluster_options.hxx>
 #include <couchbase/query_index_manager.hxx>
 #include <couchbase/query_options.hxx>
+#include <couchbase/search_options.hxx>
+#include <couchbase/search_query.hxx>
 #include <couchbase/transactions.hxx>
 
 #include <memory>
@@ -165,6 +167,43 @@ class cluster
         });
         return future;
     }
+
+    /**
+     * Performs a query against the full text search services.
+     *
+     * @param index_name name of the search index
+     * @param query query object, see hierarchy of @ref search_query for more details.
+     * @param options options to customize the query request.
+     * @param handler the handler that implements @ref search_handler
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @see https://docs.couchbase.com/server/current/fts/fts-introduction.html
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    void search_query(std::string index_name, const search_query& query, const search_options& options, search_handler&& handler) const;
+
+    /**
+     * Performs a query against the full text search services.
+     *
+     * @param index_name name of the search index
+     * @param query query object, see hierarchy of @ref search_query for more details.
+     * @param options options to customize the query request.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @see https://docs.couchbase.com/server/current/fts/fts-introduction.html
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto search_query(std::string index_name, const class search_query& query, const search_options& options = {}) const
+      -> std::future<std::pair<search_error_context, search_result>>;
 
     /**
      * Performs a query against the analytics services.

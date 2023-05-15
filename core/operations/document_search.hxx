@@ -121,7 +121,7 @@ struct search_request {
 
     std::optional<std::uint32_t> limit{};
     std::optional<std::uint32_t> skip{};
-    bool explain{ false };
+    std::optional<bool> explain{ false };
     bool disable_scoring{ false };
     /**
      * UNCOMMITTED: If set to true, will include the vector of search_location in rows.

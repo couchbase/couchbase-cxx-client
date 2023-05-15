@@ -43,6 +43,7 @@ class error_context
      * @committed
      */
     error_context() = default;
+    virtual ~error_context() = default;
 
     /**
      * Creates and initializes error context with given parameters.
@@ -79,7 +80,7 @@ class error_context
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto ec() const -> std::error_code
+    [[nodiscard]] virtual auto ec() const -> std::error_code
     {
         return ec_;
     }
@@ -105,7 +106,7 @@ class error_context
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto last_dispatched_to() const -> const std::optional<std::string>&
+    [[nodiscard]] virtual auto last_dispatched_to() const -> const std::optional<std::string>&
     {
         return last_dispatched_to_;
     }
@@ -118,7 +119,7 @@ class error_context
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto last_dispatched_from() const -> const std::optional<std::string>&
+    [[nodiscard]] virtual auto last_dispatched_from() const -> const std::optional<std::string>&
     {
         return last_dispatched_from_;
     }
@@ -131,7 +132,7 @@ class error_context
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto retry_attempts() const -> std::size_t
+    [[nodiscard]] virtual auto retry_attempts() const -> std::size_t
     {
         return retry_attempts_;
     }
@@ -144,7 +145,7 @@ class error_context
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto retry_reasons() const -> const std::set<retry_reason>&
+    [[nodiscard]] virtual auto retry_reasons() const -> const std::set<retry_reason>&
     {
         return retry_reasons_;
     }
@@ -158,7 +159,7 @@ class error_context
      * @since 1.0.0
      * @uncommitted
      */
-    [[nodiscard]] auto retried_because_of(retry_reason reason) const -> bool
+    [[nodiscard]] virtual auto retried_because_of(retry_reason reason) const -> bool
     {
         return retry_reasons_.count(reason) > 0;
     }

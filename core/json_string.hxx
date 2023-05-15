@@ -37,6 +37,11 @@ struct json_string {
         return *this;
     }
 
+    json_string(const std::vector<std::byte>& value)
+      : value_(value)
+    {
+    }
+
     json_string(std::vector<std::byte>&& value)
       : value_(std::move(value))
     {
