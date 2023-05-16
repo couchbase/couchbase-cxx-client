@@ -1,4 +1,4 @@
-# cbc-get - get document {#cbc-get}
+# cbc-get - Retrieve Documents from the Server {#cbc-get}
 
 ### NAME
 
@@ -157,4 +157,4 @@ Retrieve one or more documents from the server and print them to standard output
 
 ### SEE ALSO
 
-[cbc](#cbc), [cbc-query](#cbc-query).
+[cbc](md_docs_2cbc), [cbc-query](md_docs_2cbc-query).

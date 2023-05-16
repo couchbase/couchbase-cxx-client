@@ -126,13 +126,11 @@ struct search_options : public common_options<search_options> {
      *
      * Tuning the scan consistency allows to trade data "freshness" for latency and vice versa. By default
      * {@link search_scan_consistency::not_bounded} is used, which means that the server returns the data it has in the index right away.
-     * This is fast, but might not include the most recent mutations. If you want to include all the mutations up to the point of the query,
-     * use {@link search_scan_consistency::request_plus}.
+     * This is fast, but might not include the most recent mutations.
      *
      * Note that you cannot use this method and {@link #consistent_with(const mutation_state&)} at the same time, since they are mutually
      * exclusive. As a rule of thumb, if you only care to be consistent with the mutation you just wrote on the same thread/app, use
-     * {@link #consistent_with(const mutation_state&)}. If you need "global" scan consistency, use
-     * {@link search_scan_consistency::request_plus} on this method.
+     * {@link #consistent_with(const mutation_state&)}.
      *
      * @param scan_consistency the index scan consistency to be used for this query
      * @return this options builder for chaining purposes.
@@ -155,8 +153,7 @@ struct search_options : public common_options<search_options> {
      *
      * Note that you cannot use this method and {@link #scan_consistency(search_scan_consistency)} at the same time, since
      * they are mutually exclusive. As a rule of thumb, if you only care to be consistent with the mutation you just wrote
-     * on the same thread/app, use this method. If you need "global" scan consistency, use
-     * {@link search_scan_consistency#request_plus} on {@link #scan_consistency(search_scan_consistency)}.
+     * on the same thread/app, use this method.
      *
      * @param state the mutation state containing the mutation tokens.
      * @return this options builder for chaining purposes.

@@ -25,7 +25,7 @@ namespace couchbase::transactions
  * @volatile
  *
  * Contains internal information on a transaction,
- * returned by @ref core::transactions::run()
+ * returned by @ref couchbase::transactions::transactions::run()
  */
 struct transaction_result {
     std::string transaction_id;

@@ -21,13 +21,13 @@
  * @page cli Command Line Tools
  * @brief Indexes of the API grouped by stability.
  *
- * @subpage cbc. CLI tools entry point.
+ * @subpage md_docs_2cbc
  *
- * @subpage cbc-get. Retrieve documents from the server by ID.
+ * @subpage md_docs_2cbc-get
  *
- * @subpage cbc-query. Execute N1QL queries.
+ * @subpage md_docs_2cbc-query
  *
- * @subpage cbc-analytics. Execute Analytics queries.
+ * @subpage md_docs_2cbc-analytics
  *
- * @subpage cbc-pillowfight. Run simple workload generator.
+ * @subpage md_docs_2cbc-pillowfight
  */

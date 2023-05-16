@@ -64,7 +64,7 @@ class search_sort_field : public search_sort
      * For example, @ref search_sort_field_type::string for text fields, @ref search_sort_field_type::date for DateTime fields,
      * or @ref search_sort_field_type::number for numeric/geo fields.
      *
-     * @param value field type
+     * @param desc field type
      * @return pointer to this
      *
      * @since 1.0.0

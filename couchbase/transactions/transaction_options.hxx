@@ -25,7 +25,7 @@
 namespace couchbase::transactions
 {
 /**
- * The transaction_options can be passed in to override some elements of the global @ref transaction_config.
+ * The transaction_options can be passed in to override some elements of the global @ref transactions_config.
  */
 class transaction_options
 {

@@ -1,4 +1,4 @@
-# cbc-pillowfight - simple workload generator {#cbc-pillowfight}
+# cbc-pillowfight - Simple Workload Generator {#cbc-pillowfight}
 
 ### NAME
 
@@ -160,4 +160,4 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 
 ### SEE ALSO
 
-[cbc](#cbc).
+[cbc](md_docs_2cbc).

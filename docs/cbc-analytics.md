@@ -1,4 +1,4 @@
-# cbc-analytics - run Analytics query {#cbc-analytics}
+# cbc-analytics - Run Analytics Query {#cbc-analytics}
 
 ### NAME
 
@@ -168,4 +168,4 @@ Execute one or more Analytics queries and print results to standard output.
 
 ### SEE ALSO
 
-[cbc](#cbc), [cbc-get](#cbc-get).
+[cbc](md_docs_2cbc), [cbc-get](md_docs_2cbc-get).

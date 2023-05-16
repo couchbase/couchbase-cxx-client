@@ -18,14 +18,18 @@
 #include "test_helper_integration.hxx"
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/fmt/cas.hxx>
 #include <couchbase/transactions/attempt_context.hxx>
+
 #include <tao/json.hpp>
 
 namespace blocking_txn
 {
 //! [blocking-txn]
 #include <couchbase/cluster.hxx>
+#include <couchbase/fmt/cas.hxx>
 #include <couchbase/transactions/attempt_context.hxx>
+
 #include <tao/json.hpp>
 
 int
@@ -38,9 +42,10 @@ main(int argc, const char* argv[])
 
     int retval = 0;
 
-    std::string connection_string{ argv[1] };
-    std::string username{ argv[2] };
-    std::string password{ argv[3] };
+    const std::string connection_string{ argv[1] };
+    const std::string username{ argv[2] };
+    const std::string password{ argv[3] };
+
     // run IO context on separate thread
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
@@ -51,106 +56,116 @@ main(int argc, const char* argv[])
     // For example, optimize timeouts for WAN
     options.apply_profile("wan_development");
 
+    // [1] connect to cluster using the given connection string and the options
     auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
     if (ec) {
         fmt::print("unable to connect to the cluster: {}\n", ec.message());
         return 1;
     }
 
-    auto coll = cluster.bucket("default").default_collection();
-    auto id = "my-doc";
-    auto id2 = "my_doc_2";
-    auto id3 = "my_doc_3";
-    ::tao::json::value content = { { "some", "content" } };
+    // [2] persist three documents to the default collection of bucket "default"
+    auto collection = cluster.bucket("default").default_collection();
+    constexpr auto id_1 = "my-doc_1";
+    constexpr auto id_2 = "my_doc_2";
+    constexpr auto id_3 = "my_doc_3";
+    const tao::json::value content = { { "some", "content" } };
 
-    // upsert all 3...
-    auto [upsert_err, upsert_res] = coll.upsert(id, content).get();
-    if (upsert_err.ec()) {
-        fmt::print("upsert failed before starting transaction");
-        return 1;
-    }
-    auto [upsert_err2, upsert_res2] = coll.upsert(id2, content).get();
-    if (upsert_err2.ec()) {
-        fmt::print("upsert failed before starting transaction");
-        return 1;
-    }
-    auto [upsert_err3, upsert_res3] = coll.upsert(id3, content).get();
-    if (upsert_err3.ec()) {
-        fmt::print("upsert failed before starting transaction");
-        return 1;
-    }
-
-    //! [simple-blocking-txn]
-    auto [e, txn_res] = cluster.transactions()->run([&](couchbase::transactions::attempt_context& ctx) {
-        // get document
-        auto [get_err, doc] = ctx.get(coll, id);
-        if (get_err.ec()) {
-            fmt::print("error getting doc {}: {}", id, get_err.ec().message());
-            // don't continue the txn logic.
-            return;
+    for (const auto& id : { id_1, id_2, id_3 }) {
+        if (auto [ctx, res] = collection.upsert(id, content).get(); ctx.ec()) {
+            fmt::print(stderr, "upsert \"{}\" failed before starting transaction: {}\n", id, ctx.ec().message());
+            return 1;
         }
-        // replace document content
-        ctx.replace(doc, ::tao::json::value{ { "some", "other content" } });
-    });
-    if (e.ec()) {
-        fmt::print("error in transaction {}, {}", e.ec().message(), e.cause().message());
-        retval = 1;
-    } else {
-        fmt::print("transaction {} completed successfully", txn_res.transaction_id);
     }
-    //! [simple-blocking-txn]
 
-    //! [simple-async-txn]
-    auto barrier = std::make_shared<std::promise<std::error_code>>();
-    auto f = barrier->get_future();
-    cluster.transactions()->run(
-      [&](couchbase::transactions::async_attempt_context& ctx) {
-          ctx.get(coll, id, [&](auto get_err, auto doc) {
-              if (get_err.ec()) {
-                  fmt::print("error getting doc {}: {}", id, get_err.ec().message());
-              } else {
-                  ctx.replace(doc, ::tao::json::value{ { "some", "other async content" } }, [&](auto replace_err, auto) {
-                      if (replace_err.ec()) {
-                          fmt::print("error replacing content in doc {}: {}", id, replace_err.ec().message());
-                      }
-                  });
+    { // [3] blocking transaction
+        //! [simple-blocking-txn]
+        auto [tx_err, tx_res] = cluster.transactions()->run(
+          // [3.1] closure argument to run() method encapsulates logic, that has to be run in transaction
+          [&](couchbase::transactions::attempt_context& ctx) {
+              // [3.2] get document
+              auto [err_ctx, doc] = ctx.get(collection, id_1);
+              if (err_ctx.ec()) {
+                  fmt::print(stderr, "failed to get document \"{}\": {}\n", id_1, err_ctx.ec().message());
+                  // [3.3] don't continue the transaction logic
+                  return;
               }
+              // [3.4] replace document's content
+              ctx.replace(doc, ::tao::json::value{ { "some", "other content" } });
           });
-          ctx.get(coll, id2, [&](auto get_err, auto doc) {
-              if (get_err.ec()) {
-                  fmt::print("error getting doc {}: {}", id2, get_err.ec().message());
-              } else {
-                  ctx.replace(doc, ::tao::json::value{ { "some", "other async content" } }, [&](auto replace_err, auto) {
-                      if (replace_err.ec()) {
-                          fmt::print("error replacing content in doc {}: {}", id, replace_err.ec().message());
-                      }
-                  });
-              }
-          });
-          ctx.get(coll, id3, [&](auto get_err, auto doc) {
-              if (get_err.ec()) {
-                  fmt::print("error getting doc {}: {}", id, get_err.ec().message());
-              } else {
-                  ctx.replace(doc, ::tao::json::value{ { "some", "other async content" } }, [&](auto replace_err, auto) {
-                      if (replace_err.ec()) {
-                          fmt::print("error replacing content in doc {}: {}", id3, replace_err.ec().message());
-                      }
-                  });
-              }
-          });
-      },
-      [barrier](auto tx_err, auto tx_result) {
-          if (tx_err.ec()) {
-              fmt::print("error in async transaction {}, {}", tx_result.transaction_id, tx_err.ec().message());
-          }
-          barrier->set_value(tx_err.ec());
-      });
-    if (auto async_err = f.get()) {
-        retval = 1;
+        // [3.5] check the overall status of the transaction
+        if (tx_err.ec()) {
+            fmt::print(stderr, "error in transaction {}, cause: {}\n", tx_err.ec().message(), tx_err.cause().message());
+            retval = 1;
+        } else {
+            fmt::print("transaction {} completed successfully", tx_res.transaction_id);
+        }
+        //! [simple-blocking-txn]
     }
-    //! [simple-async-txn]
 
-    // close cluster connection
+    { // [4] asynchronous transaction
+        //! [simple-async-txn]
+        // [4.1] create promise to retrieve result from the transaction
+        auto barrier = std::make_shared<std::promise<std::error_code>>();
+        auto f = barrier->get_future();
+        cluster.transactions()->run(
+          // [4.2] closure argument to run() method encapsulates logic, that has to be run in transaction
+          [&](couchbase::transactions::async_attempt_context& ctx) {
+              // [4.3] get document
+              ctx.get(collection, id_1, [&](auto err_ctx_1, auto doc) {
+                  if (err_ctx_1.ec()) {
+                      fmt::print(stderr, "failed to get document \"{}\": {}\n", id_1, err_ctx_1.ec().message());
+                      return;
+                  }
+                  // [4.4] replace document's content
+                  ctx.replace(doc, ::tao::json::value{ { "some", "other async content" } }, [&](auto err_ctx_2, auto res) {
+                      if (err_ctx_2.ec()) {
+                          fmt::print(stderr, "error replacing content in doc {}: {}\n", id_1, err_ctx_2.ec().message());
+                      } else {
+                          fmt::print("successfully replaced: {}, cas={}\n", id_1, res.cas());
+                      }
+                  });
+              });
+              ctx.get(collection, id_2, [&](auto err_ctx_1, auto doc) {
+                  if (err_ctx_1.ec()) {
+                      fmt::print("error getting doc {}: {}", id_2, err_ctx_1.ec().message());
+                      return;
+                  }
+                  ctx.replace(doc, ::tao::json::value{ { "some", "other async content" } }, [&](auto err_ctx_2, auto res) {
+                      if (err_ctx_2.ec()) {
+                          fmt::print(stderr, "error replacing content in doc {}: {}\n", id_2, err_ctx_2.ec().message());
+                      } else {
+                          fmt::print("successfully replaced: {}, cas={}\n", id_2, res.cas());
+                      }
+                  });
+              });
+              ctx.get(collection, id_3, [&](auto err_ctx_1, auto doc) {
+                  if (err_ctx_1.ec()) {
+                      fmt::print("error getting doc {}: {}", id_3, err_ctx_1.ec().message());
+                      return;
+                  }
+                  ctx.replace(doc, ::tao::json::value{ { "some", "other async content" } }, [&](auto err_ctx_2, auto res) {
+                      if (err_ctx_2.ec()) {
+                          fmt::print(stderr, "error replacing content in doc {}: {}\n", id_3, err_ctx_2.ec().message());
+                      } else {
+                          fmt::print("successfully replaced: {}, cas={}\n", id_3, res.cas());
+                      }
+                  });
+              });
+          },
+          // [4.5], second closure represents transaction completion logic
+          [barrier](auto tx_err, auto tx_res) {
+              if (tx_err.ec()) {
+                  fmt::print(stderr, "error in async transaction {}, {}\n", tx_res.transaction_id, tx_err.ec().message());
+              }
+              barrier->set_value(tx_err.ec());
+          });
+        if (auto async_err = f.get()) {
+            retval = 1;
+        }
+        //! [simple-async-txn]
+    }
+
+    // [5], close cluster connection
     cluster.close();
     guard.reset();
 
@@ -161,11 +176,11 @@ main(int argc, const char* argv[])
 //! [blocking-txn]
 } // namespace blocking_txn
 
-TEST_CASE("example: start using", "[integration]")
+TEST_CASE("example: basic transaction", "[integration]")
 {
     test::utils::integration_test_guard integration;
     if (!integration.cluster_version().supports_collections()) {
-        SKIP("cluter does not support collections");
+        SKIP("cluster does not support collections");
     }
 
     const auto env = test::utils::test_context::load_from_environment();

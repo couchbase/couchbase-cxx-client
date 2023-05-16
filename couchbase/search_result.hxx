@@ -35,7 +35,7 @@ class internal_search_result;
 #endif
 
 /**
- * Represents result of @ref cluster#search() and @ref scope#search() calls.
+ * Represents result of @ref cluster#search_query() and @ref scope#search_query() calls.
  *
  * @since 1.0.0
  * @committed
