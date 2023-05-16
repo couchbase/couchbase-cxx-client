@@ -395,6 +395,21 @@ class cluster : public std::enable_shared_from_this<cluster>
                     CB_LOG_WARNING("[{}]: unable to load default CAs: {}", id_, ec.message());
                     // we don't consider this fatal and try to continue without it
                 }
+
+                if (const auto certificates = default_ca::mozilla_ca_certs();
+                    !origin_.options().disable_mozilla_ca_certificates && !certificates.empty()) {
+                    CB_LOG_DEBUG("[{}]: loading {} CA certificates from Mozilla bundle. Update date: \"{}\", SHA256: \"{}\"",
+                                 id_,
+                                 certificates.size(),
+                                 default_ca::mozilla_ca_certs_date(),
+                                 default_ca::mozilla_ca_certs_sha256());
+                    for (const auto& cert : certificates) {
+                        tls_.add_certificate_authority(asio::const_buffer(cert.body.data(), cert.body.size()), ec);
+                        if (ec) {
+                            CB_LOG_WARNING("[{}]: unable to load CA \"{}\" from Mozilla bundle: {}", id_, cert.authority, ec.message());
+                        }
+                    }
+                }
             } else { // trust certificate is explicitly specified
                 std::error_code ec{};
                 // load only the explicit certificate
@@ -432,21 +447,6 @@ class cluster : public std::enable_shared_from_this<cluster>
                 }
             }
 
-            if (const auto certificates = default_ca::mozilla_ca_certs();
-                !origin_.options().disable_mozilla_ca_certificates && !certificates.empty()) {
-                CB_LOG_DEBUG("[{}]: loading {} CA certificates from Mozilla bundle. Update date: \"{}\", SHA256: \"{}\"",
-                             id_,
-                             certificates.size(),
-                             default_ca::mozilla_ca_certs_date(),
-                             default_ca::mozilla_ca_certs_sha256());
-                for (const auto& cert : certificates) {
-                    std::error_code ec{};
-                    tls_.add_certificate_authority(asio::const_buffer(cert.body.data(), cert.body.size()), ec);
-                    if (ec) {
-                        CB_LOG_WARNING("[{}]: unable to load CA \"{}\" from Mozilla bundle: {}", id_, cert.authority, ec.message());
-                    }
-                }
-            }
             session_ = io::mcbp_session(id_, ctx_, tls_, origin_, dns_srv_tracker_);
         } else {
             session_ = io::mcbp_session(id_, ctx_, origin_, dns_srv_tracker_);
