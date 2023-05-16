@@ -64,6 +64,7 @@ main(int argc, const char* argv[])
     // For example, optimize timeouts for WAN
     options.apply_profile("wan_development");
 
+    // [1] connect to cluster using the given connection string and the options
     auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
     if (ec) {
         fmt::print("unable to connect to the cluster: {}\n", ec.message());
@@ -77,8 +78,7 @@ main(int argc, const char* argv[])
     auto scope = bucket.scope("tenant_agent_00");
     auto collection = scope.collection("users");
 
-    {
-        // upsert document
+    { // [2] upsert document
         auto [ctx, upsert_result] = collection.upsert("my-document", tao::json::value{ { "name", "mike" } }).get();
         if (ctx.ec()) {
             fmt::print("unable to upsert the document \"{}\": {}\n", ctx.id(), ctx.ec().message());
@@ -87,8 +87,7 @@ main(int argc, const char* argv[])
         fmt::print("saved document \"{}\", cas={}, token={}\n", ctx.id(), upsert_result.cas(), upsert_result.mutation_token().value());
     }
 
-    {
-        // get document
+    { // [3] get document
         auto [ctx, get_result] = collection.get("my-document").get();
         if (ctx.ec()) {
             fmt::print("unable to get the document \"{}\": {}\n", ctx.id(), ctx.ec().message());
@@ -98,8 +97,7 @@ main(int argc, const char* argv[])
         fmt::print("retrieved document \"{}\", name=\"{}\"\n", ctx.id(), name);
     }
 
-    {
-        // N1QL query
+    { // [4] N1QL query
         auto inventory_scope = bucket.scope("inventory");
         auto [ctx, query_result] = inventory_scope.query("SELECT * FROM airline WHERE id = 10").get();
         if (ctx.ec()) {
@@ -111,7 +109,7 @@ main(int argc, const char* argv[])
         }
     }
 
-    // close cluster connection
+    // [5] close cluster connection
     cluster.close();
     guard.reset();
 

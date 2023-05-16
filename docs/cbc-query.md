@@ -1,4 +1,4 @@
-# cbc-query - run N1QL query {#cbc-query}
+# cbc-query - Execute N1QL Query {#cbc-query}
 
 ### NAME
 
@@ -176,4 +176,4 @@ Execute one or more N1QL queries and print results to standard output.
 
 ### SEE ALSO
 
-[cbc](#cbc), [cbc-get](#cbc-get).
+[cbc](md_docs_2cbc), [cbc-get](md_docs_2cbc-get).

@@ -29,7 +29,8 @@ class transaction_context;
 /**
  * The transaction_query_options are options specific to a query.
  *
- * Some of the options will override the corresponding elements in the @ref transaction_query_config section of the @ref transaction_config.
+ * Some of the options will override the corresponding elements in the @ref transactions_query_config section of the
+ * @ref transactions_config.
  */
 class transaction_query_options
 {

@@ -46,7 +46,7 @@ class transactions
      * You can supply a lambda or function which uses a yielded {@link attempt_context} to perform a transaction, where each transaction
      * operation is blocking.  A simple usage would be to get a document and replace the contents:
      *
-     * @snippet test/test_transaction_examples.cxx simple-blocking-txn
+     * @snippet{trimleft} test/test_transaction_examples.cxx simple-blocking-txn
      *
      * @param logic a lambda or function which uses the yielded {@link attempt_context} to perform the desired transactional operations.
      * @param cfg if passed in, these options override the defaults, or those set in the {@link cluster_options}.
@@ -62,7 +62,7 @@ class transactions
      * below, we get the 3 documents in parallel, and update each when the get returns the document.   This can be significantly faster than
      * getting each document in serial, and updating it using the blocking api:
      *
-     * @snippet test/test_transaction_examples.cxx simple-async-txn
+     * @snippet{trimleft} test/test_transaction_examples.cxx simple-async-txn
      *
      * @param logic a lambda or function which uses the yielded {@link async_attempt_context} to perform the desired transactional
      * operations.

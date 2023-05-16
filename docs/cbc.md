@@ -25,12 +25,12 @@ Display version information.
 
 <dt>get</dt>
 <dd>
-Retrieve document from the server. See [cbc-get](#cbc-get) for more information.
+Retrieve document from the server. See [cbc-get](md_docs_2cbc-get) for more information.
 </dd>
 
 <dt>query</dt>
 <dd>
-Perform N1QL query. See [cbc-query](#cbc-query) for more information.
+Perform N1QL query. See [cbc-query](md_docs_2cbc-query) for more information.
 </dd>
 </dl>
 
@@ -43,4 +43,4 @@ Perform N1QL query. See [cbc-query](#cbc-query) for more information.
 
 ### SEE ALSO
 
-[cbc-get](#cbc-get), [cbc-query](#cbc-query).
+[cbc-get](md_docs_2cbc-get), [cbc-query](md_docs_2cbc-query).
