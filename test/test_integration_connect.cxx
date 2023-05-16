@@ -126,7 +126,7 @@ TEST_CASE("integration: destroy cluster without waiting for close completion", "
     auto ctx = test::utils::test_context::load_from_environment();
 
     if (ctx.deployment == test::utils::deployment_type::elixir) {
-        SKIP("elixir deployment is incompatible with parts of this test");
+        SKIP("elixir deployment is incompatible with parts of this test, but it is probably bug in SDK. FIXME");
     }
 
     asio::io_context io{};

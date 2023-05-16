@@ -25,7 +25,7 @@ TEST_CASE("integration: analytics query")
     test::utils::integration_test_guard integration;
 
     if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
-        SKIP("elixir deployment is incompatible with parts of this test");
+        SKIP("elixir deployment does not support analytics");
     }
 
     if (!integration.cluster_version().supports_analytics()) {
@@ -185,7 +185,7 @@ TEST_CASE("integration: analytics scope query")
     test::utils::integration_test_guard integration;
 
     if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
-        SKIP("elixir deployment is incompatible with parts of this test");
+        SKIP("elixir deployment does not support analytics");
     }
 
     if (!integration.cluster_version().supports_analytics()) {
@@ -298,7 +298,7 @@ TEST_CASE("integration: public API analytics query")
     test::utils::integration_test_guard integration;
 
     if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
-        SKIP("elixir deployment is incompatible with parts of this test");
+        SKIP("elixir deployment does not support analytics");
     }
 
     if (!integration.cluster_version().supports_analytics()) {
@@ -484,7 +484,7 @@ TEST_CASE("integration: public API analytics scope query")
     test::utils::integration_test_guard integration;
 
     if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
-        SKIP("elixir deployment is incompatible with parts of this test");
+        SKIP("elixir deployment does not support analytics");
     }
 
     if (!integration.cluster_version().supports_analytics()) {

@@ -232,7 +232,8 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
     {
         couchbase::core::operations::get_and_lock_request req{ id };
         req.lock_time = lock_time;
-        if (integration.ctx.deployment == test::utils::deployment_type::capella || ctx.deployment == test::utils::deployment_type::elixir) {
+        if (integration.ctx.deployment == test::utils::deployment_type::capella ||
+            integration.ctx.deployment == test::utils::deployment_type::elixir) {
             req.timeout = std::chrono::seconds{ 2 };
         }
         auto resp = test::utils::execute(integration.cluster, req);
@@ -822,7 +823,8 @@ TEST_CASE("integration: pessimistic locking with public API", "[integration]")
     // it is not allowed to lock the same key twice
     {
         couchbase::get_and_lock_options options{};
-        if (integration.ctx.deployment == test::utils::deployment_type::capella || ctx.deployment == test::utils::deployment_type::elixir) {
+        if (integration.ctx.deployment == test::utils::deployment_type::capella ||
+            integration.ctx.deployment == test::utils::deployment_type::elixir) {
             options.timeout(std::chrono::seconds{ 2 });
         }
         auto [ctx, resp] = collection.get_and_lock(id, lock_time, options).get();
