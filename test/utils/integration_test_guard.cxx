@@ -63,7 +63,7 @@ build_origin(const test_context& ctx,
         ctx.dns_nameserver.value_or(couchbase::core::io::dns::dns_config::default_nameserver),
         ctx.dns_port.value_or(couchbase::core::io::dns::dns_config::default_port),
     };
-    if (ctx.deployment == deployment_type::capella) {
+    if (ctx.deployment == deployment_type::capella || ctx.deployment == test::utils::deployment_type::elixir) {
         origin.options().apply_profile("wan_development");
     }
     return origin;

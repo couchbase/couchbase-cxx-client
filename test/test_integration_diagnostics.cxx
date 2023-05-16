@@ -321,8 +321,8 @@ TEST_CASE("integration: fetch diagnostics after N1QL query", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_query()) {
-        SKIP("cluster does not support query");
+    if (!integration.cluster_version().supports_query() || integration.ctx.deployment == test::utils::deployment_type::elixir) {
+        SKIP("cluster does not support query or cluster level query");
     }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -369,8 +369,10 @@ TEST_CASE("integration: ping", "[integration]")
         REQUIRE(res.services.count(couchbase::core::service_type::management) > 0);
         REQUIRE(res.services[couchbase::core::service_type::management].size() > 0);
 
-        REQUIRE(res.services.count(couchbase::core::service_type::view) > 0);
-        REQUIRE(res.services[couchbase::core::service_type::view].size() > 0);
+        if (integration.ctx.deployment != test::utils::deployment_type::elixir) {
+            REQUIRE(res.services.count(couchbase::core::service_type::view) > 0);
+            REQUIRE(res.services[couchbase::core::service_type::view].size() > 0);
+        }
 
         REQUIRE(res.services.count(couchbase::core::service_type::query) > 0);
         REQUIRE(res.services[couchbase::core::service_type::query].size() > 0);
