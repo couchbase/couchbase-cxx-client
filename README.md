@@ -7,6 +7,7 @@
 
 This repo is under active development and is not yet ready for release as a public SDK.
 
+Release notes and API reference: https://github.com/couchbaselabs/couchbase-cxx-client/releases.
 
 ## Getting the Source Code
 
