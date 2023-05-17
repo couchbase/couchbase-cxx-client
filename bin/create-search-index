@@ -26,6 +26,7 @@ class API
   end
 
   def connect
+    puts "# CONNECT #{@options}"
     @client = Net::HTTP.start(@options[:host], @options[:port],
                               use_ssl: @options[:strict_encryption],
                               verify_mode: OpenSSL::SSL::VERIFY_NONE)
