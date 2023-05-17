@@ -193,7 +193,7 @@ struct server_version {
 
     [[nodiscard]] bool requires_search_replicas() const
     {
-        return deployment == deployment_type::capella || is_serverless_config_profile();
+        return deployment == deployment_type::elixir || deployment == deployment_type::capella || is_serverless_config_profile();
     }
 
     [[nodiscard]] bool supports_views() const

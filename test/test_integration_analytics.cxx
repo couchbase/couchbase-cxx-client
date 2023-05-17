@@ -24,6 +24,10 @@ TEST_CASE("integration: analytics query")
 {
     test::utils::integration_test_guard integration;
 
+    if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+        SKIP("elixir deployment does not support analytics");
+    }
+
     if (!integration.cluster_version().supports_analytics()) {
         SKIP("cluster does not support analytics");
     }
@@ -180,6 +184,10 @@ TEST_CASE("integration: analytics scope query")
 {
     test::utils::integration_test_guard integration;
 
+    if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+        SKIP("elixir deployment does not support analytics");
+    }
+
     if (!integration.cluster_version().supports_analytics()) {
         SKIP("cluster does not support analytics");
     }
@@ -288,6 +296,10 @@ TEST_CASE("unit: analytics query")
 TEST_CASE("integration: public API analytics query")
 {
     test::utils::integration_test_guard integration;
+
+    if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+        SKIP("elixir deployment does not support analytics");
+    }
 
     if (!integration.cluster_version().supports_analytics()) {
         SKIP("cluster does not support analytics");
@@ -470,6 +482,10 @@ TEST_CASE("integration: public API analytics query")
 TEST_CASE("integration: public API analytics scope query")
 {
     test::utils::integration_test_guard integration;
+
+    if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+        SKIP("elixir deployment does not support analytics");
+    }
 
     if (!integration.cluster_version().supports_analytics()) {
         SKIP("cluster does not support analytics");

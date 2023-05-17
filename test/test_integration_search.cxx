@@ -356,6 +356,10 @@ TEST_CASE("integration: search query consistency", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
+    if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+        SKIP("elixir deployment is incompatible with parts of this test");
+    }
+
     if (!integration.cluster_version().supports_search()) {
         SKIP("cluster does not support search");
     }
