@@ -116,9 +116,10 @@ class bucket
         }
         auto session = find_session_by_index(index);
         if (!session || !session->has_config()) {
-            CB_LOG_TRACE(R"({} defer operation id={}, session={}, has_config={})",
+            CB_LOG_TRACE(R"({} defer operation id={}, index={}, session={}, has_config={})",
                          log_prefix(),
                          cmd->id_,
+                         index,
                          session.has_value(),
                          session.has_value() && session->has_config());
             return defer_command([self = shared_from_this(), cmd]() { self->map_and_send(cmd); });

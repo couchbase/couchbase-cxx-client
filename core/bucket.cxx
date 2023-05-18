@@ -40,28 +40,6 @@
 
 namespace couchbase::core
 {
-/**
- * copies nodes from rhs that are not in lhs to output vector
- */
-static void
-diff_nodes(const std::vector<topology::configuration::node>& lhs,
-           const std::vector<topology::configuration::node>& rhs,
-           std::vector<topology::configuration::node>& output)
-{
-    for (const auto& re : rhs) {
-        bool known = false;
-        for (const auto& le : lhs) {
-            if (le.hostname == re.hostname && le.services_plain.management.value_or(0) == re.services_plain.management.value_or(0)) {
-                known = true;
-                break;
-            }
-        }
-        if (!known) {
-            output.push_back(re);
-        }
-    }
-}
-
 class bucket_impl
   : public std::enable_shared_from_this<bucket_impl>
   , public config_listener
@@ -305,15 +283,41 @@ class bucket_impl
     void restart_sessions()
     {
         const std::scoped_lock lock(config_mutex_, sessions_mutex_);
+        if (!config_.has_value()) {
+            return;
+        }
 
+        std::size_t index{ 0 };
         for (const auto& node : config_->nodes) {
-            if (sessions_.find(node.index) != sessions_.end()) {
-                continue;
-            }
-
             const auto& hostname = node.hostname_for(origin_.options().network);
             auto port = node.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0);
             if (port == 0) {
+                continue;
+            }
+
+            bool session_alive{ false };
+            for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
+                if (it->second.bootstrap_hostname() == hostname && it->second.bootstrap_port_number() == port) {
+                    session_alive = true;
+                    break;
+                }
+            }
+            if (session_alive) {
+                ++index;
+                continue;
+            }
+            if (auto it = sessions_.find(index); sessions_.find(index) != sessions_.end()) {
+                CB_LOG_WARNING(
+                  R"({} rev={}, expected idx={} for address="{}:{}" not running, but it points to session="{}", address="{}:{}")",
+                  log_prefix_,
+                  config_->rev_str(),
+                  index,
+                  hostname,
+                  port,
+                  it->second.id(),
+                  it->second.bootstrap_hostname(),
+                  it->second.bootstrap_port());
+                ++index;
                 continue;
             }
 
@@ -339,7 +343,8 @@ class bucket_impl
                   self->drain_deferred_queue();
               },
               true);
-            sessions_.insert_or_assign(node.index, std::move(session));
+            sessions_.insert_or_assign(index, std::move(session));
+            ++index;
         }
     }
 
@@ -470,6 +475,31 @@ class bucket_impl
         }
     }
 
+    /**
+     * copies nodes from rhs that are not in lhs to output vector
+     */
+    void diff_nodes(const std::vector<topology::configuration::node>& lhs,
+                    const std::vector<topology::configuration::node>& rhs,
+                    std::vector<topology::configuration::node>& output)
+    {
+        for (const auto& re : rhs) {
+            bool known = false;
+            const auto& rhost = re.hostname_for(origin_.options().network);
+            const auto rport = re.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0);
+            for (const auto& le : lhs) {
+                const auto& lhost = le.hostname_for(origin_.options().network);
+                const auto lport = le.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0);
+                if (rhost == lhost && rport == lport) {
+                    known = true;
+                    break;
+                }
+            }
+            if (!known) {
+                output.push_back(re);
+            }
+        }
+    }
+
     void update_config(topology::configuration config) override
     {
         bool forced_config = false;
@@ -514,58 +544,49 @@ class bucket_impl
             std::scoped_lock lock(sessions_mutex_);
             std::map<size_t, io::mcbp_session> new_sessions{};
 
-            for (auto& [index, session] : sessions_) {
-                std::size_t new_index = config.nodes.size() + 1;
-                for (const auto& node : config.nodes) {
-                    if (session.bootstrap_hostname() == node.hostname_for(origin_.options().network) &&
-                        session.bootstrap_port() ==
-                          std::to_string(
-                            node.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0))) {
-                        new_index = node.index;
-                        break;
-                    }
-                }
-                if (new_index < config.nodes.size()) {
-                    CB_LOG_DEBUG(R"({} rev={}, preserve session="{}", address="{}:{}", index={}->{})",
-                                 log_prefix_,
-                                 config.rev_str(),
-                                 session.id(),
-                                 session.bootstrap_hostname(),
-                                 session.bootstrap_port(),
-                                 index,
-                                 new_index);
-                    new_sessions.insert_or_assign(new_index, std::move(session));
-                } else {
-                    CB_LOG_DEBUG(R"({} rev={}, drop session="{}", address="{}:{}", index={})",
-                                 log_prefix_,
-                                 config.rev_str(),
-                                 session.id(),
-                                 session.bootstrap_hostname(),
-                                 session.bootstrap_port(),
-                                 index);
-                    asio::post(asio::bind_executor(
-                      ctx_, [session = std::move(session)]() mutable { return session.stop(retry_reason::do_not_retry); }));
-                }
-            }
-
+            std::size_t next_index{ 0 };
             for (const auto& node : config.nodes) {
-                if (new_sessions.find(node.index) != new_sessions.end()) {
-                    continue;
-                }
-
                 const auto& hostname = node.hostname_for(origin_.options().network);
                 auto port = node.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0);
                 if (port == 0) {
                     continue;
                 }
+
+                bool reused_session{ false };
+                for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
+                    if (it->second.bootstrap_hostname() == hostname && it->second.bootstrap_port_number() == port) {
+                        CB_LOG_DEBUG(R"({} rev={}, preserve session="{}", address="{}:{}", index={}->{})",
+                                     log_prefix_,
+                                     config.rev_str(),
+                                     it->second.id(),
+                                     it->second.bootstrap_hostname(),
+                                     it->second.bootstrap_port(),
+                                     it->first,
+                                     next_index);
+                        new_sessions.insert_or_assign(next_index, std::move(it->second));
+                        reused_session = true;
+                        ++next_index;
+                        sessions_.erase(it);
+                        break;
+                    }
+                }
+                if (reused_session) {
+                    continue;
+                }
+
                 couchbase::core::origin origin(origin_.credentials(), hostname, port, origin_.options());
                 io::mcbp_session session = origin_.options().enable_tls
                                              ? io::mcbp_session(client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_)
                                              : io::mcbp_session(client_id_, ctx_, origin, state_listener_, name_, known_features_);
-                CB_LOG_DEBUG(
-                  R"({} rev={}, add session="{}", address="{}:{}")", log_prefix_, config.rev_str(), session.id(), hostname, port);
+                CB_LOG_DEBUG(R"({} rev={}, add session="{}", address="{}:{}", index={})",
+                             log_prefix_,
+                             config.rev_str(),
+                             session.id(),
+                             hostname,
+                             port,
+                             node.index);
                 session.bootstrap(
-                  [self = shared_from_this(), session, forced_config, idx = node.index](std::error_code err,
+                  [self = shared_from_this(), session, forced_config, idx = next_index](std::error_code err,
                                                                                         topology::configuration cfg) mutable {
                       if (!err) {
                           self->update_config(std::move(cfg));
@@ -573,18 +594,33 @@ class bucket_impl
                           session.on_stop([id = session.id(), self]() { self->remove_session(id); });
                           self->drain_deferred_queue();
                       } else if (err == errc::common::unambiguous_timeout && forced_config) {
-                          CB_LOG_WARNING(R"({} failed to bootstrap session idx={}, id="{}", ec={})",
+                          CB_LOG_WARNING(R"({} failed to bootstrap session="{}", address="{}:{}", index={}, ec={})",
                                          session.log_prefix(),
-                                         idx,
                                          session.id(),
+                                         session.bootstrap_hostname(),
+                                         session.bootstrap_port(),
+                                         idx,
                                          err.message());
                           self->remove_session(session.id());
                       }
                   },
                   true);
-                new_sessions.insert_or_assign(node.index, std::move(session));
+                new_sessions.insert_or_assign(next_index, std::move(session));
+                ++next_index;
             }
-            sessions_ = new_sessions;
+            std::swap(sessions_, new_sessions);
+
+            for (auto it = new_sessions.begin(); it != new_sessions.end(); ++it) {
+                CB_LOG_DEBUG(R"({} rev={}, drop session="{}", address="{}:{}", index={})",
+                             log_prefix_,
+                             config.rev_str(),
+                             it->second.id(),
+                             it->second.bootstrap_hostname(),
+                             it->second.bootstrap_port(),
+                             it->first);
+                asio::post(asio::bind_executor(
+                  ctx_, [session = std::move(it->second)]() mutable { return session.stop(retry_reason::do_not_retry); }));
+            }
         }
     }
 
