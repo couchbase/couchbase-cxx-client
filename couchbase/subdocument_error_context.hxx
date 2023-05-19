@@ -62,7 +62,8 @@ class subdocument_error_context : public key_value_error_context
      * @since 1.0.0
      * @internal
      */
-    subdocument_error_context(std::error_code ec,
+    subdocument_error_context(std::string operation_id,
+                              std::error_code ec,
                               std::optional<std::string> last_dispatched_to,
                               std::optional<std::string> last_dispatched_from,
                               std::size_t retry_attempts,
@@ -79,7 +80,8 @@ class subdocument_error_context : public key_value_error_context
                               std::optional<std::string> first_error_path,
                               std::optional<std::uint64_t> first_error_index,
                               bool deleted)
-      : key_value_error_context{ ec,
+      : key_value_error_context{ std::move(operation_id),
+                                 ec,
                                  std::move(last_dispatched_to),
                                  std::move(last_dispatched_from),
                                  retry_attempts,

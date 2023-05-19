@@ -67,7 +67,7 @@ class manager_error_context : public error_context
                           std::uint32_t http_status,
                           std::string content,
                           std::string path)
-      : error_context{ ec, std::move(last_dispatched_to), std::move(last_dispatched_from), retry_attempts, std::move(retry_reasons) }
+      : error_context{ {}, ec, std::move(last_dispatched_to), std::move(last_dispatched_from), retry_attempts, std::move(retry_reasons) }
       , client_context_id_{ std::move(client_context_id) }
       , http_status_{ http_status }
       , content_{ std::move(content) }

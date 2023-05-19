@@ -43,23 +43,21 @@ make_key_value_error_context(std::error_code ec, std::uint16_t status_code, cons
     const auto& scope = command->request.id.scope();
     const auto& bucket = command->request.id.bucket();
     std::uint32_t opaque = (ec && response.opaque() == 0) ? command->request.opaque : response.opaque();
-    auto status = response.status();
-    auto retry_attempts = command->request.retries.retry_attempts();
-    auto retry_reasons = command->request.retries.retry_reasons();
-    std::optional<std::string> last_dispatched_from{};
-    std::optional<std::string> last_dispatched_to{};
+    std::optional<key_value_status_code> status{};
     std::optional<key_value_error_map_info> error_map_info{};
-    if (command->session_) {
-        last_dispatched_from = command->session_->local_address();
-        last_dispatched_to = command->session_->remote_address();
-        if (status_code) {
+    if (status_code != 0xffffU) {
+        status = response.status();
+        if (command->session_ && status_code > 0) {
             error_map_info = command->session_->decode_error_code(status_code);
         }
     }
+    auto retry_attempts = command->request.retries.retry_attempts();
+    auto retry_reasons = command->request.retries.retry_reasons();
 
-    return { ec,
-             std::move(last_dispatched_from),
-             std::move(last_dispatched_to),
+    return { command->id_,
+             ec,
+             command->last_dispatched_from_,
+             command->last_dispatched_to_,
              retry_attempts,
              std::move(retry_reasons),
              key,

@@ -17,9 +17,11 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 
 <dl>
 <dt>`-h|--help`</dt><dd>Show this screen.</dd>
+<dt>`--verbose`</dt><dd>Include more context and information where it is applicable.</dd>
 <dt>`--bucket-name=STRING`</dt><dd>Name of the bucket. [default: `default`]</dd>
 <dt>`--scope-name=STRING`</dt><dd>Name of the scope. [default: `_default`]</dd>
 <dt>`--collection-name=STRING`</dt><dd>Name of the collection. [default: `_default`]</dd>
+<dt>`--batch-size=INTEGER`</dt><dd>Number of the operations in single batch. [default: `100`]</dd>
 <dt>`--number-of-io-threads=INTEGER`</dt><dd>Number of the IO threads. [default: `1`]</dd>
 <dt>`--number-of-worker-threads=INTEGER`</dt><dd>Number of the IO threads. [default: `1`]</dd>
 <dt>`--chance-of-get=FLOAT`</dt><dd>The probability of get operation (where 1 means only get, and 0 - only upsert). [default: `0.6`]</dd>

@@ -104,6 +104,7 @@ class mcbp_session
     [[nodiscard]] const std::string& id() const;
     [[nodiscard]] std::string remote_address() const;
     [[nodiscard]] std::string local_address() const;
+    [[nodiscard]] const std::string& bootstrap_address() const;
     [[nodiscard]] const std::string& bootstrap_hostname() const;
     [[nodiscard]] const std::string& bootstrap_port() const;
     [[nodiscard]] std::uint16_t bootstrap_port_number() const;

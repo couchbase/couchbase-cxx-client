@@ -62,6 +62,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     std::string id_{ uuid::to_string(uuid::random()) };
     std::shared_ptr<couchbase::tracing::request_span> span_{ nullptr };
     std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
+    std::optional<std::string> last_dispatched_from_{};
+    std::optional<std::string> last_dispatched_to_{};
 
     mcbp_command(asio::io_context& ctx, std::shared_ptr<Manager> manager, Request req, std::chrono::milliseconds default_timeout)
       : deadline(ctx)

@@ -782,13 +782,9 @@ class mcbp_session_impl
         }
         std::tie(bootstrap_hostname_, bootstrap_port_) = origin_.next_address();
         bootstrap_port_number_ = gsl::narrow_cast<std::uint16_t>(std::stoul(bootstrap_port_, nullptr, 10));
-        log_prefix_ = fmt::format("[{}/{}/{}/{}] <{}:{}>",
-                                  client_id_,
-                                  id_,
-                                  stream_->log_prefix(),
-                                  bucket_name_.value_or("-"),
-                                  bootstrap_hostname_,
-                                  bootstrap_port_);
+        bootstrap_address_ = fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_);
+        log_prefix_ =
+          fmt::format("[{}/{}/{}/{}] <{}>", client_id_, id_, stream_->log_prefix(), bucket_name_.value_or("-"), bootstrap_address_);
         CB_LOG_DEBUG("{} attempt to establish MCBP connection", log_prefix_);
 
         async_resolve(origin_.options().use_ip_protocol,
@@ -1057,6 +1053,11 @@ class mcbp_session_impl
         std::scoped_lock lock(config_mutex_);
         Expects(config_.has_value());
         return config_->index_for_this_node();
+    }
+
+    [[nodiscard]] const std::string& bootstrap_address() const
+    {
+        return bootstrap_address_;
     }
 
     [[nodiscard]] const std::string& bootstrap_hostname() const
@@ -1496,6 +1497,7 @@ class mcbp_session_impl
     std::mutex writing_buffer_mutex_{};
     std::string bootstrap_hostname_{};
     std::string bootstrap_port_{};
+    std::string bootstrap_address_{};
     std::uint16_t bootstrap_port_number_{};
     asio::ip::tcp::endpoint endpoint_{}; // connected endpoint
     std::string endpoint_address_{};     // cached string with endpoint address
@@ -1601,6 +1603,12 @@ const std::string&
 mcbp_session::id() const
 {
     return impl_->id();
+}
+
+const std::string&
+mcbp_session::bootstrap_address() const
+{
+    return impl_->bootstrap_address();
 }
 
 std::string

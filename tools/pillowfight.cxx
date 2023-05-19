@@ -51,6 +51,7 @@ usage() -> std::string
     static const std::string default_query_statement{ "SELECT COUNT(*) FROM `{bucket_name}` WHERE type = \"fake_profile\"" };
     static const std::size_t default_document_body_size{ 0 };
     static const std::size_t default_operation_limit{ 0 };
+    static const std::size_t default_batch_size{ 100 };
 
     static const std::string usage_string = fmt::format(
       R"(Run workload generator.
@@ -61,9 +62,11 @@ Usage:
 
 Options:
   -h --help                           Show this screen.
+  --verbose                           Include more context and information where it is applicable.
   --bucket-name=STRING                Name of the bucket. [default: {bucket_name}]
   --scope-name=STRING                 Name of the scope. [default: {scope_name}]
   --collection-name=STRING            Name of the collection. [default: {collection_name}]
+  --batch-size=INTEGER                Number of the operations in single batch. [default: {batch_size}]
   --number-of-io-threads=INTEGER      Number of the IO threads. [default: {number_of_io_threads}]
   --number-of-worker-threads=INTEGER  Number of the IO threads. [default: {number_of_worker_threads}]
   --chance-of-get=FLOAT               The probability of get operation (where 1 means only get, and 0 - only upsert). [default: {chance_of_get}]
@@ -89,6 +92,7 @@ Options:
       fmt::arg("query_statement", default_query_statement),
       fmt::arg("document_body_size", default_document_body_size),
       fmt::arg("operation_limit", default_operation_limit),
+      fmt::arg("batch_size", default_batch_size),
       fmt::arg("logger_options", usage_block_for_logger()),
       fmt::arg("cluster_options", usage_block_for_cluster_options()));
 
@@ -140,6 +144,7 @@ struct command_options {
     std::string bucket_name;
     std::string scope_name;
     std::string collection_name;
+    std::size_t batch_size;
     std::size_t number_of_io_threads;
     std::size_t number_of_worker_threads;
     double chance_of_get;
@@ -149,6 +154,7 @@ struct command_options {
     std::string query_statement;
     bool incompressible_body;
     std::size_t document_body_size;
+    bool verbose{ false };
 };
 
 enum class operation {
@@ -166,8 +172,9 @@ std::map<std::error_code, std::size_t> errors{};
 std::mutex errors_mutex{};
 
 void
-sigint_handler(int /* signal */)
+sigint_handler(int signal)
 {
+    fmt::print(stderr, "\nrequested stop, signal={}\n", signal);
     running.clear();
 }
 
@@ -179,9 +186,11 @@ dump_stats(asio::steady_timer& timer, std::chrono::system_clock::time_point star
         if (ec == asio::error::operation_aborted) {
             return;
         }
-        auto diff = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time).count();
+        auto uptime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
+        auto diff = uptime.count();
         const std::uint64_t ops = total;
-        fmt::print(stderr, "\rrate: {} ops/s, total: {}", diff == 0 ? ops : ops / static_cast<std::uint64_t>(diff), ops);
+        fmt::print(
+          stderr, "\r\033[Kuptime: {}, rate: {} ops/s, total: {}", uptime, diff == 0 ? ops : ops / static_cast<std::uint64_t>(diff), ops);
         return dump_stats(timer, start_time);
     });
 }
@@ -227,58 +236,66 @@ worker(couchbase::cluster connected_cluster, command_options cmd_options, std::v
     }
 
     while (running.test_and_set()) {
-        auto opcode = (dist(gen) <= options.chance_of_get) ? operation::get : operation::upsert;
-        if (opcode == operation::get && known_keys.empty()) {
-            opcode = operation::upsert;
-        }
-        bool should_check_known_keys{ false };
-        switch (opcode) {
-            case operation::get:
-                should_check_known_keys = options.hit_chance_for_get > dist(gen);
-                break;
-            case operation::upsert:
-                should_check_known_keys = options.hit_chance_for_upsert > dist(gen);
-                break;
-        }
-        std::string document_id = uniq_id("id");
-        if (should_check_known_keys && !known_keys.empty()) {
-            auto key_index = std::uniform_int_distribution<std::size_t>(0, known_keys.size() - 1)(gen);
-            document_id = known_keys[key_index];
-        } else {
-            known_keys.emplace_back(document_id);
-        }
+        std::list<std::variant<std::future<std::pair<couchbase::key_value_error_context, couchbase::mutation_result>>,
+                               std::future<std::pair<couchbase::key_value_error_context, couchbase::get_result>>,
+                               std::future<std::pair<couchbase::query_error_context, couchbase::query_result>>>>
+          futures;
+        for (std::size_t i = 0; i < options.batch_size; ++i) {
+            auto opcode = (dist(gen) <= options.chance_of_get) ? operation::get : operation::upsert;
+            if (opcode == operation::get && known_keys.empty()) {
+                opcode = operation::upsert;
+            }
+            bool should_check_known_keys{ false };
+            switch (opcode) {
+                case operation::get:
+                    should_check_known_keys = options.hit_chance_for_get > dist(gen);
+                    break;
+                case operation::upsert:
+                    should_check_known_keys = options.hit_chance_for_upsert > dist(gen);
+                    break;
+            }
+            std::string document_id = uniq_id("id");
+            if (should_check_known_keys && !known_keys.empty()) {
+                auto key_index = std::uniform_int_distribution<std::size_t>(0, known_keys.size() - 1)(gen);
+                document_id = known_keys[key_index];
+            }
 
-        switch (opcode) {
-            case operation::upsert: {
-                const couchbase::upsert_options operation_options{};
-                auto [ctx, resp] = collection.upsert<raw_json_transcoder>(document_id, json_doc, operation_options).get();
-                ++total;
-                if (ctx.ec()) {
-                    const std::scoped_lock lock(errors_mutex);
-                    ++errors[ctx.ec()];
-                }
-            } break;
-            case operation::get: {
-                const couchbase::get_options operation_options{};
-                auto [ctx, resp] = collection.get(document_id, operation_options).get();
-                ++total;
-                if (ctx.ec()) {
-                    const std::scoped_lock lock(errors_mutex);
-                    ++errors[ctx.ec()];
-                }
-            } break;
-        }
-        if (options.chance_of_query > 0 && dist(gen) <= options.chance_of_query) {
-            const couchbase::query_options operation_options{};
-            auto [ctx, resp] = cluster.query(options.query_statement, operation_options).get();
-            ++total;
-            if (ctx.ec()) {
-                const std::scoped_lock lock(errors_mutex);
-                ++errors[ctx.ec()];
+            switch (opcode) {
+                case operation::upsert:
+                    futures.emplace_back(collection.upsert<raw_json_transcoder>(document_id, json_doc));
+                    break;
+                case operation::get:
+                    futures.emplace_back(collection.get(document_id));
+                    break;
+            }
+            if (options.chance_of_query > 0 && dist(gen) <= options.chance_of_query) {
+                futures.emplace_back(cluster.query(options.query_statement, couchbase::query_options{}));
+            }
+            if (operations_limit > 0 && total >= operations_limit) {
+                running.clear();
             }
         }
-        if (operations_limit > 0 && total >= operations_limit) {
-            running.clear();
+
+        for (auto&& future : futures) {
+            std::visit(
+              [&options, &known_keys](auto f) mutable {
+                  using T = std::decay_t<decltype(f)>;
+
+                  auto [ctx, resp] = f.get();
+                  ++total;
+                  if (ctx.ec()) {
+                      const std::scoped_lock lock(errors_mutex);
+                      ++errors[ctx.ec()];
+                      if (options.verbose) {
+                          fmt::print(stderr, "\r\033[K{}\n", ctx.to_json());
+                      }
+                  } else if constexpr (std::is_same_v<
+                                         T,
+                                         std::future<std::pair<couchbase::key_value_error_context, couchbase::mutation_result>>>) {
+                      known_keys.emplace_back(ctx.id());
+                  }
+              },
+              std::move(future));
         }
     }
 }
@@ -343,7 +360,7 @@ do_work(const std::string& connection_string, const couchbase::cluster_options& 
         if (!errors.empty()) {
             fmt::print("error stats:\n");
             for (auto [e, count] : errors) {
-                fmt::print("    {}: {}\n", ec.message(), count);
+                fmt::print("    {}: {}\n", e.message(), count);
             }
         }
     }
@@ -373,9 +390,11 @@ cbc::pillowfight::execute(const std::vector<std::string>& argv)
     cbc::fill_cluster_options(options, cluster_options, connection_string);
 
     command_options cmd_options{};
+    cmd_options.verbose = options["--verbose"].asBool();
     cmd_options.bucket_name = options["--bucket-name"].asString();
     cmd_options.scope_name = options["--scope-name"].asString();
     cmd_options.collection_name = options["--collection-name"].asString();
+    cmd_options.batch_size = options["--batch-size"].asLong();
     cmd_options.number_of_io_threads = options["--number-of-io-threads"].asLong();
     cmd_options.number_of_worker_threads = options["--number-of-worker-threads"].asLong();
     cmd_options.chance_of_get = get_double_option(options, "--chance-of-get");

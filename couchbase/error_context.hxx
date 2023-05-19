@@ -57,17 +57,24 @@ class error_context
      * @since 1.0.0
      * @internal
      */
-    error_context(std::error_code ec,
+    error_context(std::string operation_id,
+                  std::error_code ec,
                   std::optional<std::string> last_dispatched_to,
                   std::optional<std::string> last_dispatched_from,
                   std::size_t retry_attempts,
                   std::set<retry_reason> retry_reasons)
-      : ec_{ ec }
+      : operation_id_{ std::move(operation_id) }
+      , ec_{ ec }
       , last_dispatched_to_{ std::move(last_dispatched_to) }
       , last_dispatched_from_{ std::move(last_dispatched_from) }
       , retry_attempts_{ retry_attempts }
       , retry_reasons_{ std::move(retry_reasons) }
     {
+    }
+
+    [[nodiscard]] virtual auto operation_id() const -> const std::string&
+    {
+        return operation_id_;
     }
 
     /**
@@ -165,6 +172,7 @@ class error_context
     }
 
   private:
+    std::string operation_id_{};
     std::error_code ec_{};
     std::optional<std::string> last_dispatched_to_{};
     std::optional<std::string> last_dispatched_from_{};
