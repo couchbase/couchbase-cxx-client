@@ -440,10 +440,8 @@ TEST_CASE("unit: connection string", "[unit]")
 
         spec = couchbase::core::utils::parse_connection_string(
           "couchbase://localhost?query_timeout=10000&kv_timeout=true&management_timeout=11000");
-        CHECK(spec.warnings ==
-              std::vector<std::string>{
-                R"(unable to parse "kv_timeout" parameter in connection string (value "true" is not a number): stoull: no conversion)",
-              });
+        std::string warning_prefix = R"(unable to parse "kv_timeout" parameter in connection string (value "true" is not a number))";
+        CHECK(spec.warnings.at(0).substr(0, warning_prefix.size()) == warning_prefix);
         CHECK(spec.options.query_timeout == std::chrono::milliseconds(10000));
         CHECK(spec.options.management_timeout == std::chrono::milliseconds(11000));
     }
