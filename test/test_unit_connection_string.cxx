@@ -416,4 +416,33 @@ TEST_CASE("unit: connection string", "[unit]")
         CHECK(couchbase::core::utils::parse_connection_string("couchbase://2001:db8:85a3:8d3:1319:8a2e:370:7348").error.value() ==
               R"(failed to parse connection string (column: 18, trailer: "db8:85a3:8d3:1319:8a2e:370:7348"))");
     }
+
+    SECTION("parsing warnings")
+    {
+        auto spec = couchbase::core::utils::parse_connection_string("couchbase://127.0.0.1?kv_timeout=42&foo=bar");
+        CHECK(spec.warnings == std::vector<std::string>{
+                                 R"(unknown parameter "foo" in connection string (value "bar"))",
+                               });
+
+        spec = couchbase::core::utils::parse_connection_string("couchbase://127.0.0.1?enable_dns_srv=maybe&ip_protocol=yes");
+        CHECK(spec.warnings ==
+              std::vector<std::string>{
+                R"(unable to parse "enable_dns_srv" parameter in connection string (value "maybe" cannot be interpreted as a boolean))",
+                R"(unable to parse "ip_protocol" parameter in connection string (value "yes" is not a valid IP protocol preference))",
+              });
+
+        spec = couchbase::core::utils::parse_connection_string("couchbase://localhost:8091=http;127.0.0.1=mcd/default?enable_dns_srv=true");
+        CHECK(
+          spec.warnings ==
+          std::vector<std::string>{
+            R"(parameter "enable_dns_srv" requires single entry in bootstrap nodes list of the connection string, ignoring (value "true"))",
+          });
+
+        spec = couchbase::core::utils::parse_connection_string(
+          "couchbase://localhost?query_timeout=10000&kv_timeout=true&management_timeout=11000");
+        std::string warning_prefix = R"(unable to parse "kv_timeout" parameter in connection string (value "true" is not a number))";
+        CHECK(spec.warnings.at(0).substr(0, warning_prefix.size()) == warning_prefix);
+        CHECK(spec.options.query_timeout == std::chrono::milliseconds(10000));
+        CHECK(spec.options.management_timeout == std::chrono::milliseconds(11000));
+    }
 }

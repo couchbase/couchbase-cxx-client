@@ -68,6 +68,7 @@ struct connection_string {
     bootstrap_mode default_mode{ connection_string::bootstrap_mode::gcccp };
     std::uint16_t default_port{ 11210 };
 
+    std::vector<std::string> warnings{};
     std::optional<std::string> error{};
 };
 
