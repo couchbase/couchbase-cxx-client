@@ -33,6 +33,7 @@
 #include <csignal>
 #include <numeric>
 #include <random>
+#include <thread>
 
 namespace cbc
 {
@@ -52,6 +53,7 @@ usage() -> std::string
     static const std::size_t default_document_body_size{ 0 };
     static const std::size_t default_operation_limit{ 0 };
     static const std::size_t default_batch_size{ 100 };
+    static const std::chrono::milliseconds default_batch_wait{ 0 };
 
     static const std::string usage_string = fmt::format(
       R"(Run workload generator.
@@ -67,6 +69,7 @@ Options:
   --scope-name=STRING                 Name of the scope. [default: {scope_name}]
   --collection-name=STRING            Name of the collection. [default: {collection_name}]
   --batch-size=INTEGER                Number of the operations in single batch. [default: {batch_size}]
+  --batch-wait=DURATION               Time to wait after the batch. [default: {batch_wait}]
   --number-of-io-threads=INTEGER      Number of the IO threads. [default: {number_of_io_threads}]
   --number-of-worker-threads=INTEGER  Number of the IO threads. [default: {number_of_worker_threads}]
   --chance-of-get=FLOAT               The probability of get operation (where 1 means only get, and 0 - only upsert). [default: {chance_of_get}]
@@ -93,6 +96,7 @@ Options:
       fmt::arg("document_body_size", default_document_body_size),
       fmt::arg("operation_limit", default_operation_limit),
       fmt::arg("batch_size", default_batch_size),
+      fmt::arg("batch_wait", default_batch_wait),
       fmt::arg("logger_options", usage_block_for_logger()),
       fmt::arg("cluster_options", usage_block_for_cluster_options()));
 
@@ -145,6 +149,7 @@ struct command_options {
     std::string scope_name;
     std::string collection_name;
     std::size_t batch_size;
+    std::chrono::milliseconds batch_wait;
     std::size_t number_of_io_threads;
     std::size_t number_of_worker_threads;
     double chance_of_get;
@@ -155,6 +160,11 @@ struct command_options {
     bool incompressible_body;
     std::size_t document_body_size;
     bool verbose{ false };
+
+    void set_batch_wait(std::chrono::milliseconds val)
+    {
+        batch_wait = val;
+    }
 };
 
 enum class operation {
@@ -297,6 +307,9 @@ worker(couchbase::cluster connected_cluster, command_options cmd_options, std::v
               },
               std::move(future));
         }
+        if (options.batch_wait != std::chrono::milliseconds::zero()) {
+            std::this_thread::sleep_for(options.batch_wait);
+        }
     }
 }
 
@@ -395,6 +408,7 @@ cbc::pillowfight::execute(const std::vector<std::string>& argv)
     cmd_options.scope_name = options["--scope-name"].asString();
     cmd_options.collection_name = options["--collection-name"].asString();
     cmd_options.batch_size = options["--batch-size"].asLong();
+    parse_duration_option(cmd_options.set_batch_wait, "--batch-wait");
     cmd_options.number_of_io_threads = options["--number-of-io-threads"].asLong();
     cmd_options.number_of_worker_threads = options["--number-of-worker-threads"].asLong();
     cmd_options.chance_of_get = get_double_option(options, "--chance-of-get");

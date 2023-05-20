@@ -22,6 +22,7 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 <dt>`--scope-name=STRING`</dt><dd>Name of the scope. [default: `_default`]</dd>
 <dt>`--collection-name=STRING`</dt><dd>Name of the collection. [default: `_default`]</dd>
 <dt>`--batch-size=INTEGER`</dt><dd>Number of the operations in single batch. [default: `100`]</dd>
+<dt>`--batch-wait=DURATION`</dt><dd>Time to wait after the batch. [default: `0ms`]</dd>
 <dt>`--number-of-io-threads=INTEGER`</dt><dd>Number of the IO threads. [default: `1`]</dd>
 <dt>`--number-of-worker-threads=INTEGER`</dt><dd>Number of the IO threads. [default: `1`]</dd>
 <dt>`--chance-of-get=FLOAT`</dt><dd>The probability of get operation (where 1 means only get, and 0 - only upsert). [default: `0.6`]</dd>
