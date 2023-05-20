@@ -287,40 +287,55 @@ class bucket_impl
             return;
         }
 
-        std::size_t index{ 0 };
-        for (const auto& node : config_->nodes) {
+        std::size_t kv_node_index{ 0 };
+        for (std::size_t index = 0; index < config_->nodes.size(); ++index) {
+            const auto& node = config_->nodes[index];
+
             const auto& hostname = node.hostname_for(origin_.options().network);
             auto port = node.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0);
             if (port == 0) {
                 continue;
             }
 
-            bool session_alive{ false };
-            for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
-                if (it->second.bootstrap_hostname() == hostname && it->second.bootstrap_port_number() == port) {
-                    session_alive = true;
-                    break;
-                }
-            }
-            if (session_alive) {
-                ++index;
-                continue;
-            }
-            if (auto it = sessions_.find(index); sessions_.find(index) != sessions_.end()) {
-                CB_LOG_WARNING(
-                  R"({} rev={}, expected idx={} for address="{}:{}" not running, but it points to session="{}", address="{}:{}")",
-                  log_prefix_,
-                  config_->rev_str(),
-                  index,
-                  hostname,
-                  port,
-                  it->second.id(),
-                  it->second.bootstrap_hostname(),
-                  it->second.bootstrap_port());
-                ++index;
-                continue;
-            }
+            auto ptr = std::find_if(sessions_.begin(), sessions_.end(), [&hostname, &port](const auto& session) {
+                return session.second.bootstrap_hostname() == hostname && session.second.bootstrap_port_number() == port;
+            });
+            if (ptr != sessions_.end()) {
 
+                if (auto found_kv_node_index = ptr->first; found_kv_node_index != kv_node_index) {
+                    if (auto current = sessions_.find(kv_node_index); current == sessions_.end()) {
+                        CB_LOG_WARNING(R"({} KV node index mismatch: config rev={} states that address="{}:{}" should be at idx={}, )"
+                                       R"(but it is at idx={} ("{}"). Moving session to idx={}.)",
+                                       log_prefix_,
+                                       config_->rev_str(),
+                                       hostname,
+                                       port,
+                                       kv_node_index,
+                                       found_kv_node_index,
+                                       ptr->second.id(),
+                                       kv_node_index);
+                        sessions_.insert_or_assign(kv_node_index, std::move(ptr->second));
+                        sessions_.erase(ptr);
+                    } else {
+                        CB_LOG_WARNING(
+                          R"({} KV node index mismatch: config rev={} states that address="{}:{}" should be at idx={}, )"
+                          R"(but it is at idx={} ("{}"). Slot with idx={} is holds session with address="{}" ("{}"), swapping them.)",
+                          log_prefix_,
+                          config_->rev_str(),
+                          hostname,
+                          port,
+                          kv_node_index,
+                          found_kv_node_index,
+                          ptr->second.id(),
+                          kv_node_index,
+                          current->second.bootstrap_address(),
+                          current->second.id());
+                        std::swap(current->second, ptr->second);
+                    }
+                }
+                ++kv_node_index;
+                continue;
+            }
             couchbase::core::origin origin(origin_.credentials(), hostname, port, origin_.options());
             io::mcbp_session session = origin_.options().enable_tls
                                          ? io::mcbp_session(client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_)
@@ -344,7 +359,7 @@ class bucket_impl
               },
               true);
             sessions_.insert_or_assign(index, std::move(session));
-            ++index;
+            ++kv_node_index;
         }
     }
 
@@ -440,6 +455,9 @@ class bucket_impl
         {
             std::scoped_lock lock(deferred_commands_mutex_);
             std::swap(deferred_commands_, commands);
+        }
+        if (!commands.empty()) {
+            CB_LOG_TRACE(R"({} draining deferred operation queue, size={})", log_prefix_, commands.size());
         }
         while (!commands.empty()) {
             commands.front()();

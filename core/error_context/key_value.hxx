@@ -56,8 +56,8 @@ make_key_value_error_context(std::error_code ec, std::uint16_t status_code, cons
 
     return { command->id_,
              ec,
-             command->last_dispatched_from_,
              command->last_dispatched_to_,
+             command->last_dispatched_from_,
              retry_attempts,
              std::move(retry_reasons),
              key,

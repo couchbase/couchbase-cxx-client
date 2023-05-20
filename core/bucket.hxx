@@ -107,7 +107,7 @@ class bucket
             auto [partition, server] = map_id(cmd->request.id);
             if (!server.has_value()) {
                 CB_LOG_TRACE(
-                  R"({} unable to map key=\"{}\" to the node, id={}, partition={})", log_prefix(), cmd->request.id, cmd->id_, partition);
+                  R"({} unable to map key="{}" to the node, id={}, partition={})", log_prefix(), cmd->request.id, cmd->id_, partition);
                 return io::retry_orchestrator::maybe_retry(
                   cmd->manager_, cmd, retry_reason::node_not_available, errc::common::request_canceled);
             }
@@ -116,7 +116,7 @@ class bucket
         }
         auto session = find_session_by_index(index);
         if (!session || !session->has_config()) {
-            CB_LOG_TRACE(R"({} defer operation id={}, key=\"{}\", partition={}, index={}, session={} ("{}"), has_config={})",
+            CB_LOG_TRACE(R"({} defer operation id={}, key="{}", partition={}, index={}, session={}, address="{}", has_config={})",
                          log_prefix(),
                          cmd->id_,
                          cmd->request.id,
@@ -129,7 +129,7 @@ class bucket
         }
         if (session->is_stopped()) {
             CB_LOG_TRACE(
-              R"({} the session has been found for idx={}, but it is stopped, retrying id={}, key=\"{}\", partition={}, session={} ("{}"))",
+              R"({} the session has been found for idx={}, but it is stopped, retrying id={}, key="{}", partition={}, session={}, address="{}")",
               log_prefix(),
               index,
               cmd->id_,
