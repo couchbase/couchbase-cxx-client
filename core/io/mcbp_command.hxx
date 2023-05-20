@@ -59,7 +59,9 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     mcbp_command_handler handler_{};
     std::shared_ptr<Manager> manager_{};
     std::chrono::milliseconds timeout_{};
-    std::string id_{ uuid::to_string(uuid::random()) };
+    std::string id_{
+        fmt::format("{:02x}/{}", static_cast<std::uint8_t>(encoded_request_type::body_type::opcode), uuid::to_string(uuid::random()))
+    };
     std::shared_ptr<couchbase::tracing::request_span> span_{ nullptr };
     std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
     std::optional<std::string> last_dispatched_from_{};
