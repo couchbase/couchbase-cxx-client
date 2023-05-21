@@ -113,7 +113,10 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                 handler_ = nullptr;
             }
         }
-        invoke_handler(request.retries.idempotent() ? errc::common::unambiguous_timeout : errc::common::ambiguous_timeout);
+        invoke_handler(request.retries.idempotent() || !opaque_.has_value()
+                         ? errc::common::unambiguous_timeout // safe to retry or has not been sent to the server
+                         : errc::common::ambiguous_timeout   // non-idempotent and has been sent to the server
+        );
     }
 
     void invoke_handler(std::error_code ec, std::optional<io::mcbp_message>&& msg = {})
