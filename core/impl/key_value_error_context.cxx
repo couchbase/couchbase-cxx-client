@@ -42,9 +42,14 @@ key_value_error_context::to_json() const -> std::string
         { "bucket", bucket_ },
         { "scope", scope_ },
         { "collection", collection_ },
-        { "opaque", opaque_ },
-        { "retry_attempts", retry_attempts() },
     };
+
+    if (auto val = retry_attempts(); val > 0) {
+        json["retry_attempts"] = val;
+    }
+    if (opaque_ > 0) {
+        json["opaque"] = opaque_;
+    }
 
     if (!cas_.empty()) {
         json["cas"] = fmt::format("{}", cas_);
