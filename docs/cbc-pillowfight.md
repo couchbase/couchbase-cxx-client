@@ -32,7 +32,9 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 <dt>`--query-statement=STRING`</dt><dd>The N1QL query statement to use ({bucket_name}, {scope_name} and {collection_name} will be substituted). [default: <code>SELECT COUNT(*) FROM \`{bucket_name}\` WHERE type = "fake_profile"</code>]</dd>
 <dt>`--incompressible-body`</dt><dd>Use random characters to fill generated document value (by default uses 'x' to fill the body).</dd>
 <dt>`--document-body-size=INTEGER`</dt><dd>Size of the body (if zero, it will use predefined document). [default: `0`]</dd>
+<dt>`--number-of-keys-to-populate=INTEGER`</dt><dd>Preload keys before running workload, so that the worker will not generate new keys afterwards. [default: `1000`]</dd>
 <dt>`--operations-limit=INTEGER`</dt><dd>Stop and exit after the number of the operations reaches this limit. (zero for running indefinitely) [default: `0`]</dd>
+
 </dl>
 
 
