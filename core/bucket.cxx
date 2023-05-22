@@ -399,6 +399,7 @@ class bucket_impl
                                                                                                topology::configuration cfg) mutable {
             if (ec) {
                 CB_LOG_WARNING(R"({} failed to bootstrap session ec={}, bucket="{}")", new_session.log_prefix(), ec.message(), self->name_);
+                self->remove_session(new_session.id());
             } else {
                 const std::size_t this_index = new_session.index();
                 new_session.on_configuration_update(self);
@@ -520,7 +521,6 @@ class bucket_impl
 
     void update_config(topology::configuration config) override
     {
-        bool forced_config = false;
         std::vector<topology::configuration::node> added{};
         std::vector<topology::configuration::node> removed{};
         {
@@ -529,7 +529,6 @@ class bucket_impl
                 CB_LOG_DEBUG("{} initialize configuration rev={}", log_prefix_, config.rev_str());
             } else if (config.force) {
                 CB_LOG_DEBUG("{} forced to accept configuration rev={}", log_prefix_, config.rev_str());
-                forced_config = true;
             } else if (!config.vbmap) {
                 CB_LOG_DEBUG("{} will not update the configuration old={} -> new={}, because new config does not have partition map",
                              log_prefix_,
@@ -604,14 +603,8 @@ class bucket_impl
                              port,
                              node.index);
                 session.bootstrap(
-                  [self = shared_from_this(), session, forced_config, idx = next_index](std::error_code err,
-                                                                                        topology::configuration cfg) mutable {
-                      if (!err) {
-                          self->update_config(std::move(cfg));
-                          session.on_configuration_update(self);
-                          session.on_stop([id = session.id(), self]() { self->remove_session(id); });
-                          self->drain_deferred_queue();
-                      } else if (err == errc::common::unambiguous_timeout && forced_config) {
+                  [self = shared_from_this(), session, idx = next_index](std::error_code err, topology::configuration cfg) mutable {
+                      if (err) {
                           CB_LOG_WARNING(R"({} failed to bootstrap session="{}", address="{}:{}", index={}, ec={})",
                                          session.log_prefix(),
                                          session.id(),
@@ -619,8 +612,12 @@ class bucket_impl
                                          session.bootstrap_port(),
                                          idx,
                                          err.message());
-                          self->remove_session(session.id());
+                          return self->remove_session(session.id());
                       }
+                      self->update_config(std::move(cfg));
+                      session.on_configuration_update(self);
+                      session.on_stop([id = session.id(), self]() { self->remove_session(id); });
+                      self->drain_deferred_queue();
                   },
                   true);
                 new_sessions.insert_or_assign(next_index, std::move(session));
