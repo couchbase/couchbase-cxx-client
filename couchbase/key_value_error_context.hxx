@@ -48,6 +48,7 @@ class key_value_error_context : public error_context
     /**
      * Creates and initializes error context with given parameters.
      *
+     * @param operation_id
      * @param ec
      * @param last_dispatched_to
      * @param last_dispatched_from
@@ -66,7 +67,8 @@ class key_value_error_context : public error_context
      * @since 1.0.0
      * @internal
      */
-    key_value_error_context(std::error_code ec,
+    key_value_error_context(std::string operation_id,
+                            std::error_code ec,
                             std::optional<std::string> last_dispatched_to,
                             std::optional<std::string> last_dispatched_from,
                             std::size_t retry_attempts,
@@ -80,7 +82,8 @@ class key_value_error_context : public error_context
                             couchbase::cas cas,
                             std::optional<key_value_error_map_info> error_map_info,
                             std::optional<key_value_extended_error_info> extended_error_info)
-      : error_context{ ec, std::move(last_dispatched_to), std::move(last_dispatched_from), retry_attempts, std::move(retry_reasons) }
+      : error_context{ std::move(operation_id), ec, std::move(last_dispatched_to), std::move(last_dispatched_from), retry_attempts,
+                       std::move(retry_reasons) }
       , id_{ std::move(id) }
       , bucket_{ std::move(bucket) }
       , scope_{ std::move(scope) }
@@ -209,6 +212,8 @@ class key_value_error_context : public error_context
     {
         return extended_error_info_;
     }
+
+    [[nodiscard]] auto to_json() const -> std::string;
 
   private:
     std::string id_{};

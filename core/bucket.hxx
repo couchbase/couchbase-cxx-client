@@ -83,7 +83,7 @@ class bucket
         auto cmd = std::make_shared<operations::mcbp_command<bucket, Request>>(ctx_, shared_from_this(), request, default_timeout());
         cmd->start([cmd, handler = std::forward<Handler>(handler)](std::error_code ec, std::optional<io::mcbp_message>&& msg) mutable {
             using encoded_response_type = typename Request::encoded_response_type;
-            std::uint16_t status_code = msg ? msg->header.status() : 0U;
+            std::uint16_t status_code = msg ? msg->header.status() : 0xffffU;
             auto resp = msg ? encoded_response_type(std::move(*msg)) : encoded_response_type{};
             auto ctx = make_key_value_error_context(ec, status_code, cmd, resp);
             handler(cmd->request.make_response(std::move(ctx), std::move(resp)));
@@ -107,7 +107,7 @@ class bucket
             auto [partition, server] = map_id(cmd->request.id);
             if (!server.has_value()) {
                 CB_LOG_TRACE(
-                  R"({} unable to map key=\"{}\" to the node, id={}, partition={})", log_prefix(), cmd->request.id, cmd->id_, partition);
+                  R"({} unable to map key="{}" to the node, id={}, partition={})", log_prefix(), cmd->request.id, cmd->id_, partition);
                 return io::retry_orchestrator::maybe_retry(
                   cmd->manager_, cmd, retry_reason::node_not_available, errc::common::request_canceled);
             }
@@ -116,19 +116,32 @@ class bucket
         }
         auto session = find_session_by_index(index);
         if (!session || !session->has_config()) {
-            CB_LOG_TRACE(R"({} defer operation id={}, session={}, has_config={})",
+            CB_LOG_TRACE(R"({} defer operation id={}, key="{}", partition={}, index={}, session={}, address="{}", has_config={})",
                          log_prefix(),
                          cmd->id_,
+                         cmd->request.id,
+                         cmd->request.partition,
+                         index,
                          session.has_value(),
+                         session.has_value() ? session->bootstrap_address() : "",
                          session.has_value() && session->has_config());
             return defer_command([self = shared_from_this(), cmd]() { self->map_and_send(cmd); });
         }
         if (session->is_stopped()) {
             CB_LOG_TRACE(
-              R"({} the session has been found, but it is stopped, retrying id={}, session={})", log_prefix(), cmd->id_, session->id());
+              R"({} the session has been found for idx={}, but it is stopped, retrying id={}, key="{}", partition={}, session={}, address="{}")",
+              log_prefix(),
+              index,
+              cmd->id_,
+              cmd->request.id,
+              cmd->request.partition,
+              session->id(),
+              session->bootstrap_address());
             return io::retry_orchestrator::maybe_retry(
               cmd->manager_, cmd, retry_reason::node_not_available, errc::common::request_canceled);
         }
+        cmd->last_dispatched_from_ = session->local_address();
+        cmd->last_dispatched_to_ = session->bootstrap_address();
         cmd->send_to(session.value());
     }
 

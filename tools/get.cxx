@@ -47,6 +47,7 @@ Usage:
 
 Options:
   -h --help                 Show this screen.
+  --verbose                 Include more context and information where it is applicable.
   --bucket-name=STRING      Name of the bucket. [default: {bucket_name}]
   --scope-name=STRING       Name of the scope. [default: {scope_name}]
   --collection-name=STRING  Name of the collection. [default: {collection_name}]
@@ -79,6 +80,7 @@ struct command_options {
     bool hexdump{ false };
     bool pretty_json{ false };
     bool json_lines{ false };
+    bool verbose{ false };
 };
 
 static void
@@ -141,16 +143,14 @@ print_result(const std::string& bucket_name,
         } else {
             fmt::print(stderr, "{}, error: {}\n", prefix, ctx.ec().message());
         }
+        if (cmd_options.verbose) {
+            fmt::print(stderr, "{}\n", ctx.to_json());
+        }
     } else {
         auto [value, flags] = resp.content_as<cbc::passthrough_transcoder>();
-        if (resp.expiry_time()) {
-            fmt::print(stderr,
-                       "{}, size: {}, CAS: 0x{}, flags: 0x{:08x}, expiry: {}\n",
-                       prefix,
-                       value.size(),
-                       resp.cas(),
-                       flags,
-                       resp.expiry_time().value());
+        if (const auto& exptime = resp.expiry_time(); exptime.has_value()) {
+            fmt::print(
+              stderr, "{}, size: {}, CAS: 0x{}, flags: 0x{:08x}, expiry: {}\n", prefix, value.size(), resp.cas(), flags, exptime.value());
         } else {
             fmt::print(stderr, "{}, size: {}, CAS: 0x{}, flags: 0x{:08x}\n", prefix, value.size(), resp.cas(), flags);
         }
@@ -247,6 +247,7 @@ cbc::get::execute(const std::vector<std::string>& argv)
     cbc::fill_cluster_options(options, cluster_options, connection_string);
 
     command_options cmd_options{};
+    cmd_options.verbose = options["--verbose"].asBool();
     cmd_options.bucket_name = options["--bucket-name"].asString();
     cmd_options.scope_name = options["--scope-name"].asString();
     cmd_options.collection_name = options["--collection-name"].asString();

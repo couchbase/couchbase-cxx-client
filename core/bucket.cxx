@@ -22,7 +22,6 @@
 #include "core/mcbp/codec.hxx"
 #include "dispatcher.hxx"
 #include "impl/bootstrap_state_listener.hxx"
-#include "mcbp/completion_token.hxx"
 #include "mcbp/operation_queue.hxx"
 #include "mcbp/queue_request.hxx"
 #include "mcbp/queue_response.hxx"
@@ -41,28 +40,6 @@
 
 namespace couchbase::core
 {
-/**
- * copies nodes from rhs that are not in lhs to output vector
- */
-static void
-diff_nodes(const std::vector<topology::configuration::node>& lhs,
-           const std::vector<topology::configuration::node>& rhs,
-           std::vector<topology::configuration::node>& output)
-{
-    for (const auto& re : rhs) {
-        bool known = false;
-        for (const auto& le : lhs) {
-            if (le.hostname == re.hostname && le.services_plain.management.value_or(0) == re.services_plain.management.value_or(0)) {
-                known = true;
-                break;
-            }
-        }
-        if (!known) {
-            output.push_back(re);
-        }
-    }
-}
-
 class bucket_impl
   : public std::enable_shared_from_this<bucket_impl>
   , public config_listener
@@ -303,82 +280,111 @@ class bucket_impl
         return config_->map_key(key, node_index);
     }
 
-    void restart_node(std::size_t index, const std::string& hostname, const std::string& port)
+    void restart_sessions()
     {
-        if (closed_) {
-            CB_LOG_DEBUG(R"({} requested to restart session, but the bucket has been closed already. idx={}, address="{}:{}")",
-                         log_prefix_,
-                         index,
-                         hostname,
-                         port);
+        const std::scoped_lock lock(config_mutex_, sessions_mutex_);
+        if (!config_.has_value()) {
             return;
         }
-        {
-            std::scoped_lock lock(config_mutex_);
-            if (!config_->has_node(origin_.options().network, service_type::key_value, origin_.options().enable_tls, hostname, port)) {
-                CB_LOG_TRACE(
-                  R"({} requested to restart session, but the node has been ejected from current configuration already. idx={}, network={}, address="{}:{}")",
-                  log_prefix_,
-                  index,
-                  origin_.options().network,
-                  hostname,
-                  port);
-                return;
+
+        std::size_t kv_node_index{ 0 };
+        for (std::size_t index = 0; index < config_->nodes.size(); ++index) {
+            const auto& node = config_->nodes[index];
+
+            const auto& hostname = node.hostname_for(origin_.options().network);
+            auto port = node.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0);
+            if (port == 0) {
+                continue;
+            }
+
+            auto ptr = std::find_if(sessions_.begin(), sessions_.end(), [&hostname, &port](const auto& session) {
+                return session.second.bootstrap_hostname() == hostname && session.second.bootstrap_port_number() == port;
+            });
+            if (ptr != sessions_.end()) {
+
+                if (auto found_kv_node_index = ptr->first; found_kv_node_index != kv_node_index) {
+                    if (auto current = sessions_.find(kv_node_index); current == sessions_.end()) {
+                        CB_LOG_WARNING(R"({} KV node index mismatch: config rev={} states that address="{}:{}" should be at idx={}, )"
+                                       R"(but it is at idx={} ("{}"). Moving session to idx={}.)",
+                                       log_prefix_,
+                                       config_->rev_str(),
+                                       hostname,
+                                       port,
+                                       kv_node_index,
+                                       found_kv_node_index,
+                                       ptr->second.id(),
+                                       kv_node_index);
+                        sessions_.insert_or_assign(kv_node_index, std::move(ptr->second));
+                        sessions_.erase(ptr);
+                    } else {
+                        CB_LOG_WARNING(
+                          R"({} KV node index mismatch: config rev={} states that address="{}:{}" should be at idx={}, )"
+                          R"(but it is at idx={} ("{}"). Slot with idx={} is holds session with address="{}" ("{}"), swapping them.)",
+                          log_prefix_,
+                          config_->rev_str(),
+                          hostname,
+                          port,
+                          kv_node_index,
+                          found_kv_node_index,
+                          ptr->second.id(),
+                          kv_node_index,
+                          current->second.bootstrap_address(),
+                          current->second.id());
+                        std::swap(current->second, ptr->second);
+                    }
+                }
+                ++kv_node_index;
+                continue;
+            }
+            couchbase::core::origin origin(origin_.credentials(), hostname, port, origin_.options());
+            io::mcbp_session session = origin_.options().enable_tls
+                                         ? io::mcbp_session(client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_)
+                                         : io::mcbp_session(client_id_, ctx_, origin, state_listener_, name_, known_features_);
+            CB_LOG_DEBUG(R"({} rev={}, restart idx={}, session="{}", address="{}:{}")",
+                         log_prefix_,
+                         config_->rev_str(),
+                         node.index,
+                         session.id(),
+                         hostname,
+                         port);
+            session.bootstrap(
+              [self = shared_from_this(), session](std::error_code err, topology::configuration cfg) mutable {
+                  if (err) {
+                      return self->remove_session(session.id());
+                  }
+                  self->update_config(std::move(cfg));
+                  session.on_configuration_update(self);
+                  session.on_stop([id = session.id(), self]() { self->remove_session(id); });
+                  self->drain_deferred_queue();
+              },
+              true);
+            sessions_.insert_or_assign(index, std::move(session));
+            ++kv_node_index;
+        }
+    }
+
+    void remove_session(const std::string& id)
+    {
+        bool found{ false };
+        const std::scoped_lock lock(sessions_mutex_);
+        for (auto ptr = sessions_.cbegin(); ptr != sessions_.cend();) {
+            if (ptr->second.id() == id) {
+                CB_LOG_DEBUG(R"({} removed session id="{}", address="{}", bootstrap_address="{}:{}")",
+                             log_prefix_,
+                             ptr->second.id(),
+                             ptr->second.remote_address(),
+                             ptr->second.bootstrap_hostname(),
+                             ptr->second.bootstrap_port());
+                ptr = sessions_.erase(ptr);
+                found = true;
+            } else {
+                ptr = std::next(ptr);
             }
         }
-        couchbase::core::origin origin(origin_.credentials(), hostname, port, origin_.options());
 
-        io::mcbp_session session = origin_.options().enable_tls
-                                     ? io::mcbp_session(client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_)
-                                     : io::mcbp_session(client_id_, ctx_, origin, state_listener_, name_, known_features_);
-
-        std::scoped_lock lock(sessions_mutex_);
-        if (auto ptr = sessions_.find(index); ptr == sessions_.end()) {
-            CB_LOG_DEBUG(R"({} requested to restart session idx={}, which does not exist yet, initiate new one id="{}", address="{}:{}")",
-                         log_prefix_,
-                         index,
-                         session.id(),
-                         hostname,
-                         port);
-        } else {
-            const auto& old_session = ptr->second;
-            auto old_id = old_session.id();
-            sessions_.erase(ptr);
-            Expects(sessions_.count(index) == 0);
-            CB_LOG_DEBUG(R"({} restarting session idx={}, id=("{}" -> "{}"), address="{}:{}")",
-                         log_prefix_,
-                         index,
-                         old_id,
-                         session.id(),
-                         hostname,
-                         port);
+        if (found) {
+            asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() { return self->restart_sessions(); }));
         }
-
-        session.bootstrap(
-          [self = shared_from_this(), session, this_index = index, hostname, port](std::error_code ec,
-                                                                                   const topology::configuration& config) mutable {
-              if (self->closed_) {
-                  asio::post(asio::bind_executor(
-                    self->ctx_, [session = std::move(session)]() mutable { return session.stop(retry_reason::do_not_retry); }));
-                  return;
-              }
-              if (ec) {
-                  CB_LOG_WARNING(R"({} failed to restart session idx={}, ec={})", session.log_prefix(), this_index, ec.message());
-                  self->restart_node(this_index, hostname, port);
-                  return;
-              }
-              session.on_configuration_update(self);
-              session.on_stop([this_index, hostname, port, self](retry_reason reason) {
-                  if (reason == retry_reason::socket_closed_while_in_flight) {
-                      self->restart_node(this_index, hostname, port);
-                  }
-              });
-
-              self->update_config(config);
-              self->drain_deferred_queue();
-          },
-          true);
-        sessions_.insert_or_assign(index, std::move(session));
     }
 
     void bootstrap(utils::movable_function<void(std::error_code, topology::configuration)>&& handler)
@@ -393,15 +399,11 @@ class bucket_impl
                                                                                                topology::configuration cfg) mutable {
             if (ec) {
                 CB_LOG_WARNING(R"({} failed to bootstrap session ec={}, bucket="{}")", new_session.log_prefix(), ec.message(), self->name_);
+                self->remove_session(new_session.id());
             } else {
                 const std::size_t this_index = new_session.index();
                 new_session.on_configuration_update(self);
-                new_session.on_stop([this_index, hostname = new_session.bootstrap_hostname(), port = new_session.bootstrap_port(), self](
-                                      retry_reason reason) {
-                    if (reason == retry_reason::socket_closed_while_in_flight) {
-                        self->restart_node(this_index, hostname, port);
-                    }
-                });
+                new_session.on_stop([id = new_session.id(), self]() { self->remove_session(id); });
 
                 {
                     std::scoped_lock lock(self->sessions_mutex_);
@@ -455,6 +457,9 @@ class bucket_impl
             std::scoped_lock lock(deferred_commands_mutex_);
             std::swap(deferred_commands_, commands);
         }
+        if (!commands.empty()) {
+            CB_LOG_TRACE(R"({} draining deferred operation queue, size={})", log_prefix_, commands.size());
+        }
         while (!commands.empty()) {
             commands.front()();
             commands.pop();
@@ -489,9 +494,33 @@ class bucket_impl
         }
     }
 
+    /**
+     * copies nodes from rhs that are not in lhs to output vector
+     */
+    void diff_nodes(const std::vector<topology::configuration::node>& lhs,
+                    const std::vector<topology::configuration::node>& rhs,
+                    std::vector<topology::configuration::node>& output)
+    {
+        for (const auto& re : rhs) {
+            bool known = false;
+            const auto& rhost = re.hostname_for(origin_.options().network);
+            const auto rport = re.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0);
+            for (const auto& le : lhs) {
+                const auto& lhost = le.hostname_for(origin_.options().network);
+                const auto lport = le.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0);
+                if (rhost == lhost && rport == lport) {
+                    known = true;
+                    break;
+                }
+            }
+            if (!known) {
+                output.push_back(re);
+            }
+        }
+    }
+
     void update_config(topology::configuration config) override
     {
-        bool forced_config = false;
         std::vector<topology::configuration::node> added{};
         std::vector<topology::configuration::node> removed{};
         {
@@ -500,7 +529,6 @@ class bucket_impl
                 CB_LOG_DEBUG("{} initialize configuration rev={}", log_prefix_, config.rev_str());
             } else if (config.force) {
                 CB_LOG_DEBUG("{} forced to accept configuration rev={}", log_prefix_, config.rev_str());
-                forced_config = true;
             } else if (!config.vbmap) {
                 CB_LOG_DEBUG("{} will not update the configuration old={} -> new={}, because new config does not have partition map",
                              log_prefix_,
@@ -533,78 +561,81 @@ class bucket_impl
             std::scoped_lock lock(sessions_mutex_);
             std::map<size_t, io::mcbp_session> new_sessions{};
 
-            for (auto& [index, session] : sessions_) {
-                std::size_t new_index = config.nodes.size() + 1;
-                for (const auto& node : config.nodes) {
-                    if (session.bootstrap_hostname() == node.hostname_for(origin_.options().network) &&
-                        session.bootstrap_port() ==
-                          std::to_string(
-                            node.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0))) {
-                        new_index = node.index;
-                        break;
-                    }
-                }
-                if (new_index < config.nodes.size()) {
-                    CB_LOG_DEBUG(R"({} rev={}, preserve session="{}", address="{}:{}", index={}->{})",
-                                 log_prefix_,
-                                 config.rev_str(),
-                                 session.id(),
-                                 session.bootstrap_hostname(),
-                                 session.bootstrap_port(),
-                                 index,
-                                 new_index);
-                    new_sessions.insert_or_assign(new_index, std::move(session));
-                } else {
-                    CB_LOG_DEBUG(R"({} rev={}, drop session="{}", address="{}:{}", index={})",
-                                 log_prefix_,
-                                 config.rev_str(),
-                                 session.id(),
-                                 session.bootstrap_hostname(),
-                                 session.bootstrap_port(),
-                                 index);
-                    asio::post(asio::bind_executor(
-                      ctx_, [session = std::move(session)]() mutable { return session.stop(retry_reason::do_not_retry); }));
-                }
-            }
-
+            std::size_t next_index{ 0 };
             for (const auto& node : config.nodes) {
-                if (new_sessions.find(node.index) != new_sessions.end()) {
-                    continue;
-                }
-
                 const auto& hostname = node.hostname_for(origin_.options().network);
                 auto port = node.port_or(origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0);
                 if (port == 0) {
                     continue;
                 }
+
+                bool reused_session{ false };
+                for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
+                    if (it->second.bootstrap_hostname() == hostname && it->second.bootstrap_port_number() == port) {
+                        CB_LOG_DEBUG(R"({} rev={}, preserve session="{}", address="{}:{}", index={}->{})",
+                                     log_prefix_,
+                                     config.rev_str(),
+                                     it->second.id(),
+                                     it->second.bootstrap_hostname(),
+                                     it->second.bootstrap_port(),
+                                     it->first,
+                                     next_index);
+                        new_sessions.insert_or_assign(next_index, std::move(it->second));
+                        reused_session = true;
+                        ++next_index;
+                        sessions_.erase(it);
+                        break;
+                    }
+                }
+                if (reused_session) {
+                    continue;
+                }
+
                 couchbase::core::origin origin(origin_.credentials(), hostname, port, origin_.options());
                 io::mcbp_session session = origin_.options().enable_tls
                                              ? io::mcbp_session(client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_)
                                              : io::mcbp_session(client_id_, ctx_, origin, state_listener_, name_, known_features_);
-                CB_LOG_DEBUG(
-                  R"({} rev={}, add session="{}", address="{}:{}")", log_prefix_, config.rev_str(), session.id(), hostname, port);
+                CB_LOG_DEBUG(R"({} rev={}, add session="{}", address="{}:{}", index={})",
+                             log_prefix_,
+                             config.rev_str(),
+                             session.id(),
+                             hostname,
+                             port,
+                             node.index);
                 session.bootstrap(
-                  [self = shared_from_this(), session, forced_config, idx = node.index](std::error_code err,
-                                                                                        topology::configuration cfg) mutable {
-                      if (!err) {
-                          self->update_config(std::move(cfg));
-                          session.on_configuration_update(self);
-                          session.on_stop(
-                            [index = session.index(), hostname = session.bootstrap_hostname(), port = session.bootstrap_port(), self](
-                              retry_reason reason) {
-                                if (reason == retry_reason::socket_closed_while_in_flight) {
-                                    self->restart_node(index, hostname, port);
-                                }
-                            });
-                          self->drain_deferred_queue();
-                      } else if (err == errc::common::unambiguous_timeout && forced_config) {
-                          self->restart_node(idx, session.bootstrap_hostname(), session.bootstrap_port());
+                  [self = shared_from_this(), session, idx = next_index](std::error_code err, topology::configuration cfg) mutable {
+                      if (err) {
+                          CB_LOG_WARNING(R"({} failed to bootstrap session="{}", address="{}:{}", index={}, ec={})",
+                                         session.log_prefix(),
+                                         session.id(),
+                                         session.bootstrap_hostname(),
+                                         session.bootstrap_port(),
+                                         idx,
+                                         err.message());
+                          return self->remove_session(session.id());
                       }
+                      self->update_config(std::move(cfg));
+                      session.on_configuration_update(self);
+                      session.on_stop([id = session.id(), self]() { self->remove_session(id); });
+                      self->drain_deferred_queue();
                   },
                   true);
-                new_sessions.insert_or_assign(node.index, std::move(session));
+                new_sessions.insert_or_assign(next_index, std::move(session));
+                ++next_index;
             }
-            sessions_ = new_sessions;
+            std::swap(sessions_, new_sessions);
+
+            for (auto it = new_sessions.begin(); it != new_sessions.end(); ++it) {
+                CB_LOG_DEBUG(R"({} rev={}, drop session="{}", address="{}:{}", index={})",
+                             log_prefix_,
+                             config.rev_str(),
+                             it->second.id(),
+                             it->second.bootstrap_hostname(),
+                             it->second.bootstrap_port(),
+                             it->first);
+                asio::post(asio::bind_executor(
+                  ctx_, [session = std::move(it->second)]() mutable { return session.stop(retry_reason::do_not_retry); }));
+            }
         }
     }
 

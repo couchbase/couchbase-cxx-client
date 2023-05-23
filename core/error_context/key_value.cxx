@@ -24,7 +24,7 @@ key_value_error_context
 make_key_value_error_context(std::error_code ec, const document_id& id)
 {
     return {
-        ec, {}, {}, 0, {}, id.key(), id.bucket(), id.scope(), id.collection(), 0, {}, {}, {}, {},
+        {}, ec, {}, {}, 0, {}, id.key(), id.bucket(), id.scope(), id.collection(), 0, {}, {}, {}, {},
     };
 }
 
@@ -36,6 +36,7 @@ make_subdocument_error_context(const key_value_error_context& ctx,
                                bool deleted)
 {
     return {
+        ctx.operation_id(),
         ec,
         ctx.last_dispatched_to(),
         ctx.last_dispatched_from(),

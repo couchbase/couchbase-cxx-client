@@ -59,9 +59,13 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     mcbp_command_handler handler_{};
     std::shared_ptr<Manager> manager_{};
     std::chrono::milliseconds timeout_{};
-    std::string id_{ uuid::to_string(uuid::random()) };
+    std::string id_{
+        fmt::format("{:02x}/{}", static_cast<std::uint8_t>(encoded_request_type::body_type::opcode), uuid::to_string(uuid::random()))
+    };
     std::shared_ptr<couchbase::tracing::request_span> span_{ nullptr };
     std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
+    std::optional<std::string> last_dispatched_from_{};
+    std::optional<std::string> last_dispatched_to_{};
 
     mcbp_command(asio::io_context& ctx, std::shared_ptr<Manager> manager, Request req, std::chrono::milliseconds default_timeout)
       : deadline(ctx)
@@ -109,7 +113,10 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                 handler_ = nullptr;
             }
         }
-        invoke_handler(request.retries.idempotent() ? errc::common::unambiguous_timeout : errc::common::ambiguous_timeout);
+        invoke_handler(request.retries.idempotent() || !opaque_.has_value()
+                         ? errc::common::unambiguous_timeout // safe to retry or has not been sent to the server
+                         : errc::common::ambiguous_timeout   // non-idempotent and has been sent to the server
+        );
     }
 
     void invoke_handler(std::error_code ec, std::optional<io::mcbp_message>&& msg = {})

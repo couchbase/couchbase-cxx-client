@@ -379,7 +379,7 @@ class mcbp_session_impl
                     Expects(protocol::is_valid_server_request_opcode(msg.header.opcode));
                     switch (static_cast<protocol::server_opcode>(msg.header.opcode)) {
                         case protocol::server_opcode::cluster_map_change_notification: {
-                            protocol::cmd_info info{ session_->endpoint_address_, session_->endpoint_.port() };
+                            protocol::cmd_info info{ session_->bootstrap_hostname_, session_->bootstrap_port_number_ };
                             if (session_->origin_.options().dump_configuration) {
                                 std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()), msg.body.size() };
                                 CB_LOG_TRACE(
@@ -404,7 +404,7 @@ class mcbp_session_impl
                             CB_LOG_WARNING("{} unexpected server request: opcode={:x}, opaque={}{:a}{:a}",
                                            session_->log_prefix_,
                                            msg.header.opcode,
-                                           msg.header.opaque,
+                                           utils::byte_swap(msg.header.opaque),
                                            spdlog::to_hex(msg.header_data()),
                                            spdlog::to_hex(msg.body));
                     }
@@ -416,7 +416,7 @@ class mcbp_session_impl
                                    session_->log_prefix_,
                                    magic,
                                    msg.header.opcode,
-                                   msg.header.opaque,
+                                   utils::byte_swap(msg.header.opaque),
                                    spdlog::to_hex(msg.header_data()),
                                    spdlog::to_hex(msg.body));
                     break;
@@ -473,7 +473,7 @@ class mcbp_session_impl
                     Expects(protocol::is_valid_client_opcode(msg.header.opcode));
                     switch (auto opcode = static_cast<protocol::client_opcode>(msg.header.opcode)) {
                         case protocol::client_opcode::get_cluster_config: {
-                            protocol::cmd_info info{ session_->endpoint_address_, session_->endpoint_.port() };
+                            protocol::cmd_info info{ session_->bootstrap_hostname_, session_->bootstrap_port_number_ };
                             if (session_->origin_.options().dump_configuration) {
                                 std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()), msg.body.size() };
                                 CB_LOG_TRACE("{} configuration from get_cluster_config response (size={}, endpoint=\"{}:{}\"), {}",
@@ -781,13 +781,10 @@ class mcbp_session_impl
             return;
         }
         std::tie(bootstrap_hostname_, bootstrap_port_) = origin_.next_address();
-        log_prefix_ = fmt::format("[{}/{}/{}/{}] <{}:{}>",
-                                  client_id_,
-                                  id_,
-                                  stream_->log_prefix(),
-                                  bucket_name_.value_or("-"),
-                                  bootstrap_hostname_,
-                                  bootstrap_port_);
+        bootstrap_port_number_ = gsl::narrow_cast<std::uint16_t>(std::stoul(bootstrap_port_, nullptr, 10));
+        bootstrap_address_ = fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_);
+        log_prefix_ =
+          fmt::format("[{}/{}/{}/{}] <{}>", client_id_, id_, stream_->log_prefix(), bucket_name_.value_or("-"), bootstrap_address_);
         CB_LOG_DEBUG("{} attempt to establish MCBP connection", log_prefix_);
 
         async_resolve(origin_.options().use_ip_protocol,
@@ -807,7 +804,7 @@ class mcbp_session_impl
         return stopped_;
     }
 
-    void on_stop(utils::movable_function<void(retry_reason)> handler)
+    void on_stop(utils::movable_function<void()> handler)
     {
         on_stop_handler_ = std::move(handler);
     }
@@ -863,7 +860,7 @@ class mcbp_session_impl
         config_listeners_.clear();
         state_ = diag::endpoint_state::disconnected;
         if (auto on_stop = std::move(on_stop_handler_); on_stop) {
-            on_stop(reason);
+            on_stop();
         }
     }
 
@@ -874,7 +871,7 @@ class mcbp_session_impl
         }
         std::uint32_t opaque{ 0 };
         std::memcpy(&opaque, buf.data() + 12, sizeof(opaque));
-        CB_LOG_TRACE("{} MCBP send, opaque={}, {:n}", log_prefix_, opaque, spdlog::to_hex(buf.begin(), buf.begin() + 24));
+        CB_LOG_TRACE("{} MCBP send, opaque={}, {:n}", log_prefix_, utils::byte_swap(opaque), spdlog::to_hex(buf.begin(), buf.begin() + 24));
         std::scoped_lock lock(output_buffer_mutex_);
         output_buffer_.emplace_back(std::move(buf));
     }
@@ -1058,6 +1055,11 @@ class mcbp_session_impl
         return config_->index_for_this_node();
     }
 
+    [[nodiscard]] const std::string& bootstrap_address() const
+    {
+        return bootstrap_address_;
+    }
+
     [[nodiscard]] const std::string& bootstrap_hostname() const
     {
         return bootstrap_hostname_;
@@ -1066,6 +1068,11 @@ class mcbp_session_impl
     [[nodiscard]] const std::string& bootstrap_port() const
     {
         return bootstrap_port_;
+    }
+
+    [[nodiscard]] std::uint16_t bootstrap_port_number() const
+    {
+        return bootstrap_port_number_;
     }
 
     [[nodiscard]] std::uint32_t next_opaque()
@@ -1161,15 +1168,15 @@ class mcbp_session_impl
                     CB_LOG_TRACE("{} configuration from not_my_vbucket response (size={}, endpoint=\"{}:{}\"), {}",
                                  log_prefix_,
                                  config_text.size(),
-                                 endpoint_address_,
-                                 endpoint_.port(),
+                                 bootstrap_hostname_,
+                                 bootstrap_port_number_,
                                  config_text);
                 }
-                auto config = protocol::parse_config(config_text, endpoint_address_, endpoint_.port());
+                auto config = protocol::parse_config(config_text, bootstrap_hostname_, bootstrap_port_number_);
                 CB_LOG_DEBUG("{} received not_my_vbucket status for {}, opaque={} with config rev={} in the payload",
                              log_prefix_,
                              protocol::client_opcode(msg.header.opcode),
-                             msg.header.opaque,
+                             utils::byte_swap(msg.header.opaque),
                              config.rev_str());
                 update_configuration(std::move(config));
             }
@@ -1202,6 +1209,12 @@ class mcbp_session_impl
         }
         if (retry_bootstrap_on_bucket_not_found_ && ec == errc::common::bucket_not_found) {
             CB_LOG_DEBUG(R"({} server returned {} ({}), it must be transient condition, retrying)", log_prefix_, ec.value(), ec.message());
+            return initiate_bootstrap();
+        }
+        if (!origin_.exhausted() && ec == errc::common::authentication_failure) {
+            CB_LOG_DEBUG(
+              R"({} server returned authentication_failure, but the bootstrap list is not exhausted yet. It must be transient condition, retrying)",
+              log_prefix_);
             return initiate_bootstrap();
         }
 
@@ -1382,8 +1395,10 @@ class mcbp_session_impl
                           if (self->stopped_) {
                               return;
                           }
-                          CB_LOG_TRACE(
-                            "{} MCBP recv, opaque={}, {:n}", self->log_prefix_, msg.header.opaque, spdlog::to_hex(msg.header_data()));
+                          CB_LOG_TRACE("{} MCBP recv, opaque={}, {:n}",
+                                       self->log_prefix_,
+                                       utils::byte_swap(msg.header.opaque),
+                                       spdlog::to_hex(msg.header_data()));
                           if (self->bootstrapped_) {
                               self->handler_->handle(std::move(msg));
                           } else {
@@ -1462,7 +1477,7 @@ class mcbp_session_impl
     std::mutex command_handlers_mutex_{};
     std::map<std::uint32_t, command_handler> command_handlers_{};
     std::vector<std::shared_ptr<config_listener>> config_listeners_{};
-    utils::movable_function<void(retry_reason)> on_stop_handler_{};
+    utils::movable_function<void()> on_stop_handler_{};
 
     std::atomic_bool bootstrapped_{ false };
     std::atomic_bool stopped_{ false };
@@ -1482,6 +1497,8 @@ class mcbp_session_impl
     std::mutex writing_buffer_mutex_{};
     std::string bootstrap_hostname_{};
     std::string bootstrap_port_{};
+    std::string bootstrap_address_{};
+    std::uint16_t bootstrap_port_number_{};
     asio::ip::tcp::endpoint endpoint_{}; // connected endpoint
     std::string endpoint_address_{};     // cached string with endpoint address
     asio::ip::tcp::endpoint local_endpoint_{};
@@ -1582,22 +1599,16 @@ mcbp_session::supports_feature(protocol::hello_feature feature)
     return impl_->supports_feature(feature);
 }
 
-// const std::string&
-// mcbp_session::id() const
-// {
-//     return impl_->id();
-// }
-std::string
+const std::string&
 mcbp_session::id() const
 {
-    if (impl_) {
-        return fmt::format("{}, {}, {}, refcnt={}",
-                           reinterpret_cast<const void*>(this),
-                           reinterpret_cast<const void*>(impl_.get()),
-                           impl_->id(),
-                           impl_.use_count());
-    }
-    return fmt::format("{}, nullptr", reinterpret_cast<const void*>(this));
+    return impl_->id();
+}
+
+const std::string&
+mcbp_session::bootstrap_address() const
+{
+    return impl_->bootstrap_address();
 }
 
 std::string
@@ -1624,6 +1635,12 @@ mcbp_session::bootstrap_port() const
     return impl_->bootstrap_port();
 }
 
+std::uint16_t
+mcbp_session::bootstrap_port_number() const
+{
+    return impl_->bootstrap_port_number();
+}
+
 void
 mcbp_session::write_and_subscribe(std::uint32_t opaque, std::vector<std::byte>&& data, command_handler&& handler)
 {
@@ -1637,7 +1654,7 @@ mcbp_session::bootstrap(utils::movable_function<void(std::error_code, topology::
 }
 
 void
-mcbp_session::on_stop(utils::movable_function<void(retry_reason)> handler)
+mcbp_session::on_stop(utils::movable_function<void()> handler)
 {
     return impl_->on_stop(std::move(handler));
 }

@@ -101,17 +101,18 @@ class mcbp_session
     [[nodiscard]] mcbp_context context() const;
     [[nodiscard]] bool supports_feature(protocol::hello_feature feature);
     [[nodiscard]] std::vector<protocol::hello_feature> supported_features() const;
-    //[[nodiscard]] const std::string& id() const;
-    [[nodiscard]] std::string id() const;
+    [[nodiscard]] const std::string& id() const;
     [[nodiscard]] std::string remote_address() const;
     [[nodiscard]] std::string local_address() const;
+    [[nodiscard]] const std::string& bootstrap_address() const;
     [[nodiscard]] const std::string& bootstrap_hostname() const;
     [[nodiscard]] const std::string& bootstrap_port() const;
+    [[nodiscard]] std::uint16_t bootstrap_port_number() const;
     void write_and_subscribe(std::shared_ptr<mcbp::queue_request>, std::shared_ptr<response_handler> handler);
     void write_and_subscribe(std::uint32_t opaque, std::vector<std::byte>&& data, command_handler&& handler);
     void bootstrap(utils::movable_function<void(std::error_code, topology::configuration)>&& handler,
                    bool retry_on_bucket_not_found = false);
-    void on_stop(utils::movable_function<void(retry_reason)> handler);
+    void on_stop(utils::movable_function<void()> handler);
     void stop(retry_reason reason);
     [[nodiscard]] std::size_t index() const;
     [[nodiscard]] bool has_config() const;

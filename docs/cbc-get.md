@@ -18,6 +18,7 @@ Retrieve one or more documents from the server and print them to standard output
 
 <dl>
 <dt>`-h|--help`</dt><dd>Show help message.</dd>
+<dt>`--verbose`</dt><dd>Include more context and information where it is applicable.</dd>
 <dt>`--bucket-name=STRING`</dt><dd>Name of the bucket. [default: `default`]</dd>
 <dt>`--scope-name=STRING`</dt><dd>Name of the scope. [default: `_default`]</dd>
 <dt>`--collection-name=STRING`</dt><dd>Name of the collection. [default: `_default`]</dd>

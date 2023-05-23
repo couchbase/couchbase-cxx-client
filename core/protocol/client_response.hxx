@@ -148,6 +148,7 @@ class client_response
         data_.resize(body_size_);
 
         memcpy(&opaque_, header_.data() + 12, sizeof(opaque_));
+        opaque_ = utils::byte_swap(opaque_);
 
         memcpy(&cas_, header_.data() + 16, sizeof(cas_));
         cas_ = utils::byte_swap(cas_);
