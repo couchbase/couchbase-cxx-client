@@ -342,8 +342,8 @@ class bucket_impl
                                          : io::mcbp_session(client_id_, ctx_, origin, state_listener_, name_, known_features_);
             CB_LOG_DEBUG(R"({} rev={}, restart idx={}, session="{}", address="{}:{}")",
                          log_prefix_,
-                         node.index,
                          config_->rev_str(),
+                         node.index,
                          session.id(),
                          hostname,
                          port);
