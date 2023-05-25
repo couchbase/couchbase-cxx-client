@@ -315,6 +315,11 @@ TEST_CASE("integration: lock/unlock without lock time", "[integration]")
 TEST_CASE("integration: touch with zero expiry resets expiry", "[integration]")
 {
     test::utils::integration_test_guard integration;
+
+    if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+        SKIP("Timeout is too strict for sanity test env");
+    }
+
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("get_reset_expiry_key") };
