@@ -60,6 +60,21 @@ class behavior_options
         return *this;
     }
 
+    /**
+     * Selects network to use.
+     *
+     * @param name network name as it is exposed in the configuration.
+     * @return this object for chaining purposes.
+     *
+     * @see https://docs.couchbase.com/server/current/learn/clusters-and-availability/connectivity.html#alternate-addresses
+     * @see https://docs.couchbase.com/server/current/rest-api/rest-set-up-alternate-address.html
+     */
+    auto network(std::string name) -> behavior_options&
+    {
+        network_ = std::move(name);
+        return *this;
+    }
+
     struct built {
         std::string user_agent_extra;
         bool show_queries;
@@ -67,13 +82,14 @@ class behavior_options
         bool enable_mutation_tokens;
         bool enable_unordered_execution;
         bool dump_configuration;
+        std::string network;
     };
 
     [[nodiscard]] auto build() const -> built
     {
         return {
-            user_agent_extra_,           show_queries_,       enable_clustermap_notification_, enable_mutation_tokens_,
-            enable_unordered_execution_, dump_configuration_,
+            user_agent_extra_,   show_queries_, enable_clustermap_notification_, enable_mutation_tokens_, enable_unordered_execution_,
+            dump_configuration_, network_,
         };
     }
 
@@ -84,5 +100,6 @@ class behavior_options
     bool enable_mutation_tokens_{ true };
     bool enable_unordered_execution_{ true };
     bool dump_configuration_{ false };
+    std::string network_{ "auto" };
 };
 } // namespace couchbase

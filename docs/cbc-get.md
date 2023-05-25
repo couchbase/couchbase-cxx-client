@@ -141,6 +141,7 @@ Retrieve one or more documents from the server and print them to standard output
 
 <dl>
 <dt>`--user-agent-extra=STRING`</dt><dd>Append extra string SDK identifiers. [default: `cbc`].</dd>
+<dt>`--network=STRING`</dt><dd>Network (a.k.a. Alternate Addresses) to use. [default: `auto`]</dd>
 <dt>`--show-queries`</dt><dd>Log queries on INFO level.</dd>
 <dt>`--enable-clustermap-notifications`</dt><dd>Allow server to send notifications when cluster configuration changes.</dd>
 <dt>`--disable-mutation-tokens`</dt><dd>Do not request Key/Value service to send mutation tokens.</dd>

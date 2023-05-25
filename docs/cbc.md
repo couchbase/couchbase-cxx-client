@@ -32,6 +32,16 @@ Retrieve document from the server. See [cbc-get](md_docs_2cbc-get) for more info
 <dd>
 Perform N1QL query. See [cbc-query](md_docs_2cbc-query) for more information.
 </dd>
+
+<dt>analytics</dt>
+<dd>
+Perform Analytics query. See [cbc-analytics](md_docs_2cbc-analytics) for more information.
+</dd>
+
+<dt>pillowfight</dt>
+<dd>
+Run simple workload generator. See [cbc-pillowfight](md_docs_2cbc-pillowfight) for more information.
+</dd>
 </dl>
 
 ### OPTIONS
