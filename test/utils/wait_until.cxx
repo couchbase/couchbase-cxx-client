@@ -21,7 +21,10 @@
 #include "core/operations/management/collections_manifest_get.hxx"
 #include "core/operations/management/search_get_stats.hxx"
 #include "core/operations/management/search_index_get_documents_count.hxx"
+#include "core/topology/collections_manifest_fmt.hxx"
 #include "core/utils/json.hxx"
+
+#include <fmt/chrono.h>
 
 namespace test::utils
 {
@@ -49,18 +52,34 @@ wait_until_bucket_healthy(std::shared_ptr<couchbase::core::cluster> cluster, con
 bool
 wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::core::cluster> cluster,
                                           const std::string& bucket_name,
-                                          const std::uint64_t current_manifest_uid)
+                                          const std::uint64_t current_manifest_uid,
+                                          std::size_t successful_rounds,
+                                          std::chrono::seconds total_timeout)
 {
-    auto propagated = test::utils::wait_until([cluster, bucket_name, current_manifest_uid]() {
-        couchbase::core::operations::management::collections_manifest_get_request req{ { bucket_name, "_default", "_default", "" } };
-        auto resp = test::utils::execute(cluster, req);
-        return resp.manifest.uid >= current_manifest_uid;
-    });
-    if (propagated) {
-        // FIXME: The above check does not wait for all nodes to be up to date
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::size_t round = 0;
+    auto deadline = std::chrono::system_clock::now() + total_timeout;
+    while (std::chrono::system_clock::now() < deadline) {
+        auto propagated = test::utils::wait_until([cluster, bucket_name, current_manifest_uid, round, successful_rounds]() {
+            couchbase::core::operations::management::collections_manifest_get_request req{ { bucket_name, "_default", "_default", "" } };
+            auto resp = test::utils::execute(cluster, req);
+            CB_LOG_INFO("wait_until_collection_manifest_propagated \"{}\", expected: {}, actual: {}, round: {} ({}), manifest: {}",
+                        bucket_name,
+                        current_manifest_uid,
+                        resp.manifest.uid,
+                        round,
+                        successful_rounds,
+                        resp.manifest);
+            return resp.manifest.uid >= current_manifest_uid;
+        });
+        if (propagated) {
+            round += 1;
+            if (round >= successful_rounds) {
+                std::this_thread::sleep_for(std::chrono::seconds{ 1 });
+                return propagated;
+            }
+        }
     }
-    return propagated;
+    return false;
 }
 
 bool

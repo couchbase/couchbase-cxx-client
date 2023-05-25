@@ -94,7 +94,7 @@ upsert_scope_and_collection(std::shared_ptr<couchbase::core::cluster> cluster,
     }
 }
 
-TEST_CASE("can get", "[transactions]")
+TEST_CASE("transactions public blocking API: can get", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -118,7 +118,7 @@ TEST_CASE("can get", "[transactions]")
     CHECK_FALSE(tx_err.ec());
 }
 
-TEST_CASE("get returns error if doc doesn't exist", "[transactions]")
+TEST_CASE("transactions public blocking API: get returns error if doc doesn't exist", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -137,7 +137,7 @@ TEST_CASE("get returns error if doc doesn't exist", "[transactions]")
     CHECK_FALSE(tx_err.ec());
 }
 
-TEST_CASE("can insert", "[transactions]")
+TEST_CASE("transactions public blocking API: can insert", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -165,7 +165,7 @@ TEST_CASE("can insert", "[transactions]")
     REQUIRE(final_doc.content_as<tao::json::value>() == content);
 }
 
-TEST_CASE("insert has error as expected when doc already exists", "[transactions]")
+TEST_CASE("transactions public blocking API: insert has error as expected when doc already exists", "[transactions]")
 {
 
     test::utils::integration_test_guard integration;
@@ -193,7 +193,7 @@ TEST_CASE("insert has error as expected when doc already exists", "[transactions
     REQUIRE(final_doc.content_as<tao::json::value>() == content);
 }
 
-TEST_CASE("can replace", "[transactions]")
+TEST_CASE("transactions public blocking API: can replace", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -225,7 +225,7 @@ TEST_CASE("can replace", "[transactions]")
             couchbase::core::utils::json::generate_binary(new_content));
 }
 
-TEST_CASE("replace fails as expected with bad cas", "[transactions]")
+TEST_CASE("transactions public blocking API: replace fails as expected with bad cas", "[transactions]")
 {
 
     test::utils::integration_test_guard integration;
@@ -255,7 +255,7 @@ TEST_CASE("replace fails as expected with bad cas", "[transactions]")
     REQUIRE(final_doc.content_as<tao::json::value>() == content);
 }
 
-TEST_CASE("can remove", "[transactions]")
+TEST_CASE("transactions public blocking API: can remove", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -280,7 +280,7 @@ TEST_CASE("can remove", "[transactions]")
     REQUIRE(final_err.ec() == couchbase::errc::key_value::document_not_found);
 }
 
-TEST_CASE("remove fails as expected with bad cas", "[transactions]")
+TEST_CASE("transactions public blocking API: remove fails as expected with bad cas", "[transactions]")
 {
 
     test::utils::integration_test_guard integration;
@@ -307,7 +307,7 @@ TEST_CASE("remove fails as expected with bad cas", "[transactions]")
     CHECK(tx_err.ec());
 }
 
-TEST_CASE("remove fails as expected with missing doc", "[transactions]")
+TEST_CASE("transactions public blocking API: remove fails as expected with missing doc", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -331,7 +331,7 @@ TEST_CASE("remove fails as expected with missing doc", "[transactions]")
     CHECK(tx_err.cause() == couchbase::errc::transaction_op::unknown);
 }
 
-TEST_CASE("uncaught exception in lambda will rollback without retry", "[transactions]")
+TEST_CASE("transactions public blocking API: uncaught exception in lambda will rollback without retry", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -352,7 +352,7 @@ TEST_CASE("uncaught exception in lambda will rollback without retry", "[transact
     CHECK(tx_err.cause() == couchbase::errc::transaction_op::unknown);
 }
 
-TEST_CASE("can pass per-transaction configs", "[transactions]")
+TEST_CASE("transactions public blocking API: can pass per-transaction configs", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -386,7 +386,7 @@ TEST_CASE("can pass per-transaction configs", "[transactions]")
     CHECK(tx_err.ec());
 }
 
-TEST_CASE("can do simple query", "[transactions]")
+TEST_CASE("transactions public blocking API: can do simple query", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -407,7 +407,7 @@ TEST_CASE("can do simple query", "[transactions]")
     CHECK_FALSE(result.transaction_id.empty());
 }
 
-TEST_CASE("can do simple mutating query", "[transactions]")
+TEST_CASE("transactions public blocking API: can do simple mutating query", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -430,7 +430,7 @@ TEST_CASE("can do simple mutating query", "[transactions]")
     CHECK(final_doc.content_as<tao::json::value>().at("some_number") == 10);
 }
 
-TEST_CASE("some query errors don't force rollback", "[transactions]")
+TEST_CASE("transactions public blocking API: some query errors don't force rollback", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -455,7 +455,7 @@ TEST_CASE("some query errors don't force rollback", "[transactions]")
     CHECK(final_doc.content_as<tao::json::value>() == content);
 }
 
-TEST_CASE("some query errors do rollback", "[transactions]")
+TEST_CASE("transactions public blocking API: some query errors do rollback", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -484,7 +484,7 @@ TEST_CASE("some query errors do rollback", "[transactions]")
     CHECK(doc2.cas().empty());
 }
 
-TEST_CASE("some query errors are seen immediately", "[transactions]")
+TEST_CASE("transactions public blocking API: some query errors are seen immediately", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -503,7 +503,7 @@ TEST_CASE("some query errors are seen immediately", "[transactions]")
     CHECK(result.unstaging_complete);
 }
 
-TEST_CASE("can query from a scope", "[transactions]")
+TEST_CASE("transactions public blocking API: can query from a scope", "[transactions]")
 {
     const std::string new_scope_name("newscope");
     const std::string new_coll_name("newcoll");
@@ -529,9 +529,15 @@ TEST_CASE("can query from a scope", "[transactions]")
       txn_opts());
     CHECK_FALSE(tx_err.ec());
     CHECK_FALSE(result.transaction_id.empty());
+
+    {
+        couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket, new_scope_name };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
+    }
 }
 
-TEST_CASE("can get doc from bucket not yet opened", "[transactions]")
+TEST_CASE("transactions public blocking API: can get doc from bucket not yet opened", "[transactions]")
 {
 
     auto id = test::utils::uniq_id("txn");
@@ -559,7 +565,7 @@ TEST_CASE("can get doc from bucket not yet opened", "[transactions]")
     });
 }
 
-TEST_CASE("can insert doc into bucket not yet opened", "[transactions]")
+TEST_CASE("transactions public blocking API: can insert doc into bucket not yet opened", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -585,7 +591,7 @@ TEST_CASE("can insert doc into bucket not yet opened", "[transactions]")
     });
 }
 
-TEST_CASE("can replace doc in bucket not yet opened", "[transactions]")
+TEST_CASE("transactions public blocking API: can replace doc in bucket not yet opened", "[transactions]")
 {
 
     auto id = test::utils::uniq_id("txn");
@@ -620,7 +626,7 @@ TEST_CASE("can replace doc in bucket not yet opened", "[transactions]")
     });
 }
 
-TEST_CASE("can remove doc in bucket not yet opened", "[transactions]")
+TEST_CASE("transactions public blocking API: can remove doc in bucket not yet opened", "[transactions]")
 {
 
     auto id = test::utils::uniq_id("txn");

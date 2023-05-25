@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require "timeout"
+require "set"
 
 require_relative "api"
 
@@ -25,7 +26,13 @@ options = {
   password: ENV.fetch("CB_PASSWORD", ARGV[3] || "password"),
   verbose: ENV.fetch("CB_VERBOSE", true).to_b,
   bucket: "travel-sample",
+  sample_buckets: Set.new,
 }
+options[:sample_buckets] << "beer-sample" if ENV.fetch("CB_BEER_SAMPLE", false).to_b
+options[:sample_buckets] << "travel-sample" if ENV.fetch("CB_TRAVEL_SAMPLE", false).to_b
+options[:sample_buckets] |= ARGV[4..-1]
+return if options[:sample_buckets].empty?
+
 p options: options
 
 management_api =
@@ -36,12 +43,12 @@ management_api =
     sleep(1)
     retry
   end
-service_address = service_address_for_bucket(management_api, "fts", options[:bucket], options)
-p search_service: service_address
 
-has_v6_nodes =
-  management_api.get("/pools/default")["nodes"]
-  .any? { |node| node["version"] =~ /^6\./ && node["services"].include?("fts") }
+expected_counts = {
+  "travel-sample" => 30_000,
+  "beer-sample" => 7_000,
+}
 
-index_definition_path = File.join(__dir__, "travel-sample-index#{"-v6" if has_v6_nodes}.json")
-ensure_search_index_created(index_definition_path, options.merge(service_address))
+options[:sample_buckets].each do |bucket|
+  ensure_sample_bucket_loaded(management_api, expected_counts[bucket], options.merge(bucket: bucket))
+end

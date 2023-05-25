@@ -25,6 +25,8 @@
 
 #include <couchbase/query_string_query.hxx>
 
+#include <regex>
+
 using Catch::Matchers::StartsWith;
 
 TEST_CASE("integration: search query")
@@ -567,7 +569,14 @@ TEST_CASE("integration: search query collections")
         }
         couchbase::core::operations::management::search_index_upsert_request req{};
         req.index = index;
-        auto resp = test::utils::execute(integration.cluster, req);
+
+        couchbase::core::operations::management::search_index_upsert_response resp;
+        bool operation_completed = test::utils::wait_until([&integration, &resp, req]() {
+            resp = test::utils::execute(integration.cluster, req);
+            std::regex scope_not_found("collection: '.+' doesn't belong to scope");
+            return !std::regex_search(resp.error, scope_not_found);
+        });
+        REQUIRE(operation_completed);
         REQUIRE_SUCCESS(resp.ctx.ec);
         if (index_name != resp.name) {
             CB_LOG_INFO("update index name \"{}\" -> \"{}\"", index_name, resp.name);

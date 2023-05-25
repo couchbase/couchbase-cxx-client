@@ -115,13 +115,19 @@ TEST_CASE("integration: query on a collection", "[integration]")
     }
 
     {
-        couchbase::core::operations::management::query_index_create_request req{};
-        req.bucket_name = integration.ctx.bucket;
-        req.scope_name = scope_name;
-        req.collection_name = collection_name;
-        req.index_name = index_name;
-        req.is_primary = true;
-        auto resp = test::utils::execute(integration.cluster, req);
+        couchbase::core::operations::management::query_index_create_response resp;
+        bool operation_completed = test::utils::wait_until([&integration, &index_name, &scope_name, &collection_name, &resp]() {
+            couchbase::core::operations::management::query_index_create_request req{};
+            req.bucket_name = integration.ctx.bucket;
+            req.scope_name = scope_name;
+            req.collection_name = collection_name;
+            req.index_name = index_name;
+            req.is_primary = true;
+            resp = test::utils::execute(integration.cluster, req);
+
+            return resp.ctx.ec != couchbase::errc::common::bucket_not_found && resp.ctx.ec != couchbase::errc::common::scope_not_found;
+        });
+        REQUIRE(operation_completed);
         INFO(resp.ctx.http_body);
         REQUIRE_SUCCESS(resp.ctx.ec);
     }
@@ -178,6 +184,12 @@ TEST_CASE("integration: query on a collection", "[integration]")
         REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.size() == 1);
         REQUIRE(value == couchbase::core::utils::json::parse(resp.rows[0]));
+    }
+
+    {
+        couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket, scope_name };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
     }
 }
 
