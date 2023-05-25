@@ -103,6 +103,7 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
     user_options.enable_mutation_tokens = opts.behavior.enable_mutation_tokens;
     user_options.enable_unordered_execution = opts.behavior.enable_unordered_execution;
     user_options.user_agent_extra = opts.behavior.user_agent_extra;
+    user_options.network = opts.behavior.network;
 
     user_options.enable_tcp_keep_alive = opts.network.enable_tcp_keep_alive;
     user_options.tcp_keep_alive_interval = opts.network.tcp_keep_alive_interval;

@@ -82,6 +82,7 @@ auto
 usage_block_for_cluster_options() -> std::string
 {
     const auto default_user_agent_extra{ "cbc" };
+    const auto default_network{ "auto" };
     const auto default_options = default_cluster_options().build();
     const auto connection_string = default_connection_string();
 
@@ -161,6 +162,7 @@ Tracing options:
 
 Behavior options:
   --user-agent-extra=STRING          Append extra string SDK identifiers (full user-agent is "{sdk_id};{user_agent_extra}"). [default: {user_agent_extra}].
+  --network=STRING                   Network (a.k.a. Alternate Addresses) to use. [default: {default_network}]
   --show-queries                     Log queries on INFO level.
   --enable-clustermap-notifications  Allow server to send notifications when cluster configuration changes.
   --disable-mutation-tokens          Do not request Key/Value service to send mutation tokens.
@@ -209,7 +211,8 @@ Behavior options:
       fmt::arg("tracing_threshold_management", default_options.tracing.management_threshold),
       fmt::arg("tracing_threshold_eventing", default_options.tracing.eventing_threshold),
       fmt::arg("sdk_id", couchbase::core::meta::sdk_id()),
-      fmt::arg("user_agent_extra", default_user_agent_extra));
+      fmt::arg("user_agent_extra", default_user_agent_extra),
+      fmt::arg("network", default_network));
 }
 
 void
