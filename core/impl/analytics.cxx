@@ -15,37 +15,20 @@
  *   limitations under the License.
  */
 
+#include "analytics.hxx"
+
+#include "core/cluster.hxx"
+#include "core/operations/document_analytics.hxx"
+#include "core/utils/binary.hxx"
+
 #include <couchbase/cluster.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/scope.hxx>
 
-#include "core/cluster.hxx"
-#include "core/operations/document_analytics.hxx"
-
-namespace couchbase
+namespace couchbase::core::impl
 {
-static analytics_error_context
-build_context(core::operations::analytics_response& resp)
+namespace
 {
-    return {
-        resp.ctx.ec,
-        resp.ctx.last_dispatched_to,
-        resp.ctx.last_dispatched_from,
-        resp.ctx.retry_attempts,
-        std::move(resp.ctx.retry_reasons),
-        resp.ctx.first_error_code,
-        std::move(resp.ctx.first_error_message),
-        std::move(resp.ctx.client_context_id),
-        std::move(resp.ctx.statement),
-        std::move(resp.ctx.parameters),
-        std::move(resp.ctx.method),
-        std::move(resp.ctx.path),
-        resp.ctx.http_status,
-        std::move(resp.ctx.http_body),
-        std::move(resp.ctx.hostname),
-        resp.ctx.port,
-    };
-}
 
 static analytics_status
 map_status(core::operations::analytics_response::analytics_status status)
@@ -80,9 +63,9 @@ map_scan_consistency(std::optional<couchbase::analytics_scan_consistency> consis
 {
     if (consistency.has_value()) {
         switch (consistency.value()) {
-            case analytics_scan_consistency::not_bounded:
+            case couchbase::analytics_scan_consistency::not_bounded:
                 return couchbase::core::analytics_scan_consistency::not_bounded;
-            case analytics_scan_consistency::request_plus:
+            case couchbase::analytics_scan_consistency::request_plus:
                 return couchbase::core::analytics_scan_consistency::request_plus;
         }
     }
@@ -133,7 +116,32 @@ map_signature(core::operations::analytics_response& resp)
     return core::utils::to_binary(resp.meta.signature.value());
 }
 
-static analytics_result
+} // namespace
+
+analytics_error_context
+build_context(core::operations::analytics_response& resp)
+{
+    return {
+        resp.ctx.ec,
+        resp.ctx.last_dispatched_to,
+        resp.ctx.last_dispatched_from,
+        resp.ctx.retry_attempts,
+        std::move(resp.ctx.retry_reasons),
+        resp.ctx.first_error_code,
+        std::move(resp.ctx.first_error_message),
+        std::move(resp.ctx.client_context_id),
+        std::move(resp.ctx.statement),
+        std::move(resp.ctx.parameters),
+        std::move(resp.ctx.method),
+        std::move(resp.ctx.path),
+        resp.ctx.http_status,
+        std::move(resp.ctx.http_body),
+        std::move(resp.ctx.hostname),
+        resp.ctx.port,
+    };
+}
+
+analytics_result
 build_result(core::operations::analytics_response& resp)
 {
     return {
@@ -149,7 +157,7 @@ build_result(core::operations::analytics_response& resp)
     };
 }
 
-static core::operations::analytics_request
+core::operations::analytics_request
 build_analytics_request(std::string statement,
                         analytics_options::built options,
                         std::optional<std::string> bucket_name,
@@ -188,50 +196,4 @@ build_analytics_request(std::string statement,
     return request;
 }
 
-void
-cluster::analytics_query(std::string statement, const analytics_options& options, analytics_handler&& handler) const
-{
-    auto request = build_analytics_request(std::move(statement), options.build(), {}, {});
-
-    core_->execute(std::move(request), [handler = std::move(handler)](core::operations::analytics_response resp) mutable {
-        auto r = std::move(resp);
-        return handler(build_context(r), build_result(r));
-    });
-}
-
-auto
-cluster::analytics_query(std::string statement, const analytics_options& options) const
-  -> std::future<std::pair<analytics_error_context, analytics_result>>
-{
-    auto barrier = std::make_shared<std::promise<std::pair<analytics_error_context, analytics_result>>>();
-    auto future = barrier->get_future();
-    analytics_query(std::move(statement), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
-    });
-    return future;
-}
-
-void
-scope::analytics_query(std::string statement, const analytics_options& options, analytics_handler&& handler) const
-{
-    auto request = build_analytics_request(std::move(statement), options.build(), bucket_name_, name_);
-
-    core_->execute(std::move(request), [handler = std::move(handler)](core::operations::analytics_response resp) mutable {
-        auto r = std::move(resp);
-        return handler(build_context(r), build_result(r));
-    });
-}
-
-auto
-scope::analytics_query(std::string statement, const analytics_options& options) const
-  -> std::future<std::pair<analytics_error_context, analytics_result>>
-{
-    auto barrier = std::make_shared<std::promise<std::pair<analytics_error_context, analytics_result>>>();
-    auto future = barrier->get_future();
-    analytics_query(std::move(statement), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
-    });
-    return future;
-}
-
-} // namespace couchbase
+} // namespace couchbase::core::impl

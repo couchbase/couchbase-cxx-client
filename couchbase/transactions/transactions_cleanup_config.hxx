@@ -15,10 +15,11 @@
  */
 #pragma once
 
+#include <couchbase/transactions/transaction_keyspace.hxx>
+
 #include <chrono>
 #include <list>
 
-#include <couchbase/transactions/transaction_keyspace.hxx>
 namespace couchbase::transactions
 {
 /**

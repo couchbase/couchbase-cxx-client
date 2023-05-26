@@ -21,33 +21,13 @@
 
 #include "core/cluster.hxx"
 #include "core/operations/document_query.hxx"
+#include "core/utils/binary.hxx"
 
 namespace couchbase::core::impl
 {
-static query_error_context
-build_context(operations::query_response& resp)
+namespace
 {
-    return {
-        resp.ctx.ec,
-        resp.ctx.last_dispatched_to,
-        resp.ctx.last_dispatched_from,
-        resp.ctx.retry_attempts,
-        std::move(resp.ctx.retry_reasons),
-        resp.ctx.first_error_code,
-        std::move(resp.ctx.first_error_message),
-        std::move(resp.ctx.client_context_id),
-        std::move(resp.ctx.statement),
-        std::move(resp.ctx.parameters),
-        std::move(resp.ctx.method),
-        std::move(resp.ctx.path),
-        resp.ctx.http_status,
-        std::move(resp.ctx.http_body),
-        std::move(resp.ctx.hostname),
-        resp.ctx.port,
-    };
-}
-
-static query_status
+query_status
 map_status(std::string status)
 {
     std::transform(status.cbegin(), status.cend(), status.begin(), [](unsigned char c) { return std::tolower(c); });
@@ -73,7 +53,7 @@ map_status(std::string status)
     return query_status::unknown;
 }
 
-static std::vector<codec::binary>
+std::vector<codec::binary>
 map_rows(operations::query_response& resp)
 {
     std::vector<codec::binary> rows;
@@ -84,7 +64,7 @@ map_rows(operations::query_response& resp)
     return rows;
 }
 
-static std::vector<query_warning>
+std::vector<query_warning>
 map_warnings(operations::query_response& resp)
 {
     std::vector<query_warning> warnings;
@@ -102,7 +82,7 @@ map_warnings(operations::query_response& resp)
     return warnings;
 }
 
-static std::optional<query_metrics>
+std::optional<query_metrics>
 map_metrics(operations::query_response& resp)
 {
     if (!resp.meta.metrics) {
@@ -116,7 +96,7 @@ map_metrics(operations::query_response& resp)
     };
 }
 
-static std::optional<std::vector<std::byte>>
+std::optional<std::vector<std::byte>>
 map_signature(operations::query_response& resp)
 {
     if (!resp.meta.signature) {
@@ -125,7 +105,7 @@ map_signature(operations::query_response& resp)
     return utils::to_binary(resp.meta.signature.value());
 }
 
-static std::optional<std::vector<std::byte>>
+std::optional<std::vector<std::byte>>
 map_profile(operations::query_response& resp)
 {
     if (!resp.meta.profile) {
@@ -133,8 +113,32 @@ map_profile(operations::query_response& resp)
     }
     return utils::to_binary(resp.meta.profile.value());
 }
+} // namespace
 
-static query_result
+query_error_context
+build_context(operations::query_response& resp)
+{
+    return {
+        resp.ctx.ec,
+        resp.ctx.last_dispatched_to,
+        resp.ctx.last_dispatched_from,
+        resp.ctx.retry_attempts,
+        std::move(resp.ctx.retry_reasons),
+        resp.ctx.first_error_code,
+        std::move(resp.ctx.first_error_message),
+        std::move(resp.ctx.client_context_id),
+        std::move(resp.ctx.statement),
+        std::move(resp.ctx.parameters),
+        std::move(resp.ctx.method),
+        std::move(resp.ctx.path),
+        resp.ctx.http_status,
+        std::move(resp.ctx.http_body),
+        std::move(resp.ctx.hostname),
+        resp.ctx.port,
+    };
+}
+
+query_result
 build_result(operations::query_response& resp)
 {
     return {
@@ -151,28 +155,19 @@ build_result(operations::query_response& resp)
     };
 }
 
-static core::operations::query_request
-build_query_request(std::string statement, query_options::built options)
+core::operations::query_request
+build_query_request(std::string statement, std::optional<std::string> query_context, query_options::built options)
 {
     operations::query_request request{
-        std::move(statement),
-        options.adhoc,
-        options.metrics,
-        options.readonly,
-        options.flex_index,
-        options.preserve_expiry,
-        options.use_replica,
-        options.max_parallelism,
-        options.scan_cap,
-        options.scan_wait,
-        options.pipeline_batch,
-        options.pipeline_cap,
-        options.scan_consistency,
-        std::move(options.mutation_state),
-        std::move(options.client_context_id),
-        {}, // we put the query_context in later, if one was specified.
-        options.timeout,
-        options.profile,
+        std::move(statement),     options.adhoc,
+        options.metrics,          options.readonly,
+        options.flex_index,       options.preserve_expiry,
+        options.use_replica,      options.max_parallelism,
+        options.scan_cap,         options.scan_wait,
+        options.pipeline_batch,   options.pipeline_cap,
+        options.scan_consistency, std::move(options.mutation_state),
+        std::move(query_context), std::move(options.client_context_id),
+        options.timeout,          options.profile,
     };
     if (!options.raw.empty()) {
         for (auto& [name, value] : options.raw) {
@@ -223,24 +218,6 @@ build_transaction_query_result(operations::query_response resp, std::error_code 
 core::operations::query_request
 build_transaction_query_request(query_options::built opts)
 {
-    return build_query_request("", opts);
-}
-
-void
-initiate_query_operation(std::shared_ptr<couchbase::core::cluster> core,
-                         std::string statement,
-                         std::optional<std::string> query_context,
-                         query_options::built options,
-                         query_handler&& handler)
-{
-    auto request = build_query_request(std::move(statement), options);
-    if (query_context) {
-        request.query_context = std::move(query_context);
-    }
-
-    core->execute(std::move(request), [core, handler = std::move(handler)](operations::query_response resp) mutable {
-        auto r = std::move(resp);
-        return handler(build_context(r), build_result(r));
-    });
+    return core::impl::build_query_request("", {}, opts);
 }
 } // namespace couchbase::core::impl

@@ -102,4 +102,18 @@ test_context::load_from_environment()
 
     return ctx;
 }
+
+couchbase::core::cluster_credentials
+test_context::build_auth() const
+{
+    couchbase::core::cluster_credentials auth{};
+    if (certificate_path.empty()) {
+        auth.username = username;
+        auth.password = password;
+    } else {
+        auth.certificate_path = certificate_path;
+        auth.key_path = key_path;
+    }
+    return auth;
+}
 } // namespace test::utils

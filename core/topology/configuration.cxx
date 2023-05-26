@@ -19,6 +19,7 @@
 
 #include "core/logger/logger.hxx"
 #include "core/service_type_fmt.hxx"
+#include "core/utils/crc32.hxx"
 
 #include <gsl/narrow>
 
@@ -228,6 +229,28 @@ configuration::server_by_vbucket(std::uint16_t vbucket, std::size_t index)
         return static_cast<std::size_t>(server_index);
     }
     return {};
+}
+
+std::pair<std::uint16_t, std::optional<std::size_t>>
+configuration::map_key(const std::string& key, std::size_t index)
+{
+    if (!vbmap.has_value()) {
+        return { 0, {} };
+    }
+    const std::uint32_t crc = utils::hash_crc32(key.data(), key.size());
+    auto vbucket = static_cast<std::uint16_t>(crc % vbmap->size());
+    return { vbucket, server_by_vbucket(vbucket, index) };
+}
+
+std::pair<std::uint16_t, std::optional<std::size_t>>
+configuration::map_key(const std::vector<std::byte>& key, std::size_t index)
+{
+    if (!vbmap.has_value()) {
+        return { 0, {} };
+    }
+    const std::uint32_t crc = utils::hash_crc32(key.data(), key.size());
+    auto vbucket = static_cast<std::uint16_t>(crc % vbmap->size());
+    return { vbucket, server_by_vbucket(vbucket, index) };
 }
 
 configuration

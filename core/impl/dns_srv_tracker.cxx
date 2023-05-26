@@ -20,6 +20,8 @@
 #include "core/logger/logger.hxx"
 #include "core/utils/join_strings.hxx"
 
+#include <couchbase/error_codes.hxx>
+
 #include <asio/bind_executor.hpp>
 #include <asio/io_context.hpp>
 #include <asio/post.hpp>

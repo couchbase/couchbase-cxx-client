@@ -51,6 +51,7 @@
 #include "streams.hxx"
 
 #include <couchbase/build_config.hxx>
+#include <couchbase/error_codes.hxx>
 #include <couchbase/fmt/retry_reason.hxx>
 
 #include <asio.hpp>
@@ -850,8 +851,9 @@ class mcbp_session_impl
                 self->state_listener_->report_bootstrap_error(fmt::format("{}:{}", self->bootstrap_hostname_, self->bootstrap_port_), ec);
             }
             CB_LOG_WARNING("{} unable to bootstrap in time", self->log_prefix_);
-            auto h = std::move(self->bootstrap_callback_);
-            h(ec, {});
+            if (auto h = std::move(self->bootstrap_callback_); h) {
+                h(ec, {});
+            }
             self->stop(retry_reason::do_not_retry);
         });
         initiate_bootstrap();

@@ -15,41 +15,28 @@
  *   limitations under the License.
  */
 
-#include "core/transactions.hxx"
-
 #include "core/cluster.hxx"
 
+#include "analytics.hxx"
+#include "core/transactions.hxx"
+#include "core/utils/connection_string.hxx"
+#include "internal_search_error_context.hxx"
+#include "internal_search_meta_data.hxx"
+#include "internal_search_result.hxx"
+#include "internal_search_row.hxx"
+#include "internal_search_row_location.hxx"
+#include "internal_search_row_locations.hxx"
+#include "query.hxx"
+#include "search.hxx"
+
+#include <couchbase/bucket.hxx>
 #include <couchbase/cluster.hxx>
 
 namespace couchbase
 {
-
+namespace
+{
 auto
-cluster::transactions() -> std::shared_ptr<couchbase::transactions::transactions>
-{
-    // TODO: add mutex for thread safety.
-    if (!transactions_) {
-        // TODO: fill in the cluster config, add an optional transactions_config, use it here.
-        transactions_ = std::make_shared<couchbase::core::transactions::transactions>(core_, core_->origin().second.options().transactions);
-    }
-    return transactions_;
-}
-
-auto
-cluster::close() -> void
-{
-    if (transactions_) {
-        // blocks until cleanup is finished
-        transactions_->close();
-    }
-    transactions_.reset();
-    return core::impl::initiate_cluster_close(core_);
-}
-
-namespace core::impl
-{
-
-static auto
 options_to_origin(const std::string& connection_string, const couchbase::cluster_options& options) -> core::origin
 {
     auto opts = options.build();
@@ -99,8 +86,8 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
     }
 
     if (opts.dns.nameserver) {
-        user_options.dns_config =
-          io::dns::dns_config(opts.dns.nameserver.value(), opts.dns.port.value_or(io::dns::dns_config::default_port), opts.dns.timeout);
+        user_options.dns_config = core::io::dns::dns_config(
+          opts.dns.nameserver.value(), opts.dns.port.value_or(core::io::dns::dns_config::default_port), opts.dns.timeout);
     }
     user_options.enable_clustermap_notification = opts.behavior.enable_clustermap_notification;
     user_options.show_queries = opts.behavior.show_queries;
@@ -161,32 +148,197 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
     return { auth, couchbase::core::utils::parse_connection_string(connection_string, user_options) };
 }
 
-void
-initiate_cluster_connect(asio::io_context& io,
-                         const std::string& connection_string,
-                         const couchbase::cluster_options& options,
-                         cluster_connect_handler&& handler)
+} // namespace
+
+class cluster_impl : public std::enable_shared_from_this<cluster_impl>
 {
-    auto core = couchbase::core::cluster::create(io);
-    auto origin = options_to_origin(connection_string, options);
-    core->open(origin, [core, handler = std::move(handler)](std::error_code ec) mutable {
-        if (ec) {
-            return handler({}, ec);
+  public:
+    explicit cluster_impl(couchbase::core::cluster core)
+      : core_{ std::move(core) }
+      , transactions_{ std::make_shared<couchbase::core::transactions::transactions>(core_, core_.origin().second.options().transactions) }
+    {
+    }
+
+    void query(std::string statement, query_options::built options, query_handler&& handler) const
+    {
+        return core_.execute(
+          core::impl::build_query_request(std::move(statement), {}, std::move(options)),
+          [handler = std::move(handler)](auto resp) { return handler(core::impl::build_context(resp), core::impl::build_result(resp)); });
+    }
+
+    void analytics_query(std::string statement, analytics_options::built options, analytics_handler&& handler) const
+    {
+        return core_.execute(
+          core::impl::build_analytics_request(std::move(statement), std::move(options), {}, {}),
+          [handler = std::move(handler)](auto resp) { return handler(core::impl::build_context(resp), core::impl::build_result(resp)); });
+    }
+
+    void search_query(std::string index_name,
+                      const class search_query& query,
+                      const search_options::built& options,
+                      search_handler&& handler) const
+    {
+        return core_.execute(core::impl::build_search_request(std::move(index_name), query, options, {}, {}),
+                             [handler = std::move(handler)](auto resp) mutable {
+                                 return handler(search_error_context{ internal_search_error_context{ resp } },
+                                                search_result{ internal_search_result{ resp } });
+                             });
+    }
+
+    void close(core::utils::movable_function<void()> handler)
+    {
+        if (transactions_) {
+            // blocks until cleanup is finished
+            transactions_->close();
         }
-        auto c = couchbase::cluster(core);
-        // create txns as we want to start cleanup immediately if configured with metadata_collection
-        [[maybe_unused]] std::shared_ptr<couchbase::transactions::transactions> t = c.transactions();
-        handler(std::move(c), {});
-    });
+        transactions_.reset();
+        return core_.close(std::move(handler));
+    }
+
+    [[nodiscard]] auto core() const -> const core::cluster&
+    {
+        return core_;
+    }
+
+    [[nodiscard]] auto transactions() const -> std::shared_ptr<couchbase::core::transactions::transactions>
+    {
+        return transactions_;
+    }
+
+  private:
+    couchbase::core::cluster core_;
+    std::shared_ptr<couchbase::core::transactions::transactions> transactions_;
+};
+
+/*
+ * This function exists only for usage in the unit tests, and might be removed at any moment.
+ * Avoid using it unless it is absolutely necessary.
+ */
+auto
+extract_core_cluster(const couchbase::cluster& cluster) -> const core::cluster&
+{
+    static_assert(alignof(couchbase::cluster) == alignof(std::shared_ptr<cluster_impl>),
+                  "expected alignment of couchbase::cluster and std::shared_ptr<cluster_impl> to match");
+    static_assert(sizeof(couchbase::cluster) == sizeof(std::shared_ptr<cluster_impl>),
+                  "expected size of couchbase::cluster and std::shared_ptr<cluster_impl> to match");
+    return reinterpret_cast<const std::shared_ptr<cluster_impl>*>(&cluster)->get()->core();
+}
+
+cluster::cluster(core::cluster core)
+  : impl_{ std::make_shared<cluster_impl>(std::move(core)) }
+{
 }
 
 void
-initiate_cluster_close(std::shared_ptr<couchbase::core::cluster> core)
+cluster::query(std::string statement, const query_options& options, query_handler&& handler) const
 {
-    if (core == nullptr) {
+    return impl_->query(std::move(statement), options.build(), std::move(handler));
+}
+
+auto
+cluster::query(std::string statement, const query_options& options) const -> std::future<std::pair<query_error_context, query_result>>
+{
+    auto barrier = std::make_shared<std::promise<std::pair<query_error_context, query_result>>>();
+    auto future = barrier->get_future();
+    query(std::move(statement), options, [barrier](auto ctx, auto result) { barrier->set_value({ std::move(ctx), std::move(result) }); });
+    return future;
+}
+
+void
+cluster::analytics_query(std::string statement, const analytics_options& options, analytics_handler&& handler) const
+{
+    impl_->analytics_query(std::move(statement), options.build(), std::move(handler));
+}
+
+auto
+cluster::analytics_query(std::string statement, const analytics_options& options) const
+  -> std::future<std::pair<analytics_error_context, analytics_result>>
+{
+    auto barrier = std::make_shared<std::promise<std::pair<analytics_error_context, analytics_result>>>();
+    auto future = barrier->get_future();
+    analytics_query(std::move(statement), options, [barrier](auto ctx, auto result) {
+        barrier->set_value({ std::move(ctx), std::move(result) });
+    });
+    return future;
+}
+
+void
+cluster::search_query(std::string index_name,
+                      const class search_query& query,
+                      const search_options& options,
+                      search_handler&& handler) const
+{
+    return impl_->search_query(std::move(index_name), query, options.build(), std::move(handler));
+}
+
+auto
+cluster::search_query(std::string index_name, const class search_query& query, const search_options& options) const
+  -> std::future<std::pair<search_error_context, search_result>>
+{
+    auto barrier = std::make_shared<std::promise<std::pair<search_error_context, search_result>>>();
+    search_query(std::move(index_name), query, options, [barrier](auto ctx, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
+    });
+    return barrier->get_future();
+}
+
+auto
+cluster::connect(asio::io_context& io, const std::string& connection_string, const cluster_options& options)
+  -> std::future<std::pair<cluster, std::error_code>>
+{
+    auto barrier = std::make_shared<std::promise<std::pair<cluster, std::error_code>>>();
+    auto future = barrier->get_future();
+    connect(io, connection_string, options, [barrier](auto c, auto ec) { barrier->set_value({ std::move(c), ec }); });
+    return future;
+}
+
+void
+cluster::connect(asio::io_context& io,
+                 const std::string& connection_string,
+                 const cluster_options& options,
+                 cluster_connect_handler&& handler)
+{
+    auto core = couchbase::core::cluster(io);
+    auto origin = options_to_origin(connection_string, options);
+    return core.open(origin, [core, handler = std::move(handler)](std::error_code ec) mutable {
+        if (ec) {
+            return handler({}, ec);
+        }
+        handler(couchbase::cluster(std::move(core)), {});
+    });
+}
+
+auto
+cluster::close() const -> void
+{
+    if (!impl_) {
         return;
     }
-    core->close([]() { /* do nothing */ });
+    return impl_->close([] { /* do nothing */ });
 }
-} // namespace core::impl
+
+auto
+cluster::query_indexes() const -> query_index_manager
+{
+    return query_index_manager{ impl_->core() };
+}
+
+auto
+cluster::bucket(std::string_view bucket_name) const -> couchbase::bucket
+{
+    return { impl_->core(), bucket_name };
+}
+
+auto
+cluster::transactions() const -> std::shared_ptr<couchbase::transactions::transactions>
+{
+    return impl_->transactions();
+}
+
+auto
+cluster::buckets() const -> bucket_manager
+{
+    return bucket_manager{ impl_->core() };
+}
+
 } // namespace couchbase

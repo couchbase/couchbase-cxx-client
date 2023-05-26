@@ -19,6 +19,18 @@
 
 #include "utils/move_only_context.hxx"
 
+#include "core/operations/document_analytics.hxx"
+#include "core/operations/document_append.hxx"
+#include "core/operations/document_decrement.hxx"
+#include "core/operations/document_increment.hxx"
+#include "core/operations/document_insert.hxx"
+#include "core/operations/document_lookup_in.hxx"
+#include "core/operations/document_mutate_in.hxx"
+#include "core/operations/document_prepend.hxx"
+#include "core/operations/document_query.hxx"
+#include "core/operations/document_remove.hxx"
+#include "core/operations/document_replace.hxx"
+#include "core/operations/document_upsert.hxx"
 #include "core/operations/management/collections.hxx"
 #include "core/operations/management/query.hxx"
 #include "couchbase/codec/binary_noop_serializer.hxx"
@@ -69,7 +81,7 @@ TEST_CASE("integration: query with handler capturing non-copyable object", "[int
             CHECK(ctx.payload() == "foobar");
             barrier->set_value(std::move(resp));
         };
-        integration.cluster->execute(req, std::move(handler));
+        integration.cluster.execute(req, std::move(handler));
         auto resp = f.get();
         REQUIRE_SUCCESS(resp.ctx.ec);
     }
@@ -206,7 +218,7 @@ TEST_CASE("integration: read only with no results", "[integration]")
     }
 
     {
-        couchbase::core::operations::query_request req{ fmt::format("SELECT * FROM {} LIMIT 0", integration.ctx.bucket) };
+        couchbase::core::operations::query_request req{ fmt::format("SELECT * FROM `{}` LIMIT 0", integration.ctx.bucket) };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
         REQUIRE(resp.rows.empty());
@@ -253,7 +265,7 @@ TEST_CASE("integration: preserve expiry for mutation query", "[integration]")
         test::utils::uniq_id("preserve_expiry_for_query"),
     };
 
-    uint32_t expiry = std::numeric_limits<uint32_t>::max();
+    constexpr std::uint32_t expiry = std::numeric_limits<std::uint32_t>::max();
 
     {
         couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary(R"({"foo":42})") };
@@ -516,7 +528,7 @@ TEST_CASE("integration: prepared query", "[integration]")
 
     {
         couchbase::core::operations::query_request req{ fmt::format(
-          R"(SELECT a, b FROM {} WHERE META().id = "{}")", integration.ctx.bucket, key) };
+          R"(SELECT a, b FROM `{}` WHERE META().id = "{}")", integration.ctx.bucket, key) };
 
         req.mutation_state = { mutation_token };
         req.adhoc = false;

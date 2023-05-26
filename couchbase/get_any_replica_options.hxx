@@ -67,27 +67,4 @@ struct get_any_replica_options : public common_options<get_any_replica_options> 
  * @uncommitted
  */
 using get_any_replica_handler = std::function<void(key_value_error_context, get_replica_result)>;
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core
-{
-class cluster;
-namespace impl
-{
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_get_any_replica_operation(std::shared_ptr<couchbase::core::cluster> core,
-                                   const std::string& bucket_name,
-                                   const std::string& scope_name,
-                                   const std::string& collection_name,
-                                   std::string document_key,
-                                   get_any_replica_options::built options,
-                                   get_any_replica_handler&& handler);
-#endif
-} // namespace impl
-} // namespace core
 } // namespace couchbase

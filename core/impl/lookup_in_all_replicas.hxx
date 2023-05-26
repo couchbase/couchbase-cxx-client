@@ -67,14 +67,4 @@ class lookup_in_all_replicas_request
 
 using movable_lookup_in_all_replicas_handler =
   utils::movable_function<void(couchbase::subdocument_error_context, lookup_in_all_replicas_result)>;
-
-void
-initiate_lookup_in_all_replicas_operation(std::shared_ptr<cluster> core,
-                                          const std::string& bucket_name,
-                                          const std::string& scope_name,
-                                          const std::string& collection_name,
-                                          std::string document_key,
-                                          const std::vector<subdoc::command>& specs,
-                                          std::optional<std::chrono::milliseconds> timeout,
-                                          movable_lookup_in_all_replicas_handler&& handler);
 } // namespace couchbase::core::impl

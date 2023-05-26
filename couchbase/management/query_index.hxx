@@ -21,9 +21,9 @@
 #include <string>
 #include <vector>
 
-namespace couchbase::management::query
+namespace couchbase::management
 {
-struct index {
+struct query_index {
     bool is_primary{ false };
     std::string name;
     std::string state;
@@ -36,4 +36,4 @@ struct index {
     std::optional<std::string> collection_name{};
 };
 
-} // namespace couchbase::management::query
+} // namespace couchbase::management

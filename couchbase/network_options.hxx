@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "ip_protocol.hxx"
+#include <couchbase/ip_protocol.hxx>
 
 #include <cstdint>
 #include <optional>

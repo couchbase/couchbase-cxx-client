@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -15,24 +15,23 @@
  *   limitations under the License.
  */
 
-#include "mcbp_noop.hxx"
+#pragma once
 
-#include <couchbase/error_codes.hxx>
+#include "core/operations/document_search.hxx"
 
-namespace couchbase::core::operations
-{
-std::error_code
-mcbp_noop_request::encode_to(mcbp_noop_request::encoded_request_type& encoded, mcbp_context&& /* context */) const
-{
-    encoded.opaque(opaque);
-    encoded.partition(partition);
-    return {};
-}
+#include <couchbase/search_options.hxx>
+#include <couchbase/search_query.hxx>
 
-mcbp_noop_response
-mcbp_noop_request::make_response(key_value_error_context&& ctx, const encoded_response_type& /* encoded */) const
+#include <optional>
+#include <string>
+
+namespace couchbase::core::impl
 {
-    mcbp_noop_response response{ std::move(ctx) };
-    return response;
-}
-} // namespace couchbase::core::operations
+core::operations::search_request
+build_search_request(std::string index_name,
+                     const search_query& query,
+                     search_options::built options,
+                     std::optional<std::string> bucket_name,
+                     std::optional<std::string> scope_name);
+
+} // namespace couchbase::core::impl

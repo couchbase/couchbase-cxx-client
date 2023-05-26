@@ -206,28 +206,4 @@ struct mutate_in_options : public common_durability_options<mutate_in_options> {
  * @uncommitted
  */
 using mutate_in_handler = std::function<void(couchbase::subdocument_error_context, mutate_in_result)>;
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core
-{
-class cluster;
-namespace impl
-{
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_mutate_in_operation(std::shared_ptr<couchbase::core::cluster> core,
-                             std::string bucket_name,
-                             std::string scope_name,
-                             std::string collection_name,
-                             std::string document_key,
-                             const std::vector<couchbase::core::impl::subdoc::command>& specs,
-                             couchbase::mutate_in_options::built options,
-                             couchbase::mutate_in_handler&& handler);
-#endif
-} // namespace impl
-} // namespace core
 } // namespace couchbase

@@ -27,7 +27,7 @@ std::error_code
 search_index_get_all_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
     encoded.method = "GET";
-    encoded.path = fmt::format("/api/index");
+    encoded.path = "/api/index";
     return {};
 }
 

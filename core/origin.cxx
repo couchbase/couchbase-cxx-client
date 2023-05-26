@@ -17,8 +17,10 @@
 
 #include "origin.hxx"
 
+#include "core/utils/connection_string.hxx"
+
 #include <fmt/chrono.h>
-#include <fmt/format.h>
+#include <fmt/core.h>
 
 #include <tao/json.hpp>
 
@@ -267,4 +269,146 @@ origin::to_json() const -> std::string
     }
     return tao::json::to_string(json);
 }
+
+bool
+cluster_credentials::uses_certificate() const
+{
+    return !certificate_path.empty();
+}
 } // namespace couchbase::core
+
+couchbase::core::origin::origin(const couchbase::core::origin& other)
+  : options_(other.options_)
+  , credentials_(other.credentials_)
+  , nodes_(other.nodes_)
+  , next_node_(nodes_.begin())
+{
+}
+couchbase::core::origin::origin(couchbase::core::cluster_credentials auth,
+                                const std::string& hostname,
+                                std::uint16_t port,
+                                couchbase::core::cluster_options options)
+  : options_(std::move(options))
+  , credentials_(std::move(auth))
+  , nodes_{ { hostname, std::to_string(port) } }
+  , next_node_(nodes_.begin())
+{
+}
+couchbase::core::origin::origin(couchbase::core::cluster_credentials auth,
+                                const std::string& hostname,
+                                const std::string& port,
+                                couchbase::core::cluster_options options)
+  : options_(std::move(options))
+  , credentials_(std::move(auth))
+  , nodes_{ { hostname, port } }
+  , next_node_(nodes_.begin())
+{
+}
+couchbase::core::origin::origin(couchbase::core::cluster_credentials auth, const couchbase::core::utils::connection_string& connstr)
+  : options_(connstr.options)
+  , credentials_(std::move(auth))
+{
+    nodes_.reserve(connstr.bootstrap_nodes.size());
+    for (const auto& node : connstr.bootstrap_nodes) {
+        nodes_.emplace_back(node.address, node.port > 0 ? std::to_string(node.port) : std::to_string(connstr.default_port));
+    }
+    next_node_ = nodes_.begin();
+}
+couchbase::core::origin&
+couchbase::core::origin::operator=(const couchbase::core::origin& other)
+{
+    if (this != &other) {
+        options_ = other.options_;
+        credentials_ = other.credentials_;
+        nodes_ = other.nodes_;
+        next_node_ = nodes_.begin();
+        exhausted_ = false;
+    }
+    return *this;
+}
+const std::string&
+couchbase::core::origin::username() const
+{
+    return credentials_.username;
+}
+const std::string&
+couchbase::core::origin::password() const
+{
+    return credentials_.password;
+}
+const std::string&
+couchbase::core::origin::certificate_path() const
+{
+    return credentials_.certificate_path;
+}
+const std::string&
+couchbase::core::origin::key_path() const
+{
+    return credentials_.key_path;
+}
+std::vector<std::string>
+couchbase::core::origin::get_hostnames() const
+{
+    std::vector<std::string> res;
+    res.reserve(nodes_.size());
+    for (const auto& [hostname, _] : nodes_) {
+        res.emplace_back(hostname);
+    }
+    return res;
+}
+std::vector<std::string>
+couchbase::core::origin::get_nodes() const
+{
+    std::vector<std::string> res;
+    res.reserve(nodes_.size());
+    for (const auto& [hostname, port] : nodes_) {
+        res.emplace_back(fmt::format("\"{}:{}\"", hostname, port));
+    }
+    return res;
+}
+void
+couchbase::core::origin::set_nodes(couchbase::core::origin::node_list nodes)
+{
+    nodes_ = std::move(nodes);
+    next_node_ = nodes_.begin();
+    exhausted_ = false;
+}
+std::pair<std::string, std::string>
+couchbase::core::origin::next_address()
+{
+    if (exhausted_) {
+        restart();
+    }
+
+    auto address = *next_node_;
+    if (++next_node_ == nodes_.end()) {
+        exhausted_ = true;
+    }
+    return address;
+}
+bool
+couchbase::core::origin::exhausted() const
+{
+    return exhausted_;
+}
+void
+couchbase::core::origin::restart()
+{
+    exhausted_ = false;
+    next_node_ = nodes_.begin();
+}
+const couchbase::core::cluster_options&
+couchbase::core::origin::options() const
+{
+    return options_;
+}
+couchbase::core::cluster_options&
+couchbase::core::origin::options()
+{
+    return options_;
+}
+const couchbase::core::cluster_credentials&
+couchbase::core::origin::credentials() const
+{
+    return credentials_;
+}

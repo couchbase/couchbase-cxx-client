@@ -77,6 +77,10 @@ struct traits<couchbase::core::error_map> {
                     attributes.insert(couchbase::key_value_error_map_attribute::item_deleted);
                 } else if (attr_val == "rate-limit") {
                     attributes.insert(couchbase::key_value_error_map_attribute::rate_limit);
+                } else if (attr_val == "no-retry") {
+                    attributes.insert(couchbase::key_value_error_map_attribute::no_retry);
+                } else if (attr_val == "system-constraint") {
+                    attributes.insert(couchbase::key_value_error_map_attribute::system_constraint);
                 } else {
                     CB_LOG_WARNING(R"(skipping unknown attribute "{}" in error map for code={} and name="{}")", attr_val, code, name);
                 }

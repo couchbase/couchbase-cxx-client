@@ -27,8 +27,8 @@
 namespace couchbase::core
 {
 struct error_map {
-    uuid::uuid_t id;
-    std::uint16_t version;
+    uuid::uuid_t id{};
+    std::uint16_t version{};
     std::uint16_t revision{};
     std::map<std::uint16_t, couchbase::key_value_error_map_info> errors{};
 };

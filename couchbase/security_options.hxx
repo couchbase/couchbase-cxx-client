@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "tls_verify_mode.hxx"
+#include <couchbase/tls_verify_mode.hxx>
 
 #include <optional>
 #include <string>

@@ -16,10 +16,14 @@
 
 #include "test_helper_integration.hxx"
 
-#include <core/transactions/transaction_get_result.hxx>
+#include "core/operations/management/collection_create.hxx"
+#include "core/operations/management/scope_create.hxx"
+#include "core/transactions/transaction_get_result.hxx"
+
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
 #include <couchbase/transactions.hxx>
+
 #include <memory>
 #include <variant>
 
@@ -68,7 +72,7 @@ with_new_cluster(test::utils::integration_test_guard& integration, std::function
 }
 
 void
-upsert_scope_and_collection(std::shared_ptr<couchbase::core::cluster> cluster,
+upsert_scope_and_collection(const couchbase::core::cluster& cluster,
                             const std::string& bucket_name,
                             const std::string& scope_name,
                             const std::string& coll_name)

@@ -20,8 +20,6 @@
 #include "core/timeout_defaults.hxx"
 
 #include <cstdint>
-#include <filesystem>
-#include <fstream>
 #include <string>
 
 namespace couchbase::core::io::dns
@@ -32,31 +30,14 @@ class dns_config
     static constexpr auto default_nameserver = "8.8.8.8";
     static constexpr std::uint16_t default_port = 53;
 
-    dns_config() = default;
-
-    dns_config(const std::string& nameserver, std::uint16_t port, std::chrono::milliseconds timeout = timeout_defaults::dns_srv_timeout)
-      : nameserver_{ nameserver }
-      , port_{ port }
-      , timeout_{ timeout }
-    {
-    }
-
-    [[nodiscard]] std::uint16_t port() const
-    {
-        return port_;
-    }
-
-    [[nodiscard]] const std::string& nameserver() const
-    {
-        return nameserver_;
-    }
-
-    [[nodiscard]] std::chrono::milliseconds timeout() const
-    {
-        return timeout_;
-    }
-
     static const dns_config& system_config();
+
+    dns_config() = default;
+    dns_config(std::string nameserver, std::uint16_t port, std::chrono::milliseconds timeout = timeout_defaults::dns_srv_timeout);
+
+    [[nodiscard]] std::uint16_t port() const;
+    [[nodiscard]] const std::string& nameserver() const;
+    [[nodiscard]] std::chrono::milliseconds timeout() const;
 
   private:
     std::string nameserver_{ default_nameserver };

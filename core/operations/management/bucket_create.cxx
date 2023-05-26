@@ -31,7 +31,7 @@ std::error_code
 bucket_create_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
     encoded.method = "POST";
-    encoded.path = fmt::format("/pools/default/buckets");
+    encoded.path = "/pools/default/buckets";
 
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";
     encoded.body.append(fmt::format("name={}", utils::string_codec::form_encode(bucket.name)));

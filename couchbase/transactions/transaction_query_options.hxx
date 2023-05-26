@@ -15,8 +15,6 @@
  */
 #pragma once
 
-// TODO: remove this when moving the wrap_request call
-#include "core/operations/document_query.hxx"
 #include <couchbase/query_options.hxx>
 
 // NOTE: when query is in public api, we will hold a query_options struct instead, and
@@ -57,6 +55,7 @@ class transaction_query_options
         opts_.raw(key, value);
         return *this;
     }
+
     /**
      * Set ad_hoc.
      *
@@ -71,6 +70,7 @@ class transaction_query_options
         opts_.adhoc(value);
         return *this;
     }
+
     /**
      * Set the query_scan_consistency for this query.
      *
@@ -98,6 +98,7 @@ class transaction_query_options
         opts_.profile(mode);
         return *this;
     }
+
     /**
      * Set a client id for this query.
      *
@@ -139,6 +140,7 @@ class transaction_query_options
         opts_.readonly(readonly);
         return *this;
     }
+
     /**
      * Set the scan cap for this query.
      *
@@ -152,6 +154,7 @@ class transaction_query_options
         opts_.scan_cap(cap);
         return *this;
     }
+
     /**
      * Set pipeline_batch size for this query.
      *
@@ -195,6 +198,7 @@ class transaction_query_options
         opts_.positional_parameters(parameters...);
         return *this;
     }
+
     /**
      * Set named parameters for this query.
      *
@@ -210,6 +214,7 @@ class transaction_query_options
         opts_.named_parameters(parameters...);
         return *this;
     }
+
     /**
      * Set metrics for this query.
      *

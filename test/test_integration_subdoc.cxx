@@ -17,6 +17,21 @@
 
 #include "test_helper_integration.hxx"
 
+#include "core/document_id_fmt.hxx"
+#include "core/operations/document_append.hxx"
+#include "core/operations/document_decrement.hxx"
+#include "core/operations/document_get.hxx"
+#include "core/operations/document_increment.hxx"
+#include "core/operations/document_insert.hxx"
+#include "core/operations/document_lookup_in.hxx"
+#include "core/operations/document_lookup_in_all_replicas.hxx"
+#include "core/operations/document_lookup_in_any_replica.hxx"
+#include "core/operations/document_mutate_in.hxx"
+#include "core/operations/document_prepend.hxx"
+#include "core/operations/document_remove.hxx"
+#include "core/operations/document_replace.hxx"
+#include "core/operations/document_upsert.hxx"
+
 #include <couchbase/lookup_in_specs.hxx>
 #include <couchbase/mutate_in_specs.hxx>
 
@@ -648,7 +663,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
             SKIP("GOCAVES incorrectly handles limits for subdoc counters. See https://github.com/couchbaselabs/gocaves/issues/104");
         }
         {
-            int64_t max_value = std::numeric_limits<int64_t>::max();
+            constexpr std::int64_t max_value = std::numeric_limits<std::int64_t>::max();
             couchbase::core::operations::mutate_in_request req{ id };
             req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::increment("counter", max_value) }.specs();
             auto resp = test::utils::execute(integration.cluster, req);

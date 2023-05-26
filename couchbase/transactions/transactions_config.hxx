@@ -1,3 +1,4 @@
+/* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
  *     Copyright 2021-Present Couchbase, Inc.
  *
@@ -15,6 +16,7 @@
  */
 #pragma once
 
+#include <couchbase/durability_level.hxx>
 #include <couchbase/transactions/transaction_keyspace.hxx>
 #include <couchbase/transactions/transactions_cleanup_config.hxx>
 #include <couchbase/transactions/transactions_query_config.hxx>

@@ -16,12 +16,17 @@
  */
 
 #include "cluster_options.hxx"
+
 #include "config_profiles.hxx"
+#include "core/transactions/attempt_context_testing_hooks.hxx"
+#include "core/transactions/cleanup_testing_hooks.hxx"
+
+#include <couchbase/best_effort_retry_strategy.hxx>
+
 #include <stdexcept>
 
 namespace couchbase::core
 {
-
 std::chrono::milliseconds
 cluster_options::default_timeout_for(service_type type) const
 {
@@ -43,8 +48,13 @@ cluster_options::default_timeout_for(service_type type) const
     throw std::runtime_error("unexpected service type");
 }
 void
-cluster_options::apply_profile(std::string profile_name)
+cluster_options::apply_profile(std::string_view profile_name)
 {
     known_profiles().apply(profile_name, *this);
+}
+
+cluster_options::cluster_options()
+  : default_retry_strategy_{ make_best_effort_retry_strategy() }
+{
 }
 } // namespace couchbase::core

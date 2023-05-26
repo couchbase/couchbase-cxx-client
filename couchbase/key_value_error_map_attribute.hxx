@@ -120,5 +120,17 @@ enum class key_value_error_map_attribute {
      * The error is related to rate limitation for the client (version 2)
      */
     rate_limit,
+
+    /**
+     * The error is related to a system-defined hard limit for resource usage.
+     * Retrying the operation will most likely not succeed unless an action was
+     * taken on the server to resolve the issue (version 2)
+     */
+    system_constraint,
+
+    /**
+     * The client should not retry the operation.
+     */
+    no_retry,
 };
 } // namespace couchbase

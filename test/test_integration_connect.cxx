@@ -20,17 +20,29 @@
 #include "test/utils/logger.hxx"
 #include "utils/move_only_context.hxx"
 
+#include "core/operations/document_append.hxx"
+#include "core/operations/document_decrement.hxx"
+#include "core/operations/document_increment.hxx"
+#include "core/operations/document_insert.hxx"
+#include "core/operations/document_mutate_in.hxx"
+#include "core/operations/document_prepend.hxx"
+#include "core/operations/document_query.hxx"
+#include "core/operations/document_remove.hxx"
+#include "core/operations/document_replace.hxx"
+#include "core/operations/document_upsert.hxx"
+#include "core/utils/connection_string.hxx"
+
 TEST_CASE("integration: connecting with empty bootstrap nodes list", "[integration]")
 {
     asio::io_context io{};
     auto connstr = couchbase::core::utils::parse_connection_string("couchbase://");
     REQUIRE(connstr.bootstrap_nodes.empty());
     auto origin = couchbase::core::origin({}, connstr);
-    auto cluster = couchbase::core::cluster::create(io);
+    couchbase::core::cluster cluster(io);
     auto io_thread = std::thread([&io]() { io.run(); });
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();
-    cluster->open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
+    cluster.open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
     REQUIRE(rc == couchbase::errc::common::invalid_argument);
     test::utils::close_cluster(cluster);
@@ -56,11 +68,11 @@ TEST_CASE("integration: connecting with unresponsive first node in bootstrap nod
                                      couchbase::core::utils::connection_string::bootstrap_mode::gcccp,
                                    });
     auto origin = couchbase::core::origin(ctx.build_auth(), connstr);
-    auto cluster = couchbase::core::cluster::create(io);
+    couchbase::core::cluster cluster(io);
     auto io_thread = std::thread([&io]() { io.run(); });
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();
-    cluster->open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
+    cluster.open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
     REQUIRE_SUCCESS(rc);
     test::utils::close_cluster(cluster);
@@ -71,7 +83,7 @@ TEST_CASE("integration: can connect with handler capturing non-copyable object",
 {
     test::utils::integration_test_guard integration;
 
-    auto cluster = couchbase::core::cluster::create(integration.io);
+    couchbase::core::cluster cluster(integration.io);
 
     // test connecting
     {
@@ -79,7 +91,7 @@ TEST_CASE("integration: can connect with handler capturing non-copyable object",
         auto f = barrier->get_future();
         test::utils::move_only_context ctx("foobar");
         std::string output;
-        cluster->open(integration.origin, [barrier, ctx = std::move(ctx), &output](std::error_code ec) {
+        cluster.open(integration.origin, [barrier, ctx = std::move(ctx), &output](std::error_code ec) {
             output = ctx.payload();
             barrier->set_value(ec);
         });
@@ -94,7 +106,7 @@ TEST_CASE("integration: can connect with handler capturing non-copyable object",
         auto f = barrier->get_future();
         test::utils::move_only_context ctx("foobar");
         std::string output;
-        cluster->open_bucket(integration.ctx.bucket, [barrier, ctx = std::move(ctx), &output](std::error_code ec) {
+        cluster.open_bucket(integration.ctx.bucket, [barrier, ctx = std::move(ctx), &output](std::error_code ec) {
             output = ctx.payload();
             barrier->set_value(ec);
         });
@@ -109,7 +121,7 @@ TEST_CASE("integration: can connect with handler capturing non-copyable object",
         auto f = barrier->get_future();
         test::utils::move_only_context ctx("foobar");
         std::string output;
-        cluster->close([barrier, ctx = std::move(ctx), &output]() mutable {
+        cluster.close([barrier, ctx = std::move(ctx), &output]() mutable {
             output = ctx.payload();
             barrier->set_value(false);
         });
@@ -131,7 +143,7 @@ TEST_CASE("integration: destroy cluster without waiting for close completion", "
 
     asio::io_context io{};
 
-    auto cluster = couchbase::core::cluster::create(io);
+    couchbase::core::cluster cluster(io);
     auto io_thread = std::thread([&io]() { io.run(); });
 
     auto origin = couchbase::core::origin(ctx.build_auth(), couchbase::core::utils::parse_connection_string(ctx.connection_string));
@@ -155,8 +167,7 @@ TEST_CASE("integration: destroy cluster without waiting for close completion", "
 
     // close but do not explicitly wait for callback
     std::atomic_bool closed{ false };
-    cluster->close([&closed]() { closed = true; });
-    cluster.reset();
+    cluster.close([&closed]() { closed = true; });
     io_thread.join();
     REQUIRE(closed);
 }

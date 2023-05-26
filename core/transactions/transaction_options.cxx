@@ -13,9 +13,12 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
+
+#include <couchbase/collection.hxx>
+#include <couchbase/transactions/transaction_options.hxx>
+
 #include <core/transactions/attempt_context_testing_hooks.hxx>
 #include <core/transactions/cleanup_testing_hooks.hxx>
-#include <couchbase/transactions/transaction_options.hxx>
 
 namespace couchbase::transactions
 {
@@ -35,4 +38,72 @@ transaction_options::apply(const transactions_config::built& conf) const
              query_config,
              conf.cleanup_config };
 }
+
+transaction_options&
+transaction_options::test_factories(std::shared_ptr<core::transactions::attempt_context_testing_hooks> hooks,
+                                    std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks)
+{
+    attempt_context_hooks_ = hooks;
+    cleanup_hooks_ = cleanup_hooks;
+    return *this;
+}
+
+std::optional<transaction_keyspace>
+transaction_options::metadata_collection() const
+{
+    return metadata_collection_;
+}
+
+transaction_options&
+transaction_options::durability_level(couchbase::durability_level level)
+{
+    durability_ = level;
+    return *this;
+}
+
+std::optional<couchbase::durability_level>
+transaction_options::durability_level() const
+{
+    return durability_;
+}
+
+transaction_options&
+transaction_options::scan_consistency(query_scan_consistency scan_consistency)
+{
+    scan_consistency_ = scan_consistency;
+    return *this;
+}
+
+std::optional<query_scan_consistency>
+transaction_options::scan_consistency() const
+{
+    return scan_consistency_;
+}
+
+transaction_options&
+transaction_options::kv_timeout(std::chrono::milliseconds kv_timeout)
+{
+    kv_timeout_ = kv_timeout;
+    return *this;
+}
+
+std::optional<std::chrono::milliseconds>
+transaction_options::kv_timeout()
+{
+    return kv_timeout_;
+}
+
+std::optional<std::chrono::nanoseconds>
+transaction_options::expiration_time()
+{
+    return expiration_time_;
+}
+
+transaction_options&
+transaction_options::metadata_collection(const couchbase::collection& coll)
+{
+    metadata_collection_.emplace(coll.bucket_name(), coll.scope_name(), coll.name());
+    return *this;
+}
+
 } // namespace couchbase::transactions

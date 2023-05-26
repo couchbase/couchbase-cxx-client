@@ -27,22 +27,23 @@ class query_context
 {
   public:
     query_context() = default;
+
     query_context(std::string namespace_id, std::string bucket_name, std::string scope_name)
-      : namespace_id_(namespace_id)
-      , bucket_name_(bucket_name)
-      , scope_name_(scope_name)
+      : namespace_id_(std::move(namespace_id))
+      , bucket_name_(std::move(bucket_name))
+      , scope_name_(std::move(scope_name))
     {
     }
 
     query_context(std::string bucket_name, std::string scope_name)
-      : bucket_name_(bucket_name)
-      , scope_name_(scope_name)
+      : bucket_name_(std::move(bucket_name))
+      , scope_name_(std::move(scope_name))
     {
     }
 
     bool has_value() const
     {
-        return bucket_name_.has_value() && scope_name_.has_value();
+        return bucket_name_.has_value() && !bucket_name_->empty() && scope_name_.has_value() && !scope_name_->empty();
     }
 
     std::string value() const
@@ -52,6 +53,7 @@ class query_context
         }
         return {};
     }
+
     std::string bucket_name() const
     {
         if (has_value()) {
@@ -59,6 +61,7 @@ class query_context
         }
         return "";
     }
+
     std::string scope_name() const
     {
         if (has_value()) {
@@ -66,6 +69,7 @@ class query_context
         }
         return "";
     }
+
     std::string namespace_id() const
     {
         return namespace_id_;

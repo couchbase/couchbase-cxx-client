@@ -21,8 +21,8 @@
 #include <string>
 
 struct SimpleObject {
-    std::string name;
-    std::uint64_t number;
+    std::string name{};
+    std::uint64_t number{};
 
     bool operator==(const SimpleObject& other) const
     {

@@ -20,12 +20,18 @@
 #include "core/cluster.hxx"
 #include "core/impl/observe_seqno.hxx"
 
+#include <couchbase/error_codes.hxx>
+
+#include <asio/steady_timer.hpp>
+
 #include <memory>
 #include <mutex>
 
 namespace couchbase::core::impl
 {
-static constexpr bool
+namespace
+{
+constexpr bool
 touches_replica(couchbase::persist_to persist_to, couchbase::replicate_to replicate_to)
 {
 
@@ -53,7 +59,7 @@ touches_replica(couchbase::persist_to persist_to, couchbase::replicate_to replic
     return false;
 }
 
-static constexpr std::uint32_t
+constexpr std::uint32_t
 number_of_replica_nodes_required(couchbase::persist_to persist_to)
 {
     switch (persist_to) {
@@ -72,7 +78,7 @@ number_of_replica_nodes_required(couchbase::persist_to persist_to)
     return 0U;
 }
 
-static constexpr std::uint32_t
+constexpr std::uint32_t
 number_of_replica_nodes_required(couchbase::replicate_to replicate_to)
 {
     switch (replicate_to) {
@@ -88,7 +94,7 @@ number_of_replica_nodes_required(couchbase::replicate_to replicate_to)
     return 0U;
 }
 
-static std::pair<std::error_code, std::uint32_t>
+std::pair<std::error_code, std::uint32_t>
 validate_replicas(const topology::configuration& config, couchbase::persist_to persist_to, couchbase::replicate_to replicate_to)
 {
     if (config.node_locator != topology::configuration::node_locator_type::vbucket) {
@@ -158,8 +164,8 @@ class observe_status
 };
 
 class observe_context;
-static void
-observe_poll(std::shared_ptr<couchbase::core::cluster> core, std::shared_ptr<observe_context> ctx);
+void
+observe_poll(cluster core, std::shared_ptr<observe_context> ctx);
 
 class observe_context : public std::enable_shared_from_this<observe_context>
 {
@@ -270,13 +276,13 @@ class observe_context : public std::enable_shared_from_this<observe_context>
         }
     }
 
-    void on_last_response(std::size_t expected_number_of_responses, std::function<void(std::error_code)> handler)
+    void on_last_response(std::size_t expected_number_of_responses, utils::movable_function<void(std::error_code)> handler)
     {
         expect_number_of_responses_ = expected_number_of_responses;
         on_last_response_ = std::move(handler);
     }
 
-    void execute(std::shared_ptr<couchbase::core::cluster> core)
+    void execute(cluster core)
     {
         auto requests = std::move(requests_);
         status_.reset();
@@ -287,8 +293,8 @@ class observe_context : public std::enable_shared_from_this<observe_context>
             observe_poll(std::move(core), std::move(ctx));
         });
         for (auto&& request : requests) {
-            core->execute(std::move(request),
-                          [ctx = shared_from_this()](observe_seqno_response&& response) { ctx->handle_response(std::move(response)); });
+            core.execute(std::move(request),
+                         [ctx = shared_from_this()](observe_seqno_response&& response) { ctx->handle_response(std::move(response)); });
         }
     }
 
@@ -304,16 +310,16 @@ class observe_context : public std::enable_shared_from_this<observe_context>
     std::atomic_size_t expect_number_of_responses_{};
     std::mutex handler_mutex_{};
     observe_handler handler_{};
-    std::function<void(std::error_code)> on_last_response_{};
+    utils::movable_function<void(std::error_code)> on_last_response_{};
     std::chrono::milliseconds poll_backoff_interval_{ 500 };
     std::chrono::milliseconds poll_deadline_interval_{ 5'000 };
 };
 
-static void
-observe_poll(std::shared_ptr<couchbase::core::cluster> core, std::shared_ptr<observe_context> ctx)
+void
+observe_poll(cluster core, std::shared_ptr<observe_context> ctx)
 {
-    std::string bucket_name = ctx->bucket_name();
-    core->with_bucket_configuration(
+    const std::string bucket_name = ctx->bucket_name();
+    core.with_bucket_configuration(
       bucket_name, [core, ctx = std::move(ctx)](std::error_code ec, const core::topology::configuration& config) mutable {
           if (ec) {
               return ctx->finish(ec);
@@ -337,9 +343,10 @@ observe_poll(std::shared_ptr<couchbase::core::cluster> core, std::shared_ptr<obs
           ctx->execute(core);
       });
 }
+} // namespace
 
 void
-initiate_observe_poll(std::shared_ptr<couchbase::core::cluster> core,
+initiate_observe_poll(cluster core,
                       document_id id,
                       mutation_token token,
                       std::optional<std::chrono::milliseconds> timeout,
@@ -348,7 +355,7 @@ initiate_observe_poll(std::shared_ptr<couchbase::core::cluster> core,
                       observe_handler&& handler)
 {
     auto ctx = std::make_shared<observe_context>(
-      core->io_context(), std::move(id), std::move(token), timeout, persist_to, replicate_to, std::move(handler));
+      core.io_context(), std::move(id), std::move(token), timeout, persist_to, replicate_to, std::move(handler));
     ctx->start();
     return observe_poll(std::move(core), std::move(ctx));
 }

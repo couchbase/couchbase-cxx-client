@@ -58,9 +58,9 @@ config_profiles::config_profiles() noexcept
 }
 
 void
-config_profiles::apply(const std::string& profile_name, couchbase::core::cluster_options& opts)
+config_profiles::apply(std::string_view profile_name, couchbase::core::cluster_options& opts)
 {
-    std::lock_guard<std::mutex> lock(mut_);
+    const std::lock_guard<std::mutex> lock(mut_);
     auto it = profiles_.find(profile_name);
     if (it != profiles_.end()) {
         it->second->apply(opts);

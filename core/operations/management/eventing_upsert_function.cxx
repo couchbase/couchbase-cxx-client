@@ -21,6 +21,8 @@
 
 #include <tao/json/contrib/traits.hpp>
 
+#include <fmt/core.h>
+
 namespace couchbase::core::operations::management
 {
 std::error_code

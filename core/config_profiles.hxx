@@ -36,7 +36,7 @@ class config_profiles
   public:
     config_profiles() noexcept;
 
-    void apply(const std::string& profile_name, couchbase::core::cluster_options& opts);
+    void apply(std::string_view profile_name, couchbase::core::cluster_options& opts);
 
     template<typename T, typename... Args>
     void register_profile(const std::string& name, Args... args)

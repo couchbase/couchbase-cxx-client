@@ -15,10 +15,6 @@
  *   limitations under the License.
  */
 
-#include <couchbase/cluster.hxx>
-#include <couchbase/error_codes.hxx>
-#include <couchbase/scope.hxx>
-
 #include "core/cluster.hxx"
 #include "core/operations/document_search.hxx"
 #include "core/utils/json.hxx"
@@ -27,17 +23,17 @@
 #include "encoded_search_sort.hxx"
 #include "internal_date_range_facet_result.hxx"
 #include "internal_numeric_range_facet_result.hxx"
-#include "internal_search_error_context.hxx"
-#include "internal_search_meta_data.hxx"
-#include "internal_search_result.hxx"
-#include "internal_search_row.hxx"
-#include "internal_search_row_location.hxx"
-#include "internal_search_row_locations.hxx"
 #include "internal_term_facet_result.hxx"
 
-namespace couchbase
+#include <couchbase/cluster.hxx>
+
+#include <fmt/core.h>
+
+namespace couchbase::core::impl
 {
-static std::optional<core::search_highlight_style>
+namespace
+{
+std::optional<core::search_highlight_style>
 map_highlight_style(const std::optional<couchbase::highlight_style>& style)
 {
     if (style) {
@@ -54,7 +50,7 @@ map_highlight_style(const std::optional<couchbase::highlight_style>& style)
 static std::optional<core::search_scan_consistency>
 map_scan_consistency(const std::optional<couchbase::search_scan_consistency>& scan_consistency)
 {
-    if (scan_consistency == search_scan_consistency::not_bounded) {
+    if (scan_consistency == couchbase::search_scan_consistency::not_bounded) {
         return core::search_scan_consistency::not_bounded;
     }
     return {};
@@ -106,8 +102,9 @@ map_raw(std::map<std::string, codec::binary, std::less<>>& raw)
     }
     return core_raw;
 }
+} // namespace
 
-static core::operations::search_request
+core::operations::search_request
 build_search_request(std::string index_name,
                      const search_query& query,
                      search_options::built options,
@@ -142,50 +139,4 @@ build_search_request(std::string index_name,
     return request;
 }
 
-void
-cluster::search_query(std::string index_name,
-                      const class search_query& query,
-                      const search_options& options,
-                      search_handler&& handler) const
-{
-    auto request = build_search_request(std::move(index_name), query, options.build(), {}, {});
-
-    core_->execute(std::move(request), [handler = std::move(handler)](core::operations::search_response resp) mutable {
-        handler(search_error_context{ internal_search_error_context{ resp } }, search_result{ internal_search_result{ resp } });
-    });
-}
-
-auto
-cluster::search_query(std::string index_name, const class search_query& query, const search_options& options) const
-  -> std::future<std::pair<search_error_context, search_result>>
-{
-    auto barrier = std::make_shared<std::promise<std::pair<search_error_context, search_result>>>();
-    search_query(std::move(index_name), query, options, [barrier](auto ctx, auto result) mutable {
-        barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
-    });
-    return barrier->get_future();
-}
-
-void
-scope::search_query(std::string index_name, const class search_query& query, const search_options& options, search_handler&& handler) const
-{
-    auto request = build_search_request(std::move(index_name), query, options.build(), bucket_name_, name_);
-
-    core_->execute(std::move(request), [handler = std::move(handler)](core::operations::search_response resp) mutable {
-        return handler(search_error_context{ internal_search_error_context{ resp } }, search_result{ internal_search_result{ resp } });
-    });
-}
-
-auto
-scope::search_query(std::string index_name, const class search_query& query, const search_options& options) const
-  -> std::future<std::pair<search_error_context, search_result>>
-{
-    auto barrier = std::make_shared<std::promise<std::pair<search_error_context, search_result>>>();
-    auto future = barrier->get_future();
-    search_query(std::move(index_name), query, options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
-    });
-    return future;
-}
-
-} // namespace couchbase
+} // namespace couchbase::core::impl

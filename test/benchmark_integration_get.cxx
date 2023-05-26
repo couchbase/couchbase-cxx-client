@@ -17,6 +17,17 @@
 
 #include "benchmark_helper_integration.hxx"
 
+#include "core/operations/document_append.hxx"
+#include "core/operations/document_decrement.hxx"
+#include "core/operations/document_get.hxx"
+#include "core/operations/document_increment.hxx"
+#include "core/operations/document_insert.hxx"
+#include "core/operations/document_mutate_in.hxx"
+#include "core/operations/document_prepend.hxx"
+#include "core/operations/document_remove.hxx"
+#include "core/operations/document_replace.hxx"
+#include "core/operations/document_upsert.hxx"
+
 TEST_CASE("benchmark: get a document", "[benchmark]")
 {
     test::utils::integration_test_guard integration;

@@ -20,6 +20,7 @@
 #include "collection_id_cache_entry.hxx"
 #include "core/mcbp/big_endian.hxx"
 #include "core/mcbp/codec.hxx"
+#include "couchbase/bucket.hxx"
 #include "dispatcher.hxx"
 #include "impl/bootstrap_state_listener.hxx"
 #include "mcbp/operation_queue.hxx"
@@ -196,7 +197,7 @@ class bucket_impl
 
         auto session = route_request(req);
         if (!session || !session->has_config()) {
-            return defer_command([self = shared_from_this(), req]() { self->direct_dispatch(std::move(req)); });
+            return defer_command([self = shared_from_this(), req]() { self->direct_dispatch(req); });
         }
         if (session->is_stopped()) {
             if (backoff_and_retry(req, retry_reason::node_not_available)) {

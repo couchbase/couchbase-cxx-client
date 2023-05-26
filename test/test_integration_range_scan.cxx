@@ -75,7 +75,7 @@ do_range_scan(couchbase::core::agent agent,
 
     std::vector<couchbase::core::range_scan_item> data;
 
-    auto options = continue_options;
+    const auto options = continue_options;
 
     do {
         auto barrier = std::make_shared<std::promise<std::pair<couchbase::core::range_scan_continue_result, std::error_code>>>();
@@ -115,11 +115,11 @@ make_binary_value(std::size_t number_of_bytes)
 }
 
 static couchbase::core::topology::configuration::vbucket_map
-get_vbucket_map(test::utils::integration_test_guard& integration)
+get_vbucket_map(const test::utils::integration_test_guard& integration)
 {
     auto barrier = std::make_shared<std::promise<tl::expected<couchbase::core::topology::configuration::vbucket_map, std::error_code>>>();
     auto f = barrier->get_future();
-    integration.cluster->with_bucket_configuration(
+    integration.cluster.with_bucket_configuration(
       integration.ctx.bucket, [barrier](std::error_code ec, const couchbase::core::topology::configuration& config) mutable {
           if (ec) {
               return barrier->set_value(tl::unexpected(ec));
@@ -149,7 +149,7 @@ TEST_CASE("integration: range scan large values", "[integration]")
 
     auto value = make_binary_value(16'384);
 
-    std::vector<std::string> ids{
+    const std::vector<std::string> ids{
         "largevalues-2960", "largevalues-3064", "largevalues-3686", "largevalues-3716", "largevalues-5354",
         "largevalues-5426", "largevalues-6175", "largevalues-6607", "largevalues-6797", "largevalues-7871",
     };
@@ -208,7 +208,7 @@ TEST_CASE("integration: range scan small values", "[integration]")
         value[i] = static_cast<std::byte>(i);
     }
 
-    std::vector<std::string> ids{
+    const std::vector<std::string> ids{
         "rangesmallvalues-1023", "rangesmallvalues-1751", "rangesmallvalues-2202", "rangesmallvalues-2392", "rangesmallvalues-2570",
         "rangesmallvalues-4132", "rangesmallvalues-4640", "rangesmallvalues-5836", "rangesmallvalues-7283", "rangesmallvalues-7313",
     };
@@ -296,7 +296,7 @@ TEST_CASE("integration: range scan collection retry", "[integration]")
         SKIP("cluster does not support range_scan");
     }
 
-    collection_guard new_collection(integration);
+    const collection_guard new_collection(integration);
 
     auto collection = couchbase::cluster(integration.cluster)
                         .bucket(integration.ctx.bucket)
@@ -308,7 +308,7 @@ TEST_CASE("integration: range scan collection retry", "[integration]")
         value[i] = static_cast<std::byte>(i);
     }
 
-    std::vector<std::string> ids{
+    const std::vector<std::string> ids{
         "rangecollectionretry-9695",   "rangecollectionretry-24520",  "rangecollectionretry-90825",  "rangecollectionretry-119677",
         "rangecollectionretry-150939", "rangecollectionretry-170176", "rangecollectionretry-199557", "rangecollectionretry-225568",
         "rangecollectionretry-231302", "rangecollectionretry-245898",
@@ -372,7 +372,7 @@ TEST_CASE("integration: range scan only keys", "[integration]")
         value[i] = static_cast<std::byte>(i);
     }
 
-    std::vector<std::string> ids{
+    const std::vector<std::string> ids{
         "rangekeysonly-1269", "rangekeysonly-2048",  "rangekeysonly-4378",  "rangekeysonly-7159",  "rangekeysonly-8898",
         "rangekeysonly-8908", "rangekeysonly-19559", "rangekeysonly-20808", "rangekeysonly-20998", "rangekeysonly-25889",
     };
@@ -431,7 +431,7 @@ TEST_CASE("integration: range scan cancellation before continue", "[integration]
         value[i] = static_cast<std::byte>(i);
     }
 
-    std::vector<std::string> ids{
+    const std::vector<std::string> ids{
         "rangescancancel-2746",   "rangescancancel-37795",  "rangescancancel-63440",  "rangescancancel-116036", "rangescancancel-136879",
         "rangescancancel-156589", "rangescancancel-196316", "rangescancancel-203197", "rangescancancel-243428", "rangescancancel-257242",
     };
@@ -534,7 +534,7 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
         value[i] = static_cast<std::byte>(i);
     }
 
-    std::vector<std::string> ids{
+    const std::vector<std::string> ids{
         "rangescancancel-2746",   "rangescancancel-37795",  "rangescancancel-63440",  "rangescancancel-116036", "rangescancancel-136879",
         "rangescancancel-156589", "rangescancancel-196316", "rangescancancel-203197", "rangescancancel-243428", "rangescancancel-257242",
     };
@@ -645,7 +645,7 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
         value[i] = static_cast<std::byte>(i);
     }
 
-    std::vector<std::string> ids{
+    const std::vector<std::string> ids{
         "rangescancancel-2746",   "rangescancancel-37795",  "rangescancancel-63440",  "rangescancancel-116036", "rangescancancel-136879",
         "rangescancancel-156589", "rangescancancel-196316", "rangescancancel-203197", "rangescancancel-243428", "rangescancancel-257242",
     };
@@ -746,7 +746,7 @@ TEST_CASE("integration: sampling scan keys only", "[integration]")
         value[i] = static_cast<std::byte>(i);
     }
 
-    std::vector<std::string> ids{
+    const std::vector<std::string> ids{
         "samplescankeys-170",  "samplescankeys-602",   "samplescankeys-792",   "samplescankeys-3978",  "samplescankeys-6869",
         "samplescankeys-9038", "samplescankeys-10806", "samplescankeys-10996", "samplescankeys-11092", "samplescankeys-11102",
     };
@@ -790,7 +790,7 @@ make_doc_ids(std::size_t number_of_keys, const std::string& prefix)
 }
 
 static auto
-mutations_to_mutation_state(std::map<std::string, couchbase::mutation_token> mutations)
+mutations_to_mutation_state(const std::map<std::string, couchbase::mutation_token>& mutations)
 {
     couchbase::core::mutation_state state;
     for (const auto& [key, token] : mutations) {
@@ -921,7 +921,7 @@ TEST_CASE("integration: manager sampling scan with custom collection", "[integra
         SKIP("cluster does not support range_scan");
     }
 
-    collection_guard new_collection(integration);
+    const collection_guard new_collection(integration);
 
     auto collection = couchbase::cluster(integration.cluster)
                         .bucket(integration.ctx.bucket)
@@ -1035,7 +1035,7 @@ TEST_CASE("integration: manager sampling scan with custom collection and up to 1
         SKIP("cluster does not support range_scan");
     }
 
-    collection_guard new_collection(integration);
+    const collection_guard new_collection(integration);
 
     auto collection = couchbase::cluster(integration.cluster)
                         .bucket(integration.ctx.bucket)
@@ -1097,7 +1097,7 @@ TEST_CASE("integration: manager sampling scan with custom collection and up to 1
         SKIP("cluster does not support range_scan");
     }
 
-    collection_guard new_collection(integration);
+    const collection_guard new_collection(integration);
 
     auto collection = couchbase::cluster(integration.cluster)
                         .bucket(integration.ctx.bucket)
@@ -1287,7 +1287,7 @@ TEST_CASE("integration: manager prefix scan with concurrency 0 (invalid argument
 
     auto vbucket_map = get_vbucket_map(integration);
 
-    auto ag = couchbase::core::agent_group(integration.io, { { integration.cluster } });
+    auto ag = couchbase::core::agent_group(integration.io, { couchbase::core::core_sdk_shim{ integration.cluster } });
     ag.open_bucket(integration.ctx.bucket);
     auto agent = ag.get_agent(integration.ctx.bucket);
     REQUIRE(agent.has_value());

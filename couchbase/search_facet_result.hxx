@@ -17,14 +17,8 @@
 
 #pragma once
 
-#include <couchbase/codec/tao_json_serializer.hxx>
-#include <couchbase/search_meta_data.hxx>
-
-#include "search_row.hxx"
-#include <chrono>
 #include <cinttypes>
-#include <optional>
-#include <vector>
+#include <string>
 
 namespace couchbase
 {

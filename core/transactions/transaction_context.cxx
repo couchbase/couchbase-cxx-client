@@ -81,7 +81,7 @@ transaction_context::has_expired_client_side()
 void
 transaction_context::after_delay(std::chrono::milliseconds delay, std::function<void()> fn)
 {
-    auto timer = std::make_shared<asio::steady_timer>(this->transactions_.cluster_ref()->io_context());
+    auto timer = std::make_shared<asio::steady_timer>(this->transactions_.cluster_ref().io_context());
     timer->expires_after(delay);
     timer->async_wait([timer, fn](std::error_code) {
         // have to always call the function, even if timer was canceled.
@@ -92,7 +92,7 @@ transaction_context::after_delay(std::chrono::milliseconds delay, std::function<
 void
 transaction_context::new_attempt_context(async_attempt_context::VoidCallback&& cb)
 {
-    asio::post(transactions_.cluster_ref()->io_context(), [this, cb = std::move(cb)]() {
+    asio::post(transactions_.cluster_ref().io_context(), [this, cb = std::move(cb)]() {
         // the first time we call the delay, it just records an end time.  After that, it
         // actually delays.
         try {

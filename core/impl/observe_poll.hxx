@@ -38,7 +38,7 @@ namespace impl
 using observe_handler = utils::movable_function<void(std::error_code)>;
 
 void
-initiate_observe_poll(std::shared_ptr<couchbase::core::cluster> core,
+initiate_observe_poll(cluster core,
                       document_id id,
                       mutation_token token,
                       std::optional<std::chrono::milliseconds> timeout,

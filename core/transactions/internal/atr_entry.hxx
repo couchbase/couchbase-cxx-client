@@ -19,6 +19,8 @@
 #include "core/transactions/attempt_state.hxx"
 #include "doc_record.hxx"
 
+#include <tao/json/value.hpp>
+
 #include <chrono>
 #include <cstdint>
 #include <optional>

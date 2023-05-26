@@ -131,28 +131,4 @@ struct upsert_options : public common_durability_options<upsert_options> {
  * @uncommitted
  */
 using upsert_handler = std::function<void(couchbase::key_value_error_context, mutation_result)>;
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core
-{
-class cluster;
-namespace impl
-{
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_upsert_operation(std::shared_ptr<couchbase::core::cluster> core,
-                          std::string bucket_name,
-                          std::string scope_name,
-                          std::string collection_name,
-                          std::string document_key,
-                          couchbase::codec::encoded_value encoded,
-                          couchbase::upsert_options::built options,
-                          couchbase::upsert_handler&& handler);
-#endif
-} // namespace impl
-} // namespace core
 } // namespace couchbase

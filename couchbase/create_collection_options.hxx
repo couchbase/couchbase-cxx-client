@@ -17,10 +17,11 @@
 
 #pragma once
 
+#include <couchbase/common_options.hxx>
+#include <couchbase/manager_error_context.hxx>
+
 #include <functional>
-#include <memory>
 #include <optional>
-#include <string>
 
 namespace couchbase
 {

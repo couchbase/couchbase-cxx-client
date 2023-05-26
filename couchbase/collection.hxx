@@ -41,21 +41,20 @@
 #include <couchbase/unlock_options.hxx>
 #include <couchbase/upsert_options.hxx>
 
-#include <fmt/format.h>
 #include <future>
 #include <memory>
 
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace couchbase::core
-{
-class cluster;
-} // namespace couchbase::core
-#endif
-
 namespace couchbase
 {
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+namespace core
+{
+class cluster;
+} // namespace core
 class bucket;
 class scope;
+class collection_impl;
+#endif
 
 /**
  * The {@link collection} provides access to all collection APIs.
@@ -82,10 +81,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto bucket_name() const noexcept -> const std::string&
-    {
-        return bucket_name_;
-    }
+    [[nodiscard]] auto bucket_name() const -> const std::string&;
 
     /**
      * Returns name of the scope where the collection is defined.
@@ -95,10 +91,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto scope_name() const noexcept -> const std::string&
-    {
-        return scope_name_;
-    }
+    [[nodiscard]] auto scope_name() const -> const std::string&;
 
     /**
      * Returns name of the collection.
@@ -108,10 +101,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto name() const noexcept -> const std::string&
-    {
-        return name_;
-    }
+    [[nodiscard]] auto name() const -> const std::string&;
 
     /**
      * Provides access to the binary APIs, not used for JSON documents.
@@ -121,15 +111,10 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto binary() const -> binary_collection
-    {
-        return { core_, bucket_name_, scope_name_, name_ };
-    }
+    [[nodiscard]] auto binary() const -> binary_collection;
 
     /**
      * Fetches the full document from this collection.
-     *
-     * @tparam Handler callable type that implements @ref get_handler signature
      *
      * @param document_id the document id which is used to uniquely identify it.
      * @param options options to customize the get request.
@@ -142,12 +127,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Handler>
-    void get(std::string document_id, const get_options& options, Handler&& handler) const
-    {
-        return core::impl::initiate_get_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
-    }
+    void get(std::string document_id, const get_options& options, get_handler&& handler) const;
 
     /**
      * Fetches the full document from this collection.
@@ -164,20 +144,10 @@ class collection
      * @committed
      */
     [[nodiscard]] auto get(std::string document_id, const get_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, get_result>>
-    {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
-        auto future = barrier->get_future();
-        get(std::move(document_id), options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
-    }
+      -> std::future<std::pair<key_value_error_context, get_result>>;
 
     /**
      * Fetches a full document and resets its expiration time to the value provided.
-     *
-     * @tparam Handler callable type that implements @ref get_and_touch_handler signature
      *
      * @param document_id the document id which is used to uniquely identify it.
      * @param duration the new expiration time for the document.
@@ -191,21 +161,10 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Handler>
     void get_and_touch(std::string document_id,
                        std::chrono::seconds duration,
                        const get_and_touch_options& options,
-                       Handler&& handler) const
-    {
-        return core::impl::initiate_get_and_touch_operation(core_,
-                                                            bucket_name_,
-                                                            scope_name_,
-                                                            name_,
-                                                            std::move(document_id),
-                                                            core::impl::expiry_relative(duration),
-                                                            options.build(),
-                                                            std::forward<Handler>(handler));
-    }
+                       get_and_touch_handler&& handler) const;
 
     /**
      * Fetches a full document and resets its expiration time to the value provided.
@@ -225,20 +184,10 @@ class collection
     [[nodiscard]] auto get_and_touch(std::string document_id,
                                      std::chrono::seconds duration,
                                      const get_and_touch_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, get_result>>
-    {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
-        auto future = barrier->get_future();
-        get_and_touch(std::move(document_id), duration, options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
-    }
+      -> std::future<std::pair<key_value_error_context, get_result>>;
 
     /**
      * Fetches a full document and resets its expiration time to the absolute value provided.
-     *
-     * @tparam Handler callable type that implements @ref get_and_touch_handler signature
      *
      * @param document_id the document id which is used to uniquely identify it.
      * @param time_point the new expiration time point for the document.
@@ -252,21 +201,10 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Handler>
     void get_and_touch(std::string document_id,
                        std::chrono::system_clock::time_point time_point,
                        const get_and_touch_options& options,
-                       Handler&& handler) const
-    {
-        return core::impl::initiate_get_and_touch_operation(core_,
-                                                            bucket_name_,
-                                                            scope_name_,
-                                                            name_,
-                                                            std::move(document_id),
-                                                            core::impl::expiry_absolute(time_point),
-                                                            options.build(),
-                                                            std::forward<Handler>(handler));
-    }
+                       get_and_touch_handler&& handler) const;
 
     /**
      * Fetches a full document and resets its expiration time to the absolute value provided.
@@ -286,20 +224,10 @@ class collection
     [[nodiscard]] auto get_and_touch(std::string document_id,
                                      std::chrono::system_clock::time_point time_point,
                                      const get_and_touch_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, get_result>>
-    {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
-        auto future = barrier->get_future();
-        get_and_touch(std::move(document_id), time_point, options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
-    }
+      -> std::future<std::pair<key_value_error_context, get_result>>;
 
     /**
      * Updates the expiration a document given an id, without modifying or returning its value.
-     *
-     * @tparam Handler callable type that implements @ref touch_handler signature
      *
      * @param document_id the document id which is used to uniquely identify it.
      * @param duration the new expiration time for the document.
@@ -313,18 +241,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Handler>
-    void touch(std::string document_id, std::chrono::seconds duration, const touch_options& options, Handler&& handler) const
-    {
-        return core::impl::initiate_touch_operation(core_,
-                                                    bucket_name_,
-                                                    scope_name_,
-                                                    name_,
-                                                    std::move(document_id),
-                                                    core::impl::expiry_relative(duration),
-                                                    options.build(),
-                                                    std::forward<Handler>(handler));
-    }
+    void touch(std::string document_id, std::chrono::seconds duration, const touch_options& options, touch_handler&& handler) const;
 
     /**
      * Updates the expiration a document given an id, without modifying or returning its value.
@@ -342,20 +259,10 @@ class collection
      * @committed
      */
     [[nodiscard]] auto touch(std::string document_id, std::chrono::seconds duration, const touch_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, result>>
-    {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, result>>>();
-        auto future = barrier->get_future();
-        touch(std::move(document_id), duration, options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
-    }
+      -> std::future<std::pair<key_value_error_context, result>>;
 
     /**
      * Updates the expiration a document given an id, without modifying or returning its value.
-     *
-     * @tparam Handler callable type that implements @ref touch_handler signature
      *
      * @param document_id the document id which is used to uniquely identify it.
      * @param time_point the new expiration time point for the document.
@@ -369,21 +276,10 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Handler>
     void touch(std::string document_id,
                std::chrono::system_clock::time_point time_point,
                const touch_options& options,
-               Handler&& handler) const
-    {
-        return core::impl::initiate_touch_operation(core_,
-                                                    bucket_name_,
-                                                    scope_name_,
-                                                    name_,
-                                                    std::move(document_id),
-                                                    core::impl::expiry_absolute(time_point),
-                                                    options.build(),
-                                                    std::forward<Handler>(handler));
-    }
+               touch_handler&& handler) const;
 
     /**
      * Updates the expiration a document given an id, without modifying or returning its value.
@@ -402,20 +298,10 @@ class collection
      */
     [[nodiscard]] auto touch(std::string document_id,
                              std::chrono::system_clock::time_point time_point,
-                             const touch_options& options = {}) const -> std::future<std::pair<key_value_error_context, result>>
-    {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, result>>>();
-        auto future = barrier->get_future();
-        touch(std::move(document_id), time_point, options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
-    }
+                             const touch_options& options = {}) const -> std::future<std::pair<key_value_error_context, result>>;
 
     /**
      * Reads all available replicas, and returns the first found.
-     *
-     * @tparam Handler callable type that implements @ref get_any_replica_handler signature
      *
      * @param document_id the document id which is used to uniquely identify it.
      * @param options the custom options
@@ -431,12 +317,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Handler>
-    void get_any_replica(std::string document_id, const get_any_replica_options& options, Handler&& handler) const
-    {
-        return core::impl::initiate_get_any_replica_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
-    }
+    void get_any_replica(std::string document_id, const get_any_replica_options& options, get_any_replica_handler&& handler) const;
 
     /**
      * Reads all available replicas, and returns the first found.
@@ -456,23 +337,13 @@ class collection
      * @committed
      */
     [[nodiscard]] auto get_any_replica(std::string document_id, const get_any_replica_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, get_replica_result>>
-    {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_replica_result>>>();
-        auto future = barrier->get_future();
-        get_any_replica(std::move(document_id), options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
-    }
+      -> std::future<std::pair<key_value_error_context, get_replica_result>>;
 
     /**
      * Reads from all available replicas and the active node and returns the results as a vector.
      *
      * @note Individual errors are ignored, so you can think of this API as a best effort
      * approach which explicitly emphasises availability over consistency.
-     *
-     * @tparam Handler callable type that implements @ref get_all_replicas_handler signature
      *
      * @param document_id the document id which is used to uniquely identify it.
      * @param options the custom options
@@ -484,12 +355,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Handler>
-    void get_all_replicas(std::string document_id, const get_all_replicas_options& options, Handler&& handler) const
-    {
-        return core::impl::initiate_get_all_replicas_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
-    }
+    void get_all_replicas(std::string document_id, const get_all_replicas_options& options, get_all_replicas_handler&& handler) const;
 
     /**
      * Reads from all available replicas and the active node and returns the results as a vector.
@@ -508,22 +374,29 @@ class collection
      * @committed
      */
     [[nodiscard]] auto get_all_replicas(std::string document_id, const get_all_replicas_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, get_all_replicas_result>>
-    {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_all_replicas_result>>>();
-        auto future = barrier->get_future();
-        get_all_replicas(std::move(document_id), options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
-    }
+      -> std::future<std::pair<key_value_error_context, get_all_replicas_result>>;
+
+    /**
+     * Upserts an encoded body of the document which might or might not exist yet, with custom options.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param document the encoded content of the document to upsert.
+     * @param options custom options to customize the upsert behavior.
+     * @param handler callable that implements @ref upsert_handler
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @uncommitted
+     */
+    void upsert(std::string document_id, codec::encoded_value document, const upsert_options& options, upsert_handler&& handler) const;
 
     /**
      * Upserts a full document which might or might not exist yet with custom options.
      *
      * @tparam Transcoder type of the transcoder that will be used to encode the document
      * @tparam Document type of the document
-     * @tparam Handler type of the handler that implements @ref upsert_handler
      *
      * @param document_id the document id which is used to uniquely identify it.
      * @param document the document content to upsert.
@@ -536,18 +409,28 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Transcoder = codec::default_json_transcoder, typename Document, typename Handler>
-    void upsert(std::string document_id, Document document, const upsert_options& options, Handler&& handler) const
+    template<typename Transcoder = codec::default_json_transcoder, typename Document>
+    void upsert(std::string document_id, Document document, const upsert_options& options, upsert_handler&& handler) const
     {
-        return core::impl::initiate_upsert_operation(core_,
-                                                     bucket_name_,
-                                                     scope_name_,
-                                                     name_,
-                                                     std::move(document_id),
-                                                     Transcoder::encode(document),
-                                                     options.build(),
-                                                     std::forward<Handler>(handler));
+        return upsert(std::move(document_id), Transcoder::encode(document), options, std::move(handler));
     }
+
+    /**
+     * Upserts an encoded body of the document which might or might not exist yet, with custom options.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param document the encoded content of the document to upsert.
+     * @param options custom options to customize the upsert behavior.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @uncommitted
+     */
+    [[nodiscard]] auto upsert(std::string document_id, codec::encoded_value document, const upsert_options& options) const
+      -> std::future<std::pair<key_value_error_context, mutation_result>>;
 
     /**
      * Upserts a full document which might or might not exist yet with custom options.
@@ -570,20 +453,30 @@ class collection
     [[nodiscard]] auto upsert(std::string document_id, const Document& document, const upsert_options& options = {}) const
       -> std::future<std::pair<key_value_error_context, mutation_result>>
     {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
-        auto future = barrier->get_future();
-        upsert<Transcoder>(std::move(document_id), document, options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
+        return upsert(std::move(document_id), Transcoder::encode(document), options);
     }
+
+    /**
+     * Inserts an encoded body of the document which does not exist yet with custom options.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param document the encoded content of the document to upsert.
+     * @param options custom options to customize the upsert behavior.
+     * @param handler callable that implements @ref upsert_handler
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @uncommitted
+     */
+    void insert(std::string document_id, codec::encoded_value document, const insert_options& options, insert_handler&& handler) const;
 
     /**
      * Inserts a full document which does not exist yet with custom options.
      *
      * @tparam Transcoder type of the transcoder that will be used to encode the document
      * @tparam Document type of the document
-     * @tparam Handler type of the handler that implements @ref insert_handler
      *
      * @param document_id the document id which is used to uniquely identify it.
      * @param document the document content to insert.
@@ -597,18 +490,30 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Transcoder = codec::default_json_transcoder, typename Document, typename Handler>
-    void insert(std::string document_id, Document document, const insert_options& options, Handler&& handler) const
+    template<typename Transcoder = codec::default_json_transcoder,
+             typename Document,
+             std::enable_if_t<!std::is_same_v<codec::encoded_value, Document>, bool> = true>
+    void insert(std::string document_id, Document document, const insert_options& options, insert_handler&& handler) const
     {
-        return core::impl::initiate_insert_operation(core_,
-                                                     bucket_name_,
-                                                     scope_name_,
-                                                     name_,
-                                                     std::move(document_id),
-                                                     Transcoder::encode(document),
-                                                     options.build(),
-                                                     std::forward<Handler>(handler));
+        return insert(std::move(document_id), Transcoder::encode(document), options, std::move(handler));
     }
+
+    /**
+     * Inserts an encoded body of the document which does not exist yet with custom options.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param document the encoded content of the document to upsert.
+     * @param options custom options to customize the upsert behavior.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @uncommitted
+     */
+    [[nodiscard]] auto insert(std::string document_id, codec::encoded_value document, const insert_options& options) const
+      -> std::future<std::pair<key_value_error_context, mutation_result>>;
 
     /**
      * Inserts a full document which does not exist yet with custom options.
@@ -628,24 +533,36 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Transcoder = codec::default_json_transcoder, typename Document>
+    template<typename Transcoder = codec::default_json_transcoder,
+             typename Document,
+             std::enable_if_t<!std::is_same_v<codec::encoded_value, Document>, bool> = true>
     [[nodiscard]] auto insert(std::string document_id, const Document& document, const insert_options& options = {}) const
       -> std::future<std::pair<key_value_error_context, mutation_result>>
     {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
-        auto future = barrier->get_future();
-        insert<Transcoder>(std::move(document_id), document, options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
+        return insert(std::move(document_id), Transcoder::encode(document), options);
     }
+
+    /**
+     * Replaces a body of the document which already exists with specified encoded body.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param document the encoded content of the document to upsert.
+     * @param options custom options to customize the upsert behavior.
+     * @param handler callable that implements @ref upsert_handler
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @uncommitted
+     */
+    void replace(std::string document_id, codec::encoded_value document, const replace_options& options, replace_handler&& handler) const;
 
     /**
      * Replaces a full document which already exists.
      *
      * @tparam Transcoder type of the transcoder that will be used to encode the document
      * @tparam Document type of the document
-     * @tparam Handler type of the handler that implements @ref replace_handler
      *
      * @param document_id the document id which is used to uniquely identify it.
      * @param document the document content to replace.
@@ -660,18 +577,30 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Transcoder = codec::default_json_transcoder, typename Document, typename Handler>
-    void replace(std::string document_id, Document document, const replace_options& options, Handler&& handler) const
+    template<typename Transcoder = codec::default_json_transcoder,
+             typename Document,
+             std::enable_if_t<!std::is_same_v<codec::encoded_value, Document>, bool> = true>
+    void replace(std::string document_id, Document document, const replace_options& options, replace_handler&& handler) const
     {
-        return core::impl::initiate_replace_operation(core_,
-                                                      bucket_name_,
-                                                      scope_name_,
-                                                      name_,
-                                                      std::move(document_id),
-                                                      Transcoder::encode(document),
-                                                      options.build(),
-                                                      std::forward<Handler>(handler));
+        return replace(std::move(document_id), Transcoder::encode(document), options, std::move(handler));
     }
+
+    /**
+     * Replaces a body of the document which already exists with specified encoded body.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param document the encoded content of the document to upsert.
+     * @param options custom options to customize the upsert behavior.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @uncommitted
+     */
+    [[nodiscard]] auto replace(std::string document_id, codec::encoded_value document, const replace_options& options) const
+      -> std::future<std::pair<key_value_error_context, mutation_result>>;
 
     /**
      * Replaces a full document which already exists.
@@ -692,22 +621,17 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Transcoder = codec::default_json_transcoder, typename Document>
+    template<typename Transcoder = codec::default_json_transcoder,
+             typename Document,
+             std::enable_if_t<!std::is_same_v<codec::encoded_value, Document>, bool> = true>
     [[nodiscard]] auto replace(std::string document_id, const Document& document, const replace_options& options = {}) const
       -> std::future<std::pair<key_value_error_context, mutation_result>>
     {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
-        auto future = barrier->get_future();
-        replace<Transcoder>(std::move(document_id), document, options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
+        return replace(std::move(document_id), Transcoder::encode(document), options);
     }
 
     /**
      * Removes a Document from a collection.
-     *
-     * @tparam Handler type of the handler that implements @ref remove_handler
      *
      * @param document_id the document id which is used to uniquely identify it.
      * @param options custom options to customize the remove behavior.
@@ -721,12 +645,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Handler>
-    void remove(std::string document_id, const remove_options& options, Handler&& handler) const
-    {
-        return core::impl::initiate_remove_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
-    }
+    void remove(std::string document_id, const remove_options& options, remove_handler&& handler) const;
 
     /**
      * Removes a Document from a collection.
@@ -744,20 +663,10 @@ class collection
      * @committed
      */
     [[nodiscard]] auto remove(std::string document_id, const remove_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, mutation_result>>
-    {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
-        auto future = barrier->get_future();
-        remove(std::move(document_id), options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
-    }
+      -> std::future<std::pair<key_value_error_context, mutation_result>>;
 
     /**
      * Performs mutations to document fragments
-     *
-     * @tparam Handler type of the handler that implements @ref mutate_in_handler
      *
      * @param document_id the document id which is used to uniquely identify it.
      * @param specs the spec which specifies the type of mutations to perform.
@@ -773,12 +682,10 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Handler>
-    void mutate_in(std::string document_id, mutate_in_specs specs, const mutate_in_options& options, Handler&& handler) const
-    {
-        return core::impl::initiate_mutate_in_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), specs.specs(), options.build(), std::forward<Handler>(handler));
-    }
+    void mutate_in(std::string document_id,
+                   const mutate_in_specs& specs,
+                   const mutate_in_options& options,
+                   mutate_in_handler&& handler) const;
 
     /**
      * Performs mutations to document fragments
@@ -797,21 +704,11 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto mutate_in(std::string document_id, mutate_in_specs specs, const mutate_in_options& options = {}) const
-      -> std::future<std::pair<subdocument_error_context, mutate_in_result>>
-    {
-        auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, mutate_in_result>>>();
-        auto future = barrier->get_future();
-        mutate_in(std::move(document_id), std::move(specs), options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
-    }
+    [[nodiscard]] auto mutate_in(std::string document_id, const mutate_in_specs& specs, const mutate_in_options& options = {}) const
+      -> std::future<std::pair<subdocument_error_context, mutate_in_result>>;
 
     /**
      * Performs lookups to document fragments with default options.
-     *
-     * @tparam Handler type of the handler that implements @ref lookup_in_handler
      *
      * @param document_id the outer document ID
      * @param specs an object that specifies the types of lookups to perform
@@ -825,12 +722,10 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Handler>
-    void lookup_in(std::string document_id, lookup_in_specs specs, const lookup_in_options& options, Handler&& handler) const
-    {
-        return core::impl::initiate_lookup_in_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), specs.specs(), options.build(), std::forward<Handler>(handler));
-    }
+    void lookup_in(std::string document_id,
+                   const lookup_in_specs& specs,
+                   const lookup_in_options& options,
+                   lookup_in_handler&& handler) const;
 
     /**
      * Performs lookups to document fragments with default options.
@@ -847,21 +742,11 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto lookup_in(std::string document_id, lookup_in_specs specs, const lookup_in_options& options = {}) const
-      -> std::future<std::pair<subdocument_error_context, lookup_in_result>>
-    {
-        auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, lookup_in_result>>>();
-        auto future = barrier->get_future();
-        lookup_in(std::move(document_id), std::move(specs), options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
-    }
+    [[nodiscard]] auto lookup_in(std::string document_id, const lookup_in_specs& specs, const lookup_in_options& options = {}) const
+      -> std::future<std::pair<subdocument_error_context, lookup_in_result>>;
 
     /**
      * Performs lookups to document fragments with default options from all replicas and the active node and returns the result as a vector.
-     *
-     * @tparam Handler type of the handler that implements @ref lookup_in_all_replicas_handler
      *
      * @param document_id the outer document ID
      * @param specs an object that specifies the types of lookups to perform
@@ -875,15 +760,10 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Handler>
     void lookup_in_all_replicas(std::string document_id,
-                                lookup_in_specs specs,
+                                const lookup_in_specs& specs,
                                 const lookup_in_all_replicas_options& options,
-                                Handler&& handler) const
-    {
-        return core::impl::initiate_lookup_in_all_replicas_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), specs.specs(), options.build(), std::forward<Handler>(handler));
-    }
+                                lookup_in_all_replicas_handler&& handler) const;
 
     /**
      * Performs lookups to document fragments with default options from all replicas and the active node and returns the result as a vector.
@@ -901,22 +781,12 @@ class collection
      * @committed
      */
     [[nodiscard]] auto lookup_in_all_replicas(std::string document_id,
-                                              lookup_in_specs specs,
+                                              const lookup_in_specs& specs,
                                               const lookup_in_all_replicas_options& options = {}) const
-      -> std::future<std::pair<subdocument_error_context, lookup_in_all_replicas_result>>
-    {
-        auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, lookup_in_all_replicas_result>>>();
-        auto future = barrier->get_future();
-        lookup_in_all_replicas(std::move(document_id), std::move(specs), options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
-    }
+      -> std::future<std::pair<subdocument_error_context, lookup_in_all_replicas_result>>;
 
     /**
      * Performs lookups to document fragments with default options from all replicas and returns the first found.
-     *
-     * @tparam Handler type of the handler that implements @ref lookup_in_any_replica_handler
      *
      * @param document_id the outer document ID
      * @param specs an object that specifies the types of lookups to perform
@@ -929,15 +799,10 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Handler>
     void lookup_in_any_replica(std::string document_id,
-                               lookup_in_specs specs,
+                               const lookup_in_specs& specs,
                                const lookup_in_any_replica_options& options,
-                               Handler&& handler) const
-    {
-        return core::impl::initiate_lookup_in_any_replica_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), specs.specs(), options.build(), std::forward<Handler>(handler));
-    }
+                               lookup_in_any_replica_handler&& handler) const;
 
     /**
      * Performs lookups to document fragments with default options from all replicas and returns the first found.
@@ -955,22 +820,12 @@ class collection
      * @committed
      */
     [[nodiscard]] auto lookup_in_any_replica(std::string document_id,
-                                             lookup_in_specs specs,
+                                             const lookup_in_specs& specs,
                                              const lookup_in_any_replica_options& options = {}) const
-      -> std::future<std::pair<subdocument_error_context, lookup_in_replica_result>>
-    {
-        auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, lookup_in_replica_result>>>();
-        auto future = barrier->get_future();
-        lookup_in_any_replica(std::move(document_id), std::move(specs), options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
-    }
+      -> std::future<std::pair<subdocument_error_context, lookup_in_replica_result>>;
 
     /**
      * Gets a document for a given id and places a pessimistic lock on it for mutations
-     *
-     * @tparam Handler type of the handler that implements @ref get_and_lock_handler
      *
      * @param document_id the id of the document
      * @param lock_duration the length of time the lock will be held on the document
@@ -980,15 +835,10 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Handler>
     void get_and_lock(std::string document_id,
                       std::chrono::seconds lock_duration,
                       const get_and_lock_options& options,
-                      Handler&& handler) const
-    {
-        return core::impl::initiate_get_and_lock_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), lock_duration, options.build(), std::forward<Handler>(handler));
-    }
+                      get_and_lock_handler&& handler) const;
 
     /**
      * Gets a document for a given id and places a pessimistic lock on it for mutations
@@ -1004,20 +854,10 @@ class collection
     [[nodiscard]] auto get_and_lock(std::string document_id,
                                     std::chrono::seconds lock_duration,
                                     const get_and_lock_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, get_result>>
-    {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
-        auto future = barrier->get_future();
-        get_and_lock(std::move(document_id), lock_duration, options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
-    }
+      -> std::future<std::pair<key_value_error_context, get_result>>;
 
     /**
      * Unlocks a document if it has been locked previously, with default options.
-     *
-     * @tparam Handler type of the handler that implements @ref unlock_handler
      *
      * @param document_id the id of the document
      * @param cas the CAS value which is needed to unlock it
@@ -1032,12 +872,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Handler>
-    void unlock(std::string document_id, couchbase::cas cas, const unlock_options& options, Handler&& handler) const
-    {
-        return core::impl::initiate_unlock_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), cas, options.build(), std::forward<Handler>(handler));
-    }
+    void unlock(std::string document_id, couchbase::cas cas, const unlock_options& options, unlock_handler&& handler) const;
 
     /**
      * Unlocks a document if it has been locked previously, with default options.
@@ -1056,18 +891,10 @@ class collection
      * @committed
      */
     [[nodiscard]] auto unlock(std::string document_id, couchbase::cas cas, const unlock_options& options = {}) const
-      -> std::future<key_value_error_context>
-    {
-        auto barrier = std::make_shared<std::promise<key_value_error_context>>();
-        auto future = barrier->get_future();
-        unlock(std::move(document_id), cas, options, [barrier](auto ctx) { barrier->set_value({ std::move(ctx) }); });
-        return future;
-    }
+      -> std::future<key_value_error_context>;
 
     /**
      * Checks if the document exists on the server.
-     *
-     * @tparam Handler type of the handler that implements @ref exists_handler
      *
      * @param document_id the id of the document
      * @param options the options to customize
@@ -1079,12 +906,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    template<typename Handler>
-    void exists(std::string document_id, const exists_options& options, Handler&& handler) const
-    {
-        return core::impl::initiate_exists_operation(
-          core_, bucket_name_, scope_name_, name_, std::move(document_id), options.build(), std::forward<Handler>(handler));
-    }
+    void exists(std::string document_id, const exists_options& options, exists_handler&& handler) const;
 
     /**
      * Checks if the document exists on the server.
@@ -1100,48 +922,16 @@ class collection
      * @committed
      */
     [[nodiscard]] auto exists(std::string document_id, const exists_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, exists_result>>
-    {
-        auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, exists_result>>>();
-        auto future = barrier->get_future();
-        exists(std::move(document_id), options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
-    }
+      -> std::future<std::pair<key_value_error_context, exists_result>>;
 
-    [[nodiscard]] auto query_indexes() const -> collection_query_index_manager
-    {
-        return collection_query_index_manager(core_, bucket_name_, scope_name_, name_);
-    }
+    [[nodiscard]] auto query_indexes() const -> collection_query_index_manager;
 
   private:
     friend class bucket;
     friend class scope;
 
-    /**
-     * @param core
-     * @param bucket_name
-     * @param scope_name
-     * @param name
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    collection(std::shared_ptr<couchbase::core::cluster> core,
-               std::string_view bucket_name,
-               std::string_view scope_name,
-               std::string_view name)
-      : core_(std::move(core))
-      , bucket_name_(bucket_name)
-      , scope_name_(scope_name)
-      , name_(name)
-    {
-    }
+    collection(core::cluster core, std::string_view bucket_name, std::string_view scope_name, std::string_view name);
 
-    std::shared_ptr<couchbase::core::cluster> core_;
-    std::string bucket_name_;
-    std::string scope_name_;
-    std::string name_;
+    std::shared_ptr<collection_impl> impl_;
 };
 } // namespace couchbase

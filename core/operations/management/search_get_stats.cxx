@@ -22,17 +22,17 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-search_index_stats_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+search_get_stats_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
     encoded.method = "GET";
     encoded.path = "/api/nsstats";
     return {};
 }
 
-search_index_stats_response
-search_index_stats_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+search_get_stats_response
+search_get_stats_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
 {
-    search_index_stats_response response{ std::move(ctx) };
+    search_get_stats_response response{ std::move(ctx) };
     if (!response.ctx.ec) {
         response.stats = encoded.body.data();
     }

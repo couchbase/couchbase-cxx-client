@@ -76,27 +76,4 @@ using get_all_replicas_result = std::vector<get_replica_result>;
  * @uncommitted
  */
 using get_all_replicas_handler = std::function<void(couchbase::key_value_error_context, get_all_replicas_result)>;
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core
-{
-class cluster;
-namespace impl
-{
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_get_all_replicas_operation(std::shared_ptr<couchbase::core::cluster> core,
-                                    const std::string& bucket_name,
-                                    const std::string& scope_name,
-                                    const std::string& collection_name,
-                                    std::string document_key,
-                                    get_all_replicas_options::built options,
-                                    get_all_replicas_handler&& handler);
-#endif
-} // namespace impl
-} // namespace core
 } // namespace couchbase

@@ -19,6 +19,18 @@
 
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include "core/logger/logger.hxx"
+#include "core/operations/document_append.hxx"
+#include "core/operations/document_decrement.hxx"
+#include "core/operations/document_get.hxx"
+#include "core/operations/document_increment.hxx"
+#include "core/operations/document_insert.hxx"
+#include "core/operations/document_mutate_in.hxx"
+#include "core/operations/document_prepend.hxx"
+#include "core/operations/document_remove.hxx"
+#include "core/operations/document_replace.hxx"
+#include "core/operations/document_search.hxx"
+#include "core/operations/document_upsert.hxx"
 #include "core/operations/management/collection_create.hxx"
 #include "core/operations/management/search_index_drop.hxx"
 #include "core/operations/management/search_index_upsert.hxx"

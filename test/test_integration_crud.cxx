@@ -19,6 +19,23 @@
 
 #include "utils/move_only_context.hxx"
 
+#include "core/operations/document_append.hxx"
+#include "core/operations/document_decrement.hxx"
+#include "core/operations/document_exists.hxx"
+#include "core/operations/document_get.hxx"
+#include "core/operations/document_get_and_lock.hxx"
+#include "core/operations/document_get_and_touch.hxx"
+#include "core/operations/document_increment.hxx"
+#include "core/operations/document_insert.hxx"
+#include "core/operations/document_lookup_in.hxx"
+#include "core/operations/document_mutate_in.hxx"
+#include "core/operations/document_prepend.hxx"
+#include "core/operations/document_remove.hxx"
+#include "core/operations/document_replace.hxx"
+#include "core/operations/document_touch.hxx"
+#include "core/operations/document_unlock.hxx"
+#include "core/operations/document_upsert.hxx"
+
 #include <couchbase/cluster.hxx>
 #include <couchbase/lookup_in_specs.hxx>
 #include <couchbase/mutate_in_specs.hxx>
@@ -505,7 +522,7 @@ TEST_CASE("integration: upsert preserve expiry", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("preserve_expiry") };
-    uint32_t expiry = std::numeric_limits<uint32_t>::max();
+    constexpr std::uint32_t expiry = std::numeric_limits<std::uint32_t>::max();
 
     {
         couchbase::core::operations::upsert_request req{ id, basic_doc_json };
@@ -577,7 +594,7 @@ TEST_CASE("integration: upsert with handler capturing non-copyable object", "[in
             CHECK(ctx.payload() == "foobar");
             barrier->set_value(std::move(resp));
         };
-        integration.cluster->execute(req, std::move(handler));
+        integration.cluster.execute(req, std::move(handler));
         auto resp = f.get();
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
@@ -688,7 +705,7 @@ TEST_CASE("integration: open bucket that does not exist", "[integration]")
 
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();
-    integration.cluster->open_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
+    integration.cluster.open_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
     auto rc = f.get();
     REQUIRE(rc == couchbase::errc::common::bucket_not_found);
 }

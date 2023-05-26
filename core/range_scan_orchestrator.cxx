@@ -673,7 +673,7 @@ class range_scan_orchestrator_impl
     topology::configuration::vbucket_map vbucket_map_;
     std::string scope_name_;
     std::string collection_name_;
-    std::uint32_t collection_id_;
+    std::uint32_t collection_id_{ 0 };
     std::variant<std::monostate, range_scan, prefix_scan, sampling_scan> scan_type_;
     range_scan_orchestrator_options options_;
     std::map<std::size_t, std::optional<range_snapshot_requirements>> vbucket_to_snapshot_requirements_;
