@@ -162,7 +162,7 @@ Tracing options:
 
 Behavior options:
   --user-agent-extra=STRING          Append extra string SDK identifiers (full user-agent is "{sdk_id};{user_agent_extra}"). [default: {user_agent_extra}].
-  --network=STRING                   Network (a.k.a. Alternate Addresses) to use. [default: {default_network}]
+  --network=STRING                   Network (a.k.a. Alternate Addresses) to use. [default: {network}]
   --show-queries                     Log queries on INFO level.
   --enable-clustermap-notifications  Allow server to send notifications when cluster configuration changes.
   --disable-mutation-tokens          Do not request Key/Value service to send mutation tokens.
