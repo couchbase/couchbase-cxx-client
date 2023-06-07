@@ -79,6 +79,7 @@ class cluster : public std::enable_shared_from_this<cluster>
         }
 
         origin_ = std::move(origin);
+        CB_LOG_DEBUG(R"(open cluster, id: "{}", core version: "{}", {})", id_, couchbase::core::meta::sdk_semver(), origin_.to_json());
         // ignore the enable_tracing flag if a tracer was passed in
         if (nullptr != origin_.options().tracer) {
             tracer_ = origin_.options().tracer;

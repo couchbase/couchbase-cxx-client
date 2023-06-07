@@ -184,6 +184,8 @@ struct origin {
         return credentials_;
     }
 
+    [[nodiscard]] auto to_json() const -> std::string;
+
   private:
     couchbase::core::cluster_options options_{};
     cluster_credentials credentials_{};
