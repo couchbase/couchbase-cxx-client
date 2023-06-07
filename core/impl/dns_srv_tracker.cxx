@@ -41,7 +41,8 @@ dns_srv_tracker::dns_srv_tracker(asio::io_context& ctx, std::string address, con
 void
 dns_srv_tracker::get_srv_nodes(utils::movable_function<void(origin::node_list, std::error_code)> callback)
 {
-    CB_LOG_TRACE("query DNS-SRV: address=\"{}\", service=\"{}\"", address_, service_);
+    CB_LOG_DEBUG(
+      "Query DNS-SRV: address=\"{}\", service=\"{}\", nameserver=\"{}:{}\"", address_, service_, config_.nameserver(), config_.port());
     dns_client_.query_srv(
       address_,
       service_,

@@ -28,6 +28,8 @@
 #include <asio/read.hpp>
 #include <asio/write.hpp>
 
+#include <spdlog/fmt/bin_to_hex.h>
+
 #include <memory>
 #include <sstream>
 
@@ -68,13 +70,17 @@ class dns_srv_command : public std::enable_shared_from_this<dns_srv_command>
 
     void execute(std::chrono::milliseconds total_timeout, std::chrono::milliseconds udp_timeout)
     {
+        CB_LOG_TRACE("Query DNS-SRV (UDP) address=\"{}:{}\"{:a}", address_.to_string(), port_, spdlog::to_hex(send_buf_));
         asio::ip::udp::endpoint endpoint(address_, port_);
         udp_.open(endpoint.protocol());
         udp_.async_send_to(
           asio::buffer(send_buf_), endpoint, [self = shared_from_this()](std::error_code ec1, std::size_t /* bytes_transferred */) mutable {
               if (ec1) {
                   self->udp_deadline_.cancel();
-                  CB_LOG_DEBUG("DNS UDP write operation has got error {}, retrying with TCP", ec1.message());
+                  CB_LOG_DEBUG("DNS UDP write operation has got error, retrying with TCP, address=\"{}:{}\", ec={}",
+                               self->address_.to_string(),
+                               self->port_,
+                               ec1.message());
                   return self->retry_with_tcp();
               }
 
@@ -83,7 +89,10 @@ class dns_srv_command : public std::enable_shared_from_this<dns_srv_command>
                 asio::buffer(self->recv_buf_), self->udp_sender_, [self](std::error_code ec2, std::size_t bytes_transferred) mutable {
                     self->udp_deadline_.cancel();
                     if (ec2) {
-                        CB_LOG_DEBUG("DNS UDP read operation has got error {}, retrying with TCP", ec2.message());
+                        CB_LOG_DEBUG("DNS UDP read operation has got error, retrying with TCP, address=\"{}:{}\", ec={}",
+                                     self->address_.to_string(),
+                                     self->port_,
+                                     ec2.message());
                         return self->retry_with_tcp();
                     }
                     self->recv_buf_.resize(bytes_transferred);
@@ -108,7 +117,9 @@ class dns_srv_command : public std::enable_shared_from_this<dns_srv_command>
             if (ec == asio::error::operation_aborted) {
                 return;
             }
-            CB_LOG_DEBUG("DNS UDP deadline has been reached, cancelling UDP operation and fall back to TCP");
+            CB_LOG_DEBUG("DNS UDP deadline has been reached, cancelling UDP operation and fall back to TCP, address=\"{}:{}\"",
+                         self->address_.to_string(),
+                         self->port_);
             self->udp_.cancel();
             return self->retry_with_tcp();
         });
@@ -118,7 +129,10 @@ class dns_srv_command : public std::enable_shared_from_this<dns_srv_command>
             if (ec == asio::error::operation_aborted) {
                 return;
             }
-            CB_LOG_DEBUG("DNS deadline has been reached, cancelling in-flight operations (tcp.is_open={})", self->tcp_.is_open());
+            CB_LOG_DEBUG("DNS deadline has been reached, cancelling in-flight operations (tcp.is_open={}, address=\"{}:{}\")",
+                         self->tcp_.is_open(),
+                         self->address_.to_string(),
+                         self->port_);
             self->udp_.cancel();
             if (self->tcp_.is_open()) {
                 self->tcp_.cancel();
@@ -140,53 +154,65 @@ class dns_srv_command : public std::enable_shared_from_this<dns_srv_command>
         tcp_.async_connect(endpoint, [self = shared_from_this()](std::error_code ec1) mutable {
             if (ec1) {
                 self->deadline_.cancel();
-                CB_LOG_DEBUG("DNS TCP connection has been aborted, {}", ec1.message());
+                CB_LOG_DEBUG(
+                  "DNS TCP connection has been aborted, address=\"{}:{}\", ec={}", self->address_.to_string(), self->port_, ec1.message());
                 return self->handler_({ ec1 });
             }
             auto send_size = static_cast<std::uint16_t>(self->send_buf_.size());
             self->send_buf_.insert(self->send_buf_.begin(), static_cast<std::uint8_t>(send_size & 0xffU));
             self->send_buf_.insert(self->send_buf_.begin(), static_cast<std::uint8_t>(send_size >> 8U));
+            CB_LOG_TRACE(
+              "Query DNS-SRV (TCP) address=\"{}:{}\"{:a}", self->address_.to_string(), self->port_, spdlog::to_hex(self->send_buf_));
             asio::async_write(
               self->tcp_, asio::buffer(self->send_buf_), [self](std::error_code ec2, std::size_t /* bytes_transferred */) mutable {
                   if (ec2) {
-                      CB_LOG_DEBUG("DNS TCP write operation has been aborted, {}", ec2.message());
+                      CB_LOG_DEBUG("DNS TCP write operation has been aborted, address=\"{}:{}\", ec={}",
+                                   self->address_.to_string(),
+                                   self->port_,
+                                   ec2.message());
                       self->deadline_.cancel();
                       if (ec2 == asio::error::operation_aborted) {
                           ec2 = errc::common::unambiguous_timeout;
                       }
                       return self->handler_({ ec2 });
                   }
-                  asio::async_read(self->tcp_,
-                                   asio::buffer(&self->recv_buf_size_, sizeof(std::uint16_t)),
-                                   [self](std::error_code ec3, std::size_t /* bytes_transferred */) mutable {
-                                       if (ec3) {
-                                           CB_LOG_DEBUG("DNS TCP buf size read operation has been aborted, {}", ec3.message());
-                                           self->deadline_.cancel();
-                                           return self->handler_({ ec3 });
-                                       }
-                                       self->recv_buf_size_ = utils::byte_swap(self->recv_buf_size_);
-                                       self->recv_buf_.resize(self->recv_buf_size_);
-                                       CB_LOG_DEBUG("DNS TCP schedule read of {} bytes", self->recv_buf_size_);
-                                       asio::async_read(self->tcp_,
-                                                        asio::buffer(self->recv_buf_),
-                                                        [self](std::error_code ec4, std::size_t bytes_transferred) mutable {
-                                                            self->deadline_.cancel();
-                                                            if (ec4) {
-                                                                CB_LOG_DEBUG("DNS TCP read operation has been aborted, {}", ec4.message());
-                                                                return self->handler_({ ec4 });
-                                                            }
-                                                            self->recv_buf_.resize(bytes_transferred);
-                                                            const dns_message message = dns_codec::decode(self->recv_buf_);
-                                                            dns_srv_response resp{ ec4 };
-                                                            resp.targets.reserve(message.answers.size());
-                                                            for (const auto& answer : message.answers) {
-                                                                resp.targets.emplace_back(dns_srv_response::address{
-                                                                  utils::join_strings(answer.target.labels, "."), answer.port });
-                                                            }
-                                                            CB_LOG_DEBUG("DNS TCP returned {} records", resp.targets.size());
-                                                            return self->handler_(std::move(resp));
-                                                        });
-                                   });
+                  asio::async_read(
+                    self->tcp_,
+                    asio::buffer(&self->recv_buf_size_, sizeof(std::uint16_t)),
+                    [self](std::error_code ec3, std::size_t /* bytes_transferred */) mutable {
+                        if (ec3) {
+                            CB_LOG_DEBUG("DNS TCP buf size read operation has been aborted, address=\"{}:{}\", ec={}",
+                                         self->address_.to_string(),
+                                         self->port_,
+                                         ec3.message());
+                            self->deadline_.cancel();
+                            return self->handler_({ ec3 });
+                        }
+                        self->recv_buf_size_ = utils::byte_swap(self->recv_buf_size_);
+                        self->recv_buf_.resize(self->recv_buf_size_);
+                        CB_LOG_DEBUG("DNS TCP schedule read of {} bytes", self->recv_buf_size_);
+                        asio::async_read(
+                          self->tcp_, asio::buffer(self->recv_buf_), [self](std::error_code ec4, std::size_t bytes_transferred) mutable {
+                              self->deadline_.cancel();
+                              if (ec4) {
+                                  CB_LOG_DEBUG("DNS TCP read operation has been aborted, address=\"{}:{}\", ec={}",
+                                               self->address_.to_string(),
+                                               self->port_,
+                                               ec4.message());
+                                  return self->handler_({ ec4 });
+                              }
+                              self->recv_buf_.resize(bytes_transferred);
+                              const dns_message message = dns_codec::decode(self->recv_buf_);
+                              dns_srv_response resp{ ec4 };
+                              resp.targets.reserve(message.answers.size());
+                              for (const auto& answer : message.answers) {
+                                  resp.targets.emplace_back(
+                                    dns_srv_response::address{ utils::join_strings(answer.target.labels, "."), answer.port });
+                              }
+                              CB_LOG_DEBUG("DNS TCP returned {} records", resp.targets.size());
+                              return self->handler_(std::move(resp));
+                          });
+                    });
               });
         });
     }

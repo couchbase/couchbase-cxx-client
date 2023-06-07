@@ -87,7 +87,7 @@ load_resolv_conf()
 
     if (dns_servers.size() > 0) {
         CB_LOG_DEBUG(
-          "Found DNS Servers: [{}], using nameserver: {}", couchbase::core::utils::join_strings(dns_servers, ", "), dns_servers[0]);
+          "Found DNS Servers: [{}], selected nameserver: \"{}\"", couchbase::core::utils::join_strings(dns_servers, ", "), dns_servers[0]);
         return dns_servers[0];
     }
     CB_LOG_WARNING("Unable to find DNS nameserver");
@@ -118,13 +118,13 @@ load_resolv_conf(const char* conf_path)
             if (space == std::string::npos || space == offset || line.size() < space + 2) {
                 continue;
             }
-            if (std::string keyword = line.substr(offset, space); keyword != "nameserver") {
+            if (const auto keyword = line.substr(offset, space); keyword != "nameserver") {
                 continue;
             }
             offset = space + 1;
             space = line.find(' ', offset);
-            auto nameserver = line.substr(offset, space);
-            CB_LOG_DEBUG("Using nameserver: {}", nameserver);
+            auto nameserver = (space == std::string::npos) ? line.substr(offset) : line.substr(offset, space - offset);
+            CB_LOG_DEBUG("Selected nameserver: \"{}\" from \"{}\"", nameserver, conf_path);
             return nameserver;
         }
     }
@@ -147,6 +147,7 @@ dns_config::system_config()
         std::error_code ec;
         asio::ip::address::from_string(nameserver, ec);
         if (ec) {
+            CB_LOG_DEBUG("Unable to parse \"{}\" as a network address, fall back to \"{}\"", nameserver, default_nameserver);
             nameserver = default_nameserver;
         }
         instance.nameserver_ = nameserver;
