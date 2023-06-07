@@ -28,6 +28,8 @@
 #include <asio/read.hpp>
 #include <asio/write.hpp>
 
+#include <fmt/chrono.h>
+
 #include <spdlog/fmt/bin_to_hex.h>
 
 #include <memory>
@@ -70,7 +72,12 @@ class dns_srv_command : public std::enable_shared_from_this<dns_srv_command>
 
     void execute(std::chrono::milliseconds total_timeout, std::chrono::milliseconds udp_timeout)
     {
-        CB_LOG_TRACE("Query DNS-SRV (UDP) address=\"{}:{}\"{:a}", address_.to_string(), port_, spdlog::to_hex(send_buf_));
+        CB_LOG_TRACE("Query DNS-SRV (UDP) address=\"{}:{}\", udp_timeout={}, total_timeout={}{:a}",
+                     address_.to_string(),
+                     port_,
+                     udp_timeout,
+                     total_timeout,
+                     spdlog::to_hex(send_buf_));
         asio::ip::udp::endpoint endpoint(address_, port_);
         udp_.open(endpoint.protocol());
         udp_.async_send_to(
@@ -113,7 +120,7 @@ class dns_srv_command : public std::enable_shared_from_this<dns_srv_command>
                 });
           });
         udp_deadline_.expires_after(udp_timeout);
-        deadline_.async_wait([self = shared_from_this()](std::error_code ec) {
+        udp_deadline_.async_wait([self = shared_from_this()](std::error_code ec) {
             if (ec == asio::error::operation_aborted) {
                 return;
             }
