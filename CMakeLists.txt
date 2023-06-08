@@ -100,6 +100,7 @@ set(couchbase_cxx_client_FILES
         core/free_form_http_request.cxx
         core/key_value_config.cxx
         core/n1ql_query_options.cxx
+        core/origin.cxx
         core/range_scan_options.cxx
         core/range_scan_orchestrator.cxx
         core/retry_orchestrator.cxx
