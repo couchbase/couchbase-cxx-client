@@ -1279,16 +1279,15 @@ class mcbp_session_impl
         }
         last_active_ = std::chrono::steady_clock::now();
         if (it != endpoints_.end()) {
-            CB_LOG_DEBUG("{} connecting to {}:{}, timeout={}ms",
-                         log_prefix_,
-                         it->endpoint().address().to_string(),
-                         it->endpoint().port(),
-                         origin_.options().connect_timeout.count());
+            auto hostname = it->endpoint().address().to_string();
+            auto port = it->endpoint().port();
+            CB_LOG_DEBUG("{} connecting to {}:{}, timeout={}ms", log_prefix_, hostname, port, origin_.options().connect_timeout.count());
             connection_deadline_.expires_after(origin_.options().connect_timeout);
-            connection_deadline_.async_wait([self = shared_from_this()](const auto timer_ec) {
+            connection_deadline_.async_wait([self = shared_from_this(), hostname, port](const auto timer_ec) {
                 if (timer_ec == asio::error::operation_aborted || self->stopped_) {
                     return;
                 }
+                CB_LOG_DEBUG("{} unable to connect to {}:{} in time, reconnecting", self->log_prefix_, hostname, port);
                 return self->stream_->close([self](std::error_code) { self->initiate_bootstrap(); });
             });
             stream_->async_connect(it->endpoint(),

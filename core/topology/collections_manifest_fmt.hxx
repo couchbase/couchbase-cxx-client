@@ -47,6 +47,6 @@ struct fmt::formatter<couchbase::core::topology::collections_manifest> {
                          couchbase::core::uuid::to_string(manifest.id),
                          manifest.uid,
                          collections.size(),
-                         utils::join_strings(collections, ", "));
+                         couchbase::core::utils::join_strings(collections, ", "));
     }
 };

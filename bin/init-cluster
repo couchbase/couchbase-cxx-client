@@ -17,13 +17,8 @@
 require "set"
 require "timeout"
 require "optparse"
-require "openssl"
 
-class Object
-  def to_b
-    ![nil, false, 0, "", "0", "f", "F", "false", "FALSE", "off", "OFF", "no", "NO"].include?(self)
-  end
-end
+require_relative "api"
 
 options = {
   verbose: ENV.fetch("CB_VERBOSE", true).to_b,
@@ -49,106 +44,6 @@ options[:port] = ENV.fetch("CB_PORT", default_port).to_i
 options[:sample_buckets] << "beer-sample" if ENV.fetch("CB_BEER_SAMPLE", false).to_b
 options[:sample_buckets] << "travel-sample" if ENV.fetch("CB_TRAVEL_SAMPLE", false).to_b
 
-require "net/http"
-require "json"
-
-class API
-  def initialize(options)
-    @options = options
-    connect
-  end
-
-  def connect
-    @client = Net::HTTP.start(@options[:host], @options[:port],
-                              use_ssl: @options[:strict_encryption],
-                              verify_mode: OpenSSL::SSL::VERIFY_NONE)
-  end
-
-  def url(path)
-    "#{@client.use_ssl? ? 'https' : 'http'}://#{@options[:username]}@#{@options[:host]}:#{@options[:port]}#{path}"
-  end
-
-  def decode_response(response)
-    payload =
-      if /application\/json/.match?(response['content-type'])
-        JSON.parse(response.body)
-      else
-        response.body
-      end
-    p payload if @options[:verbose]
-    payload
-  end
-
-  def setup_request(request)
-    request.basic_auth(@options[:username], @options[:password])
-    request['accept'] = "application/json"
-  end
-
-  def get(path)
-    puts "# GET #{url(path)}"
-    req = Net::HTTP::Get.new(path)
-    setup_request(req)
-    res = @client.request(req)
-    decode_response(res)
-  rescue EOFError
-    connect
-    retry
-  rescue => ex
-    puts "#{__method__}: #{ex}, sleep for 1 second and retry"
-    sleep(1)
-    retry
-  end
-
-  def post_form(path, fields = {})
-    puts "# POST #{url(path)} #{fields}"
-    req = Net::HTTP::Post.new(path)
-    setup_request(req)
-    req.form_data = fields
-    res = @client.request(req)
-    decode_response(res)
-  rescue EOFError
-    connect
-    retry
-  rescue => ex
-    puts "#{__method__}: #{ex}, sleep for 1 second and retry"
-    sleep(1)
-    retry
-  end
-
-  def post_json(path, object)
-    data = JSON.generate(object)
-    puts "# POST #{url(path)} #{data}"
-    req = Net::HTTP::Post.new(path)
-    req['content-type'] = "application/json"
-    setup_request(req)
-    res = @client.request(req, data)
-    decode_response(res)
-  rescue EOFError
-    connect
-    retry
-  rescue => ex
-    puts "#{__method__}: #{ex}, sleep for 1 second and retry"
-    sleep(1)
-    retry
-  end
-
-  def put_json(path, object)
-    data = JSON.generate(object)
-    puts "# PUT #{url(path)} #{data}"
-    req = Net::HTTP::Put.new(path)
-    req['content-type'] = "application/json"
-    setup_request(req)
-    res = @client.request(req, data)
-    decode_response(res)
-  rescue EOFError
-    connect
-    retry
-  rescue => ex
-    puts "#{__method__}: #{ex}, sleep for 1 second and retry"
-    sleep(1)
-    retry
-  end
-end
 
 api = 
   begin
@@ -235,50 +130,30 @@ if options[:sec_bucket].to_b
               name: options[:sec_bucket])
 end
 
-api.post_json("/sampleBuckets/install", options[:sample_buckets].to_a) if options[:sample_buckets].any?
-
 api.post_form("/settings/developerPreview", enabled: true) if options[:enable_developer_preview]
 
-def service_port_for_bucket(api, service, bucket, options)
-  port_key = options[:strict_encryption] ? "#{service}SSL" : service
-  port = 0
-  while port.zero?
-    config = api.get("/pools/default/b/#{bucket}")
-    port = config["nodesExt"].find{|n| n["services"].key?(port_key)}["services"][port_key].to_i rescue 0
-    sleep 1
-  end
-  port
-end
+service_address = service_address_for_bucket(api, "n1ql", options[:bucket], options)
+puts query_service: service_address
 
-query_api = API.new(options.merge(port: service_port_for_bucket(api, "n1ql", options[:bucket], options)))
+query_api = API.new(options.merge(service_address))
 query_api.post_form("/query/service", statement: "CREATE PRIMARY INDEX ON `#{options[:bucket]}` USING GSI")
-options[:sample_buckets].each do |bucket|
-  service_port_for_bucket(api, "n1ql", bucket, options)
-  query_api.post_form("/query/service", statement: "CREATE PRIMARY INDEX ON `#{bucket}` USING GSI")
-end
 
-puts service_port_for_bucket(api, "fts", options[:bucket], options)
+expected_counts = {
+  "travel-sample" => 30_000,
+  "beer-sample" => 7_000,
+}
+options[:sample_buckets].each do |bucket|
+  ensure_sample_bucket_loaded(api, expected_counts[bucket], options.merge(bucket: bucket))
+end
 
 if options[:sample_buckets].include?("travel-sample") && services.include?("fts")
-  search_api = API.new(options.merge(port: service_port_for_bucket(api, "fts", options[:bucket], options)))
+  service_address = service_address_for_bucket(api, "fts", options[:bucket], options)
+  puts search_service: service_address
 
   has_v6_nodes = 
     api.get("/pools/default")["nodes"]
     .any? { |node| node["version"] =~ /^6\./ && node["services"].include?("fts") }
-
   index_definition_path = File.join(__dir__, "travel-sample-index#{"-v6" if has_v6_nodes}.json")
-  puts "using index definition: #{File.basename(index_definition_path)}"
-  index_definition = JSON.load(File.read(index_definition_path))
-  search_api.put_json("/api/index/travel-sample-index", index_definition)
-
-  expected_number_of_the_documents = 1000
-  indexed_documents = 0
-  Timeout.timeout(10 * 60) do # give it 10 minutes to index
-    while indexed_documents < expected_number_of_the_documents
-      resp = search_api.get("/api/index/travel-sample-index/count")
-      indexed_documents = resp['count'].to_i
-      sleep 1
-    end
-  end
+  ensure_search_index_created(index_definition_path, options.merge(service_address))
 end
 

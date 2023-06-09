@@ -32,7 +32,7 @@ async_options()
     return cfg;
 }
 
-TEST_CASE("can async get", "[transactions]")
+TEST_CASE("transactions public async API: can async get", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -62,7 +62,7 @@ TEST_CASE("can async get", "[transactions]")
     f.get();
 }
 
-TEST_CASE("can get fail as expected", "[transactions]")
+TEST_CASE("transactions public async API: can get fail as expected", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -85,7 +85,7 @@ TEST_CASE("can get fail as expected", "[transactions]")
       async_options());
     f.get();
 }
-TEST_CASE("can async remove", "[transactions]")
+TEST_CASE("transactions public async API: can async remove", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -114,7 +114,7 @@ TEST_CASE("can async remove", "[transactions]")
     f.get();
 }
 
-TEST_CASE("async remove with bad cas fails as expected", "[transactions]")
+TEST_CASE("transactions public async API: async remove with bad cas fails as expected", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -144,7 +144,8 @@ TEST_CASE("async remove with bad cas fails as expected", "[transactions]")
       async_options());
     f.get();
 }
-TEST_CASE("can async insert", "[transactions]")
+
+TEST_CASE("transactions public async API: can async insert", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -168,7 +169,7 @@ TEST_CASE("can async insert", "[transactions]")
     f.get();
 }
 
-TEST_CASE("async insert fails when doc already exists, but doesn't rollback", "[transactions]")
+TEST_CASE("transactions public async API: async insert fails when doc already exists, but doesn't rollback", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -196,7 +197,7 @@ TEST_CASE("async insert fails when doc already exists, but doesn't rollback", "[
     f.get();
 }
 
-TEST_CASE("can async replace", "[transactions]")
+TEST_CASE("transactions public async API: can async replace", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -227,7 +228,7 @@ TEST_CASE("can async replace", "[transactions]")
       async_options());
     f.get();
 }
-TEST_CASE("async replace fails as expected with bad cas", "[transactions]")
+TEST_CASE("transactions public async API: async replace fails as expected with bad cas", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -259,7 +260,7 @@ TEST_CASE("async replace fails as expected with bad cas", "[transactions]")
     f.get();
 }
 
-TEST_CASE("uncaught exception will rollback", "[transactions]")
+TEST_CASE("transactions public async API: uncaught exception will rollback", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -293,7 +294,7 @@ TEST_CASE("uncaught exception will rollback", "[transactions]")
     f.get();
 }
 
-TEST_CASE("can set transaction options", "[transactions]")
+TEST_CASE("transactions public async API: can set transaction options", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
@@ -334,7 +335,7 @@ TEST_CASE("can set transaction options", "[transactions]")
     f.get();
 }
 
-TEST_CASE("can do mutating query", "[transactions]")
+TEST_CASE("transactions public async API: can do mutating query", "[transactions]")
 {
 
     test::utils::integration_test_guard integration;
@@ -360,7 +361,7 @@ TEST_CASE("can do mutating query", "[transactions]")
     f.get();
 }
 
-TEST_CASE("some query errors rollback", "[transactions]")
+TEST_CASE("transactions public async API: some query errors rollback", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 

@@ -61,7 +61,9 @@ wait_until_bucket_healthy(std::shared_ptr<couchbase::core::cluster> cluster, con
 bool
 wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::core::cluster> cluster,
                                           const std::string& bucket_name,
-                                          const std::uint64_t current_manifest_uid);
+                                          const std::uint64_t current_manifest_uid,
+                                          std::size_t successful_rounds = 4,
+                                          std::chrono::seconds total_timeout = std::chrono::minutes{ 5 });
 bool
 wait_until_user_present(const std::shared_ptr<couchbase::core::cluster>& cluster, const std::string& username);
 

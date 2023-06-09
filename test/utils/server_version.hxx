@@ -215,6 +215,11 @@ struct server_version {
     {
         return supports_search() && (is_mad_hatter() || is_cheshire_cat() || is_neo());
     }
+
+    [[nodiscard]] bool is_capella() const
+    {
+        return deployment == deployment_type::capella;
+    }
 };
 
 } // namespace test::utils
