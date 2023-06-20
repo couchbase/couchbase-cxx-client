@@ -50,6 +50,8 @@ struct cluster_options {
     std::chrono::milliseconds management_timeout = timeout_defaults::management_timeout;
 
     bool enable_tls{ false };
+    bool tls_disable_deprecated_protocols{ true };
+    bool tls_disable_v1_2{ false };
     std::string trust_certificate{};
     bool enable_mutation_tokens{ true };
     bool enable_tcp_keep_alive{ true };

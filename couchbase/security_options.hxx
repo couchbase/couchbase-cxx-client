@@ -50,15 +50,14 @@ class security_options
         tls_verify_mode tls_verify;
         std::optional<std::string> trust_certificate;
         bool disable_mozilla_ca_certificates;
+        bool disable_deprecated_protocols;
+        bool disable_tls_v1_2;
     };
 
     [[nodiscard]] auto build() const -> built
     {
         return {
-            enabled_,
-            tls_verify_,
-            trust_certificate_,
-            disable_mozilla_ca_certificates_,
+            enabled_, tls_verify_, trust_certificate_, disable_mozilla_ca_certificates_, disable_deprecated_protocols, disable_tls_v1_2,
         };
     }
 
@@ -67,5 +66,7 @@ class security_options
     tls_verify_mode tls_verify_{ tls_verify_mode::peer };
     std::optional<std::string> trust_certificate_{};
     bool disable_mozilla_ca_certificates_{ false };
+    bool disable_deprecated_protocols{ true };
+    bool disable_tls_v1_2{ false };
 };
 } // namespace couchbase
