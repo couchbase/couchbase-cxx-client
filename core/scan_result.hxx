@@ -41,8 +41,9 @@ class range_scan_item_iterator
 {
   public:
     virtual ~range_scan_item_iterator() = default;
-    virtual auto next() -> std::future<std::optional<range_scan_item>> = 0;
+    virtual auto next() -> std::future<tl::expected<range_scan_item, std::error_code>> = 0;
     virtual void next(utils::movable_function<void(range_scan_item, std::error_code)> callback) = 0;
+    virtual void cancel() = 0;
 };
 
 class scan_result
@@ -51,7 +52,7 @@ class scan_result
     explicit scan_result(std::shared_ptr<range_scan_item_iterator> iterator);
     [[nodiscard]] auto next() const -> tl::expected<range_scan_item, std::error_code>;
     void next(utils::movable_function<void(range_scan_item, std::error_code)> callback) const;
-    void cancel() const;
+    void cancel();
 
   private:
     std::shared_ptr<scan_result_impl> impl_{};

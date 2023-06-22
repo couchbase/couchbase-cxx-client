@@ -599,7 +599,6 @@ enum class key_value {
     // KV Code: 0xd6
     cannot_revive_living_document = 131,
 
-    range_scan_cancelled = 132,
     range_scan_vb_uuid_not_equal = 133,
     range_scan_completed = 134,
 };

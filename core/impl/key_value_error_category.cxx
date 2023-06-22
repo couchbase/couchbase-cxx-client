@@ -84,8 +84,6 @@ struct key_value_error_category : std::error_category {
                 return "cannot_revive_living_document (131)";
             case errc::key_value::xattr_no_access:
                 return "xattr_no_access (130)";
-            case errc::key_value::range_scan_cancelled:
-                return "range_scan_cancelled (132)";
             case errc::key_value::range_scan_vb_uuid_not_equal:
                 return "range_scan_vb_uuid_not_equal (133)";
             case errc::key_value::range_scan_completed:
