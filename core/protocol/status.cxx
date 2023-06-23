@@ -192,7 +192,7 @@ map_status_code(protocol::client_opcode opcode, std::uint16_t status)
             return errc::common::request_canceled;
 
         case key_value_status_code::range_scan_vb_uuid_not_equal:
-            return errc::key_value::range_scan_vb_uuid_not_equal;
+            return errc::key_value::mutation_token_outdated;
 
         case key_value_status_code::unknown:
             break;
