@@ -996,7 +996,7 @@ TEST_CASE("integration: manager sampling scan with custom collection", "[integra
     REQUIRE(ids.size() >= 10);
 
     for (const auto& id : entry_ids) {
-        REQUIRE(std::find(ids.begin(), ids.end(), std::string(reinterpret_cast<const char*>(id.data()), id.size())) != ids.end());
+        REQUIRE(std::find(ids.begin(), ids.end(), id) != ids.end());
     }
 }
 
@@ -1141,7 +1141,7 @@ TEST_CASE("integration: manager sampling scan with custom collection and up to 1
     REQUIRE(ids.size() >= 10);
 
     for (const auto& id : entry_ids) {
-        REQUIRE(std::find(ids.begin(), ids.end(), std::string(reinterpret_cast<const char*>(id.data()), id.size())) != ids.end());
+        REQUIRE(std::find(ids.begin(), ids.end(), id) != ids.end());
     }
 }
 
