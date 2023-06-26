@@ -100,7 +100,7 @@ serialize_range_scan_create_options(const range_scan_create_options& options)
             { "vb_uuid", std::to_string(snapshot.vbucket_uuid) },
             { "seqno", snapshot.sequence_number },
             { "timeout_ms",
-              (options.timeout == std::chrono::milliseconds::zero()) ? timeout_defaults::range_scan_timeout.count()
+              (options.timeout == std::chrono::milliseconds::zero()) ? timeout_defaults::key_value_scan_timeout.count()
                                                                      : options.timeout.count() },
         };
         if (snapshot.sequence_number_exists) {

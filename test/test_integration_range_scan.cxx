@@ -847,10 +847,11 @@ TEST_CASE("integration: manager scan range without content", "[integration]")
         REQUIRE_FALSE(entry->body.has_value());
     } while (true);
 
+    REQUIRE(ids.size() == entry_ids.size());
+
     for (const auto& id : ids) {
         REQUIRE(entry_ids.count(id) == 1);
     }
-    REQUIRE(ids.size() == entry_ids.size());
 }
 
 TEST_CASE("integration: manager scan range with content", "[integration]")
@@ -920,11 +921,12 @@ TEST_CASE("integration: manager scan range with content", "[integration]")
         REQUIRE(entry->body.has_value());
     } while (true);
 
+    REQUIRE(ids.size() == entry_ids.size());
+
     for (const auto& id : ids) {
         INFO(id);
         REQUIRE(entry_ids.count(id) == 1);
     }
-    REQUIRE(ids.size() == entry_ids.size());
 }
 
 TEST_CASE("integration: manager sampling scan with custom collection", "[integration]")
@@ -1065,10 +1067,11 @@ TEST_CASE("integration: manager prefix scan without content", "[integration]")
         REQUIRE_FALSE(entry->body.has_value());
     } while (true);
 
+    REQUIRE(ids.size() == entry_ids.size());
+
     for (const auto& id : ids) {
         REQUIRE(entry_ids.count(id) == 1);
     }
-    REQUIRE(ids.size() == entry_ids.size());
 }
 
 TEST_CASE("integration: manager sampling scan with custom collection and up to 10 concurrent streams", "[integration]")
@@ -1211,8 +1214,9 @@ TEST_CASE("integration: manager prefix scan without content and up to 5 concurre
         REQUIRE_FALSE(entry->body.has_value());
     } while (true);
 
+    REQUIRE(ids.size() == entry_ids.size());
+
     for (const auto& id : ids) {
         REQUIRE(entry_ids.count(id) == 1);
     }
-    REQUIRE(ids.size() == entry_ids.size());
 }

@@ -90,7 +90,7 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
 
     void start()
     {
-        CB_LOG_TRACE("starting stream {}", vbucket_id_);
+        CB_LOG_TRACE("starting stream {} in node {}", vbucket_id_, node_id_);
         state_ = std::monostate{};
         if (std::holds_alternative<range_scan>(create_options_.scan_type) && !last_seen_key_.empty()) {
             std::get<range_scan>(create_options_.scan_type).from = scan_term{ last_seen_key_ };
@@ -141,7 +141,7 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
             }
             items_.close();
 
-            bool fatal;
+            bool fatal{};
             if (ec == errc::key_value::document_not_found || ec == errc::common::authentication_failure ||
                 ec == errc::common::collection_not_found || ec == errc::common::request_canceled) {
                 // Errors that are fatal unless this is a sampling scan
@@ -160,7 +160,7 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
             }
 
             CB_LOG_TRACE("setting state for stream {} to FAILED after range scan continue", vbucket_id_);
-            state_ = failed{ std::move(ec), fatal };
+            state_ = failed{ ec, fatal };
             stream_manager_->stream_continue_failed(node_id_, fatal);
         }
     }
@@ -414,7 +414,6 @@ class range_scan_orchestrator_impl
             if (stream_count_per_node_.count(node_id) == 0) {
                 stream_count_per_node_[node_id] = 0;
             }
-            pending_vbuckets_.insert(vbucket);
         }
         start_streams(concurrency_);
 
@@ -472,49 +471,58 @@ class range_scan_orchestrator_impl
 
     void start_streams(std::uint16_t stream_count)
     {
-        std::lock_guard<std::mutex> lock(stream_start_mutex_);
-
-        CB_LOG_TRACE("{} pending streams exist", pending_vbuckets_.size());
+        std::lock_guard<std::recursive_mutex> const lock(stream_start_mutex_);
 
         if (cancelled_) {
-            CB_LOG_TRACE("scan has been cancelled, do no tstar");
+            CB_LOG_TRACE("scan has been cancelled, do not start another stream");
             return;
         }
 
-        if (pending_vbuckets_.empty()) {
-            CB_LOG_TRACE("no more pending vbuckets");
+        if (stream_count_per_node_.empty()) {
+            CB_LOG_TRACE("no more vbuckets to scan");
             return;
         }
 
         std::uint16_t counter = 0;
         while (counter < stream_count) {
-            counter++;
-
             // Find the node with the least number of active streams from those recorded in stream_count_per_node_
             auto least_busy_node = stream_count_per_node_.begin()->first;
-            for (const auto& [node_id, count] : stream_count_per_node_) {
-                if (count < stream_count_per_node_[least_busy_node]) {
-                    least_busy_node = node_id;
+            {
+                std::lock_guard<std::mutex> const stream_count_lock(stream_count_per_node_mutex_);
+                for (const auto& [node_id, count] : stream_count_per_node_) {
+                    if (count < stream_count_per_node_[least_busy_node]) {
+                        least_busy_node = node_id;
+                    }
                 }
             }
 
-            std::shared_ptr<range_scan_stream> stream;
-            std::uint16_t vbucket_id;
+            std::shared_ptr<range_scan_stream> stream{};
             {
-                std::lock_guard<std::mutex> stream_map_lock(stream_map_mutex_);
+                std::lock_guard<std::mutex> const stream_map_lock(stream_map_mutex_);
 
-                // Find a vbucket active on the least busy node OR a node with
-                vbucket_id = *std::find_if(pending_vbuckets_.begin(), pending_vbuckets_.end(), [&least_busy_node, this](auto v) {
-                    return (streams_.count(v) > 0) && (least_busy_node == this->streams_.at(v)->node_id());
-                });
-                stream = streams_[vbucket_id];
+                for (const auto& [v, s] : streams_) {
+                    if ((s->is_not_started() || s->is_awaiting_retry()) && (s->node_id() == least_busy_node)) {
+                        CB_LOG_TRACE("selected vbucket {} to scan", v);
+                        stream = s;
+                        break;
+                    }
+                }
+            }
+
+            if (stream == nullptr) {
+                CB_LOG_TRACE("no vbuckets to scan for node {}", least_busy_node);
+                {
+                    std::lock_guard<std::mutex> const stream_count_lock(stream_count_per_node_mutex_);
+                    stream_count_per_node_.erase(least_busy_node);
+                }
+                return start_streams(stream_count - counter);
             }
 
             auto node_id = stream->node_id();
             active_stream_count_++;
-            pending_vbuckets_.erase(vbucket_id);
             stream_count_per_node_[node_id]++;
             stream->start();
+            counter++;
         }
     }
 
@@ -528,10 +536,15 @@ class range_scan_orchestrator_impl
         }
     }
 
-    void stream_start_failed_awaiting_retry(std::int16_t node_id, std::uint16_t vbucket_id) override
+    void stream_start_failed_awaiting_retry(std::int16_t node_id, std::uint16_t /* vbucket_id */) override
     {
+        {
+            std::lock_guard<std::mutex> const stream_count_lock(stream_count_per_node_mutex_);
+            if (stream_count_per_node_.count(node_id) == 0) {
+                stream_count_per_node_[node_id] = 1;
+            }
+        }
         stream_no_longer_running(node_id);
-        pending_vbuckets_.insert(vbucket_id);
         if (active_stream_count_ == 0) {
             start_streams(1);
         }
@@ -556,7 +569,12 @@ class range_scan_orchestrator_impl
   private:
     void stream_no_longer_running(std::int16_t node_id)
     {
-        stream_count_per_node_[node_id]--;
+        {
+            std::lock_guard<std::mutex> const stream_count_lock(stream_count_per_node_mutex_);
+            if (stream_count_per_node_.count(node_id) > 0) {
+                stream_count_per_node_[node_id]--;
+            }
+        }
         active_stream_count_--;
     }
 
@@ -576,7 +594,7 @@ class range_scan_orchestrator_impl
                 return handler({}, ec);
             }
             if (!has_more) {
-                std::lock_guard lock{ self->stream_map_mutex_ };
+                std::lock_guard<std::mutex> const lock(self->stream_map_mutex_);
                 self->streams_.erase(vbucket_id);
             }
             if (item) {
@@ -603,10 +621,10 @@ class range_scan_orchestrator_impl
     range_scan_orchestrator_options options_;
     std::map<std::size_t, std::optional<range_snapshot_requirements>> vbucket_to_snapshot_requirements_;
     std::map<std::uint16_t, std::shared_ptr<range_scan_stream>> streams_{};
-    std::set<std::uint16_t> pending_vbuckets_{};
     std::map<std::int16_t, std::atomic_uint16_t> stream_count_per_node_{};
-    std::mutex stream_start_mutex_{};
+    std::recursive_mutex stream_start_mutex_{};
     std::mutex stream_map_mutex_{};
+    std::mutex stream_count_per_node_mutex_{};
     std::atomic_uint16_t active_stream_count_ = 0;
     std::uint16_t concurrency_ = 1;
     std::size_t item_limit{ std::numeric_limits<size_t>::max() };
