@@ -41,16 +41,42 @@ class cluster;
 class bucket_manager
 {
   public:
+    /**
+     * Get specific bucket within the cluster
+     *
+     * @param bucket_name the name of the bucket to get
+     * @param options optional parameters
+     * @param handler  handler that implements @ref get_bucket_handler
+     *
+     * @since 1.0.0
+     * @committed
+     */
     void get_bucket(std::string bucket_name, const get_bucket_options& options, get_bucket_handler&& handler) const;
 
     [[nodiscard]] auto get_bucket(std::string bucket_name, const get_bucket_options& options = {}) const
       -> std::future<std::pair<manager_error_context, management::cluster::bucket_settings>>;
 
+    /**
+     * Get all buckets on the cluster
+     *
+     * @param options optional parameters
+     * @param handler handler that implements @ref get_all_buckets_handler
+     *
+     * @since 1.0.0
+     * @committed
+     */
     void get_all_buckets(const get_all_buckets_options& options, get_all_buckets_handler&& handler) const;
 
     [[nodiscard]] auto get_all_buckets(const get_all_buckets_options& options = {}) const
       -> std::future<std::pair<manager_error_context, std::vector<management::cluster::bucket_settings>>>;
 
+    /**
+     * Create a bucket on the cluster
+     *
+     * @param bucket_settings the settings for the bucket
+     * @param options optional parameters
+     * @param handler handler that implements @ref create_bucket_handler
+     */
     void create_bucket(const management::cluster::bucket_settings& bucket_settings,
                        const create_bucket_options& options,
                        create_bucket_handler&& handler) const;
@@ -58,6 +84,13 @@ class bucket_manager
     [[nodiscard]] auto create_bucket(const management::cluster::bucket_settings& bucket_settings,
                                      const create_bucket_options& options = {}) const -> std::future<manager_error_context>;
 
+    /**
+     * Update an existing bucket
+     *
+     * @param bucket_settings the settings for the bucket
+     * @param options optional parameters
+     * @param handler handler that implements @ref update_bucket_handler
+     */
     void update_bucket(const management::cluster::bucket_settings& bucket_settings,
                        const update_bucket_options& options,
                        update_bucket_handler&& handler) const;
@@ -65,11 +98,25 @@ class bucket_manager
     [[nodiscard]] auto update_bucket(const management::cluster::bucket_settings& bucket_settings,
                                      const update_bucket_options& options = {}) const -> std::future<manager_error_context>;
 
+    /**
+     * Drop an existing bucket
+     *
+     * @param bucket_name the name of the bucket to drop
+     * @param options optional parameters
+     * @param handler handler that implements @ref drop_bucket_handler
+     */
     void drop_bucket(std::string bucket_name, const drop_bucket_options& options, drop_bucket_handler&& handler) const;
 
     [[nodiscard]] auto drop_bucket(std::string bucket_name, const drop_bucket_options& options = {}) const
       -> std::future<manager_error_context>;
 
+    /**
+     * Flush an existing bucket
+     *
+     * @param bucket_name the name of the bucket to flush
+     * @param options optional parameters
+     * @param handler handler that implements @ref flush_bucket_handler
+     */
     void flush_bucket(std::string bucket_name, const flush_bucket_options& options, flush_bucket_handler&& handler) const;
 
     [[nodiscard]] auto flush_bucket(std::string bucket_name, const flush_bucket_options& options = {}) const
