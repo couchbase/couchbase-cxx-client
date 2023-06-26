@@ -21,11 +21,16 @@
 #include <couchbase/error_context.hxx>
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 
 namespace couchbase
 {
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+class internal_manager_error_context;
+#endif
+
 /**
  * The error context returned with manager operations.
  *
