@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "core/impl/internal_manager_error_context.hxx"
 #include <couchbase/error_context.hxx>
 
 #include <cstdint>
@@ -34,46 +35,31 @@ namespace couchbase
 class manager_error_context : public error_context
 {
   public:
-    /**
-     * Creates empty error context
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    manager_error_context() = default;
+    //    /**
+    //     * Creates empty error context
+    //     *
+    //     * @since 1.0.0
+    //     * @committed
+    //     */
+    manager_error_context();
+    explicit manager_error_context(internal_manager_error_context ctx);
+    manager_error_context(manager_error_context&& other);
+    manager_error_context& operator=(manager_error_context&& other);
+    manager_error_context(const manager_error_context& other) = delete;
+    manager_error_context& operator=(const manager_error_context& other) = delete;
+    ~manager_error_context() override;
 
-    /**
-     * Creates and initializes error context with given parameters.
-     *
-     * @param ec
-     * @param last_dispatched_to
-     * @param last_dispatched_from
-     * @param retry_attempts
-     * @param retry_reasons
-     * @param client_context_id
-     * @param http_status
-     * @param content
-     * @param path
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    manager_error_context(std::error_code ec,
-                          std::optional<std::string> last_dispatched_to,
-                          std::optional<std::string> last_dispatched_from,
-                          std::size_t retry_attempts,
-                          std::set<retry_reason> retry_reasons,
-                          std::string client_context_id,
-                          std::uint32_t http_status,
-                          std::string content,
-                          std::string path)
-      : error_context{ {}, ec, std::move(last_dispatched_to), std::move(last_dispatched_from), retry_attempts, std::move(retry_reasons) }
-      , client_context_id_{ std::move(client_context_id) }
-      , http_status_{ http_status }
-      , content_{ std::move(content) }
-      , path_{ std::move(path) }
-    {
-    }
+    [[nodiscard]] auto ec() const -> std::error_code override;
+
+    [[nodiscard]] auto last_dispatched_to() const -> const std::optional<std::string>& override;
+
+    [[nodiscard]] auto last_dispatched_from() const -> const std::optional<std::string>& override;
+
+    [[nodiscard]] auto retry_attempts() const -> std::size_t override;
+
+    [[nodiscard]] auto retry_reasons() const -> const std::set<retry_reason>& override;
+
+    [[nodiscard]] auto retried_because_of(retry_reason reason) const -> bool override;
 
     /**
      * Returns request path.
@@ -83,10 +69,7 @@ class manager_error_context : public error_context
      * @since 1.0.0
      * @uncommitted
      */
-    [[nodiscard]] auto path() const -> const std::string&
-    {
-        return path_;
-    }
+    [[nodiscard]] auto path() const -> const std::string&;
 
     /**
      * Returns response body.
@@ -96,10 +79,7 @@ class manager_error_context : public error_context
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto content() const -> const std::string&
-    {
-        return content_;
-    }
+    [[nodiscard]] auto content() const -> const std::string&;
 
     /**
      * Returns the unique
@@ -109,10 +89,7 @@ class manager_error_context : public error_context
      * @since 1.0.0
      * @uncommitted
      */
-    [[nodiscard]] auto client_context_id() const -> const std::string&
-    {
-        return client_context_id_;
-    }
+    [[nodiscard]] auto client_context_id() const -> const std::string&;
 
     /**
      * Returns HTTP status of response
@@ -122,15 +99,9 @@ class manager_error_context : public error_context
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto http_status() const -> std::uint32_t
-    {
-        return http_status_;
-    }
+    [[nodiscard]] auto http_status() const -> std::uint32_t;
 
   private:
-    std::string client_context_id_{};
-    std::uint32_t http_status_{};
-    std::string content_{};
-    std::string path_{};
+    std::unique_ptr<internal_manager_error_context> internal_;
 };
 } // namespace couchbase
