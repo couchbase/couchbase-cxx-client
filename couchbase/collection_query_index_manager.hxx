@@ -64,13 +64,7 @@ class collection_query_index_manager
     void get_all_indexes(const get_all_query_indexes_options& options, get_all_query_indexes_handler&& handler) const;
 
     [[nodiscard]] auto get_all_indexes(const get_all_query_indexes_options& options) const
-      -> std::future<std::pair<manager_error_context, std::vector<couchbase::management::query::index>>>
-    {
-        auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, std::vector<couchbase::management::query::index>>>>();
-        auto future = barrier->get_future();
-        get_all_indexes(options, [barrier](auto ctx, auto resp) { barrier->set_value({ ctx, resp }); });
-        return future;
-    }
+      -> std::future<std::pair<manager_error_context, std::vector<couchbase::management::query::index>>>;
     /**
      * Create an index on the collection.
      *
@@ -89,13 +83,7 @@ class collection_query_index_manager
 
     [[nodiscard]] auto create_index(std::string index_name,
                                     std::vector<std::string> fields,
-                                    const create_query_index_options& options) const -> std::future<manager_error_context>
-    {
-        auto barrier = std::make_shared<std::promise<manager_error_context>>();
-        auto future = barrier->get_future();
-        create_index(std::move(index_name), std::move(fields), options, [barrier](auto ctx) { barrier->set_value(ctx); });
-        return future;
-    }
+                                    const create_query_index_options& options) const -> std::future<manager_error_context>;
 
     /**
      * Create a primary index on a collection.
@@ -108,13 +96,7 @@ class collection_query_index_manager
      */
     void create_primary_index(const create_primary_query_index_options& options, create_query_index_handler&& handler) const;
 
-    [[nodiscard]] auto create_primary_index(const create_primary_query_index_options& options) -> std::future<manager_error_context>
-    {
-        auto barrier = std::make_shared<std::promise<manager_error_context>>();
-        auto future = barrier->get_future();
-        create_primary_index(options, [barrier](auto ctx) { barrier->set_value(ctx); });
-        return future;
-    }
+    [[nodiscard]] auto create_primary_index(const create_primary_query_index_options& options) -> std::future<manager_error_context>;
     /**
      * Drop primary index on a collection.
      *
@@ -126,13 +108,7 @@ class collection_query_index_manager
      */
     void drop_primary_index(const drop_primary_query_index_options& options, drop_query_index_handler&& handler) const;
 
-    [[nodiscard]] auto drop_primary_index(const drop_primary_query_index_options& options) const -> std::future<manager_error_context>
-    {
-        auto barrier = std::make_shared<std::promise<manager_error_context>>();
-        auto future = barrier->get_future();
-        drop_primary_index(options, [barrier](auto ctx) { barrier->set_value(ctx); });
-        return future;
-    }
+    [[nodiscard]] auto drop_primary_index(const drop_primary_query_index_options& options) const -> std::future<manager_error_context>;
 
     /**
      * Drop index in collection.
@@ -146,13 +122,7 @@ class collection_query_index_manager
      */
     void drop_index(std::string index_name, const drop_query_index_options& options, drop_query_index_handler&& handler) const;
 
-    [[nodiscard]] auto drop_index(std::string index_name, const drop_query_index_options& options) -> std::future<manager_error_context>
-    {
-        auto barrier = std::make_shared<std::promise<manager_error_context>>();
-        auto future = barrier->get_future();
-        drop_index(std::move(index_name), options, [barrier](auto ctx) { barrier->set_value(ctx); });
-        return future;
-    }
+    [[nodiscard]] auto drop_index(std::string index_name, const drop_query_index_options& options) -> std::future<manager_error_context>;
     /**
      * Builds all currently deferred indexes in this collection.
      *
@@ -166,13 +136,7 @@ class collection_query_index_manager
      */
     void build_deferred_indexes(const build_query_index_options& options, build_deferred_query_indexes_handler&& handler) const;
 
-    [[nodiscard]] auto build_deferred_indexes(const build_query_index_options& options) const -> std::future<manager_error_context>
-    {
-        auto barrier = std::make_shared<std::promise<manager_error_context>>();
-        auto future = barrier->get_future();
-        build_deferred_indexes(options, [barrier](auto ctx) { barrier->set_value(std::move(ctx)); });
-        return future;
-    }
+    [[nodiscard]] auto build_deferred_indexes(const build_query_index_options& options) const -> std::future<manager_error_context>;
 
     /**
      * Polls the state of a set of indexes, until they all are online.
@@ -189,12 +153,7 @@ class collection_query_index_manager
                        watch_query_indexes_handler&& handler) const;
 
     [[nodiscard]] auto watch_indexes(std::vector<std::string> index_names, const watch_query_indexes_options& options)
-    {
-        auto barrier = std::make_shared<std::promise<manager_error_context>>();
-        auto future = barrier->get_future();
-        watch_indexes(std::move(index_names), options, [barrier](auto ctx) { barrier->set_value(ctx); });
-        return future;
-    }
+      -> std::future<manager_error_context>;
 
   private:
     friend class collection;

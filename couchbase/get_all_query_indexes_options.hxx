@@ -68,34 +68,4 @@ class get_all_query_indexes_options : public common_options<get_all_query_indexe
 
 using get_all_query_indexes_handler =
   std::function<void(couchbase::manager_error_context, std::vector<couchbase::management::query::index>)>;
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core
-{
-class cluster;
-class query_context;
-namespace impl
-{
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_get_all_query_indexes(std::shared_ptr<couchbase::core::cluster> core,
-                               std::string bucket_name,
-                               couchbase::get_all_query_indexes_options::built options,
-                               get_all_query_indexes_handler&& handler);
-
-void
-initiate_get_all_query_indexes(std::shared_ptr<couchbase::core::cluster> core,
-                               std::string bucket_name,
-                               couchbase::get_all_query_indexes_options::built options,
-                               query_context query_ctx,
-                               std::string collection_name,
-                               get_all_query_indexes_handler&& handler);
-
-#endif
-} // namespace impl
-} // namespace core
 } // namespace couchbase

@@ -136,37 +136,4 @@ class create_query_index_options : public common_options<create_query_index_opti
  */
 
 using create_query_index_handler = std::function<void(couchbase::manager_error_context)>;
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core
-{
-class cluster;
-class query_context;
-namespace impl
-{
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_create_query_index(std::shared_ptr<couchbase::core::cluster> core,
-                            std::string bucket_name,
-                            std::string index_name,
-                            std::vector<std::string> fields,
-                            couchbase::create_query_index_options::built options,
-                            create_query_index_handler&& handler);
-void
-initiate_create_query_index(std::shared_ptr<couchbase::core::cluster> core,
-                            std::string bucket_name,
-                            std::string index_name,
-                            std::vector<std::string> fields,
-                            couchbase::create_query_index_options::built options,
-                            query_context query_ctx,
-                            std::string collection_name,
-                            create_query_index_handler&& handler);
-
-#endif
-} // namespace impl
-} // namespace core
 } // namespace couchbase

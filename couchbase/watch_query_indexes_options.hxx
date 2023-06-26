@@ -81,35 +81,4 @@ class watch_query_indexes_options : public common_options<watch_query_indexes_op
  */
 
 using watch_query_indexes_handler = std::function<void(couchbase::manager_error_context)>;
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core
-{
-class cluster;
-class query_context;
-namespace impl
-{
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_watch_query_indexes(std::shared_ptr<couchbase::core::cluster> core,
-                             std::string bucket_name,
-                             std::vector<std::string> index_names,
-                             couchbase::watch_query_indexes_options::built options,
-                             query_context query_ctx,
-                             std::string collection_name,
-                             watch_query_indexes_handler&& handler);
-void
-initiate_watch_query_indexes(std::shared_ptr<couchbase::core::cluster> core,
-                             std::string bucket_name,
-                             std::vector<std::string> index_names,
-                             couchbase::watch_query_indexes_options::built options,
-                             watch_query_indexes_handler&& handler);
-
-#endif
-} // namespace impl
-} // namespace core
 } // namespace couchbase

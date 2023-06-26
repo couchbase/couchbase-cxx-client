@@ -82,35 +82,4 @@ class drop_query_index_options : public common_options<drop_query_index_options>
  */
 
 using drop_query_index_handler = std::function<void(couchbase::manager_error_context)>;
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core
-{
-class cluster;
-class query_context;
-namespace impl
-{
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_drop_query_index(std::shared_ptr<couchbase::core::cluster> core,
-                          std::string bucket_name,
-                          std::string index_name,
-                          couchbase::drop_query_index_options::built options,
-                          query_context query_ctx,
-                          std::string collection_name,
-                          drop_query_index_handler&& handler);
-void
-initiate_drop_query_index(std::shared_ptr<couchbase::core::cluster> core,
-                          std::string bucket_name,
-                          std::string index_name,
-                          couchbase::drop_query_index_options::built options,
-                          drop_query_index_handler&& handler);
-
-#endif
-} // namespace impl
-} // namespace core
 } // namespace couchbase

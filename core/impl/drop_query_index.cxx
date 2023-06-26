@@ -21,88 +21,167 @@
 #include "core/cluster.hxx"
 #include "core/operations/management/query_index_drop.hxx"
 
-namespace couchbase::core::impl
+namespace couchbase
 {
 template<typename Response>
 static manager_error_context
 build_context(Response& resp)
 {
-    return { resp.ctx.ec,
-             resp.ctx.last_dispatched_to,
-             resp.ctx.last_dispatched_from,
-             resp.ctx.retry_attempts,
-             std::move(resp.ctx.retry_reasons),
-             std::move(resp.ctx.client_context_id),
-             resp.ctx.http_status,
-             std::move(resp.ctx.http_body),
-             std::move(resp.ctx.path) };
+    return manager_error_context(internal_manager_error_context{ resp.ctx.ec,
+                                                                 resp.ctx.last_dispatched_to,
+                                                                 resp.ctx.last_dispatched_from,
+                                                                 resp.ctx.retry_attempts,
+                                                                 std::move(resp.ctx.retry_reasons),
+                                                                 std::move(resp.ctx.client_context_id),
+                                                                 resp.ctx.http_status,
+                                                                 std::move(resp.ctx.http_body),
+                                                                 std::move(resp.ctx.path) });
 }
 
-void
-initiate_drop_query_index(std::shared_ptr<couchbase::core::cluster> core,
-                          std::string bucket_name,
-                          std::string index_name,
-                          drop_query_index_options::built options,
-                          query_context query_context,
-                          std::string collection_name,
-                          drop_query_index_handler&& handler)
+static core::operations::management::query_index_drop_request
+build_drop_primary_index_request(std::string bucket_name, const drop_primary_query_index_options::built& options)
 {
-    core->execute(
-      operations::management::query_index_drop_request{
-        bucket_name,
+    core::operations::management::query_index_drop_request request{
+        std::move(bucket_name), "", "", options.index_name.value_or(""), {}, true, options.ignore_if_not_exists, {}, options.timeout,
+    };
+    return request;
+}
+
+static core::operations::management::query_index_drop_request
+build_drop_index_request(std::string bucket_name, std::string index_name, const drop_query_index_options::built& options)
+{
+    core::operations::management::query_index_drop_request request{
+        std::move(bucket_name), "", "", std::move(index_name), {}, false, options.ignore_if_not_exists, {}, options.timeout,
+    };
+    return request;
+}
+
+static core::operations::management::query_index_drop_request
+build_drop_primary_index_request(std::string bucket_name,
+                                 std::string scope_name,
+                                 std::string collection_name,
+                                 const drop_primary_query_index_options::built& options)
+{
+    core::operations::management::query_index_drop_request request{
         "",
-        collection_name,
-        index_name,
-        query_context,
-        false,
-        options.ignore_if_not_exists,
-        {},
-        options.timeout,
-      },
-      [core, bucket_name, options = std::move(options), handler = std::move(handler)](
-        operations::management::query_index_drop_response resp) { handler(build_context(resp)); });
-}
-
-void
-initiate_drop_query_index(std::shared_ptr<couchbase::core::cluster> core,
-                          std::string bucket_name,
-                          std::string index_name,
-                          couchbase::drop_query_index_options::built options,
-                          drop_query_index_handler&& handler)
-{
-    initiate_drop_query_index(core, std::move(bucket_name), std::move(index_name), options, {}, "", std::move(handler));
-}
-
-void
-initiate_drop_primary_query_index(std::shared_ptr<couchbase::core::cluster> core,
-                                  std::string bucket_name,
-                                  couchbase::drop_primary_query_index_options::built options,
-                                  query_context query_ctx,
-                                  std::string collection_name,
-                                  drop_primary_query_index_handler&& handler)
-{
-    core->execute(
-      operations::management::query_index_drop_request{
-        bucket_name,
         "",
-        collection_name,
+        std::move(collection_name),
         options.index_name.value_or(""),
-        query_ctx,
+        core::query_context(std::move(bucket_name), std::move(scope_name)),
         true,
         options.ignore_if_not_exists,
         {},
         options.timeout,
-      },
-      [core, bucket_name, options = std::move(options), handler = std::move(handler)](
-        operations::management::query_index_drop_response resp) { handler(build_context(resp)); });
-}
-void
-initiate_drop_primary_query_index(std::shared_ptr<couchbase::core::cluster> core,
-                                  std::string bucket_name,
-                                  couchbase::drop_primary_query_index_options::built options,
-                                  drop_primary_query_index_handler&& handler)
-{
-    return initiate_drop_primary_query_index(core, std::move(bucket_name), options, {}, "", std::move(handler));
+    };
+    return request;
 }
 
-} // namespace couchbase::core::impl
+static core::operations::management::query_index_drop_request
+build_drop_index_request(std::string bucket_name,
+                         std::string scope_name,
+                         std::string collection_name,
+                         std::string index_name,
+                         const drop_query_index_options::built& options)
+{
+    core::operations::management::query_index_drop_request request{
+        "",
+        "",
+        std::move(collection_name),
+        std::move(index_name),
+        core::query_context(std::move(bucket_name), std::move(scope_name)),
+        false,
+        options.ignore_if_not_exists,
+        {},
+        options.timeout,
+    };
+    return request;
+}
+
+void
+query_index_manager::drop_primary_index(std::string bucket_name,
+                                        const couchbase::drop_primary_query_index_options& options,
+                                        couchbase::drop_query_index_handler&& handler)
+{
+    auto request = build_drop_primary_index_request(std::move(bucket_name), options.build());
+
+    core_->execute(std::move(request),
+                   [handler = std::move(handler)](core::operations::management::query_index_drop_response resp) mutable {
+                       return handler(build_context(resp));
+                   });
+}
+
+auto
+query_index_manager::drop_primary_index(std::string bucket_name, const couchbase::drop_primary_query_index_options& options)
+  -> std::future<manager_error_context>
+{
+    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    drop_primary_index(std::move(bucket_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    return barrier->get_future();
+}
+
+void
+query_index_manager::drop_index(std::string bucket_name,
+                                std::string index_name,
+                                const couchbase::drop_query_index_options& options,
+                                couchbase::drop_query_index_handler&& handler)
+{
+    auto request = build_drop_index_request(std::move(bucket_name), std::move(index_name), options.build());
+
+    core_->execute(std::move(request),
+                   [handler = std::move(handler)](core::operations::management::query_index_drop_response resp) mutable {
+                       return handler(build_context(resp));
+                   });
+}
+
+auto
+query_index_manager::drop_index(std::string bucket_name, std::string index_name, const couchbase::drop_query_index_options& options)
+  -> std::future<manager_error_context>
+{
+    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    drop_index(std::move(bucket_name), std::move(index_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    return barrier->get_future();
+}
+
+void
+collection_query_index_manager::drop_primary_index(const drop_primary_query_index_options& options,
+                                                   drop_query_index_handler&& handler) const
+{
+    auto request = build_drop_primary_index_request(bucket_name_, scope_name_, collection_name_, options.build());
+
+    core_->execute(std::move(request),
+                   [handler = std::move(handler)](core::operations::management::query_index_drop_response resp) mutable {
+                       return handler(build_context(resp));
+                   });
+}
+
+auto
+collection_query_index_manager::drop_primary_index(const couchbase::drop_primary_query_index_options& options) const
+  -> std::future<manager_error_context>
+{
+    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    drop_primary_index(options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    return barrier->get_future();
+}
+
+void
+collection_query_index_manager::drop_index(std::string index_name,
+                                           const drop_query_index_options& options,
+                                           drop_query_index_handler&& handler) const
+{
+    auto request = build_drop_index_request(bucket_name_, scope_name_, collection_name_, std::move(index_name), options.build());
+
+    core_->execute(std::move(request),
+                   [handler = std::move(handler)](core::operations::management::query_index_drop_response resp) mutable {
+                       return handler(build_context(resp));
+                   });
+}
+
+auto
+collection_query_index_manager::drop_index(std::string index_name, const couchbase::drop_query_index_options& options)
+  -> std::future<manager_error_context>
+{
+    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    drop_index(std::move(index_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    return barrier->get_future();
+}
+} // namespace couchbase

@@ -21,41 +21,36 @@
 #include "core/cluster.hxx"
 #include "core/operations/management/query_index_create.hxx"
 
-namespace couchbase::core::impl
+namespace couchbase
 {
 template<typename Response>
 static manager_error_context
 build_context(Response& resp)
 {
-    return { resp.ctx.ec,
-             resp.ctx.last_dispatched_to,
-             resp.ctx.last_dispatched_from,
-             resp.ctx.retry_attempts,
-             std::move(resp.ctx.retry_reasons),
-             std::move(resp.ctx.client_context_id),
-             resp.ctx.http_status,
-             std::move(resp.ctx.http_body),
-             std::move(resp.ctx.path) };
+    return manager_error_context(internal_manager_error_context{ resp.ctx.ec,
+                                                                 resp.ctx.last_dispatched_to,
+                                                                 resp.ctx.last_dispatched_from,
+                                                                 resp.ctx.retry_attempts,
+                                                                 std::move(resp.ctx.retry_reasons),
+                                                                 std::move(resp.ctx.client_context_id),
+                                                                 resp.ctx.http_status,
+                                                                 std::move(resp.ctx.http_body),
+                                                                 std::move(resp.ctx.path) });
 }
 
-void
-initiate_create_query_index(std::shared_ptr<couchbase::core::cluster> core,
-                            std::string bucket_name,
-                            std::string index_name,
-                            std::vector<std::string> fields,
-                            couchbase::create_query_index_options::built options,
-                            query_context query_ctx,
-                            std::string collection_name,
-                            create_query_index_handler&& handler)
+static core::operations::management::query_index_create_request
+build_create_index_request(std::string bucket_name,
+                           std::string index_name,
+                           std::vector<std::string> fields,
+                           create_query_index_options::built options)
 {
-    core->execute(
-      operations::management::query_index_create_request{
-        bucket_name,
+    core::operations::management::query_index_create_request request{
+        std::move(bucket_name),
         "",
-        collection_name,
-        index_name,
-        fields,
-        query_ctx,
+        "",
+        std::move(index_name),
+        std::move(fields),
+        {},
         false,
         options.ignore_if_exists,
         options.condition,
@@ -63,39 +58,20 @@ initiate_create_query_index(std::shared_ptr<couchbase::core::cluster> core,
         options.num_replicas,
         {},
         options.timeout,
-      },
-      [core, bucket_name, options = std::move(options), handler = std::move(handler)](
-        operations::management::query_index_create_response resp) { handler(build_context(resp)); });
+    };
+    return request;
 }
 
-void
-initiate_create_query_index(std::shared_ptr<couchbase::core::cluster> core,
-                            std::string bucket_name,
-                            std::string index_name,
-                            std::vector<std::string> fields,
-                            couchbase::create_query_index_options::built options,
-                            create_query_index_handler&& handler)
+static core::operations::management::query_index_create_request
+build_create_primary_index_request(std::string bucket_name, create_primary_query_index_options::built options)
 {
-    initiate_create_query_index(
-      core, std::move(bucket_name), std::move(index_name), std::move(fields), options, {}, "", std::move(handler));
-}
-
-void
-initiate_create_primary_query_index(std::shared_ptr<couchbase::core::cluster> core,
-                                    std::string bucket_name,
-                                    couchbase::create_primary_query_index_options::built options,
-                                    query_context query_ctx,
-                                    std::string collection_name,
-                                    create_primary_query_index_handler&& handler)
-{
-    core->execute(
-      operations::management::query_index_create_request{
-        bucket_name,
+    core::operations::management::query_index_create_request request{
+        std::move(bucket_name),
         "",
-        collection_name,
+        "",
         options.index_name.value_or(""),
         {},
-        query_ctx,
+        {},
         true,
         options.ignore_if_exists,
         {},
@@ -103,17 +79,154 @@ initiate_create_primary_query_index(std::shared_ptr<couchbase::core::cluster> co
         options.num_replicas,
         {},
         options.timeout,
-      },
-      [core, bucket_name, options = std::move(options), handler = std::move(handler)](
-        operations::management::query_index_create_response resp) { handler(build_context(resp)); });
+    };
+    return request;
+}
+
+static core::operations::management::query_index_create_request
+build_create_index_request(std::string bucket_name,
+                           std::string scope_name,
+                           std::string collection_name,
+                           std::string index_name,
+                           std::vector<std::string> fields,
+                           create_query_index_options::built options)
+{
+    core::operations::management::query_index_create_request request{
+        "",
+        "",
+        std::move(collection_name),
+        std::move(index_name),
+        std::move(fields),
+        core::query_context(std::move(bucket_name), std::move(scope_name)),
+        false,
+        options.ignore_if_exists,
+        options.condition,
+        options.deferred,
+        options.num_replicas,
+        {},
+        options.timeout,
+    };
+    return request;
+}
+
+static core::operations::management::query_index_create_request
+build_create_primary_index_request(std::string bucket_name,
+                                   std::string scope_name,
+                                   std::string collection_name,
+                                   create_primary_query_index_options::built options)
+{
+    core::operations::management::query_index_create_request request{
+        "",
+        "",
+        std::move(collection_name),
+        options.index_name.value_or(""),
+        {},
+        core::query_context(std::move(bucket_name), std::move(scope_name)),
+        true,
+        options.ignore_if_exists,
+        {},
+        options.deferred,
+        options.num_replicas,
+        {},
+        options.timeout,
+    };
+    return request;
 }
 
 void
-initiate_create_primary_query_index(std::shared_ptr<couchbase::core::cluster> core,
-                                    std::string bucket_name,
-                                    couchbase::create_primary_query_index_options::built options,
-                                    create_primary_query_index_handler&& handler)
+query_index_manager::create_index(std::string bucket_name,
+                                  std::string index_name,
+                                  std::vector<std::string> fields,
+                                  const couchbase::create_query_index_options& options,
+                                  couchbase::create_primary_query_index_handler&& handler) const
 {
-    initiate_create_primary_query_index(core, std::move(bucket_name), std::move(options), {}, "", std::move(handler));
+    auto request = build_create_index_request(std::move(bucket_name), std::move(index_name), std::move(fields), options.build());
+
+    core_->execute(std::move(request),
+                   [handler = std::move(handler)](core::operations::management::query_index_create_response resp) mutable {
+                       return handler(build_context(resp));
+                   });
 }
-} // namespace couchbase::core::impl
+
+auto
+query_index_manager::create_index(std::string bucket_name,
+                                  std::string index_name,
+                                  std::vector<std::string> fields,
+                                  const couchbase::create_query_index_options& options) const -> std::future<manager_error_context>
+{
+    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    create_index(std::move(bucket_name), std::move(index_name), std::move(fields), options, [barrier](auto ctx) mutable {
+        barrier->set_value(std::move(ctx));
+    });
+    return barrier->get_future();
+}
+
+void
+query_index_manager::create_primary_index(std::string bucket_name,
+                                          const create_primary_query_index_options& options,
+                                          create_query_index_handler&& handler)
+{
+    auto request = build_create_primary_index_request(std::move(bucket_name), options.build());
+
+    core_->execute(std::move(request),
+                   [handler = std::move(handler)](core::operations::management::query_index_create_response resp) mutable {
+                       return handler(build_context(resp));
+                   });
+}
+
+auto
+query_index_manager::create_primary_index(std::string bucket_name, const create_primary_query_index_options& options)
+  -> std::future<manager_error_context>
+{
+    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    create_primary_index(std::move(bucket_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    return barrier->get_future();
+}
+
+void
+collection_query_index_manager::create_index(std::string index_name,
+                                             std::vector<std::string> fields,
+                                             const create_query_index_options& options,
+                                             create_query_index_handler&& handler) const
+{
+    auto request =
+      build_create_index_request(bucket_name_, scope_name_, collection_name_, std::move(index_name), std::move(fields), options.build());
+
+    core_->execute(std::move(request),
+                   [handler = std::move(handler)](core::operations::management::query_index_create_response resp) mutable {
+                       return handler(build_context(resp));
+                   });
+}
+
+auto
+collection_query_index_manager::create_index(std::string index_name,
+                                             std::vector<std::string> fields,
+                                             const couchbase::create_query_index_options& options) const
+  -> std::future<manager_error_context>
+{
+    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    create_index(std::move(index_name), std::move(fields), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    return barrier->get_future();
+}
+
+void
+collection_query_index_manager::create_primary_index(const create_primary_query_index_options& options,
+                                                     create_query_index_handler&& handler) const
+{
+    auto request = build_create_primary_index_request(bucket_name_, scope_name_, collection_name_, options.build());
+
+    core_->execute(std::move(request),
+                   [handler = std::move(handler)](core::operations::management::query_index_create_response resp) mutable {
+                       return handler(build_context(resp));
+                   });
+}
+
+auto
+collection_query_index_manager::create_primary_index(const couchbase::create_primary_query_index_options& options)
+  -> std::future<manager_error_context>
+{
+    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    create_primary_index(options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    return barrier->get_future();
+}
+} // namespace couchbase
