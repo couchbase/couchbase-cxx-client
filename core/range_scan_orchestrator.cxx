@@ -515,7 +515,7 @@ class range_scan_orchestrator_impl
                     std::lock_guard<std::mutex> const stream_count_lock(stream_count_per_node_mutex_);
                     stream_count_per_node_.erase(least_busy_node);
                 }
-                return start_streams(stream_count - counter);
+                return start_streams(static_cast<std::uint16_t>(stream_count - counter));
             }
 
             auto node_id = stream->node_id();
