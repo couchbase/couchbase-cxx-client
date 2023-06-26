@@ -20,7 +20,6 @@
 
 #include "core/cluster.hxx"
 #include "core/operations/management/bucket_get.hxx"
-#include "core/operations/management/bucket_get_all.hxx"
 #include "couchbase/bucket_manager.hxx"
 
 namespace couchbase
@@ -44,13 +43,6 @@ static core::operations::management::bucket_get_request
 build_get_bucket_request(std::string bucket_name, const get_bucket_options::built& options)
 {
     core::operations::management::bucket_get_request request{ std::move(bucket_name), {}, options.timeout };
-    return request;
-}
-
-static core::operations::management::bucket_get_all_request
-build_get_all_buckets_request(const get_all_buckets_options::built& options)
-{
-    core::operations::management::bucket_get_all_request request{ {}, options.timeout };
     return request;
 }
 
@@ -138,17 +130,6 @@ map_bucket_settings(const couchbase::core::management::cluster::bucket_settings&
     return bucket_settings;
 }
 
-static std::vector<couchbase::management::cluster::bucket_settings>
-map_all_bucket_settings(const std::vector<couchbase::core::management::cluster::bucket_settings>& buckets)
-{
-    std::vector<couchbase::management::cluster::bucket_settings> buckets_settings{};
-    for (const auto& bucket : buckets) {
-        auto converted_bucket = map_bucket_settings(bucket);
-        buckets_settings.emplace_back(converted_bucket);
-    }
-    return buckets_settings;
-}
-
 void
 bucket_manager::get_bucket(std::string bucket_name, const get_bucket_options& options, get_bucket_handler&& handler) const
 {
@@ -167,26 +148,6 @@ bucket_manager::get_bucket(std::string bucket_name, const get_bucket_options& op
     get_bucket(std::move(bucket_name), options, [barrier](auto ctx, auto result) mutable {
         barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
     });
-    return barrier->get_future();
-}
-
-void
-bucket_manager::get_all_buckets(const get_all_buckets_options& options, get_all_buckets_handler&& handler) const
-{
-    auto request = build_get_all_buckets_request(options.build());
-
-    core_->execute(std::move(request), [handler = std::move(handler)](core::operations::management::bucket_get_all_response resp) mutable {
-        return handler(build_context(resp), map_all_bucket_settings(resp.buckets));
-    });
-}
-
-auto
-bucket_manager::get_all_buckets(const get_all_buckets_options& options) const
-  -> std::future<std::pair<manager_error_context, std::vector<management::cluster::bucket_settings>>>
-{
-    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, std::vector<management::cluster::bucket_settings>>>>();
-    get_all_buckets(options,
-                    [barrier](auto ctx, auto result) mutable { barrier->set_value(std::make_pair(std::move(ctx), std::move(result))); });
     return barrier->get_future();
 }
 } // namespace couchbase
