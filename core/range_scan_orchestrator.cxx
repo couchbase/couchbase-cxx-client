@@ -90,6 +90,19 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
 
     void start()
     {
+        // Fail the stream if more time since the timeout has elapsed since the stream was first attempted (if this is a retry)
+        if (first_attempt_timestamp_.has_value()) {
+            if (std::chrono::steady_clock::now() - first_attempt_timestamp_.value() > create_options_.timeout) {
+                CB_LOG_DEBUG("stream for vbucket_id {} cannot be retried any longer because it has exceeded the timeout", vbucket_id_);
+                state_ = failed{ errc::common::unambiguous_timeout, !is_sampling_scan() };
+                stream_manager_->stream_start_failed(node_id_, error_is_fatal());
+                drain_waiting_queue();
+                return;
+            }
+        } else {
+            first_attempt_timestamp_ = std::chrono::steady_clock::now();
+        }
+
         CB_LOG_TRACE("starting stream {} in node {}", vbucket_id_, node_id_);
         state_ = std::monostate{};
         if (std::holds_alternative<range_scan>(create_options_.scan_type) && !last_seen_key_.empty()) {
@@ -102,25 +115,25 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
                     // Benign error
                     CB_LOG_DEBUG("ignoring vbucket_id {} because no documents exist for it", self->vbucket_id_);
                     CB_LOG_TRACE("setting state for stream {} to FAILED", self->vbucket_id_);
-                    self->state_ = failed{ std::move(ec), false };
+                    self->state_ = failed{ ec, false };
                     self->stream_manager_->stream_start_failed(self->node_id_, self->error_is_fatal());
                 } else if (ec == errc::common::temporary_failure) {
                     // Retryable error
                     CB_LOG_DEBUG("received busy status from vbucket with ID {} - reducing concurrency & will retry", self->vbucket_id_);
                     CB_LOG_TRACE("setting state for stream {} to AWAITING_RETRY", self->vbucket_id_);
-                    self->state_ = awaiting_retry{ std::move(ec) };
+                    self->state_ = awaiting_retry{ ec };
                     self->stream_manager_->stream_start_failed_awaiting_retry(self->node_id_, self->vbucket_id_);
                 } else if (ec == errc::common::internal_server_failure || ec == errc::common::collection_not_found) {
                     // Fatal errors
                     CB_LOG_TRACE("setting state for stream {} to FAILED", self->vbucket_id_);
-                    self->state_ = failed{ std::move(ec), true };
+                    self->state_ = failed{ ec, true };
                     self->stream_manager_->stream_start_failed(self->node_id_, self->error_is_fatal());
                 } else {
                     // Unexpected errors
                     CB_LOG_DEBUG(
                       "received unexpected error {} from stream for vbucket {} ({})", ec.value(), self->vbucket_id_, ec.message());
                     CB_LOG_TRACE("setting state for stream {} to FAILED", self->vbucket_id_);
-                    self->state_ = failed{ std::move(ec), true };
+                    self->state_ = failed{ ec, true };
                     self->stream_manager_->stream_start_failed(self->node_id_, self->error_is_fatal());
                 }
                 self->drain_waiting_queue();
@@ -348,6 +361,7 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
     std::string last_seen_key_{};
     std::variant<std::monostate, not_started, failed, awaiting_retry, running, completed> state_{};
     bool should_cancel_{ false };
+    std::optional<std::chrono::time_point<std::chrono::steady_clock>> first_attempt_timestamp_{};
     std::vector<utils::movable_function<void()>> waiting_queue_{};
 };
 
@@ -387,10 +401,11 @@ class range_scan_orchestrator_impl
         }
 
         auto batch_time_limit = std::chrono::duration_cast<std::chrono::milliseconds>(0.9 * options_.timeout);
-        range_scan_continue_options continue_options{
+        range_scan_continue_options const continue_options{
             options_.batch_item_limit,
             options_.batch_byte_limit,
             batch_time_limit,
+            options_.timeout,
             options_.retry_strategy,
         };
         for (std::uint16_t vbucket = 0; vbucket < gsl::narrow_cast<std::uint16_t>(vbucket_map_.size()); ++vbucket) {

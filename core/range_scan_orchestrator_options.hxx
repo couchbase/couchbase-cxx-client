@@ -41,11 +41,13 @@ namespace couchbase::core
 {
 
 struct range_scan_orchestrator_options {
+    static constexpr std::uint16_t default_concurrency{ 1 };
+
     bool ids_only{ false };
     std::optional<mutation_state> consistent_with{};
     std::uint32_t batch_item_limit{ range_scan_continue_options::default_batch_item_limit };
     std::uint32_t batch_byte_limit{ range_scan_continue_options::default_batch_byte_limit };
-    std::uint16_t concurrency{ range_scan_continue_options::default_concurrency };
+    std::uint16_t concurrency{ default_concurrency };
 
     std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
     std::chrono::milliseconds timeout{ timeout_defaults::key_value_scan_timeout };

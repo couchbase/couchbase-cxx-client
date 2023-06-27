@@ -292,6 +292,19 @@ class crud_component_impl
 
         req->persistent_ = true;
         req->vbucket_ = vbucket_id;
+
+        if (options.timeout != std::chrono::milliseconds::zero()) {
+            auto timer = std::make_shared<asio::steady_timer>(io_);
+            timer->expires_after(options.timeout);
+            timer->async_wait([req](auto error) {
+                if (error == asio::error::operation_aborted) {
+                    return;
+                }
+                req->cancel(couchbase::errc::common::unambiguous_timeout);
+            });
+            req->set_deadline(timer);
+        }
+
         mcbp::buffer_writer buf{ scan_uuid.size() + sizeof(std::uint32_t) * 3 };
         buf.write(scan_uuid);
         buf.write_uint32(options.batch_item_limit);

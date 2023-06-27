@@ -81,10 +81,10 @@ struct range_scan_continue_options {
     static constexpr std::uint32_t default_batch_item_limit{ 50 };
     static constexpr std::uint32_t default_batch_byte_limit{ 15000 };
     static constexpr std::chrono::milliseconds default_batch_time_limit{ 0 };
-    static constexpr std::uint16_t default_concurrency{ 1 };
 
     std::uint32_t batch_item_limit{ default_batch_item_limit };
     std::uint32_t batch_byte_limit{ default_batch_byte_limit };
+    std::chrono::milliseconds timeout{};
     std::chrono::milliseconds batch_time_limit{ default_batch_time_limit };
     std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
 
