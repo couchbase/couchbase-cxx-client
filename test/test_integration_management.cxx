@@ -357,12 +357,11 @@ TEST_CASE("integration: bucket management", "[integration]")
                     auto ctx = c.buckets().create_bucket(bucket_settings, {}).get();
                     REQUIRE_SUCCESS(ctx.ec());
                 }
-                auto bucket_exists = test::utils::wait_until([&bucket_name, c]() {
-                    auto [ctx, bucket] = c.buckets().get_bucket(bucket_name, {}).get();
-                    return ctx.ec() != couchbase::errc::common::bucket_not_found;
-                });
-                REQUIRE(bucket_exists);
+
+                REQUIRE(test::utils::wait_until_bucket_healthy(integration.cluster, bucket_name));
+
                 test::utils::open_bucket(integration.cluster, bucket_name);
+
                 auto default_coll = c.bucket(bucket_name).default_collection();
                 {
                     const tao::json::value value = {
