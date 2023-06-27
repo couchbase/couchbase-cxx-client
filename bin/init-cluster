@@ -75,7 +75,10 @@ api.post_form("/settings/web",
               password: options[:password],
               username: options[:username],
               port: "SAME")
-api.post_form("/settings/indexes", storageMode: "plasma")
+res = api.post_form("/settings/indexes", storageMode: "plasma")
+if res["errors"]
+  res = api.post_form("/settings/indexes", storageMode: "forestdb")
+end
 
 if options[:cluster_run_nodes] > 1
   known_nodes = []

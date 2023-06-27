@@ -17,60 +17,90 @@
 
 #include <couchbase/manager_error_context.hxx>
 #include <couchbase/query_index_manager.hxx>
+#include <utility>
 
 #include "core/cluster.hxx"
 #include "core/operations/management/query_index_build.hxx"
 #include "core/operations/management/query_index_get_all.hxx"
 
-namespace couchbase::core::impl
+namespace couchbase
 {
 template<typename Response>
 static manager_error_context
 build_context(Response& resp)
 {
-    return { resp.ctx.ec,
-             resp.ctx.last_dispatched_to,
-             resp.ctx.last_dispatched_from,
-             resp.ctx.retry_attempts,
-             std::move(resp.ctx.retry_reasons),
-             std::move(resp.ctx.client_context_id),
-             resp.ctx.http_status,
-             std::move(resp.ctx.http_body),
-             std::move(resp.ctx.path) };
+    return manager_error_context(internal_manager_error_context{ resp.ctx.ec,
+                                                                 resp.ctx.last_dispatched_to,
+                                                                 resp.ctx.last_dispatched_from,
+                                                                 resp.ctx.retry_attempts,
+                                                                 std::move(resp.ctx.retry_reasons),
+                                                                 std::move(resp.ctx.client_context_id),
+                                                                 resp.ctx.http_status,
+                                                                 std::move(resp.ctx.http_body),
+                                                                 std::move(resp.ctx.path) });
+}
+
+static core::operations::management::query_index_get_all_request
+build_get_all_indexes_request(std::string bucket_name, const get_all_query_indexes_options::built& options)
+{
+    core::operations::management::query_index_get_all_request request{ std::move(bucket_name), "", "", {}, {}, options.timeout };
+    return request;
+}
+
+static core::operations::management::query_index_get_all_request
+build_get_all_indexes_request(std::string bucket_name,
+                              std::string scope_name,
+                              std::string collection_name,
+                              const get_all_query_indexes_options::built& options)
+{
+    core::operations::management::query_index_get_all_request request{
+        "", "", std::move(collection_name), core::query_context(std::move(bucket_name), std::move(scope_name)), {}, options.timeout
+    };
+    return request;
 }
 
 void
-initiate_get_all_query_indexes(std::shared_ptr<couchbase::core::cluster> core,
-                               std::string bucket_name,
-                               couchbase::get_all_query_indexes_options::built options,
-                               query_context query_ctx,
-                               std::string collection_name,
-                               get_all_query_indexes_handler&& handler)
+query_index_manager::get_all_indexes(std::string bucket_name,
+                                     const couchbase::get_all_query_indexes_options& options,
+                                     couchbase::get_all_query_indexes_handler&& handler) const
 {
-    core->execute(
-      operations::management::query_index_get_all_request{
-        bucket_name,
-        "",
-        collection_name,
-        query_ctx,
-        {},
-        options.timeout,
-      },
-      [handler = std::move(handler)](operations::management::query_index_get_all_response resp) {
-          if (resp.ctx.ec) {
-              return handler(build_context(resp), {});
-          }
-          handler(build_context(resp), resp.indexes);
-      });
+    auto request = build_get_all_indexes_request(std::move(bucket_name), options.build());
+
+    core_->execute(std::move(request),
+                   [handler = std::move(handler)](core::operations::management::query_index_get_all_response resp) mutable {
+                       return handler(build_context(resp), resp.indexes);
+                   });
+}
+
+auto
+query_index_manager::get_all_indexes(std::string bucket_name, const couchbase::get_all_query_indexes_options& options) const
+  -> std::future<std::pair<manager_error_context, std::vector<management::query::index>>>
+{
+    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, std::vector<management::query::index>>>>();
+    get_all_indexes(std::move(bucket_name), options, [barrier](auto ctx, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
+    });
+    return barrier->get_future();
 }
 
 void
-initiate_get_all_query_indexes(std::shared_ptr<couchbase::core::cluster> core,
-                               std::string bucket_name,
-                               couchbase::get_all_query_indexes_options::built options,
-                               get_all_query_indexes_handler&& handler)
+collection_query_index_manager::get_all_indexes(const get_all_query_indexes_options& options, get_all_query_indexes_handler&& handler) const
 {
-    initiate_get_all_query_indexes(core, std::move(bucket_name), options, {}, "", std::move(handler));
+    auto request = build_get_all_indexes_request(bucket_name_, scope_name_, collection_name_, options.build());
+
+    core_->execute(std::move(request),
+                   [handler = std::move(handler)](core::operations::management::query_index_get_all_response resp) mutable {
+                       return handler(build_context(resp), resp.indexes);
+                   });
 }
 
-} // namespace couchbase::core::impl
+auto
+collection_query_index_manager::get_all_indexes(const couchbase::get_all_query_indexes_options& options) const
+  -> std::future<std::pair<manager_error_context, std::vector<couchbase::management::query::index>>>
+{
+    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, std::vector<management::query::index>>>>();
+    get_all_indexes(options,
+                    [barrier](auto ctx, auto result) mutable { barrier->set_value(std::make_pair(std::move(ctx), std::move(result))); });
+    return barrier->get_future();
+}
+} // namespace couchbase

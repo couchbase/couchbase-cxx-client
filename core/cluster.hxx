@@ -112,10 +112,7 @@ class cluster : public std::enable_shared_from_this<cluster>
                   return self->dns_srv_tracker_->get_srv_nodes(
                     [self, hostname = std::move(hostname), handler = std::forward<Handler>(handler)](origin::node_list nodes,
                                                                                                      std::error_code ec) mutable {
-                        if (ec) {
-                            return self->close([ec, handler = std::forward<Handler>(handler)]() mutable { handler(ec); });
-                        }
-                        if (!nodes.empty()) {
+                        if (!ec && !nodes.empty()) {
                             self->origin_.set_nodes(std::move(nodes));
                             CB_LOG_INFO("replace list of bootstrap nodes with addresses from DNS SRV of \"{}\": [{}]",
                                         hostname,
