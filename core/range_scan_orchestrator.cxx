@@ -27,8 +27,8 @@
 
 #include <gsl/narrow>
 
-#include <random>
 #include <future>
+#include <random>
 
 namespace couchbase::core
 {
