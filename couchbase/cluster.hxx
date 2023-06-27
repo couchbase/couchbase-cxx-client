@@ -19,6 +19,7 @@
 
 #include <couchbase/analytics_options.hxx>
 #include <couchbase/bucket.hxx>
+#include <couchbase/bucket_manager.hxx>
 #include <couchbase/cluster_options.hxx>
 #include <couchbase/query_index_manager.hxx>
 #include <couchbase/query_options.hxx>
@@ -248,6 +249,19 @@ class cluster
     [[nodiscard]] auto query_indexes() const -> query_index_manager
     {
         return query_index_manager{ core_ };
+    }
+
+    /**
+     * Provides access to the bucket management services.
+     *
+     * @return a manager instance
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto buckets() const -> bucket_manager
+    {
+        return bucket_manager{ core_ };
     }
 
     /**

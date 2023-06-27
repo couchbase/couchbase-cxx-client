@@ -66,34 +66,4 @@ class build_query_index_options : public common_options<build_query_index_option
  * @uncommitted
  */
 using build_deferred_query_indexes_handler = std::function<void(couchbase::manager_error_context)>;
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core
-{
-class cluster;
-class query_context;
-namespace impl
-{
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_build_deferred_indexes(std::shared_ptr<couchbase::core::cluster> resp1,
-                                std::string bucket_name,
-                                build_query_index_options::built options,
-                                query_context query_ctx,
-                                std::string collection_name,
-                                build_deferred_query_indexes_handler&& handler);
-
-void
-initiate_build_deferred_indexes(std::shared_ptr<couchbase::core::cluster> resp1,
-                                std::string bucket_name,
-                                build_query_index_options::built options,
-                                build_deferred_query_indexes_handler&& handler);
-
-#endif
-} // namespace impl
-} // namespace core
 } // namespace couchbase

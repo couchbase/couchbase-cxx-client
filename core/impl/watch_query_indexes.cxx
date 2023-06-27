@@ -24,16 +24,6 @@
 
 namespace couchbase::core::impl
 {
-
-template<typename Response>
-static manager_error_context
-build_context(Response& resp, std::optional<std::error_code> ec = {})
-{
-    return { ec ? ec.value() : resp.ctx.ec, resp.ctx.last_dispatched_to,       resp.ctx.last_dispatched_from,
-             resp.ctx.retry_attempts,       std::move(resp.ctx.retry_reasons), std::move(resp.ctx.client_context_id),
-             resp.ctx.http_status,          std::move(resp.ctx.http_body),     std::move(resp.ctx.path) };
-}
-
 class watch_context : public std::enable_shared_from_this<watch_context>
 {
 
@@ -50,9 +40,18 @@ class watch_context : public std::enable_shared_from_this<watch_context>
     std::chrono::milliseconds timeout_{ options_.timeout.value_or(core_->origin().second.options().query_timeout) };
     std::atomic<size_t> attempts_{ 0 };
 
-    void finish(manager_error_context error_ctx)
+    template<typename Response>
+    void finish(Response& resp, std::optional<std::error_code> ec = {})
     {
-        handler_(error_ctx);
+        handler_({ manager_error_context(internal_manager_error_context{ ec ? ec.value() : resp.ctx.ec,
+                                                                         resp.ctx.last_dispatched_to,
+                                                                         resp.ctx.last_dispatched_from,
+                                                                         resp.ctx.retry_attempts,
+                                                                         std::move(resp.ctx.retry_reasons),
+                                                                         std::move(resp.ctx.client_context_id),
+                                                                         resp.ctx.http_status,
+                                                                         std::move(resp.ctx.http_body),
+                                                                         std::move(resp.ctx.path) }) });
         timer_.cancel();
     }
     std::chrono::milliseconds remaining()
@@ -79,9 +78,9 @@ class watch_context : public std::enable_shared_from_this<watch_context>
             complete &= it != resp.indexes.end() && it->state == "online";
         }
         if (complete || resp.ctx.ec == couchbase::errc::common::ambiguous_timeout) {
-            finish(build_context(resp));
+            finish(resp);
         } else if (remaining().count() <= 0) {
-            finish(build_context(resp, couchbase::errc::common::ambiguous_timeout));
+            finish(resp, couchbase::errc::common::ambiguous_timeout);
             complete = true;
         }
         return complete;
@@ -141,28 +140,53 @@ class watch_context : public std::enable_shared_from_this<watch_context>
         core_->execute(req, resp_fn);
     }
 };
+} // namespace couchbase::core::impl
 
-void
-initiate_watch_query_indexes(std::shared_ptr<couchbase::core::cluster> core,
-                             std::string bucket_name,
-                             std::vector<std::string> index_names,
-                             couchbase::watch_query_indexes_options::built options,
-                             query_context query_ctx,
-                             std::string collection_name,
-                             watch_query_indexes_handler&& handler)
+namespace couchbase
 {
-    auto ctx = std::make_shared<watch_context>(core, bucket_name, index_names, options, query_ctx, collection_name, std::move(handler));
+void
+query_index_manager::watch_indexes(std::string bucket_name,
+                                   std::vector<std::string> index_names,
+                                   const couchbase::watch_query_indexes_options& options,
+                                   couchbase::watch_query_indexes_handler&& handler)
+{
+    auto ctx = std::make_shared<couchbase::core::impl::watch_context>(
+      core_, std::move(bucket_name), std::move(index_names), options.build(), core::query_context{}, "", std::move(handler));
     ctx->execute();
 }
 
-void
-initiate_watch_query_indexes(std::shared_ptr<couchbase::core::cluster> core,
-                             std::string bucket_name,
-                             std::vector<std::string> index_names,
-                             couchbase::watch_query_indexes_options::built options,
-                             watch_query_indexes_handler&& handler)
+auto
+query_index_manager::watch_indexes(std::string bucket_name,
+                                   std::vector<std::string> index_names,
+                                   const couchbase::watch_query_indexes_options& options) -> std::future<manager_error_context>
 {
-    initiate_watch_query_indexes(core, std::move(bucket_name), std::move(index_names), options, {}, "", std::move(handler));
+    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    watch_indexes(
+      std::move(bucket_name), std::move(index_names), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    return barrier->get_future();
 }
 
-} // namespace couchbase::core::impl
+void
+collection_query_index_manager::watch_indexes(std::vector<std::string> index_names,
+                                              const watch_query_indexes_options& options,
+                                              watch_query_indexes_handler&& handler) const
+{
+    auto ctx = std::make_shared<couchbase::core::impl::watch_context>(core_,
+                                                                      bucket_name_,
+                                                                      std::move(index_names),
+                                                                      options.build(),
+                                                                      core::query_context(bucket_name_, scope_name_),
+                                                                      collection_name_,
+                                                                      std::move(handler));
+    ctx->execute();
+}
+
+auto
+collection_query_index_manager::watch_indexes(std::vector<std::string> index_names, const couchbase::watch_query_indexes_options& options)
+  -> std::future<manager_error_context>
+{
+    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    watch_indexes(std::move(index_names), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    return barrier->get_future();
+}
+} // namespace couchbase

@@ -459,3 +459,132 @@ TEST_CASE("example: search", "[integration]")
 
     REQUIRE(example_search::main(4, argv) == 0);
 }
+
+namespace example_buckets
+{
+//! [example-buckets]
+#include <couchbase/cluster.hxx>
+
+int
+main(int argc, const char* argv[])
+{
+    if (argc != 4) {
+        fmt::print("USAGE: ./example_buckets couchbase://127.0.0.1 Administrator password\n");
+        return 1;
+    }
+
+    std::string connection_string{ argv[1] }; // "couchbase://127.0.0.1"
+    std::string username{ argv[2] };          // "Administrator"
+    std::string password{ argv[3] };          // "password"
+    std::string bucket_name{ "travel-sample" };
+
+    // run IO context on separate thread
+    asio::io_context io;
+    auto guard = asio::make_work_guard(io);
+    std::thread io_thread([&io]() { io.run(); });
+
+    auto options = couchbase::cluster_options(username, password);
+    // customize through the 'options'.
+    // For example, optimize timeouts for WAN
+    options.apply_profile("wan_development");
+
+    auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
+    if (ec) {
+        fmt::print("unable to connect to the cluster: {}\n", ec.message());
+        return 1;
+    }
+    auto manager = cluster.buckets();
+
+    couchbase::management::cluster::bucket_settings bucket_settings{};
+    std::string test_bucket_name = "cxx_test_integration_examples_bucket";
+    bucket_settings.name = test_bucket_name;
+    bucket_settings.ram_quota_mb = 150;
+    bucket_settings.bucket_type = couchbase::management::cluster::bucket_type::couchbase;
+    bucket_settings.eviction_policy = couchbase::management::cluster::bucket_eviction_policy::value_only;
+    bucket_settings.flush_enabled = true;
+    bucket_settings.replica_indexes = true;
+    bucket_settings.conflict_resolution_type = couchbase::management::cluster::bucket_conflict_resolution::sequence_number;
+    {
+        fmt::print("--- create bucket\n");
+        auto ctx = manager.create_bucket(bucket_settings).get();
+        if (ctx.ec()) {
+            if (ctx.ec() == couchbase::errc::common::invalid_argument) {
+                fmt::print("bucket already exists\n");
+            } else {
+                fmt::print("unable to create the bucket: {}\n", ctx.ec().message());
+                return 1;
+            }
+        } else {
+            fmt::print("--- bucket has been successfully created\n");
+        }
+    }
+    {
+        fmt::print("--- get bucket\n");
+        auto [ctx, bucket] = manager.get_bucket(bucket_name).get();
+        if (ctx.ec()) {
+            fmt::print("unable to get the bucket: {}\n", ctx.ec().message());
+            return 1;
+        }
+        fmt::print("name of fetched bucket: {}\n", bucket.name);
+    }
+    {
+        fmt::print("--- get all buckets\n");
+        auto [ctx, buckets] = manager.get_all_buckets().get();
+        if (ctx.ec()) {
+            fmt::print("unable to get all buckets: {}\n", ctx.ec().message());
+            return 1;
+        }
+        for (const auto& fetched_bucket : buckets) {
+            fmt::print("Bucket name: {}\n", fetched_bucket.name);
+        }
+    }
+    {
+        fmt::print("--- update bucket\n");
+        bucket_settings.ram_quota_mb = 150;
+        auto ctx = manager.update_bucket(bucket_settings).get();
+        if (ctx.ec()) {
+            fmt::print("unable to update the bucket: {}\n", ctx.ec().message());
+            return 1;
+        }
+        fmt::print("bucket has been updated\n");
+    }
+    {
+        fmt::print("--- drop bucket\n");
+        auto ctx = manager.drop_bucket(test_bucket_name).get();
+        if (ctx.ec()) {
+            fmt::print("unable to drop the bucket: {}\n", ctx.ec().message());
+            return 1;
+        }
+        fmt::print("bucket has been dropped\n");
+    }
+
+    // close cluster connection
+    cluster.close();
+    guard.reset();
+
+    io_thread.join();
+    return 0;
+}
+
+//! [example-buckets]
+} // namespace example_buckets
+
+TEST_CASE("example: bucket management", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (integration.cluster_version().is_capella()) {
+        SKIP("Capella does not allow to use REST API to load sample buckets");
+    }
+
+    const auto env = test::utils::test_context::load_from_environment();
+
+    const char* argv[] = {
+        "example_buckets", // name of the "executable"
+        env.connection_string.c_str(),
+        env.username.c_str(),
+        env.password.c_str(),
+    };
+
+    REQUIRE(example_buckets::main(4, argv) == 0);
+}

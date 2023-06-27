@@ -20,44 +20,116 @@
 
 #include "core/cluster.hxx"
 #include "core/operations/management/query_index_build.hxx"
-#include "core/operations/management/query_index_get_all_deferred.hxx"
-#include "core/utils/json.hxx"
+#include "core/operations/management/query_index_build_deferred.hxx"
 
-namespace couchbase::core::impl
+namespace couchbase
 {
 template<typename Response>
 static manager_error_context
 build_context(Response& resp)
 {
-    return { resp.ctx.ec,
-             resp.ctx.last_dispatched_to,
-             resp.ctx.last_dispatched_from,
-             resp.ctx.retry_attempts,
-             std::move(resp.ctx.retry_reasons),
-             std::move(resp.ctx.client_context_id),
-             resp.ctx.http_status,
-             std::move(resp.ctx.http_body),
-             std::move(resp.ctx.path) };
+    return manager_error_context(internal_manager_error_context{ resp.ctx.ec,
+                                                                 resp.ctx.last_dispatched_to,
+                                                                 resp.ctx.last_dispatched_from,
+                                                                 resp.ctx.retry_attempts,
+                                                                 std::move(resp.ctx.retry_reasons),
+                                                                 std::move(resp.ctx.client_context_id),
+                                                                 resp.ctx.http_status,
+                                                                 std::move(resp.ctx.http_body),
+                                                                 std::move(resp.ctx.path) });
 }
-void
-initiate_build_deferred_indexes(std::shared_ptr<couchbase::core::cluster> core,
-                                std::string bucket_name,
-                                build_query_index_options::built options,
-                                query_context query_ctx,
-                                std::string collection_name,
-                                build_deferred_query_indexes_handler&& handler)
+
+static core::operations::management::query_index_build_request
+build_build_index_request(std::string bucket_name,
+                          core::operations::management::query_index_get_all_deferred_response list_resp,
+                          const build_query_index_options::built& options)
 {
-    core->execute(
-      operations::management::query_index_get_all_deferred_request{
-        bucket_name,
-        "",
-        collection_name,
-        query_ctx,
-        {},
-        options.timeout,
-      },
-      [core, bucket_name, collection_name, options = std::move(options), query_ctx, handler = std::move(handler)](
-        operations::management::query_index_get_all_deferred_response resp1) mutable {
+    core::operations::management::query_index_build_request request{
+        std::move(bucket_name), {}, {}, {}, std::move(list_resp.index_names), {}, options.timeout
+    };
+    return request;
+}
+
+static core::operations::management::query_index_get_all_deferred_request
+build_get_all_request(std::string bucket_name, const build_query_index_options::built& options)
+{
+    core::operations::management::query_index_get_all_deferred_request request{ std::move(bucket_name), {}, {}, {}, {}, options.timeout };
+    return request;
+}
+
+static core::operations::management::query_index_build_request
+build_build_index_request(std::string bucket_name,
+                          std::string scope_name,
+                          std::string collection_name,
+                          core::operations::management::query_index_get_all_deferred_response list_resp,
+                          const build_query_index_options::built& options)
+{
+    core::operations::management::query_index_build_request request{ "",
+                                                                     "",
+                                                                     std::move(collection_name),
+                                                                     core::query_context{ std::move(bucket_name), std::move(scope_name) },
+                                                                     std::move(list_resp.index_names),
+                                                                     {},
+                                                                     options.timeout };
+    return request;
+}
+
+static core::operations::management::query_index_get_all_deferred_request
+build_get_all_request(std::string bucket_name,
+                      std::string scope_name,
+                      std::string collection_name,
+                      const build_query_index_options::built& options)
+{
+    core::operations::management::query_index_get_all_deferred_request request{
+        "", "", std::move(collection_name), core::query_context{ std::move(bucket_name), std::move(scope_name) }, {}, options.timeout
+    };
+    return request;
+}
+
+void
+query_index_manager::build_deferred_indexes(std::string bucket_name,
+                                            const couchbase::build_query_index_options& options,
+                                            couchbase::build_deferred_query_indexes_handler&& handler) const
+{
+
+    auto get_all_request = build_get_all_request(bucket_name, options.build());
+    core_->execute(std::move(get_all_request),
+                   [handler = std::move(handler), this, bucket_name, options](
+                     core::operations::management::query_index_get_all_deferred_response resp1) mutable {
+                       auto list_resp = std::move(resp1);
+                       if (list_resp.ctx.ec) {
+                           return handler(build_context(list_resp));
+                       }
+                       if (list_resp.index_names.empty()) {
+                           return handler(build_context(list_resp));
+                       }
+                       auto build_request = build_build_index_request(std::move(bucket_name), list_resp, options.build());
+                       core_->execute(
+                         std::move(build_request),
+                         [handler = std::move(handler)](core::operations::management::query_index_build_response resp2) mutable {
+                             auto build_resp = std::move(resp2);
+                             return handler(build_context(build_resp));
+                         });
+                   });
+}
+
+auto
+query_index_manager::build_deferred_indexes(std::string bucket_name, const couchbase::build_query_index_options& options) const
+  -> std::future<manager_error_context>
+{
+    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    build_deferred_indexes(std::move(bucket_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    return barrier->get_future();
+}
+
+void
+collection_query_index_manager::build_deferred_indexes(const build_query_index_options& options,
+                                                       build_deferred_query_indexes_handler&& handler) const
+{
+    auto get_all_request = build_get_all_request(bucket_name_, scope_name_, collection_name_, options.build());
+    core_->execute(
+      std::move(get_all_request),
+      [handler = std::move(handler), this, options](core::operations::management::query_index_get_all_deferred_response resp1) mutable {
           auto list_resp = std::move(resp1);
           if (list_resp.ctx.ec) {
               return handler(build_context(list_resp));
@@ -65,28 +137,21 @@ initiate_build_deferred_indexes(std::shared_ptr<couchbase::core::cluster> core,
           if (list_resp.index_names.empty()) {
               return handler(build_context(list_resp));
           }
-          core->execute(
-            operations::management::query_index_build_request{
-              std::move(bucket_name),
-              "",
-              collection_name,
-              query_ctx,
-              std::move(list_resp.index_names),
-              {},
-              options.timeout,
-            },
-            [handler = std::move(handler)](operations::management::query_index_build_response resp2) {
-                auto build_resp = std::move(resp2);
-                return handler(build_context(build_resp));
-            });
+          auto build_request = build_build_index_request(bucket_name_, scope_name_, collection_name_, list_resp, options.build());
+          core_->execute(std::move(build_request),
+                         [handler = std::move(handler)](core::operations::management::query_index_build_response resp2) mutable {
+                             auto build_resp = std::move(resp2);
+                             return handler(build_context(build_resp));
+                         });
       });
 }
-void
-initiate_build_deferred_indexes(std::shared_ptr<couchbase::core::cluster> core,
-                                std::string bucket_name,
-                                build_query_index_options::built options,
-                                build_deferred_query_indexes_handler&& handler)
+
+auto
+collection_query_index_manager::build_deferred_indexes(const couchbase::build_query_index_options& options) const
+  -> std::future<manager_error_context>
 {
-    return initiate_build_deferred_indexes(core, std::move(bucket_name), options, {}, "", std::move(handler));
+    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    build_deferred_indexes(options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    return barrier->get_future();
 }
-} // namespace couchbase::core::impl
+} // namespace couchbase
