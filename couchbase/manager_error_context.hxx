@@ -40,12 +40,12 @@ class internal_manager_error_context;
 class manager_error_context : public error_context
 {
   public:
-    //    /**
-    //     * Creates empty error context
-    //     *
-    //     * @since 1.0.0
-    //     * @committed
-    //     */
+    /**
+     * Creates empty error context
+     *
+     * @since 1.0.0
+     * @committed
+     */
     manager_error_context();
     explicit manager_error_context(internal_manager_error_context ctx);
     manager_error_context(manager_error_context&& other);
