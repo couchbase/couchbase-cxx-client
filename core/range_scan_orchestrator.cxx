@@ -27,6 +27,7 @@
 
 #include <gsl/narrow>
 
+#include <random>
 #include <future>
 
 namespace couchbase::core
@@ -497,9 +498,19 @@ class range_scan_orchestrator_impl
         std::uint16_t counter = 0;
         while (counter < stream_count) {
             // Find the node with the least number of active streams from those recorded in stream_count_per_node_
-            auto least_busy_node = stream_count_per_node_.begin()->first;
+            int16_t least_busy_node{};
             {
                 std::lock_guard<std::mutex> const stream_count_lock(stream_count_per_node_mutex_);
+
+                // Pick a random node
+                std::random_device rd;
+                std::mt19937_64 gen(rd());
+                std::uniform_int_distribution<std::size_t> dis(0, stream_count_per_node_.size() - 1);
+                auto it = stream_count_per_node_.begin();
+                std::advance(it, dis(gen));
+                least_busy_node = it->first;
+
+                // If any other node has fewer streams running use that
                 for (const auto& [node_id, count] : stream_count_per_node_) {
                     if (count < stream_count_per_node_[least_busy_node]) {
                         least_busy_node = node_id;
