@@ -402,11 +402,7 @@ class range_scan_orchestrator_impl
 
         auto batch_time_limit = std::chrono::duration_cast<std::chrono::milliseconds>(0.9 * options_.timeout);
         range_scan_continue_options const continue_options{
-            options_.batch_item_limit,
-            options_.batch_byte_limit,
-            batch_time_limit,
-            options_.timeout,
-            options_.retry_strategy,
+            options_.batch_item_limit, options_.batch_byte_limit, batch_time_limit, options_.timeout, options_.retry_strategy,
         };
         for (std::uint16_t vbucket = 0; vbucket < gsl::narrow_cast<std::uint16_t>(vbucket_map_.size()); ++vbucket) {
             const range_scan_create_options create_options{
