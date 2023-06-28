@@ -18,6 +18,7 @@
 #include "range_scan_options.hxx"
 #include "range_scan_orchestrator_options.hxx"
 #include "scan_result.hxx"
+#include "topology/configuration.hxx"
 
 #include <tl/expected.hpp>
 
@@ -34,15 +35,25 @@ namespace couchbase::core
 class agent;
 class range_scan_orchestrator_impl;
 
+class scan_stream_manager
+{
+  public:
+    virtual ~scan_stream_manager() = default;
+    virtual void stream_start_failed(std::int16_t node_id, bool fatal) = 0;
+    virtual void stream_start_failed_awaiting_retry(std::int16_t node_id, std::uint16_t vbucket_id) = 0;
+    virtual void stream_continue_failed(std::int16_t node_id, bool fatal) = 0;
+    virtual void stream_completed(std::int16_t node_id) = 0;
+};
+
 class range_scan_orchestrator
 {
   public:
     range_scan_orchestrator(asio::io_context& io,
                             agent kv_provider,
-                            std::size_t num_vbuckets,
+                            topology::configuration::vbucket_map vbucket_map,
                             std::string scope_name,
                             std::string collection_name,
-                            std::variant<std::monostate, range_scan, sampling_scan> scan_type,
+                            std::variant<std::monostate, range_scan, prefix_scan, sampling_scan> scan_type,
                             range_scan_orchestrator_options options);
 
     auto scan() -> tl::expected<scan_result, std::error_code>;

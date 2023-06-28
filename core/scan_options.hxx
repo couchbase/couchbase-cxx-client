@@ -38,26 +38,7 @@ class request_span;
 
 namespace couchbase::core
 {
-
-enum class scan_sort {
-    none,
-    ascending,
-};
-
 struct mutation_state {
     std::vector<couchbase::mutation_token> tokens;
-};
-
-struct scan_options {
-    bool ids_only{ false };
-    std::optional<mutation_state> consistent_with{};
-    scan_sort sort{ scan_sort::none };
-    std::uint32_t batch_item_limit{ range_scan_continue_options::default_batch_item_limit };
-    std::uint32_t batch_byte_limit{ range_scan_continue_options::default_batch_byte_limit };
-    std::chrono::milliseconds batch_time_limit{ range_scan_continue_options::default_batch_time_limit };
-
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
-    std::chrono::milliseconds timeout{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{};
 };
 } // namespace couchbase::core

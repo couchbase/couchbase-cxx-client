@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-2023 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -39,6 +39,8 @@
 
 #include <tl/expected.hpp>
 
+#include <random>
+
 namespace couchbase::core
 {
 static std::pair<std::vector<std::byte>, std::error_code>
@@ -53,17 +55,40 @@ serialize_range_scan_create_options(const range_scan_create_options& options)
         body["collection"] = fmt::format("{:x}", options.collection_id);
     }
 
-    if (std::holds_alternative<range_scan>(options.scan_type)) {
-        const auto& range = std::get<range_scan>(options.scan_type);
+    if (std::holds_alternative<range_scan>(options.scan_type) || std::holds_alternative<prefix_scan>(options.scan_type)) {
+        const auto& range = (std::holds_alternative<range_scan>(options.scan_type))
+                              ? std::get<range_scan>(options.scan_type)
+                              : std::get<prefix_scan>(options.scan_type).to_range_scan();
+
+        const auto& from = range.from.value_or(scan_term{ "" });
+        const auto& to = range.to.value_or(scan_term{ "\xf4\x8f\xfb\xfb" });
+
         body["range"] = {
-            { range.start_.exclusive ? "excl_start" : "start", base64::encode(range.start_.id) },
-            { range.end_.exclusive ? "excl_end" : "end", base64::encode(range.end_.id) },
+            { from.exclusive ? "excl_start" : "start", base64::encode(from.term) },
+            { to.exclusive ? "excl_end" : "end", base64::encode(to.term) },
         };
     } else if (std::holds_alternative<sampling_scan>(options.scan_type)) {
         const auto& sampling = std::get<sampling_scan>(options.scan_type);
+
+        // The limit in sampling scan is required to be greater than 0
+        if (sampling.limit <= 0) {
+            return { {}, errc::common::invalid_argument };
+        }
+
+        std::uint64_t seed{};
+        if (sampling.seed.has_value()) {
+            seed = sampling.seed.value();
+        } else {
+            // Generate random uint64 as seed
+            std::random_device rd;
+            std::mt19937_64 gen(rd());
+            std::uniform_int_distribution<std::uint64_t> dis;
+            seed = dis(gen);
+        }
+
         body["sampling"] = {
             { "samples", sampling.limit },
-            { "seed", sampling.seed.value_or(0) },
+            { "seed", seed },
         };
     } else {
         return { {}, errc::common::invalid_argument };
@@ -75,7 +100,7 @@ serialize_range_scan_create_options(const range_scan_create_options& options)
             { "vb_uuid", std::to_string(snapshot.vbucket_uuid) },
             { "seqno", snapshot.sequence_number },
             { "timeout_ms",
-              (options.timeout == std::chrono::milliseconds::zero()) ? timeout_defaults::range_scan_timeout.count()
+              (options.timeout == std::chrono::milliseconds::zero()) ? timeout_defaults::key_value_scan_timeout.count()
                                                                      : options.timeout.count() },
         };
         if (snapshot.sequence_number_exists) {
@@ -98,7 +123,7 @@ parse_range_scan_keys(gsl::span<std::byte> data, range_scan_item_callback&& item
         if (remaining.size() < key_length) {
             return errc::network::protocol_error;
         }
-        item_callback(range_scan_item{ { remaining.begin(), remaining.begin() + static_cast<std::ptrdiff_t>(key_length) } });
+        item_callback(range_scan_item{ { reinterpret_cast<const char*>(remaining.data()), key_length } });
         if (remaining.size() == key_length) {
             return {};
         }
@@ -130,13 +155,13 @@ parse_range_scan_documents(gsl::span<std::byte> data, range_scan_item_callback&&
         body.datatype = data[24];
         data = gsl::make_span(data.data() + header_offset, data.size() - header_offset);
 
-        std::vector<std::byte> key{};
+        std::string key{};
         {
             auto [key_length, remaining] = utils::decode_unsigned_leb128<std::size_t>(data, core::utils::leb_128_no_throw{});
             if (remaining.size() < key_length) {
                 return errc::network::protocol_error;
             }
-            key = { remaining.begin(), remaining.begin() + static_cast<std::ptrdiff_t>(key_length) };
+            key = { reinterpret_cast<const char*>(remaining.data()), key_length };
             data = gsl::make_span(remaining.data() + key_length, remaining.size() - key_length);
         }
 
@@ -242,19 +267,10 @@ class crud_component_impl
               if (error) {
                   return cb({}, error);
               }
-              bool ids_only;
-              switch (response->extras_.size()) {
-                  case 4:
-                      ids_only = mcbp::big_endian::read_uint32(response->extras_, 0) == 0;
-                      break;
-
-                  case 0:
-                      ids_only = options.ids_only; // support servers before MB-54267. TODO: remove after server GA
-                      break;
-
-                  default:
-                      return cb({}, errc::network::protocol_error);
+              if (response->extras_.size() != 4) {
+                  return cb({}, errc::network::protocol_error);
               }
+              bool ids_only = mcbp::big_endian::read_uint32(response->extras_, 0) == 0;
 
               if (auto ec = parse_range_scan_data(response->value_, std::move(item_cb), ids_only); ec) {
                   return cb({}, ec);
@@ -276,6 +292,19 @@ class crud_component_impl
 
         req->persistent_ = true;
         req->vbucket_ = vbucket_id;
+
+        if (options.timeout != std::chrono::milliseconds::zero()) {
+            auto timer = std::make_shared<asio::steady_timer>(io_);
+            timer->expires_after(options.timeout);
+            timer->async_wait([req](auto error) {
+                if (error == asio::error::operation_aborted) {
+                    return;
+                }
+                req->cancel(couchbase::errc::common::unambiguous_timeout);
+            });
+            req->set_deadline(timer);
+        }
+
         mcbp::buffer_writer buf{ scan_uuid.size() + sizeof(std::uint32_t) * 3 };
         buf.write(scan_uuid);
         buf.write_uint32(options.batch_item_limit);

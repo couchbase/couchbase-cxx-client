@@ -19,34 +19,10 @@
 
 namespace couchbase::core
 {
-range_scan::range_scan(scan_term start, scan_term end)
-  : start_{ std::move(start) }
-  , end_{ std::move(end) }
+auto
+prefix_scan::to_range_scan() const -> range_scan
 {
-}
-
-range_scan::range_scan(std::string_view start, std::string_view end)
-  : start_{ utils::to_binary(start) }
-  , end_{ utils::to_binary(end) }
-{
-}
-
-range_scan::range_scan(std::string_view start, bool exclusive_start, std::string_view end, bool exclusive_end)
-  : start_{ utils::to_binary(start), exclusive_start }
-  , end_{ utils::to_binary(end), exclusive_end }
-{
-}
-
-range_scan::range_scan(std::vector<std::byte> start, std::vector<std::byte> end)
-  : start_{ std::move(start) }
-  , end_{ std::move(end) }
-{
-}
-
-range_scan::range_scan(std::vector<std::byte> start, bool exclusive_start, std::vector<std::byte> end, bool exclusive_end)
-  : start_{ std::move(start), exclusive_start }
-  , end_{ std::move(end), exclusive_end }
-{
+    return { scan_term{ prefix, false }, scan_term{ prefix + "\xf4\x8f\xfb\xfb" } };
 }
 
 auto

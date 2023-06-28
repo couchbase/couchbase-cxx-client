@@ -32,15 +32,17 @@ class scan_result_impl
 
     [[nodiscard]] auto next() const -> tl::expected<range_scan_item, std::error_code>
     {
-        if (auto item = iterator_->next().get(); item) {
-            return item.value();
-        }
-        return tl::unexpected{ errc::key_value::range_scan_completed };
+        return iterator_->next().get();
     }
 
     void next(utils::movable_function<void(range_scan_item, std::error_code)> callback) const
     {
         return iterator_->next(std::move(callback));
+    }
+
+    void cancel()
+    {
+        return iterator_->cancel();
     }
 
   private:
@@ -65,7 +67,8 @@ scan_result::next(utils::movable_function<void(range_scan_item, std::error_code)
 }
 
 void
-scan_result::cancel() const
+scan_result::cancel()
 {
+    return impl_->cancel();
 }
 } // namespace couchbase::core
