@@ -45,6 +45,11 @@ class scan_result_impl
         return iterator_->cancel();
     }
 
+    [[nodiscard]] auto is_cancelled() -> bool
+    {
+        return iterator_->is_cancelled();
+    }
+
   private:
     std::shared_ptr<range_scan_item_iterator> iterator_;
 };
@@ -70,5 +75,11 @@ void
 scan_result::cancel()
 {
     return impl_->cancel();
+}
+
+auto
+scan_result::is_cancelled() -> bool
+{
+    return impl_->is_cancelled();
 }
 } // namespace couchbase::core

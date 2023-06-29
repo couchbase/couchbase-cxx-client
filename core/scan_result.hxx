@@ -44,6 +44,7 @@ class range_scan_item_iterator
     virtual auto next() -> std::future<tl::expected<range_scan_item, std::error_code>> = 0;
     virtual void next(utils::movable_function<void(range_scan_item, std::error_code)> callback) = 0;
     virtual void cancel() = 0;
+    virtual bool is_cancelled() = 0;
 };
 
 class scan_result
@@ -53,6 +54,7 @@ class scan_result
     [[nodiscard]] auto next() const -> tl::expected<range_scan_item, std::error_code>;
     void next(utils::movable_function<void(range_scan_item, std::error_code)> callback) const;
     void cancel();
+    [[nodiscard]] auto is_cancelled() -> bool;
 
   private:
     std::shared_ptr<scan_result_impl> impl_{};
