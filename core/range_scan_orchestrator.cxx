@@ -507,7 +507,7 @@ class range_scan_orchestrator_impl
                 std::mt19937_64 gen(rd());
                 std::uniform_int_distribution<std::size_t> dis(0, stream_count_per_node_.size() - 1);
                 auto it = stream_count_per_node_.begin();
-                std::advance(it, dis(gen));
+                std::advance(it, static_cast<decltype(stream_count_per_node_)::difference_type>(dis(gen)));
                 least_busy_node = it->first;
 
                 // If any other node has fewer streams running use that
