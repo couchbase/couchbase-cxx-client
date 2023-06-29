@@ -127,7 +127,7 @@ custom_rotating_file_sink<Mutex>::add_hook(const std::string& hook)
 
     // Payload shouldn't contain anything yet, overwrite it
     Expects(msg.payload.size() == 0);
-    msg.payload = hook;
+    msg.payload = hookToAdd;
 
     spdlog::memory_buf_t formatted;
     formatter->format(msg, formatted);

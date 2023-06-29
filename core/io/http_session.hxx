@@ -31,7 +31,10 @@
 
 #include <couchbase/error_codes.hxx>
 
+#include <spdlog/fmt/bin_to_hex.h>
+
 #include <asio.hpp>
+
 #include <list>
 #include <memory>
 #include <utility>
@@ -448,7 +451,20 @@ class http_session : public std::enable_shared_from_this<http_session>
         stream_->async_read_some(
           asio::buffer(input_buffer_), [self = shared_from_this()](std::error_code ec, std::size_t bytes_transferred) {
               if (ec == asio::error::operation_aborted || self->stopped_) {
+                  CB_LOG_PROTOCOL("[HTTP, IN] type={}, host=\"{}\", rc={}, bytes_received={}",
+                                  self->type_,
+                                  self->info_.remote_address(),
+                                  ec ? ec.message() : "ok",
+                                  bytes_transferred);
                   return;
+              } else {
+                  CB_LOG_PROTOCOL("[HTTP, IN] type={}, host=\"{}\", rc={}, bytes_received={}{:a}",
+                                  self->type_,
+                                  self->info_.remote_address(),
+                                  ec ? ec.message() : "ok",
+                                  bytes_transferred,
+                                  spdlog::to_hex(self->input_buffer_.data(),
+                                                 self->input_buffer_.data() + static_cast<std::ptrdiff_t>(bytes_transferred)));
               }
               self->last_active_ = std::chrono::steady_clock::now();
               if (ec) {
@@ -495,9 +511,16 @@ class http_session : public std::enable_shared_from_this<http_session>
         std::vector<asio::const_buffer> buffers;
         buffers.reserve(writing_buffer_.size());
         for (auto& buf : writing_buffer_) {
+            CB_LOG_PROTOCOL(
+              "[HTTP, OUT] type={}, host=\"{}\", buffer_size={}{:a}", type_, info_.remote_address(), buf.size(), spdlog::to_hex(buf));
             buffers.emplace_back(asio::buffer(buf));
         }
-        stream_->async_write(buffers, [self = shared_from_this()](std::error_code ec, std::size_t /* bytes_transferred */) {
+        stream_->async_write(buffers, [self = shared_from_this()](std::error_code ec, std::size_t bytes_transferred) {
+            CB_LOG_PROTOCOL("[HTTP, OUT] type={}, host=\"{}\", rc={}, bytes_sent={}",
+                            self->type_,
+                            self->info_.remote_address(),
+                            ec ? ec.message() : "ok",
+                            bytes_transferred);
             if (ec == asio::error::operation_aborted || self->stopped_) {
                 return;
             }

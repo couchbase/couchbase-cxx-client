@@ -1365,7 +1365,20 @@ class mcbp_session_impl
           asio::buffer(input_buffer_),
           [self = shared_from_this(), stream_id = stream_->id()](std::error_code ec, std::size_t bytes_transferred) {
               if (ec == asio::error::operation_aborted || self->stopped_) {
+                  CB_LOG_PROTOCOL("[MCBP, IN] host=\"{}\", port={}, rc={}, bytes_received={}",
+                                  self->endpoint_address_,
+                                  self->endpoint_.port(),
+                                  ec ? ec.message() : "ok",
+                                  bytes_transferred);
                   return;
+              } else {
+                  CB_LOG_PROTOCOL("[MCBP, IN] host=\"{}\", port={}, rc={}, bytes_received={}{:a}",
+                                  self->endpoint_address_,
+                                  self->endpoint_.port(),
+                                  ec ? ec.message() : "ok",
+                                  bytes_transferred,
+                                  spdlog::to_hex(self->input_buffer_.data(),
+                                                 self->input_buffer_.data() + static_cast<std::ptrdiff_t>(bytes_transferred)));
               }
               self->last_active_ = std::chrono::steady_clock::now();
               if (ec) {
@@ -1433,13 +1446,21 @@ class mcbp_session_impl
         std::vector<asio::const_buffer> buffers;
         buffers.reserve(writing_buffer_.size());
         for (auto& buf : writing_buffer_) {
+            CB_LOG_PROTOCOL(
+              "[MCBP, OUT] host=\"{}\", port={}, buffer_size={}{:a}", endpoint_address_, endpoint_.port(), buf.size(), spdlog::to_hex(buf));
             buffers.emplace_back(asio::buffer(buf));
         }
-        stream_->async_write(buffers, [self = shared_from_this()](std::error_code ec, std::size_t /*unused*/) {
+        stream_->async_write(buffers, [self = shared_from_this()](std::error_code ec, std::size_t bytes_transferred) {
+            CB_LOG_PROTOCOL("[MCBP, OUT] host=\"{}\", port={}, rc={}, bytes_sent={}",
+                            self->endpoint_address_,
+                            self->endpoint_.port(),
+                            ec ? ec.message() : "ok",
+                            bytes_transferred);
             if (ec == asio::error::operation_aborted || self->stopped_) {
                 return;
             }
             self->last_active_ = std::chrono::steady_clock::now();
+
             if (ec) {
                 CB_LOG_ERROR(R"({} IO error while writing to the socket("{}"): {} ({}))",
                              self->log_prefix_,
