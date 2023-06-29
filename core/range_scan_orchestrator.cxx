@@ -442,6 +442,11 @@ class range_scan_orchestrator_impl
         }
     }
 
+    bool is_cancelled() override
+    {
+        return cancelled_;
+    }
+
     auto next() -> std::future<tl::expected<range_scan_item, std::error_code>> override
     {
         auto barrier = std::make_shared<std::promise<tl::expected<range_scan_item, std::error_code>>>();
