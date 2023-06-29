@@ -91,6 +91,8 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
                 break;
         }
         user_options.disable_mozilla_ca_certificates = opts.security.disable_mozilla_ca_certificates;
+        user_options.tls_disable_deprecated_protocols = opts.security.disable_deprecated_protocols;
+        user_options.tls_disable_v1_2 = opts.security.disable_tls_v1_2;
     }
 
     if (opts.dns.nameserver) {

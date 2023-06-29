@@ -415,6 +415,10 @@ extract_options(connection_string& connstr)
             parse_option(connstr.options.tls_verify, name, value, connstr.warnings);
         } else if (name == "disable_mozilla_ca_certificates") {
             parse_option(connstr.options.disable_mozilla_ca_certificates, name, value, connstr.warnings);
+        } else if (name == "tls_disable_deprecated_protocols") {
+            parse_option(connstr.options.tls_disable_deprecated_protocols, name, value, connstr.warnings);
+        } else if (name == "tls_disable_v1_2") {
+            parse_option(connstr.options.tls_disable_v1_2, name, value, connstr.warnings);
         } else if (name == "user_agent_extra") {
             /**
              * string, that will be appended to identification fields of the server protocols (key in HELO packet for MCBP, "user-agent"

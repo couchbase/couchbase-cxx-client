@@ -337,8 +337,8 @@ class cluster : public std::enable_shared_from_this<cluster>
     void do_open(Handler&& handler)
     {
         // Warn users if they attempt to use Capella without TLS being enabled.
+        bool has_capella_host = false;
         {
-            bool has_capella_host = false;
             bool has_non_capella_host = false;
             static std::string suffix = "cloud.couchbase.com";
             for (const auto& node : origin_.get_hostnames()) {
@@ -366,7 +366,17 @@ class cluster : public std::enable_shared_from_this<cluster>
         }
 
         if (origin_.options().enable_tls) {
-            tls_.set_options(asio::ssl::context::default_workarounds | asio::ssl::context::no_sslv2 | asio::ssl::context::no_sslv3);
+            long tls_options = asio::ssl::context::default_workarounds | // various bug workarounds that should be rather harmless
+                               asio::ssl::context::no_sslv2 |            // published: 1995, deprecated: 2011
+                               asio::ssl::context::no_sslv3;             // published: 1996, deprecated: 2015
+            if (origin_.options().tls_disable_deprecated_protocols) {
+                tls_options |= asio::ssl::context::no_tlsv1 |  // published: 1999, deprecated: 2021
+                               asio::ssl::context::no_tlsv1_1; // published: 2006, deprecated: 2021
+            }
+            if (origin_.options().tls_disable_v1_2 || has_capella_host) {
+                tls_options |= asio::ssl::context::no_tlsv1_2; // published: 2008, still in use
+            }
+            tls_.set_options(tls_options);
             switch (origin_.options().tls_verify) {
                 case tls_verify_mode::none:
                     tls_.set_verify_mode(asio::ssl::verify_none);
