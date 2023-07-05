@@ -153,7 +153,6 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
             if (is_running()) {
                 agent_.range_scan_cancel(uuid(), vbucket_id_, {}, [](auto /* res */, auto /* ec */) {});
             }
-            items_.close();
 
             bool fatal{};
             if (ec == errc::key_value::document_not_found || ec == errc::common::authentication_failure ||
@@ -171,6 +170,11 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
                              vbucket_id_,
                              ec.message());
                 fatal = true;
+            }
+
+            if (fatal) {
+                items_.cancel();
+                items_.close();
             }
 
             CB_LOG_TRACE("setting state for stream {} to FAILED after range scan continue", vbucket_id_);
