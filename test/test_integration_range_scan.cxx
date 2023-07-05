@@ -114,6 +114,26 @@ make_binary_value(std::size_t number_of_bytes)
     return value;
 }
 
+static couchbase::core::topology::configuration::vbucket_map
+get_vbucket_map(test::utils::integration_test_guard& integration)
+{
+    auto barrier = std::make_shared<std::promise<tl::expected<couchbase::core::topology::configuration::vbucket_map, std::error_code>>>();
+    auto f = barrier->get_future();
+    integration.cluster->with_bucket_configuration(
+      integration.ctx.bucket, [barrier](std::error_code ec, const couchbase::core::topology::configuration& config) mutable {
+          if (ec) {
+              return barrier->set_value(tl::unexpected(ec));
+          }
+          if (!config.vbmap || config.vbmap->empty()) {
+              return barrier->set_value(tl::unexpected(couchbase::errc::common::feature_not_available));
+          }
+          barrier->set_value(config.vbmap.value());
+      });
+    auto vbucket_map = f.get();
+    EXPECT_SUCCESS(vbucket_map);
+    return vbucket_map.value();
+}
+
 TEST_CASE("integration: range scan large values", "[integration]")
 {
     test::utils::integration_test_guard integration;
@@ -796,20 +816,7 @@ TEST_CASE("integration: manager scan range without content", "[integration]")
     auto value = make_binary_value(1);
     auto mutations = populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
 
-    auto barrier = std::make_shared<std::promise<tl::expected<couchbase::core::topology::configuration::vbucket_map, std::error_code>>>();
-    auto f = barrier->get_future();
-    integration.cluster->with_bucket_configuration(
-      integration.ctx.bucket, [barrier](std::error_code ec, const couchbase::core::topology::configuration& config) mutable {
-          if (ec) {
-              return barrier->set_value(tl::unexpected(ec));
-          }
-          if (!config.vbmap || config.vbmap->empty()) {
-              return barrier->set_value(tl::unexpected(couchbase::errc::common::feature_not_available));
-          }
-          barrier->set_value(config.vbmap.value());
-      });
-    auto vbucket_map = f.get();
-    EXPECT_SUCCESS(vbucket_map);
+    auto vbucket_map = get_vbucket_map(integration);
 
     auto ag = couchbase::core::agent_group(integration.io, { { integration.cluster } });
     ag.open_bucket(integration.ctx.bucket);
@@ -823,13 +830,8 @@ TEST_CASE("integration: manager scan range without content", "[integration]")
     couchbase::core::range_scan_orchestrator_options options{};
     options.consistent_with = mutations_to_mutation_state(mutations);
     options.ids_only = true;
-    couchbase::core::range_scan_orchestrator orchestrator(integration.io,
-                                                          agent.value(),
-                                                          vbucket_map.value(),
-                                                          couchbase::scope::default_name,
-                                                          couchbase::collection::default_name,
-                                                          scan,
-                                                          options);
+    couchbase::core::range_scan_orchestrator orchestrator(
+      integration.io, agent.value(), vbucket_map, couchbase::scope::default_name, couchbase::collection::default_name, scan, options);
 
     auto result = orchestrator.scan();
     EXPECT_SUCCESS(result);
@@ -871,20 +873,7 @@ TEST_CASE("integration: manager scan range with content", "[integration]")
     auto value = make_binary_value(100);
     auto mutations = populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
 
-    auto barrier = std::make_shared<std::promise<tl::expected<couchbase::core::topology::configuration::vbucket_map, std::error_code>>>();
-    auto f = barrier->get_future();
-    integration.cluster->with_bucket_configuration(
-      integration.ctx.bucket, [barrier](std::error_code ec, const couchbase::core::topology::configuration& config) mutable {
-          if (ec) {
-              return barrier->set_value(tl::unexpected(ec));
-          }
-          if (!config.vbmap || config.vbmap->empty()) {
-              return barrier->set_value(tl::unexpected(couchbase::errc::common::feature_not_available));
-          }
-          barrier->set_value(config.vbmap.value());
-      });
-    auto vbucket_map = f.get();
-    EXPECT_SUCCESS(vbucket_map);
+    auto vbucket_map = get_vbucket_map(integration);
 
     auto ag = couchbase::core::agent_group(integration.io, { { integration.cluster } });
     ag.open_bucket(integration.ctx.bucket);
@@ -897,13 +886,8 @@ TEST_CASE("integration: manager scan range with content", "[integration]")
     };
     couchbase::core::range_scan_orchestrator_options options{};
     options.consistent_with = mutations_to_mutation_state(mutations);
-    couchbase::core::range_scan_orchestrator orchestrator(integration.io,
-                                                          agent.value(),
-                                                          vbucket_map.value(),
-                                                          couchbase::scope::default_name,
-                                                          couchbase::collection::default_name,
-                                                          scan,
-                                                          options);
+    couchbase::core::range_scan_orchestrator orchestrator(
+      integration.io, agent.value(), vbucket_map, couchbase::scope::default_name, couchbase::collection::default_name, scan, options);
 
     auto result = orchestrator.scan();
     EXPECT_SUCCESS(result);
@@ -948,20 +932,7 @@ TEST_CASE("integration: manager sampling scan with custom collection", "[integra
     auto value = make_binary_value(100);
     auto mutations = populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 300 });
 
-    auto barrier = std::make_shared<std::promise<tl::expected<couchbase::core::topology::configuration::vbucket_map, std::error_code>>>();
-    auto f = barrier->get_future();
-    integration.cluster->with_bucket_configuration(
-      integration.ctx.bucket, [barrier](std::error_code ec, const couchbase::core::topology::configuration& config) mutable {
-          if (ec) {
-              return barrier->set_value(tl::unexpected(ec));
-          }
-          if (!config.vbmap || config.vbmap->empty()) {
-              return barrier->set_value(tl::unexpected(couchbase::errc::common::feature_not_available));
-          }
-          barrier->set_value(config.vbmap.value());
-      });
-    auto vbucket_map = f.get();
-    EXPECT_SUCCESS(vbucket_map);
+    auto vbucket_map = get_vbucket_map(integration);
 
     auto ag = couchbase::core::agent_group(integration.io, { { integration.cluster } });
     ag.open_bucket(integration.ctx.bucket);
@@ -972,7 +943,7 @@ TEST_CASE("integration: manager sampling scan with custom collection", "[integra
     couchbase::core::range_scan_orchestrator_options options{};
     options.consistent_with = mutations_to_mutation_state(mutations);
     couchbase::core::range_scan_orchestrator orchestrator(
-      integration.io, agent.value(), vbucket_map.value(), couchbase::scope::default_name, new_collection.name(), scan, options);
+      integration.io, agent.value(), vbucket_map, couchbase::scope::default_name, new_collection.name(), scan, options);
 
     auto result = orchestrator.scan();
     EXPECT_SUCCESS(result);
@@ -1019,20 +990,7 @@ TEST_CASE("integration: manager prefix scan without content", "[integration]")
     auto value = make_binary_value(1);
     auto mutations = populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
 
-    auto barrier = std::make_shared<std::promise<tl::expected<couchbase::core::topology::configuration::vbucket_map, std::error_code>>>();
-    auto f = barrier->get_future();
-    integration.cluster->with_bucket_configuration(
-      integration.ctx.bucket, [barrier](std::error_code ec, const couchbase::core::topology::configuration& config) mutable {
-          if (ec) {
-              return barrier->set_value(tl::unexpected(ec));
-          }
-          if (!config.vbmap || config.vbmap->empty()) {
-              return barrier->set_value(tl::unexpected(couchbase::errc::common::feature_not_available));
-          }
-          barrier->set_value(config.vbmap.value());
-      });
-    auto vbucket_map = f.get();
-    EXPECT_SUCCESS(vbucket_map);
+    auto vbucket_map = get_vbucket_map(integration);
 
     auto ag = couchbase::core::agent_group(integration.io, { { integration.cluster } });
     ag.open_bucket(integration.ctx.bucket);
@@ -1043,13 +1001,8 @@ TEST_CASE("integration: manager prefix scan without content", "[integration]")
     couchbase::core::range_scan_orchestrator_options options{};
     options.consistent_with = mutations_to_mutation_state(mutations);
     options.ids_only = true;
-    couchbase::core::range_scan_orchestrator orchestrator(integration.io,
-                                                          agent.value(),
-                                                          vbucket_map.value(),
-                                                          couchbase::scope::default_name,
-                                                          couchbase::collection::default_name,
-                                                          scan,
-                                                          options);
+    couchbase::core::range_scan_orchestrator orchestrator(
+      integration.io, agent.value(), vbucket_map, couchbase::scope::default_name, couchbase::collection::default_name, scan, options);
 
     auto result = orchestrator.scan();
     EXPECT_SUCCESS(result);
@@ -1093,20 +1046,7 @@ TEST_CASE("integration: manager sampling scan with custom collection and up to 1
     auto value = make_binary_value(100);
     auto mutations = populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 300 });
 
-    auto barrier = std::make_shared<std::promise<tl::expected<couchbase::core::topology::configuration::vbucket_map, std::error_code>>>();
-    auto f = barrier->get_future();
-    integration.cluster->with_bucket_configuration(
-      integration.ctx.bucket, [barrier](std::error_code ec, const couchbase::core::topology::configuration& config) mutable {
-          if (ec) {
-              return barrier->set_value(tl::unexpected(ec));
-          }
-          if (!config.vbmap || config.vbmap->empty()) {
-              return barrier->set_value(tl::unexpected(couchbase::errc::common::feature_not_available));
-          }
-          barrier->set_value(config.vbmap.value());
-      });
-    auto vbucket_map = f.get();
-    EXPECT_SUCCESS(vbucket_map);
+    auto vbucket_map = get_vbucket_map(integration);
 
     auto ag = couchbase::core::agent_group(integration.io, { { integration.cluster } });
     ag.open_bucket(integration.ctx.bucket);
@@ -1118,7 +1058,7 @@ TEST_CASE("integration: manager sampling scan with custom collection and up to 1
     options.consistent_with = mutations_to_mutation_state(mutations);
     options.concurrency = 10;
     couchbase::core::range_scan_orchestrator orchestrator(
-      integration.io, agent.value(), vbucket_map.value(), couchbase::scope::default_name, new_collection.name(), scan, options);
+      integration.io, agent.value(), vbucket_map, couchbase::scope::default_name, new_collection.name(), scan, options);
 
     auto result = orchestrator.scan();
     EXPECT_SUCCESS(result);
@@ -1165,20 +1105,7 @@ TEST_CASE("integration: manager prefix scan without content and up to 5 concurre
     auto value = make_binary_value(1);
     auto mutations = populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
 
-    auto barrier = std::make_shared<std::promise<tl::expected<couchbase::core::topology::configuration::vbucket_map, std::error_code>>>();
-    auto f = barrier->get_future();
-    integration.cluster->with_bucket_configuration(
-      integration.ctx.bucket, [barrier](std::error_code ec, const couchbase::core::topology::configuration& config) mutable {
-          if (ec) {
-              return barrier->set_value(tl::unexpected(ec));
-          }
-          if (!config.vbmap || config.vbmap->empty()) {
-              return barrier->set_value(tl::unexpected(couchbase::errc::common::feature_not_available));
-          }
-          barrier->set_value(config.vbmap.value());
-      });
-    auto vbucket_map = f.get();
-    EXPECT_SUCCESS(vbucket_map);
+    auto vbucket_map = get_vbucket_map(integration);
 
     auto ag = couchbase::core::agent_group(integration.io, { { integration.cluster } });
     ag.open_bucket(integration.ctx.bucket);
@@ -1190,13 +1117,8 @@ TEST_CASE("integration: manager prefix scan without content and up to 5 concurre
     options.consistent_with = mutations_to_mutation_state(mutations);
     options.ids_only = true;
     options.concurrency = 5;
-    couchbase::core::range_scan_orchestrator orchestrator(integration.io,
-                                                          agent.value(),
-                                                          vbucket_map.value(),
-                                                          couchbase::scope::default_name,
-                                                          couchbase::collection::default_name,
-                                                          scan,
-                                                          options);
+    couchbase::core::range_scan_orchestrator orchestrator(
+      integration.io, agent.value(), vbucket_map, couchbase::scope::default_name, couchbase::collection::default_name, scan, options);
 
     auto result = orchestrator.scan();
     EXPECT_SUCCESS(result);
@@ -1238,20 +1160,7 @@ TEST_CASE("integration: manager prefix scan, get 10 items and cancel", "[integra
     auto value = make_binary_value(1);
     auto mutations = populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
 
-    auto barrier = std::make_shared<std::promise<tl::expected<couchbase::core::topology::configuration::vbucket_map, std::error_code>>>();
-    auto f = barrier->get_future();
-    integration.cluster->with_bucket_configuration(
-      integration.ctx.bucket, [barrier](std::error_code ec, const couchbase::core::topology::configuration& config) mutable {
-          if (ec) {
-              return barrier->set_value(tl::unexpected(ec));
-          }
-          if (!config.vbmap || config.vbmap->empty()) {
-              return barrier->set_value(tl::unexpected(couchbase::errc::common::feature_not_available));
-          }
-          barrier->set_value(config.vbmap.value());
-      });
-    auto vbucket_map = f.get();
-    EXPECT_SUCCESS(vbucket_map);
+    auto vbucket_map = get_vbucket_map(integration);
 
     auto ag = couchbase::core::agent_group(integration.io, { { integration.cluster } });
     ag.open_bucket(integration.ctx.bucket);
@@ -1262,13 +1171,8 @@ TEST_CASE("integration: manager prefix scan, get 10 items and cancel", "[integra
     couchbase::core::range_scan_orchestrator_options options{};
     options.consistent_with = mutations_to_mutation_state(mutations);
     options.ids_only = true;
-    couchbase::core::range_scan_orchestrator orchestrator(integration.io,
-                                                          agent.value(),
-                                                          vbucket_map.value(),
-                                                          couchbase::scope::default_name,
-                                                          couchbase::collection::default_name,
-                                                          scan,
-                                                          options);
+    couchbase::core::range_scan_orchestrator orchestrator(
+      integration.io, agent.value(), vbucket_map, couchbase::scope::default_name, couchbase::collection::default_name, scan, options);
 
     auto result = orchestrator.scan();
     EXPECT_SUCCESS(result);
@@ -1296,4 +1200,41 @@ TEST_CASE("integration: manager prefix scan, get 10 items and cancel", "[integra
     }
 
     REQUIRE(result->is_cancelled());
+}
+
+TEST_CASE("integration: manager prefix scan with concurrency 0 (invalid argument)", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.has_bucket_capability("range_scan")) {
+        SKIP("cluster does not support range_scan");
+    }
+
+    auto collection = couchbase::cluster(integration.cluster)
+                        .bucket(integration.ctx.bucket)
+                        .scope(couchbase::scope::default_name)
+                        .collection(couchbase::collection::default_name);
+
+    auto ids = make_doc_ids(100, "prefixscaninvalidconcurrency-");
+    auto value = make_binary_value(1);
+    auto mutations = populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
+
+    auto vbucket_map = get_vbucket_map(integration);
+
+    auto ag = couchbase::core::agent_group(integration.io, { { integration.cluster } });
+    ag.open_bucket(integration.ctx.bucket);
+    auto agent = ag.get_agent(integration.ctx.bucket);
+    REQUIRE(agent.has_value());
+
+    couchbase::core::prefix_scan scan{ "prefixscaninvalidconcurrency" };
+    couchbase::core::range_scan_orchestrator_options options{};
+    options.consistent_with = mutations_to_mutation_state(mutations);
+    options.ids_only = true;
+    options.concurrency = 0;
+    couchbase::core::range_scan_orchestrator orchestrator(
+      integration.io, agent.value(), vbucket_map, couchbase::scope::default_name, couchbase::collection::default_name, scan, options);
+
+    auto result = orchestrator.scan();
+    REQUIRE(!result.has_value());
+    REQUIRE(result.error() == couchbase::errc::common::invalid_argument);
 }

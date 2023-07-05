@@ -391,13 +391,16 @@ class range_scan_orchestrator_impl
     {
 
         if (std::holds_alternative<sampling_scan>(scan_type_)) {
-            item_limit = std::get<sampling_scan>(scan_type).limit;
+            item_limit_ = std::get<sampling_scan>(scan_type).limit;
         }
     }
 
     auto scan() -> tl::expected<scan_result, std::error_code>
     {
-        if (item_limit == 0) {
+        if (item_limit_ == 0) {
+            return tl::unexpected(errc::common::invalid_argument);
+        }
+        if (concurrency_ <= 0) {
             return tl::unexpected(errc::common::invalid_argument);
         }
 
@@ -450,7 +453,7 @@ class range_scan_orchestrator_impl
     auto next() -> std::future<tl::expected<range_scan_item, std::error_code>> override
     {
         auto barrier = std::make_shared<std::promise<tl::expected<range_scan_item, std::error_code>>>();
-        if (item_limit == 0 || item_limit-- == 0) {
+        if (item_limit_ == 0 || item_limit_-- == 0) {
             barrier->set_value(tl::unexpected{ errc::key_value::range_scan_completed });
             cancel();
         } else {
@@ -478,7 +481,7 @@ class range_scan_orchestrator_impl
                 callback({}, errc::key_value::range_scan_completed);
             }
         };
-        if (item_limit == 0 || item_limit-- == 0) {
+        if (item_limit_ == 0 || item_limit_-- == 0) {
             handler({}, {});
             cancel();
         } else {
@@ -654,7 +657,7 @@ class range_scan_orchestrator_impl
     std::mutex stream_count_per_node_mutex_{};
     std::atomic_uint16_t active_stream_count_ = 0;
     std::uint16_t concurrency_ = 1;
-    std::size_t item_limit{ std::numeric_limits<size_t>::max() };
+    std::size_t item_limit_{ std::numeric_limits<size_t>::max() };
     bool cancelled_{ false };
 };
 
