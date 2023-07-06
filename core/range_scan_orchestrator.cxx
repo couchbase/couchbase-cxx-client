@@ -153,7 +153,9 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
             if (is_running()) {
                 agent_.range_scan_cancel(uuid(), vbucket_id_, {}, [](auto /* res */, auto /* ec */) {});
             }
+
             items_.close();
+            items_.cancel();
 
             bool fatal{};
             if (ec == errc::key_value::document_not_found || ec == errc::common::authentication_failure ||
@@ -295,6 +297,8 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
         }
         if (should_cancel_) {
             agent_.range_scan_cancel(uuid(), vbucket_id_, {}, [](auto /* res */, auto /* ec */) {});
+            items_.close();
+            items_.cancel();
             return;
         }
 
@@ -611,7 +615,7 @@ class range_scan_orchestrator_impl
     template<typename Iterator, typename Handler>
     void next_item(Iterator it, Handler&& handler)
     {
-        if (streams_.empty()) {
+        if (streams_.empty() || cancelled_) {
             return handler({}, {});
         }
         auto vbucket_id = it->first;
