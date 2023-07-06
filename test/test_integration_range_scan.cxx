@@ -1195,10 +1195,13 @@ TEST_CASE("integration: manager prefix scan, get 10 items and cancel", "[integra
 
     REQUIRE(expected_id_count == entry_ids.size());
 
-    for (const auto& id : entry_ids) {
-        REQUIRE(std::find(ids.begin(), ids.end(), id) != ids.end());
+    for (const auto& entry_id : entry_ids) {
+        REQUIRE(std::count(ids.begin(), ids.end(), entry_id) == 0);
     }
 
+    auto next_item = result->next();
+    REQUIRE(!next_item.has_value());
+    REQUIRE(next_item.error() == couchbase::errc::key_value::range_scan_completed);
     REQUIRE(result->is_cancelled());
 }
 
