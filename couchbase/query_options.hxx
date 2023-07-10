@@ -51,6 +51,7 @@ struct query_options : public common_options<query_options> {
         const bool readonly;
         const bool flex_index;
         const bool preserve_expiry;
+        std::optional<bool> use_replica;
         std::optional<std::uint64_t> max_parallelism;
         std::optional<std::uint64_t> scan_cap;
         std::optional<std::chrono::milliseconds> scan_wait;
@@ -84,6 +85,7 @@ struct query_options : public common_options<query_options> {
             readonly_,
             flex_index_,
             preserve_expiry_,
+            use_replica_,
             max_parallelism_,
             scan_cap_,
             scan_wait_,
@@ -222,6 +224,21 @@ struct query_options : public common_options<query_options> {
     auto preserve_expiry(bool preserve_expiry) -> query_options&
     {
         preserve_expiry_ = preserve_expiry;
+        return self();
+    }
+
+    /**
+     * Specifies that the query engine should use replica nodes for KV fetches if the active node is down.
+     *
+     * @param use_replica whether replica nodes should be used if the active node is down. If not provided, the server default will be used.
+     * @return the options builder for chaining purposes.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    auto use_replica(bool use_replica) -> query_options&
+    {
+        use_replica_ = use_replica;
         return self();
     }
 
@@ -529,6 +546,7 @@ struct query_options : public common_options<query_options> {
     bool readonly_{ false };
     bool flex_index_{ false };
     bool preserve_expiry_{ false };
+    std::optional<bool> use_replica_{};
     std::optional<std::uint64_t> max_parallelism_{};
     std::optional<std::uint64_t> scan_cap_{};
     std::optional<std::uint64_t> pipeline_batch_{};

@@ -85,6 +85,17 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
         case couchbase::query_profile::off:
             break;
     }
+    if (use_replica.has_value()) {
+        if (context.config.supports_read_from_replica()) {
+            if (use_replica.value()) {
+                body["use_replica"] = "on";
+            } else {
+                body["use_replica"] = "off";
+            }
+        } else {
+            return errc::common::feature_not_available;
+        }
+    }
     if (max_parallelism) {
         body["max_parallelism"] = std::to_string(max_parallelism.value());
     }

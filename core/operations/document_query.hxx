@@ -91,6 +91,7 @@ struct query_request {
     bool flex_index{ false };
     bool preserve_expiry{ false };
 
+    std::optional<bool> use_replica{};
     std::optional<std::uint64_t> max_parallelism{};
     std::optional<std::uint64_t> scan_cap{};
     std::optional<std::chrono::milliseconds> scan_wait{};

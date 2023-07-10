@@ -249,6 +249,8 @@ struct traits<couchbase::core::topology::configuration> {
                         result.cluster_capabilities.insert(couchbase::core::cluster_capability::n1ql_inline_functions);
                     } else if (name == "enhancedPreparedStatements") {
                         result.cluster_capabilities.insert(couchbase::core::cluster_capability::n1ql_enhanced_prepared_statements);
+                    } else if (name == "readFromReplica") {
+                        result.cluster_capabilities.insert(couchbase::core::cluster_capability::n1ql_read_from_replica);
                     }
                 }
             }

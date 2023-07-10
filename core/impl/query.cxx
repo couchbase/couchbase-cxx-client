@@ -161,6 +161,7 @@ build_query_request(std::string statement, query_options::built options)
         options.readonly,
         options.flex_index,
         options.preserve_expiry,
+        options.use_replica,
         options.max_parallelism,
         options.scan_cap,
         options.scan_wait,
