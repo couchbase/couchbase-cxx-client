@@ -50,7 +50,7 @@ TEST_CASE("unit: query with read from replica", "[unit]")
         REQUIRE(body.get_object().at("use_replica").get_string() == "on");
     }
 
-    SECTION("use_replica true")
+    SECTION("use_replica false")
     {
         couchbase::core::io::http_request http_req;
         couchbase::core::operations::query_request req{};
