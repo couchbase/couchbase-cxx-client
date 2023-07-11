@@ -39,5 +39,6 @@ enum class cluster_capability {
     n1ql_javascript_functions,
     n1ql_inline_functions,
     n1ql_enhanced_prepared_statements,
+    n1ql_read_from_replica,
 };
 } // namespace couchbase::core

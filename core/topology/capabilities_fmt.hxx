@@ -100,6 +100,8 @@ struct fmt::formatter<couchbase::core::cluster_capability> {
             case couchbase::core::cluster_capability::n1ql_enhanced_prepared_statements:
                 name = "n1ql_enhanced_prepared_statements";
                 break;
+            case couchbase::core::cluster_capability::n1ql_read_from_replica:
+                name = "n1ql_read_from_replica";
         }
         return format_to(ctx.out(), "{}", name);
     }
