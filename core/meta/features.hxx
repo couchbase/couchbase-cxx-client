@@ -29,3 +29,9 @@
  * couchbase::core::meta::sdk_version() function is available
  */
 #define COUCHBASE_CXX_CLIENT_HAS_SDK_SEMVER 1
+
+/**
+ * couchbase::core::cluster_options and couchbase::security_options support
+ * passing TLS trust certificate by value
+ */
+#define COUCHBASE_CXX_CLIENT_CAN_PASS_TLS_TRUST_CERTIFICATE_BY_VALUE 1

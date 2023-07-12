@@ -45,10 +45,17 @@ class security_options
         return *this;
     }
 
+    auto trust_certificate_value(std::string certificate_value) -> security_options&
+    {
+        trust_certificate_value_ = certificate_value;
+        return *this;
+    }
+
     struct built {
         bool enabled;
         tls_verify_mode tls_verify;
         std::optional<std::string> trust_certificate;
+        std::optional<std::string> trust_certificate_value;
         bool disable_mozilla_ca_certificates;
         bool disable_deprecated_protocols;
         bool disable_tls_v1_2;
@@ -57,7 +64,13 @@ class security_options
     [[nodiscard]] auto build() const -> built
     {
         return {
-            enabled_, tls_verify_, trust_certificate_, disable_mozilla_ca_certificates_, disable_deprecated_protocols, disable_tls_v1_2,
+            enabled_,
+            tls_verify_,
+            trust_certificate_,
+            trust_certificate_value_,
+            disable_mozilla_ca_certificates_,
+            disable_deprecated_protocols,
+            disable_tls_v1_2,
         };
     }
 
@@ -65,6 +78,7 @@ class security_options
     bool enabled_{ true };
     tls_verify_mode tls_verify_{ tls_verify_mode::peer };
     std::optional<std::string> trust_certificate_{};
+    std::optional<std::string> trust_certificate_value_{};
     bool disable_mozilla_ca_certificates_{ false };
     bool disable_deprecated_protocols{ true };
     bool disable_tls_v1_2{ false };

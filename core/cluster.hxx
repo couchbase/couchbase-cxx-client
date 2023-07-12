@@ -357,6 +357,7 @@ class cluster : public std::enable_shared_from_this<cluster>
 
             if (origin_.options().enable_tls                   /* TLS is enabled */
                 && origin_.options().trust_certificate.empty() /* No CA certificate (or other SDK-specific trust source) is specified */
+                && origin_.options().trust_certificate_value.empty()     /* and certificate value has not been specified */
                 && origin_.options().tls_verify != tls_verify_mode::none /* The user did not disable all TLS verification */
                 && has_non_capella_host /* The connection string has a hostname that does NOT end in ".cloud.couchbase.com" */) {
                 CB_LOG_WARNING("[{}] When TLS is enabled, the cluster options must specify certificate(s) to trust or ensure that they are "
@@ -386,7 +387,8 @@ class cluster : public std::enable_shared_from_this<cluster>
                     tls_.set_verify_mode(asio::ssl::verify_peer);
                     break;
             }
-            if (origin_.options().trust_certificate.empty()) { // trust certificate is not explicitly specified
+            if (origin_.options().trust_certificate.empty() &&
+                origin_.options().trust_certificate_value.empty()) { // trust certificate is not explicitly specified
                 CB_LOG_DEBUG(R"([{}]: use default CA for TLS verify)", id_);
                 std::error_code ec{};
 
@@ -422,11 +424,22 @@ class cluster : public std::enable_shared_from_this<cluster>
                 std::error_code ec{};
                 // load only the explicit certificate
                 // system and default capella certificates are not loaded
-                CB_LOG_DEBUG(R"([{}]: use TLS verify file: "{}")", id_, origin_.options().trust_certificate);
-                tls_.load_verify_file(origin_.options().trust_certificate, ec);
-                if (ec) {
-                    CB_LOG_ERROR("[{}]: unable to load verify file \"{}\": {}", id_, origin_.options().trust_certificate, ec.message());
-                    return close([ec, handler = std::forward<Handler>(handler)]() mutable { return handler(ec); });
+                if (!origin_.options().trust_certificate_value.empty()) {
+                    CB_LOG_DEBUG(R"([{}]: use TLS certificate passed through via options object)", id_);
+                    tls_.add_certificate_authority(asio::const_buffer(origin_.options().trust_certificate_value.data(),
+                                                                      origin_.options().trust_certificate_value.size()),
+                                                   ec);
+                    if (ec) {
+                        CB_LOG_WARNING("[{}]: unable to load CA passed via options object: {}", id_, ec.message());
+                    }
+                }
+                if (!origin_.options().trust_certificate.empty()) {
+                    CB_LOG_DEBUG(R"([{}]: use TLS verify file: "{}")", id_, origin_.options().trust_certificate);
+                    tls_.load_verify_file(origin_.options().trust_certificate, ec);
+                    if (ec) {
+                        CB_LOG_ERROR("[{}]: unable to load verify file \"{}\": {}", id_, origin_.options().trust_certificate, ec.message());
+                        return close([ec, handler = std::forward<Handler>(handler)]() mutable { return handler(ec); });
+                    }
                 }
             }
 #ifdef COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE
