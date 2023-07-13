@@ -82,6 +82,9 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
         if (opts.security.trust_certificate.has_value()) {
             user_options.trust_certificate = opts.security.trust_certificate.value();
         }
+        if (opts.security.trust_certificate_value.has_value()) {
+            user_options.trust_certificate_value = opts.security.trust_certificate_value.value();
+        }
         switch (opts.security.tls_verify) {
             case couchbase::tls_verify_mode::none:
                 user_options.tls_verify = core::tls_verify_mode::none;

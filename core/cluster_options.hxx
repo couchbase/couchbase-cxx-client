@@ -53,6 +53,7 @@ struct cluster_options {
     bool tls_disable_deprecated_protocols{ true };
     bool tls_disable_v1_2{ false };
     std::string trust_certificate{};
+    std::string trust_certificate_value{};
     bool enable_mutation_tokens{ true };
     bool enable_tcp_keep_alive{ true };
     io::ip_protocol use_ip_protocol{ io::ip_protocol::any };
