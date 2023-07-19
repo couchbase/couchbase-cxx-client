@@ -1088,7 +1088,8 @@ TEST_CASE("integration: manager sampling scan with custom collection and up to 1
     }
 }
 
-TEST_CASE("integration: manager sampling scan with custom collection and up to 128 concurrent streams and batch item limit 0", "[integration]")
+TEST_CASE("integration: manager sampling scan with custom collection and up to 128 concurrent streams and batch item limit 0",
+          "[integration]")
 {
     test::utils::integration_test_guard integration;
 
