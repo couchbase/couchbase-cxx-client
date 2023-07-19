@@ -1088,6 +1088,69 @@ TEST_CASE("integration: manager sampling scan with custom collection and up to 1
     }
 }
 
+TEST_CASE("integration: manager sampling scan with custom collection and up to 128 concurrent streams and batch item limit 0",
+          "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.has_bucket_capability("range_scan")) {
+        SKIP("cluster does not support range_scan");
+    }
+
+    collection_guard new_collection(integration);
+
+    auto collection = couchbase::cluster(integration.cluster)
+                        .bucket(integration.ctx.bucket)
+                        .scope(couchbase::scope::default_name)
+                        .collection(new_collection.name());
+
+    auto ids = make_doc_ids(100, "samplingscan-");
+    auto value = make_binary_value(100);
+    auto mutations = populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 300 });
+
+    auto vbucket_map = get_vbucket_map(integration);
+
+    auto ag = couchbase::core::agent_group(integration.io, { { integration.cluster } });
+    ag.open_bucket(integration.ctx.bucket);
+    auto agent = ag.get_agent(integration.ctx.bucket);
+    REQUIRE(agent.has_value());
+
+    couchbase::core::sampling_scan scan{ 10, 50 };
+    couchbase::core::range_scan_orchestrator_options options{};
+    options.consistent_with = mutations_to_mutation_state(mutations);
+    options.concurrency = 128;
+    options.batch_item_limit = 0;
+    couchbase::core::range_scan_orchestrator orchestrator(
+      integration.io, agent.value(), vbucket_map, couchbase::scope::default_name, new_collection.name(), scan, options);
+
+    auto result = orchestrator.scan();
+    EXPECT_SUCCESS(result);
+
+    std::set<std::string> entry_ids{};
+
+    auto now = std::chrono::system_clock::now();
+    do {
+        auto entry = result->next();
+        if (!entry) {
+            break;
+        }
+
+        REQUIRE(entry->body);
+        REQUIRE_FALSE(entry->body->cas.empty());
+        REQUIRE(entry->body->value == value);
+        REQUIRE(entry->body->expiry_time() > now);
+
+        auto [_, inserted] = entry_ids.insert(entry->key);
+        REQUIRE(inserted);
+    } while (true);
+
+    REQUIRE(ids.size() >= 10);
+
+    for (const auto& id : entry_ids) {
+        REQUIRE(std::find(ids.begin(), ids.end(), id) != ids.end());
+    }
+}
+
 TEST_CASE("integration: manager prefix scan without content and up to 5 concurrent streams", "[integration]")
 {
     test::utils::integration_test_guard integration;
