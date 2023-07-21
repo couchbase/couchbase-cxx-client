@@ -67,6 +67,9 @@ struct fmt::formatter<couchbase::core::bucket_capability> {
             case couchbase::core::bucket_capability::tombstoned_user_xattrs:
                 name = "tombstoned_user_xattrs";
                 break;
+            case couchbase::core::bucket_capability::range_scan:
+                name = "range_scan";
+                break;
         }
         return format_to(ctx.out(), "{}", name);
     }
