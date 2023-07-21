@@ -117,6 +117,11 @@ struct configuration {
         return cluster_capabilities.find(cluster_capability::n1ql_read_from_replica) != cluster_capabilities.end();
     }
 
+    [[nodiscard]] bool supports_range_scan() const
+    {
+        return bucket_capabilities.find(bucket_capability::range_scan) != bucket_capabilities.end();
+    }
+
     [[nodiscard]] bool ephemeral() const
     {
         // Use bucket capabilities to identify if couchapi is missing (then its ephemeral). If its null then

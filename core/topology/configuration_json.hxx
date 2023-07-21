@@ -233,6 +233,8 @@ struct traits<couchbase::core::topology::configuration> {
                     result.bucket_capabilities.insert(couchbase::core::bucket_capability::nodes_ext);
                 } else if (name == "xattr") {
                     result.bucket_capabilities.insert(couchbase::core::bucket_capability::xattr);
+                } else if (name == "rangeScan") {
+                    result.bucket_capabilities.insert(couchbase::core::bucket_capability::range_scan);
                 }
             }
         }
