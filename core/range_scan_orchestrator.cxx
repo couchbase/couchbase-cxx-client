@@ -412,13 +412,33 @@ class range_scan_orchestrator_impl
             return tl::unexpected(errc::common::invalid_argument);
         }
 
+        // Get the collection ID before starting any of the streams
+        {
+            auto barrier = std::make_shared<std::promise<tl::expected<get_collection_id_result, std::error_code>>>();
+            auto f = barrier->get_future();
+            get_collection_id_options const get_cid_options{ options_.retry_strategy, options_.timeout, options_.parent_span };
+            agent_.get_collection_id(scope_name_, collection_name_, get_cid_options, [barrier](auto result, auto ec) {
+                if (ec) {
+                    return barrier->set_value(tl::unexpected(ec));
+                }
+                barrier->set_value(result);
+            });
+            auto get_cid_res = f.get();
+            if (!get_cid_res.has_value()) {
+                return tl::unexpected(get_cid_res.error());
+            }
+            collection_id_ = get_cid_res->collection_id;
+        }
+
         auto batch_time_limit = std::chrono::duration_cast<std::chrono::milliseconds>(0.9 * options_.timeout);
         range_scan_continue_options const continue_options{
             options_.batch_item_limit, options_.batch_byte_limit, batch_time_limit, options_.timeout, options_.retry_strategy,
         };
         for (std::uint16_t vbucket = 0; vbucket < gsl::narrow_cast<std::uint16_t>(vbucket_map_.size()); ++vbucket) {
             const range_scan_create_options create_options{
-                scope_name_,       collection_name_,        scan_type_, options_.timeout, {}, vbucket_to_snapshot_requirements_[vbucket],
+                scope_name_,       {},
+                scan_type_,        options_.timeout,
+                collection_id_,    vbucket_to_snapshot_requirements_[vbucket],
                 options_.ids_only, options_.retry_strategy,
             };
 
@@ -653,6 +673,7 @@ class range_scan_orchestrator_impl
     topology::configuration::vbucket_map vbucket_map_;
     std::string scope_name_;
     std::string collection_name_;
+    std::uint32_t collection_id_;
     std::variant<std::monostate, range_scan, prefix_scan, sampling_scan> scan_type_;
     range_scan_orchestrator_options options_;
     std::map<std::size_t, std::optional<range_snapshot_requirements>> vbucket_to_snapshot_requirements_;
