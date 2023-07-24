@@ -35,3 +35,9 @@
  * passing TLS trust certificate by value
  */
 #define COUCHBASE_CXX_CLIENT_CAN_PASS_TLS_TRUST_CERTIFICATE_BY_VALUE 1
+
+/**
+ *  Range scan is available in the core
+ *  couchbase::core::range_scan_orchestrator and relevant options in the core API
+ */
+#define COUCHBASE_CXX_CLIENT_CORE_HAS_RANGE_SCAN 1
