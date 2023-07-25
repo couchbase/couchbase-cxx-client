@@ -55,6 +55,17 @@ std::optional<std::string>
 create_file_logger(const configuration& logger_settings);
 
 /**
+ * Protocol logger writes only communication logs with the nodes.
+ *
+ * It accepts the same settings as a file logger, and writes only to the filesystem.
+ *
+ * @param logger_settings
+ * @return
+ */
+std::optional<std::string>
+create_protocol_logger(const configuration& logger_settings);
+
+/**
  * Initialize the logger with the blackhole logger object
  *
  * This method is intended to be used by unit tests which don't need any output (but may call methods who tries to fetch the logger)
@@ -144,6 +155,9 @@ set_log_levels(level lvl);
 bool
 should_log(level lvl);
 
+bool
+should_log_protocol();
+
 namespace detail
 {
 /**
@@ -153,6 +167,9 @@ namespace detail
  */
 void
 log(const char* file, int line, const char* function, level lvl, std::string_view msg);
+
+void
+log_protocol(const char* file, int line, const char* function, std::string_view msg);
 } // namespace detail
 
 /**
@@ -166,6 +183,13 @@ inline void
 log(const char* file, int line, const char* function, level lvl, const String& msg, Args&&... args)
 {
     detail::log(file, line, function, lvl, fmt::format(msg, std::forward<Args>(args)...));
+}
+
+template<typename String, typename... Args>
+inline void
+log_protocol(const char* file, int line, const char* function, const String& msg, Args&&... args)
+{
+    detail::log_protocol(file, line, function, fmt::format(msg, std::forward<Args>(args)...));
 }
 
 /**
@@ -213,6 +237,13 @@ is_initialized();
 #define CB_LOG_ERROR(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::err, __VA_ARGS__)
 #define CB_LOG_CRITICAL(...)                                                                                                               \
     COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::critical, __VA_ARGS__)
+
+#define CB_LOG_PROTOCOL(...)                                                                                                               \
+    do {                                                                                                                                   \
+        if (couchbase::core::logger::should_log_protocol()) {                                                                              \
+            couchbase::core::logger::log_protocol(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, __VA_ARGS__);                             \
+        }                                                                                                                                  \
+    } while (false)
 
 /**
  * Convenience macros which log with the given level, and message, if the given

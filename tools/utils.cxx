@@ -367,8 +367,9 @@ usage_block_for_logger() -> std::string
 
     return fmt::format(R"(
 Logger options:
-  --log-level=LEVEL  Log level (allowed values are: {allowed_levels}). CBC_LOG_LEVEL. [default: {log_level}]
-  --log-output=PATH  File to send logs (when is not set, logs will be written to STDERR).
+  --log-level=LEVEL    Log level (allowed values are: {allowed_levels}). CBC_LOG_LEVEL. [default: {log_level}]
+  --log-output=PATH    File to send logs (when is not set, logs will be written to STDERR).
+  --log-protocol=PATH  File to send protocol logs.
 )",
                        fmt::arg("allowed_levels", fmt::join(allowed_log_levels, ", ")),
                        fmt::arg("log_level", default_log_level()));
@@ -391,6 +392,12 @@ apply_logger_options(const docopt::Options& options)
         }
         configuration.log_level = level;
         couchbase::core::logger::create_file_logger(configuration);
+    }
+
+    if (options.find("--log-protocol") != options.end() && options.at("--log-protocol")) {
+        couchbase::core::logger::configuration configuration{};
+        configuration.filename = options.at("--log-protocol").asString();
+        couchbase::core::logger::create_protocol_logger(configuration);
     }
 
     spdlog::set_level(spdlog::level::from_str(log_level));

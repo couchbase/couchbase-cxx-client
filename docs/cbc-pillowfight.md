@@ -41,8 +41,9 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 ### LOGGER OPTIONS
 
 <dl>
-<dt>`--log-level=LEVEL`</dt><dd>Log level (allowed values are: `trace`, `debug`, `info`, `warning`, `error`, `critical`, `off`). [default: `off`]
-<dt>`--log-output=PATH`</dt><dd>File to send logs (when is not set, logs will be written to STDERR).
+<dt>`--log-level=LEVEL`</dt><dd>Log level (allowed values are: `trace`, `debug`, `info`, `warning`, `error`, `critical`, `off`). [default: `off`]</dd>
+<dt>`--log-output=PATH`</dt><dd>File to send logs (when is not set, logs will be written to STDERR).</dd>
+<dt>`--log-protocol=PATH`</dt><dd>File to send protocol logs.</dd>
 </dl>
 
 ### CONNECTION OPTIONS

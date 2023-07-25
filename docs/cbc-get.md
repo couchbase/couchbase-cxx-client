@@ -34,8 +34,9 @@ Retrieve one or more documents from the server and print them to standard output
 ### LOGGER OPTIONS
 
 <dl>
-<dt>`--log-level=LEVEL`</dt><dd>Log level (allowed values are: `trace`, `debug`, `info`, `warning`, `error`, `critical`, `off`). [default: `off`]
-<dt>`--log-output=PATH`</dt><dd>File to send logs (when is not set, logs will be written to STDERR).
+<dt>`--log-level=LEVEL`</dt><dd>Log level (allowed values are: `trace`, `debug`, `info`, `warning`, `error`, `critical`, `off`). [default: `off`]</dd>
+<dt>`--log-output=PATH`</dt><dd>File to send logs (when is not set, logs will be written to STDERR).</dd>
+<dt>`--log-protocol=PATH`</dt><dd>File to send protocol logs.</dd>
 </dl>
 
 ### CONNECTION OPTIONS

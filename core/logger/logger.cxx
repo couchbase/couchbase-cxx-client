@@ -22,7 +22,8 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
-static const std::string logger_name{ "couchbase_cxx_client_file_logger" };
+static const std::string file_logger_name{ "couchbase_cxx_client_file_logger" };
+static const std::string protocol_logger_name{ "couchbase_cxx_client_protocol_logger" };
 
 /**
  * Custom log pattern which the loggers will use.
@@ -39,7 +40,12 @@ static const std::string log_pattern{ "[%Y-%m-%d %T.%e] [%P,%t] [%^%l%$] %oms, %
  * messages and send them to the sinks, which do the actual writing (to file,
  * to stream etc.) or further processing.
  */
-static std::shared_ptr<spdlog::logger> file_logger;
+static std::shared_ptr<spdlog::logger> file_logger{};
+
+/**
+ * Instance of the protocol logger.
+ */
+static std::shared_ptr<spdlog::logger> protocol_logger{};
 
 namespace couchbase::core::logger
 {
@@ -146,13 +152,11 @@ is_initialized()
     return file_logger != nullptr;
 }
 
-/**
- * Initialises the loggers. Called if the logger configuration is
- * specified in a separate settings object.
- */
-std::optional<std::string>
-create_file_logger(const configuration& logger_settings)
+std::pair<std::optional<std::string>, std::shared_ptr<spdlog::logger>>
+create_file_logger_impl(const std::string logger_name, const configuration& logger_settings)
 {
+    std::shared_ptr<spdlog::logger> logger{};
+
     auto fname = logger_settings.filename;
     auto buffersz = logger_settings.buffer_size;
     auto cyclesz = logger_settings.cycle_size;
@@ -218,7 +222,7 @@ create_file_logger(const configuration& logger_settings)
         spdlog::drop(logger_name);
 
         if (logger_settings.unit_test) {
-            file_logger = std::make_shared<spdlog::logger>(logger_name, sink);
+            logger = std::make_shared<spdlog::logger>(logger_name, sink);
         } else {
             // Create the default thread pool for async logging
             spdlog::init_thread_pool(buffersz, 1);
@@ -226,22 +230,70 @@ create_file_logger(const configuration& logger_settings)
             // Get the thread pool so that we can actually construct the
             // object with already created sinks...
             auto tp = spdlog::thread_pool();
-            file_logger = std::make_shared<spdlog::async_logger>(logger_name, sink, tp, spdlog::async_overflow_policy::block);
+            logger = std::make_shared<spdlog::async_logger>(logger_name, sink, tp, spdlog::async_overflow_policy::block);
         }
 
-        file_logger->set_pattern(log_pattern);
-        file_logger->set_level(translate_level(logger_settings.log_level));
+        logger->set_pattern(log_pattern);
+        logger->set_level(translate_level(logger_settings.log_level));
 
         // Set the flushing interval policy
         spdlog::flush_every(std::chrono::seconds(1));
 
-        spdlog::register_logger(file_logger);
+        spdlog::register_logger(logger);
     } catch (const spdlog::spdlog_ex& ex) {
         std::string msg = std::string{ "Log initialization failed: " } + ex.what();
-        return std::optional<std::string>{ msg };
+        return { msg, {} };
     }
+    return { {}, logger };
+}
+
+/**
+ * Initialises the loggers. Called if the logger configuration is
+ * specified in a separate settings object.
+ */
+std::optional<std::string>
+create_file_logger(const configuration& logger_settings)
+{
+    auto [error, logger] = create_file_logger_impl(file_logger_name, logger_settings);
+    if (error) {
+        return error;
+    }
+    file_logger = std::move(logger);
     return {};
 }
+
+std::optional<std::string>
+create_protocol_logger(const configuration& logger_settings)
+{
+    if (logger_settings.filename.empty()) {
+        return "File name is missing";
+    }
+    auto config = logger_settings;
+    config.log_level = couchbase::core::logger::level::trace;
+    auto [error, logger] = create_file_logger_impl(protocol_logger_name, config);
+    if (error) {
+        return error;
+    }
+    protocol_logger = std::move(logger);
+    return {};
+}
+
+bool
+should_log_protocol()
+{
+    return protocol_logger != nullptr;
+}
+
+namespace detail
+{
+void
+log_protocol(const char* file, int line, const char* function, std::string_view msg)
+{
+    if (should_log_protocol()) {
+        return protocol_logger->log(spdlog::source_loc{ file, line, function }, spdlog::level::level_enum::trace, msg);
+    }
+}
+} // namespace detail
 
 spdlog::logger*
 get()
@@ -252,17 +304,20 @@ get()
 void
 reset()
 {
-    spdlog::drop(logger_name);
+    spdlog::drop(file_logger_name);
     file_logger.reset();
+
+    spdlog::drop(protocol_logger_name);
+    protocol_logger.reset();
 }
 
 void
 create_blackhole_logger()
 {
     // delete if already exists
-    spdlog::drop(logger_name);
+    spdlog::drop(file_logger_name);
 
-    file_logger = std::make_shared<spdlog::logger>(logger_name, std::make_shared<spdlog::sinks::null_sink_mt>());
+    file_logger = std::make_shared<spdlog::logger>(file_logger_name, std::make_shared<spdlog::sinks::null_sink_mt>());
 
     file_logger->set_level(spdlog::level::off);
     file_logger->set_pattern(log_pattern);
@@ -274,11 +329,11 @@ void
 create_console_logger()
 {
     // delete if already exists
-    spdlog::drop(logger_name);
+    spdlog::drop(file_logger_name);
 
     auto stderrsink = std::make_shared<spdlog::sinks::stderr_color_sink_mt>();
 
-    file_logger = std::make_shared<spdlog::logger>(logger_name, stderrsink);
+    file_logger = std::make_shared<spdlog::logger>(file_logger_name, stderrsink);
     file_logger->set_level(spdlog::level::info);
     file_logger->set_pattern(log_pattern);
 
@@ -322,8 +377,13 @@ void
 set_log_levels(level lvl)
 {
     auto level = translate_level(lvl);
-    // Apply the function to each registered spdlog::logger
+    // Apply the function to each registered spdlog::logger except protocol logger
     spdlog::apply_all([level](std::shared_ptr<spdlog::logger> l) {
+        if (l->name() == protocol_logger_name) {
+            l->set_level(spdlog::level::trace);
+            return;
+        }
+
         try {
             l->set_level(level);
         } catch (const spdlog::spdlog_ex& e) {
