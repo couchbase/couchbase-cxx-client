@@ -113,9 +113,9 @@ assert_single_lookup_any_replica_error(test::utils::integration_test_guard& inte
 template<typename SubdocumentOperation>
 void
 assert_single_lookup_all_replica_success(test::utils::integration_test_guard& integration,
-                                          const couchbase::core::document_id& id,
-                                          const SubdocumentOperation& spec,
-                                          std::optional<std::string> expected_value = std::nullopt)
+                                         const couchbase::core::document_id& id,
+                                         const SubdocumentOperation& spec,
+                                         std::optional<std::string> expected_value = std::nullopt)
 {
     couchbase::core::operations::lookup_in_all_replicas_request req{ id };
     req.specs = couchbase::lookup_in_specs{ spec }.specs();
@@ -123,9 +123,10 @@ assert_single_lookup_all_replica_success(test::utils::integration_test_guard& in
     INFO(fmt::format("assert_single_lookup_all_replica_success(\"{}\", \"{}\")", id, req.specs[0].path_));
     REQUIRE_SUCCESS(response.ctx.ec());
     REQUIRE(response.entries.size() == integration.number_of_replicas() + 1);
-    auto responses_from_active = std::count_if(response.entries.begin(), response.entries.end(), [](const auto& r) { return !r.is_replica; });
+    auto responses_from_active =
+      std::count_if(response.entries.begin(), response.entries.end(), [](const auto& r) { return !r.is_replica; });
     REQUIRE(responses_from_active == 1);
-    for (auto &resp : response.entries) {
+    for (auto& resp : response.entries) {
         REQUIRE_FALSE(resp.cas.empty());
         REQUIRE(resp.fields.size() == 1);
         REQUIRE(resp.fields[0].exists);
@@ -141,10 +142,10 @@ assert_single_lookup_all_replica_success(test::utils::integration_test_guard& in
 template<typename SubdocumentOperation>
 void
 assert_single_lookup_all_replica_error(test::utils::integration_test_guard& integration,
-                                        const couchbase::core::document_id& id,
-                                        const SubdocumentOperation& spec,
-                                        couchbase::key_value_status_code expected_status,
-                                        std::error_code expected_ec)
+                                       const couchbase::core::document_id& id,
+                                       const SubdocumentOperation& spec,
+                                       couchbase::key_value_status_code expected_status,
+                                       std::error_code expected_ec)
 {
     couchbase::core::operations::lookup_in_all_replicas_request req{ id };
     req.specs = couchbase::lookup_in_specs{ spec }.specs();
@@ -152,9 +153,10 @@ assert_single_lookup_all_replica_error(test::utils::integration_test_guard& inte
     INFO(fmt::format("assert_single_lookup_all_replica_error(\"{}\", \"{}\")", id, req.specs[0].path_));
     REQUIRE_SUCCESS(response.ctx.ec());
     REQUIRE(response.entries.size() == integration.number_of_replicas() + 1);
-    auto responses_from_active = std::count_if(response.entries.begin(), response.entries.end(), [](const auto& r) { return !r.is_replica; });
+    auto responses_from_active =
+      std::count_if(response.entries.begin(), response.entries.end(), [](const auto& r) { return !r.is_replica; });
     REQUIRE(responses_from_active == 1);
-    for (auto &resp : response.entries) {
+    for (auto& resp : response.entries) {
         REQUIRE_FALSE(resp.cas.empty());
         REQUIRE(resp.fields.size() == 1);
         REQUIRE_FALSE(resp.fields[0].exists);
@@ -1117,7 +1119,8 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
 
     SECTION("array get")
     {
-        assert_single_lookup_all_replica_success(integration, id, couchbase::lookup_in_specs::get("array"), "[1,2,3,4,[10,20,30,[100,200,300]]]");
+        assert_single_lookup_all_replica_success(
+          integration, id, couchbase::lookup_in_specs::get("array"), "[1,2,3,4,[10,20,30,[100,200,300]]]");
     }
 
     SECTION("array exists")
@@ -1263,22 +1266,19 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
 
     SECTION("public API")
     {
-        auto collection =
-          couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope("_default").collection("_default");
+        auto collection = couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope("_default").collection("_default");
 
         SECTION("lookup in all replicas")
         {
-            auto specs = couchbase::lookup_in_specs{
-                couchbase::lookup_in_specs::get("dictkey"),
-                couchbase::lookup_in_specs::exists("array"),
-                couchbase::lookup_in_specs::count("array")
-            };
+            auto specs = couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("dictkey"),
+                                                     couchbase::lookup_in_specs::exists("array"),
+                                                     couchbase::lookup_in_specs::count("array") };
             auto [ctx, result] = collection.lookup_in_all_replicas(key, specs).get();
             REQUIRE_SUCCESS(ctx.ec());
             REQUIRE(result.size() == number_of_replicas + 1);
             auto responses_from_active = std::count_if(result.begin(), result.end(), [](const auto& r) { return !r.is_replica(); });
             REQUIRE(responses_from_active == 1);
-            for (auto &res : result) {
+            for (auto& res : result) {
                 REQUIRE(!res.cas().empty());
                 REQUIRE("dictval" == res.content_as<std::string>(0));
                 REQUIRE(res.exists("array"));
@@ -1493,11 +1493,9 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
 
         SECTION("lookup in any replica")
         {
-            auto specs = couchbase::lookup_in_specs{
-                couchbase::lookup_in_specs::get("dictkey"),
-                couchbase::lookup_in_specs::exists("array"),
-                couchbase::lookup_in_specs::count("array")
-            };
+            auto specs = couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("dictkey"),
+                                                     couchbase::lookup_in_specs::exists("array"),
+                                                     couchbase::lookup_in_specs::count("array") };
             auto [ctx, result] = collection.lookup_in_any_replica(key, specs).get();
             REQUIRE_SUCCESS(ctx.ec());
             REQUIRE(!result.cas().empty());
