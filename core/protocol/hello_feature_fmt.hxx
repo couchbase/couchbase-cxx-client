@@ -106,6 +106,9 @@ struct fmt::formatter<couchbase::core::protocol::hello_feature> {
             case couchbase::core::protocol::hello_feature::resource_units:
                 name = "resource_units";
                 break;
+            case couchbase::core::protocol::hello_feature::subdoc_replica_read:
+                name = "subdoc_replica_read";
+                break;
         }
         return format_to(ctx.out(), "{}", name);
     }

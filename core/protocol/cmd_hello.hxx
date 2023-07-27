@@ -71,6 +71,7 @@ class hello_request_body
         hello_feature::collections,
         hello_feature::subdoc_create_as_deleted,
         hello_feature::preserve_ttl,
+        hello_feature::subdoc_replica_read,
     };
     std::vector<std::byte> value_;
 

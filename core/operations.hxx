@@ -30,6 +30,8 @@
 #include "core/operations/document_increment.hxx"
 #include "core/operations/document_insert.hxx"
 #include "core/operations/document_lookup_in.hxx"
+#include "core/operations/document_lookup_in_all_replicas.hxx"
+#include "core/operations/document_lookup_in_any_replica.hxx"
 #include "core/operations/document_mutate_in.hxx"
 #include "core/operations/document_prepend.hxx"
 #include "core/operations/document_query.hxx"
