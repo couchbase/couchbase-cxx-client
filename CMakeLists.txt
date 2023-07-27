@@ -132,8 +132,6 @@ set(couchbase_cxx_client_FILES
         core/operations/document_increment.cxx
         core/operations/document_insert.cxx
         core/operations/document_lookup_in.cxx
-        core/operations/document_lookup_in_all_replicas.hxx
-        core/operations/document_lookup_in_any_replica.hxx
         core/operations/document_mutate_in.cxx
         core/operations/document_prepend.cxx
         core/operations/document_query.cxx
