@@ -65,6 +65,106 @@ assert_single_lookup_error(test::utils::integration_test_guard& integration,
     REQUIRE(resp.fields[0].ec == expected_ec);
 }
 
+template<typename SubdocumentOperation>
+void
+assert_single_lookup_any_replica_success(test::utils::integration_test_guard& integration,
+                                         const couchbase::core::document_id& id,
+                                         const SubdocumentOperation& spec,
+                                         std::optional<std::string> expected_value = std::nullopt)
+{
+    couchbase::core::operations::lookup_in_any_replica_request req{ id };
+    req.specs = couchbase::lookup_in_specs{ spec }.specs();
+    auto resp = test::utils::execute(integration.cluster, req);
+    INFO(fmt::format("assert_single_lookup_all_replica_success(\"{}\", \"{}\")", id, req.specs[0].path_));
+    REQUIRE_SUCCESS(resp.ctx.ec());
+    REQUIRE_FALSE(resp.cas.empty());
+    REQUIRE(resp.fields.size() == 1);
+    REQUIRE(resp.fields[0].exists);
+    REQUIRE(resp.fields[0].path == req.specs[0].path_);
+    REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::success);
+    REQUIRE_SUCCESS(resp.fields[0].ec);
+    if (expected_value.has_value()) {
+        REQUIRE(couchbase::core::utils::to_binary(expected_value.value()) == resp.fields[0].value);
+    }
+}
+
+template<typename SubdocumentOperation>
+void
+assert_single_lookup_any_replica_error(test::utils::integration_test_guard& integration,
+                                       const couchbase::core::document_id& id,
+                                       const SubdocumentOperation& spec,
+                                       couchbase::key_value_status_code expected_status,
+                                       std::error_code expected_ec)
+{
+    couchbase::core::operations::lookup_in_any_replica_request req{ id };
+    req.specs = couchbase::lookup_in_specs{ spec }.specs();
+    auto resp = test::utils::execute(integration.cluster, req);
+    INFO(fmt::format("assert_single_lookup_all_replica_error(\"{}\", \"{}\")", id, req.specs[0].path_));
+    REQUIRE_SUCCESS(resp.ctx.ec());
+    REQUIRE_FALSE(resp.cas.empty());
+    REQUIRE(resp.fields.size() == 1);
+    REQUIRE_FALSE(resp.fields[0].exists);
+    REQUIRE(resp.fields[0].path == req.specs[0].path_);
+    REQUIRE(resp.fields[0].value.empty());
+    REQUIRE(resp.fields[0].status == expected_status);
+    REQUIRE(resp.fields[0].ec == expected_ec);
+}
+
+template<typename SubdocumentOperation>
+void
+assert_single_lookup_all_replica_success(test::utils::integration_test_guard& integration,
+                                          const couchbase::core::document_id& id,
+                                          const SubdocumentOperation& spec,
+                                          std::optional<std::string> expected_value = std::nullopt)
+{
+    couchbase::core::operations::lookup_in_all_replicas_request req{ id };
+    req.specs = couchbase::lookup_in_specs{ spec }.specs();
+    auto response = test::utils::execute(integration.cluster, req);
+    INFO(fmt::format("assert_single_lookup_all_replica_success(\"{}\", \"{}\")", id, req.specs[0].path_));
+    REQUIRE_SUCCESS(response.ctx.ec());
+    REQUIRE(response.entries.size() == integration.number_of_replicas() + 1);
+    auto responses_from_active = std::count_if(response.entries.begin(), response.entries.end(), [](const auto& r) { return !r.is_replica; });
+    REQUIRE(responses_from_active == 1);
+    for (auto &resp : response.entries) {
+        REQUIRE_FALSE(resp.cas.empty());
+        REQUIRE(resp.fields.size() == 1);
+        REQUIRE(resp.fields[0].exists);
+        REQUIRE(resp.fields[0].path == req.specs[0].path_);
+        REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::success);
+        REQUIRE_SUCCESS(resp.fields[0].ec);
+        if (expected_value.has_value()) {
+            REQUIRE(couchbase::core::utils::to_binary(expected_value.value()) == resp.fields[0].value);
+        }
+    }
+}
+
+template<typename SubdocumentOperation>
+void
+assert_single_lookup_all_replica_error(test::utils::integration_test_guard& integration,
+                                        const couchbase::core::document_id& id,
+                                        const SubdocumentOperation& spec,
+                                        couchbase::key_value_status_code expected_status,
+                                        std::error_code expected_ec)
+{
+    couchbase::core::operations::lookup_in_all_replicas_request req{ id };
+    req.specs = couchbase::lookup_in_specs{ spec }.specs();
+    auto response = test::utils::execute(integration.cluster, req);
+    INFO(fmt::format("assert_single_lookup_all_replica_error(\"{}\", \"{}\")", id, req.specs[0].path_));
+    REQUIRE_SUCCESS(response.ctx.ec());
+    REQUIRE(response.entries.size() == integration.number_of_replicas() + 1);
+    auto responses_from_active = std::count_if(response.entries.begin(), response.entries.end(), [](const auto& r) { return !r.is_replica; });
+    REQUIRE(responses_from_active == 1);
+    for (auto &resp : response.entries) {
+        REQUIRE_FALSE(resp.cas.empty());
+        REQUIRE(resp.fields.size() == 1);
+        REQUIRE_FALSE(resp.fields[0].exists);
+        REQUIRE(resp.fields[0].path == req.specs[0].path_);
+        REQUIRE(resp.fields[0].value.empty());
+        REQUIRE(resp.fields[0].status == expected_status);
+        REQUIRE(resp.fields[0].ec == expected_ec);
+    }
+}
+
 void
 assert_single_mutate_success(couchbase::core::operations::mutate_in_response resp, const std::string& path, const std::string& value = "")
 {
@@ -971,5 +1071,449 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
         REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.fields.size() == 1);
         REQUIRE(resp.fields[0].value == couchbase::core::utils::to_binary("3"));
+    }
+}
+
+TEST_CASE("integration: subdoc all replica reads", "[integration]")
+{
+
+    test::utils::integration_test_guard integration;
+
+    if (!integration.has_bucket_capability("subdoc.ReplicaRead")) {
+        SKIP("cluster does not support replica_read");
+    }
+
+    auto number_of_replicas = integration.number_of_replicas();
+
+    if (number_of_replicas == 0) {
+        SKIP("bucket has zero replicas");
+    }
+    if (integration.number_of_nodes() <= number_of_replicas) {
+        SKIP(fmt::format("number of nodes ({}) is less or equal to number of replicas ({})",
+                         integration.number_of_nodes(),
+                         integration.number_of_replicas()));
+    }
+
+    auto key = test::utils::uniq_id("lookup_in_any_replica");
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", key };
+
+    {
+        auto value_json = couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
+        couchbase::core::operations::insert_request req{ id, value_json };
+        req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
+    SECTION("dict get")
+    {
+        assert_single_lookup_all_replica_success(integration, id, couchbase::lookup_in_specs::get("dictkey"), R"("dictval")");
+    }
+
+    SECTION("dict exists")
+    {
+        assert_single_lookup_all_replica_success(integration, id, couchbase::lookup_in_specs::exists("dictkey"));
+    }
+
+    SECTION("array get")
+    {
+        assert_single_lookup_all_replica_success(integration, id, couchbase::lookup_in_specs::get("array"), "[1,2,3,4,[10,20,30,[100,200,300]]]");
+    }
+
+    SECTION("array exists")
+    {
+        assert_single_lookup_all_replica_success(integration, id, couchbase::lookup_in_specs::exists("array"));
+    }
+
+    SECTION("array index get")
+    {
+        assert_single_lookup_all_replica_success(integration, id, couchbase::lookup_in_specs::get("array[0]"), "1");
+    }
+
+    SECTION("array index exists")
+    {
+        assert_single_lookup_all_replica_success(integration, id, couchbase::lookup_in_specs::exists("array[0]"));
+    }
+
+    SECTION("non existent path get")
+    {
+        assert_single_lookup_all_replica_error(integration,
+                                               id,
+                                               couchbase::lookup_in_specs::get("non-exist"),
+                                               couchbase::key_value_status_code::subdoc_path_not_found,
+                                               couchbase::errc::key_value::path_not_found);
+    }
+
+    SECTION("non existent path exists")
+    {
+        assert_single_lookup_all_replica_error(integration,
+                                               id,
+                                               couchbase::lookup_in_specs::exists("non-exist"),
+                                               couchbase::key_value_status_code::subdoc_path_not_found,
+                                               couchbase::errc::key_value::path_not_found);
+    }
+
+    SECTION("non existent doc")
+    {
+        couchbase::core::document_id missing_id{ integration.ctx.bucket, "_default", "_default", "missing_key" };
+
+        SECTION("non existent doc get")
+        {
+            couchbase::core::operations::lookup_in_all_replicas_request req{ missing_id };
+            req.specs =
+              couchbase::lookup_in_specs{
+                  couchbase::lookup_in_specs::get("non-exist"),
+              }
+                .specs();
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
+            REQUIRE(resp.entries.empty());
+        }
+
+        SECTION("non existent doc exists")
+        {
+            couchbase::core::operations::lookup_in_all_replicas_request req{ missing_id };
+            req.specs =
+              couchbase::lookup_in_specs{
+                  couchbase::lookup_in_specs::exists("non-exist"),
+              }
+                .specs();
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
+            REQUIRE(resp.entries.empty());
+        }
+    }
+
+    SECTION("non json")
+    {
+        couchbase::core::document_id non_json_id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("non_json") };
+        auto non_json_doc = couchbase::core::utils::to_binary("string");
+
+        {
+            couchbase::core::operations::insert_request req{ non_json_id, non_json_doc };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_SUCCESS(resp.ctx.ec());
+        }
+
+        SECTION("non json get")
+        {
+            if (integration.cluster_version().is_mock()) {
+                SKIP("GOCAVES does not handle subdocument operations for non-JSON documents. See "
+                     "https://github.com/couchbaselabs/gocaves/issues/103");
+            }
+            assert_single_lookup_all_replica_error(integration,
+                                                   non_json_id,
+                                                   couchbase::lookup_in_specs::get("non-exist"),
+                                                   couchbase::key_value_status_code::subdoc_doc_not_json,
+                                                   couchbase::errc::key_value::document_not_json);
+        }
+
+        SECTION("non json exists")
+        {
+            if (integration.cluster_version().is_mock()) {
+                SKIP("GOCAVES does not handle subdocument operations for non-JSON documents. See "
+                     "https://github.com/couchbaselabs/gocaves/issues/103");
+            }
+            assert_single_lookup_all_replica_error(integration,
+                                                   non_json_id,
+                                                   couchbase::lookup_in_specs::exists("non-exist"),
+                                                   couchbase::key_value_status_code::subdoc_doc_not_json,
+                                                   couchbase::errc::key_value::document_not_json);
+        }
+    }
+
+    SECTION("invalid path")
+    {
+        std::vector<std::string> invalid_paths = { "invalid..path", "invalid[-2]" };
+        for (const auto& path : invalid_paths) {
+            if (integration.cluster_version().is_mock()) {
+                assert_single_lookup_all_replica_error(integration,
+                                                       id,
+                                                       couchbase::lookup_in_specs::get(path),
+                                                       couchbase::key_value_status_code::subdoc_path_not_found,
+                                                       couchbase::errc::key_value::path_not_found);
+            } else {
+                assert_single_lookup_all_replica_error(integration,
+                                                       id,
+                                                       couchbase::lookup_in_specs::get(path),
+                                                       couchbase::key_value_status_code::subdoc_path_invalid,
+                                                       couchbase::errc::key_value::path_invalid);
+            }
+        }
+    }
+
+    SECTION("negative paths")
+    {
+        assert_single_lookup_all_replica_success(integration, id, couchbase::lookup_in_specs::get("array[-1][-1][-1]"), "300");
+    }
+
+    SECTION("nested arrays")
+    {
+        assert_single_lookup_all_replica_success(integration, id, couchbase::lookup_in_specs::get("array[4][3][2]"), "300");
+    }
+
+    SECTION("path mismatch")
+    {
+        assert_single_lookup_all_replica_error(integration,
+                                               id,
+                                               couchbase::lookup_in_specs::get("array.key"),
+                                               couchbase::key_value_status_code::subdoc_path_mismatch,
+                                               couchbase::errc::key_value::path_mismatch);
+    }
+
+    SECTION("public API")
+    {
+        auto collection =
+          couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope("_default").collection("_default");
+
+        SECTION("lookup in all replicas")
+        {
+            auto specs = couchbase::lookup_in_specs{
+                couchbase::lookup_in_specs::get("dictkey"),
+                couchbase::lookup_in_specs::exists("array"),
+                couchbase::lookup_in_specs::count("array")
+            };
+            auto [ctx, result] = collection.lookup_in_all_replicas(key, specs).get();
+            REQUIRE_SUCCESS(ctx.ec());
+            REQUIRE(result.size() == number_of_replicas + 1);
+            auto responses_from_active = std::count_if(result.begin(), result.end(), [](const auto& r) { return !r.is_replica(); });
+            REQUIRE(responses_from_active == 1);
+            for (auto &res : result) {
+                REQUIRE(!res.cas().empty());
+                REQUIRE("dictval" == res.content_as<std::string>(0));
+                REQUIRE(res.exists("array"));
+                REQUIRE(5 == res.content_as<int>(2));
+            }
+        }
+
+        SECTION("missing document")
+        {
+            auto specs = couchbase::lookup_in_specs{
+                couchbase::lookup_in_specs::get("non-exists"),
+            };
+            auto [ctx, result] = collection.lookup_in_all_replicas("missing-key", specs).get();
+            REQUIRE(ctx.ec() == couchbase::errc::key_value::document_not_found);
+            REQUIRE(result.empty());
+        }
+    }
+}
+
+TEST_CASE("integration: subdoc any replica reads", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.has_bucket_capability("subdoc.ReplicaRead")) {
+        SKIP("cluster does not support replica_read");
+    }
+
+    auto number_of_replicas = integration.number_of_replicas();
+
+    if (number_of_replicas == 0) {
+        SKIP("bucket has zero replicas");
+    }
+    if (integration.number_of_nodes() <= number_of_replicas) {
+        SKIP(fmt::format("number of nodes ({}) is less or equal to number of replicas ({})",
+                         integration.number_of_nodes(),
+                         integration.number_of_replicas()));
+    }
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    auto key = test::utils::uniq_id("lookup_in_any_replica");
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", key };
+
+    {
+        auto value_json = couchbase::core::utils::to_binary(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
+        couchbase::core::operations::insert_request req{ id, value_json };
+        req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
+    SECTION("dict get")
+    {
+        assert_single_lookup_any_replica_success(integration, id, couchbase::lookup_in_specs::get("dictkey"), R"("dictval")");
+    }
+
+    SECTION("dict exists")
+    {
+        assert_single_lookup_any_replica_success(integration, id, couchbase::lookup_in_specs::exists("dictkey"));
+    }
+
+    SECTION("array get")
+    {
+        assert_single_lookup_any_replica_success(
+          integration, id, couchbase::lookup_in_specs::get("array"), "[1,2,3,4,[10,20,30,[100,200,300]]]");
+    }
+
+    SECTION("array exists")
+    {
+        assert_single_lookup_any_replica_success(integration, id, couchbase::lookup_in_specs::exists("array"));
+    }
+
+    SECTION("array index get")
+    {
+        assert_single_lookup_any_replica_success(integration, id, couchbase::lookup_in_specs::get("array[0]"), "1");
+    }
+
+    SECTION("array index exists")
+    {
+        assert_single_lookup_any_replica_success(integration, id, couchbase::lookup_in_specs::exists("array[0]"));
+    }
+
+    SECTION("non existent path get")
+    {
+        assert_single_lookup_any_replica_error(integration,
+                                               id,
+                                               couchbase::lookup_in_specs::get("non-exist"),
+                                               couchbase::key_value_status_code::subdoc_path_not_found,
+                                               couchbase::errc::key_value::path_not_found);
+    }
+
+    SECTION("non existent path exists")
+    {
+        assert_single_lookup_any_replica_error(integration,
+                                               id,
+                                               couchbase::lookup_in_specs::exists("non-exist"),
+                                               couchbase::key_value_status_code::subdoc_path_not_found,
+                                               couchbase::errc::key_value::path_not_found);
+    }
+
+    SECTION("non existent doc")
+    {
+        couchbase::core::document_id missing_id{ integration.ctx.bucket, "_default", "_default", "missing_key" };
+
+        SECTION("non existent doc get")
+        {
+            couchbase::core::operations::lookup_in_any_replica_request req{ missing_id };
+            req.specs =
+              couchbase::lookup_in_specs{
+                  couchbase::lookup_in_specs::get("non-exist"),
+              }
+                .specs();
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+            REQUIRE(resp.fields.empty());
+        }
+
+        SECTION("non existent doc exists")
+        {
+            couchbase::core::operations::lookup_in_any_replica_request req{ missing_id };
+            req.specs =
+              couchbase::lookup_in_specs{
+                  couchbase::lookup_in_specs::exists("non-exist"),
+              }
+                .specs();
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+            REQUIRE(resp.fields.empty());
+        }
+    }
+
+    SECTION("non json")
+    {
+        couchbase::core::document_id non_json_id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("non_json") };
+        auto non_json_doc = couchbase::core::utils::to_binary("string");
+
+        {
+            couchbase::core::operations::insert_request req{ non_json_id, non_json_doc };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_SUCCESS(resp.ctx.ec());
+        }
+
+        SECTION("non json get")
+        {
+            if (integration.cluster_version().is_mock()) {
+                SKIP("GOCAVES does not handle subdocument operations for non-JSON documents. See "
+                     "https://github.com/couchbaselabs/gocaves/issues/103");
+            }
+            assert_single_lookup_any_replica_error(integration,
+                                                   non_json_id,
+                                                   couchbase::lookup_in_specs::get("non-exist"),
+                                                   couchbase::key_value_status_code::subdoc_doc_not_json,
+                                                   couchbase::errc::key_value::document_not_json);
+        }
+
+        SECTION("non json exists")
+        {
+            if (integration.cluster_version().is_mock()) {
+                SKIP("GOCAVES does not handle subdocument operations for non-JSON documents. See "
+                     "https://github.com/couchbaselabs/gocaves/issues/103");
+            }
+            assert_single_lookup_any_replica_error(integration,
+                                                   non_json_id,
+                                                   couchbase::lookup_in_specs::exists("non-exist"),
+                                                   couchbase::key_value_status_code::subdoc_doc_not_json,
+                                                   couchbase::errc::key_value::document_not_json);
+        }
+    }
+
+    SECTION("invalid path")
+    {
+        std::vector<std::string> invalid_paths = { "invalid..path", "invalid[-2]" };
+        for (const auto& path : invalid_paths) {
+            if (integration.cluster_version().is_mock()) {
+                assert_single_lookup_any_replica_error(integration,
+                                                       id,
+                                                       couchbase::lookup_in_specs::get(path),
+                                                       couchbase::key_value_status_code::subdoc_path_not_found,
+                                                       couchbase::errc::key_value::path_not_found);
+            } else {
+                assert_single_lookup_any_replica_error(integration,
+                                                       id,
+                                                       couchbase::lookup_in_specs::get(path),
+                                                       couchbase::key_value_status_code::subdoc_path_invalid,
+                                                       couchbase::errc::key_value::path_invalid);
+            }
+        }
+    }
+
+    SECTION("negative paths")
+    {
+        assert_single_lookup_any_replica_success(integration, id, couchbase::lookup_in_specs::get("array[-1][-1][-1]"), "300");
+    }
+
+    SECTION("nested arrays")
+    {
+        assert_single_lookup_any_replica_success(integration, id, couchbase::lookup_in_specs::get("array[4][3][2]"), "300");
+    }
+
+    SECTION("path mismatch")
+    {
+        assert_single_lookup_any_replica_error(integration,
+                                               id,
+                                               couchbase::lookup_in_specs::get("array.key"),
+                                               couchbase::key_value_status_code::subdoc_path_mismatch,
+                                               couchbase::errc::key_value::path_mismatch);
+    }
+
+    SECTION("public API")
+    {
+        auto collection = couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope("_default").collection("_default");
+
+        SECTION("lookup in any replica")
+        {
+            auto specs = couchbase::lookup_in_specs{
+                couchbase::lookup_in_specs::get("dictkey"),
+                couchbase::lookup_in_specs::exists("array"),
+                couchbase::lookup_in_specs::count("array")
+            };
+            auto [ctx, result] = collection.lookup_in_any_replica(key, specs).get();
+            REQUIRE_SUCCESS(ctx.ec());
+            REQUIRE(!result.cas().empty());
+            REQUIRE("dictval" == result.content_as<std::string>(0));
+            REQUIRE(result.exists("array"));
+            REQUIRE(5 == result.content_as<int>(2));
+        }
+
+        SECTION("missing document")
+        {
+            auto specs = couchbase::lookup_in_specs{
+                couchbase::lookup_in_specs::get("non-exists"),
+            };
+            auto [ctx, result] = collection.lookup_in_any_replica("missing-key", specs).get();
+            REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+            REQUIRE(result.cas().empty());
+        }
     }
 }
