@@ -41,3 +41,10 @@
  *  couchbase::core::range_scan_orchestrator and relevant options in the core API
  */
 #define COUCHBASE_CXX_CLIENT_CORE_HAS_RANGE_SCAN 1
+
+/**
+ * Query with reads from replica is available:
+ *  - use_replica field in couchbase::core::operations::query_request
+ *  - couchbase::query_options::use_replica()
+ */
+#define COUCHBASE_CXX_CLIENT_QUERY_READ_FROM_REPLICA 1
