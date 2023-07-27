@@ -34,7 +34,6 @@ namespace couchbase
 class lookup_in_replica_result : public lookup_in_result
 {
   public:
-
     /**
      * @since 1.0.0
      * @internal
@@ -53,8 +52,8 @@ class lookup_in_replica_result : public lookup_in_result
      * @committed
      */
     lookup_in_replica_result(couchbase::cas cas, std::vector<entry> entries, bool is_deleted, bool is_replica)
-      : lookup_in_result{ cas, std::move(entries), is_deleted },
-      is_replica_ { is_replica }
+      : lookup_in_result{ cas, std::move(entries), is_deleted }
+      , is_replica_{ is_replica }
     {
     }
 
@@ -72,6 +71,5 @@ class lookup_in_replica_result : public lookup_in_result
 
   private:
     bool is_replica_{ false };
-
 };
 } // namespace couchbase

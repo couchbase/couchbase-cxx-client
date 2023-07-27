@@ -876,7 +876,10 @@ class collection
      * @committed
      */
     template<typename Handler>
-    void lookup_in_all_replicas(std::string document_id, lookup_in_specs specs, const lookup_in_all_replicas_options& options, Handler&& handler) const
+    void lookup_in_all_replicas(std::string document_id,
+                                lookup_in_specs specs,
+                                const lookup_in_all_replicas_options& options,
+                                Handler&& handler) const
     {
         return core::impl::initiate_lookup_in_all_replicas_operation(
           core_, bucket_name_, scope_name_, name_, std::move(document_id), specs.specs(), options.build(), std::forward<Handler>(handler));
@@ -897,18 +900,20 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto lookup_in_all_replicas(std::string document_id, lookup_in_specs specs, const lookup_in_all_replicas_options& options = {}) const
+    [[nodiscard]] auto lookup_in_all_replicas(std::string document_id,
+                                              lookup_in_specs specs,
+                                              const lookup_in_all_replicas_options& options = {}) const
       -> std::future<std::pair<subdocument_error_context, lookup_in_all_replicas_result>>
-      {
-          auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, lookup_in_all_replicas_result>>>();
-          auto future = barrier->get_future();
-          lookup_in_all_replicas(std::move(document_id), std::move(specs), options, [barrier](auto ctx, auto result) {
-              barrier->set_value({ std::move(ctx), std::move(result) });
-          });
-          return future;
-      }
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, lookup_in_all_replicas_result>>>();
+        auto future = barrier->get_future();
+        lookup_in_all_replicas(std::move(document_id), std::move(specs), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
 
-     /**
+    /**
      * Performs lookups to document fragments with default options from all replicas and returns the first found.
      *
      * @tparam Handler type of the handler that implements @ref lookup_in_any_replica_handler
@@ -924,14 +929,17 @@ class collection
      * @since 1.0.0
      * @committed
      */
-      template<typename Handler>
-      void lookup_in_any_replica(std::string document_id, lookup_in_specs specs, const lookup_in_any_replica_options& options, Handler&& handler) const
-      {
-          return core::impl::initiate_lookup_in_any_replica_operation(
-            core_, bucket_name_, scope_name_, name_, std::move(document_id), specs.specs(), options.build(), std::forward<Handler>(handler));
-      }
+    template<typename Handler>
+    void lookup_in_any_replica(std::string document_id,
+                               lookup_in_specs specs,
+                               const lookup_in_any_replica_options& options,
+                               Handler&& handler) const
+    {
+        return core::impl::initiate_lookup_in_any_replica_operation(
+          core_, bucket_name_, scope_name_, name_, std::move(document_id), specs.specs(), options.build(), std::forward<Handler>(handler));
+    }
 
-     /**
+    /**
      * Performs lookups to document fragments with default options from all replicas and returns the first found.
      *
      * @param document_id the outer document ID
@@ -946,16 +954,18 @@ class collection
      * @since 1.0.0
      * @committed
      */
-      [[nodiscard]] auto lookup_in_any_replica(std::string document_id, lookup_in_specs specs, const lookup_in_any_replica_options& options = {}) const
-        -> std::future<std::pair<subdocument_error_context, lookup_in_replica_result>>
-        {
-            auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, lookup_in_replica_result>>>();
-            auto future = barrier->get_future();
-            lookup_in_any_replica(std::move(document_id), std::move(specs), options, [barrier](auto ctx, auto result) {
-                barrier->set_value({ std::move(ctx), std::move(result) });
-            });
-            return future;
-        }
+    [[nodiscard]] auto lookup_in_any_replica(std::string document_id,
+                                             lookup_in_specs specs,
+                                             const lookup_in_any_replica_options& options = {}) const
+      -> std::future<std::pair<subdocument_error_context, lookup_in_replica_result>>
+    {
+        auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, lookup_in_replica_result>>>();
+        auto future = barrier->get_future();
+        lookup_in_any_replica(std::move(document_id), std::move(specs), options, [barrier](auto ctx, auto result) {
+            barrier->set_value({ std::move(ctx), std::move(result) });
+        });
+        return future;
+    }
 
     /**
      * Gets a document for a given id and places a pessimistic lock on it for mutations
