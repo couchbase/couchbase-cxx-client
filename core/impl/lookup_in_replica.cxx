@@ -39,7 +39,7 @@ lookup_in_replica_request::encode_to(lookup_in_replica_request::encoded_request_
     encoded.opaque(opaque);
     encoded.partition(partition);
     encoded.body().id(id);
-    encoded.body().read_replica(read_replica);
+    encoded.body().read_replica(true);
     encoded.body().specs(specs);
     return {};
 }

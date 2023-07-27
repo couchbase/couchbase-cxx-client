@@ -48,13 +48,14 @@ struct lookup_in_any_replica_request {
     core::document_id id;
     std::vector<couchbase::core::impl::subdoc::command> specs{};
     std::optional<std::chrono::milliseconds> timeout{};
+    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
     template<typename Core, typename Handler>
     void execute(Core core, Handler handler)
     {
         core->with_bucket_configuration(
           id.bucket(),
-          [core, id = id, timeout = timeout, specs = specs, h = std::forward<Handler>(handler)](
+          [core, id = id, timeout = timeout, specs = specs, parent_span = parent_span, h = std::forward<Handler>(handler)](
             std::error_code ec, const topology::configuration& config) mutable {
               if (ec) {
                   std::optional<std::string> first_error_path{};
@@ -81,7 +82,7 @@ struct lookup_in_any_replica_request {
               for (std::size_t idx = 1U; idx <= config.num_replicas.value_or(0U); ++idx) {
                   document_id replica_id{ id };
                   replica_id.node_index(idx);
-                  core->execute(impl::lookup_in_replica_request{ std::move(replica_id), specs, timeout },
+                  core->execute(impl::lookup_in_replica_request{ std::move(replica_id), specs, timeout, parent_span },
                                 [ctx](impl::lookup_in_replica_response&& resp) {
                                     handler_type local_handler;
                                     {

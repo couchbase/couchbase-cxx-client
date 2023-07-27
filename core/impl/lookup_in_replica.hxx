@@ -57,7 +57,7 @@ struct lookup_in_replica_request {
     document_id id;
     std::vector<couchbase::core::impl::subdoc::command> specs{};
     std::optional<std::chrono::milliseconds> timeout{};
-    bool read_replica{ true };
+    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
     std::uint16_t partition{};
     std::uint32_t opaque{};
     io::retry_context<false> retries{};
