@@ -35,9 +35,9 @@ class lookup_in_all_replicas_request
                                             std::string document_key,
                                             std::vector<couchbase::core::impl::subdoc::command> specs,
                                             std::optional<std::chrono::milliseconds> timeout)
-    : id_{std::move(bucket_name), std::move(scope_name), std::move(collection_name), std::move(document_key) }
-    , specs_{std::move( specs )}
-    , timeout_{ timeout }
+      : id_{ std::move(bucket_name), std::move(scope_name), std::move(collection_name), std::move(document_key) }
+      , specs_{ std::move(specs) }
+      , timeout_{ timeout }
     {
     }
 
@@ -62,7 +62,8 @@ class lookup_in_all_replicas_request
     std::optional<std::chrono::milliseconds> timeout_{};
 };
 
-using movable_lookup_in_all_replicas_handler = utils::movable_function<void(couchbase::subdocument_error_context, lookup_in_all_replicas_result)>;
+using movable_lookup_in_all_replicas_handler =
+  utils::movable_function<void(couchbase::subdocument_error_context, lookup_in_all_replicas_result)>;
 
 void
 initiate_lookup_in_all_replicas_operation(std::shared_ptr<cluster> core,

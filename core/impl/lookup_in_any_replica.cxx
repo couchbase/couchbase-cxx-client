@@ -27,33 +27,33 @@ namespace couchbase::core::impl
 {
 void
 initiate_lookup_in_any_replica_operation(std::shared_ptr<cluster> core,
-                                          const std::string& bucket_name,
-                                          const std::string& scope_name,
-                                          const std::string& collection_name,
-                                          std::string document_key,
-                                          const std::vector<subdoc::command>& specs,
-                                          lookup_in_any_replica_options::built options,
-                                          lookup_in_any_replica_handler&& handler)
+                                         const std::string& bucket_name,
+                                         const std::string& scope_name,
+                                         const std::string& collection_name,
+                                         std::string document_key,
+                                         const std::vector<subdoc::command>& specs,
+                                         lookup_in_any_replica_options::built options,
+                                         lookup_in_any_replica_handler&& handler)
 {
     return initiate_lookup_in_any_replica_operation(std::move(core),
-                                                     bucket_name,
-                                                     scope_name,
-                                                     collection_name,
-                                                     std::move(document_key),
-                                                     specs,
-                                                     options.timeout,
-                                                     movable_lookup_in_any_replica_handler{ std::move(handler) });
+                                                    bucket_name,
+                                                    scope_name,
+                                                    collection_name,
+                                                    std::move(document_key),
+                                                    specs,
+                                                    options.timeout,
+                                                    movable_lookup_in_any_replica_handler{ std::move(handler) });
 }
 
 void
 initiate_lookup_in_any_replica_operation(std::shared_ptr<cluster> core,
-                                          const std::string& bucket_name,
-                                          const std::string& scope_name,
-                                          const std::string& collection_name,
-                                          std::string document_key,
-                                          const std::vector<subdoc::command>& specs,
-                                          std::optional<std::chrono::milliseconds> timeout,
-                                          movable_lookup_in_any_replica_handler&& handler)
+                                         const std::string& bucket_name,
+                                         const std::string& scope_name,
+                                         const std::string& collection_name,
+                                         std::string document_key,
+                                         const std::vector<subdoc::command>& specs,
+                                         std::optional<std::chrono::milliseconds> timeout,
+                                         movable_lookup_in_any_replica_handler&& handler)
 {
     auto request = std::make_shared<couchbase::core::impl::lookup_in_any_replica_request>(
       bucket_name, scope_name, collection_name, std::move(document_key), specs, timeout);

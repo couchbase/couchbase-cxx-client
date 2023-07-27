@@ -34,9 +34,9 @@ class lookup_in_any_replica_request
                                            std::string document_key,
                                            std::vector<couchbase::core::impl::subdoc::command> specs,
                                            std::optional<std::chrono::milliseconds> timeout)
-    : id_{ std::move(bucket_name), std::move(scope_name), std::move(collection_name), std::move(document_key) }
-    , specs_{std::move( specs )}
-    , timeout_{ timeout }
+      : id_{ std::move(bucket_name), std::move(scope_name), std::move(collection_name), std::move(document_key) }
+      , specs_{ std::move(specs) }
+      , timeout_{ timeout }
     {
     }
 

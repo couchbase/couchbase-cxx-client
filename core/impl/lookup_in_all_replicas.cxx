@@ -64,12 +64,14 @@ initiate_lookup_in_all_replicas_operation(std::shared_ptr<cluster> core,
           if (ec) {
               std::optional<std::string> first_error_path{};
               std::optional<std::size_t> first_error_index{};
-              return h(make_subdocument_error_context(make_key_value_error_context(ec, r->id()), ec, first_error_path, first_error_index, false), lookup_in_all_replicas_result{});
+              return h(
+                make_subdocument_error_context(make_key_value_error_context(ec, r->id()), ec, first_error_path, first_error_index, false),
+                lookup_in_all_replicas_result{});
           }
           struct replica_context {
               replica_context(movable_lookup_in_all_replicas_handler handler, std::uint32_t expected_responses)
-              : handler_(std::move(handler))
-              , expected_responses_(expected_responses)
+                : handler_(std::move(handler))
+                , expected_responses_(expected_responses)
               {
               }
 
@@ -84,46 +86,48 @@ initiate_lookup_in_all_replicas_operation(std::shared_ptr<cluster> core,
           for (std::size_t idx = 1U; idx <= config.num_replicas.value_or(0U); ++idx) {
               document_id replica_id{ r->id() };
               replica_id.node_index(idx);
-              core->execute(impl::lookup_in_replica_request{ std::move(replica_id), r->specs(), r->timeout() }, [ctx](impl::lookup_in_replica_response&& resp) {
-                  movable_lookup_in_all_replicas_handler local_handler{};
-                  {
-                      std::scoped_lock lock(ctx->mutex_);
-                      if (ctx->done_) {
-                          return;
-                      }
-                      --ctx->expected_responses_;
-                      if (resp.ctx.ec()) {
-                          if (ctx->expected_responses_ > 0) {
-                              // just ignore the response
-                              return;
-                          }
-                      } else {
-                          std::vector<lookup_in_replica_result::entry> entries{};
-                          for (auto& field : resp.fields) {
-                              lookup_in_replica_result::entry lookup_in_entry{};
-                              lookup_in_entry.path = field.path;
-                              lookup_in_entry.value = field.value;
-                              lookup_in_entry.exists = field.exists;
-                              lookup_in_entry.original_index = field.original_index;
-                              entries.emplace_back(lookup_in_entry);
-                          }
-                          ctx->result_.emplace_back(lookup_in_replica_result{ resp.cas, entries, resp.deleted, true /* replica */ });
-                      }
-                      if (ctx->expected_responses_ == 0) {
-                          ctx->done_ = true;
-                          std::swap(local_handler, ctx->handler_);
-                      }
-                  }
-                  if (local_handler) {
-                      if (!ctx->result_.empty()) {
-                          resp.ctx.override_ec({});
-                      }
-                      return local_handler(std::move(resp.ctx), std::move(ctx->result_));
-                  }
-              });
+              core->execute(
+                impl::lookup_in_replica_request{ std::move(replica_id), r->specs(), r->timeout() },
+                [ctx](impl::lookup_in_replica_response&& resp) {
+                    movable_lookup_in_all_replicas_handler local_handler{};
+                    {
+                        std::scoped_lock lock(ctx->mutex_);
+                        if (ctx->done_) {
+                            return;
+                        }
+                        --ctx->expected_responses_;
+                        if (resp.ctx.ec()) {
+                            if (ctx->expected_responses_ > 0) {
+                                // just ignore the response
+                                return;
+                            }
+                        } else {
+                            std::vector<lookup_in_replica_result::entry> entries{};
+                            for (auto& field : resp.fields) {
+                                lookup_in_replica_result::entry lookup_in_entry{};
+                                lookup_in_entry.path = field.path;
+                                lookup_in_entry.value = field.value;
+                                lookup_in_entry.exists = field.exists;
+                                lookup_in_entry.original_index = field.original_index;
+                                entries.emplace_back(lookup_in_entry);
+                            }
+                            ctx->result_.emplace_back(lookup_in_replica_result{ resp.cas, entries, resp.deleted, true /* replica */ });
+                        }
+                        if (ctx->expected_responses_ == 0) {
+                            ctx->done_ = true;
+                            std::swap(local_handler, ctx->handler_);
+                        }
+                    }
+                    if (local_handler) {
+                        if (!ctx->result_.empty()) {
+                            resp.ctx.override_ec({});
+                        }
+                        return local_handler(std::move(resp.ctx), std::move(ctx->result_));
+                    }
+                });
           }
 
-          core::operations::lookup_in_request active{document_id{ r->id() } };
+          core::operations::lookup_in_request active{ document_id{ r->id() } };
           active.specs = r->specs();
           active.timeout = r->timeout();
           core->execute(active, [ctx](core::operations::lookup_in_response&& resp) {

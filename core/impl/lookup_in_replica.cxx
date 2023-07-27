@@ -15,15 +15,15 @@
  *   limitations under the License.
  */
 
-#include "core/impl/subdoc/path_flags.hxx"
 #include "lookup_in_replica.hxx"
+#include "core/impl/subdoc/path_flags.hxx"
 
 #include <couchbase/error_codes.hxx>
 
 namespace couchbase::core::impl
 {
 std::error_code
-lookup_in_replica_request::encode_to(lookup_in_replica_request::encoded_request_type& encoded, mcbp_context&& context )
+lookup_in_replica_request::encode_to(lookup_in_replica_request::encoded_request_type& encoded, mcbp_context&& context)
 {
     if (!context.config->supports_subdoc_read_replica()) {
         return errc::common::feature_not_available;
