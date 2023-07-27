@@ -132,6 +132,8 @@ set(couchbase_cxx_client_FILES
         core/operations/document_increment.cxx
         core/operations/document_insert.cxx
         core/operations/document_lookup_in.cxx
+        core/operations/document_lookup_in_all_replicas.hxx
+        core/operations/document_lookup_in_any_replica.hxx
         core/operations/document_mutate_in.cxx
         core/operations/document_prepend.cxx
         core/operations/document_query.cxx
@@ -233,6 +235,7 @@ set(couchbase_cxx_client_FILES
         core/protocol/cmd_increment.cxx
         core/protocol/cmd_insert.cxx
         core/protocol/cmd_lookup_in.cxx
+        core/protocol/cmd_lookup_in_replica.cxx
         core/protocol/cmd_mutate_in.cxx
         core/protocol/cmd_noop.cxx
         core/protocol/cmd_observe_seqno.cxx
@@ -311,6 +314,9 @@ set(couchbase_cxx_client_FILES
         core/impl/key_value_error_category.cxx
         core/impl/key_value_error_context.cxx
         core/impl/lookup_in.cxx
+        core/impl/lookup_in_replica.cxx
+        core/impl/lookup_in_all_replicas.cxx
+        core/impl/lookup_in_any_replica.cxx
         core/impl/management_error_category.cxx
         core/impl/manager_error_context.cxx
         core/impl/match_all_query.cxx
