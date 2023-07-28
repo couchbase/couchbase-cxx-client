@@ -73,6 +73,10 @@ struct lookup_in_all_replicas_request {
           id.bucket(),
           [core, id = id, timeout = timeout, specs = specs, parent_span = parent_span, h = std::forward<Handler>(handler)](
             std::error_code ec, const topology::configuration& config) mutable {
+              if (!config.supports_subdoc_read_replica()) {
+                  ec = errc::common::feature_not_available;
+              }
+
               if (ec) {
                   std::optional<std::string> first_error_path{};
                   std::optional<std::size_t> first_error_index{};

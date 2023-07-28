@@ -23,11 +23,8 @@
 namespace couchbase::core::impl
 {
 std::error_code
-lookup_in_replica_request::encode_to(lookup_in_replica_request::encoded_request_type& encoded, mcbp_context&& context)
+lookup_in_replica_request::encode_to(lookup_in_replica_request::encoded_request_type& encoded, mcbp_context&& /* context */)
 {
-    if (!context.config->supports_subdoc_read_replica()) {
-        return errc::common::feature_not_available;
-    }
     for (std::size_t i = 0; i < specs.size(); ++i) {
         specs[i].original_index_ = i;
     }

@@ -61,6 +61,10 @@ initiate_lookup_in_all_replicas_operation(std::shared_ptr<cluster> core,
     core->with_bucket_configuration(
       bucket_name,
       [core, r = std::move(request), h = std::move(handler)](std::error_code ec, const core::topology::configuration& config) mutable {
+          if (!config.supports_subdoc_read_replica()) {
+              ec = errc::common::feature_not_available;
+          }
+
           if (ec) {
               std::optional<std::string> first_error_path{};
               std::optional<std::size_t> first_error_index{};
