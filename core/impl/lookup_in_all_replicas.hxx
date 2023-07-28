@@ -21,7 +21,10 @@
 #include <couchbase/lookup_in_replica_result.hxx>
 
 #include "core/document_id.hxx"
+#include "core/error_context/key_value.hxx"
 #include "core/utils/movable_function.hxx"
+
+#include <vector>
 
 namespace couchbase::core::impl
 {

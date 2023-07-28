@@ -17,6 +17,15 @@
 
 #pragma once
 
+#include "core/error_context/key_value.hxx"
+#include "core/impl/lookup_in_replica.hxx"
+#include "core/impl/subdoc/command.hxx"
+#include "core/operations/document_lookup_in.hxx"
+#include "core/operations/operation_traits.hxx"
+#include "core/utils/movable_function.hxx"
+#include "couchbase/codec/encoded_value.hxx"
+#include "couchbase/error_codes.hxx"
+
 #include <functional>
 #include <memory>
 #include <mutex>

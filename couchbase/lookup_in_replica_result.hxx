@@ -19,8 +19,7 @@
 
 #include <couchbase/lookup_in_result.hxx>
 
-#include <optional>
-#include <utility>
+#include <vector>
 
 namespace couchbase
 {

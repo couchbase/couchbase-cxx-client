@@ -18,24 +18,20 @@
 #pragma once
 
 #include "core/error_context/key_value.hxx"
-#include "core/impl/get_replica.hxx"
 #include "core/impl/lookup_in_replica.hxx"
 #include "core/impl/subdoc/command.hxx"
+#include "core/operations/document_lookup_in.hxx"
 #include "core/operations/operation_traits.hxx"
-#include "core/protocol/cmd_lookup_in_replica.hxx"
 #include "core/utils/movable_function.hxx"
 #include "couchbase/codec/encoded_value.hxx"
 #include "couchbase/error_codes.hxx"
-#include "document_get_all_replicas.hxx"
 
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <utility>
 
 namespace couchbase::core::operations
 {
-
 struct lookup_in_all_replicas_response {
     struct entry {
         struct lookup_in_entry {
