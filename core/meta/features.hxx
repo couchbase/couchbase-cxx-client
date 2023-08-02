@@ -48,3 +48,9 @@
  *  - couchbase::query_options::use_replica()
  */
 #define COUCHBASE_CXX_CLIENT_QUERY_READ_FROM_REPLICA 1
+
+/**
+ * Subdoc read from replica is available in the core
+ * couchbase::core::lookup_in_replica support
+ */
+#define COUCHBASE_CXX_CLIENT_CORE_HAS_SUBDOC_READ_REPLICA 1

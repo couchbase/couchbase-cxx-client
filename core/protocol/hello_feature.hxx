@@ -155,6 +155,11 @@ enum class hello_feature : std::uint16_t {
     replace_body_with_xattr = 0x19,
 
     resource_units = 0x1a,
+
+    /**
+     * Indicates support for subdoc lookup operations on replicas
+     */
+    subdoc_replica_read = 0x1c,
 };
 
 constexpr bool
@@ -185,6 +190,7 @@ is_valid_hello_feature(std::uint16_t code)
         case hello_feature::subdoc_document_macro_support:
         case hello_feature::replace_body_with_xattr:
         case hello_feature::resource_units:
+        case hello_feature::subdoc_replica_read:
             return true;
     }
     return false;

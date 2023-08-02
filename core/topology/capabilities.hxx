@@ -32,6 +32,7 @@ enum class bucket_capability {
     durable_write,
     tombstoned_user_xattrs,
     range_scan,
+    replica_read,
 };
 
 enum class cluster_capability {

@@ -70,6 +70,9 @@ struct fmt::formatter<couchbase::core::bucket_capability> {
             case couchbase::core::bucket_capability::range_scan:
                 name = "range_scan";
                 break;
+            case couchbase::core::bucket_capability::replica_read:
+                name = "replica_read";
+                break;
         }
         return format_to(ctx.out(), "{}", name);
     }
