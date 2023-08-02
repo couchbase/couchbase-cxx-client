@@ -86,7 +86,7 @@ FileUtils.mkdir_p(BUILD_DIR, verbose: true)
 
 Dir.chdir(BUILD_DIR) do
   if RUBY_PLATFORM =~ /mswin|mingw/
-    CB_CMAKE_EXTRAS << "-DOPENSSL_ROOT_DIR=C:/Program Files/OpenSSL-Win64"
+    CB_CMAKE_EXTRAS << "-DOPENSSL_ROOT_DIR=C:/Program Files/OpenSSL"
   else
     CB_CMAKE_EXTRAS << "-DCMAKE_C_COMPILER=#{CB_CC}" << "-DCMAKE_CXX_COMPILER=#{CB_CXX}"
   end
