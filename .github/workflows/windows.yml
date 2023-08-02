@@ -13,9 +13,6 @@ jobs:
         os: [windows-2022, windows-2019]
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Install build environment
-        run: |
-          choco install --no-progress openssl
       - uses: actions/checkout@v2
         with:
           submodules: recursive
