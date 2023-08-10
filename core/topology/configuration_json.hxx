@@ -52,7 +52,6 @@ struct traits<couchbase::core::topology::configuration> {
                 }
                 if (const auto& hostname = o.find("hostname"); hostname != o.end()) {
                     n.hostname = hostname->second.get_string();
-                    n.hostname = n.hostname.substr(0, n.hostname.rfind(':'));
                 }
                 const auto& s = o.at("services");
                 n.services_plain.key_value = s.template optional<std::uint16_t>("kv");
