@@ -8,6 +8,7 @@ define_example(game_server)
 define_example(async_game_server)
 define_example(minimal)
 define_example(distributed_mutex)
+define_example(bulk_base_api)
 
 macro(define_asio_example name)
     add_executable(${name} ${name}.cxx)
