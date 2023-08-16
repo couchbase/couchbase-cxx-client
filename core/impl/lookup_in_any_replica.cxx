@@ -63,6 +63,9 @@ initiate_lookup_in_any_replica_operation(std::shared_ptr<cluster> core,
           if (!config.supports_subdoc_read_replica()) {
               ec = errc::common::feature_not_available;
           }
+          if (r->specs().size() > 16) {
+              ec = errc::common::invalid_argument;
+          }
           if (ec) {
               std::optional<std::string> first_error_path{};
               std::optional<std::size_t> first_error_index{};
