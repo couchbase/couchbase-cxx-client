@@ -115,8 +115,8 @@ initiate_remove_operation(std::shared_ptr<couchbase::core::cluster> core,
                           std::string scope_name,
                           std::string collection_name,
                           std::string document_key,
-                          remove_options::built options,
-                          remove_handler&& handler);
+                          couchbase::remove_options::built options,
+                          couchbase::remove_handler&& handler);
 #endif
 } // namespace impl
 } // namespace core

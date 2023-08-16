@@ -149,9 +149,9 @@ initiate_upsert_operation(std::shared_ptr<couchbase::core::cluster> core,
                           std::string scope_name,
                           std::string collection_name,
                           std::string document_key,
-                          codec::encoded_value encoded,
-                          upsert_options::built options,
-                          upsert_handler&& handler);
+                          couchbase::codec::encoded_value encoded,
+                          couchbase::upsert_options::built options,
+                          couchbase::upsert_handler&& handler);
 #endif
 } // namespace impl
 } // namespace core
