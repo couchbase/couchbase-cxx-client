@@ -86,8 +86,8 @@ initiate_get_and_lock_operation(std::shared_ptr<couchbase::core::cluster> core,
                                 std::string collection_name,
                                 std::string document_key,
                                 std::chrono::seconds lock_duration,
-                                get_and_lock_options::built options,
-                                get_and_lock_handler&& handler);
+                                couchbase::get_and_lock_options::built options,
+                                couchbase::get_and_lock_handler&& handler);
 #endif
 } // namespace impl
 } // namespace core

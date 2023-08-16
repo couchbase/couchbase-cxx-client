@@ -175,9 +175,9 @@ initiate_replace_operation(std::shared_ptr<couchbase::core::cluster> core,
                            std::string scope_name,
                            std::string collection_name,
                            std::string document_key,
-                           codec::encoded_value encoded,
-                           replace_options::built options,
-                           replace_handler&& handler);
+                           couchbase::codec::encoded_value encoded,
+                           couchbase::replace_options::built options,
+                           couchbase::replace_handler&& handler);
 #endif
 } // namespace impl
 } // namespace core

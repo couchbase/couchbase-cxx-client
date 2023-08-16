@@ -89,8 +89,8 @@ initiate_unlock_operation(std::shared_ptr<couchbase::core::cluster> core,
                           std::string collection_name,
                           std::string document_key,
                           couchbase::cas cas,
-                          unlock_options::built options,
-                          unlock_handler&& handler);
+                          couchbase::unlock_options::built options,
+                          couchbase::unlock_handler&& handler);
 #endif
 } // namespace impl
 } // namespace core

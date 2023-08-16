@@ -4,6 +4,7 @@
 /cmake-build-report.tar.gz
 /.idea/workspace.xml
 /.idea/sonarlint
+/.cache
 /.vs
 /.vscode
 /CMakeSettings.json

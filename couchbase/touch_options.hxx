@@ -86,8 +86,8 @@ initiate_touch_operation(std::shared_ptr<couchbase::core::cluster> core,
                          std::string collection_name,
                          std::string document_key,
                          std::uint32_t expiry,
-                         touch_options::built options,
-                         touch_handler&& handler);
+                         couchbase::touch_options::built options,
+                         couchbase::touch_handler&& handler);
 #endif
 } // namespace impl
 } // namespace core

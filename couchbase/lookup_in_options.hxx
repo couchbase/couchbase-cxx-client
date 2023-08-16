@@ -111,8 +111,8 @@ initiate_lookup_in_operation(std::shared_ptr<couchbase::core::cluster> core,
                              std::string collection_name,
                              std::string document_key,
                              const std::vector<couchbase::core::impl::subdoc::command>& specs,
-                             lookup_in_options::built options,
-                             lookup_in_handler&& handler);
+                             couchbase::lookup_in_options::built options,
+                             couchbase::lookup_in_handler&& handler);
 #endif
 } // namespace impl
 } // namespace core

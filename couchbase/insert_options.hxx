@@ -127,9 +127,9 @@ initiate_insert_operation(std::shared_ptr<couchbase::core::cluster> core,
                           std::string scope_name,
                           std::string collection_name,
                           std::string document_key,
-                          codec::encoded_value encoded,
-                          insert_options::built options,
-                          insert_handler&& handler);
+                          couchbase::codec::encoded_value encoded,
+                          couchbase::insert_options::built options,
+                          couchbase::insert_handler&& handler);
 #endif
 } // namespace impl
 } // namespace core
