@@ -1487,6 +1487,21 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
                                                couchbase::errc::key_value::path_mismatch);
     }
 
+    SECTION("too many specs")
+    {
+        couchbase::core::operations::lookup_in_any_replica_request req{ id };
+        auto specs = couchbase::lookup_in_specs{};
+
+        for (int i = 0; i < 17; i++) {
+            specs.push_back(couchbase::lookup_in_specs::get("dictkey"));
+        }
+        req.specs = specs.specs();
+
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::common::invalid_argument);
+        REQUIRE(resp.fields.empty());
+    }
+
     SECTION("public API")
     {
         auto collection = couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope("_default").collection("_default");
@@ -1511,6 +1526,18 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
             };
             auto [ctx, result] = collection.lookup_in_any_replica("missing-key", specs).get();
             REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+            REQUIRE(result.cas().empty());
+        }
+
+        SECTION("too many specs")
+        {
+            auto specs = couchbase::lookup_in_specs{};
+
+            for (int i = 0; i < 17; i++) {
+                specs.push_back(couchbase::lookup_in_specs::get("dictkey"));
+            }
+            auto [ctx, result] = collection.lookup_in_any_replica(key, specs).get();
+            REQUIRE(ctx.ec() == couchbase::errc::common::invalid_argument);
             REQUIRE(result.cas().empty());
         }
     }
