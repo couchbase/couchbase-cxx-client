@@ -60,6 +60,7 @@ initiate_lookup_in_operation(std::shared_ptr<couchbase::core::cluster> core,
                 std::move(entry.value),
                 entry.original_index,
                 entry.exists,
+                entry.ec,
               });
           }
           return handler(std::move(resp.ctx), lookup_in_result{ resp.cas, std::move(entries), resp.deleted });
