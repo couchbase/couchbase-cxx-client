@@ -44,6 +44,7 @@ class lookup_in_result : public result
         codec::binary value;
         std::size_t original_index;
         bool exists;
+        std::error_code ec;
     };
 
     /**
@@ -84,6 +85,11 @@ class lookup_in_result : public result
     {
         for (const entry& e : entries_) {
             if (e.original_index == index) {
+                if (e.ec) {
+                    throw std::system_error(
+                      e.ec, "error getting result for spec at index " + std::to_string(index) + ", path \"" + e.path + "\"");
+                }
+
                 return codec::tao_json_serializer::deserialize<Document>(e.value);
             }
         }
@@ -105,6 +111,10 @@ class lookup_in_result : public result
     {
         for (const entry& e : entries_) {
             if (e.path == path) {
+                if (e.ec) {
+                    throw std::system_error(e.ec, "error getting result for path \"" + e.path + "\"");
+                }
+
                 return codec::tao_json_serializer::deserialize<Document>(e.value);
             }
         }
@@ -127,6 +137,10 @@ class lookup_in_result : public result
         const auto& macro_string = subdoc::to_string(macro);
         for (const entry& e : entries_) {
             if (e.path == macro_string) {
+                if (e.ec) {
+                    throw std::system_error(e.ec, "error getting result for macro \"" + macro_string + "\"");
+                }
+
                 return codec::tao_json_serializer::deserialize<Document>(e.value);
             }
         }
@@ -147,6 +161,10 @@ class lookup_in_result : public result
     {
         for (const entry& e : entries_) {
             if (e.original_index == index) {
+                if (e.ec && e.ec != couchbase::errc::key_value::path_not_found) {
+                    throw std::system_error(e.ec, "error getting result for path \"" + e.path + "\"");
+                }
+
                 return e.exists;
             }
         }
@@ -167,6 +185,10 @@ class lookup_in_result : public result
         const auto& macro_string = subdoc::to_string(macro);
         for (const entry& e : entries_) {
             if (e.path == macro_string) {
+                if (e.ec && e.ec != couchbase::errc::key_value::path_not_found) {
+                    throw std::system_error(e.ec, "error getting result for macro \"" + macro_string + "\"");
+                }
+
                 return e.exists;
             }
         }
@@ -186,6 +208,10 @@ class lookup_in_result : public result
     {
         for (const entry& e : entries_) {
             if (e.path == path) {
+                if (e.ec && e.ec != couchbase::errc::key_value::path_not_found) {
+                    throw std::system_error(e.ec, "error getting result for path \"" + e.path + "\"");
+                }
+
                 return e.exists;
             }
         }

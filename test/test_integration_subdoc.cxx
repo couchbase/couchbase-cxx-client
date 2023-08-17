@@ -1542,3 +1542,89 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
         }
     }
 }
+
+TEST_CASE("integration: public API lookup in per-spec errors", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    auto collection = couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope("_default").collection("_default");
+
+    auto key = test::utils::uniq_id("lookup_in_path_invalid");
+    {
+        auto value_json = couchbase::core::utils::json::parse(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
+        auto [ctx, result] = collection.upsert(key, value_json).get();
+        REQUIRE_SUCCESS(ctx.ec());
+    }
+
+    SECTION("path invalid")
+    {
+        auto specs = couchbase::lookup_in_specs{
+            couchbase::lookup_in_specs::get("..dictkey"),
+        };
+        auto [ctx, result] = collection.lookup_in(key, specs).get();
+        std::error_code ec{};
+        try {
+            std::ignore = result.content_as<std::string>(0);
+        } catch (std::system_error& exc) {
+            ec = exc.code();
+        }
+        REQUIRE(ec == couchbase::errc::key_value::path_invalid);
+
+        ec.clear();
+        try {
+            std::ignore = result.exists(0);
+        } catch (std::system_error& exc) {
+            ec = exc.code();
+        }
+        REQUIRE(ec == couchbase::errc::key_value::path_invalid);
+    }
+
+    SECTION("path mismatch")
+    {
+        auto specs = couchbase::lookup_in_specs{
+            couchbase::lookup_in_specs::count("dictkey"),
+        };
+        auto [ctx, result] = collection.lookup_in(key, specs).get();
+
+        std::error_code ec{};
+        try {
+            std::ignore = result.content_as<std::string>(0);
+        } catch (std::system_error& exc) {
+            ec = exc.code();
+        }
+        REQUIRE(ec == couchbase::errc::key_value::path_mismatch);
+
+        ec.clear();
+        try {
+            std::ignore = result.exists(0);
+        } catch (std::system_error& exc) {
+            ec = exc.code();
+        }
+        REQUIRE(ec == couchbase::errc::key_value::path_mismatch);
+    }
+
+    SECTION("path not found")
+    {
+        auto specs = couchbase::lookup_in_specs{
+            couchbase::lookup_in_specs::get("dictkey2"),
+        };
+        auto [ctx, result] = collection.lookup_in(key, specs).get();
+
+        std::error_code ec{};
+        try {
+            std::ignore = result.content_as<std::string>(0);
+        } catch (std::system_error& exc) {
+            ec = exc.code();
+        }
+        REQUIRE(ec == couchbase::errc::key_value::path_not_found);
+
+        ec.clear();
+        try {
+            auto exists = result.exists(0);
+            REQUIRE_FALSE(exists);
+        } catch (std::system_error& exc) {
+            ec = exc.code();
+        }
+        REQUIRE_SUCCESS(ec);
+    }
+}
