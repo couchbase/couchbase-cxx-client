@@ -50,6 +50,7 @@
 #include "retry_orchestrator.hxx"
 #include "streams.hxx"
 
+#include <couchbase/build_config.hxx>
 #include <couchbase/fmt/retry_reason.hxx>
 
 #include <asio.hpp>
@@ -1309,14 +1310,21 @@ class mcbp_session_impl
         }
         last_active_ = std::chrono::steady_clock::now();
         if (!stream_->is_open() || ec) {
-
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+            auto error_message = (ec.category() == asio::error::ssl_category)
+                                   ? ERR_error_string(static_cast<std::uint32_t>(ec.value()), nullptr)
+                                   : ec.message();
+#else
+            auto error_message = (ec.category() == asio::error::ssl_category)
+                                   ? ERR_error_string(static_cast<unsigned long>(ec.value()), nullptr)
+                                   : ec.message();
+#endif
             CB_LOG_WARNING("{} unable to connect to {}:{}: {} ({}){}. is_open={}",
                            log_prefix_,
                            it->endpoint().address().to_string(),
                            it->endpoint().port(),
                            ec.value(),
-                           (ec.category() == asio::error::ssl_category) ? ERR_error_string(static_cast<unsigned long>(ec.value()), nullptr)
-                                                                        : ec.message(),
+                           error_message,
                            (ec == asio::error::connection_refused) ? ", check server ports and cluster encryption setting" : "",
                            stream_->is_open());
             if (stream_->is_open()) {

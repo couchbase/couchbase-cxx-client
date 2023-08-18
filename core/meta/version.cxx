@@ -92,6 +92,16 @@ sdk_build_info()
       "false"
 #endif
       ;
+    info["static_boringssl"] =
+#if defined(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+      "true"
+#else
+      "false"
+#endif
+      ;
+#if defined(COUCHBASE_CXX_CLIENT_BORINGSSL_SHA)
+    info["boringssl_sha"] = COUCHBASE_CXX_CLIENT_BORINGSSL_SHA;
+#endif
     info["spdlog"] = fmt::format("{}.{}.{}", SPDLOG_VER_MAJOR, SPDLOG_VER_MINOR, SPDLOG_VER_PATCH);
     info["fmt"] = fmt::format("{}.{}.{}", FMT_VERSION / 10'000, FMT_VERSION / 100 % 1000, FMT_VERSION % 100);
     info["asio"] = fmt::format("{}.{}.{}", ASIO_VERSION / 100'000, ASIO_VERSION / 100 % 1000, ASIO_VERSION % 100);

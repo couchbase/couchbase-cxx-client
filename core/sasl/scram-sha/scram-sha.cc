@@ -198,9 +198,9 @@ ScramShaBackend::addAttribute(std::ostream& out, char key, int value, bool more)
 std::string
 ScramShaBackend::getServerSignature()
 {
-    auto serverKey = couchbase::core::crypto::HMAC(algorithm, getSaltedPassword(), "Server Key");
+    auto serverKey = couchbase::core::crypto::CBC_HMAC(algorithm, getSaltedPassword(), "Server Key");
 
-    return couchbase::core::crypto::HMAC(algorithm, serverKey, getAuthMessage());
+    return couchbase::core::crypto::CBC_HMAC(algorithm, serverKey, getAuthMessage());
 }
 
 /**
@@ -218,10 +218,10 @@ ScramShaBackend::getServerSignature()
 std::string
 ScramShaBackend::getClientProof()
 {
-    auto clientKey = couchbase::core::crypto::HMAC(algorithm, getSaltedPassword(), "Client Key");
+    auto clientKey = couchbase::core::crypto::CBC_HMAC(algorithm, getSaltedPassword(), "Client Key");
     auto storedKey = couchbase::core::crypto::digest(algorithm, clientKey);
     std::string authMessage = getAuthMessage();
-    auto clientSignature = couchbase::core::crypto::HMAC(algorithm, storedKey, authMessage);
+    auto clientSignature = couchbase::core::crypto::CBC_HMAC(algorithm, storedKey, authMessage);
 
     // Client Proof is ClientKey XOR ClientSignature
     const auto* ck = clientKey.data();

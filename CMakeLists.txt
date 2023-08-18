@@ -481,6 +481,17 @@ if (NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
     endif ()
 endif ()
 
+if (COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+    if(COUCHBASE_CXX_CLIENT_USE_BORINGSSL_PREFIX)
+	    target_compile_definitions(couchbase_cxx_client PUBLIC BORINGSSL_PREFIX=${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX})
+	endif()
+	if(WIN32 AND NOT CMAKE_MSVC_RUNTIME_LIBRARY)
+        # BoringSSL uses the /MD compile flag, so we need to do the same
+		set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+        message(STATUS "CMAKE_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}")
+	endif()
+endif()
+
 option(COUCHBASE_CXX_CLIENT_BUILD_TESTS "Build test programs" TRUE)
 if (COUCHBASE_CXX_CLIENT_BUILD_TESTS)
     include(cmake/Testing.cmake)
