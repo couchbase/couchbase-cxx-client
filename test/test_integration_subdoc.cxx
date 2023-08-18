@@ -252,7 +252,7 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
                                    id,
                                    couchbase::lookup_in_specs::exists("non-exist"),
                                    couchbase::key_value_status_code::subdoc_path_not_found,
-                                   couchbase::errc::key_value::path_not_found);
+                                   std::error_code{});
     }
 
     SECTION("non existent doc")
@@ -1153,7 +1153,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
                                                id,
                                                couchbase::lookup_in_specs::exists("non-exist"),
                                                couchbase::key_value_status_code::subdoc_path_not_found,
-                                               couchbase::errc::key_value::path_not_found);
+                                               std::error_code{});
     }
 
     SECTION("non existent doc")
@@ -1295,6 +1295,19 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
             REQUIRE(ctx.ec() == couchbase::errc::key_value::document_not_found);
             REQUIRE(result.empty());
         }
+
+        SECTION("non existent path exists")
+        {
+            auto specs = couchbase::lookup_in_specs{
+                couchbase::lookup_in_specs::exists("non-exists"),
+            };
+            auto [ctx, result] = collection.lookup_in_all_replicas(key, specs).get();
+            REQUIRE_SUCCESS(ctx.ec());
+            for (auto& res : result) {
+                REQUIRE(!res.cas().empty());
+                REQUIRE(!res.exists(0));
+            }
+        }
     }
 }
 
@@ -1376,7 +1389,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
                                                id,
                                                couchbase::lookup_in_specs::exists("non-exist"),
                                                couchbase::key_value_status_code::subdoc_path_not_found,
-                                               couchbase::errc::key_value::path_not_found);
+                                               std::error_code{});
     }
 
     SECTION("non existent doc")
@@ -1540,6 +1553,16 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
             REQUIRE(ctx.ec() == couchbase::errc::common::invalid_argument);
             REQUIRE(result.cas().empty());
         }
+
+        SECTION("non existent path exists")
+        {
+            auto specs = couchbase::lookup_in_specs{
+                couchbase::lookup_in_specs::exists("non-exists"),
+            };
+            auto [ctx, result] = collection.lookup_in_any_replica(key, specs).get();
+            REQUIRE_SUCCESS(ctx.ec());
+            REQUIRE(!result.exists(0));
+        }
     }
 }
 
@@ -1626,5 +1649,16 @@ TEST_CASE("integration: public API lookup in per-spec errors", "[integration]")
             ec = exc.code();
         }
         REQUIRE_SUCCESS(ec);
+    }
+
+    SECTION("non existent path exists")
+    {
+        auto specs = couchbase::lookup_in_specs{
+            couchbase::lookup_in_specs::exists("dictkey2"),
+        };
+        auto [ctx, result] = collection.lookup_in(key, specs).get();
+
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE(!result.exists(0));
     }
 }

@@ -118,6 +118,11 @@ initiate_lookup_in_any_replica_operation(std::shared_ptr<cluster> core,
                                         entry.original_index = field.original_index;
                                         entry.exists = field.exists;
                                         entry.value = field.value;
+                                        entry.ec = field.ec;
+                                        if (field.opcode == protocol::subdoc_opcode::exists &&
+                                            field.ec == errc::key_value::path_not_found) {
+                                            entry.ec.clear();
+                                        }
                                         entries.emplace_back(entry);
                                     }
                                     return local_handler(std::move(resp.ctx),
@@ -156,6 +161,10 @@ initiate_lookup_in_any_replica_operation(std::shared_ptr<cluster> core,
                       entry.original_index = field.original_index;
                       entry.exists = field.exists;
                       entry.value = field.value;
+                      entry.ec = field.ec;
+                      if (field.opcode == protocol::subdoc_opcode::exists && field.ec == errc::key_value::path_not_found) {
+                          entry.ec.clear();
+                      }
                       entries.emplace_back(entry);
                   }
                   return local_handler(std::move(resp.ctx),

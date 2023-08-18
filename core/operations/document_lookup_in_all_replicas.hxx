@@ -127,6 +127,10 @@ struct lookup_in_all_replicas_request {
                                                 lookup_in_entry.exists = field.exists;
                                                 lookup_in_entry.original_index = field.original_index;
                                                 lookup_in_entry.opcode = field.opcode;
+                                                if (lookup_in_entry.opcode == protocol::subdoc_opcode::exists &&
+                                                    lookup_in_entry.ec == errc::key_value::path_not_found) {
+                                                    lookup_in_entry.ec.clear();
+                                                }
                                                 top_entry.fields.emplace_back(lookup_in_entry);
                                             }
                                             ctx->result_.emplace_back(lookup_in_all_replicas_response::entry{ top_entry });
@@ -169,6 +173,10 @@ struct lookup_in_all_replicas_request {
                               lookup_in_entry.exists = field.exists;
                               lookup_in_entry.original_index = field.original_index;
                               lookup_in_entry.opcode = field.opcode;
+                              if (lookup_in_entry.opcode == protocol::subdoc_opcode::exists &&
+                                  lookup_in_entry.ec == errc::key_value::path_not_found) {
+                                  lookup_in_entry.ec.clear();
+                              }
                               top_entry.fields.emplace_back(lookup_in_entry);
                           }
                           ctx->result_.emplace_back(lookup_in_all_replicas_response::entry{ top_entry });

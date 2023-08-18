@@ -70,6 +70,9 @@ lookup_in_request::make_response(key_value_error_context&& ctx, const encoded_re
             fields[i].status = res_entry.status;
             fields[i].ec =
               protocol::map_status_code(protocol::client_opcode::subdoc_multi_mutation, static_cast<std::uint16_t>(res_entry.status));
+            if (fields[i].opcode == protocol::subdoc_opcode::exists && fields[i].ec == errc::key_value::path_not_found) {
+                fields[i].ec.clear();
+            }
             if (!fields[i].ec && !ctx.ec()) {
                 ec = fields[i].ec;
             }
