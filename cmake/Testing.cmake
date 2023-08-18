@@ -22,6 +22,14 @@ macro(integration_test name)
     snappy
     couchbase_cxx_client
     test_utils)
+  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+    target_link_libraries(test_integration_${name} OpenSSL::SSL)
+    if(WIN32)
+      # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
+      # *.PDB from the BoringSSL build
+      set_target_properties(test_integration_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
+    endif()
+  endif()
   catch_discover_tests(
     test_integration_${name}
     PROPERTIES
@@ -51,6 +59,14 @@ macro(transaction_test name)
     snappy
     couchbase_cxx_client
     test_utils)
+  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+    target_link_libraries(test_transaction_${name} OpenSSL::SSL)
+    if(WIN32)
+      # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
+      # *.PDB from the BoringSSL build
+      set_target_properties(test_transaction_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
+    endif()
+  endif()
   catch_discover_tests(
     test_transaction_${name}
     PROPERTIES
@@ -79,6 +95,14 @@ macro(unit_test name)
     snappy
     couchbase_cxx_client
     test_utils)
+  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+    target_link_libraries(test_unit_${name} OpenSSL::SSL)
+    if(WIN32)
+      # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
+      # *.PDB from the BoringSSL build
+      set_target_properties(test_unit_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
+    endif()
+  endif()
   catch_discover_tests(
     test_unit_${name}
     PROPERTIES
@@ -107,6 +131,14 @@ macro(integration_benchmark name)
     snappy
     couchbase_cxx_client
     test_utils)
+  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+    target_link_libraries(benchmark_integration_${name} OpenSSL::SSL)
+    if(WIN32)
+      # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
+      # *.PDB from the BoringSSL build
+      set_target_properties(benchmark_integration_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
+    endif()
+  endif()
   catch_discover_tests(
     benchmark_integration_${name}
     PROPERTIES

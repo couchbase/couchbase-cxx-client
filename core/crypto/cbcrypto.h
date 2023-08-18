@@ -21,7 +21,7 @@
 
 namespace couchbase::core::crypto
 {
-enum class Algorithm { SHA1, SHA256, SHA512 };
+enum class Algorithm { ALG_SHA1, ALG_SHA256, ALG_SHA512 };
 
 bool
 isSupported(Algorithm algorithm);
@@ -38,7 +38,7 @@ const int SHA512_DIGEST_SIZE = 64;
  *         std::runtime_error - Failures generating the HMAC
  */
 std::string
-HMAC(Algorithm algorithm, std::string_view key, std::string_view data);
+CBC_HMAC(Algorithm algorithm, std::string_view key, std::string_view data);
 
 /**
  * Generate a PBKDF2_HMAC digest of the key and data by using the given

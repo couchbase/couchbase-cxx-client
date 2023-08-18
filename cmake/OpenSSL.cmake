@@ -1,11 +1,192 @@
 option(COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL "Rely on application to link OpenSSL library" FALSE)
 option(COUCHBASE_CXX_CLIENT_USE_HOMEBREW_TO_DETECT_OPENSSL "Use homebrew to determine OpenSSL root directory" TRUE)
 option(COUCHBASE_CXX_CLIENT_USE_SCOOP_TO_DETECT_OPENSSL "Use scoop to determine OpenSSL root directory" TRUE)
+option(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL "Statically link BoringSSL library" FALSE)
+option(COUCHBASE_CXX_CLIENT_BORINGSSL_PIC "Position Independent Code when building BoringSSL library" TRUE)
+option(COUCHBASE_CXX_CLIENT_BORINGSSL_VERBOSE_MAKEFILE "Enable verbose output when building BoringSSL library" FALSE)
 
 if(COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
   message(
     STATUS "COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL is set, assuming OpenSSL headers and symbols are available already"
   )
+elseif(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+  if(NOT DEFINED COUCHBASE_CXX_CLIENT_BORINGSSL_BRANCH)
+    message(STATUS "COUCHBASE_CXX_CLIENT_BORINGSSL_BRANCH is not set, using origin/master.")
+    set(COUCHBASE_CXX_CLIENT_BORINGSSL_BRANCH "origin/master")
+  endif()
+  message(STATUS "COUCHBASE_CXX_CLIENT_BORINGSSL_BRANCH=${COUCHBASE_CXX_CLIENT_BORINGSSL_BRANCH}")
+
+  if(NOT DEFINED COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX)
+    find_program(GIT git)
+    if(GIT)
+      execute_process(
+        COMMAND git describe --always --long HEAD
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        OUTPUT_VARIABLE COUCHBASE_CXX_CLIENT_GIT_DESCRIBE)
+      if(COUCHBASE_CXX_CLIENT_GIT_DESCRIBE MATCHES
+         "^([0-9]+\\.[0-9]+\\.[0-9]+)(-([a-zA-Z0-9\\.]+))?(-([0-9]+)-g([a-zA-Z0-9]+))?$")
+        string(
+          REPLACE "."
+                  "_"
+                  CXX_CLIENT_VERSION
+                  ${CMAKE_MATCH_1})
+        set(COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX "COUCHBASE_${CXX_CLIENT_VERSION}")
+        if(CMAKE_MATCH_3) # pre-release
+          string(
+            REPLACE "."
+                    "_"
+                    CXX_CLIENT_PRE_RELEASE
+                    ${CMAKE_MATCH_3})
+          set(COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX
+              "${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX}_${CXX_CLIENT_PRE_RELEASE}")
+        endif()
+      endif()
+    endif()
+  else()
+    message(STATUS "Cannot find git setting COUCHBASE_CXX_CLIENT_BORINGSSL_BRANCH to unknown.")
+    set(COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX "COUCHBASE_UNKNOWN")
+  endif()
+  message(STATUS "COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX=${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX}")
+  set(BORINGSSL_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/boringssl)
+  set(BORINGSSL_INCLUDE_DIR ${BORINGSSL_OUTPUT_DIR}/include)
+  set(BORINGSSL_LIB_DIR ${BORINGSSL_OUTPUT_DIR}/lib)
+  set(BORINGSSL_SETUP FALSE)
+
+  # If these exists, no need to fetch the content and rebuild BoringSSL, we have already completed that process
+  if(WIN32)
+    if(EXISTS "${BORINGSSL_LIB_DIR}/crypto${CMAKE_STATIC_LIBRARY_SUFFIX}"
+       AND EXISTS "${BORINGSSL_LIB_DIR}/ssl${CMAKE_STATIC_LIBRARY_SUFFIX}"
+       AND EXISTS "${BORINGSSL_INCLUDE_DIR}/boringssl_prefix_symbols.h")
+      set(BORINGSSL_SETUP TRUE)
+    endif()
+  else()
+    if(EXISTS "${BORINGSSL_LIB_DIR}/libcrypto${CMAKE_STATIC_LIBRARY_SUFFIX}"
+       AND EXISTS "${BORINGSSL_LIB_DIR}/libssl${CMAKE_STATIC_LIBRARY_SUFFIX}"
+       AND EXISTS "${BORINGSSL_INCLUDE_DIR}/boringssl_prefix_symbols.h")
+      set(BORINGSSL_SETUP TRUE)
+    endif()
+  endif()
+
+  if(NOT BORINGSSL_SETUP)
+    include(FetchContent)
+    FetchContent_Declare(
+      boringssl
+      GIT_REPOSITORY https://github.com/google/boringssl.git
+      GIT_TAG ${COUCHBASE_CXX_CLIENT_BORINGSSL_BRANCH})
+    # we do not want this to be a part of the build since we _need_ to build it ourselves twice:  build -> get symbols
+    # -> build again w/ symbols prefixed once the build is complete we only care about the headers and libs
+    message("Cloning borringssl...")
+    FetchContent_Populate(boringssl)
+    message("Cloned borringssl to ${boringssl_SOURCE_DIR}")
+    set(BORINGSSL_SRC_DIR "${boringssl_SOURCE_DIR}")
+    set(BORINGSSL_BIN_DIR "${boringssl_BINARY_DIR}")
+
+    # we need Go in order to read BoringSSL's symbols via the utils they provide...thanks Google!
+    find_program(GO_EXECUTABLE go)
+    if(NOT GO_EXECUTABLE)
+      message(FATAL_ERROR "Could not find Go")
+    else()
+      message("Found Go: ${GO_EXECUTABLE}")
+    endif()
+
+    file(MAKE_DIRECTORY ${BORINGSSL_OUTPUT_DIR})
+    file(MAKE_DIRECTORY ${BORINGSSL_INCLUDE_DIR})
+    file(MAKE_DIRECTORY ${BORINGSSL_LIB_DIR})
+
+    if(WIN32)
+      execute_process(
+        COMMAND
+          cmd /C build_boringssl_win.bat ${BORINGSSL_SRC_DIR} ${BORINGSSL_BIN_DIR} ${BORINGSSL_OUTPUT_DIR}
+          ${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX} ${CMAKE_BUILD_TYPE} ${COUCHBASE_CXX_CLIENT_BORINGSSL_PIC}
+          ${COUCHBASE_CXX_CLIENT_BORINGSSL_VERBOSE_MAKEFILE}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin
+        RESULT_VARIABLE BUILD_RESULT)
+    else()
+      execute_process(
+        COMMAND
+          bash build_boringssl ${BORINGSSL_SRC_DIR} ${BORINGSSL_BIN_DIR} ${BORINGSSL_OUTPUT_DIR}
+          ${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX} ${CMAKE_BUILD_TYPE} ${COUCHBASE_CXX_CLIENT_BORINGSSL_PIC}
+          ${COUCHBASE_CXX_CLIENT_BORINGSSL_VERBOSE_MAKEFILE}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin
+        RESULT_VARIABLE BUILD_RESULT)
+    endif()
+    if(NOT
+       BUILD_RESULT
+       EQUAL
+       "0")
+      message(FATAL_ERROR "Failed to build BoringSSL.  Failed with ${BUILD_RESULT}.")
+    endif()
+  endif()
+
+  # create the OpenSSL targets the CXX client relies on
+  add_library(
+    OpenSSL::SSL
+    STATIC
+    IMPORTED
+    GLOBAL)
+  add_library(
+    OpenSSL::Crypto
+    STATIC
+    IMPORTED
+    GLOBAL)
+  if(WIN32)
+    set_property(TARGET OpenSSL::SSL PROPERTY IMPORTED_LOCATION ${BORINGSSL_LIB_DIR}/ssl${CMAKE_STATIC_LIBRARY_SUFFIX})
+    set_property(TARGET OpenSSL::Crypto PROPERTY IMPORTED_LOCATION
+                                                 ${BORINGSSL_LIB_DIR}/crypto${CMAKE_STATIC_LIBRARY_SUFFIX})
+  else()
+    set_property(TARGET OpenSSL::SSL PROPERTY IMPORTED_LOCATION
+                                              ${BORINGSSL_LIB_DIR}/libssl${CMAKE_STATIC_LIBRARY_SUFFIX})
+    set_property(TARGET OpenSSL::Crypto PROPERTY IMPORTED_LOCATION
+                                                 ${BORINGSSL_LIB_DIR}/libcrypto${CMAKE_STATIC_LIBRARY_SUFFIX})
+  endif()
+  set_property(TARGET OpenSSL::SSL PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${BORINGSSL_INCLUDE_DIR})
+  set_property(TARGET OpenSSL::Crypto PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${BORINGSSL_INCLUDE_DIR})
+  file(READ "${BORINGSSL_OUTPUT_DIR}/boringssl_sha.txt" COUCHBASE_CXX_CLIENT_BORINGSSL_SHA)
+  string(STRIP "${COUCHBASE_CXX_CLIENT_BORINGSSL_SHA}" COUCHBASE_CXX_CLIENT_BORINGSSL_SHA)
+  message("COUCHBASE_CXX_CLIENT_BORINGSSL_SHA=${COUCHBASE_CXX_CLIENT_BORINGSSL_SHA}")
+
+  # NOTEs: linux seems to need to link `Threads::Threads`, does not appear to be required for macOS use `OUTPUT_VARIABLE
+  # TRY_COMPILE_OUTPUT` for debugging
+  string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LOWER)
+  if(CMAKE_BUILD_TYPE_LOWER MATCHES "deb")
+    try_compile(
+      BORINGSSL_USABLE ${CMAKE_CURRENT_BINARY_DIR}
+      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/test_openssl.cxx
+      CMAKE_FLAGS "-DINCLUDE_DIRECTORIES:STRING=${BORINGSSL_INCLUDE_DIR}"
+      COMPILE_DEFINITIONS "-DBORINGSSL_PREFIX=${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX}"
+      OUTPUT_VARIABLE TRY_COMPILE_OUTPUT
+      LINK_LIBRARIES
+        OpenSSL::Crypto
+        OpenSSL::SSL
+        Threads::Threads
+        CXX_STANDARD
+        17)
+    message(STATUS ${TRY_COMPILE_OUTPUT})
+  else()
+    try_compile(
+      BORINGSSL_USABLE ${CMAKE_CURRENT_BINARY_DIR}
+      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/test_openssl.cxx
+      CMAKE_FLAGS "-DINCLUDE_DIRECTORIES:STRING=${BORINGSSL_INCLUDE_DIR}"
+      COMPILE_DEFINITIONS "-DBORINGSSL_PREFIX=${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX}"
+      LINK_LIBRARIES
+        OpenSSL::Crypto
+        OpenSSL::SSL
+        Threads::Threads
+        CXX_STANDARD
+        17)
+  endif()
+  if(BORINGSSL_USABLE)
+    message(STATUS "BORING_SSL success.")
+  else()
+    message(STATUS "BORING_SSL fail.")
+  endif()
+
+  # lets remove all the things b/c we _should_ have all that we need
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${CMAKE_CURRENT_BINARY_DIR}/_deps/boringssl-build"
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${CMAKE_CURRENT_BINARY_DIR}/_deps/boringssl-src"
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${CMAKE_CURRENT_BINARY_DIR}/_deps/boringssl-subbuild")
 else()
   option(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL "Statically link OpenSSL library" FALSE)
   if(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL)

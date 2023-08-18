@@ -481,6 +481,10 @@ if (NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
     endif ()
 endif ()
 
+if (COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+    target_compile_definitions(couchbase_cxx_client PUBLIC BORINGSSL_PREFIX=${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX})
+endif ()
+
 option(COUCHBASE_CXX_CLIENT_BUILD_TESTS "Build test programs" TRUE)
 if (COUCHBASE_CXX_CLIENT_BUILD_TESTS)
     include(cmake/Testing.cmake)

@@ -113,7 +113,8 @@ class client_request
     [[nodiscard]] std::vector<std::byte> generate_payload(bool try_to_compress)
     {
         // SA: for some reason GCC 8.5.0 on CentOS 8 sees here null-pointer dereference
-#if defined(__GNUC__) && __GNUC__ == 8
+        // JC: BoringSSL changes, noticed the same when building w/ GCC 11.3.0; TODO:  is 12 okay?
+#if defined(__GNUC__) && __GNUC__ >= 8 && __GNUC__ < 12
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnull-dereference"
 #endif

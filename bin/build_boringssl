@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+BORINGSSL_SRC_DIR=$1
+BORINGSSL_BUILD_DIR=$2
+BORINGSSL_OUTPUT_DIR=$3
+BORINGSSL_PREFIX=$4
+BUILD_TYPE=$5
+PIC=$6
+VERBOSE_MAKEFILE=$7
+BORINGSSL_LIB_DIR=$BORINGSSL_OUTPUT_DIR/lib
+BORINGSSL_INCLUDE_DIR=$BORINGSSL_OUTPUT_DIR/include
+
+cd $BORINGSSL_SRC_DIR
+git rev-parse HEAD > $BORINGSSL_OUTPUT_DIR/boringssl_sha.txt
+
+rm -rf build
+mkdir -p build
+cd build
+echo "Starting initial build phase."
+cmake .. -S$BORINGSSL_SRC_DIR -B$BORINGSSL_BUILD_DIR
+make -j -C $BORINGSSL_BUILD_DIR
+
+cd $BORINGSSL_BUILD_DIR
+[ -f ssl/libssl.a ] || { echo "Failed to build libssl.a" ; exit 1 ; }
+[ -f crypto/libcrypto.a ] || { echo "Failed to build libcrypto.a" ; exit 1 ; }
+
+cd $BORINGSSL_SRC_DIR/util
+go run read_symbols.go $BORINGSSL_BUILD_DIR/ssl/libssl.a > $BORINGSSL_OUTPUT_DIR/symbols.txt
+go run read_symbols.go $BORINGSSL_BUILD_DIR/crypto/libcrypto.a >> $BORINGSSL_OUTPUT_DIR/symbols.txt
+
+echo "Starting build phase with symbol prefixing."
+cmake .. -S$BORINGSSL_SRC_DIR \
+    -B$BORINGSSL_BUILD_DIR \
+    -DBORINGSSL_PREFIX=$BORINGSSL_PREFIX \
+    -DBORINGSSL_PREFIX_SYMBOLS=$BORINGSSL_OUTPUT_DIR/symbols.txt \
+    -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
+    -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=$PIC \
+    -DCMAKE_VERBOSE_MAKEFILE:BOOL=$VERBOSE_MAKEFILE
+make -j -C $BORINGSSL_BUILD_DIR
+cd $BORINGSSL_BUILD_DIR
+[ -f symbol_prefix_include/boringssl_prefix_symbols.h ] || { echo "Failed to build boringssl_prefix_symbols.h" ; exit 1 ; }
+
+cp ssl/libssl.a $BORINGSSL_LIB_DIR
+cp crypto/libcrypto.a $BORINGSSL_LIB_DIR
+cp symbol_prefix_include/boringssl_prefix_symbols.h $BORINGSSL_INCLUDE_DIR
+cp -r $BORINGSSL_SRC_DIR/include/openssl $BORINGSSL_INCLUDE_DIR
+
+echo "Done.  Libs saved in: $BORINGSSL_LIB_DIR, headers saved in: $BORINGSSL_INCLUDE_DIR"

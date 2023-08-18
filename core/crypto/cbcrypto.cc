@@ -16,6 +16,7 @@
  */
 
 #include "cbcrypto.h"
+#include <couchbase/build_config.hxx>
 
 #include <memory>
 #include <stdexcept>
@@ -524,9 +525,16 @@ HMAC_SHA1(std::string_view key, std::string_view data)
 {
     std::string ret;
     ret.resize(couchbase::core::crypto::SHA1_DIGEST_SIZE);
+
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+    auto key_size = key.size();
+#else
+    auto key_size = static_cast<int>(key.size());
+#endif
+
     if (HMAC(EVP_sha1(),
              key.data(),
-             static_cast<int>(key.size()),
+             key_size,
              reinterpret_cast<const std::uint8_t*>(data.data()),
              data.size(),
              reinterpret_cast<std::uint8_t*>(ret.data()),
@@ -541,9 +549,14 @@ HMAC_SHA256(std::string_view key, std::string_view data)
 {
     std::string ret;
     ret.resize(couchbase::core::crypto::SHA256_DIGEST_SIZE);
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+    auto key_size = key.size();
+#else
+    auto key_size = static_cast<int>(key.size());
+#endif
     if (HMAC(EVP_sha256(),
              key.data(),
-             static_cast<int>(key.size()),
+             key_size,
              reinterpret_cast<const std::uint8_t*>(data.data()),
              data.size(),
              reinterpret_cast<std::uint8_t*>(ret.data()),
@@ -558,9 +571,14 @@ HMAC_SHA512(std::string_view key, std::string_view data)
 {
     std::string ret;
     ret.resize(couchbase::core::crypto::SHA512_DIGEST_SIZE);
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+    auto key_size = key.size();
+#else
+    auto key_size = static_cast<int>(key.size());
+#endif
     if (HMAC(EVP_sha512(),
              key.data(),
-             static_cast<int>(key.size()),
+             key_size,
              reinterpret_cast<const std::uint8_t*>(data.data()),
              data.size(),
              reinterpret_cast<std::uint8_t*>(ret.data()),
@@ -575,11 +593,20 @@ PBKDF2_HMAC_SHA1(const std::string& pass, std::string_view salt, unsigned int it
 {
     std::string ret;
     ret.resize(couchbase::core::crypto::SHA1_DIGEST_SIZE);
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+    auto pw_size = pass.size();
+    auto salt_size = salt.size();
+    auto iteration_count = iterationCount;
+#else
+    auto pw_size = int(pass.size());
+    auto salt_size = int(salt.size());
+    auto iteration_count = int(iterationCount);
+#endif
     auto err = PKCS5_PBKDF2_HMAC(pass.data(),
-                                 int(pass.size()),
+                                 pw_size,
                                  reinterpret_cast<const std::uint8_t*>(salt.data()),
-                                 int(salt.size()),
-                                 int(iterationCount),
+                                 salt_size,
+                                 iteration_count,
                                  EVP_sha1(),
                                  couchbase::core::crypto::SHA1_DIGEST_SIZE,
                                  reinterpret_cast<std::uint8_t*>(ret.data()));
@@ -598,11 +625,20 @@ PBKDF2_HMAC_SHA256(const std::string& pass, std::string_view salt, unsigned int 
 {
     std::string ret;
     ret.resize(couchbase::core::crypto::SHA256_DIGEST_SIZE);
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+    auto pw_size = pass.size();
+    auto salt_size = salt.size();
+    auto iteration_count = iterationCount;
+#else
+    auto pw_size = int(pass.size());
+    auto salt_size = int(salt.size());
+    auto iteration_count = int(iterationCount);
+#endif
     auto err = PKCS5_PBKDF2_HMAC(pass.data(),
-                                 int(pass.size()),
+                                 pw_size,
                                  reinterpret_cast<const std::uint8_t*>(salt.data()),
-                                 int(salt.size()),
-                                 int(iterationCount),
+                                 salt_size,
+                                 iteration_count,
                                  EVP_sha256(),
                                  couchbase::core::crypto::SHA256_DIGEST_SIZE,
                                  reinterpret_cast<std::uint8_t*>(ret.data()));
@@ -618,11 +654,20 @@ PBKDF2_HMAC_SHA512(const std::string& pass, std::string_view salt, unsigned int 
 {
     std::string ret;
     ret.resize(couchbase::core::crypto::SHA512_DIGEST_SIZE);
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+    auto pw_size = pass.size();
+    auto salt_size = salt.size();
+    auto iteration_count = iterationCount;
+#else
+    auto pw_size = int(pass.size());
+    auto salt_size = int(salt.size());
+    auto iteration_count = int(iterationCount);
+#endif
     auto err = PKCS5_PBKDF2_HMAC(pass.data(),
-                                 int(pass.size()),
+                                 pw_size,
                                  reinterpret_cast<const std::uint8_t*>(salt.data()),
-                                 int(salt.size()),
-                                 int(iterationCount),
+                                 salt_size,
+                                 iteration_count,
                                  EVP_sha512(),
                                  couchbase::core::crypto::SHA512_DIGEST_SIZE,
                                  reinterpret_cast<std::uint8_t*>(ret.data()));
@@ -689,14 +734,21 @@ getCipher(const couchbase::core::crypto::Cipher cipher, std::string_view key, st
     if (cip == nullptr) {
         throw std::invalid_argument("couchbase::core::crypto::getCipher: Unknown Cipher " + std::to_string(int(cipher)));
     }
-
-    if (int(key.size()) != EVP_CIPHER_key_length(cip)) {
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+    auto key_size = key.size();
+    auto iv_size = iv.size();
+#else
+    // NOTE that OpenSSL 3 changed EVP_CIPHER_key_length() -> EVP_CIPHER_get_key_length()
+    auto key_size = int(key.size());
+    auto iv_size = int(iv.size());
+#endif
+    if (key_size != EVP_CIPHER_key_length(cip)) {
         throw std::invalid_argument("couchbase::core::crypto::getCipher: Cipher requires a key "
                                     "length of " +
                                     std::to_string(EVP_CIPHER_key_length(cip)) + " provided key with length " + std::to_string(key.size()));
     }
 
-    if (int(iv.size()) != EVP_CIPHER_iv_length(cip)) {
+    if (iv_size != EVP_CIPHER_iv_length(cip)) {
         throw std::invalid_argument("couchbase::core::crypto::getCipher: Cipher requires a iv "
                                     "length of " +
                                     std::to_string(EVP_CIPHER_iv_length(cip)) + " provided iv with length " + std::to_string(iv.size()));
@@ -778,14 +830,14 @@ decrypt(const couchbase::core::crypto::Cipher cipher, std::string_view key, std:
 } // namespace internal
 
 std::string
-couchbase::core::crypto::HMAC(const Algorithm algorithm, std::string_view key, std::string_view data)
+couchbase::core::crypto::CBC_HMAC(const Algorithm algorithm, std::string_view key, std::string_view data)
 {
     switch (algorithm) {
-        case Algorithm::SHA1:
+        case couchbase::core::crypto::Algorithm::ALG_SHA1:
             return internal::HMAC_SHA1(key, data);
-        case Algorithm::SHA256:
+        case Algorithm::ALG_SHA256:
             return internal::HMAC_SHA256(key, data);
-        case Algorithm::SHA512:
+        case Algorithm::ALG_SHA512:
             return internal::HMAC_SHA512(key, data);
     }
 
@@ -796,11 +848,11 @@ std::string
 couchbase::core::crypto::PBKDF2_HMAC(const Algorithm algorithm, const std::string& pass, std::string_view salt, unsigned int iterationCount)
 {
     switch (algorithm) {
-        case Algorithm::SHA1:
+        case Algorithm::ALG_SHA1:
             return internal::PBKDF2_HMAC_SHA1(pass, salt, iterationCount);
-        case Algorithm::SHA256:
+        case Algorithm::ALG_SHA256:
             return internal::PBKDF2_HMAC_SHA256(pass, salt, iterationCount);
-        case Algorithm::SHA512:
+        case Algorithm::ALG_SHA512:
             return internal::PBKDF2_HMAC_SHA512(pass, salt, iterationCount);
     }
 
@@ -811,9 +863,9 @@ static inline void
 verifyLegalAlgorithm(const couchbase::core::crypto::Algorithm al)
 {
     switch (al) {
-        case couchbase::core::crypto::Algorithm::SHA1:
-        case couchbase::core::crypto::Algorithm::SHA256:
-        case couchbase::core::crypto::Algorithm::SHA512:
+        case couchbase::core::crypto::Algorithm::ALG_SHA1:
+        case couchbase::core::crypto::Algorithm::ALG_SHA256:
+        case couchbase::core::crypto::Algorithm::ALG_SHA512:
             return;
     }
     throw std::invalid_argument("verifyLegalAlgorithm: Unknown Algorithm: " + std::to_string(int(al)));
@@ -831,11 +883,11 @@ std::string
 couchbase::core::crypto::digest(const Algorithm algorithm, std::string_view data)
 {
     switch (algorithm) {
-        case Algorithm::SHA1:
+        case Algorithm::ALG_SHA1:
             return internal::digest_sha1(data);
-        case Algorithm::SHA256:
+        case Algorithm::ALG_SHA256:
             return internal::digest_sha256(data);
-        case Algorithm::SHA512:
+        case Algorithm::ALG_SHA512:
             return internal::digest_sha512(data);
     }
 
