@@ -271,7 +271,9 @@ set(couchbase_cxx_client_FILES
         core/impl/configuration_profiles_registry.cxx
         core/impl/conjunction_query.cxx
         core/impl/create_bucket.cxx
+        core/impl/create_collection.cxx
         core/impl/create_query_index.cxx
+        core/impl/create_scope.cxx
         core/impl/date_range.cxx
         core/impl/date_range_facet.cxx
         core/impl/date_range_facet_result.cxx
@@ -280,7 +282,9 @@ set(couchbase_cxx_client_FILES
         core/impl/disjunction_query.cxx
         core/impl/dns_srv_tracker.cxx
         core/impl/drop_bucket.cxx
+        core/impl/drop_collection.cxx
         core/impl/drop_query_index.cxx
+        core/impl/drop_scope.cxx
         core/impl/exists.cxx
         core/impl/expiry.cxx
         core/impl/fail_fast_retry_strategy.cxx
@@ -293,6 +297,7 @@ set(couchbase_cxx_client_FILES
         core/impl/get_all_buckets.cxx
         core/impl/get_all_query_indexes.cxx
         core/impl/get_all_replicas.cxx
+        core/impl/get_all_scopes.cxx
         core/impl/get_and_lock.cxx
         core/impl/get_and_touch.cxx
         core/impl/get_any_replica.cxx
