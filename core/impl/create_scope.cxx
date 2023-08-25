@@ -18,7 +18,6 @@
 #include <couchbase/manager_error_context.hxx>
 #include <utility>
 
-
 #include "core/cluster.hxx"
 #include "core/operations/management/scope_create.hxx"
 #include "couchbase/collection_manager.hxx"
@@ -40,10 +39,6 @@ build_context(Response& resp)
                                                                  std::move(resp.ctx.path) });
 }
 
-
-
-
-
 static core::operations::management::scope_create_request
 build_scope_create_request(std::string bucket_name, std::string scope_name, const create_scope_options::built& options)
 {
@@ -52,7 +47,9 @@ build_scope_create_request(std::string bucket_name, std::string scope_name, cons
 }
 
 void
-collection_manager::create_scope(std::string scope_name, const couchbase::create_scope_options& options, couchbase::create_scope_handler&& handler) const
+collection_manager::create_scope(std::string scope_name,
+                                 const couchbase::create_scope_options& options,
+                                 couchbase::create_scope_handler&& handler) const
 {
     auto request = build_scope_create_request(bucket_name_, std::move(scope_name), options.build());
 
@@ -62,7 +59,8 @@ collection_manager::create_scope(std::string scope_name, const couchbase::create
 }
 
 auto
-collection_manager::create_scope(std::string scope_name, const couchbase::create_scope_options& options) const -> std::future<manager_error_context>
+collection_manager::create_scope(std::string scope_name, const couchbase::create_scope_options& options) const
+  -> std::future<manager_error_context>
 {
     auto barrier = std::make_shared<std::promise<manager_error_context>>();
     create_scope(std::move(scope_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });

@@ -39,5 +39,6 @@ struct get_all_scopes_options : public common_options<get_all_scopes_options> {
   private:
 };
 
-using get_all_scopes_handler = std::function<void(couchbase::manager_error_context, std::vector<couchbase::management::bucket::scope_spec>)>;
+using get_all_scopes_handler =
+  std::function<void(couchbase::manager_error_context, std::vector<couchbase::management::bucket::scope_spec>)>;
 } // namespace couchbase

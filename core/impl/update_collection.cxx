@@ -45,25 +45,39 @@ build_collection_update_request(std::string bucket_name,
                                 const update_collection_settings& settings,
                                 const update_collection_options::built& options)
 {
-    core::operations::management::collection_update_request request{ std::move(bucket_name), std::move(scope_name), std::move(collection_name), settings.max_expiry, settings.history, {}, options.timeout };
+    core::operations::management::collection_update_request request{
+        std::move(bucket_name), std::move(scope_name), std::move(collection_name), settings.max_expiry, settings.history, {},
+        options.timeout
+    };
     return request;
 }
 
 void
-collection_manager::update_collection(std::string scope_name, std::string collection_name, const couchbase::update_collection_settings& settings, const couchbase::update_collection_options& options, couchbase::update_collection_handler&& handler) const
+collection_manager::update_collection(std::string scope_name,
+                                      std::string collection_name,
+                                      const couchbase::update_collection_settings& settings,
+                                      const couchbase::update_collection_options& options,
+                                      couchbase::update_collection_handler&& handler) const
 {
-    auto request = build_collection_update_request(bucket_name_, std::move(scope_name), std::move(collection_name), settings, options.build());
+    auto request =
+      build_collection_update_request(bucket_name_, std::move(scope_name), std::move(collection_name), settings, options.build());
 
-    core_->execute(std::move(request), [handler = std::move(handler)](core::operations::management::collection_update_response resp) mutable {
-        return handler(build_context(resp));
-    });
+    core_->execute(std::move(request),
+                   [handler = std::move(handler)](core::operations::management::collection_update_response resp) mutable {
+                       return handler(build_context(resp));
+                   });
 }
 
 auto
-collection_manager::update_collection(std::string scope_name, std::string collection_name, const couchbase::update_collection_settings& settings, const couchbase::update_collection_options& options) const -> std::future<manager_error_context>
+collection_manager::update_collection(std::string scope_name,
+                                      std::string collection_name,
+                                      const couchbase::update_collection_settings& settings,
+                                      const couchbase::update_collection_options& options) const -> std::future<manager_error_context>
 {
     auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    update_collection(std::move(scope_name), std::move(collection_name), settings, options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    update_collection(std::move(scope_name), std::move(collection_name), settings, options, [barrier](auto ctx) mutable {
+        barrier->set_value(std::move(ctx));
+    });
     return barrier->get_future();
 }
 } // namespace couchbase

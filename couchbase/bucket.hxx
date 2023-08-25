@@ -18,8 +18,8 @@
 #pragma once
 
 #include <couchbase/collection.hxx>
-#include <couchbase/scope.hxx>
 #include <couchbase/collection_manager.hxx>
+#include <couchbase/scope.hxx>
 
 #include <memory>
 

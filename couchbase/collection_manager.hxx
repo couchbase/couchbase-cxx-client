@@ -80,11 +80,13 @@ class collection_manager
 
     void create_scope(std::string scope_name, const create_scope_options& options, create_scope_handler&& handler) const;
 
-    [[nodiscard]] auto create_scope(std::string scope_name, const create_scope_options& options = {}) const -> std::future<manager_error_context>;
+    [[nodiscard]] auto create_scope(std::string scope_name, const create_scope_options& options = {}) const
+      -> std::future<manager_error_context>;
 
     void drop_scope(std::string scope_name, const drop_scope_options& options, drop_scope_handler&& handler) const;
 
-    [[nodiscard]] auto drop_scope(std::string scope_name, const drop_scope_options& options = {}) const -> std::future<manager_error_context>;
+    [[nodiscard]] auto drop_scope(std::string scope_name, const drop_scope_options& options = {}) const
+      -> std::future<manager_error_context>;
 
   private:
     friend class bucket;

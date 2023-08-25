@@ -43,10 +43,10 @@ struct traits<couchbase::core::management::cluster::bucket_settings> {
             result.history_retention_collection_default = history_retention_default->template as<std::optional<bool>>();
         }
         if (auto* history_retention_bytes = v.find("historyRetentionBytes"); history_retention_bytes != nullptr) {
-            result.history_retention_bytes = history_retention_bytes->template as <std::uint32_t>();
+            result.history_retention_bytes = history_retention_bytes->template as<std::uint32_t>();
         }
         if (auto* history_retention_duration = v.find("historyRetentionSeconds"); history_retention_duration != nullptr) {
-            result.history_retention_duration = history_retention_duration->template as <std::uint32_t>();
+            result.history_retention_duration = history_retention_duration->template as<std::uint32_t>();
         }
 
         if (auto& str = v.at("bucketType").get_string(); str == "couchbase" || str == "membase") {

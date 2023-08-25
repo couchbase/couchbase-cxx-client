@@ -46,7 +46,9 @@ build_drop_scope_request(std::string bucket_name, std::string scope_name, const 
 }
 
 void
-collection_manager::drop_scope(std::string scope_name, const couchbase::drop_scope_options& options, couchbase::drop_scope_handler&& handler) const
+collection_manager::drop_scope(std::string scope_name,
+                               const couchbase::drop_scope_options& options,
+                               couchbase::drop_scope_handler&& handler) const
 {
     auto request = build_drop_scope_request(bucket_name_, std::move(scope_name), options.build());
 
@@ -56,7 +58,8 @@ collection_manager::drop_scope(std::string scope_name, const couchbase::drop_sco
 }
 
 auto
-collection_manager::drop_scope(std::string scope_name, const couchbase::drop_scope_options& options) const -> std::future<manager_error_context>
+collection_manager::drop_scope(std::string scope_name, const couchbase::drop_scope_options& options) const
+  -> std::future<manager_error_context>
 {
     auto barrier = std::make_shared<std::promise<manager_error_context>>();
     drop_scope(std::move(scope_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
