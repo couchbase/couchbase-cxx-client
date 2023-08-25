@@ -25,13 +25,13 @@
 
 namespace couchbase::core::operations::management
 {
-struct collection_create_response {
+struct collection_update_response {
     error_context::http ctx;
     std::uint64_t uid{ 0 };
 };
 
-struct collection_create_request {
-    using response_type = collection_create_response;
+struct collection_update_request {
+    using response_type = collection_update_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
     using error_context_type = error_context::http;
@@ -49,6 +49,6 @@ struct collection_create_request {
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 
-    [[nodiscard]] collection_create_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
+    [[nodiscard]] collection_update_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::operations::management

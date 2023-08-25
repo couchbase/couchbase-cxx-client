@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,13 +17,28 @@
 
 #pragma once
 
-namespace couchbase::management::bucket
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+
+namespace couchbase
 {
-struct collection_spec {
-    std::string name;
-    std::string scope_name;
-    std::uint32_t max_expiry{};
+struct update_collection_options : public common_options<update_collection_options> {
+  public:
+    struct built : public common_options<update_collection_options>::built {
+    };
+
+    [[nodiscard]] auto build() const -> built
+    {
+        return { build_common_options() };
+    }
+};
+
+struct update_collection_settings {
+    std::uint32_t max_expiry{ 0 };
     bool history{};
 };
 
-} // namespace couchbase::management::bucket
+using update_collection_handler = std::function<void(couchbase::manager_error_context)>;
+} // namespace couchbase

@@ -170,6 +170,7 @@ set(couchbase_cxx_client_FILES
         core/operations/management/cluster_developer_preview_enable.cxx
         core/operations/management/collection_create.cxx
         core/operations/management/collection_drop.cxx
+        core/operations/management/collection_update.cxx
         core/operations/management/collections_manifest_get.cxx
         core/operations/management/error_utils.cxx
         core/operations/management/eventing_deploy_function.cxx
@@ -385,6 +386,7 @@ set(couchbase_cxx_client_FILES
         core/impl/transaction_op_error_category.cxx
         core/impl/unlock.cxx
         core/impl/update_bucket.cxx
+        core/impl/update_collection.cxx
         core/impl/upsert.cxx
         core/impl/view_error_category.cxx
         core/impl/watch_query_indexes.cxx

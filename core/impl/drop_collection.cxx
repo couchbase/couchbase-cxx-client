@@ -46,9 +46,9 @@ build_collection_drop_request(std::string bucket_name, std::string scope_name, s
 }
 
 void
-collection_manager::drop_collection(const management::bucket::collection_spec& collection_spec, const couchbase::drop_collection_options& options, couchbase::drop_collection_handler&& handler) const
+collection_manager::drop_collection(std::string scope_name, std::string collection_name, const couchbase::drop_collection_options& options, couchbase::drop_collection_handler&& handler) const
 {
-    auto request = build_collection_drop_request(bucket_name_, collection_spec.scope_name, collection_spec.name, options.build());
+    auto request = build_collection_drop_request(bucket_name_, std::move(scope_name), std::move(collection_name), options.build());
 
     core_->execute(std::move(request), [handler = std::move(handler)](core::operations::management::collection_drop_response resp) mutable {
         return handler(build_context(resp));
@@ -56,10 +56,10 @@ collection_manager::drop_collection(const management::bucket::collection_spec& c
 }
 
 auto
-collection_manager::drop_collection(const management::bucket::collection_spec& collection_spec, const couchbase::drop_collection_options& options) const -> std::future<manager_error_context>
+collection_manager::drop_collection(std::string scope_name, std::string collection_name, const couchbase::drop_collection_options& options) const -> std::future<manager_error_context>
 {
     auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    drop_collection(collection_spec, options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    drop_collection(std::move(scope_name), std::move(collection_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
     return barrier->get_future();
 }
 } // namespace couchbase

@@ -23,6 +23,7 @@
 #include <couchbase/drop_scope_options.hxx>
 #include <couchbase/get_all_scopes_options.hxx>
 #include <couchbase/management/collection_spec.hxx>
+#include <couchbase/update_collection_options.hxx>
 
 #include <future>
 #include <memory>
@@ -46,18 +47,35 @@ class collection_manager
     [[nodiscard]] auto get_all_scopes(const get_all_scopes_options& options = {}) const
       -> std::future<std::pair<manager_error_context, std::vector<management::bucket::scope_spec>>>;
 
-    void create_collection(const management::bucket::collection_spec& collection_spec,
+    void create_collection(std::string scope_name,
+                           std::string collection_name,
+                           const create_collection_settings& settings,
                            const create_collection_options& options,
                            create_collection_handler&& handler) const;
 
-    [[nodiscard]] auto create_collection(const management::bucket::collection_spec& collection_spec,
+    [[nodiscard]] auto create_collection(std::string scope_name,
+                                         std::string collection_name,
+                                         const create_collection_settings& settings = {},
                                          const create_collection_options& options = {}) const -> std::future<manager_error_context>;
 
-    void drop_collection(const management::bucket::collection_spec& collection_spec,
+    void update_collection(std::string scope_name,
+                           std::string collection_name,
+                           const update_collection_settings& settings,
+                           const update_collection_options& options,
+                           update_collection_handler&& handler) const;
+
+    [[nodiscard]] auto update_collection(std::string scope_name,
+                                         std::string collection_name,
+                                         const update_collection_settings& settings,
+                                         const update_collection_options& options = {}) const -> std::future<manager_error_context>;
+
+    void drop_collection(std::string scope_name,
+                         std::string collection_name,
                          const drop_collection_options& options,
                          drop_collection_handler&& handler) const;
 
-    [[nodiscard]] auto drop_collection(const management::bucket::collection_spec& collection_spec,
+    [[nodiscard]] auto drop_collection(std::string scope_name,
+                                       std::string collection_name,
                                        const drop_collection_options& options = {}) const -> std::future<manager_error_context>;
 
     void create_scope(std::string scope_name, const create_scope_options& options, create_scope_handler&& handler) const;

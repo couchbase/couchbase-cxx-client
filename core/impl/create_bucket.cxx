@@ -59,6 +59,9 @@ map_bucket_settings(const couchbase::management::cluster::bucket_settings& bucke
     bucket_settings.num_replicas = bucket.num_replicas;
     bucket_settings.replica_indexes = bucket.replica_indexes;
     bucket_settings.flush_enabled = bucket.flush_enabled;
+    bucket_settings.history_retention_collection_default = bucket.history_retention_collection_default;
+    bucket_settings.history_retention_bytes = bucket.history_retention_bytes;
+    bucket_settings.history_retention_duration = bucket.history_retention_bytes;
     switch (bucket.conflict_resolution_type) {
         case management::cluster::bucket_conflict_resolution::unknown:
             bucket_settings.conflict_resolution_type = core::management::cluster::bucket_conflict_resolution::unknown;
