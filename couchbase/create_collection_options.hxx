@@ -37,7 +37,7 @@ struct create_collection_options : public common_options<create_collection_optio
 
 struct create_collection_settings {
     std::uint32_t max_expiry{ 0 };
-    bool history{};
+    std::optional<bool> history{};
 };
 
 using create_collection_handler = std::function<void(couchbase::manager_error_context)>;
