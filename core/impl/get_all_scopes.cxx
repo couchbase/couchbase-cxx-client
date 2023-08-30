@@ -52,6 +52,7 @@ map_collection(std::string scope_name, const core::topology::collections_manifes
     spec.name = collection.name;
     spec.scope_name = std::move(scope_name);
     spec.max_expiry = collection.max_expiry;
+    spec.history = collection.history.value();
     return spec;
 }
 

@@ -36,7 +36,7 @@ struct update_collection_options : public common_options<update_collection_optio
 };
 
 struct update_collection_settings {
-    std::uint32_t max_expiry{ 0 };
+    std::optional<std::uint32_t> max_expiry{};
     std::optional<bool> history{};
 };
 

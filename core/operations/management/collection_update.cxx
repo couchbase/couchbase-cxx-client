@@ -28,13 +28,16 @@ std::error_code
 collection_update_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
     encoded.method = "PATCH";
-    encoded.path = fmt::format("/pools/default/buckets/{}/collections/{}/{}", bucket_name, scope_name, collection_name);
+    encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}/collections/{}", bucket_name, scope_name, collection_name);
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";
-    if (max_expiry > 0) {
-        encoded.body.append(fmt::format("&maxTTL={}", max_expiry));
+    if (max_expiry.has_value()) {
+        encoded.body.append(fmt::format("maxTTL={}", max_expiry.value()));
+        if (history.has_value()) {
+            encoded.body.append(fmt::format("&history={}", history.value()));
+        }
     }
     if (history.has_value()) {
-        encoded.body.append(fmt::format("&history={}", history.value()));
+        encoded.body.append(fmt::format("history={}", history.value()));
     }
     return {};
 }

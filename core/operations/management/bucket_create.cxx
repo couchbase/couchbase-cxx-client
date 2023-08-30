@@ -60,7 +60,7 @@ bucket_create_request::encode_to(encoded_request_type& encoded, http_context& /*
     }
     if (bucket.history_retention_collection_default.has_value()) {
         encoded.body.append(
-          fmt::format("&historyRetentionCollectionDefault={}", bucket.history_retention_collection_default.value() ? "1" : "0"));
+          fmt::format("&historyRetentionCollectionDefault={}", bucket.history_retention_collection_default.value() ? "true" : "false"));
     }
     if (bucket.history_retention_bytes > 0) {
         encoded.body.append(fmt::format("&historyRetentionBytes={}", bucket.history_retention_bytes));
