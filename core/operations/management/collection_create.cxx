@@ -26,17 +26,21 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-collection_create_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+collection_create_request::encode_to(encoded_request_type& encoded, http_context& context ) const
 {
     encoded.method = "POST";
     encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}/collections", bucket_name, scope_name);
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";
     encoded.body = fmt::format("name={}", utils::string_codec::form_encode(collection_name));
-    if (max_expiry > 0) {
-        encoded.body.append(fmt::format("&maxTTL={}", max_expiry));
+    if (max_expiry.has_value()) {
+        encoded.body.append(fmt::format("&maxTTL={}", max_expiry.value()));
     }
     if (history.has_value()) {
-        encoded.body.append(fmt::format("&history={}", history.value()));
+        if (context.config.supports_non_deduped_history()) {
+            encoded.body.append(fmt::format("&history={}", history.value()));
+        } else {
+            return errc::common::feature_not_available;
+        }
     }
     return {};
 }

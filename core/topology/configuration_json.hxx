@@ -236,6 +236,8 @@ struct traits<couchbase::core::topology::configuration> {
                     result.bucket_capabilities.insert(couchbase::core::bucket_capability::range_scan);
                 } else if (name == "subdoc.ReplicaRead") {
                     result.bucket_capabilities.insert(couchbase::core::bucket_capability::replica_read);
+                } else if (name == "nonDedupedHistory") {
+                    result.bucket_capabilities.insert(couchbase::core::bucket_capability::non_deduped_history);
                 }
             }
         }

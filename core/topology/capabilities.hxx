@@ -33,6 +33,7 @@ enum class bucket_capability {
     tombstoned_user_xattrs,
     range_scan,
     replica_read,
+    non_deduped_history,
 };
 
 enum class cluster_capability {

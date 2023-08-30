@@ -36,7 +36,7 @@ struct create_collection_options : public common_options<create_collection_optio
 };
 
 struct create_collection_settings {
-    std::uint32_t max_expiry{ 0 };
+    std::optional<std::uint32_t> max_expiry{};
     std::optional<bool> history{};
 };
 

@@ -25,7 +25,7 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-collection_update_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+collection_update_request::encode_to(encoded_request_type& encoded, http_context& context ) const
 {
     encoded.method = "PATCH";
     encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}/collections/{}", bucket_name, scope_name, collection_name);
@@ -33,11 +33,20 @@ collection_update_request::encode_to(encoded_request_type& encoded, http_context
     if (max_expiry.has_value()) {
         encoded.body.append(fmt::format("maxTTL={}", max_expiry.value()));
         if (history.has_value()) {
-            encoded.body.append(fmt::format("&history={}", history.value()));
+            if (context.config.supports_non_deduped_history()) {
+                encoded.body.append(fmt::format("&history={}", history.value()));
+            } else {
+                return errc::common::feature_not_available;
+            }
         }
+        return {};
     }
     if (history.has_value()) {
-        encoded.body.append(fmt::format("history={}", history.value()));
+        if (context.config.supports_non_deduped_history()) {
+            encoded.body.append(fmt::format("history={}", history.value()));
+        } else {
+            return errc::common::feature_not_available;
+        }
     }
     return {};
 }

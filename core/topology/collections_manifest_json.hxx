@@ -45,7 +45,7 @@ struct traits<couchbase::core::topology::collections_manifest> {
                 }
                 if (const auto* history = c.find("history"); history != nullptr) {
                     collection.history = history->template as<std::optional<bool>>();
-                } // TODO unsure about this
+                }
                 scope.collections.emplace_back(collection);
             }
             result.scopes.emplace_back(scope);
