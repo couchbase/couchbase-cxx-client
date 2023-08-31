@@ -28,6 +28,7 @@ add_library(
         collection_create.cxx
         collection_drop.cxx
         collections_manifest_get.cxx
+        collection_update.cxx
         error_utils.cxx
         eventing_deploy_function.cxx
         eventing_drop_function.cxx

@@ -36,9 +36,14 @@ collection_create_request::encode_to(encoded_request_type& encoded, http_context
         encoded.body.append(fmt::format("&maxTTL={}", max_expiry));
         if (history.has_value()) {
             encoded.body.append(fmt::format("&history={}", history.value()));
+        }
+        return {};
+    }
+    if (history.has_value()) {
+        encoded.body.append(fmt::format("&history={}", history.value()));
     }
     return {};
-    }
+}
 
 collection_create_response
 collection_create_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
