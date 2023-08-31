@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include "core/platform/uuid.h"
