@@ -156,6 +156,11 @@ struct server_version {
         return (major == 6 && minor >= 6) || major > 6;
     }
 
+    [[nodiscard]] bool supports_bucket_history() const
+    {
+        return (major == 7 && minor >= 2) || major > 7;
+    }
+
     [[nodiscard]] bool supports_search_analyze() const
     {
         return supports_search() && (is_mad_hatter() || is_cheshire_cat() || is_neo());

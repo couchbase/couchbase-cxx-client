@@ -19,6 +19,7 @@
 
 #include "collection_create.hxx"
 #include "collection_drop.hxx"
+#include "collection_update.hxx"
 #include "collections_manifest_get.hxx"
 #include "scope_create.hxx"
 #include "scope_drop.hxx"
