@@ -55,7 +55,6 @@ class collection_manager
     [[nodiscard]] auto get_all_scopes(const get_all_scopes_options& options = {}) const
       -> std::future<std::pair<manager_error_context, std::vector<management::bucket::scope_spec>>>;
 
-
     /**
      * Creates a new collection
      *
