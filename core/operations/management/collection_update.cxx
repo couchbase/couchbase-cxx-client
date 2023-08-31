@@ -25,7 +25,7 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-collection_update_request::encode_to(encoded_request_type& encoded, http_context& context ) const
+collection_update_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
     encoded.method = "PATCH";
     encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}/collections/{}", bucket_name, scope_name, collection_name);
@@ -33,20 +33,12 @@ collection_update_request::encode_to(encoded_request_type& encoded, http_context
     if (max_expiry.has_value()) {
         encoded.body.append(fmt::format("maxTTL={}", max_expiry.value()));
         if (history.has_value()) {
-            if (context.config.supports_non_deduped_history()) {
-                encoded.body.append(fmt::format("&history={}", history.value()));
-            } else {
-                return errc::common::feature_not_available;
-            }
+            encoded.body.append(fmt::format("&history={}", history.value()));
         }
         return {};
     }
     if (history.has_value()) {
-        if (context.config.supports_non_deduped_history()) {
-            encoded.body.append(fmt::format("history={}", history.value()));
-        } else {
-            return errc::common::feature_not_available;
-        }
+        encoded.body.append(fmt::format("history={}", history.value()));
     }
     return {};
 }
@@ -58,7 +50,8 @@ collection_update_request::make_response(error_context::http&& ctx, const encode
     if (!response.ctx.ec) {
         switch (encoded.status_code) {
             case 400: {
-                if (encoded.body.data().find("Not allowed on this version of cluster") != std::string::npos) {
+                if (encoded.body.data().find("Not allowed on this version of cluster") != std::string::npos ||
+                    encoded.body.data().find("Bucket must have storage_mode=magma") != std::string::npos) {
                     response.ctx.ec = errc::common::feature_not_available;
                 } else {
                     response.ctx.ec = errc::common::invalid_argument;
