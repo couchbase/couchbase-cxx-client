@@ -32,14 +32,13 @@ collection_create_request::encode_to(encoded_request_type& encoded, http_context
     encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}/collections", bucket_name, scope_name);
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";
     encoded.body = fmt::format("name={}", utils::string_codec::form_encode(collection_name));
-    if (max_expiry.has_value()) {
-        encoded.body.append(fmt::format("&maxTTL={}", max_expiry.value()));
-    }
-    if (history.has_value()) {
+    if (max_expiry > 0) {
+        encoded.body.append(fmt::format("&maxTTL={}", max_expiry));
+        if (history.has_value()) {
             encoded.body.append(fmt::format("&history={}", history.value()));
     }
     return {};
-}
+    }
 
 collection_create_response
 collection_create_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
