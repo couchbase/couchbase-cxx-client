@@ -1123,13 +1123,14 @@ TEST_CASE("integration: collection management", "[integration]")
         {
             auto scope_exists = test::utils::wait_until([&scope_name, &manager]() {
                 auto [ctx, result] = manager.get_all_scopes().get();
-                auto exists = false;
-                for (auto& scope : result) {
-                    if (scope.name == scope_name) {
-                        exists = true;
+                if (!ctx.ec()) {
+                    for (auto& scope : result) {
+                        if (scope.name == scope_name) {
+                            return true;
+                        }
                     }
                 }
-                return exists;
+                return false;
             });
             REQUIRE(scope_exists);
         }
@@ -1146,17 +1147,18 @@ TEST_CASE("integration: collection management", "[integration]")
             REQUIRE_SUCCESS(ctx.ec());
             auto created = test::utils::wait_until([&scope_name, &collection_name, &manager]() {
                 auto [get_ctx, result] = manager.get_all_scopes().get();
-                auto exists = false;
-                for (auto& scope : result) {
-                    if (scope.name == scope_name) {
-                        for (auto& collection : scope.collections) {
-                            if (collection.name == collection_name) {
-                                exists = true;
+                if (!get_ctx.ec()) {
+                    for (auto& scope : result) {
+                        if (scope.name == scope_name) {
+                            for (auto& collection : scope.collections) {
+                                if (collection.name == collection_name) {
+                                    return true;
+                                }
                             }
                         }
                     }
                 }
-                return exists;
+                return false;
             });
             REQUIRE(created);
         }
