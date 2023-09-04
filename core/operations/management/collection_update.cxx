@@ -18,6 +18,7 @@
 #include "collection_update.hxx"
 
 #include "core/utils/json.hxx"
+#include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
 #include <regex>
@@ -30,16 +31,14 @@ collection_update_request::encode_to(encoded_request_type& encoded, http_context
     encoded.method = "PATCH";
     encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}/collections/{}", bucket_name, scope_name, collection_name);
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";
+    std::map<std::string, std::string> values{};
     if (max_expiry.has_value()) {
-        encoded.body.append(fmt::format("maxTTL={}", max_expiry.value()));
-        if (history.has_value()) {
-            encoded.body.append(fmt::format("&history={}", history.value()));
-        }
-        return {};
+        values["maxTTL"] = std::to_string(max_expiry.value());
     }
     if (history.has_value()) {
-        encoded.body.append(fmt::format("history={}", history.value()));
+        values["history"] = history.value() ? "true" : "false";
     }
+    encoded.body = utils::string_codec::v2::form_encode(values);
     return {};
 }
 
