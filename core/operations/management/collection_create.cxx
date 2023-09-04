@@ -34,10 +34,6 @@ collection_create_request::encode_to(encoded_request_type& encoded, http_context
     encoded.body = fmt::format("name={}", utils::string_codec::form_encode(collection_name));
     if (max_expiry > 0) {
         encoded.body.append(fmt::format("&maxTTL={}", max_expiry));
-        if (history.has_value()) {
-            encoded.body.append(fmt::format("&history={}", history.value()));
-        }
-        return {};
     }
     if (history.has_value()) {
         encoded.body.append(fmt::format("&history={}", history.value()));

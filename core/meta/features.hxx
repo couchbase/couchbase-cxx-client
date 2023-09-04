@@ -54,3 +54,14 @@
  * couchbase::core::lookup_in_replica support
  */
 #define COUCHBASE_CXX_CLIENT_CORE_HAS_SUBDOC_READ_REPLICA 1
+
+/**
+ * Collection management is accessible from the public API
+ * couchbase::bucket::collections() support
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_PUBLIC_COLLECTION_MANAGEMENT 1
+
+/**
+ * Support for bucket no-deduplication feature in bucket and collection management
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_BUCKET_NO_DEDUP 1
