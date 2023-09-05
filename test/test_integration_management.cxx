@@ -894,6 +894,86 @@ TEST_CASE("integration: bucket management", "[integration]")
     }
 }
 
+TEST_CASE("integration: bucket management history", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_bucket_management()) {
+        SKIP("cluster does not support bucket management");
+    }
+
+    if (!integration.cluster_version().supports_gcccp()) {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    }
+
+    if (!integration.cluster_version().supports_bucket_history()) {
+        SKIP("cluster does not support bucket history");
+    }
+
+    auto bucket_name = test::utils::uniq_id("bucket");
+    auto update_bucket_name = test::utils::uniq_id("bucket");
+
+    SECTION("create history")
+    {
+        {
+            couchbase::core::management::cluster::bucket_settings bucket_settings;
+            bucket_settings.name = bucket_name;
+            bucket_settings.ram_quota_mb = integration.cluster_version().is_neo() ? 1'024 : 256;
+            bucket_settings.storage_backend = couchbase::core::management::cluster::bucket_storage_backend::magma;
+            bucket_settings.history_retention_collection_default = true;
+            bucket_settings.history_retention_bytes = 2147483648;
+            bucket_settings.history_retention_duration = 13000;
+            couchbase::core::operations::management::bucket_create_request req{ bucket_settings };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_SUCCESS(resp.ctx.ec);
+        }
+
+        {
+            auto resp = wait_for_bucket_created(integration, bucket_name);
+            REQUIRE_SUCCESS(resp.ctx.ec);
+            REQUIRE(resp.bucket.storage_backend == couchbase::core::management::cluster::bucket_storage_backend::magma);
+            REQUIRE(resp.bucket.history_retention_collection_default == true);
+            REQUIRE(resp.bucket.history_retention_duration == 13000);
+            REQUIRE(resp.bucket.history_retention_bytes == 2147483648);
+        }
+    }
+
+    SECTION("update history")
+    {
+        couchbase::core::management::cluster::bucket_settings bucket_settings;
+        bucket_settings.ram_quota_mb = integration.cluster_version().is_neo() ? 1'024 : 256;
+        bucket_settings.name = update_bucket_name;
+        bucket_settings.storage_backend = couchbase::core::management::cluster::bucket_storage_backend::magma;
+        {
+            couchbase::core::operations::management::bucket_create_request req{ bucket_settings };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_SUCCESS(resp.ctx.ec);
+            auto get_resp = wait_for_bucket_created(integration, update_bucket_name);
+            REQUIRE_SUCCESS(get_resp.ctx.ec);
+        }
+        {
+            bucket_settings.history_retention_collection_default = true;
+            bucket_settings.history_retention_bytes = 2147483648;
+            bucket_settings.history_retention_duration = 13000;
+            couchbase::core::operations::management::bucket_update_request req{ bucket_settings };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_SUCCESS(resp.ctx.ec);
+            auto get_resp = wait_for_bucket_created(integration, update_bucket_name);
+            REQUIRE_SUCCESS(get_resp.ctx.ec);
+            REQUIRE(get_resp.bucket.storage_backend == couchbase::core::management::cluster::bucket_storage_backend::magma);
+            REQUIRE(get_resp.bucket.history_retention_collection_default == true);
+            REQUIRE(get_resp.bucket.history_retention_duration == 13000);
+            REQUIRE(get_resp.bucket.history_retention_bytes == 2147483648);
+        }
+    }
+    {
+        couchbase::core::operations::management::bucket_drop_request req{ bucket_name };
+        couchbase::core::operations::management::bucket_drop_request update_req{ update_bucket_name };
+        test::utils::execute(integration.cluster, req);
+        test::utils::execute(integration.cluster, update_req);
+    }
+}
+
 std::optional<couchbase::core::topology::collections_manifest::collection>
 get_collection(std::shared_ptr<couchbase::core::cluster> cluster,
                const std::string& bucket_name,
@@ -943,7 +1023,208 @@ TEST_CASE("integration: collection management", "[integration]")
     auto scope_name = test::utils::uniq_id("scope");
     auto collection_name = test::utils::uniq_id("collection");
     std::uint32_t max_expiry = 5;
+    SECTION("core api")
+    {
+        {
+            couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_SUCCESS(resp.ctx.ec);
+            auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+            REQUIRE(created);
+        }
 
+        {
+            auto created = test::utils::wait_until([&]() { return scope_exists(integration.cluster, integration.ctx.bucket, scope_name); });
+            REQUIRE(created);
+        }
+
+        {
+            couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec == couchbase::errc::management::scope_exists);
+        }
+
+        {
+            couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
+            if (integration.cluster_version().is_enterprise()) {
+                req.max_expiry = max_expiry;
+            }
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_SUCCESS(resp.ctx.ec);
+            auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+            REQUIRE(created);
+        }
+
+        {
+            couchbase::core::topology::collections_manifest::collection collection;
+            auto created = test::utils::wait_until([&]() {
+                auto coll = get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
+                if (coll) {
+                    collection = *coll;
+                    return true;
+                }
+                return false;
+            });
+            REQUIRE(created);
+            if (integration.cluster_version().is_enterprise()) {
+                REQUIRE(collection.max_expiry == max_expiry);
+            }
+        }
+
+        {
+            couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec == couchbase::errc::management::collection_exists);
+        }
+        {
+            couchbase::core::operations::management::collection_drop_request req{ integration.ctx.bucket, scope_name, collection_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_SUCCESS(resp.ctx.ec);
+        }
+
+        {
+            auto dropped = test::utils::wait_until(
+              [&]() { return !get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name).has_value(); });
+            REQUIRE(dropped);
+        }
+
+        {
+            couchbase::core::operations::management::collection_drop_request req{ integration.ctx.bucket, scope_name, collection_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec == couchbase::errc::common::collection_not_found);
+        }
+
+        {
+            couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket, scope_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_SUCCESS(resp.ctx.ec);
+        }
+
+        {
+            auto dropped =
+              test::utils::wait_until([&]() { return !scope_exists(integration.cluster, integration.ctx.bucket, scope_name); });
+            REQUIRE(dropped);
+        }
+
+        {
+            couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket, scope_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec == couchbase::errc::common::scope_not_found);
+        }
+    }
+    SECTION("public API")
+    {
+        couchbase::cluster c(integration.cluster);
+        auto manager = c.bucket(integration.ctx.bucket).collections();
+        {
+            auto ctx = manager.create_scope(scope_name).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+        {
+            auto scope_exists = test::utils::wait_until([&scope_name, &manager]() {
+                auto [ctx, result] = manager.get_all_scopes().get();
+                if (!ctx.ec()) {
+                    for (auto& scope : result) {
+                        if (scope.name == scope_name) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            });
+            REQUIRE(scope_exists);
+        }
+        {
+            auto ctx = manager.create_scope(scope_name).get();
+            REQUIRE(ctx.ec() == couchbase::errc::management::scope_exists);
+        }
+        {
+            couchbase::create_collection_settings settings{};
+            if (integration.cluster_version().is_enterprise()) {
+                settings.max_expiry = max_expiry;
+            }
+            auto ctx = manager.create_collection(scope_name, collection_name, settings).get();
+            REQUIRE_SUCCESS(ctx.ec());
+            auto created = test::utils::wait_until([&scope_name, &collection_name, &manager]() {
+                auto [get_ctx, result] = manager.get_all_scopes().get();
+                if (!get_ctx.ec()) {
+                    for (auto& scope : result) {
+                        if (scope.name == scope_name) {
+                            for (auto& collection : scope.collections) {
+                                if (collection.name == collection_name) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+                return false;
+            });
+            REQUIRE(created);
+        }
+        {
+            auto [ctx, scopes] = manager.get_all_scopes().get();
+            REQUIRE_SUCCESS(ctx.ec());
+            couchbase::management::bucket::collection_spec spec;
+            for (auto& scope : scopes) {
+                if (scope.name == scope_name) {
+                    for (auto& collection : scope.collections) {
+                        if (collection.name == collection_name) {
+                            spec = collection;
+                        }
+                    }
+                }
+            }
+            if (integration.cluster_version().is_enterprise()) {
+                REQUIRE(spec.max_expiry == max_expiry);
+            }
+        }
+        {
+            couchbase::create_collection_settings settings{};
+            auto ctx = manager.create_collection(scope_name, collection_name, settings).get();
+            REQUIRE(ctx.ec() == couchbase::errc::management::collection_exists);
+        }
+        {
+            auto ctx = manager.drop_collection(scope_name, collection_name).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+        {
+            auto bucket_name = integration.ctx.bucket;
+            auto does_not_exist = test::utils::wait_until([&scope_name, &collection_name, &manager]() {
+                auto ctx = manager.drop_collection(scope_name, collection_name).get();
+                return (ctx.ec() == couchbase::errc::common::collection_not_found);
+            });
+            REQUIRE(does_not_exist);
+        }
+        {
+            auto ctx = manager.drop_scope(scope_name).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+        {
+            auto does_not_exist = test::utils::wait_until([&scope_name, &manager]() {
+                auto ctx = manager.drop_scope(scope_name).get();
+                return (ctx.ec() == couchbase::errc::common::scope_not_found);
+            });
+            REQUIRE(does_not_exist);
+        }
+    }
+}
+
+TEST_CASE("integration: collection management bucket dedup", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    if (!integration.cluster_version().supports_collections()) {
+        SKIP("cluster does not support collections");
+    }
+    if (!integration.has_bucket_capability("nonDedupedHistory")) {
+        SKIP("Bucket does not support non deduped history");
+    }
+
+    auto bucket_name = test::utils::uniq_id("bucket");
+    auto scope_name = test::utils::uniq_id("scope");
+    auto collection_name = test::utils::uniq_id("collection");
     {
         couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
         auto resp = test::utils::execute(integration.cluster, req);
@@ -958,22 +1239,13 @@ TEST_CASE("integration: collection management", "[integration]")
     }
 
     {
-        couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::errc::management::scope_exists);
-    }
-
-    {
         couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
-        if (integration.cluster_version().is_enterprise()) {
-            req.max_expiry = max_expiry;
-        }
+        req.history = true;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
         auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
         REQUIRE(created);
     }
-
     {
         couchbase::core::topology::collections_manifest::collection collection;
         auto created = test::utils::wait_until([&]() {
@@ -985,50 +1257,27 @@ TEST_CASE("integration: collection management", "[integration]")
             return false;
         });
         REQUIRE(created);
-        if (integration.cluster_version().is_enterprise()) {
-            REQUIRE(collection.max_expiry == max_expiry);
-        }
+        REQUIRE(collection.history.value());
     }
-
     {
-        couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::errc::management::collection_exists);
-    }
-
-    {
-        couchbase::core::operations::management::collection_drop_request req{ integration.ctx.bucket, scope_name, collection_name };
+        couchbase::core::operations::management::collection_update_request req{ integration.ctx.bucket, scope_name, collection_name };
+        req.history = false;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
     }
-
     {
-        auto dropped = test::utils::wait_until(
-          [&]() { return !get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name).has_value(); });
-        REQUIRE(dropped);
-    }
-
-    {
-        couchbase::core::operations::management::collection_drop_request req{ integration.ctx.bucket, scope_name, collection_name };
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::errc::common::collection_not_found);
-    }
-
-    {
-        couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket, scope_name };
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_SUCCESS(resp.ctx.ec);
-    }
-
-    {
-        auto dropped = test::utils::wait_until([&]() { return !scope_exists(integration.cluster, integration.ctx.bucket, scope_name); });
-        REQUIRE(dropped);
-    }
-
-    {
-        couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket, scope_name };
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::errc::common::scope_not_found);
+        couchbase::core::topology::collections_manifest::collection collection;
+        auto no_history = test::utils::wait_until([&]() {
+            auto coll = get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
+            if (coll.has_value()) {
+                if (!coll.value().history.value()) {
+                    return true;
+                }
+                return false;
+            }
+            return false;
+        });
+        REQUIRE(no_history);
     }
 }
 

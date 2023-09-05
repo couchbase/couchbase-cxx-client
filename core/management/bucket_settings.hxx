@@ -115,6 +115,9 @@ struct bucket_settings {
     bool flush_enabled{ false };
     bucket_eviction_policy eviction_policy{ bucket_eviction_policy::unknown };
     bucket_conflict_resolution conflict_resolution_type{ bucket_conflict_resolution::unknown };
+    std::optional<bool> history_retention_collection_default{};
+    std::uint32_t history_retention_bytes{ 0 };
+    std::uint32_t history_retention_duration{ 0 };
 
     /**
      * UNCOMMITTED: This API may change in the future

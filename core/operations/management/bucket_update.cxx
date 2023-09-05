@@ -38,6 +38,16 @@ bucket_update_request::encode_to(encoded_request_type& encoded, http_context& /*
     if (bucket.max_expiry > 0) {
         encoded.body.append(fmt::format("&maxTTL={}", bucket.max_expiry));
     }
+    if (bucket.history_retention_collection_default.has_value()) {
+        encoded.body.append(
+          fmt::format("&historyRetentionCollectionDefault={}", bucket.history_retention_collection_default.value() ? "true" : "false"));
+    }
+    if (bucket.history_retention_bytes > 0) {
+        encoded.body.append(fmt::format("&historyRetentionBytes={}", bucket.history_retention_bytes));
+    }
+    if (bucket.history_retention_duration > 0) {
+        encoded.body.append(fmt::format("&historyRetentionSeconds={}", bucket.history_retention_duration));
+    }
     encoded.body.append(fmt::format("&replicaIndex={}", bucket.replica_indexes ? "1" : "0"));
     encoded.body.append(fmt::format("&flushEnabled={}", bucket.flush_enabled ? "1" : "0"));
     switch (bucket.eviction_policy) {

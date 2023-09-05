@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include "core/platform/uuid.h"
@@ -28,6 +29,7 @@ struct collections_manifest {
         std::uint64_t uid;
         std::string name;
         std::uint32_t max_expiry{ 0 };
+        std::optional<bool> history{};
     };
 
     struct scope {

@@ -73,6 +73,9 @@ struct fmt::formatter<couchbase::core::bucket_capability> {
             case couchbase::core::bucket_capability::replica_read:
                 name = "replica_read";
                 break;
+            case couchbase::core::bucket_capability::non_deduped_history:
+                name = "non_deduped_history";
+                break;
         }
         return format_to(ctx.out(), "{}", name);
     }

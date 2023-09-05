@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/collection.hxx>
+#include <couchbase/collection_manager.hxx>
 #include <couchbase/scope.hxx>
 
 #include <memory>
@@ -80,6 +81,19 @@ class bucket
     [[nodiscard]] auto scope(std::string_view scope_name) const -> scope
     {
         return { core_, name_, scope_name };
+    }
+
+    /**
+     * Provides access to the collection management services.
+     *
+     * @return a manager instance
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto collections() const -> collection_manager
+    {
+        return collection_manager{ core_, name_ };
     }
 
   private:

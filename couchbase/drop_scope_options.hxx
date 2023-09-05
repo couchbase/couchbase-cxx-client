@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,10 +17,25 @@
 
 #pragma once
 
-#include "collection_create.hxx"
-#include "collection_drop.hxx"
-#include "collection_update.hxx"
-#include "collections_manifest_get.hxx"
-#include "scope_create.hxx"
-#include "scope_drop.hxx"
-#include "scope_get_all.hxx"
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+
+namespace couchbase
+{
+struct drop_scope_options : public common_options<drop_scope_options> {
+  public:
+    struct built : public common_options<drop_scope_options>::built {
+    };
+
+    [[nodiscard]] auto build() const -> built
+    {
+        return { build_common_options() };
+    }
+
+  private:
+};
+
+using drop_scope_handler = std::function<void(couchbase::manager_error_context)>;
+} // namespace couchbase

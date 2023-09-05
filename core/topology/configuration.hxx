@@ -134,6 +134,11 @@ struct configuration {
         return bucket_capabilities.find(bucket_capability::replica_read) != bucket_capabilities.end();
     }
 
+    [[nodiscard]] bool supports_non_deduped_history() const
+    {
+        return bucket_capabilities.find(bucket_capability::non_deduped_history) != bucket_capabilities.end();
+    }
+
     [[nodiscard]] std::size_t index_for_this_node() const;
     [[nodiscard]] bool has_node(const std::string& network,
                                 service_type type,

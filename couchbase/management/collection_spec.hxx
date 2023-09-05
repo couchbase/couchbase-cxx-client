@@ -17,10 +17,13 @@
 
 #pragma once
 
-#include "collection_create.hxx"
-#include "collection_drop.hxx"
-#include "collection_update.hxx"
-#include "collections_manifest_get.hxx"
-#include "scope_create.hxx"
-#include "scope_drop.hxx"
-#include "scope_get_all.hxx"
+namespace couchbase::management::bucket
+{
+struct collection_spec {
+    std::string name;
+    std::string scope_name;
+    std::uint32_t max_expiry{};
+    std::optional<bool> history{};
+};
+
+} // namespace couchbase::management::bucket

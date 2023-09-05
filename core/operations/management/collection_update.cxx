@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-#include "collection_create.hxx"
+#include "collection_update.hxx"
 
 #include "core/utils/json.hxx"
 #include "core/utils/url_codec.hxx"
@@ -26,33 +26,31 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-collection_create_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+collection_update_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
-    encoded.method = "POST";
-    encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}/collections", bucket_name, scope_name);
+    encoded.method = "PATCH";
+    encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}/collections/{}", bucket_name, scope_name, collection_name);
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";
-    encoded.body = fmt::format("name={}", utils::string_codec::form_encode(collection_name));
-    if (max_expiry > 0) {
-        encoded.body.append(fmt::format("&maxTTL={}", max_expiry));
+    std::map<std::string, std::string> values{};
+    if (max_expiry.has_value()) {
+        values["maxTTL"] = std::to_string(max_expiry.value());
     }
     if (history.has_value()) {
-        encoded.body.append(fmt::format("&history={}", history.value()));
+        values["history"] = history.value() ? "true" : "false";
     }
+    encoded.body = utils::string_codec::v2::form_encode(values);
     return {};
 }
 
-collection_create_response
-collection_create_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+collection_update_response
+collection_update_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
 {
-    collection_create_response response{ std::move(ctx) };
+    collection_update_response response{ std::move(ctx) };
     if (!response.ctx.ec) {
         switch (encoded.status_code) {
             case 400: {
-                std::regex collection_exists("Collection with name .+ already exists");
-                if (std::regex_search(encoded.body.data(), collection_exists)) {
-                    response.ctx.ec = errc::management::collection_exists;
-                } else if (encoded.body.data().find("Not allowed on this version of cluster") != std::string::npos ||
-                           encoded.body.data().find("Bucket must have storage_mode=magma") != std::string::npos) {
+                if (encoded.body.data().find("Not allowed on this version of cluster") != std::string::npos ||
+                    encoded.body.data().find("Bucket must have storage_mode=magma") != std::string::npos) {
                     response.ctx.ec = errc::common::feature_not_available;
                 } else {
                     response.ctx.ec = errc::common::invalid_argument;
