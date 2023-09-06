@@ -65,3 +65,9 @@
  * Support for bucket no-deduplication feature in bucket and collection management
  */
 #define COUCHBASE_CXX_CLIENT_HAS_BUCKET_NO_DEDUP 1
+
+/**
+ * Collection query index management is available in the public API
+ * couchbase::collection::query_indexes() support
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_COLLECTION_QUERY_INDEX_MANAGEMENT 1
