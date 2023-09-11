@@ -336,6 +336,13 @@ class cluster : public std::enable_shared_from_this<cluster>
     template<typename Handler>
     void do_open(Handler&& handler)
     {
+        // Warn users if idle_http_connection_timeout is too close to server idle timeouts
+        if (origin_.options().idle_http_connection_timeout > std::chrono::milliseconds(4'500)) {
+            CB_LOG_INFO("[{}]: The SDK may produce trivial warnings due to the idle HTTP connection timeout being set above the idle"
+                        "timeout of various services",
+                        id_);
+        }
+
         // Warn users if they attempt to use Capella without TLS being enabled.
         bool has_capella_host = false;
         {
