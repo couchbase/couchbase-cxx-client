@@ -161,6 +161,9 @@ bucket_create_request::make_response(error_context::http&& ctx, const encoded_re
                 if (errors != nullptr) {
                     std::vector<std::string> error_list{};
                     for (const auto& [code, message] : errors->get_object()) {
+                        if (message.get_string().find("Bucket with given name already exists") != std::string::npos) {
+                            response.ctx.ec = errc::management::bucket_exists;
+                        }
                         error_list.emplace_back(message.get_string());
                     }
                     if (!error_list.empty()) {
