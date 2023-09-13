@@ -109,6 +109,14 @@ TEST_CASE("integration: bucket management", "[integration]")
                 REQUIRE(bucket_settings.compression_mode == resp.bucket.compression_mode);
                 REQUIRE(bucket_settings.replica_indexes == resp.bucket.replica_indexes);
             }
+
+            {
+                couchbase::core::operations::management::bucket_create_request req;
+                req.bucket = bucket_settings;
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE(resp.ctx.ec == couchbase::errc::management::bucket_exists);
+            }
+
             std::uint64_t old_quota_mb{ 0 };
             {
                 couchbase::core::operations::management::bucket_get_all_request req{};
