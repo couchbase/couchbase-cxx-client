@@ -168,15 +168,9 @@ bucket_create_request::make_response(error_context::http&& ctx, const encoded_re
                 auto* errors = payload.find("errors");
                 if (errors != nullptr) {
                     std::vector<std::string> error_list{};
-                    bool error_overridden = false;
                     for (const auto& [code, message] : errors->get_object()) {
                         if (message.get_string().find("Bucket with given name already exists") != std::string::npos) {
                             response.ctx.ec = errc::management::bucket_exists;
-                            error_overridden = true;
-                        }
-                        if (message.get_string().find("History Retention can only used with Magma") != std::string::npos &&
-                            !error_overridden) {
-                            response.ctx.ec = errc::common::feature_not_available;
                         }
                         error_list.emplace_back(message.get_string());
                     }
