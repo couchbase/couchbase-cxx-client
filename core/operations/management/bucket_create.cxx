@@ -166,8 +166,8 @@ bucket_create_request::make_response(error_context::http&& ctx, const encoded_re
                             response.ctx.ec = errc::management::bucket_exists;
                             error_overridden = true;
                         }
-                        if (message.get_string().find("History Retention can only used with Magma") != std::string::npos
-                            && !error_overridden) {
+                        if (message.get_string().find("History Retention can only used with Magma") != std::string::npos &&
+                            !error_overridden) {
                             response.ctx.ec = errc::common::feature_not_available;
                         }
                         error_list.emplace_back(message.get_string());
