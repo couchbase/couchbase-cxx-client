@@ -120,9 +120,6 @@ bucket_update_request::make_response(error_context::http&& ctx, const encoded_re
                 if (errors != nullptr) {
                     std::vector<std::string> error_list{};
                     for (const auto& [field, message] : errors->get_object()) {
-                        if (message.get_string().find("History Retention can only used with Magma") != std::string::npos) {
-                            response.ctx.ec = errc::common::feature_not_available;
-                        }
                         error_list.emplace_back(message.get_string());
                     }
                     if (!error_list.empty()) {
