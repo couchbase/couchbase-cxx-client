@@ -58,7 +58,10 @@ collection_update_request::make_response(error_context::http&& ctx, const encode
             } break;
             case 404: {
                 std::regex scope_not_found("Scope with name .+ is not found");
-                if (std::regex_search(encoded.body.data(), scope_not_found)) {
+                std::regex collection_not_found("Collection with name .+ is not found");
+                if (std::regex_search(encoded.body.data(), collection_not_found)) {
+                    response.ctx.ec = errc::common::collection_not_found;
+                } else if (std::regex_search(encoded.body.data(), scope_not_found)) {
                     response.ctx.ec = errc::common::scope_not_found;
                 } else {
                     response.ctx.ec = errc::common::bucket_not_found;
