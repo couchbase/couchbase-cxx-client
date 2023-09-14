@@ -33,23 +33,34 @@ bucket_update_request::encode_to(encoded_request_type& encoded, http_context& /*
     encoded.path = fmt::format("/pools/default/buckets/{}", bucket.name);
 
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";
-    encoded.body.append(fmt::format("&ramQuotaMB={}", bucket.ram_quota_mb));
-    encoded.body.append(fmt::format("&replicaNumber={}", bucket.num_replicas));
-    if (bucket.max_expiry > 0) {
-        encoded.body.append(fmt::format("&maxTTL={}", bucket.max_expiry));
+
+    if (bucket.ram_quota_mb > 0) {
+        encoded.body.append(fmt::format("&ramQuotaMB={}", bucket.ram_quota_mb));
+    }
+    if (bucket.num_replicas.has_value()) {
+        encoded.body.append(fmt::format("&replicaNumber={}", bucket.num_replicas.value()));
+    }
+
+    if (bucket.max_expiry.has_value()) {
+        encoded.body.append(fmt::format("&maxTTL={}", bucket.max_expiry.value()));
     }
     if (bucket.history_retention_collection_default.has_value()) {
         encoded.body.append(
           fmt::format("&historyRetentionCollectionDefault={}", bucket.history_retention_collection_default.value() ? "true" : "false"));
     }
-    if (bucket.history_retention_bytes > 0) {
-        encoded.body.append(fmt::format("&historyRetentionBytes={}", bucket.history_retention_bytes));
+    if (bucket.history_retention_bytes.has_value()) {
+        encoded.body.append(fmt::format("&historyRetentionBytes={}", bucket.history_retention_bytes.value()));
     }
-    if (bucket.history_retention_duration > 0) {
-        encoded.body.append(fmt::format("&historyRetentionSeconds={}", bucket.history_retention_duration));
+    if (bucket.history_retention_duration.has_value()) {
+        encoded.body.append(fmt::format("&historyRetentionSeconds={}", bucket.history_retention_duration.value()));
     }
-    encoded.body.append(fmt::format("&replicaIndex={}", bucket.replica_indexes ? "1" : "0"));
-    encoded.body.append(fmt::format("&flushEnabled={}", bucket.flush_enabled ? "1" : "0"));
+    if (bucket.replica_indexes.has_value()) {
+        encoded.body.append(fmt::format("&replicaIndex={}", bucket.replica_indexes.value() ? "1" : "0"));
+    }
+    if (bucket.flush_enabled.has_value()) {
+        encoded.body.append(fmt::format("&flushEnabled={}", bucket.flush_enabled.value() ? "1" : "0"));
+    }
+
     switch (bucket.eviction_policy) {
         case couchbase::core::management::cluster::bucket_eviction_policy::full:
             encoded.body.append("&evictionPolicy=fullEviction");
@@ -120,6 +131,9 @@ bucket_update_request::make_response(error_context::http&& ctx, const encoded_re
                 if (errors != nullptr) {
                     std::vector<std::string> error_list{};
                     for (const auto& [field, message] : errors->get_object()) {
+                        if (message.get_string().find("History Retention can only used with Magma") != std::string::npos) {
+                            response.ctx.ec = errc::common::feature_not_available;
+                        }
                         error_list.emplace_back(message.get_string());
                     }
                     if (!error_list.empty()) {

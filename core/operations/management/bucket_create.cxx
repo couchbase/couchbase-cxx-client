@@ -48,27 +48,35 @@ bucket_create_request::encode_to(encoded_request_type& encoded, http_context& /*
         case couchbase::core::management::cluster::bucket_type::unknown:
             break;
     }
-    encoded.body.append(fmt::format("&ramQuotaMB={}", bucket.ram_quota_mb));
-    if (bucket.bucket_type != couchbase::core::management::cluster::bucket_type::memcached) {
-        encoded.body.append(fmt::format("&replicaNumber={}", bucket.num_replicas));
+    if (bucket.ram_quota_mb == 0) {
+        encoded.body.append(fmt::format("&ramQuotaMB={}", 100)); // If not explicitly set, set to prior default value of 100
+    } else {
+        encoded.body.append(fmt::format("&ramQuotaMB={}", bucket.ram_quota_mb));
     }
-    if (bucket.max_expiry > 0) {
-        encoded.body.append(fmt::format("&maxTTL={}", bucket.max_expiry));
+
+    if (bucket.bucket_type != couchbase::core::management::cluster::bucket_type::memcached && bucket.num_replicas.has_value()) {
+        encoded.body.append(fmt::format("&replicaNumber={}", bucket.num_replicas.value()));
     }
-    if (bucket.bucket_type != couchbase::core::management::cluster::bucket_type::ephemeral) {
-        encoded.body.append(fmt::format("&replicaIndex={}", bucket.replica_indexes ? "1" : "0"));
+    if (bucket.max_expiry.has_value()) {
+        encoded.body.append(fmt::format("&maxTTL={}", bucket.max_expiry.value()));
+    }
+    if (bucket.bucket_type != couchbase::core::management::cluster::bucket_type::ephemeral && bucket.replica_indexes.has_value()) {
+        encoded.body.append(fmt::format("&replicaIndex={}", bucket.replica_indexes.value() ? "1" : "0"));
     }
     if (bucket.history_retention_collection_default.has_value()) {
         encoded.body.append(
           fmt::format("&historyRetentionCollectionDefault={}", bucket.history_retention_collection_default.value() ? "true" : "false"));
     }
-    if (bucket.history_retention_bytes > 0) {
-        encoded.body.append(fmt::format("&historyRetentionBytes={}", bucket.history_retention_bytes));
+    if (bucket.history_retention_bytes.has_value()) {
+        encoded.body.append(fmt::format("&historyRetentionBytes={}", bucket.history_retention_bytes.value()));
     }
-    if (bucket.history_retention_duration > 0) {
-        encoded.body.append(fmt::format("&historyRetentionSeconds={}", bucket.history_retention_duration));
+    if (bucket.history_retention_duration.has_value()) {
+        encoded.body.append(fmt::format("&historyRetentionSeconds={}", bucket.history_retention_duration.value()));
     }
-    encoded.body.append(fmt::format("&flushEnabled={}", bucket.flush_enabled ? "1" : "0"));
+    if (bucket.flush_enabled.has_value()) {
+        encoded.body.append(fmt::format("&flushEnabled={}", bucket.flush_enabled.value() ? "1" : "0"));
+    }
+
     switch (bucket.eviction_policy) {
         case couchbase::core::management::cluster::bucket_eviction_policy::full:
             encoded.body.append("&evictionPolicy=fullEviction");
@@ -111,7 +119,7 @@ bucket_create_request::encode_to(encoded_request_type& encoded, http_context& /*
         case couchbase::core::management::cluster::bucket_conflict_resolution::unknown:
             break;
     }
-    if (bucket.minimum_durability_level) {
+    if (bucket.minimum_durability_level.has_value()) {
         switch (bucket.minimum_durability_level.value()) {
             case durability_level::none:
                 encoded.body.append("&durabilityMinLevel=none");
@@ -160,9 +168,15 @@ bucket_create_request::make_response(error_context::http&& ctx, const encoded_re
                 auto* errors = payload.find("errors");
                 if (errors != nullptr) {
                     std::vector<std::string> error_list{};
+                    bool error_overridden = false;
                     for (const auto& [code, message] : errors->get_object()) {
                         if (message.get_string().find("Bucket with given name already exists") != std::string::npos) {
                             response.ctx.ec = errc::management::bucket_exists;
+                            error_overridden = true;
+                        }
+                        if (message.get_string().find("History Retention can only used with Magma") != std::string::npos &&
+                            !error_overridden) {
+                            response.ctx.ec = errc::common::feature_not_available;
                         }
                         error_list.emplace_back(message.get_string());
                     }
