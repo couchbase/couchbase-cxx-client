@@ -33,20 +33,20 @@ struct traits<couchbase::core::management::cluster::bucket_settings> {
         result.uuid = v.at("uuid").get_string();
         const static std::uint64_t megabyte = 1024LLU * 1024LLU;
         result.ram_quota_mb = v.at("quota").at("rawRAM").get_unsigned() / megabyte;
-        result.num_replicas = v.at("replicaNumber").template as<std::uint32_t>();
+        result.num_replicas = v.at("replicaNumber").template as<std::optional<std::uint32_t>>();
 
         if (auto* max_ttl = v.find("maxTTL"); max_ttl != nullptr) {
-            result.max_expiry = max_ttl->template as<std::uint32_t>();
+            result.max_expiry = max_ttl->template as<std::optional<std::uint32_t>>();
         }
 
         if (auto* history_retention_default = v.find("historyRetentionCollectionDefault"); history_retention_default != nullptr) {
             result.history_retention_collection_default = history_retention_default->template as<std::optional<bool>>();
         }
         if (auto* history_retention_bytes = v.find("historyRetentionBytes"); history_retention_bytes != nullptr) {
-            result.history_retention_bytes = history_retention_bytes->template as<std::uint32_t>();
+            result.history_retention_bytes = history_retention_bytes->template as<std::optional<std::uint32_t>>();
         }
         if (auto* history_retention_duration = v.find("historyRetentionSeconds"); history_retention_duration != nullptr) {
-            result.history_retention_duration = history_retention_duration->template as<std::uint32_t>();
+            result.history_retention_duration = history_retention_duration->template as<std::optional<std::uint32_t>>();
         }
 
         if (auto& str = v.at("bucketType").get_string(); str == "couchbase" || str == "membase") {
