@@ -98,7 +98,7 @@ struct bucket_settings {
 
     std::string name;
     cluster::bucket_type bucket_type{ cluster::bucket_type::unknown };
-    std::uint64_t ram_quota_mb{ 100 };
+    std::uint64_t ram_quota_mb{ 0 };
     std::optional<std::uint32_t> max_expiry{};
     bucket_compression compression_mode{ bucket_compression::unknown };
     std::optional<couchbase::durability_level> minimum_durability_level{};
