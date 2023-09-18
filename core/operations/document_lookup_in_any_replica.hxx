@@ -133,10 +133,6 @@ struct lookup_in_any_replica_request {
                                             lookup_in_entry.exists = field.exists;
                                             lookup_in_entry.original_index = field.original_index;
                                             lookup_in_entry.opcode = field.opcode;
-                                            if (lookup_in_entry.opcode == protocol::subdoc_opcode::exists &&
-                                                lookup_in_entry.ec == errc::key_value::path_not_found) {
-                                                lookup_in_entry.ec.clear();
-                                            }
                                             res.fields.emplace_back(lookup_in_entry);
                                         }
                                         return local_handler(res);
@@ -177,10 +173,6 @@ struct lookup_in_any_replica_request {
                           lookup_in_entry.exists = field.exists;
                           lookup_in_entry.original_index = field.original_index;
                           lookup_in_entry.opcode = field.opcode;
-                          if (lookup_in_entry.opcode == protocol::subdoc_opcode::exists &&
-                              lookup_in_entry.ec == errc::key_value::path_not_found) {
-                              lookup_in_entry.ec.clear();
-                          }
                           res.fields.emplace_back(lookup_in_entry);
                       }
                       return local_handler(res);

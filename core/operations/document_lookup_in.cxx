@@ -82,7 +82,11 @@ lookup_in_request::make_response(key_value_error_context&& ctx, const encoded_re
             }
             fields[i].exists =
               res_entry.status == key_value_status_code::success || res_entry.status == key_value_status_code::subdoc_success_deleted;
-            fields[i].value = utils::to_binary(res_entry.value);
+            if (fields[i].opcode == protocol::subdoc_opcode::exists && !fields[i].ec) {
+                fields[i].value = utils::json::generate_binary(fields[i].exists);
+            } else {
+                fields[i].value = utils::to_binary(res_entry.value);
+            }
         }
         if (!ec) {
             cas = encoded.cas();
