@@ -52,14 +52,26 @@ map_bucket_settings(const couchbase::core::management::cluster::bucket_settings&
     couchbase::management::cluster::bucket_settings bucket_settings{};
     bucket_settings.name = bucket.name;
     bucket_settings.ram_quota_mb = bucket.ram_quota_mb;
-    bucket_settings.max_expiry = bucket.max_expiry;
     bucket_settings.minimum_durability_level = bucket.minimum_durability_level;
-    bucket_settings.num_replicas = bucket.num_replicas;
-    bucket_settings.replica_indexes = bucket.replica_indexes;
-    bucket_settings.flush_enabled = bucket.flush_enabled;
     bucket_settings.history_retention_collection_default = bucket.history_retention_collection_default;
-    bucket_settings.history_retention_bytes = bucket.history_retention_bytes;
-    bucket_settings.history_retention_duration = bucket.history_retention_duration;
+    if (bucket.max_expiry.has_value()) {
+        bucket_settings.max_expiry = bucket.max_expiry.value();
+    }
+    if (bucket.num_replicas.has_value()) {
+        bucket_settings.num_replicas = bucket.num_replicas.value();
+    }
+    if (bucket.replica_indexes.has_value()) {
+        bucket_settings.replica_indexes = bucket.replica_indexes.value();
+    }
+    if (bucket.flush_enabled.has_value()) {
+        bucket_settings.flush_enabled = bucket.flush_enabled.value();
+    }
+    if (bucket.history_retention_bytes.has_value()) {
+        bucket_settings.history_retention_bytes = bucket.history_retention_bytes.value();
+    }
+    if (bucket.history_retention_duration.has_value()) {
+        bucket_settings.history_retention_duration = bucket.history_retention_duration.value();
+    }
     switch (bucket.conflict_resolution_type) {
         case core::management::cluster::bucket_conflict_resolution::unknown:
             bucket_settings.conflict_resolution_type = management::cluster::bucket_conflict_resolution::unknown;
