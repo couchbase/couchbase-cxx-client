@@ -87,6 +87,7 @@ query_index_create_request::make_response(error_context::http&& ctx, const encod
             bool bucket_not_found = false;
             bool collection_not_found = false;
             bool scope_not_found = false;
+            bool authentication_failure = false;
             std::optional<std::error_code> common_ec{};
             for (const auto& entry : payload.at("errors").get_array()) {
                 query_index_create_response::query_problem error;
@@ -117,6 +118,11 @@ query_index_create_request::make_response(error_context::http&& ctx, const encod
                     case 4300: /* IKey: "plan.new_index_already_exists" */
                         index_already_exists = true;
                         break;
+                    case 13014:
+                        if (error.message.find("User does not have credentials") != std::string::npos) {
+                            authentication_failure = true;
+                        }
+                        break;
 
                     default:
                         common_ec = management::extract_common_query_error_code(error.code, error.message);
@@ -134,6 +140,8 @@ query_index_create_request::make_response(error_context::http&& ctx, const encod
                 response.ctx.ec = errc::common::collection_not_found;
             } else if (scope_not_found) {
                 response.ctx.ec = errc::common::scope_not_found;
+            } else if (authentication_failure) {
+                response.ctx.ec = errc::common::authentication_failure;
             } else if (common_ec) {
                 response.ctx.ec = common_ec.value();
             } else if (!response.errors.empty()) {

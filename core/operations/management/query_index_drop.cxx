@@ -70,6 +70,7 @@ query_index_drop_request::make_response(error_context::http&& ctx, const encoded
             bool index_not_found = false;
             bool collection_not_found = false;
             bool scope_not_found = false;
+            bool authentication_failure = false;
             std::optional<std::error_code> common_ec{};
             for (const auto& entry : payload.at("errors").get_array()) {
                 query_index_drop_response::query_problem error;
@@ -99,6 +100,12 @@ query_index_drop_request::make_response(error_context::http&& ctx, const encoded
                         index_not_found = true;
                         break;
 
+                    case 13014:
+                        if (error.message.find("User does not have credentials") != std::string::npos) {
+                            authentication_failure = true;
+                        }
+                        break;
+
                     default:
                         common_ec = management::extract_common_query_error_code(error.code, error.message);
                         break;
@@ -115,6 +122,8 @@ query_index_drop_request::make_response(error_context::http&& ctx, const encoded
                 response.ctx.ec = errc::common::collection_not_found;
             } else if (scope_not_found) {
                 response.ctx.ec = errc::common::scope_not_found;
+            } else if (authentication_failure) {
+                response.ctx.ec = errc::common::authentication_failure;
             } else if (common_ec) {
                 response.ctx.ec = common_ec.value();
             } else if (!response.errors.empty()) {
