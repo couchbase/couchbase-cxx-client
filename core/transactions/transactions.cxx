@@ -93,7 +93,7 @@ wrap_run(transactions& txns, const couchbase::transactions::transaction_options&
         };
         try {
             auto ctx = overall.current_attempt_context();
-            fn(*ctx);
+            fn(ctx);
         } catch (...) {
             overall.handle_error(std::current_exception(), finalize_handler);
             auto retval = f.get();

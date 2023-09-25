@@ -144,11 +144,11 @@ class GameServer
         auto barrier = std::make_shared<std::promise<std::pair<couchbase::transaction_error_context, transaction_result>>>();
         auto f = barrier->get_future();
         transactions_->run(
-          [this, damage, collection, player_id, monster_id, &exists](async_attempt_context& ctx) {
-              ctx.get(
+          [this, damage, collection, player_id, monster_id, &exists](std::shared_ptr<async_attempt_context> ctx) {
+              ctx->get(
                 collection,
                 monster_id,
-                [&ctx, this, collection, monster_id, player_id, &exists, damage = std::move(damage)](auto e, auto monster) {
+                [ctx, this, collection, monster_id, player_id, &exists, damage = std::move(damage)](auto e, auto monster) {
                     if (e.ec() == couchbase::errc::transaction_op::document_not_found_exception) {
                         std::cout << "monster no longer exists" << std::endl;
                         exists = false;
@@ -163,13 +163,13 @@ class GameServer
                     if (monster_new_hitpoints <= 0) {
                         // Monster is killed. The remove is just for demoing, and a more realistic examples would set a "dead" flag or
                         // similar.
-                        ctx.remove(monster, [](auto e) {
+                        ctx->remove(monster, [](auto e) {
                             if (e.ec()) {
                                 std::cout << "error removing monster: " << e.ec().message() << std::endl;
                             }
                         });
                         // also, in parallel, get/update player
-                        ctx.get(collection, player_id, [&ctx, player_id, monster_id, monster_body, this](auto e, auto player) {
+                        ctx->get(collection, player_id, [&ctx, player_id, monster_id, monster_body, this](auto e, auto player) {
                             if (e.ec()) {
                                 std::cout << "error getting player: " << e.ec().message() << std::endl;
                                 return;
@@ -188,7 +188,7 @@ class GameServer
                             Player player_new_body = player_body;
                             player_new_body.experience = player_new_experience;
                             player_new_body.level = player_new_level;
-                            ctx.replace(player, player_new_body, [](auto e, auto) {
+                            ctx->replace(player, player_new_body, [](auto e, auto) {
                                 if (e.ec()) {
                                     std::cout << "Error updating player :" << e.ec().message() << std::endl;
                                 }
@@ -199,7 +199,7 @@ class GameServer
 
                         Monster monster_new_body = monster_body;
                         monster_new_body.hitpoints = monster_new_hitpoints;
-                        ctx.replace(monster, monster_new_body, [monster_new_body](auto e, auto res) {
+                        ctx->replace(monster, monster_new_body, [monster_new_body](auto e, auto res) {
                             if (e.ec()) {
                                 std::cout << "Error updating monster :" << e.ec().message() << std::endl;
                             } else {

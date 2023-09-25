@@ -141,22 +141,22 @@ class GameServer
                              const std::string& monster_id,
                              std::atomic<bool>& exists)
     {
-        auto [err, result] = transactions_->run([&](attempt_context& ctx) {
-            auto [e, monster] = ctx.get(collection, monster_id);
+        auto [err, result] = transactions_->run([&](std::shared_ptr<attempt_context> ctx) {
+            auto [e, monster] = ctx->get(collection, monster_id);
             if (e.ec() == couchbase::errc::transaction_op::document_not_found_exception) {
-                std::cout << "monster no longer exists" << std::endl;
+                std::cout << "monster no longer exists" << '\n';
                 exists = false;
                 return;
             }
             const Monster& monster_body = monster.content<Monster>();
 
-            int monster_hitpoints = monster_body.hitpoints;
-            int monster_new_hitpoints = monster_hitpoints - damage_;
+            const int monster_hitpoints = monster_body.hitpoints;
+            const int monster_new_hitpoints = monster_hitpoints - damage_;
 
             std::cout << "Monster " << monster_id << " had " << monster_hitpoints << " hitpoints, took " << damage_ << " damage, now has "
-                      << monster_new_hitpoints << " hitpoints" << std::endl;
+                      << monster_new_hitpoints << " hitpoints" << '\n';
 
-            auto [e2, player] = ctx.get(collection, player_id);
+            auto [e2, player] = ctx->get(collection, player_id);
             if (e2.ec()) {
                 // rollback
                 throw std::runtime_error(fmt::format("error getting player {}", player_id));
@@ -164,33 +164,33 @@ class GameServer
 
             if (monster_new_hitpoints <= 0) {
                 // Monster is killed. The remove is just for demoing, and a more realistic examples would set a "dead" flag or similar.
-                ctx.remove(monster);
+                ctx->remove(monster);
 
                 const Player& player_body = player.content<Player>();
 
                 // the player earns experience for killing the monster
-                int experience_for_killing_monster = monster_body.experience_when_killed;
-                int player_experience = player_body.experience;
-                int player_new_experience = player_experience + experience_for_killing_monster;
-                int player_new_level = calculate_level_for_experience(player_new_experience);
+                const int experience_for_killing_monster = monster_body.experience_when_killed;
+                const int player_experience = player_body.experience;
+                const int player_new_experience = player_experience + experience_for_killing_monster;
+                const int player_new_level = calculate_level_for_experience(player_new_experience);
 
                 std::cout << "Monster " << monster_id << " was killed. Player " << player_id << " gains " << experience_for_killing_monster
-                          << " experience, now has level " << player_new_level << std::endl;
+                          << " experience, now has level " << player_new_level << '\n';
 
                 Player player_new_body = player_body;
                 player_new_body.experience = player_new_experience;
                 player_new_body.level = player_new_level;
-                ctx.replace(player, player_new_body);
+                ctx->replace(player, player_new_body);
             } else {
-                std::cout << "Monster " << monster_id << " is damaged but alive" << std::endl;
+                std::cout << "Monster " << monster_id << " is damaged but alive" << '\n';
 
                 Monster monster_new_body = monster_body;
                 monster_new_body.hitpoints = monster_new_hitpoints;
-                ctx.replace(monster, monster_new_body);
+                ctx->replace(monster, monster_new_body);
             }
         });
         if (err.ec()) {
-            std::cout << "txn error during player_hits_monster: " << err.ec().message() << ", " << err.cause().message() << std::endl;
+            std::cout << "txn error during player_hits_monster: " << err.ec().message() << ", " << err.cause().message() << '\n';
         }
     }
 };

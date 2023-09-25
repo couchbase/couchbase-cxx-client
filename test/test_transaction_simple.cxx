@@ -66,8 +66,8 @@ TEST_CASE("transactions: arbitrary runtime error", "[transactions]")
     REQUIRE_THROWS_AS(
       [](auto& txn, auto& id) {
           try {
-              txn.run([&id](attempt_context& ctx) {
-                  ctx.get(id);
+              txn.run([&id](std::shared_ptr<attempt_context> ctx) {
+                  ctx->get(id);
                   throw std::runtime_error("Yo");
               });
           } catch (const transaction_exception& e) {
@@ -92,8 +92,8 @@ TEST_CASE("transactions: arbitrary exception", "[transactions]")
     REQUIRE_THROWS_AS(
       [](auto& txn, auto& id) {
           try {
-              txn.run([&id](attempt_context& ctx) {
-                  ctx.insert(id, content);
+              txn.run([&id](std::shared_ptr<attempt_context> ctx) {
+                  ctx->insert(id, content);
                   throw 3;
               });
           } catch (const transaction_exception& e) {
@@ -120,11 +120,11 @@ TEST_CASE("transactions: can get replica", "[transactions]")
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
-    txn.run([id](attempt_context& ctx) {
-        auto doc = ctx.get(id);
+    txn.run([id](std::shared_ptr<attempt_context> ctx) {
+        auto doc = ctx->get(id);
         auto new_content = doc.content<tao::json::value>();
         new_content["another one"] = 1;
-        ctx.replace(doc, new_content);
+        ctx->replace(doc, new_content);
     });
     // now add to the initial content, and compare
     const tao::json::value expected{
@@ -154,11 +154,11 @@ TEST_CASE("transactions: can use custom metadata collections per transactions", 
     }
     couchbase::transactions::transaction_options cfg;
     cfg.metadata_collection(couchbase::transactions::transaction_keyspace("secBucket"));
-    txn.run(cfg, [id](attempt_context& ctx) {
-        auto doc = ctx.get(id);
+    txn.run([id](std::shared_ptr<attempt_context> ctx) {
+        auto doc = ctx->get(id);
         auto new_content = doc.content<tao::json::value>();
         new_content["another one"] = 1;
-        ctx.replace(doc, new_content);
+        ctx->replace(doc, new_content);
     });
 
     const tao::json::value expected{
@@ -187,11 +187,11 @@ TEST_CASE("transactions: can use custom metadata collections", "[transactions]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
-    txn.run([&](attempt_context& ctx) {
-        auto doc = ctx.get(id);
+    txn.run([&](std::shared_ptr<attempt_context> ctx) {
+        auto doc = ctx->get(id);
         auto new_content = doc.content<tao::json::value>();
         new_content["another one"] = 1;
-        ctx.replace(doc, new_content);
+        ctx->replace(doc, new_content);
     });
     // now add to the original content, and compare
     const tao::json::value expected{
@@ -239,11 +239,11 @@ TEST_CASE("transactions: non existent scope in custom metadata collections", "[t
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
     try {
-        txn.run([&](attempt_context& ctx) {
-            auto doc = ctx.get(id);
+        txn.run([&](std::shared_ptr<attempt_context> ctx) {
+            auto doc = ctx->get(id);
             auto new_content = doc.content<tao::json::value>();
             new_content["another one"] = 1;
-            ctx.replace(doc, new_content);
+            ctx->replace(doc, new_content);
         });
         FAIL("expected txn to timeout");
     } catch (const transaction_exception& e) {
@@ -277,11 +277,11 @@ TEST_CASE("transactions: non existent collection in custom metadata collections"
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
     try {
-        txn.run([&](attempt_context& ctx) {
-            auto doc = ctx.get(id);
+        txn.run([&](std::shared_ptr<attempt_context> ctx) {
+            auto doc = ctx->get(id);
             auto new_content = doc.content<tao::json::value>();
             new_content["another one"] = 1;
-            ctx.replace(doc, new_content);
+            ctx->replace(doc, new_content);
         });
         FAIL("expected txn to timeout");
     } catch (const transaction_exception& e) {
@@ -307,9 +307,9 @@ TEST_CASE("transactions: raw std::strings become json strings", "[transactions]"
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
-    txn.run([id, new_content](attempt_context& ctx) {
-        auto doc = ctx.get(id);
-        ctx.replace(doc, new_content);
+    txn.run([id, new_content](std::shared_ptr<attempt_context> ctx) {
+        auto doc = ctx->get(id);
+        ctx->replace(doc, new_content);
     });
     {
         couchbase::core::operations::get_request req{ id };
@@ -328,9 +328,9 @@ TEST_CASE("transactions: quoted std::strings end up with 2 quotes (that's bad)",
     std::string quoted_json_string = "\"imaquotedjsonstring\"";
     // insert the doc
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
-    txn.run([id, quoted_json_string](attempt_context& ctx) {
-        ctx.insert(id, quoted_json_string);
-        auto doc = ctx.get(id);
+    txn.run([id, quoted_json_string](std::shared_ptr<attempt_context> ctx) {
+        ctx->insert(id, quoted_json_string);
+        auto doc = ctx->get(id);
     });
     {
         couchbase::core::operations::get_request req{ id };
@@ -347,10 +347,10 @@ TEST_CASE("transactions: query error can be handled", "[transactions]")
     test::utils::integration_test_guard integration;
     auto cluster = integration.cluster;
     transactions txn(cluster, get_conf());
-    txn.run([](attempt_context& ctx) {
+    txn.run([](std::shared_ptr<attempt_context> ctx) {
         // the EXPECT_THROW will eat the exception, as long as there is one of the correct type.
-        REQUIRE_THROWS_AS(ctx.query("wont parse"), query_parsing_failure);
-        auto res = ctx.query("Select 'Yo' as greeting");
+        REQUIRE_THROWS_AS(ctx->query("wont parse"), query_parsing_failure);
+        auto res = ctx->query("Select 'Yo' as greeting");
         REQUIRE(1 == res.rows.size());
     });
 }
@@ -362,9 +362,9 @@ TEST_CASE("transactions: unhandled query error fails transaction", "[transaction
     transactions txn(cluster, get_conf());
     REQUIRE_THROWS_AS(
       [&](auto& txn) {
-          txn.run([&](attempt_context& ctx) {
-              ctx.query("wont parse");
-              ctx.query("Select * from `" + integration.ctx.bucket + "` limit 1");
+          txn.run([&](std::shared_ptr<attempt_context> ctx) {
+              ctx->query("wont parse");
+              ctx->query("Select * from `" + integration.ctx.bucket + "` limit 1");
           });
       }(txn),
       transaction_exception);
@@ -384,9 +384,9 @@ TEST_CASE("transactions: query mode get optional", "[transactions]")
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
     auto query = fmt::format("SELECT * FROM `{}` USE KEYS '{}'", id.bucket(), id.key());
-    txn.run([&](attempt_context& ctx) {
-        ctx.query(query);
-        auto doc = ctx.get_optional(id);
+    txn.run([&](std::shared_ptr<attempt_context> ctx) {
+        ctx->query(query);
+        auto doc = ctx->get_optional(id);
         REQUIRE(doc);
     });
 }
@@ -407,9 +407,9 @@ TEST_CASE("transactions: can get replace objects", "[transactions]")
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
-    txn.run([id, o2](attempt_context& ctx) {
-        auto doc = ctx.get(id);
-        ctx.replace(doc, o2);
+    txn.run([id, o2](std::shared_ptr<attempt_context> ctx) {
+        auto doc = ctx->get(id);
+        ctx->replace(doc, o2);
     });
     {
         couchbase::core::operations::get_request req{ id };
@@ -437,9 +437,9 @@ TEST_CASE("transactions: can get replace mixed object strings", "[transactions]"
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
-    txn.run([id, v2](attempt_context& ctx) {
-        auto doc = ctx.get(id);
-        ctx.replace(doc, couchbase::core::utils::json::generate_binary(v2));
+    txn.run([id, v2](std::shared_ptr<attempt_context> ctx) {
+        auto doc = ctx->get(id);
+        ctx->replace(doc, couchbase::core::utils::json::generate_binary(v2));
     });
     {
         couchbase::core::operations::get_request req{ id };
@@ -461,9 +461,9 @@ TEST_CASE("transactions: can rollback insert", "[transactions]")
 
     REQUIRE_THROWS_AS(
       [](auto& txn, auto id) {
-          txn.run([id](attempt_context& ctx) {
+          txn.run([id](std::shared_ptr<attempt_context> ctx) {
               SimpleObject o{ "someone", 100 };
-              ctx.insert(id, o);
+              ctx->insert(id, o);
               throw 3; // some arbitrary exception...
           });
       }(txn, id),
@@ -492,9 +492,9 @@ TEST_CASE("transactions: can rollback remove", "[transactions]")
 
     REQUIRE_THROWS_AS(
       [](auto& txn, auto id) {
-          txn.run([id](attempt_context& ctx) {
-              auto res = ctx.get(id);
-              ctx.remove(res);
+          txn.run([id](std::shared_ptr<attempt_context> ctx) {
+              auto res = ctx->get(id);
+              ctx->remove(res);
               throw 3; // just throw some arbitrary exception to get rollback
           });
       }(txn, id),
@@ -522,12 +522,12 @@ TEST_CASE("transactions: can rollback replace", "[transactions]")
 
     REQUIRE_THROWS_AS(
       [](auto& txn, auto id) {
-          txn.run([id](attempt_context& ctx) {
-              auto res = ctx.get(id);
+          txn.run([id](std::shared_ptr<attempt_context> ctx) {
+              auto res = ctx->get(id);
               tao::json::value new_content{
                   { "some number", 100 },
               };
-              ctx.replace(res, new_content);
+              ctx->replace(res, new_content);
               throw 3; // just throw some arbitrary exception to get rollback
           });
       }(txn, id),
@@ -556,8 +556,8 @@ TEST_CASE("transactions: can have trivial query in transaction", "[transactions]
 
     std::ostringstream stream;
     stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
-    txn.run([statement = stream.str()](attempt_context& ctx) {
-        auto payload = ctx.query(statement);
+    txn.run([statement = stream.str()](std::shared_ptr<attempt_context> ctx) {
+        auto payload = ctx->query(statement);
         REQUIRE(1 == payload.rows.size());
         REQUIRE(content == tao::json::from_string(payload.rows.front())["default"]);
     });
@@ -580,7 +580,7 @@ TEST_CASE("transactions: can modify doc in query", "[transactions]")
     std::ostringstream stream;
     stream << "UPDATE `" << id.bucket() << "` USE KEYS '" << id.key() << "' SET `some_number` = 10";
 
-    txn.run([statement = stream.str()](attempt_context& ctx) { ctx.query(statement); });
+    txn.run([statement = stream.str()](std::shared_ptr<attempt_context> ctx) { ctx->query(statement); });
 
     {
         couchbase::core::operations::get_request req{ id };
@@ -610,8 +610,8 @@ TEST_CASE("transactions: can rollback", "[transactions]")
 
     REQUIRE_THROWS_AS(
       [](auto& txn, std::string statement) {
-          txn.run([&](attempt_context& ctx) {
-              auto payload = ctx.query(statement);
+          txn.run([&](std::shared_ptr<attempt_context> ctx) {
+              auto payload = ctx->query(statement);
               throw 3;
           });
       }(txn, stream.str()),
@@ -634,9 +634,9 @@ TEST_CASE("transactions: query updates insert", "[transactions]")
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
     std::ostringstream stream;
     stream << "UPDATE `" << id.bucket() << "` USE KEYS '" << id.key() << "' SET `some_number` = 10";
-    txn.run([id, statement = stream.str()](attempt_context& ctx) {
-        ctx.insert(id, content);
-        ctx.query(statement);
+    txn.run([id, statement = stream.str()](std::shared_ptr<attempt_context> ctx) {
+        ctx->insert(id, content);
+        ctx->query(statement);
     });
 
     {
@@ -656,11 +656,11 @@ TEST_CASE("transactions: can KV get", "[transactions]")
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
     std::ostringstream stream;
     stream << "UPDATE `" << id.bucket() << "` USE KEYS '" << id.key() << "' SET `some_number` = 10";
-    txn.run([id, statement = stream.str()](attempt_context& ctx) {
-        ctx.insert(id, content);
-        auto payload = ctx.query(statement);
+    txn.run([id, statement = stream.str()](std::shared_ptr<attempt_context> ctx) {
+        ctx->insert(id, content);
+        auto payload = ctx->query(statement);
         CHECK(payload.rows.empty());
-        auto doc = ctx.get(id);
+        auto doc = ctx->get(id);
         CHECK(10 == doc.content<tao::json::value>()["some_number"].as<uint32_t>());
     });
     {
@@ -681,9 +681,9 @@ TEST_CASE("transactions: can KV insert", "[transactions]")
 
     std::ostringstream stream;
     stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
-    txn.run([id, statement = stream.str()](attempt_context& ctx) {
-        auto payload = ctx.query(statement);
-        ctx.insert(id, content);
+    txn.run([id, statement = stream.str()](std::shared_ptr<attempt_context> ctx) {
+        auto payload = ctx->query(statement);
+        ctx->insert(id, content);
     });
     {
         couchbase::core::operations::get_request req{ id };
@@ -704,9 +704,9 @@ TEST_CASE("transactions: can rollback KV insert", "[transactions]")
     stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
     REQUIRE_THROWS_AS(
       [](auto& txn, auto id, auto statement) {
-          txn.run([&](attempt_context& ctx) {
-              auto payload = ctx.query(statement);
-              ctx.insert(id, content);
+          txn.run([&](std::shared_ptr<attempt_context> ctx) {
+              auto payload = ctx->query(statement);
+              ctx->insert(id, content);
               throw 3;
           });
       }(txn, id, stream.str()),
@@ -734,12 +734,12 @@ TEST_CASE("transactions: can KV replace", "[transactions]")
 
     std::ostringstream stream;
     stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
-    txn.run([id, statement = stream.str()](attempt_context& ctx) {
-        auto payload = ctx.query(statement);
-        auto doc = ctx.get(id);
+    txn.run([id, statement = stream.str()](std::shared_ptr<attempt_context> ctx) {
+        auto payload = ctx->query(statement);
+        auto doc = ctx->get(id);
         auto new_content = doc.content<tao::json::value>();
         new_content["some_number"] = 10;
-        auto replaced_doc = ctx.replace(doc, new_content);
+        auto replaced_doc = ctx->replace(doc, new_content);
         CHECK(replaced_doc.cas() != doc.cas());
         CHECK_FALSE(replaced_doc.cas().empty());
     });
@@ -769,12 +769,12 @@ TEST_CASE("transactions: can rollback KV replace", "[transactions]")
     stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
     REQUIRE_THROWS_AS(
       [](auto& txn, auto id, auto statement) {
-          txn.run([id, statement](attempt_context& ctx) {
-              auto payload = ctx.query(statement);
-              auto doc = ctx.get(id);
+          txn.run([id, statement](std::shared_ptr<attempt_context> ctx) {
+              auto payload = ctx->query(statement);
+              auto doc = ctx->get(id);
               auto new_content = doc.template content<tao::json::value>();
               new_content["some_number"] = 10;
-              auto replaced_doc = ctx.replace(doc, new_content);
+              auto replaced_doc = ctx->replace(doc, new_content);
               REQUIRE(replaced_doc.cas() != doc.cas());
               REQUIRE_FALSE(replaced_doc.cas().empty());
               throw 3;
@@ -805,10 +805,10 @@ TEST_CASE("transactions: can KV remove", "[transactions]")
 
     std::ostringstream stream;
     stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
-    txn.run([id, statement = stream.str()](attempt_context& ctx) {
-        auto payload = ctx.query(statement);
-        auto doc = ctx.get(id);
-        ctx.remove(doc);
+    txn.run([id, statement = stream.str()](std::shared_ptr<attempt_context> ctx) {
+        auto payload = ctx->query(statement);
+        auto doc = ctx->get(id);
+        ctx->remove(doc);
     });
     {
         couchbase::core::operations::get_request req{ id };
@@ -835,10 +835,10 @@ TEST_CASE("transactions: can rollback KV remove", "[transactions]")
     stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
     REQUIRE_THROWS_AS(
       [](auto& txn, auto id, auto statement) {
-          txn.run([id, statement](attempt_context& ctx) {
-              auto payload = ctx.query(statement);
-              auto doc = ctx.get(id);
-              ctx.remove(doc);
+          txn.run([id, statement](std::shared_ptr<attempt_context> ctx) {
+              auto payload = ctx->query(statement);
+              auto doc = ctx->get(id);
+              ctx->remove(doc);
               throw 3;
           });
       }(txn, id, stream.str()),
@@ -868,10 +868,10 @@ TEST_CASE("transactions: can rollback retry bad KV replace", "[transactions]")
     auto query = fmt::format("UPDATE `{}` USE KEYS '{}' SET `some_number` = 10", id.bucket(), id.key());
     REQUIRE_THROWS_AS(
       [](auto& txn, auto id, auto query) {
-          txn.run([id, query](attempt_context& ctx) {
-              auto doc = ctx.get(id);
-              auto payload = ctx.query(query);
-              auto new_doc = ctx.replace(doc, "{\"some_number\": 20}");
+          txn.run([id, query](std::shared_ptr<attempt_context> ctx) {
+              auto doc = ctx->get(id);
+              auto payload = ctx->query(query);
+              auto new_doc = ctx->replace(doc, "{\"some_number\": 20}");
           });
       }(txn, id, query),
       transaction_exception);
@@ -889,10 +889,10 @@ TEST_CASE("transactions: atr and client_record are binary documents", "[transact
     auto cluster = integration.cluster;
 
     transactions txn(cluster, get_conf());
-    std::vector<std::byte> binary_null{ std::byte(0) };
+    std::vector<std::byte> binary_null{ static_cast<std::byte>(0) };
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
 
-    txn.run([id](attempt_context& ctx) { ctx.insert(id, content); });
+    txn.run([id](std::shared_ptr<attempt_context> ctx) { ctx->insert(id, content); });
     {
         couchbase::core::document_id client_record_id{ integration.ctx.bucket, "_default", "_default", "_txn:client-record" };
         couchbase::core::operations::get_request req{ client_record_id };
@@ -915,7 +915,7 @@ TEST_CASE("transactions: get non-existent doc fails txn", "[transactions]")
     auto cluster = integration.cluster;
     transactions txn(cluster, get_conf());
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
-    REQUIRE_THROWS_AS(txn.run([id](attempt_context& ctx) { ctx.get(id); }), transaction_exception);
+    REQUIRE_THROWS_AS(txn.run([id](std::shared_ptr<attempt_context> ctx) { ctx->get(id); }), transaction_exception);
 }
 
 TEST_CASE("transactions: get_optional on non-existent doc doesn't fail txn", "[transactions]")
@@ -924,7 +924,7 @@ TEST_CASE("transactions: get_optional on non-existent doc doesn't fail txn", "[t
     auto cluster = integration.cluster;
     transactions txn(cluster, get_conf());
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
-    REQUIRE_NOTHROW(txn.run([id](attempt_context& ctx) { ctx.get_optional(id); }));
+    REQUIRE_NOTHROW(txn.run([id](std::shared_ptr<attempt_context> ctx) { ctx->get_optional(id); }));
 }
 TEST_CASE("transactions: get after query behaves same as before a query", "[transactions]")
 {
@@ -932,9 +932,9 @@ TEST_CASE("transactions: get after query behaves same as before a query", "[tran
     auto cluster = integration.cluster;
     transactions txn(cluster, get_conf());
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
-    REQUIRE_THROWS_AS(txn.run([id](attempt_context& ctx) {
-        ctx.query("select * from `default` limit 1");
-        ctx.get(id);
+    REQUIRE_THROWS_AS(txn.run([id](std::shared_ptr<attempt_context> ctx) {
+        ctx->query("select * from `default` limit 1");
+        ctx->get(id);
     }),
                       transaction_exception);
 }
@@ -945,9 +945,9 @@ TEST_CASE("transactions: get_optional after query behaves same as before a query
     auto cluster = integration.cluster;
     transactions txn(cluster, get_conf());
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
-    REQUIRE_NOTHROW(txn.run([id](attempt_context& ctx) {
-        ctx.query("select * from `default` limit 1");
-        ctx.get_optional(id);
+    REQUIRE_NOTHROW(txn.run([id](std::shared_ptr<attempt_context> ctx) {
+        ctx->query("select * from `default` limit 1");
+        ctx->get_optional(id);
     }));
 }
 TEST_CASE("transactions: sergey example", "[transactions]")
@@ -969,16 +969,16 @@ TEST_CASE("transactions: sergey example", "[transactions]")
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
-    REQUIRE_NOTHROW(txn.run([&](attempt_context& ctx) {
-        ctx.query(fmt::format(
+    REQUIRE_NOTHROW(txn.run([&](std::shared_ptr<attempt_context> ctx) {
+        ctx->query(fmt::format(
           "INSERT INTO `default` (KEY, VALUE) VALUES ('{}', {})", id_to_insert.key(), couchbase::core::utils::json::generate(content)));
-        ctx.query(fmt::format("UPDATE `default` USE KEYS '{}' SET `some_number` = 10 ", id_to_replace.key()));
-        ctx.query(fmt::format("DELETE FROM `default` WHERE META().id = '{}'", id_to_remove.key()));
-        auto insert_res = ctx.get(id_to_insert);
+        ctx->query(fmt::format("UPDATE `default` USE KEYS '{}' SET `some_number` = 10 ", id_to_replace.key()));
+        ctx->query(fmt::format("DELETE FROM `default` WHERE META().id = '{}'", id_to_remove.key()));
+        auto insert_res = ctx->get(id_to_insert);
         CHECK(insert_res.content<tao::json::value>() == content);
-        auto replace_res = ctx.get(id_to_replace);
+        auto replace_res = ctx->get(id_to_replace);
         CHECK(replace_res.content<tao::json::value>()["some_number"] == 10);
-        auto remove_res = ctx.get_optional(id_to_remove);
+        auto remove_res = ctx->get_optional(id_to_remove);
         CHECK_FALSE(remove_res.has_value());
     }));
 }

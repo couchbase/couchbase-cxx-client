@@ -70,8 +70,8 @@ TEST_CASE("transactions: async get", "[transactions]")
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     txn.run(
-      [id, cb_called](async_attempt_context& ctx) {
-          ctx.get(id, [cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
+      [id, cb_called](std::shared_ptr<async_attempt_context> ctx) {
+          ctx->get(id, [cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
               if (!err) {
                   cb_called->store(true);
                   CHECK(res);
@@ -96,8 +96,8 @@ TEST_CASE("transactions: can't get from unopened bucket", "[transactions]")
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     txn.run(
-      [&bad_id, cb_called, barrier](async_attempt_context& ctx) {
-          ctx.get(bad_id, [cb_called, barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
+      [&bad_id, cb_called, barrier](std::shared_ptr<async_attempt_context> ctx) {
+          ctx->get(bad_id, [cb_called, barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
               cb_called->store(true);
               CHECK(err);
               CHECK_FALSE(result);
@@ -124,8 +124,8 @@ TEST_CASE("transactions: async get fail", "[transactions]")
     auto f = barrier->get_future();
     try {
         txn.run(
-          [cb_called, id](async_attempt_context& ctx) {
-              ctx.get(id, [cb_called](std::exception_ptr err, std::optional<transaction_get_result>) {
+          [cb_called, id](std::shared_ptr<async_attempt_context> ctx) {
+              ctx->get(id, [cb_called](std::exception_ptr err, std::optional<transaction_get_result>) {
                   // should be an error
                   CHECK(err);
                   cb_called->store(true);
@@ -166,13 +166,13 @@ TEST_CASE("transactions: async remove fail", "[transactions]")
 
     try {
         txn.run(
-          [cb_called, id](async_attempt_context& ctx) {
-              ctx.get(id, [&ctx, cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
+          [cb_called, id](std::shared_ptr<async_attempt_context> ctx) {
+              ctx->get(id, [ctx, cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
                   // let's just change the cas to make it fail, which it should
                   // do until timeout
                   if (!err) {
                       res->cas(100);
-                      ctx.remove(*res, [cb_called](std::exception_ptr err) {
+                      ctx->remove(*res, [cb_called](std::exception_ptr err) {
                           CHECK(err);
                           cb_called->store(true);
                       });
@@ -202,11 +202,11 @@ TEST_CASE("transactions: RYOW on insert", "[transactions]")
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     txn.run(
-      [cb_called, id](async_attempt_context& ctx) {
-          ctx.insert(id, async_content, [&ctx, cb_called, id](std::exception_ptr err, std::optional<transaction_get_result> res) {
+      [cb_called, id](std::shared_ptr<async_attempt_context> ctx) {
+          ctx->insert(id, async_content, [ctx, cb_called, id](std::exception_ptr err, std::optional<transaction_get_result> res) {
               CHECK_FALSE(err);
               CHECK(res);
-              ctx.get(id, [cb_called, id](std::exception_ptr err, std::optional<transaction_get_result> res) {
+              ctx->get(id, [cb_called, id](std::exception_ptr err, std::optional<transaction_get_result> res) {
                   CHECK_FALSE(err);
                   CHECK(res);
                   CHECK(res->content<tao::json::value>() == async_content);
@@ -241,10 +241,10 @@ TEST_CASE("transactions: async remove", "[transactions]")
     auto f = barrier->get_future();
     auto cb_called = std::make_shared<std::atomic<bool>>(false);
     txn.run(
-      [cb_called, id](async_attempt_context& ctx) {
-          ctx.get(id, [&ctx, cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
+      [cb_called, id](std::shared_ptr<async_attempt_context> ctx) {
+          ctx->get(id, [ctx, cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
               if (!err) {
-                  ctx.remove(*res, [cb_called](std::exception_ptr err) {
+                  ctx->remove(*res, [cb_called](std::exception_ptr err) {
                       CHECK_FALSE(err);
                       cb_called->store(true);
                   });
@@ -284,18 +284,18 @@ TEST_CASE("transactions: async replace", "[transactions]")
         { "shiny", "and new" },
     };
     txn.run(
-      [cb_called, &new_content, id](async_attempt_context& ctx) {
-          ctx.get(id, [&ctx, &new_content, cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
+      [cb_called, &new_content, id](std::shared_ptr<async_attempt_context> ctx) {
+          ctx->get(id, [ctx, &new_content, cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
               if (!err) {
-                  ctx.replace(*res,
-                              new_content,
-                              [old_cas = res->cas(), cb_called](std::exception_ptr err, std::optional<transaction_get_result> result) {
-                                  // replace doesn't actually put the new content in the
-                                  // result, but it does change the cas, so...
-                                  CHECK_FALSE(err);
-                                  CHECK(result->cas() != old_cas);
-                                  cb_called->store(true);
-                              });
+                  ctx->replace(*res,
+                               new_content,
+                               [old_cas = res->cas(), cb_called](std::exception_ptr err, std::optional<transaction_get_result> result) {
+                                   // replace doesn't actually put the new content in the
+                                   // result, but it does change the cas, so...
+                                   CHECK_FALSE(err);
+                                   CHECK(result->cas() != old_cas);
+                                   cb_called->store(true);
+                               });
               }
           });
       },
@@ -335,10 +335,10 @@ TEST_CASE("transactions: async replace fail", "[transactions]")
 
     try {
         txn.run(
-          [cb_called, &new_content, id](async_attempt_context& ctx) {
-              ctx.get(id, [&ctx, &new_content, cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
+          [cb_called, &new_content, id](std::shared_ptr<async_attempt_context> ctx) {
+              ctx->get(id, [ctx, &new_content, cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
                   if (!err) {
-                      ctx.replace(*res, new_content, [cb_called](std::exception_ptr err, std::optional<transaction_get_result>) {
+                      ctx->replace(*res, new_content, [cb_called](std::exception_ptr err, std::optional<transaction_get_result>) {
                           if (!err) {
                               cb_called->store(true);
                               throw std::runtime_error("I wanna roll back");
@@ -377,8 +377,8 @@ TEST_CASE("transactions: async insert", "[transactions]")
     auto cb_called = std::make_shared<std::atomic<bool>>(false);
 
     txn.run(
-      [cb_called, id](async_attempt_context& ctx) {
-          ctx.insert(id, async_content, [cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
+      [cb_called, id](std::shared_ptr<async_attempt_context> ctx) {
+          ctx->insert(id, async_content, [cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
               if (!err) {
                   CHECK_FALSE(res->cas().empty());
                   cb_called->store(true);
@@ -413,8 +413,8 @@ TEST_CASE("transactions: async insert can be rolled back", "[transactions]")
 
     try {
         txn.run(
-          [cb_called, id, barrier](async_attempt_context& ctx) {
-              ctx.insert(id, async_content, [cb_called](std::exception_ptr err, std::optional<transaction_get_result>) {
+          [cb_called, id, barrier](std::shared_ptr<async_attempt_context> ctx) {
+              ctx->insert(id, async_content, [cb_called](std::exception_ptr err, std::optional<transaction_get_result>) {
                   if (!err) {
                       cb_called->store(true);
                       throw std::runtime_error("I wanna rollback");
@@ -455,9 +455,9 @@ TEST_CASE("transactions: async query", "[transactions]")
     }
     auto query_called = std::make_shared<std::atomic<bool>>(false);
     txn.run(
-      [query_called, id](async_attempt_context& ctx) {
+      [query_called, id](std::shared_ptr<async_attempt_context> ctx) {
           auto query = fmt::format("UPDATE `{}` USE KEYS '{}' SET `some` = 'thing else'", id.bucket(), id.key());
-          ctx.query(query, [query_called](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
+          ctx->query(query, [query_called](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
               if (!err) {
                   query_called->store(true);
               }
@@ -497,19 +497,19 @@ TEST_CASE("transactions: multiple racing queries", "[transactions]")
 
     auto query_called = std::make_shared<std::atomic<int>>(0);
     txn.run(
-      [query_called, id](async_attempt_context& ctx) {
+      [query_called, id](std::shared_ptr<async_attempt_context> ctx) {
           auto query = fmt::format("UPDATE `{}` USE KEYS '{}' SET `some` = 'thing else'", id.bucket(), id.key());
-          ctx.query(query, [query_called](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
+          ctx->query(query, [query_called](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
               if (!err) {
                   ++(*query_called);
               }
           });
-          ctx.query(query, [query_called](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
+          ctx->query(query, [query_called](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
               if (!err) {
                   ++(*query_called);
               }
           });
-          ctx.query(query, [query_called](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
+          ctx->query(query, [query_called](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
               if (!err) {
                   ++(*query_called);
               }
@@ -549,9 +549,9 @@ TEST_CASE("transactions: rollback async query", "[transactions]")
 
     auto query_called = std::make_shared<std::atomic<bool>>(false);
     txn.run(
-      [query_called, id](async_attempt_context& ctx) {
+      [query_called, id](std::shared_ptr<async_attempt_context> ctx) {
           auto query = fmt::format("UPDATE `{}` USE KEYS '{}' SET `some` = 'thing else'", id.bucket(), id.key());
-          ctx.query(query, [query_called](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
+          ctx->query(query, [query_called](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
               if (!err) {
                   query_called->store(true);
                   // now rollback by throwing arbitrary exception
@@ -593,12 +593,12 @@ TEST_CASE("transactions: async KV get", "[transactions]")
 
     auto get_called = std::make_shared<std::atomic<bool>>(false);
     txn.run(
-      [get_called, &id](async_attempt_context& ctx) {
-          ctx.get(id, [get_called, &id, &ctx](std::exception_ptr, std::optional<transaction_get_result>) {
+      [get_called, &id](std::shared_ptr<async_attempt_context> ctx) {
+          ctx->get(id, [get_called, &id, ctx](std::exception_ptr, std::optional<transaction_get_result>) {
               auto query = fmt::format("UPDATE `{}` USE KEYS '{}' SET `some` = 'thing else'", id.bucket(), id.key());
-              ctx.query(query, [get_called, &id, &ctx](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
+              ctx->query(query, [get_called, &id, ctx](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
                   if (!err) {
-                      ctx.get(id, [get_called](std::exception_ptr err, std::optional<transaction_get_result>) {
+                      ctx->get(id, [get_called](std::exception_ptr err, std::optional<transaction_get_result>) {
                           if (!err) {
                               get_called->store(true);
                           }
@@ -639,12 +639,12 @@ TEST_CASE("transactions: rollback async KV get", "[transactions]")
     }
     auto get_called = std::make_shared<std::atomic<bool>>(false);
     txn.run(
-      [get_called, &id](async_attempt_context& ctx) {
-          ctx.get(id, [&ctx, get_called, &id](std::exception_ptr, std::optional<transaction_get_result>) {
+      [get_called, &id](std::shared_ptr<async_attempt_context> ctx) {
+          ctx->get(id, [ctx, get_called, &id](std::exception_ptr, std::optional<transaction_get_result>) {
               auto query = fmt::format("UPDATE `{}` USE KEYS '{}' SET `some` = 'thing else'", id.bucket(), id.key());
-              ctx.query(query, [&ctx, get_called, &id](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
+              ctx->query(query, [ctx, get_called, &id](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
                   if (!err) {
-                      ctx.get(id, [get_called](std::exception_ptr err, std::optional<transaction_get_result>) {
+                      ctx->get(id, [get_called](std::exception_ptr err, std::optional<transaction_get_result>) {
                           if (!err) {
                               get_called->store(true);
                               throw 3;
@@ -681,15 +681,15 @@ TEST_CASE("transactions: async KV insert", "[transactions]")
     auto f = barrier->get_future();
     auto insert_called = std::make_shared<std::atomic<bool>>(false);
     txn.run(
-      [insert_called, id, barrier](async_attempt_context& ctx) {
-          ctx.query("Select 'Yo' as greeting",
-                    [&ctx, insert_called, id, barrier](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
-                        if (!err) {
-                            ctx.insert(id, async_content, [insert_called](std::exception_ptr err, std::optional<transaction_get_result>) {
-                                insert_called->store(!err);
-                            });
-                        }
-                    });
+      [insert_called, id, barrier](std::shared_ptr<async_attempt_context> ctx) {
+          ctx->query("Select 'Yo' as greeting",
+                     [ctx, insert_called, id, barrier](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
+                         if (!err) {
+                             ctx->insert(id, async_content, [insert_called](std::exception_ptr err, std::optional<transaction_get_result>) {
+                                 insert_called->store(!err);
+                             });
+                         }
+                     });
       },
       [insert_called, barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> res) {
           CHECK_FALSE(err);
@@ -718,17 +718,17 @@ TEST_CASE("transactions: rollback async KV insert", "[transactions]")
     auto f = barrier->get_future();
     auto insert_called = std::make_shared<std::atomic<bool>>(false);
     txn.run(
-      [insert_called, id, barrier](async_attempt_context& ctx) {
-          ctx.query("Select 'Yo' as greeting",
-                    [insert_called, &ctx, id, barrier](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
-                        if (!err) {
-                            ctx.insert(id, async_content, [insert_called](std::exception_ptr err, std::optional<transaction_get_result>) {
-                                insert_called->store(!err);
-                                // now roll it back
-                                throw 3;
-                            });
-                        }
-                    });
+      [insert_called, id, barrier](std::shared_ptr<async_attempt_context> ctx) {
+          ctx->query("Select 'Yo' as greeting",
+                     [insert_called, ctx, id, barrier](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
+                         if (!err) {
+                             ctx->insert(id, async_content, [insert_called](std::exception_ptr err, std::optional<transaction_get_result>) {
+                                 insert_called->store(!err);
+                                 // now roll it back
+                                 throw 3;
+                             });
+                         }
+                     });
       },
       [insert_called, barrier](std::optional<transaction_exception> err, std::optional<couchbase::transactions::transaction_result> res) {
           CHECK(err);
@@ -765,18 +765,18 @@ TEST_CASE("transactions: async KV replace", "[transactions]")
     };
     auto replace_called = std::make_shared<std::atomic<bool>>(false);
     txn.run(
-      [replace_called, &id, &new_content](async_attempt_context& ctx) {
-          ctx.get(id, [replace_called, id, &ctx, &new_content](std::exception_ptr err, std::optional<transaction_get_result> result) {
+      [replace_called, &id, &new_content](std::shared_ptr<async_attempt_context> ctx) {
+          ctx->get(id, [replace_called, id, ctx, &new_content](std::exception_ptr err, std::optional<transaction_get_result> result) {
               // do a query just to move into query mode.
               if (!err) {
                   CHECK(result);
                   auto query = fmt::format("SELECT * FROM `{}` USE KEYS '{}'", id.bucket(), id.key());
-                  ctx.query(
+                  ctx->query(
                     query,
-                    [replace_called, &ctx, &new_content, doc = *result](std::exception_ptr err,
-                                                                        std::optional<couchbase::core::operations::query_response>) {
+                    [replace_called, ctx, &new_content, doc = *result](std::exception_ptr err,
+                                                                       std::optional<couchbase::core::operations::query_response>) {
                         if (!err) {
-                            ctx.replace(doc, new_content, [replace_called](std::exception_ptr err, std::optional<transaction_get_result>) {
+                            ctx->replace(doc, new_content, [replace_called](std::exception_ptr err, std::optional<transaction_get_result>) {
                                 if (!err) {
                                     replace_called->store(true);
                                 }
@@ -822,18 +822,18 @@ TEST_CASE("transactions: rollback async KV replace", "[transactions]")
     };
     auto replace_called = std::make_shared<std::atomic<bool>>(false);
     txn.run(
-      [replace_called, &id, &new_content](async_attempt_context& ctx) {
-          ctx.get(id, [replace_called, &ctx, &id, &new_content](std::exception_ptr err, std::optional<transaction_get_result> result) {
+      [replace_called, &id, &new_content](std::shared_ptr<async_attempt_context> ctx) {
+          ctx->get(id, [replace_called, ctx, &id, &new_content](std::exception_ptr err, std::optional<transaction_get_result> result) {
               // do a query just to move into query mode.
               if (!err) {
                   CHECK(result);
                   auto query = fmt::format("SELECT * FROM `{}` USE KEYS '{}'", id.bucket(), id.key());
-                  ctx.query(
+                  ctx->query(
                     query,
-                    [replace_called, &ctx, &new_content, doc = *result](std::exception_ptr err,
-                                                                        std::optional<couchbase::core::operations::query_response>) {
+                    [replace_called, ctx, &new_content, doc = *result](std::exception_ptr err,
+                                                                       std::optional<couchbase::core::operations::query_response>) {
                         if (!err) {
-                            ctx.replace(doc, new_content, [replace_called](std::exception_ptr err, std::optional<transaction_get_result>) {
+                            ctx->replace(doc, new_content, [replace_called](std::exception_ptr err, std::optional<transaction_get_result>) {
                                 if (!err) {
                                     replace_called->store(true);
                                     throw 3;
@@ -879,23 +879,23 @@ TEST_CASE("transactions: async KV remove", "[transactions]")
 
     auto remove_called = std::make_shared<std::atomic<bool>>(false);
     txn.run(
-      [remove_called, &id](async_attempt_context& ctx) {
-          ctx.get(id, [remove_called, &ctx, &id](std::exception_ptr err, std::optional<transaction_get_result> result) {
+      [remove_called, &id](std::shared_ptr<async_attempt_context> ctx) {
+          ctx->get(id, [remove_called, ctx, &id](std::exception_ptr err, std::optional<transaction_get_result> result) {
               // do a query just to move into query mode.
               if (!err) {
                   CHECK(result);
                   auto query = fmt::format("SELECT * FROM `{}` USE KEYS '{}'", id.bucket(), id.key());
-                  ctx.query(query,
-                            [remove_called, &ctx, doc = *result](std::exception_ptr err,
+                  ctx->query(query,
+                             [remove_called, ctx, doc = *result](std::exception_ptr err,
                                                                  std::optional<couchbase::core::operations::query_response>) {
-                                if (!err) {
-                                    ctx.remove(doc, [remove_called](std::exception_ptr err) {
-                                        if (!err) {
-                                            remove_called->store(true);
-                                        }
-                                    });
-                                }
-                            });
+                                 if (!err) {
+                                     ctx->remove(doc, [remove_called](std::exception_ptr err) {
+                                         if (!err) {
+                                             remove_called->store(true);
+                                         }
+                                     });
+                                 }
+                             });
               }
           });
       },
@@ -932,23 +932,23 @@ TEST_CASE("transactions: rollback async KV remove", "[transactions]")
 
     auto remove_called = std::make_shared<std::atomic<bool>>(false);
     txn.run(
-      [remove_called, &id](async_attempt_context& ctx) {
-          ctx.get(id, [remove_called, &id, &ctx](std::exception_ptr err, std::optional<transaction_get_result> result) {
+      [remove_called, &id](std::shared_ptr<async_attempt_context> ctx) {
+          ctx->get(id, [remove_called, &id, ctx](std::exception_ptr err, std::optional<transaction_get_result> result) {
               // do a query just to move into query mode.
               if (!err) {
                   CHECK(result);
                   auto query = fmt::format("SELECT * FROM `{}` USE KEYS '{}'", id.bucket(), id.key());
-                  ctx.query(query,
-                            [remove_called, &ctx, doc = *result](std::exception_ptr err,
+                  ctx->query(query,
+                             [remove_called, ctx, doc = *result](std::exception_ptr err,
                                                                  std::optional<couchbase::core::operations::query_response>) {
-                                if (!err) {
-                                    ctx.remove(doc, [remove_called](std::exception_ptr err) {
-                                        REQUIRE_FALSE(err);
-                                        remove_called->store(true);
-                                        throw 3;
-                                    });
-                                }
-                            });
+                                 if (!err) {
+                                     ctx->remove(doc, [remove_called](std::exception_ptr err) {
+                                         REQUIRE_FALSE(err);
+                                         remove_called->store(true);
+                                         throw 3;
+                                     });
+                                 }
+                             });
               }
           });
       },

@@ -81,16 +81,16 @@ main(int argc, const char* argv[])
         //! [simple-blocking-txn]
         auto [tx_err, tx_res] = cluster.transactions()->run(
           // [3.1] closure argument to run() method encapsulates logic, that has to be run in transaction
-          [&](couchbase::transactions::attempt_context& ctx) {
+          [&](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
               // [3.2] get document
-              auto [err_ctx, doc] = ctx.get(collection, id_1);
+              auto [err_ctx, doc] = ctx->get(collection, id_1);
               if (err_ctx.ec()) {
                   fmt::print(stderr, "failed to get document \"{}\": {}\n", id_1, err_ctx.ec().message());
                   // [3.3] don't continue the transaction logic
                   return;
               }
               // [3.4] replace document's content
-              ctx.replace(doc, ::tao::json::value{ { "some", "other content" } });
+              ctx->replace(doc, ::tao::json::value{ { "some", "other content" } });
           });
         // [3.5] check the overall status of the transaction
         if (tx_err.ec()) {
@@ -109,15 +109,15 @@ main(int argc, const char* argv[])
         auto f = barrier->get_future();
         cluster.transactions()->run(
           // [4.2] closure argument to run() method encapsulates logic, that has to be run in transaction
-          [&](couchbase::transactions::async_attempt_context& ctx) {
+          [&](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) {
               // [4.3] get document
-              ctx.get(collection, id_1, [&](auto err_ctx_1, auto doc) {
+              ctx->get(collection, id_1, [&](auto err_ctx_1, auto doc) {
                   if (err_ctx_1.ec()) {
                       fmt::print(stderr, "failed to get document \"{}\": {}\n", id_1, err_ctx_1.ec().message());
                       return;
                   }
                   // [4.4] replace document's content
-                  ctx.replace(doc, ::tao::json::value{ { "some", "other async content" } }, [&](auto err_ctx_2, auto res) {
+                  ctx->replace(doc, ::tao::json::value{ { "some", "other async content" } }, [&](auto err_ctx_2, auto res) {
                       if (err_ctx_2.ec()) {
                           fmt::print(stderr, "error replacing content in doc {}: {}\n", id_1, err_ctx_2.ec().message());
                       } else {
@@ -125,12 +125,12 @@ main(int argc, const char* argv[])
                       }
                   });
               });
-              ctx.get(collection, id_2, [&](auto err_ctx_1, auto doc) {
+              ctx->get(collection, id_2, [&](auto err_ctx_1, auto doc) {
                   if (err_ctx_1.ec()) {
                       fmt::print("error getting doc {}: {}", id_2, err_ctx_1.ec().message());
                       return;
                   }
-                  ctx.replace(doc, ::tao::json::value{ { "some", "other async content" } }, [&](auto err_ctx_2, auto res) {
+                  ctx->replace(doc, ::tao::json::value{ { "some", "other async content" } }, [&](auto err_ctx_2, auto res) {
                       if (err_ctx_2.ec()) {
                           fmt::print(stderr, "error replacing content in doc {}: {}\n", id_2, err_ctx_2.ec().message());
                       } else {
@@ -138,12 +138,12 @@ main(int argc, const char* argv[])
                       }
                   });
               });
-              ctx.get(collection, id_3, [&](auto err_ctx_1, auto doc) {
+              ctx->get(collection, id_3, [&](auto err_ctx_1, auto doc) {
                   if (err_ctx_1.ec()) {
                       fmt::print("error getting doc {}: {}", id_3, err_ctx_1.ec().message());
                       return;
                   }
-                  ctx.replace(doc, ::tao::json::value{ { "some", "other async content" } }, [&](auto err_ctx_2, auto res) {
+                  ctx->replace(doc, ::tao::json::value{ { "some", "other async content" } }, [&](auto err_ctx_2, auto res) {
                       if (err_ctx_2.ec()) {
                           fmt::print(stderr, "error replacing content in doc {}: {}\n", id_3, err_ctx_2.ec().message());
                       } else {

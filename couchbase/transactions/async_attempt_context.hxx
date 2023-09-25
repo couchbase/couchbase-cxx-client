@@ -84,7 +84,7 @@ class async_attempt_context
      * Replace the contents of a document in a collection.
      *
      * Replaces the contents of an existing document. Note that currently this content can be either a
-     * <std::vector<std::byte>> or an object which can be serialized with the @ref codec::tao_json_serializer.
+     * std::vector<std::byte> or an object which can be serialized with the @ref codec::tao_json_serializer.
      *
      * @tparam Content type of the document
      * @param doc Document whose content will be replaced.  This is gotten from a call to @ref async_attempt_context::get

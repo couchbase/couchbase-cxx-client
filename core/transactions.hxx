@@ -52,10 +52,10 @@ namespace transactions
 class transactions_cleanup;
 
 /** @brief Transaction logic should be contained in a lambda of this form */
-using logic = std::function<void(attempt_context&)>;
+using logic = std::function<void(std::shared_ptr<attempt_context>)>;
 
 /** @brief AsyncTransaction logic should be contained in a lambda of this form */
-using async_logic = std::function<void(async_attempt_context&)>;
+using async_logic = std::function<void(std::shared_ptr<async_attempt_context>)>;
 
 /** @brief AsyncTransaction callback when transaction has completed */
 using txn_complete_callback =
