@@ -91,6 +91,10 @@ query_index_get_all_deferred_request::make_response(couchbase::core::error_conte
             response.ctx.ec = couchbase::errc::common::authentication_failure;
             return response;
         }
+
+        for (const auto& entry : payload.at("results").get_array()) {
+            response.index_names.emplace_back(entry.get_string());
+        }
     }
     return response;
 }
