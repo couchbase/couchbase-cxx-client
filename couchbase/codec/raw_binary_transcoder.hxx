@@ -21,6 +21,7 @@
 #include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/codec/transcoder_traits.hxx>
 #include <couchbase/error_codes.hxx>
+#include <type_traits>
 
 namespace couchbase::codec
 {
@@ -34,7 +35,8 @@ class raw_binary_transcoder
         return { std::move(document), codec_flags::binary_common_flags };
     }
 
-    static auto decode(const encoded_value& encoded) -> document_type
+    template<typename Document = document_type, std::enable_if_t<std::is_same_v<Document, document_type>, bool> = true>
+    static auto decode(const encoded_value& encoded) -> Document
     {
         if (!codec_flags::has_common_flags(encoded.flags, codec_flags::binary_common_flags)) {
             throw std::system_error(errc::common::decoding_failure,

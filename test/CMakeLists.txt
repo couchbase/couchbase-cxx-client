@@ -20,6 +20,7 @@ integration_test(search)
 
 unit_test(connection_string)
 unit_test(utils)
+unit_test(binary_transcoder)
 unit_test(json_transcoder)
 unit_test(json_streaming_lexer)
 unit_test(jsonsl)
