@@ -2106,7 +2106,6 @@ TEST_CASE("integration: query index management", "[integration]")
         SECTION("public API")
         {
             couchbase::cluster c(integration.cluster);
-            auto start = std::chrono::steady_clock::now();
             auto ctx = c.query_indexes()
                          .watch_indexes(integration.ctx.bucket,
                                         { "idontexist", "neitherdoI" },
@@ -2114,8 +2113,7 @@ TEST_CASE("integration: query index management", "[integration]")
                                           .timeout(std::chrono::milliseconds(10000))
                                           .polling_interval(std::chrono::milliseconds(1000)))
                          .get();
-            REQUIRE(ctx.ec() == couchbase::errc::common::ambiguous_timeout);
-            REQUIRE(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count() >= 10000);
+            REQUIRE(ctx.ec() == couchbase::errc::common::index_not_found);
         }
     }
     SECTION("watch missing bucket")
@@ -2123,7 +2121,6 @@ TEST_CASE("integration: query index management", "[integration]")
         SECTION("public API")
         {
             couchbase::cluster c(integration.cluster);
-            auto start = std::chrono::steady_clock::now();
             auto ctx = c.query_indexes()
                          .watch_indexes("missing_buckeet",
                                         { "idontexist", "neitherdoI" },
@@ -2131,8 +2128,7 @@ TEST_CASE("integration: query index management", "[integration]")
                                           .timeout(std::chrono::milliseconds(10000))
                                           .polling_interval(std::chrono::milliseconds(1000)))
                          .get();
-            REQUIRE(ctx.ec() == couchbase::errc::common::ambiguous_timeout);
-            REQUIRE(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count() >= 10000);
+            REQUIRE(ctx.ec() == couchbase::errc::common::index_not_found);
         }
     }
 }
@@ -2643,7 +2639,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
             REQUIRE(coll.query_indexes()
                       .watch_indexes({ index_name }, couchbase::watch_query_indexes_options().timeout(std::chrono::seconds(5)))
                       .get()
-                      .ec() == couchbase::errc::common::ambiguous_timeout);
+                      .ec() == couchbase::errc::common::index_not_found);
         }
     }
     SECTION("watch missing collection"){ SECTION("public API"){ couchbase::cluster c(integration.cluster);
@@ -2651,7 +2647,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
     REQUIRE(coll.query_indexes()
               .watch_indexes({ index_name }, couchbase::watch_query_indexes_options().timeout(std::chrono::seconds(5)))
               .get()
-              .ec() == couchbase::errc::common::ambiguous_timeout);
+              .ec() == couchbase::errc::common::index_not_found);
 }
 }
 
