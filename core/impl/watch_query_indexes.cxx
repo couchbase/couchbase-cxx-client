@@ -70,6 +70,10 @@ class watch_context : public std::enable_shared_from_this<watch_context>
             auto it = std::find_if(resp.indexes.begin(), resp.indexes.end(), [&](const couchbase::management::query::index& index) {
                 return index.name == name;
             });
+            if (it == resp.indexes.end()) {
+                finish(resp, couchbase::errc::common::index_not_found);
+                return complete;
+            }
             complete &= (it != resp.indexes.end() && it->state == "online");
         }
         if (options_.watch_primary) {

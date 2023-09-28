@@ -105,19 +105,19 @@ struct bucket_settings {
 
     std::string name;
     std::string uuid;
+    std::uint64_t ram_quota_mb{ 0 }; // If not explicitly set, defaults to 100 on create_bucket, unset on update_bucket
     cluster::bucket_type bucket_type{ cluster::bucket_type::unknown };
-    std::uint64_t ram_quota_mb{ 100 };
-    std::uint32_t max_expiry{ 0 };
+    std::optional<std::uint32_t> max_expiry{};
     bucket_compression compression_mode{ bucket_compression::unknown };
     std::optional<couchbase::durability_level> minimum_durability_level{};
-    std::uint32_t num_replicas{ 1 };
-    bool replica_indexes{ false };
-    bool flush_enabled{ false };
+    std::optional<std::uint32_t> num_replicas{};
+    std::optional<bool> replica_indexes{};
+    std::optional<bool> flush_enabled{};
     bucket_eviction_policy eviction_policy{ bucket_eviction_policy::unknown };
     bucket_conflict_resolution conflict_resolution_type{ bucket_conflict_resolution::unknown };
     std::optional<bool> history_retention_collection_default{};
-    std::uint32_t history_retention_bytes{ 0 };
-    std::uint32_t history_retention_duration{ 0 };
+    std::optional<std::uint32_t> history_retention_bytes;
+    std::optional<std::uint32_t> history_retention_duration{};
 
     /**
      * UNCOMMITTED: This API may change in the future

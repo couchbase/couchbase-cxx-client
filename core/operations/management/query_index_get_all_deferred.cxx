@@ -87,6 +87,11 @@ query_index_get_all_deferred_request::make_response(couchbase::core::error_conte
         if (response.status != "success") {
             return response;
         }
+        if (encoded.body.data().find("insufficient user permissions") != std::string::npos) {
+            response.ctx.ec = couchbase::errc::common::authentication_failure;
+            return response;
+        }
+
         for (const auto& entry : payload.at("results").get_array()) {
             response.index_names.emplace_back(entry.get_string());
         }

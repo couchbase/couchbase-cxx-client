@@ -49,7 +49,8 @@ assert_single_lookup_error(test::utils::integration_test_guard& integration,
                            const couchbase::core::document_id& id,
                            const SubdocumentOperation& spec,
                            couchbase::key_value_status_code expected_status,
-                           std::error_code expected_ec)
+                           std::error_code expected_ec,
+                           std::optional<std::string> expected_value = std::nullopt)
 {
     couchbase::core::operations::lookup_in_request req{ id };
     req.specs = couchbase::lookup_in_specs{ spec }.specs();
@@ -60,9 +61,13 @@ assert_single_lookup_error(test::utils::integration_test_guard& integration,
     REQUIRE(resp.fields.size() == 1);
     REQUIRE_FALSE(resp.fields[0].exists);
     REQUIRE(resp.fields[0].path == req.specs[0].path_);
-    REQUIRE(resp.fields[0].value.empty());
     REQUIRE(resp.fields[0].status == expected_status);
     REQUIRE(resp.fields[0].ec == expected_ec);
+    if (expected_value.has_value()) {
+        REQUIRE(couchbase::core::utils::to_binary(expected_value.value()) == resp.fields[0].value);
+    } else {
+        REQUIRE(resp.fields[0].value.empty());
+    }
 }
 
 template<typename SubdocumentOperation>
@@ -85,6 +90,8 @@ assert_single_lookup_any_replica_success(test::utils::integration_test_guard& in
     REQUIRE_SUCCESS(resp.fields[0].ec);
     if (expected_value.has_value()) {
         REQUIRE(couchbase::core::utils::to_binary(expected_value.value()) == resp.fields[0].value);
+    } else {
+        REQUIRE(resp.fields[0].value.empty());
     }
 }
 
@@ -94,20 +101,25 @@ assert_single_lookup_any_replica_error(test::utils::integration_test_guard& inte
                                        const couchbase::core::document_id& id,
                                        const SubdocumentOperation& spec,
                                        couchbase::key_value_status_code expected_status,
-                                       std::error_code expected_ec)
+                                       std::error_code expected_ec,
+                                       std::optional<std::string> expected_value = std::nullopt)
 {
     couchbase::core::operations::lookup_in_any_replica_request req{ id };
     req.specs = couchbase::lookup_in_specs{ spec }.specs();
     auto resp = test::utils::execute(integration.cluster, req);
-    INFO(fmt::format("assert_single_lookup_all_replica_error(\"{}\", \"{}\")", id, req.specs[0].path_));
+    INFO(fmt::format("assert_single_lookup_any_replica_error(\"{}\", \"{}\")", id, req.specs[0].path_));
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE_FALSE(resp.cas.empty());
     REQUIRE(resp.fields.size() == 1);
     REQUIRE_FALSE(resp.fields[0].exists);
     REQUIRE(resp.fields[0].path == req.specs[0].path_);
-    REQUIRE(resp.fields[0].value.empty());
     REQUIRE(resp.fields[0].status == expected_status);
     REQUIRE(resp.fields[0].ec == expected_ec);
+    if (expected_value.has_value()) {
+        REQUIRE(couchbase::core::utils::to_binary(expected_value.value()) == resp.fields[0].value);
+    } else {
+        REQUIRE(resp.fields[0].value.empty());
+    }
 }
 
 template<typename SubdocumentOperation>
@@ -145,7 +157,8 @@ assert_single_lookup_all_replica_error(test::utils::integration_test_guard& inte
                                        const couchbase::core::document_id& id,
                                        const SubdocumentOperation& spec,
                                        couchbase::key_value_status_code expected_status,
-                                       std::error_code expected_ec)
+                                       std::error_code expected_ec,
+                                       std::optional<std::string> expected_value = std::nullopt)
 {
     couchbase::core::operations::lookup_in_all_replicas_request req{ id };
     req.specs = couchbase::lookup_in_specs{ spec }.specs();
@@ -161,9 +174,13 @@ assert_single_lookup_all_replica_error(test::utils::integration_test_guard& inte
         REQUIRE(resp.fields.size() == 1);
         REQUIRE_FALSE(resp.fields[0].exists);
         REQUIRE(resp.fields[0].path == req.specs[0].path_);
-        REQUIRE(resp.fields[0].value.empty());
         REQUIRE(resp.fields[0].status == expected_status);
         REQUIRE(resp.fields[0].ec == expected_ec);
+        if (expected_value.has_value()) {
+            REQUIRE(couchbase::core::utils::to_binary(expected_value.value()) == resp.fields[0].value);
+        } else {
+            REQUIRE(resp.fields[0].value.empty());
+        }
     }
 }
 
@@ -214,7 +231,7 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
 
     SECTION("dict exists")
     {
-        assert_single_lookup_success(integration, id, couchbase::lookup_in_specs::exists("dictkey"));
+        assert_single_lookup_success(integration, id, couchbase::lookup_in_specs::exists("dictkey"), "true");
     }
 
     SECTION("array get")
@@ -224,7 +241,7 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
 
     SECTION("array exists")
     {
-        assert_single_lookup_success(integration, id, couchbase::lookup_in_specs::exists("array"));
+        assert_single_lookup_success(integration, id, couchbase::lookup_in_specs::exists("array"), "true");
     }
 
     SECTION("array index get")
@@ -234,7 +251,7 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
 
     SECTION("array index exists")
     {
-        assert_single_lookup_success(integration, id, couchbase::lookup_in_specs::exists("array[0]"));
+        assert_single_lookup_success(integration, id, couchbase::lookup_in_specs::exists("array[0]"), "true");
     }
 
     SECTION("non existent path get")
@@ -252,7 +269,8 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
                                    id,
                                    couchbase::lookup_in_specs::exists("non-exist"),
                                    couchbase::key_value_status_code::subdoc_path_not_found,
-                                   std::error_code{});
+                                   std::error_code{},
+                                   "false");
     }
 
     SECTION("non existent doc")
@@ -738,7 +756,7 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
         REQUIRE(resp.fields[0].value == couchbase::core::utils::to_binary(R"("dictval")"));
         REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::success);
 
-        REQUIRE(resp.fields[1].value.empty());
+        REQUIRE(resp.fields[1].value == couchbase::core::utils::to_binary("true"));
         REQUIRE(resp.fields[1].status == couchbase::key_value_status_code::success);
         REQUIRE(resp.fields[1].exists);
 
@@ -1082,7 +1100,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
     test::utils::integration_test_guard integration;
 
     if (!integration.has_bucket_capability("subdoc.ReplicaRead")) {
-        SKIP("cluster does not support replica_read");
+        SKIP("bucket does not support replica_read");
     }
 
     auto number_of_replicas = integration.number_of_replicas();
@@ -1114,7 +1132,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
 
     SECTION("dict exists")
     {
-        assert_single_lookup_all_replica_success(integration, id, couchbase::lookup_in_specs::exists("dictkey"));
+        assert_single_lookup_all_replica_success(integration, id, couchbase::lookup_in_specs::exists("dictkey"), "true");
     }
 
     SECTION("array get")
@@ -1125,7 +1143,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
 
     SECTION("array exists")
     {
-        assert_single_lookup_all_replica_success(integration, id, couchbase::lookup_in_specs::exists("array"));
+        assert_single_lookup_all_replica_success(integration, id, couchbase::lookup_in_specs::exists("array"), "true");
     }
 
     SECTION("array index get")
@@ -1135,7 +1153,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
 
     SECTION("array index exists")
     {
-        assert_single_lookup_all_replica_success(integration, id, couchbase::lookup_in_specs::exists("array[0]"));
+        assert_single_lookup_all_replica_success(integration, id, couchbase::lookup_in_specs::exists("array[0]"), "true");
     }
 
     SECTION("non existent path get")
@@ -1153,7 +1171,8 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
                                                id,
                                                couchbase::lookup_in_specs::exists("non-exist"),
                                                couchbase::key_value_status_code::subdoc_path_not_found,
-                                               std::error_code{});
+                                               std::error_code{},
+                                               "false");
     }
 
     SECTION("non existent doc")
@@ -1282,6 +1301,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
                 REQUIRE(!res.cas().empty());
                 REQUIRE("dictval" == res.content_as<std::string>(0));
                 REQUIRE(res.exists("array"));
+                REQUIRE(res.content_as<bool>(1));
                 REQUIRE(5 == res.content_as<int>(2));
             }
         }
@@ -1306,6 +1326,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
             for (auto& res : result) {
                 REQUIRE(!res.cas().empty());
                 REQUIRE(!res.exists(0));
+                REQUIRE(!res.content_as<bool>(0));
             }
         }
     }
@@ -1316,7 +1337,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
     test::utils::integration_test_guard integration;
 
     if (!integration.has_bucket_capability("subdoc.ReplicaRead")) {
-        SKIP("cluster does not support replica_read");
+        SKIP("bucket does not support replica_read");
     }
 
     auto number_of_replicas = integration.number_of_replicas();
@@ -1350,7 +1371,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
 
     SECTION("dict exists")
     {
-        assert_single_lookup_any_replica_success(integration, id, couchbase::lookup_in_specs::exists("dictkey"));
+        assert_single_lookup_any_replica_success(integration, id, couchbase::lookup_in_specs::exists("dictkey"), "true");
     }
 
     SECTION("array get")
@@ -1361,7 +1382,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
 
     SECTION("array exists")
     {
-        assert_single_lookup_any_replica_success(integration, id, couchbase::lookup_in_specs::exists("array"));
+        assert_single_lookup_any_replica_success(integration, id, couchbase::lookup_in_specs::exists("array"), "true");
     }
 
     SECTION("array index get")
@@ -1371,7 +1392,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
 
     SECTION("array index exists")
     {
-        assert_single_lookup_any_replica_success(integration, id, couchbase::lookup_in_specs::exists("array[0]"));
+        assert_single_lookup_any_replica_success(integration, id, couchbase::lookup_in_specs::exists("array[0]"), "true");
     }
 
     SECTION("non existent path get")
@@ -1389,7 +1410,8 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
                                                id,
                                                couchbase::lookup_in_specs::exists("non-exist"),
                                                couchbase::key_value_status_code::subdoc_path_not_found,
-                                               std::error_code{});
+                                               std::error_code{},
+                                               "false");
     }
 
     SECTION("non existent doc")
@@ -1529,6 +1551,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
             REQUIRE(!result.cas().empty());
             REQUIRE("dictval" == result.content_as<std::string>(0));
             REQUIRE(result.exists("array"));
+            REQUIRE(result.content_as<bool>(1));
             REQUIRE(5 == result.content_as<int>(2));
         }
 
@@ -1562,6 +1585,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
             auto [ctx, result] = collection.lookup_in_any_replica(key, specs).get();
             REQUIRE_SUCCESS(ctx.ec());
             REQUIRE(!result.exists(0));
+            REQUIRE(!result.content_as<bool>(0));
         }
     }
 }
@@ -1660,5 +1684,6 @@ TEST_CASE("integration: public API lookup in per-spec errors", "[integration]")
 
         REQUIRE_SUCCESS(ctx.ec());
         REQUIRE(!result.exists(0));
+        REQUIRE(!result.content_as<bool>(0));
     }
 }

@@ -114,9 +114,6 @@ initiate_lookup_in_all_replicas_operation(std::shared_ptr<cluster> core,
                                 lookup_in_entry.exists = field.exists;
                                 lookup_in_entry.original_index = field.original_index;
                                 lookup_in_entry.ec = field.ec;
-                                if (field.opcode == protocol::subdoc_opcode::exists && field.ec == errc::key_value::path_not_found) {
-                                    lookup_in_entry.ec.clear();
-                                }
                                 entries.emplace_back(lookup_in_entry);
                             }
                             ctx->result_.emplace_back(lookup_in_replica_result{ resp.cas, entries, resp.deleted, true /* replica */ });
@@ -160,9 +157,6 @@ initiate_lookup_in_all_replicas_operation(std::shared_ptr<cluster> core,
                           lookup_in_entry.exists = field.exists;
                           lookup_in_entry.original_index = field.original_index;
                           lookup_in_entry.ec = field.ec;
-                          if (field.opcode == protocol::subdoc_opcode::exists && field.ec == errc::key_value::path_not_found) {
-                              lookup_in_entry.ec.clear();
-                          }
                           entries.emplace_back(lookup_in_entry);
                       }
                       ctx->result_.emplace_back(lookup_in_replica_result{ resp.cas, entries, resp.deleted, false /* active */ });
