@@ -129,7 +129,7 @@ map_status_code(protocol::client_opcode opcode, std::uint16_t status)
             return errc::key_value::path_too_big;
 
         case key_value_status_code::subdoc_doc_too_deep:
-            return errc::key_value::value_too_deep;
+            return errc::key_value::path_too_deep;
 
         case key_value_status_code::subdoc_value_cannot_insert:
             return errc::key_value::value_invalid;
