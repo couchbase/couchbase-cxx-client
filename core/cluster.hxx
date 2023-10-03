@@ -333,6 +333,8 @@ class cluster : public std::enable_shared_from_this<cluster>
         }
     }
 
+    void configure_tls_options(bool has_capella_host);
+
     template<typename Handler>
     void do_open(Handler&& handler)
     {
@@ -374,26 +376,8 @@ class cluster : public std::enable_shared_from_this<cluster>
         }
 
         if (origin_.options().enable_tls) {
-            long tls_options = asio::ssl::context::default_workarounds | // various bug workarounds that should be rather harmless
-                               asio::ssl::context::no_sslv2 |            // published: 1995, deprecated: 2011
-                               asio::ssl::context::no_sslv3;             // published: 1996, deprecated: 2015
-            if (origin_.options().tls_disable_deprecated_protocols) {
-                tls_options |= asio::ssl::context::no_tlsv1 |  // published: 1999, deprecated: 2021
-                               asio::ssl::context::no_tlsv1_1; // published: 2006, deprecated: 2021
-            }
-            if (origin_.options().tls_disable_v1_2 || has_capella_host) {
-                tls_options |= asio::ssl::context::no_tlsv1_2; // published: 2008, still in use
-            }
-            tls_.set_options(tls_options);
-            switch (origin_.options().tls_verify) {
-                case tls_verify_mode::none:
-                    tls_.set_verify_mode(asio::ssl::verify_none);
-                    break;
+            configure_tls_options(has_capella_host);
 
-                case tls_verify_mode::peer:
-                    tls_.set_verify_mode(asio::ssl::verify_peer);
-                    break;
-            }
             if (origin_.options().trust_certificate.empty() &&
                 origin_.options().trust_certificate_value.empty()) { // trust certificate is not explicitly specified
                 CB_LOG_DEBUG(R"([{}]: use default CA for TLS verify)", id_);
@@ -449,16 +433,6 @@ class cluster : public std::enable_shared_from_this<cluster>
                     }
                 }
             }
-#ifdef COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE
-            SSL_CTX_set_keylog_callback(tls_.native_handle(), [](const SSL* /* ssl */, const char* line) {
-                std::ofstream keylog(COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE, std::ios::out | std::ios::app | std::ios::binary);
-                keylog << std::string_view(line) << std::endl;
-            });
-            CB_LOG_CRITICAL(
-              "COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE was set to \"{}\" during build, all TLS keys will be logged for network analysis "
-              "(https://wiki.wireshark.org/TLS). DO NOT USE THIS BUILD IN PRODUCTION",
-              COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE);
-#endif
             if (origin_.credentials().uses_certificate()) {
                 std::error_code ec{};
                 CB_LOG_DEBUG(R"([{}]: use TLS certificate chain: "{}")", id_, origin_.certificate_path());
@@ -474,7 +448,6 @@ class cluster : public std::enable_shared_from_this<cluster>
                     return close([ec, handler = std::forward<Handler>(handler)]() mutable { return handler(ec); });
                 }
             }
-
             session_ = io::mcbp_session(id_, ctx_, tls_, origin_, dns_srv_tracker_);
         } else {
             session_ = io::mcbp_session(id_, ctx_, origin_, dns_srv_tracker_);
