@@ -423,6 +423,8 @@ else ()
     add_library(couchbase_cxx_client STATIC ${couchbase_cxx_client_FILES})
 endif ()
 set_target_properties(couchbase_cxx_client PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+target_include_directories(couchbase_cxx_client PRIVATE ${PROJECT_BINARY_DIR}/generated)
 target_include_directories(couchbase_cxx_client PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/private)
 target_include_directories(
         couchbase_cxx_client SYSTEM

@@ -17,6 +17,8 @@
 
 #include "cluster.hxx"
 
+#include "couchbase/build_config.hxx"
+
 #include "core/mcbp/completion_token.hxx"
 #include "core/mcbp/queue_request.hxx"
 #include "ping_collector.hxx"
@@ -75,6 +77,42 @@ class ping_collector_impl
         }
     }
 };
+
+void
+cluster::configure_tls_options(bool has_capella_host)
+{
+    long tls_options = asio::ssl::context::default_workarounds | // various bug workarounds that should be rather harmless
+                       asio::ssl::context::no_sslv2 |            // published: 1995, deprecated: 2011
+                       asio::ssl::context::no_sslv3;             // published: 1996, deprecated: 2015
+    if (origin_.options().tls_disable_deprecated_protocols) {
+        tls_options |= asio::ssl::context::no_tlsv1 |  // published: 1999, deprecated: 2021
+                       asio::ssl::context::no_tlsv1_1; // published: 2006, deprecated: 2021
+    }
+    if (origin_.options().tls_disable_v1_2 || has_capella_host) {
+        tls_options |= asio::ssl::context::no_tlsv1_2; // published: 2008, still in use
+    }
+    tls_.set_options(tls_options);
+    switch (origin_.options().tls_verify) {
+        case tls_verify_mode::none:
+            tls_.set_verify_mode(asio::ssl::verify_none);
+            break;
+
+        case tls_verify_mode::peer:
+            tls_.set_verify_mode(asio::ssl::verify_peer);
+            break;
+    }
+
+#ifdef COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE
+    SSL_CTX_set_keylog_callback(tls_.native_handle(), [](const SSL* /* ssl */, const char* line) {
+        std::ofstream keylog(COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE, std::ios::out | std::ios::app | std::ios::binary);
+        keylog << std::string_view(line) << std::endl;
+    });
+    CB_LOG_CRITICAL(
+      "COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE was set to \"{}\" during build, all TLS keys will be logged for network analysis "
+      "(https://wiki.wireshark.org/TLS). DO NOT USE THIS BUILD IN PRODUCTION",
+      COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE);
+#endif
+}
 
 void
 cluster::do_ping(std::optional<std::string> report_id,
