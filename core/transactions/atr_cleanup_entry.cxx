@@ -22,6 +22,7 @@
 
 #include "core/transactions.hxx"
 #include "internal/atr_cleanup_entry.hxx"
+#include "internal/exceptions_internal.hxx"
 #include "internal/logging.hxx"
 #include "internal/transactions_cleanup.hxx"
 #include "internal/utils.hxx"
@@ -407,7 +408,8 @@ atr_cleanup_entry::cleanup_entry(durability_level dl)
         error_class ec = e.ec();
         switch (ec) {
             case FAIL_PATH_NOT_FOUND:
-                CB_ATTEMPT_CLEANUP_LOG_TRACE("found attempt {} has also inserted 'p' field indicating collision with main algo");
+                CB_ATTEMPT_CLEANUP_LOG_TRACE("found attempt {} has also inserted 'p' field indicating collision with main algo",
+                                             attempt_id_);
                 return;
             default:
                 CB_ATTEMPT_CLEANUP_LOG_ERROR("cleanup couldn't remove attempt {} due to {} {}", attempt_id_, ec, e.what());

@@ -81,9 +81,10 @@ class ping_collector_impl
 void
 cluster::configure_tls_options(bool has_capella_host)
 {
-    long tls_options = asio::ssl::context::default_workarounds | // various bug workarounds that should be rather harmless
-                       asio::ssl::context::no_sslv2 |            // published: 1995, deprecated: 2011
-                       asio::ssl::context::no_sslv3;             // published: 1996, deprecated: 2015
+    asio::ssl::context::options tls_options =
+      asio::ssl::context::default_workarounds | // various bug workarounds that should be rather harmless
+      asio::ssl::context::no_sslv2 |            // published: 1995, deprecated: 2011
+      asio::ssl::context::no_sslv3;             // published: 1996, deprecated: 2015
     if (origin_.options().tls_disable_deprecated_protocols) {
         tls_options |= asio::ssl::context::no_tlsv1 |  // published: 1999, deprecated: 2021
                        asio::ssl::context::no_tlsv1_1; // published: 2006, deprecated: 2021

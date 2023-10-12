@@ -286,7 +286,7 @@ dns_client::query_srv(const std::string& name,
                       utils::movable_function<void(dns_srv_response&&)>&& handler)
 {
     std::error_code ec;
-    auto address = asio::ip::address::from_string(config.nameserver(), ec);
+    auto address = asio::ip::make_address(config.nameserver(), ec);
     if (ec) {
         return handler({ ec });
     }

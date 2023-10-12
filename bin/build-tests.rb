@@ -85,8 +85,8 @@ FileUtils.rm_rf(BUILD_DIR, verbose: true)
 FileUtils.mkdir_p(BUILD_DIR, verbose: true)
 
 Dir.chdir(BUILD_DIR) do
-  if RUBY_PLATFORM =~ /mswin|mingw/
-    CB_CMAKE_EXTRAS << "-DOPENSSL_ROOT_DIR=C:/Program Files/OpenSSL"
+  if RUBY_PLATFORM =~ /mswin|mingw/ && ENV["GITHUB_ACTIONS"]
+    CB_CMAKE_EXTRAS << "-DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON"
   else
     CB_CMAKE_EXTRAS << "-DCMAKE_C_COMPILER=#{CB_CC}" << "-DCMAKE_CXX_COMPILER=#{CB_CXX}"
   end

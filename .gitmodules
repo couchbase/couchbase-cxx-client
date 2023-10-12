@@ -1,31 +1,7 @@
-[submodule "third_party/gsl"]
-	path = third_party/gsl
-	url = https://github.com/microsoft/gsl.git
 [submodule "third_party/json"]
 	path = third_party/json
 	url = https://github.com/couchbasedeps/taocpp-json.git
     branch = 1.0.0-couchbase
-[submodule "third_party/spdlog"]
-	path = third_party/spdlog
-	url = https://github.com/gabime/spdlog.git
-[submodule "third_party/http_parser"]
-	path = third_party/http_parser
-	url = https://github.com/nodejs/http-parser.git
-[submodule "third_party/asio"]
-	path = third_party/asio
-	url = https://github.com/chriskohlhoff/asio.git
-[submodule "third_party/snappy"]
-	path = third_party/snappy
-	url = https://github.com/google/snappy.git
-[submodule "third_party/catch2"]
-	path = third_party/catch2
-	url = https://github.com/catchorg/Catch2.git
-[submodule "third_party/hdr_histogram_c"]
-	path = third_party/hdr_histogram_c
-	url = https://github.com/HdrHistogram/HdrHistogram_c.git
-[submodule "third_party/fmt"]
-	path = third_party/fmt
-	url = https://github.com/fmtlib/fmt.git
 [submodule "third_party/docopt"]
 	path = third_party/docopt
 	url = https://github.com/docopt/docopt.cpp.git

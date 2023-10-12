@@ -13,6 +13,8 @@ target_link_libraries(
   test_utils
   PRIVATE project_options
           project_warnings
+          Microsoft.GSL::GSL
+          asio
           fmt::fmt
           spdlog::spdlog)
 target_include_directories(test_utils PRIVATE ${PROJECT_SOURCE_DIR})

@@ -162,7 +162,7 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
 }
 
 void
-initiate_cluster_connect(asio::io_service& io,
+initiate_cluster_connect(asio::io_context& io,
                          const std::string& connection_string,
                          const couchbase::cluster_options& options,
                          cluster_connect_handler&& handler)

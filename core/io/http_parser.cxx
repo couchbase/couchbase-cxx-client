@@ -17,12 +17,15 @@
 
 #include "http_parser.hxx"
 
-#include "third_party/http_parser/http_parser.h"
-#include <algorithm>
 #include <fmt/core.h>
+#include <llhttp.h>
 
-static inline int
-static_on_status(::http_parser* parser, const char* at, std::size_t length)
+#include <algorithm>
+
+namespace
+{
+inline int
+static_on_status(llhttp_t* parser, const char* at, std::size_t length)
 {
     auto* wrapper = static_cast<couchbase::core::io::http_parser*>(parser->data);
     wrapper->response.status_message.assign(at, length);
@@ -30,8 +33,8 @@ static_on_status(::http_parser* parser, const char* at, std::size_t length)
     return 0;
 }
 
-static inline int
-static_on_header_field(::http_parser* parser, const char* at, std::size_t length)
+inline int
+static_on_header_field(llhttp_t* parser, const char* at, std::size_t length)
 {
     auto* wrapper = static_cast<couchbase::core::io::http_parser*>(parser->data);
     wrapper->header_field.assign(at, length);
@@ -41,47 +44,49 @@ static_on_header_field(::http_parser* parser, const char* at, std::size_t length
     return 0;
 }
 
-static inline int
-static_on_header_value(::http_parser* parser, const char* at, std::size_t length)
+inline int
+static_on_header_value(llhttp_t* parser, const char* at, std::size_t length)
 {
     auto* wrapper = static_cast<couchbase::core::io::http_parser*>(parser->data);
     wrapper->response.headers[wrapper->header_field] = std::string(at, length);
     return 0;
 }
 
-static inline int
-static_on_body(::http_parser* parser, const char* at, std::size_t length)
+inline int
+static_on_body(llhttp_t* parser, const char* at, std::size_t length)
 {
     auto* wrapper = static_cast<couchbase::core::io::http_parser*>(parser->data);
     wrapper->response.body.append(std::string_view{ at, length });
     return 0;
 }
 
-static inline int
-static_on_message_complete(::http_parser* parser)
+inline int
+static_on_message_complete(llhttp_t* parser)
 {
     auto* wrapper = static_cast<couchbase::core::io::http_parser*>(parser->data);
     wrapper->complete = true;
     return 0;
 }
+} // namespace
 
 namespace couchbase::core::io
 {
 struct http_parser_state {
-    ::http_parser_settings settings_{};
-    ::http_parser parser_{};
+    llhttp_settings_t settings_{};
+    llhttp_t parser_{};
 };
 
 http_parser::http_parser()
 {
     state_ = std::make_shared<http_parser_state>();
-    state_->parser_.data = this;
+    llhttp_settings_init(&state_->settings_);
     state_->settings_.on_status = static_on_status;
     state_->settings_.on_header_field = static_on_header_field;
     state_->settings_.on_header_value = static_on_header_value;
     state_->settings_.on_body = static_on_body;
     state_->settings_.on_message_complete = static_on_message_complete;
-    ::http_parser_init(&state_->parser_, HTTP_RESPONSE);
+    llhttp_init(&state_->parser_, HTTP_RESPONSE, &state_->settings_);
+    state_->parser_.data = this;
 }
 
 http_parser::http_parser(http_parser&& other) noexcept
@@ -113,27 +118,20 @@ http_parser::reset()
     complete = false;
     response = {};
     header_field = {};
-    ::http_parser_init(&state_->parser_, HTTP_RESPONSE);
+    llhttp_init(&state_->parser_, HTTP_RESPONSE, &state_->settings_);
 }
 
-std::string
+const char*
 http_parser::error_message() const
 {
-#define HTTP_ERRNO_GEN(n, s)                                                                                                               \
-    case HPE_##n:                                                                                                                          \
-        return fmt::format("HPE_" #n " ({})", s);
-
-    switch (state_->parser_.http_errno) {
-        HTTP_ERRNO_MAP(HTTP_ERRNO_GEN)
-    }
-#undef HTTP_ERRNO_GEN
-    return "unknown error: " + std::to_string(state_->parser_.http_errno);
+    return llhttp_errno_name(llhttp_get_errno(&state_->parser_));
 }
 
 http_parser::feeding_result
-http_parser::feed(const char* data, size_t data_len)
+http_parser::feed(const char* data, size_t data_len) const
 {
-    if (std::size_t bytes_parsed = ::http_parser_execute(&state_->parser_, &state_->settings_, data, data_len); bytes_parsed != data_len) {
+    auto error = llhttp_execute(&state_->parser_, data, data_len);
+    if (error != HPE_OK) {
         return { true, complete, error_message() };
     }
     return { false, complete };

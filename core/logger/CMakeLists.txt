@@ -4,6 +4,7 @@ target_link_libraries(
   couchbase_logger
   PRIVATE project_options
           project_warnings
+          Microsoft.GSL::GSL
           fmt::fmt
           spdlog::spdlog)
 target_include_directories(couchbase_logger PRIVATE ../..)

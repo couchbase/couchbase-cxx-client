@@ -19,7 +19,7 @@ project(
         couchbase_cxx_client
         VERSION "1.0.0.${couchbase_cxx_client_BUILD_NUMBER}"
         LANGUAGES CXX C)
-message(STATUS "Couchbase C++ client ${couchbase_cxx_client_VERSION}")
+message(STATUS "Couchbase C++ client ${couchbase_cxx_client_VERSION}, master: ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT}")
 
 include(cmake/PreventInSourceBuilds.cmake)
 include(cmake/StandardProjectSettings.cmake)
@@ -428,15 +428,12 @@ target_include_directories(couchbase_cxx_client PRIVATE ${PROJECT_BINARY_DIR}/ge
 target_include_directories(couchbase_cxx_client PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/private)
 target_include_directories(
         couchbase_cxx_client SYSTEM
-        PUBLIC ${PROJECT_SOURCE_DIR}/third_party/asio/asio/include
-        ${PROJECT_SOURCE_DIR}/third_party/gsl/include
+        PUBLIC
         ${PROJECT_SOURCE_DIR}/third_party/http_parser/include
         ${PROJECT_SOURCE_DIR}/third_party/json/external/PEGTL/include
         ${PROJECT_SOURCE_DIR}/third_party/json/include
         ${PROJECT_SOURCE_DIR}/third_party/cxx_function
-        ${PROJECT_SOURCE_DIR}/third_party/fmt/include
-        ${PROJECT_SOURCE_DIR}/third_party/expected/include
-        ${PROJECT_SOURCE_DIR}/third_party/spdlog/include)
+        ${PROJECT_SOURCE_DIR}/third_party/expected/include)
 target_link_libraries(couchbase_cxx_client PRIVATE project_options project_warnings)
 
 include(cmake/DetectStandardFilesystem.cmake)
@@ -468,7 +465,10 @@ target_link_libraries(
         couchbase_tracing
         couchbase_metrics)
 
-target_link_libraries(couchbase_cxx_client PRIVATE http_parser)
+target_link_libraries(
+        couchbase_cxx_client
+        PRIVATE Microsoft.GSL::GSL asio llhttp::llhttp)
+
 if (WIN32)
     target_link_libraries(couchbase_cxx_client PRIVATE iphlpapi)
 endif ()
@@ -495,22 +495,22 @@ if (COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
     endif()
 endif()
 
-option(COUCHBASE_CXX_CLIENT_BUILD_TESTS "Build test programs" TRUE)
+option(COUCHBASE_CXX_CLIENT_BUILD_TESTS "Build test programs" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if (COUCHBASE_CXX_CLIENT_BUILD_TESTS)
     include(cmake/Testing.cmake)
 endif ()
 
-option(COUCHBASE_CXX_CLIENT_BUILD_DOCS "Build API documentation" TRUE)
+option(COUCHBASE_CXX_CLIENT_BUILD_DOCS "Build API documentation" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if (COUCHBASE_CXX_CLIENT_BUILD_DOCS)
     include(cmake/Documentation.cmake)
 endif ()
 
-option(COUCHBASE_CXX_CLIENT_BUILD_EXAMPLES "Build example programs" TRUE)
+option(COUCHBASE_CXX_CLIENT_BUILD_EXAMPLES "Build example programs" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if (COUCHBASE_CXX_CLIENT_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif ()
 
-option(COUCHBASE_CXX_CLIENT_BUILD_TOOLS "Build tools" TRUE)
+option(COUCHBASE_CXX_CLIENT_BUILD_TOOLS "Build tools" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if (COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
     add_subdirectory(third_party/docopt)
     add_subdirectory(tools)

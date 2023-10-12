@@ -29,6 +29,7 @@
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
 #include <fmt/chrono.h>
+#include <fmt/std.h>
 
 #include <csignal>
 #include <numeric>

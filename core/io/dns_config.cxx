@@ -30,6 +30,9 @@
 
 #include "core/logger/logger.hxx"
 #include "dns_config.hxx"
+
+#include <asio/ip/address.hpp>
+
 #include <mutex>
 
 namespace couchbase::core::io::dns
@@ -145,7 +148,7 @@ dns_config::system_config()
         auto nameserver = load_resolv_conf(default_resolv_conf_path);
 #endif
         std::error_code ec;
-        asio::ip::address::from_string(nameserver, ec);
+        asio::ip::make_address(nameserver, ec);
         if (ec) {
             CB_LOG_DEBUG("Unable to parse \"{}\" as a network address, fall back to \"{}\"", nameserver, default_nameserver);
             nameserver = default_nameserver;

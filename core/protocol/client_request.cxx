@@ -18,7 +18,7 @@
 #include "client_request.hxx"
 #include "core/utils/binary.hxx"
 
-#include "third_party/snappy/snappy.h"
+#include <snappy.h>
 
 namespace couchbase::core::protocol
 {
