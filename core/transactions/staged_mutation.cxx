@@ -592,7 +592,7 @@ staged_mutation_queue::handle_commit_doc_error(const client_error& e,
             default:
                 throw transaction_operation_failed(ec, e.what()).no_rollback().failed_post_commit();
         }
-    } catch (const retry_operation& e) {
+    } catch (const retry_operation&) {
         try {
             delay([this, callback = std::move(callback), ctx, &item, delay, ambiguity_resolution_mode, cas_zero_mode](
                     std::error_code ec) mutable {
@@ -602,11 +602,11 @@ staged_mutation_queue::handle_commit_doc_error(const client_error& e,
                 CB_ATTEMPT_CTX_LOG_TRACE(ctx, "retrying commit_doc");
                 commit_doc(ctx, item, delay, std::move(callback), ambiguity_resolution_mode, cas_zero_mode);
             });
-        } catch (const retry_operation_retries_exhausted& e) {
+        } catch (const retry_operation_retries_exhausted&) {
             callback(std::current_exception());
         }
 
-    } catch (const transaction_operation_failed& e) {
+    } catch (const transaction_operation_failed&) {
         callback(std::current_exception());
     }
 }
@@ -631,7 +631,7 @@ staged_mutation_queue::handle_remove_doc_error(const client_error& e,
             default:
                 throw transaction_operation_failed(ec, e.what()).no_rollback().failed_post_commit();
         }
-    } catch (const retry_operation& e) {
+    } catch (const retry_operation&) {
         try {
             delay([this, callback = std::move(callback), ctx, &item, delay](std::error_code ec) mutable {
                 CB_ATTEMPT_CTX_LOG_TRACE(ctx, "callback invoked after delay");
@@ -641,12 +641,12 @@ staged_mutation_queue::handle_remove_doc_error(const client_error& e,
                 CB_ATTEMPT_CTX_LOG_TRACE(ctx, "retrying remove_doc");
                 remove_doc(ctx, item, delay, std::move(callback));
             });
-        } catch (const retry_operation_retries_exhausted& e) {
+        } catch (const retry_operation_retries_exhausted&) {
             CB_ATTEMPT_CTX_LOG_TRACE(ctx, "remove_doc operation retries exhausted");
             callback(std::current_exception());
         }
 
-    } catch (const transaction_operation_failed& e) {
+    } catch (const transaction_operation_failed&) {
         callback(std::current_exception());
     }
 }
@@ -683,7 +683,7 @@ staged_mutation_queue::handle_rollback_insert_error(const client_error& e,
             default:
                 throw retry_operation("retry rollback insert");
         }
-    } catch (const retry_operation& e) {
+    } catch (const retry_operation&) {
         try {
             delay([this, callback = std::move(callback), ctx, &item, delay](std::error_code ec) mutable {
                 if (ec == asio::error::operation_aborted) {
@@ -692,10 +692,10 @@ staged_mutation_queue::handle_rollback_insert_error(const client_error& e,
                 CB_ATTEMPT_CTX_LOG_TRACE(ctx, "retrying rollback_insert");
                 rollback_insert(ctx, item, delay, std::move(callback));
             });
-        } catch (const retry_operation_timeout& e) {
+        } catch (const retry_operation_timeout&) {
             callback(std::current_exception());
         }
-    } catch (const transaction_operation_failed& e) {
+    } catch (const transaction_operation_failed&) {
         callback(std::current_exception());
     }
 }
@@ -731,7 +731,7 @@ staged_mutation_queue::handle_rollback_remove_or_replace_error(const client_erro
             default:
                 throw retry_operation("retry rollback_remove_or_replace");
         }
-    } catch (const retry_operation& e) {
+    } catch (const retry_operation&) {
         try {
             delay([this, callback = std::move(callback), ctx, &item, delay](std::error_code ec) mutable {
                 if (ec == asio::error::operation_aborted) {
@@ -743,7 +743,7 @@ staged_mutation_queue::handle_rollback_remove_or_replace_error(const client_erro
         } catch (const retry_operation_timeout&) {
             callback(std::current_exception());
         }
-    } catch (const transaction_operation_failed& e) {
+    } catch (const transaction_operation_failed&) {
         callback(std::current_exception());
     }
 }
