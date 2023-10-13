@@ -30,6 +30,9 @@
 #include <string>
 #include <thread>
 
+#include <asio/steady_timer.hpp>
+#include <utility>
+
 namespace couchbase::core::transactions
 {
 // returns the parsed server time from the result of a lookup_in_spec::get(subdoc::lookup_in_macro::vbucket).xattr() call
@@ -81,6 +84,9 @@ wrap_durable_request(T&& req, const couchbase::transactions::transactions_config
     req.durability_level = level;
     return req;
 }
+
+void
+validate_operation_result(result& res, bool ignore_subdoc_errors = true);
 
 result
 wrap_operation_future(std::future<result>& fut, bool ignore_subdoc_errors = true);
@@ -297,6 +303,81 @@ struct constant_delay {
             throw retry_operation_retries_exhausted("retries exhausted");
         }
         std::this_thread::sleep_for(delay);
+    }
+};
+
+struct async_exp_delay {
+    std::shared_ptr<asio::steady_timer> timer;
+    std::chrono::microseconds initial_delay;
+    std::chrono::microseconds max_delay;
+    std::chrono::microseconds timeout;
+    mutable std::uint32_t retries;
+    mutable std::optional<std::chrono::time_point<std::chrono::steady_clock>> end_time;
+
+    template<typename R1, typename P1, typename R2, typename P2, typename R3, typename P3>
+    async_exp_delay(std::shared_ptr<asio::steady_timer> timer,
+                    std::chrono::duration<R1, P1> initial,
+                    std::chrono::duration<R2, P2> max,
+                    std::chrono::duration<R3, P3> limit)
+      : timer(std::move(timer))
+      , initial_delay(std::chrono::duration_cast<std::chrono::microseconds>(initial))
+      , max_delay(std::chrono::duration_cast<std::chrono::microseconds>(max))
+      , timeout(std::chrono::duration_cast<std::chrono::microseconds>(limit))
+      , retries(0)
+      , end_time()
+    {
+    }
+
+    void operator()(utils::movable_function<void(std::error_code)> callback) const
+    {
+        auto now = std::chrono::steady_clock::now();
+        if (!end_time) {
+            end_time = std::chrono::steady_clock::now() + timeout;
+            return;
+        }
+        if (now > *end_time) {
+            throw retry_operation_timeout("timed out");
+        }
+        auto delay = std::chrono::duration_cast<std::chrono::microseconds>(initial_delay * (jitter() * pow(2, retries++)));
+        if (delay > max_delay) {
+            delay = max_delay;
+        }
+        if (now + delay > *end_time) {
+            timer->expires_after(*end_time - now);
+        } else {
+            timer->expires_after(delay);
+        }
+        timer->async_wait(callback);
+    }
+};
+
+struct async_constant_delay {
+    std::shared_ptr<asio::steady_timer> timer;
+    std::chrono::microseconds delay;
+    std::size_t max_retries;
+    std::size_t retries;
+
+    template<typename R, typename P>
+    async_constant_delay(std::shared_ptr<asio::steady_timer> timer, std::chrono::duration<R, P> d, std::size_t max)
+      : timer(std::move(timer))
+      , delay(std::chrono::duration_cast<std::chrono::microseconds>(d))
+      , max_retries(max)
+      , retries(0)
+    {
+    }
+
+    explicit async_constant_delay(std::shared_ptr<asio::steady_timer> timer)
+      : async_constant_delay(std::move(timer), DEFAULT_RETRY_OP_DELAY, DEFAULT_RETRY_OP_MAX_RETRIES)
+    {
+    }
+
+    void operator()(utils::movable_function<void(std::error_code)> callback)
+    {
+        if (retries++ >= max_retries) {
+            throw retry_operation_retries_exhausted("retries exhausted");
+        }
+        timer->expires_after(delay);
+        timer->async_wait(callback);
     }
 };
 
