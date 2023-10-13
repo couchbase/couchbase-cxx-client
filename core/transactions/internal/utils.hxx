@@ -347,7 +347,7 @@ struct async_exp_delay {
         } else {
             timer->expires_after(delay);
         }
-        timer->async_wait(callback);
+        timer->async_wait(std::move(callback));
     }
 };
 
@@ -359,7 +359,7 @@ struct async_constant_delay {
 
     template<typename R, typename P>
     async_constant_delay(std::shared_ptr<asio::steady_timer> timer, std::chrono::duration<R, P> d, std::size_t max)
-      : timer(std::move(timer))
+      : timer(timer)
       , delay(std::chrono::duration_cast<std::chrono::microseconds>(d))
       , max_retries(max)
       , retries(0)
@@ -367,7 +367,7 @@ struct async_constant_delay {
     }
 
     explicit async_constant_delay(std::shared_ptr<asio::steady_timer> timer)
-      : async_constant_delay(std::move(timer), DEFAULT_RETRY_OP_DELAY, DEFAULT_RETRY_OP_MAX_RETRIES)
+      : async_constant_delay(timer, DEFAULT_RETRY_OP_DELAY, DEFAULT_RETRY_OP_MAX_RETRIES)
     {
     }
 
@@ -377,7 +377,7 @@ struct async_constant_delay {
             throw retry_operation_retries_exhausted("retries exhausted");
         }
         timer->expires_after(delay);
-        timer->async_wait(callback);
+        timer->async_wait(std::move(callback));
     }
 };
 

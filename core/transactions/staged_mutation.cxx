@@ -312,12 +312,12 @@ staged_mutation_queue::rollback(attempt_context_impl* ctx)
 void
 staged_mutation_queue::rollback_insert(attempt_context_impl* ctx,
                                        const staged_mutation& item,
-                                       async_exp_delay& delay,
+                                       async_exp_delay delay,
                                        utils::movable_function<void(std::exception_ptr)> callback)
 {
     CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rolling back staged insert for {} with cas {}", item.doc().id(), item.doc().cas().value());
 
-    asio::post(asio::bind_executor(ctx->cluster_ref()->io_context(), [this, callback = std::move(callback), ctx, &item, &delay]() mutable {
+    asio::post(asio::bind_executor(ctx->cluster_ref()->io_context(), [this, callback = std::move(callback), ctx, &item, delay]() mutable {
         try {
             auto ec = ctx->error_if_expired_and_not_in_overtime(STAGE_DELETE_INSERTED, item.doc().id().key());
             if (ec) {
@@ -337,7 +337,7 @@ staged_mutation_queue::rollback_insert(attempt_context_impl* ctx,
             req.cas = item.doc().cas();
             wrap_durable_request(req, ctx->overall().config());
             return ctx->cluster_ref()->execute(
-              req, [this, callback = std::move(callback), ctx, &item, &delay](const core::operations::mutate_in_response& resp) mutable {
+              req, [this, callback = std::move(callback), ctx, &item, delay](const core::operations::mutate_in_response& resp) mutable {
                   CB_ATTEMPT_CTX_LOG_TRACE(ctx, "mutate_in for {} with cas {}", item.doc().id(), item.doc().cas().value());
 
                   auto res = result::create_from_subdoc_response(resp);
@@ -359,12 +359,12 @@ staged_mutation_queue::rollback_insert(attempt_context_impl* ctx,
 void
 staged_mutation_queue::rollback_remove_or_replace(attempt_context_impl* ctx,
                                                   const staged_mutation& item,
-                                                  async_exp_delay& delay,
+                                                  async_exp_delay delay,
                                                   utils::movable_function<void(std::exception_ptr)> callback)
 {
     CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rolling back staged remove/replace for {} with cas {}", item.doc().id(), item.doc().cas().value());
 
-    asio::post(asio::bind_executor(ctx->cluster_ref()->io_context(), [this, callback = std::move(callback), ctx, &item, &delay]() mutable {
+    asio::post(asio::bind_executor(ctx->cluster_ref()->io_context(), [this, callback = std::move(callback), ctx, &item, delay]() mutable {
         try {
             auto ec = ctx->error_if_expired_and_not_in_overtime(STAGE_ROLLBACK_DOC, item.doc().id().key());
             if (ec) {
@@ -383,7 +383,7 @@ staged_mutation_queue::rollback_remove_or_replace(attempt_context_impl* ctx,
             req.cas = item.doc().cas();
             wrap_durable_request(req, ctx->overall().config());
             return ctx->cluster_ref()->execute(
-              req, [this, callback = std::move(callback), ctx, &item, &delay](const core::operations::mutate_in_response& resp) mutable {
+              req, [this, callback = std::move(callback), ctx, &item, delay](const core::operations::mutate_in_response& resp) mutable {
                   auto res = result::create_from_subdoc_response(resp);
                   try {
                       validate_rollback_remove_or_replace_result(ctx, res, item);
@@ -403,7 +403,7 @@ staged_mutation_queue::rollback_remove_or_replace(attempt_context_impl* ctx,
 void
 staged_mutation_queue::commit_doc(attempt_context_impl* ctx,
                                   staged_mutation& item,
-                                  async_constant_delay& delay,
+                                  async_constant_delay delay,
                                   utils::movable_function<void(std::exception_ptr)> callback,
                                   bool ambiguity_resolution_mode,
                                   bool cas_zero_mode)
@@ -413,7 +413,7 @@ staged_mutation_queue::commit_doc(attempt_context_impl* ctx,
 
     asio::post(asio::bind_executor(
       ctx->cluster_ref()->io_context(),
-      [this, callback = std::move(callback), ctx, &item, &delay, cas_zero_mode, ambiguity_resolution_mode]() mutable {
+      [this, callback = std::move(callback), ctx, &item, delay, cas_zero_mode, ambiguity_resolution_mode]() mutable {
           try {
               ctx->check_expiry_during_commit_or_rollback(STAGE_COMMIT_DOC, std::optional<const std::string>(item.doc().id().key()));
               auto ec = ctx->hooks_.before_doc_committed(ctx, item.doc().id().key());
@@ -431,7 +431,7 @@ staged_mutation_queue::commit_doc(attempt_context_impl* ctx,
                   wrap_durable_request(req, ctx->overall().config());
                   return ctx->cluster_ref()->execute(
                     req,
-                    [this, callback = std::move(callback), ctx, &item, &delay, ambiguity_resolution_mode, cas_zero_mode](
+                    [this, callback = std::move(callback), ctx, &item, delay, ambiguity_resolution_mode, cas_zero_mode](
                       const core::operations::insert_response& resp) mutable {
                         auto res = result::create_from_mutation_response(resp);
                         try {
@@ -457,7 +457,7 @@ staged_mutation_queue::commit_doc(attempt_context_impl* ctx,
                   wrap_durable_request(req, ctx->overall().config());
                   return ctx->cluster_ref()->execute(
                     req,
-                    [this, callback = std::move(callback), ctx, &item, &delay, ambiguity_resolution_mode, cas_zero_mode](
+                    [this, callback = std::move(callback), ctx, &item, delay, ambiguity_resolution_mode, cas_zero_mode](
                       const core::operations::mutate_in_response resp) mutable {
                         auto res = result::create_from_subdoc_response(resp);
                         try {
@@ -479,12 +479,12 @@ staged_mutation_queue::commit_doc(attempt_context_impl* ctx,
 void
 staged_mutation_queue::remove_doc(attempt_context_impl* ctx,
                                   const staged_mutation& item,
-                                  async_constant_delay& delay,
+                                  async_constant_delay delay,
                                   utils::movable_function<void(std::exception_ptr)> callback)
 {
     CB_ATTEMPT_CTX_LOG_TRACE(ctx, "remove doc {}", item.doc().id());
 
-    asio::post(asio::bind_executor(ctx->cluster_ref()->io_context(), [this, callback = std::move(callback), ctx, &item, &delay]() mutable {
+    asio::post(asio::bind_executor(ctx->cluster_ref()->io_context(), [this, callback = std::move(callback), ctx, &item, delay]() mutable {
         try {
             ctx->check_expiry_during_commit_or_rollback(STAGE_REMOVE_DOC, std::optional<const std::string>(item.doc().id().key()));
             auto ec = ctx->hooks_.before_doc_removed(ctx, item.doc().id().key());
@@ -494,7 +494,7 @@ staged_mutation_queue::remove_doc(attempt_context_impl* ctx,
             core::operations::remove_request req{ item.doc().id() };
             wrap_durable_request(req, ctx->overall().config());
             return ctx->cluster_ref()->execute(
-              req, [this, callback = std::move(callback), ctx, &item, &delay](core::operations::remove_response resp) mutable {
+              req, [this, callback = std::move(callback), ctx, &item, delay](core::operations::remove_response resp) mutable {
                   auto res = result::create_from_mutation_response(resp);
                   try {
                       validate_remove_doc_result(ctx, res, item);
@@ -533,6 +533,7 @@ staged_mutation_queue::validate_remove_doc_result(attempt_context_impl* ctx, res
     validate_operation_result(res);
     CB_ATTEMPT_CTX_LOG_TRACE(ctx, "remove doc result {}", res);
     auto ec = ctx->hooks_.after_doc_removed_pre_retry(ctx, item.doc().id().key());
+    CB_ATTEMPT_CTX_LOG_TRACE(ctx, "got hook ec");
     if (ec) {
         throw client_error(*ec, "after_doc_removed_pre_retry threw error");
     }
@@ -564,7 +565,7 @@ void
 staged_mutation_queue::handle_commit_doc_error(const client_error& e,
                                                attempt_context_impl* ctx,
                                                staged_mutation& item,
-                                               async_constant_delay& delay,
+                                               async_constant_delay delay,
                                                bool ambiguity_resolution_mode,
                                                bool cas_zero_mode,
                                                utils::movable_function<void(std::exception_ptr)> callback)
@@ -591,9 +592,9 @@ staged_mutation_queue::handle_commit_doc_error(const client_error& e,
             default:
                 throw transaction_operation_failed(ec, e.what()).no_rollback().failed_post_commit();
         }
-    } catch (const retry_operation&) {
+    } catch (const retry_operation& e) {
         try {
-            delay([this, callback = std::move(callback), ctx, &item, &delay, ambiguity_resolution_mode, cas_zero_mode](
+            delay([this, callback = std::move(callback), ctx, &item, delay, ambiguity_resolution_mode, cas_zero_mode](
                     std::error_code ec) mutable {
                 if (ec == asio::error::operation_aborted) {
                     return;
@@ -601,11 +602,11 @@ staged_mutation_queue::handle_commit_doc_error(const client_error& e,
                 CB_ATTEMPT_CTX_LOG_TRACE(ctx, "retrying commit_doc");
                 commit_doc(ctx, item, delay, std::move(callback), ambiguity_resolution_mode, cas_zero_mode);
             });
-        } catch (const retry_operation_retries_exhausted&) {
+        } catch (const retry_operation_retries_exhausted& e) {
             callback(std::current_exception());
         }
 
-    } catch (const transaction_operation_failed&) {
+    } catch (const transaction_operation_failed& e) {
         callback(std::current_exception());
     }
 }
@@ -614,7 +615,7 @@ void
 staged_mutation_queue::handle_remove_doc_error(const client_error& e,
                                                attempt_context_impl* ctx,
                                                const staged_mutation& item,
-                                               async_constant_delay& delay,
+                                               async_constant_delay delay,
                                                utils::movable_function<void(std::exception_ptr)> callback)
 {
     auto ec = e.ec();
@@ -630,20 +631,22 @@ staged_mutation_queue::handle_remove_doc_error(const client_error& e,
             default:
                 throw transaction_operation_failed(ec, e.what()).no_rollback().failed_post_commit();
         }
-    } catch (const retry_operation&) {
+    } catch (const retry_operation& e) {
         try {
-            delay([this, callback = std::move(callback), ctx, &item, &delay](std::error_code ec) mutable {
+            delay([this, callback = std::move(callback), ctx, &item, delay](std::error_code ec) mutable {
+                CB_ATTEMPT_CTX_LOG_TRACE(ctx, "callback invoked after delay");
                 if (ec == asio::error::operation_aborted) {
                     return;
                 }
                 CB_ATTEMPT_CTX_LOG_TRACE(ctx, "retrying remove_doc");
                 remove_doc(ctx, item, delay, std::move(callback));
             });
-        } catch (const retry_operation_retries_exhausted&) {
+        } catch (const retry_operation_retries_exhausted& e) {
+            CB_ATTEMPT_CTX_LOG_TRACE(ctx, "remove_doc operation retries exhausted");
             callback(std::current_exception());
         }
 
-    } catch (const transaction_operation_failed&) {
+    } catch (const transaction_operation_failed& e) {
         callback(std::current_exception());
     }
 }
@@ -652,7 +655,7 @@ void
 staged_mutation_queue::handle_rollback_insert_error(const client_error& e,
                                                     attempt_context_impl* ctx,
                                                     const staged_mutation& item,
-                                                    async_exp_delay& delay,
+                                                    async_exp_delay delay,
                                                     utils::movable_function<void(std::exception_ptr)> callback)
 {
     auto ec = e.ec();
@@ -680,19 +683,19 @@ staged_mutation_queue::handle_rollback_insert_error(const client_error& e,
             default:
                 throw retry_operation("retry rollback insert");
         }
-    } catch (const retry_operation&) {
+    } catch (const retry_operation& e) {
         try {
-            delay([this, callback = std::move(callback), ctx, &item, &delay](std::error_code ec) mutable {
+            delay([this, callback = std::move(callback), ctx, &item, delay](std::error_code ec) mutable {
                 if (ec == asio::error::operation_aborted) {
                     return;
                 }
                 CB_ATTEMPT_CTX_LOG_TRACE(ctx, "retrying rollback_insert");
                 rollback_insert(ctx, item, delay, std::move(callback));
             });
-        } catch (const retry_operation_timeout&) {
+        } catch (const retry_operation_timeout& e) {
             callback(std::current_exception());
         }
-    } catch (const transaction_operation_failed&) {
+    } catch (const transaction_operation_failed& e) {
         callback(std::current_exception());
     }
 }
@@ -701,7 +704,7 @@ void
 staged_mutation_queue::handle_rollback_remove_or_replace_error(const client_error& e,
                                                                attempt_context_impl* ctx,
                                                                const staged_mutation& item,
-                                                               async_exp_delay& delay,
+                                                               async_exp_delay delay,
                                                                utils::movable_function<void(std::exception_ptr)> callback)
 {
     auto ec = e.ec();
@@ -728,9 +731,9 @@ staged_mutation_queue::handle_rollback_remove_or_replace_error(const client_erro
             default:
                 throw retry_operation("retry rollback_remove_or_replace");
         }
-    } catch (const retry_operation&) {
+    } catch (const retry_operation& e) {
         try {
-            delay([this, callback = std::move(callback), ctx, &item, &delay](std::error_code ec) mutable {
+            delay([this, callback = std::move(callback), ctx, &item, delay](std::error_code ec) mutable {
                 if (ec == asio::error::operation_aborted) {
                     return;
                 }
@@ -740,7 +743,7 @@ staged_mutation_queue::handle_rollback_remove_or_replace_error(const client_erro
         } catch (const retry_operation_timeout&) {
             callback(std::current_exception());
         }
-    } catch (const transaction_operation_failed&) {
+    } catch (const transaction_operation_failed& e) {
         callback(std::current_exception());
     }
 }
