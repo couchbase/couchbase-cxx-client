@@ -16,44 +16,30 @@
  */
 
 #include "utils.hxx"
+#include "core/logger/configuration.hxx"
+#include "core/logger/logger.hxx"
+#include "core/meta/version.hxx"
+#include "core/utils/duration_parser.hxx"
+#include "core/utils/json.hxx"
 
-#include <core/logger/configuration.hxx>
-#include <core/logger/logger.hxx>
-#include <core/meta/version.hxx>
-
+#include <couchbase/cluster_options.hxx>
+#include <couchbase/configuration_profiles_registry.hxx>
+#include <couchbase/fmt/analytics_scan_consistency.hxx>
 #include <couchbase/fmt/durability_level.hxx>
 #include <couchbase/fmt/query_scan_consistency.hxx>
-#include <couchbase/fmt/tls_verify_mode.hxx>
 
+#include <fmt/chrono.h>
 #include <spdlog/details/os.h>
 #include <spdlog/spdlog.h>
 
+#include <chrono>
 #include <regex>
 
 namespace cbc
 {
-docopt::Options
-parse_options(const std::string& doc, const std::vector<std::string>& argv, bool options_first)
+namespace
 {
-    try {
-        return docopt::docopt_parse(doc, argv, false, true, options_first);
-    } catch (const docopt::DocoptExitHelp&) {
-        fmt::print(stdout, doc);
-        std::exit(0);
-    } catch (const docopt::DocoptExitVersion&) {
-        fmt::print(stdout, "cbc {}\n", couchbase::core::meta::sdk_semver());
-        std::exit(0);
-    } catch (const docopt::DocoptLanguageError& error) {
-        fmt::print(stdout, "Docopt usage string could not be parsed. Please report this error.\n{}\n", error.what());
-        std::exit(-1);
-    } catch (const docopt::DocoptArgumentError&) {
-        fmt::print(stdout, doc);
-        fflush(stdout);
-        throw;
-    }
-}
-
-static auto
+auto
 getenv_or_default(std::string_view var_name, const std::string& default_value) -> std::string
 {
     if (auto val = spdlog::details::os::getenv(var_name.data()); !val.empty()) {
@@ -63,345 +49,500 @@ getenv_or_default(std::string_view var_name, const std::string& default_value) -
 }
 
 auto
-default_cluster_options() -> const couchbase::cluster_options&
+default_cluster_options() -> const auto&
 {
-    static const couchbase::cluster_options default_cluster_options_(getenv_or_default("CBC_USERNAME", "Administrator"),
-                                                                     getenv_or_default("CBC_PASSWORD", "password"));
+    static const auto default_cluster_options_ = couchbase::cluster_options("Administrator", "password").build();
     return default_cluster_options_;
 }
 
-auto
-default_connection_string() -> const std::string&
+void
+add_options(CLI::App* app, connection_options& options)
 {
-    static const std::string default_connection_string_ = getenv_or_default("CBC_CONNECTION_STRING", "couchbase://localhost");
+    const auto& defaults = default_cluster_options();
+    auto* group = app->add_option_group("Connection", "Specify cluster location and credentials.");
 
-    return default_connection_string_;
-}
-
-auto
-usage_block_for_cluster_options() -> std::string
-{
-    const auto default_user_agent_extra{ "cbc" };
-    const auto default_network{ "auto" };
-    const auto default_options = default_cluster_options().build();
-    const auto connection_string = default_connection_string();
-
-    return fmt::format(
-      R"(
-Connection options:
-  --connection-string=STRING      Connection string for the cluster. CBC_CONNECTION_STRING. [default: {connection_string}]
-  --username=STRING               Username for the cluster. CBC_USERNAME. [default: {username}]
-  --password=STRING               Password for the cluster. CBC_PASSWORD. [default: {password}]
-  --certificate-path=STRING       Path to the certificate.
-  --key-path=STRING               Path to the key.
-  --ldap-compatible               Whether to select authentication mechanism that is compatible with LDAP.
-  --configuration-profile=STRING  Apply configuration profile. (available profiles: {available_configuration_profiles})
-
-Security options:
-  --disable-tls                    Whether to disable TLS.
-  --trust-certificate-path=STRING  Path to the trust certificate bundle.
-  --tls-verify-mode=MODE           Path to the certificate (allowed values: peer, none). [default: {tls_verify_mode}]
-
-Timeout options:
-  --bootstrap-timeout=DURATION          Timeout for overall bootstrap of the SDK. [default: {bootstrap_timeout}]
-  --connect-timeout=DURATION            Timeout for socket connection. [default: {connect_timeout}]
-  --resolve-timeout=DURATION            Timeout to resolve DNS address for the sockets. [default: {resolve_timeout}]
-  --key-value-timeout=DURATION          Timeout for Key/Value operations. [default: {key_value_timeout}]
-  --key-value-durable-timeout=DURATION  Timeout for Key/Value durable operations. [default: {key_value_durable_timeout}]
-  --query-timeout=DURATION              Timeout for Query service. [default: {query_timeout}]
-  --search-timeout=DURATION             Timeout for Search service. [default: {search_timeout}]
-  --eventing-timeout=DURATION           Timeout for Eventing service. [default: {eventing_timeout}]
-  --analytics-timeout=DURATION          Timeout for Analytics service. [default: {analytics_timeout}]
-  --view-timeout=DURATION               Timeout for View service. [default: {view_timeout}]
-  --management-timeout=DURATION         Timeout for management operations. [default: {management_timeout}]
-
-Compression options:
-  --disable-compression               Whether to disable compression.
-  --compression-minimum-size=INTEGER  The minimum size of the document (in bytes), that will be compressed. [default: {compression_minimum_size}]
-  --compression-minimum-ratio=FLOAT   The minimum compression ratio to allow compressed form to be used. [default: {compression_minimum_ratio}]
-
-DNS-SRV options:
-  --dns-srv-timeout=DURATION   Timeout for DNS SRV requests. [default: {dns_srv_timeout}]
-  --dns-srv-nameserver=STRING  Hostname of the DNS server where the DNS SRV requests will be sent.
-  --dns-srv-port=INTEGER       Port of the DNS server where the DNS SRV requests will be sent.
-
-Network options:
-  --tcp-keep-alive-interval=DURATION       Interval for TCP keep alive. [default: {tcp_keep_alive_interval}]
-  --config-poll-interval=DURATION          How often the library should poll for new configuration. [default: {config_poll_interval}]
-  --idle-http-connection-timeout=DURATION  Period to wait before calling HTTP connection idle. [default: {idle_http_connection_timeout}]
-
-Transactions options:
-  --transactions-durability-level=LEVEL          Durability level of the transaction (allowed values: none, majority, majority_and_persist_to_active, persist_to_majority). [default: {transactions_durability_level}]
-  --transactions-expiration-time=DURATION        Expiration time of the transaction. [default: {transactions_expiration_time}]
-  --transactions-key-value-timeout=DURATION      Override Key/Value timeout just for the transaction.
-  --transactions-metadata-bucket=STRING          Bucket name where transaction metadata is stored.
-  --transactions-metadata-scope=STRING           Scope name where transaction metadata is stored. [default: {transactions_metadata_scope}]
-  --transactions-metadata-collection=STRING      Collection name where transaction metadata is stored. [default: {transactions_metadata_collection}]
-  --transactions-query-scan-consistency=MODE     Scan consistency for queries in transactions (allowed values: not_bounded, request_plus). [default: {transactions_query_scan_consistency}]
-  --transactions-cleanup-ignore-lost-attempts    Do not cleanup lost attempts.
-  --transactions-cleanup-ignore-client-attempts  Do not cleanup client attempts.
-  --transactions-cleanup-window=DURATION         Cleanup window. [default: {transactions_cleanup_window}]
-
-Metrics options:
-  --disable-metrics                 Disable collecting and reporting metrics.
-  --metrics-emit-interval=DURATION  Interval to emit metrics report on INFO log level. [default: {metrics_emit_interval}]
-
-Tracing options:
-  --disable-tracing                           Disable collecting and reporting trace information.
-  --tracing-orphaned-emit-interval=DURATION   Interval to emit report about orphan operations. [default: {tracing_orphaned_emit_interval}]
-  --tracing-orphaned-sample-size=INTEGER      Size of the sample of the orphan report. [default: {tracing_orphaned_sample_size}]
-  --tracing-threshold-emit-interval=DURATION  Interval to emit report about operations exceeding threshold. [default: {tracing_threshold_emit_interval}]
-  --tracing-threshold-sample-size=INTEGER     Size of the sample of the threshold report. [default: {tracing_threshold_sample_size}]
-  --tracing-threshold-key-value=DURATION      Threshold for Key/Value service. [default: {tracing_threshold_key_value}]
-  --tracing-threshold-query=DURATION          Threshold for Query service. [default: {tracing_threshold_query}]
-  --tracing-threshold-search=DURATION         Threshold for Search service. [default: {tracing_threshold_search}]
-  --tracing-threshold-analytics=DURATION      Threshold for Analytics service. [default: {tracing_threshold_analytics}]
-  --tracing-threshold-management=DURATION     Threshold for Management operations. [default: {tracing_threshold_management}]
-  --tracing-threshold-eventing=DURATION       Threshold for Eventing service. [default: {tracing_threshold_eventing}]
-  --tracing-threshold-view=DURATION           Threshold for View service. [default: {tracing_threshold_view}]
-
-Behavior options:
-  --user-agent-extra=STRING          Append extra string SDK identifiers (full user-agent is "{sdk_id};{user_agent_extra}"). [default: {user_agent_extra}].
-  --network=STRING                   Network (a.k.a. Alternate Addresses) to use. [default: {network}]
-  --show-queries                     Log queries on INFO level.
-  --enable-clustermap-notifications  Allow server to send notifications when cluster configuration changes.
-  --disable-mutation-tokens          Do not request Key/Value service to send mutation tokens.
-  --disable-unordered-execution      Disable unordered execution for Key/Value service.
-  --dump-configuration               Dump every new configuration on TRACE log level.
-)",
-      fmt::arg("connection_string", connection_string),
-      fmt::arg("username", default_options.username),
-      fmt::arg("password", default_options.password),
-      fmt::arg("available_configuration_profiles", fmt::join(couchbase::configuration_profiles_registry::available_profiles(), ", ")),
-      fmt::arg("tls_verify_mode", default_options.security.tls_verify),
-      fmt::arg("bootstrap_timeout", default_options.timeouts.bootstrap_timeout),
-      fmt::arg("connect_timeout", default_options.timeouts.connect_timeout),
-      fmt::arg("resolve_timeout", default_options.timeouts.resolve_timeout),
-      fmt::arg("key_value_timeout", default_options.timeouts.key_value_timeout),
-      fmt::arg("key_value_durable_timeout", default_options.timeouts.key_value_durable_timeout),
-      fmt::arg("query_timeout", default_options.timeouts.query_timeout),
-      fmt::arg("search_timeout", default_options.timeouts.search_timeout),
-      fmt::arg("eventing_timeout", default_options.timeouts.eventing_timeout),
-      fmt::arg("analytics_timeout", default_options.timeouts.analytics_timeout),
-      fmt::arg("view_timeout", default_options.timeouts.view_timeout),
-      fmt::arg("management_timeout", default_options.timeouts.management_timeout),
-      fmt::arg("compression_minimum_size", default_options.compression.min_size),
-      fmt::arg("compression_minimum_ratio", default_options.compression.min_ratio),
-      fmt::arg("dns_srv_timeout", default_options.dns.timeout),
-      fmt::arg("tcp_keep_alive_interval", default_options.network.tcp_keep_alive_interval),
-      fmt::arg("config_poll_interval", default_options.network.config_poll_interval),
-      fmt::arg("idle_http_connection_timeout", default_options.network.idle_http_connection_timeout),
-      fmt::arg("transactions_durability_level", default_options.transactions.level),
-      fmt::arg("transactions_expiration_time",
-               std::chrono::duration_cast<std::chrono::milliseconds>(default_options.transactions.expiration_time)),
-      fmt::arg("transactions_metadata_scope", couchbase::scope::default_name),
-      fmt::arg("transactions_metadata_collection", couchbase::scope::default_name),
-      fmt::arg("transactions_query_scan_consistency", default_options.transactions.query_config.scan_consistency),
-      fmt::arg("transactions_cleanup_window", default_options.transactions.cleanup_config.cleanup_window),
-      fmt::arg("metrics_emit_interval", default_options.metrics.emit_interval),
-      fmt::arg("tracing_orphaned_emit_interval", default_options.tracing.orphaned_emit_interval),
-      fmt::arg("tracing_orphaned_sample_size", default_options.tracing.orphaned_sample_size),
-      fmt::arg("tracing_threshold_emit_interval", default_options.tracing.threshold_emit_interval),
-      fmt::arg("tracing_threshold_sample_size", default_options.tracing.threshold_sample_size),
-      fmt::arg("tracing_threshold_key_value", default_options.tracing.key_value_threshold),
-      fmt::arg("tracing_threshold_query", default_options.tracing.query_threshold),
-      fmt::arg("tracing_threshold_view", default_options.tracing.view_threshold),
-      fmt::arg("tracing_threshold_search", default_options.tracing.search_threshold),
-      fmt::arg("tracing_threshold_analytics", default_options.tracing.analytics_threshold),
-      fmt::arg("tracing_threshold_management", default_options.tracing.management_threshold),
-      fmt::arg("tracing_threshold_eventing", default_options.tracing.eventing_threshold),
-      fmt::arg("sdk_id", couchbase::core::meta::sdk_id()),
-      fmt::arg("user_agent_extra", default_user_agent_extra),
-      fmt::arg("network", default_network));
+    group
+      ->add_option("--connection-string",
+                   options.connection_string,
+                   "Connection string for the cluster. Also see CBC_CONNECTION_STRING environment variable.")
+      ->default_val(getenv_or_default("CBC_CONNECTION_STRING", "couchbase://localhost"));
+    group->add_option("--username", options.username, "Username for the cluster. Also see CBC_USERNAME environment variable.")
+      ->default_val(getenv_or_default("CBC_USERNAME", defaults.username));
+    group->add_option("--password", options.password, "Username for the cluster. Also see CBC_PASSWORD environment variable.")
+      ->default_val(getenv_or_default("CBC_PASSWORD", defaults.password));
+    group->add_option("--certificate-path", options.certificate_path, "Path to the client certificate.")->transform(CLI::ExistingFile);
+    group->add_option("--key-path", options.key_path, "Path to the client key.")->transform(CLI::ExistingFile);
+    group->add_flag(
+      "--ldap-compatible", options.ldap_compatible, "Whether to select authentication mechanism that is compatible with LDAP.");
+    group->add_option("--configuration-profile", options.configuration_profile, "Apply configuration profile.")
+      ->transform(CLI::IsMember(couchbase::configuration_profiles_registry::available_profiles()));
 }
 
 void
-fill_cluster_options(const docopt::Options& options, couchbase::cluster_options& cluster_options, std::string& connection_string)
+add_options(CLI::App* app, logger_options& options)
 {
-    connection_string = options.at("--connection-string").asString();
-    if (options.find("--certificate-path") != options.end() && options.at("--certificate-path") &&
-        options.find("--key-path") != options.end() && options.at("--key-path")) {
-        cluster_options = couchbase::cluster_options(
-          couchbase::certificate_authenticator(options.at("--certificate-path").asString(), options.at("--key-path").asString()));
-    } else {
-        auto username = options.at("--username").asString();
-        auto password = options.at("--password").asString();
-        if (options.find("--ldap-compatible") != options.end() && options.at("--ldap-compatible") &&
-            options.at("--ldap-compatible").asBool()) {
-            cluster_options = couchbase::cluster_options(couchbase::password_authenticator::ldap_compatible(username, password));
-        } else {
-            cluster_options = couchbase::cluster_options(couchbase::password_authenticator(username, password));
-        }
-    }
-
-    if (options.find("--configuration-profile") != options.end() && options.at("--configuration-profile")) {
-        cluster_options.apply_profile(options.at("--configuration-profile").asString());
-    }
-
-    parse_disable_option(cluster_options.security().enabled, "--disable-tls");
-    parse_string_option(cluster_options.security().trust_certificate, "--trust-certificate-path");
-    if (options.find("--tls-verify-mode") != options.end() && options.at("--tls-verify-mode")) {
-        if (auto value = options.at("--tls-verify-mode").asString(); value == "none") {
-            cluster_options.security().tls_verify(couchbase::tls_verify_mode::none);
-        } else if (value == "peer") {
-            cluster_options.security().tls_verify(couchbase::tls_verify_mode::peer);
-        } else {
-            throw docopt::DocoptArgumentError(fmt::format("unexpected value '{}' for --tls-verify-mode", value));
-        }
-    }
-
-    parse_duration_option(cluster_options.timeouts().bootstrap_timeout, "--bootstrap-timeout");
-    parse_duration_option(cluster_options.timeouts().connect_timeout, "--connect-timeout");
-    parse_duration_option(cluster_options.timeouts().resolve_timeout, "--resolve-timeout");
-    parse_duration_option(cluster_options.timeouts().key_value_timeout, "--key-value-timeout");
-    parse_duration_option(cluster_options.timeouts().key_value_durable_timeout, "--key-value-durable-timeout");
-    parse_duration_option(cluster_options.timeouts().query_timeout, "--query-timeout");
-    parse_duration_option(cluster_options.timeouts().search_timeout, "--search-timeout");
-    parse_duration_option(cluster_options.timeouts().eventing_timeout, "--eventing-timeout");
-    parse_duration_option(cluster_options.timeouts().analytics_timeout, "--analytics-timeout");
-    parse_duration_option(cluster_options.timeouts().view_timeout, "--view-timeout");
-    parse_duration_option(cluster_options.timeouts().management_timeout, "--management-timeout");
-
-    parse_disable_option(cluster_options.compression().enabled, "--disable-compression");
-    parse_integer_option(cluster_options.compression().min_size, "--compression-minimum-size");
-    parse_float_option(cluster_options.compression().min_ratio, "--compression-minimum-ratio");
-
-    parse_duration_option(cluster_options.dns().timeout, "--dns-srv-timeout");
-    if (options.find("--dns-srv-nameserver") != options.end() && options.at("--dns-srv-nameserver")) {
-        auto hostname = options.at("--dns-srv-nameserver").asString();
-        if (options.find("--dns-srv-port") != options.end() && options.at("--dns-srv-port")) {
-            auto value = options.at("--dns-srv-port").asString();
-            try {
-                cluster_options.dns().nameserver(hostname, static_cast<std::uint16_t>(std::stoul(value, nullptr, 10)));
-            } catch (const std::invalid_argument&) {
-                throw docopt::DocoptArgumentError(fmt::format("cannot parse '{}' as integer in --dns-srv-port: not a number", value));
-            } catch (const std::out_of_range&) {
-                throw docopt::DocoptArgumentError(fmt::format("cannot parse '{}' as integer in --dns-srv-port: out of range", value));
-            }
-        } else {
-            cluster_options.dns().nameserver(hostname);
-        }
-    }
-
-    parse_duration_option(cluster_options.network().tcp_keep_alive_interval, "--tcp-keep-alive-interval");
-    parse_duration_option(cluster_options.network().config_poll_interval, "--config-poll-interval");
-    parse_duration_option(cluster_options.network().idle_http_connection_timeout, "--idle-http-connection-timeout");
-
-    if (options.find("--transactions-durability-level") != options.end() && options.at("--transactions-durability-level")) {
-        if (auto value = options.at("--transactions-durability-level").asString(); value == "none") {
-            cluster_options.transactions().durability_level(couchbase::durability_level::none);
-        } else if (value == "majority") {
-            cluster_options.transactions().durability_level(couchbase::durability_level::majority);
-        } else if (value == "majority_and_persist_to_active") {
-            cluster_options.transactions().durability_level(couchbase::durability_level::majority_and_persist_to_active);
-        } else if (value == "persist_to_majority") {
-            cluster_options.transactions().durability_level(couchbase::durability_level::persist_to_majority);
-        } else {
-            throw docopt::DocoptArgumentError(fmt::format("unexpected value '{}' for --transactions-durability-level", value));
-        }
-    }
-    parse_duration_option(cluster_options.transactions().expiration_time, "--transactions-expiration-time");
-    parse_duration_option(cluster_options.transactions().kv_timeout, "--transactions-key-value-timeout");
-    if (options.find("--transactions-metadata-bucket") != options.end() && options.at("--transactions-metadata-bucket")) {
-        if (auto bucket = options.at("--transactions-metadata-bucket").asString(); !bucket.empty()) {
-            cluster_options.transactions().metadata_collection({ bucket,
-                                                                 options.at("--transactions-metadata-scope").asString(),
-                                                                 options.at("--transactions-metadata-collection").asString() });
-        } else {
-            throw docopt::DocoptArgumentError("empty value for --transactions-metadata-bucket");
-        }
-    }
-    if (options.find("--transactions-query-scan-consistency") != options.end() && options.at("--transactions-query-scan-consistency")) {
-        if (auto value = options.at("--transactions-query-scan-consistency").asString(); value == "not_bounded") {
-            cluster_options.transactions().query_config().scan_consistency(couchbase::query_scan_consistency::not_bounded);
-        } else if (value == "request_plus") {
-            cluster_options.transactions().query_config().scan_consistency(couchbase::query_scan_consistency::request_plus);
-        } else {
-            throw docopt::DocoptArgumentError(fmt::format("unexpected value '{}' for --transactions-query-scan-consistency", value));
-        }
-    }
-    parse_disable_option(cluster_options.transactions().cleanup_config().cleanup_lost_attempts,
-                         "--transactions-cleanup-ignore-lost-attempts");
-    parse_disable_option(cluster_options.transactions().cleanup_config().cleanup_client_attempts,
-                         "--transactions-cleanup-ignore-client-attempts");
-    parse_duration_option(cluster_options.transactions().cleanup_config().cleanup_window, "--transactions-cleanup-window");
-
-    parse_disable_option(cluster_options.metrics().enable, "--disable-metrics");
-    parse_duration_option(cluster_options.metrics().emit_interval, "--metrics-emit-interval");
-
-    parse_disable_option(cluster_options.tracing().enable, "--disable-tracing");
-    parse_duration_option(cluster_options.tracing().orphaned_emit_interval, "--tracing-orphaned-emit-interval");
-    parse_integer_option(cluster_options.tracing().orphaned_sample_size, "--tracing-orphaned-sample-size");
-    parse_duration_option(cluster_options.tracing().threshold_emit_interval, "--tracing-threshold-emit-interval");
-    parse_integer_option(cluster_options.tracing().threshold_sample_size, "--tracing-threshold-sample-size");
-    parse_duration_option(cluster_options.tracing().key_value_threshold, "--tracing-threshold-key-value");
-    parse_duration_option(cluster_options.tracing().query_threshold, "--tracing-threshold-query");
-    parse_duration_option(cluster_options.tracing().search_threshold, "--tracing-threshold-search");
-    parse_duration_option(cluster_options.tracing().analytics_threshold, "--tracing-threshold-analytics");
-    parse_duration_option(cluster_options.tracing().management_threshold, "--tracing-threshold-management");
-    parse_duration_option(cluster_options.tracing().eventing_threshold, "--tracing-threshold-eventing");
-    parse_duration_option(cluster_options.tracing().view_threshold, "--tracing-threshold-view");
-
-    parse_string_option(cluster_options.behavior().append_to_user_agent, "--user-agent-extra");
-    parse_enable_option(cluster_options.behavior().show_queries, "--show-queries");
-    parse_enable_option(cluster_options.behavior().dump_configuration, "--dump-configuration");
-    parse_enable_option(cluster_options.behavior().enable_clustermap_notification, "--enable-clustermap-notification");
-    parse_disable_option(cluster_options.behavior().enable_mutation_tokens, "--disable-mutation-tokens");
-    parse_disable_option(cluster_options.behavior().enable_unordered_execution, "--disable-disable-unordered-execution");
-}
-
-auto
-default_log_level() -> const std::string&
-{
-    static const std::string default_log_level_ = getenv_or_default("CBC_LOG_LEVEL", "off");
-
-    return default_log_level_;
-}
-
-auto
-usage_block_for_logger() -> std::string
-{
-    static const std::vector<std::string> allowed_log_levels{
+    const std::vector<std::string> allowed_log_levels{
         "trace", "debug", "info", "warning", "error", "critical", "off",
     };
+    auto* group = app->add_option_group("Logger", "Set logger verbosity and file output.");
 
-    return fmt::format(R"(
-Logger options:
-  --log-level=LEVEL    Log level (allowed values are: {allowed_levels}). CBC_LOG_LEVEL. [default: {log_level}]
-  --log-output=PATH    File to send logs (when is not set, logs will be written to STDERR).
-  --log-protocol=PATH  File to send protocol logs.
-)",
-                       fmt::arg("allowed_levels", fmt::join(allowed_log_levels, ", ")),
-                       fmt::arg("log_level", default_log_level()));
+    group->add_option("--log-level", options.level, "Log level. Also see CBC_LOG_LEVEL environment variable.")
+      ->default_val(getenv_or_default("CBC_LOG_LEVEL", "off"))
+      ->transform(CLI::IsMember(allowed_log_levels));
+    group->add_option("--log-output", options.output_path, "File to write logs (when is not set, logs will be written to STDERR).")
+      ->transform(CLI::ExistingFile | CLI::NonexistentPath);
+    group->add_option("--log-protocol", options.protocol_path, "File to write protocol logs.")
+      ->transform(CLI::ExistingFile | CLI::NonexistentPath);
 }
 
 void
-apply_logger_options(const docopt::Options& options)
+add_options(CLI::App* app, security_options& options)
 {
-    auto log_level = options.at("--log-level").asString();
-    auto level = couchbase::core::logger::level_from_str(log_level);
+    const std::vector<std::string> allowed_tls_verficiation_modes{
+        "peer",
+        "none",
+    };
+    auto* group = app->add_option_group("Security", "Set security and TLS options.");
+
+    group->add_flag("--disable-tls", options.disable_tls, "Whether to disable TLS completely.");
+    group->add_option("--trust-certificate-path", options.trust_certificate_path, "Path to the trust certificate bundle.")
+      ->transform(CLI::ExistingFile);
+    group->add_option("--tls-verify-mode", options.tls_verify_mode, "Verification mode for TLS connections.")
+      ->default_val("peer")
+      ->transform(CLI::IsMember(allowed_tls_verficiation_modes));
+}
+
+void
+add_options(CLI::App* app, timeout_options& options)
+{
+    const auto& defaults = default_cluster_options();
+    auto* group = app->add_option_group("Timeouts", "Set security and TLS options.");
+
+    group->add_option("--bootstrap-timeout", options.bootstrap_timeout, "Timeout for overall bootstrap of the SDK.")
+      ->default_val(defaults.timeouts.bootstrap_timeout)
+      ->type_name("DURATION");
+    group->add_option("--connect-timeout", options.connect_timeout, "Timeout for socket connection.")
+      ->default_val(defaults.timeouts.connect_timeout)
+      ->type_name("DURATION");
+    group->add_option("--resolve-timeout", options.resolve_timeout, "Timeout to resolve DNS address for the sockets.")
+      ->default_val(defaults.timeouts.resolve_timeout)
+      ->type_name("DURATION");
+    group->add_option("--key-value-timeout", options.key_value_timeout, "Timeout for Key/Value operations.")
+      ->default_val(defaults.timeouts.key_value_timeout)
+      ->type_name("DURATION");
+    group->add_option("--key-value-durable-timeout", options.key_value_durable_timeout, "Timeout for Key/Value durable operations.")
+      ->default_val(defaults.timeouts.key_value_durable_timeout)
+      ->type_name("DURATION");
+    group->add_option("--query-timeout", options.query_timeout, "Timeout for Query service.")
+      ->default_val(defaults.timeouts.query_timeout)
+      ->type_name("DURATION");
+    group->add_option("--search-timeout", options.search_timeout, "Timeout for Search service.")
+      ->default_val(defaults.timeouts.search_timeout)
+      ->type_name("DURATION");
+    group->add_option("--eventing-timeout", options.eventing_timeout, "Timeout for Eventing service.")
+      ->default_val(defaults.timeouts.eventing_timeout)
+      ->type_name("DURATION");
+    group->add_option("--analytics-timeout", options.analytics_timeout, "Timeout for Analytics service.")
+      ->default_val(defaults.timeouts.analytics_timeout);
+    group->add_option("--view-timeout", options.view_timeout, "Timeout for View service.")
+      ->default_val(defaults.timeouts.view_timeout)
+      ->type_name("DURATION");
+    group->add_option("--management-timeout", options.management_timeout, "Timeout for management operations.")
+      ->default_val(defaults.timeouts.management_timeout)
+      ->type_name("DURATION");
+}
+
+void
+add_options(CLI::App* app, compression_options& options)
+{
+    const auto& defaults = default_cluster_options();
+    auto* group = app->add_option_group("Compression", "Set compression options.");
+
+    group->add_flag("--disable-compression", options.disable, "Whether to disable compression.");
+    group
+      ->add_option(
+        "--compression-minimum-size", options.minimum_size, "The minimum size of the document (in bytes), that will be compressed.")
+      ->default_val(defaults.compression.min_size);
+    group
+      ->add_option(
+        "--compression-minimum-ratio", options.minimum_ratio, "The minimum compression ratio to allow compressed form to be used.")
+      ->default_val(defaults.compression.min_ratio);
+}
+
+void
+add_options(CLI::App* app, dns_srv_options& options)
+{
+    const auto& defaults = default_cluster_options();
+    auto* group = app->add_option_group("DNS-SRV", "Set DNS-SRV options.");
+
+    group->add_option("--dns-srv-timeout", options.timeout, "Timeout for DNS SRV requests.")
+      ->default_val(defaults.dns.timeout)
+      ->type_name("DURATION");
+    group->add_option("--dns-srv-nameserver", options.nameserver, "Hostname of the DNS server where the DNS SRV requests will be sent.");
+    group->add_option("--dns-srv-port", options.port, "Port of the DNS server where the DNS SRV requests will be sent.");
+}
+
+void
+add_options(CLI::App* app, network_options& options)
+{
+    const auto& defaults = default_cluster_options();
+    auto* group = app->add_option_group("Network", "Set network options.");
+
+    group->add_option("--tcp-keep-alive-interval", options.tcp_keep_alive_interval, "Interval for TCP keep alive.")
+      ->default_val(defaults.network.tcp_keep_alive_interval)
+      ->type_name("DURATION");
+    group->add_option("--config-poll-interval", options.config_poll_interval, "How often the library should poll for new configuration.")
+      ->default_val(defaults.network.config_poll_interval)
+      ->type_name("DURATION");
+    group
+      ->add_option(
+        "--idle-http-connection-timeout", options.idle_http_connection_timeout, "Period to wait before calling HTTP connection idle.")
+      ->default_val(defaults.network.idle_http_connection_timeout)
+      ->type_name("DURATION");
+}
+
+void
+add_options(CLI::App* app, transactions_options& options)
+{
+    const auto& defaults = default_cluster_options();
+    auto* group = app->add_option_group("Transactions", "Set transactions options.");
+    const std::vector<std::string> available_durability_levels{
+        fmt::format("{}", couchbase::durability_level::none),
+        fmt::format("{}", couchbase::durability_level::majority),
+        fmt::format("{}", couchbase::durability_level::majority_and_persist_to_active),
+        fmt::format("{}", couchbase::durability_level::persist_to_majority),
+    };
+
+    group->add_option("--transactions-durability-level", options.durability_level, "Durability level of the transaction.")
+      ->default_val(fmt::format("{}", defaults.transactions.level))
+      ->transform(CLI::IsMember(available_durability_levels));
+    group->add_option("--transactions-expiration-time", options.expiration_time, "Expiration time of the transaction.")
+      ->default_val(defaults.transactions.expiration_time)
+      ->type_name("DURATION");
+    group->add_option("--transactions-key-value-timeout", options.key_value_timeout, "Override Key/Value timeout just for the transaction.")
+      ->type_name("DURATION");
+    group->add_option("--transactions-metadata-bucket", options.metadata_bucket, "Bucket name where transaction metadata is stored.");
+    group->add_option("--transactions-metadata-scope", options.metadata_scope, "Scope name where transaction metadata is stored.")
+      ->default_val(couchbase::scope::default_name);
+    group
+      ->add_option(
+        "--transactions-metadata-collection", options.metadata_collection, "Collection name where transaction metadata is stored.")
+      ->default_val(couchbase::collection::default_name);
+    group
+      ->add_option("--transactions-query-scan-consistency", options.query_scan_consistency, "Scan consistency for queries in transactions.")
+      ->default_val(fmt::format("{}", defaults.transactions.query_config.scan_consistency))
+      ->transform(CLI::IsMember(available_query_scan_consistency_modes()));
+    group->add_option("--transactions-cleanup-window", options.cleanup_window, "Cleanup window.")
+      ->default_val(defaults.transactions.cleanup_config.cleanup_window)
+      ->type_name("DURATION");
+    group->add_flag("--transactions-cleanup-ignore-lost-attempts", options.cleanup_ignore_lost_attempts, "Do not cleanup lost attempts.");
+    group->add_flag(
+      "--transactions-cleanup-ignore-client-attempts", options.cleanup_ignore_client_attempts, "Do not cleanup client attempts.");
+}
+
+void
+add_options(CLI::App* app, metrics_options& options)
+{
+    const auto& defaults = default_cluster_options();
+    auto* group = app->add_option_group("Metrics", "Set metrics options.");
+
+    group->add_flag("--disable-metrics", options.disable, "Disable collecting and reporting metrics.");
+    group->add_option("--metrics-orphaned-emit-interval", options.emit_interval, "Interval to emit metrics report on INFO log level.")
+      ->default_val(defaults.metrics.emit_interval)
+      ->type_name("DURATION");
+}
+
+void
+add_options(CLI::App* app, tracing_options& options)
+{
+    const auto& defaults = default_cluster_options();
+    auto* group = app->add_option_group("Tracing", "Set tracing options.");
+
+    group->add_flag("--disable-tracing", options.disable, "Disable collecting and reporting trace information.");
+    group
+      ->add_option("--tracing-orphaned-emit-interval", options.orphaned_emit_interval, "Interval to emit report about orphan operations.")
+      ->default_val(defaults.tracing.orphaned_emit_interval)
+      ->type_name("DURATION");
+    group->add_option("--tracing-orphaned-sample-size", options.orphaned_sample_size, "Size of the sample of the orphan report.")
+      ->default_val(defaults.tracing.orphaned_sample_size);
+    group
+      ->add_option("--tracing-threshold-emit-interval",
+                   options.threshold_emit_interval,
+                   "Interval to emit report about operations exceeding threshold.")
+      ->default_val(defaults.tracing.threshold_emit_interval)
+      ->type_name("DURATION");
+    group->add_option("--tracing-threshold-sample-size", options.threshold_sample_size, "Size of the sample of the threshold report.")
+      ->default_val(defaults.tracing.threshold_sample_size);
+    group->add_option("--tracing-threshold-key-value", options.threshold_key_value, "Threshold for Key/Value service.")
+      ->default_val(defaults.tracing.key_value_threshold)
+      ->type_name("DURATION");
+    group->add_option("--tracing-threshold-query", options.threshold_query, "Threshold for Query service.")
+      ->default_val(defaults.tracing.query_threshold)
+      ->type_name("DURATION");
+    group->add_option("--tracing-threshold-search", options.threshold_search, "Threshold for Query service.")
+      ->default_val(defaults.tracing.search_threshold)
+      ->type_name("DURATION");
+    group->add_option("--tracing-threshold-analytics", options.threshold_analytics, "Threshold for Query service.")
+      ->default_val(defaults.tracing.analytics_threshold)
+      ->type_name("DURATION");
+    group->add_option("--tracing-threshold-management", options.threshold_management, "Threshold for Query service.")
+      ->default_val(defaults.tracing.management_threshold)
+      ->type_name("DURATION");
+    group->add_option("--tracing-threshold-eventing", options.threshold_eventing, "Threshold for Query service.")
+      ->default_val(defaults.tracing.eventing_threshold)
+      ->type_name("DURATION");
+    group->add_option("--tracing-threshold-view", options.threshold_view, "Threshold for Query service.")
+      ->default_val(defaults.tracing.view_threshold)
+      ->type_name("DURATION");
+}
+
+std::string
+full_user_agent(std::string extra)
+{
+    constexpr auto uuid{ "00000000-0000-0000-0000-000000000000" };
+    auto hello = couchbase::core::meta::user_agent_for_mcbp(uuid, uuid, extra);
+    auto json = couchbase::core::utils::json::parse(hello.data(), hello.size());
+    return json["a"].get_string();
+}
+
+void
+add_options(CLI::App* app, behavior_options& options)
+{
+    const std::string default_user_agent_extra{ "cbc" };
+    const std::string default_network{ "auto" };
+    auto* group = app->add_option_group("Behavior", "Set options related to general library behavior.");
+
+    group
+      ->add_option(
+        "--user-agent-extra",
+        options.user_agent_extra,
+        fmt::format("Append extra string SDK identifiers (full user-agent is \"{}\").", full_user_agent(default_user_agent_extra)))
+      ->default_val(default_user_agent_extra);
+    group->add_option("--network", options.network, "Network (a.k.a. Alternate Addresses) to use.")->default_val(default_network);
+    group->add_flag("--show-queries", options.show_queries, "Log queries on INFO level.");
+    group->add_flag("--enable-clustermap-notifications",
+                    options.enable_clustermap_notifications,
+                    "Allow server to send notifications when cluster configuration changes.");
+    group->add_flag(
+      "--disable-mutation-tokens", options.disable_mutation_tokens, "Do not request Key/Value service to send mutation tokens.");
+    group->add_flag(
+      "--disable-unordered-execution", options.disable_unordered_execution, "Disable unordered execution for Key/Value service.");
+    group->add_flag("--dump-configuration", options.dump_configuration, "Dump every new configuration on TRACE log level.");
+}
+
+auto
+create_cluster_options(const connection_options& options) -> couchbase::cluster_options
+{
+    if (!options.certificate_path.empty() && !options.key_path.empty()) {
+        return couchbase::cluster_options{ couchbase::certificate_authenticator(options.certificate_path, options.key_path) };
+    }
+    if (!options.certificate_path.empty()) {
+        fail("--key-path must be provided when --certificate-path is set.");
+    }
+    if (!options.key_path.empty()) {
+        fail("--certificate-path must be provided when --key-path is set.");
+    }
+    if (options.ldap_compatible) {
+        return couchbase::cluster_options(couchbase::password_authenticator::ldap_compatible(options.username, options.password));
+    }
+    return couchbase::cluster_options{ couchbase::password_authenticator(options.username, options.password) };
+}
+
+void
+apply_options(couchbase::cluster_options& options, const security_options& security)
+{
+    options.security().enabled(!security.disable_tls);
+    if (!security.trust_certificate_path.empty()) {
+        options.security().trust_certificate(security.trust_certificate_path);
+    }
+    if (security.tls_verify_mode == "none") {
+        options.security().tls_verify(couchbase::tls_verify_mode::none);
+    } else if (security.tls_verify_mode == "peer") {
+        options.security().tls_verify(couchbase::tls_verify_mode::peer);
+    } else if (!security.tls_verify_mode.empty()) {
+        fail(fmt::format("unexpected value '{}' for --tls-verify-mode", security.tls_verify_mode));
+    }
+}
+
+void
+apply_options(couchbase::cluster_options& options, const timeout_options& timeouts)
+{
+    options.timeouts().bootstrap_timeout(timeouts.bootstrap_timeout);
+    options.timeouts().connect_timeout(timeouts.connect_timeout);
+    options.timeouts().resolve_timeout(timeouts.resolve_timeout);
+    options.timeouts().key_value_timeout(timeouts.key_value_timeout);
+    options.timeouts().key_value_durable_timeout(timeouts.key_value_durable_timeout);
+    options.timeouts().query_timeout(timeouts.query_timeout);
+    options.timeouts().search_timeout(timeouts.search_timeout);
+    options.timeouts().eventing_timeout(timeouts.eventing_timeout);
+    options.timeouts().analytics_timeout(timeouts.analytics_timeout);
+    options.timeouts().view_timeout(timeouts.view_timeout);
+    options.timeouts().management_timeout(timeouts.management_timeout);
+}
+
+void
+apply_options(couchbase::cluster_options& options, const compression_options& compression)
+{
+    options.compression().enabled(!compression.disable);
+    options.compression().min_size(compression.minimum_size);
+    options.compression().min_ratio(compression.minimum_ratio);
+}
+
+void
+apply_options(couchbase::cluster_options& options, const dns_srv_options& dns_srv)
+{
+    options.dns().timeout(dns_srv.timeout);
+    if (!dns_srv.nameserver.empty()) {
+        if (dns_srv.port > 0) {
+            options.dns().nameserver(dns_srv.nameserver, dns_srv.port);
+        } else {
+            options.dns().nameserver(dns_srv.nameserver);
+        }
+    }
+}
+
+void
+apply_options(couchbase::cluster_options& options, const network_options& network)
+{
+    options.network().tcp_keep_alive_interval(network.tcp_keep_alive_interval);
+    options.network().config_poll_interval(network.config_poll_interval);
+    options.network().idle_http_connection_timeout(network.idle_http_connection_timeout);
+}
+
+void
+apply_options(couchbase::cluster_options& options, const transactions_options& transactions)
+{
+    if (transactions.durability_level == "none") {
+        options.transactions().durability_level(couchbase::durability_level::none);
+    } else if (transactions.durability_level == "majority") {
+        options.transactions().durability_level(couchbase::durability_level::majority);
+    } else if (transactions.durability_level == "majority_and_persist_to_active") {
+        options.transactions().durability_level(couchbase::durability_level::majority_and_persist_to_active);
+    } else if (transactions.durability_level == "persist_to_majority") {
+        options.transactions().durability_level(couchbase::durability_level::persist_to_majority);
+    } else if (!transactions.durability_level.empty()) {
+        fail(fmt::format("unexpected value '{}' for --transactions-durability-level", transactions.durability_level));
+    }
+    options.transactions().expiration_time(transactions.expiration_time);
+    if (transactions.key_value_timeout > std::chrono::milliseconds::zero()) {
+        options.transactions().kv_timeout(transactions.key_value_timeout);
+    }
+    if (!transactions.metadata_bucket.empty()) {
+        options.transactions().metadata_collection(
+          { transactions.metadata_bucket, transactions.metadata_scope, transactions.metadata_collection });
+    }
+    if (transactions.query_scan_consistency == "not_bounded") {
+        options.transactions().query_config().scan_consistency(couchbase::query_scan_consistency::not_bounded);
+    } else if (transactions.query_scan_consistency == "request_plus") {
+        options.transactions().query_config().scan_consistency(couchbase::query_scan_consistency::request_plus);
+    } else if (!transactions.query_scan_consistency.empty()) {
+        fail(fmt::format("unexpected value '{}' for --transactions-query-scan-consistency", transactions.query_scan_consistency));
+    }
+    options.transactions().cleanup_config().cleanup_lost_attempts(!transactions.cleanup_ignore_lost_attempts);
+    options.transactions().cleanup_config().cleanup_client_attempts(!transactions.cleanup_ignore_client_attempts);
+    options.transactions().cleanup_config().cleanup_window(transactions.cleanup_window);
+}
+
+void
+apply_options(couchbase::cluster_options& options, const metrics_options& metrics)
+{
+    options.metrics().enable(!metrics.disable);
+    options.metrics().emit_interval(metrics.emit_interval);
+}
+
+void
+apply_options(couchbase::cluster_options& options, const tracing_options& tracing)
+{
+    options.tracing().enable(!tracing.disable);
+    options.tracing().orphaned_emit_interval(tracing.orphaned_emit_interval);
+    options.tracing().orphaned_sample_size(tracing.orphaned_sample_size);
+    options.tracing().threshold_emit_interval(tracing.threshold_emit_interval);
+    options.tracing().threshold_sample_size(tracing.threshold_sample_size);
+    options.tracing().key_value_threshold(tracing.threshold_key_value);
+    options.tracing().query_threshold(tracing.threshold_query);
+    options.tracing().search_threshold(tracing.threshold_search);
+    options.tracing().analytics_threshold(tracing.threshold_analytics);
+    options.tracing().management_threshold(tracing.threshold_management);
+    options.tracing().eventing_threshold(tracing.threshold_eventing);
+    options.tracing().view_threshold(tracing.threshold_view);
+}
+
+void
+apply_options(couchbase::cluster_options& options, const behavior_options& behavior)
+{
+    options.behavior().append_to_user_agent(behavior.user_agent_extra);
+    options.behavior().show_queries(behavior.show_queries);
+    options.behavior().dump_configuration(behavior.dump_configuration);
+    options.behavior().enable_clustermap_notification(behavior.enable_clustermap_notifications);
+    options.behavior().enable_mutation_tokens(!behavior.disable_mutation_tokens);
+    options.behavior().enable_unordered_execution(!behavior.disable_unordered_execution);
+}
+} // namespace
+
+void
+add_common_options(CLI::App* app, common_options& options)
+{
+    add_options(app, options.logger);
+    add_options(app, options.connection);
+    add_options(app, options.security);
+    add_options(app, options.timeouts);
+    add_options(app, options.compression);
+    add_options(app, options.dns_srv);
+    add_options(app, options.network);
+    add_options(app, options.transactions);
+    add_options(app, options.metrics);
+    add_options(app, options.tracing);
+    add_options(app, options.behavior);
+}
+
+void
+apply_logger_options(const logger_options& options)
+{
+    auto level = couchbase::core::logger::level_from_str(options.level);
 
     if (level != couchbase::core::logger::level::off) {
         couchbase::core::logger::configuration configuration{};
 
-        if (options.find("--log-output") != options.end() && options.at("--log-output")) {
-            configuration.filename = options.at("--log-output").asString();
-        } else {
+        if (options.output_path.empty()) {
             configuration.console = true;
             configuration.unit_test = true;
+        } else {
+            configuration.filename = options.output_path;
         }
         configuration.log_level = level;
         couchbase::core::logger::create_file_logger(configuration);
     }
 
-    if (options.find("--log-protocol") != options.end() && options.at("--log-protocol")) {
+    if (!options.protocol_path.empty()) {
         couchbase::core::logger::configuration configuration{};
-        configuration.filename = options.at("--log-protocol").asString();
+        configuration.filename = options.protocol_path;
         couchbase::core::logger::create_protocol_logger(configuration);
     }
 
-    spdlog::set_level(spdlog::level::from_str(log_level));
+    spdlog::set_level(spdlog::level::from_str(options.level));
     couchbase::core::logger::set_log_levels(level);
+}
+
+auto
+build_cluster_options(const common_options& options) -> couchbase::cluster_options
+{
+    auto cluster_options = create_cluster_options(options.connection);
+
+    if (!options.connection.configuration_profile.empty()) {
+        cluster_options.apply_profile(options.connection.configuration_profile);
+    }
+
+    apply_options(cluster_options, options.security);
+    apply_options(cluster_options, options.timeouts);
+    apply_options(cluster_options, options.compression);
+    apply_options(cluster_options, options.dns_srv);
+    apply_options(cluster_options, options.network);
+    apply_options(cluster_options, options.transactions);
+    apply_options(cluster_options, options.metrics);
+    apply_options(cluster_options, options.tracing);
+    apply_options(cluster_options, options.behavior);
+
+    return cluster_options;
 }
 
 auto
@@ -409,8 +550,7 @@ extract_inlined_keyspace(const std::string& id) -> std::optional<keyspace_with_i
 {
     static const std::regex inlined_keyspace_regex{ R"(^(.*?):(.*?)\.(.*?):(.*)$)" };
 
-    std::smatch match;
-    if (std::regex_match(id, match, inlined_keyspace_regex)) {
+    if (std::smatch match; std::regex_match(id, match, inlined_keyspace_regex)) {
         keyspace_with_id ks_id{};
         ks_id.bucket_name = match[1];
         ks_id.scope_name = match[2];
@@ -422,21 +562,28 @@ extract_inlined_keyspace(const std::string& id) -> std::optional<keyspace_with_i
     return {};
 }
 
-bool
-get_bool_option(const docopt::Options& options, const std::string& name)
+auto
+available_query_scan_consistency_modes() -> std::vector<std::string>
 {
-    return options.find(name) != options.end() && options.at(name) && options.at(name).asBool();
+    return {
+        fmt::format("{}", couchbase::query_scan_consistency::not_bounded),
+        fmt::format("{}", couchbase::query_scan_consistency::request_plus),
+    };
 }
 
-double
-get_double_option(const docopt::Options& options, const std::string& name)
+auto
+available_analytics_scan_consistency_modes() -> std::vector<std::string>
 {
-    auto value = options.at(name).asString();
-    std::size_t pos;
-    const double ret = std::stod(value, &pos);
-    if (pos != value.length()) {
-        throw std::runtime_error(value + " contains non-numeric characters.");
-    }
-    return ret;
+    return {
+        fmt::format("{}", couchbase::analytics_scan_consistency::not_bounded),
+        fmt::format("{}", couchbase::analytics_scan_consistency::request_plus),
+    };
+}
+
+[[noreturn]] void
+fail(std::string_view message)
+{
+    fmt::print(stderr, "ERROR: {}", message);
+    exit(EXIT_FAILURE);
 }
 } // namespace cbc

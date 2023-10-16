@@ -17,36 +17,25 @@
 
 #include "version.hxx"
 
-#include "utils.hxx"
-
 #include <core/meta/version.hxx>
 
+#include <fmt/format.h>
 #include <tao/json.hpp>
 
-namespace cbc
+namespace
 {
-static constexpr auto* USAGE =
-  R"(Display version information.
-
-Usage:
-  cbc version [options]
-  cbc version (-h|--help)
-
-Options:
-  -h --help  Show this screen.
-  --json     Dump version and build info in JSON format.
-)";
-
-void
-cbc::version::execute(const std::vector<std::string>& argv)
+class version_app : public CLI::App
 {
-    try {
-        auto options = cbc::parse_options(USAGE, argv);
-        if (options["--help"].asBool()) {
-            fmt::print(stdout, USAGE);
-            return;
-        }
-        if (options["--json"].asBool()) {
+  public:
+    version_app()
+      : CLI::App("Display version information.", "version")
+    {
+        add_flag("--json", "Dump version and build info in JSON format.");
+    }
+
+    void execute() const
+    {
+        if (count("--json") > 0) {
             tao::json::value info;
             for (const auto& [name, value] : couchbase::core::meta::sdk_build_info()) {
                 if (name == "version_major" || name == "version_minor" || name == "version_patch" || name == "version_build" ||
@@ -62,6 +51,7 @@ cbc::version::execute(const std::vector<std::string>& argv)
             fmt::print(stdout, "{}\n", tao::json::to_string(info, 2));
             return;
         }
+
         fmt::print(stdout, "Version: {}\n", couchbase::core::meta::sdk_semver());
         auto info = couchbase::core::meta::sdk_build_info();
         fmt::print(stdout, "Build date: {}\n", info["build_timestamp"]);
@@ -77,8 +67,25 @@ cbc::version::execute(const std::vector<std::string>& argv)
         fmt::print(stdout, "  runtime: {}\n", info["openssl_runtime"]);
         fmt::print(stdout, "  default certificate directory: {}\n", info["openssl_default_cert_dir"]);
         fmt::print(stdout, "  default certificate file: {}\n", info["openssl_default_cert_file"]);
-    } catch (const docopt::DocoptArgumentError& e) {
-        fmt::print(stderr, "Error: {}\n", e.what());
     }
+};
+} // namespace
+
+namespace cbc
+{
+auto
+make_version_command() -> std::shared_ptr<CLI::App>
+{
+    return std::make_shared<version_app>();
+}
+
+auto
+execute_version_command(const CLI::App* app) -> int
+{
+    if (const auto* version = dynamic_cast<const version_app*>(app); version != nullptr) {
+        version->execute();
+        return 0;
+    }
+    return 1;
 }
 } // namespace cbc

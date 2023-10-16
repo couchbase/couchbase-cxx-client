@@ -15,12 +15,13 @@
  *   limitations under the License.
  */
 
-#include "command.hxx"
+#include <CLI/App.hpp>
 
 namespace cbc
 {
-class get : public command
-{
-    void execute(const std::vector<std::string>& argv) override;
-};
+auto
+make_get_command() -> std::shared_ptr<CLI::App>;
+
+auto
+execute_get_command(const CLI::App* app) -> int;
 } // namespace cbc

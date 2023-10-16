@@ -15,12 +15,13 @@
  *   limitations under the License.
  */
 
-#include "command.hxx"
+#include <CLI/App.hpp>
 
 namespace cbc
 {
-class query : public command
-{
-    void execute(const std::vector<std::string>& argv) override;
-};
+auto
+make_query_command() -> std::shared_ptr<CLI::App>;
+
+auto
+execute_query_command(const CLI::App* app) -> int;
 } // namespace cbc
