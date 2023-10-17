@@ -32,9 +32,15 @@ bool
 unstaging_state::wait_until_unstage_possible()
 {
     std::unique_lock lock(mutex_);
-    cv_.wait_for(lock, ctx_->overall().remaining(), [this] { return (in_flight_count_ < MAX_PARALLELISM) || abort_; });
+    auto timeout = std::max(std::chrono::nanoseconds(0), ctx_->overall().remaining()) + timeout_defaults::key_value_durable_timeout +
+                   std::chrono::seconds(1);
+    auto success = cv_.wait_for(lock, timeout, [this] { return (in_flight_count_ < MAX_PARALLELISM) || abort_; });
     if (!abort_) {
-        in_flight_count_++;
+        if (success) {
+            in_flight_count_++;
+        } else {
+            abort_ = true;
+        }
     }
     lock.unlock();
     return !abort_;
@@ -191,9 +197,12 @@ staged_mutation_queue::commit(attempt_context_impl* ctx)
     std::vector<std::future<void>> futures{};
     futures.reserve(queue_.size());
 
+    bool aborted = false;
+
     for (auto& item : queue_) {
-        if (!state.wait_until_unstage_possible()) {
-            // Aborted - don't commit any more mutations
+        aborted = !state.wait_until_unstage_possible();
+        if (aborted) {
+            // Do not commit any more mutations
             break;
         }
 
@@ -243,6 +252,10 @@ staged_mutation_queue::commit(attempt_context_impl* ctx)
     if (exc) {
         rethrow_exception(exc);
     }
+    if (aborted) {
+        // Commit was aborted but no exception was raised from the futures (possibly timeout during wait_until_unstage_possible())
+        throw transaction_operation_failed(FAIL_OTHER, "commit aborted").no_rollback().failed_post_commit();
+    }
 }
 
 void
@@ -255,9 +268,12 @@ staged_mutation_queue::rollback(attempt_context_impl* ctx)
     std::vector<std::future<void>> futures{};
     futures.reserve(queue_.size());
 
+    bool aborted = false;
+
     for (auto& item : queue_) {
-        if (!state.wait_until_unstage_possible()) {
-            // Aborted - don't roll back any more mutations
+        aborted = !state.wait_until_unstage_possible();
+        if (aborted) {
+            // Do not roll back any more mutations
             break;
         }
 
@@ -265,7 +281,9 @@ staged_mutation_queue::rollback(attempt_context_impl* ctx)
         futures.push_back(barrier->get_future());
 
         auto timer = std::make_shared<asio::steady_timer>(ctx->cluster_ref()->io_context());
-        async_exp_delay delay(timer, std::chrono::milliseconds(1), std::chrono::milliseconds(100), ctx->overall().remaining());
+        auto timeout = std::max(std::chrono::nanoseconds(0), ctx->overall().remaining()) + timeout_defaults::key_value_durable_timeout +
+                       std::chrono::seconds(1);
+        async_exp_delay delay(timer, std::chrono::milliseconds(1), std::chrono::milliseconds(100), timeout);
 
         switch (item.type()) {
             case staged_mutation_type::INSERT:
@@ -306,6 +324,10 @@ staged_mutation_queue::rollback(attempt_context_impl* ctx)
     }
     if (exc) {
         rethrow_exception(exc);
+    }
+    if (aborted) {
+        // Rollback was aborted but no exception was raised from the futures (possibly timeout during wait_until_unstage_possible())
+        throw transaction_operation_failed(FAIL_OTHER, "rollback aborted").no_rollback();
     }
 }
 
@@ -592,21 +614,17 @@ staged_mutation_queue::handle_commit_doc_error(const client_error& e,
             default:
                 throw transaction_operation_failed(ec, e.what()).no_rollback().failed_post_commit();
         }
-    } catch (const retry_operation&) {
-        try {
-            delay([this, callback = std::move(callback), ctx, &item, delay, ambiguity_resolution_mode, cas_zero_mode](
-                    std::error_code ec) mutable {
-                if (ec == asio::error::operation_aborted) {
-                    return;
-                }
-                CB_ATTEMPT_CTX_LOG_TRACE(ctx, "retrying commit_doc");
-                commit_doc(ctx, item, delay, std::move(callback), ambiguity_resolution_mode, cas_zero_mode);
-            });
-        } catch (const retry_operation_retries_exhausted&) {
-            callback(std::current_exception());
-        }
-
-    } catch (const transaction_operation_failed&) {
+    } catch (const retry_operation& e) {
+        delay([this, callback = std::move(callback), ctx, &item, delay, ambiguity_resolution_mode, cas_zero_mode](
+                const std::exception_ptr& exc) mutable {
+            if (exc) {
+                callback(exc);
+                return;
+            }
+            CB_ATTEMPT_CTX_LOG_TRACE(ctx, "retrying commit_doc");
+            commit_doc(ctx, item, delay, std::move(callback), ambiguity_resolution_mode, cas_zero_mode);
+        });
+    } catch (const transaction_operation_failed& e) {
         callback(std::current_exception());
     }
 }
@@ -631,22 +649,16 @@ staged_mutation_queue::handle_remove_doc_error(const client_error& e,
             default:
                 throw transaction_operation_failed(ec, e.what()).no_rollback().failed_post_commit();
         }
-    } catch (const retry_operation&) {
-        try {
-            delay([this, callback = std::move(callback), ctx, &item, delay](std::error_code ec) mutable {
-                CB_ATTEMPT_CTX_LOG_TRACE(ctx, "callback invoked after delay");
-                if (ec == asio::error::operation_aborted) {
-                    return;
-                }
-                CB_ATTEMPT_CTX_LOG_TRACE(ctx, "retrying remove_doc");
-                remove_doc(ctx, item, delay, std::move(callback));
-            });
-        } catch (const retry_operation_retries_exhausted&) {
-            CB_ATTEMPT_CTX_LOG_TRACE(ctx, "remove_doc operation retries exhausted");
-            callback(std::current_exception());
-        }
-
-    } catch (const transaction_operation_failed&) {
+    } catch (const retry_operation& e) {
+        delay([this, callback = std::move(callback), ctx, &item, delay](const std::exception_ptr& exc) mutable {
+            if (exc) {
+                callback(exc);
+                return;
+            }
+            CB_ATTEMPT_CTX_LOG_TRACE(ctx, "retrying remove_doc");
+            remove_doc(ctx, item, delay, std::move(callback));
+        });
+    } catch (const transaction_operation_failed& e) {
         callback(std::current_exception());
     }
 }
@@ -683,19 +695,16 @@ staged_mutation_queue::handle_rollback_insert_error(const client_error& e,
             default:
                 throw retry_operation("retry rollback insert");
         }
-    } catch (const retry_operation&) {
-        try {
-            delay([this, callback = std::move(callback), ctx, &item, delay](std::error_code ec) mutable {
-                if (ec == asio::error::operation_aborted) {
-                    return;
-                }
-                CB_ATTEMPT_CTX_LOG_TRACE(ctx, "retrying rollback_insert");
-                rollback_insert(ctx, item, delay, std::move(callback));
-            });
-        } catch (const retry_operation_timeout&) {
-            callback(std::current_exception());
-        }
-    } catch (const transaction_operation_failed&) {
+    } catch (const retry_operation& e) {
+        delay([this, callback = std::move(callback), ctx, &item, delay](const std::exception_ptr& exc) mutable {
+            if (exc) {
+                callback(exc);
+                return;
+            }
+            CB_ATTEMPT_CTX_LOG_TRACE(ctx, "retrying rollback_insert");
+            rollback_insert(ctx, item, delay, std::move(callback));
+        });
+    } catch (const transaction_operation_failed& e) {
         callback(std::current_exception());
     }
 }
@@ -731,19 +740,16 @@ staged_mutation_queue::handle_rollback_remove_or_replace_error(const client_erro
             default:
                 throw retry_operation("retry rollback_remove_or_replace");
         }
-    } catch (const retry_operation&) {
-        try {
-            delay([this, callback = std::move(callback), ctx, &item, delay](std::error_code ec) mutable {
-                if (ec == asio::error::operation_aborted) {
-                    return;
-                }
-                CB_ATTEMPT_CTX_LOG_TRACE(ctx, "retrying rollback_remove_or_replace");
-                rollback_remove_or_replace(ctx, item, delay, std::move(callback));
-            });
-        } catch (const retry_operation_timeout&) {
-            callback(std::current_exception());
-        }
-    } catch (const transaction_operation_failed&) {
+    } catch (const retry_operation& e) {
+        delay([this, callback = std::move(callback), ctx, &item, delay](const std::exception_ptr& exc) mutable {
+            if (exc) {
+                callback(exc);
+                return;
+            }
+            CB_ATTEMPT_CTX_LOG_TRACE(ctx, "retrying rollback_remove_or_replace");
+            rollback_remove_or_replace(ctx, item, delay, std::move(callback));
+        });
+    } catch (const transaction_operation_failed& e) {
         callback(std::current_exception());
     }
 }

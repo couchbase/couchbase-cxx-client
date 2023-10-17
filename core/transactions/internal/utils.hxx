@@ -328,15 +328,14 @@ struct async_exp_delay {
     {
     }
 
-    void operator()(utils::movable_function<void(std::error_code)> callback) const
+    void operator()(utils::movable_function<void(std::exception_ptr)> callback) const
     {
         auto now = std::chrono::steady_clock::now();
         if (!end_time) {
             end_time = std::chrono::steady_clock::now() + timeout;
-            return;
         }
         if (now > *end_time) {
-            throw retry_operation_timeout("timed out");
+            callback(std::make_exception_ptr(retry_operation_timeout("timed out")));
         }
         auto delay = std::chrono::duration_cast<std::chrono::microseconds>(initial_delay * (jitter() * pow(2, retries++)));
         if (delay > max_delay) {
@@ -347,7 +346,13 @@ struct async_exp_delay {
         } else {
             timer->expires_after(delay);
         }
-        timer->async_wait(std::move(callback));
+        timer->async_wait([callback = std::move(callback)](std::error_code ec) mutable {
+            if (ec == asio::error::operation_aborted) {
+                callback(std::make_exception_ptr(retry_operation_timeout("retry aborted")));
+                return;
+            }
+            callback({});
+        });
     }
 };
 
@@ -359,7 +364,7 @@ struct async_constant_delay {
 
     template<typename R, typename P>
     async_constant_delay(std::shared_ptr<asio::steady_timer> timer, std::chrono::duration<R, P> d, std::size_t max)
-      : timer(timer)
+      : timer(std::move(timer))
       , delay(std::chrono::duration_cast<std::chrono::microseconds>(d))
       , max_retries(max)
       , retries(0)
@@ -367,17 +372,23 @@ struct async_constant_delay {
     }
 
     explicit async_constant_delay(std::shared_ptr<asio::steady_timer> timer)
-      : async_constant_delay(timer, DEFAULT_RETRY_OP_DELAY, DEFAULT_RETRY_OP_MAX_RETRIES)
+      : async_constant_delay(std::move(timer), DEFAULT_RETRY_OP_DELAY, DEFAULT_RETRY_OP_MAX_RETRIES)
     {
     }
 
-    void operator()(utils::movable_function<void(std::error_code)> callback)
+    void operator()(utils::movable_function<void(std::exception_ptr)> callback)
     {
         if (retries++ >= max_retries) {
             throw retry_operation_retries_exhausted("retries exhausted");
         }
         timer->expires_after(delay);
-        timer->async_wait(std::move(callback));
+        timer->async_wait([callback = std::move(callback)](std::error_code ec) mutable {
+            if (ec == asio::error::operation_aborted) {
+                callback(std::make_exception_ptr(retry_operation_retries_exhausted("retry aborted")));
+                return;
+            }
+            callback({});
+        });
     }
 };
 
