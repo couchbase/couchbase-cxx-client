@@ -32,9 +32,7 @@ bool
 unstaging_state::wait_until_unstage_possible()
 {
     std::unique_lock lock(mutex_);
-    auto timeout = std::max(std::chrono::nanoseconds(0), ctx_->overall().remaining()) + timeout_defaults::key_value_durable_timeout +
-                   std::chrono::seconds(1);
-    auto success = cv_.wait_for(lock, timeout, [this] { return (in_flight_count_ < MAX_PARALLELISM) || abort_; });
+    auto success = cv_.wait_for(lock, ctx_->overall().remaining(), [this] { return (in_flight_count_ < MAX_PARALLELISM) || abort_; });
     if (!abort_) {
         if (success) {
             in_flight_count_++;
@@ -281,9 +279,7 @@ staged_mutation_queue::rollback(attempt_context_impl* ctx)
         futures.push_back(barrier->get_future());
 
         auto timer = std::make_shared<asio::steady_timer>(ctx->cluster_ref()->io_context());
-        auto timeout = std::max(std::chrono::nanoseconds(0), ctx->overall().remaining()) + timeout_defaults::key_value_durable_timeout +
-                       std::chrono::seconds(1);
-        async_exp_delay delay(timer, std::chrono::milliseconds(1), std::chrono::milliseconds(100), timeout);
+        async_exp_delay delay(timer);
 
         switch (item.type()) {
             case staged_mutation_type::INSERT:
