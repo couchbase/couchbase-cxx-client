@@ -4,8 +4,8 @@ set BORINGSSL_BUILD_DIR=%2
 set BORINGSSL_OUTPUT_DIR=%3
 set BUILD_TYPE=%4
 set PIC=%5
-set VERBOSE_MAKEFILE=%6
-set BORINGSSL_PREFIX=%7
+set BORINGSSL_PREFIX=%6
+set BORINGSSL_CMAKE_OPTIONS=%7
 set "BORINGSSL_LIB_DIR=%BORINGSSL_OUTPUT_DIR%\lib"
 set "BORINGSSL_INCLUDE_DIR=%BORINGSSL_OUTPUT_DIR%\include"
 
@@ -21,8 +21,8 @@ cmake -S"%BORINGSSL_SRC_DIR%"^
  -GNinja^
  -DCMAKE_BUILD_TYPE=%BUILD_TYPE%^
  -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=%PIC%^
- -DCMAKE_VERBOSE_MAKEFILE:BOOL=%VERBOSE_MAKEFILE%
- ninja -v -C "%BORINGSSL_BUILD_DIR%"
+ %BORINGSSL_CMAKE_OPTIONS%
+cmake --build "%BORINGSSL_BUILD_DIR%" --verbose
 
 cd "%BORINGSSL_BUILD_DIR%"
 if not exist "%BORINGSSL_BUILD_DIR%\ssl\ssl.lib" (
@@ -75,20 +75,20 @@ if [%BORINGSSL_PREFIX%] NEQ [] (
 
     @echo "Starting build phase with symbol prefixing."
     cmake -S"%BORINGSSL_SRC_DIR%"^
-    -B"%BORINGSSL_BUILD_DIR%"^
-    -GNinja^
-    -DBORINGSSL_PREFIX=%BORINGSSL_PREFIX%^
-    -DBORINGSSL_PREFIX_SYMBOLS="%BORINGSSL_OUTPUT_DIR%/symbols.txt"^
-    -DCMAKE_BUILD_TYPE=%BUILD_TYPE%^
-    -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=%PIC%^
-    -DCMAKE_VERBOSE_MAKEFILE:BOOL=%VERBOSE_MAKEFILE%
-    ninja -v -C "%BORINGSSL_BUILD_DIR%"
+          -B"%BORINGSSL_BUILD_DIR%"^
+          -GNinja^
+          -DBORINGSSL_PREFIX=%BORINGSSL_PREFIX%^
+          -DBORINGSSL_PREFIX_SYMBOLS="%BORINGSSL_OUTPUT_DIR%/symbols.txt"^
+          -DCMAKE_BUILD_TYPE=%BUILD_TYPE%^
+          -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=%PIC%^
+          %BORINGSSL_CMAKE_OPTIONS%
+    cmake --build "%BORINGSSL_BUILD_DIR%" --verbose
     cd "%BORINGSSL_BUILD_DIR%"
     if not exist "%BORINGSSL_BUILD_DIR%\symbol_prefix_include\boringssl_prefix_symbols.h" (
         @echo "Failed to build boringssl_prefix_symbols.h"
         exit 1
     )
-    
+
     @copy "%BORINGSSL_BUILD_DIR%\symbol_prefix_include\boringssl_prefix_symbols.h" "%BORINGSSL_INCLUDE_DIR%"
 )
 

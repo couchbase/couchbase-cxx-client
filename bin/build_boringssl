@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 
+set -xe
+
 BORINGSSL_SRC_DIR=$1
 BORINGSSL_BUILD_DIR=$2
 BORINGSSL_OUTPUT_DIR=$3
 BUILD_TYPE=$4
 PIC=$5
-VERBOSE_MAKEFILE=$6
-BORINGSSL_PREFIX=$7
+BORINGSSL_PREFIX=$6
+BORINGSSL_CMAKE_OPTIONS="$7"
 BORINGSSL_LIB_DIR=$BORINGSSL_OUTPUT_DIR/lib
 BORINGSSL_INCLUDE_DIR=$BORINGSSL_OUTPUT_DIR/include
 
@@ -17,12 +19,12 @@ rm -rf build
 mkdir -p build
 cd build
 echo "Starting initial build phase."
-cmake .. -S$BORINGSSL_SRC_DIR \
+cmake -S$BORINGSSL_SRC_DIR \
     -B$BORINGSSL_BUILD_DIR \
     -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
     -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=$PIC \
-    -DCMAKE_VERBOSE_MAKEFILE:BOOL=$VERBOSE_MAKEFILE
-make -j -C $BORINGSSL_BUILD_DIR
+    ${BORINGSSL_CMAKE_OPTIONS}
+cmake --build $BORINGSSL_BUILD_DIR --verbose
 
 cd $BORINGSSL_BUILD_DIR
 [ -f ssl/libssl.a ] || { echo "Failed to build libssl.a" ; exit 1 ; }
@@ -40,8 +42,8 @@ if [ -n "$BORINGSSL_PREFIX" ]; then
         -DBORINGSSL_PREFIX_SYMBOLS=$BORINGSSL_OUTPUT_DIR/symbols.txt \
         -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
         -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=$PIC \
-        -DCMAKE_VERBOSE_MAKEFILE:BOOL=$VERBOSE_MAKEFILE
-    make -j -C $BORINGSSL_BUILD_DIR
+        ${BORINGSSL_CMAKE_OPTIONS}
+    cmake --build $BORINGSSL_BUILD_DIR --verbose
     cd $BORINGSSL_BUILD_DIR
     [ -f symbol_prefix_include/boringssl_prefix_symbols.h ] || { echo "Failed to build boringssl_prefix_symbols.h" ; exit 1 ; }
 
