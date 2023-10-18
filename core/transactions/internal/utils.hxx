@@ -334,11 +334,12 @@ struct async_exp_delay {
 
     void operator()(utils::movable_function<void(std::exception_ptr)> callback) const
     {
-        if (retries++ >= max_retries) {
+        if (retries >= max_retries) {
             callback(std::make_exception_ptr(retry_operation_retries_exhausted("retries exhausted")));
             return;
         }
-        auto delay = std::chrono::duration_cast<std::chrono::microseconds>(initial_delay * (jitter() * pow(2, retries - 1)));
+        auto delay =
+          std::chrono::duration_cast<std::chrono::microseconds>(initial_delay * (jitter() * pow(2, static_cast<double>(retries++))));
         if (delay > max_delay) {
             delay = max_delay;
         }
