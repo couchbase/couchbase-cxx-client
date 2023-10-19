@@ -2,15 +2,12 @@
 set BORINGSSL_SRC_DIR=%1
 set BORINGSSL_BUILD_DIR=%2
 set BORINGSSL_OUTPUT_DIR=%3
-set BUILD_TYPE=%4
-set PIC=%5
-set BORINGSSL_PREFIX=%6
-set BORINGSSL_CMAKE_OPTIONS=%7
+set BORINGSSL_PREFIX=%4
+set BORINGSSL_CMAKE_OPTIONS=%5
 set "BORINGSSL_LIB_DIR=%BORINGSSL_OUTPUT_DIR%\lib"
 set "BORINGSSL_INCLUDE_DIR=%BORINGSSL_OUTPUT_DIR%\include"
 
 cd "%BORINGSSL_SRC_DIR%"
-git rev-parse HEAD > "%BORINGSSL_OUTPUT_DIR%\boringssl_sha.txt"
 
 @rd /S /Q build
 @md build
@@ -19,10 +16,8 @@ git rev-parse HEAD > "%BORINGSSL_OUTPUT_DIR%\boringssl_sha.txt"
 cmake -S"%BORINGSSL_SRC_DIR%"^
  -B"%BORINGSSL_BUILD_DIR%"^
  -GNinja^
- -DCMAKE_BUILD_TYPE=%BUILD_TYPE%^
- -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=%PIC%^
  %BORINGSSL_CMAKE_OPTIONS%
-cmake --build "%BORINGSSL_BUILD_DIR%" --verbose
+cmake --build "%BORINGSSL_BUILD_DIR%" --verbose --target crypto ssl
 
 cd "%BORINGSSL_BUILD_DIR%"
 if not exist "%BORINGSSL_BUILD_DIR%\ssl\ssl.lib" (
@@ -47,25 +42,25 @@ if [%BORINGSSL_PREFIX%] NEQ [] (
     set keepSymbols[0]=
     set /a kIdx=0
     for /F "usebackq tokens=*" %%s in ("%BORINGSSL_OUTPUT_DIR%\symbols.txt") do (
-    set "found="
-    for %%k in (%skipSymbols%) do (
-    if %%k==%%s (
-    set "found=y"
-    )
-    )
-    if not defined found (
-    set keepSymbols[!kIdx!]=%%s
-    set /A kIdx+=1
-    )
+        set "found="
+        for %%k in (%skipSymbols%) do (
+            if %%k==%%s (
+                set "found=y"
+            )
+        )
+        if not defined found (
+            set keepSymbols[!kIdx!]=%%s
+            set /A kIdx+=1
+        )
     )
     set /a end=%kIdx%-1
 
     for /L %%i in (0,1,%end%) do (
-    if %%i equ 0 (
-    echo !keepSymbols[%%i]! > "%BORINGSSL_OUTPUT_DIR%\symbols_parsed.txt"
-    ) else (
-    echo !keepSymbols[%%i]! >> "%BORINGSSL_OUTPUT_DIR%\symbols_parsed.txt"
-    )
+        if %%i equ 0 (
+            echo !keepSymbols[%%i]! > "%BORINGSSL_OUTPUT_DIR%\symbols_parsed.txt"
+        ) else (
+            echo !keepSymbols[%%i]! >> "%BORINGSSL_OUTPUT_DIR%\symbols_parsed.txt"
+        )
     )
     endlocal
 
@@ -79,10 +74,8 @@ if [%BORINGSSL_PREFIX%] NEQ [] (
           -GNinja^
           -DBORINGSSL_PREFIX=%BORINGSSL_PREFIX%^
           -DBORINGSSL_PREFIX_SYMBOLS="%BORINGSSL_OUTPUT_DIR%/symbols.txt"^
-          -DCMAKE_BUILD_TYPE=%BUILD_TYPE%^
-          -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=%PIC%^
           %BORINGSSL_CMAKE_OPTIONS%
-    cmake --build "%BORINGSSL_BUILD_DIR%" --verbose
+    cmake --build "%BORINGSSL_BUILD_DIR%" --verbose --target crypto ssl
     cd "%BORINGSSL_BUILD_DIR%"
     if not exist "%BORINGSSL_BUILD_DIR%\symbol_prefix_include\boringssl_prefix_symbols.h" (
         @echo "Failed to build boringssl_prefix_symbols.h"
@@ -97,3 +90,4 @@ if [%BORINGSSL_PREFIX%] NEQ [] (
 @robocopy "%BORINGSSL_SRC_DIR%\include\openssl" "%BORINGSSL_INCLUDE_DIR%\openssl" /s /np /nfl /njh /njs /ndl /nc /ns
 @echo "Done.  Libs saved in: %BORINGSSL_LIB_DIR%, headers saved in: %BORINGSSL_INCLUDE_DIR%"
 exit 0
+
