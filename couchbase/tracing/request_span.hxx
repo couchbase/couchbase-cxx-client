@@ -56,6 +56,11 @@ class request_span
         return parent_;
     }
 
+    virtual bool uses_tags() const
+    {
+        return true;
+    }
+
   private:
     std::string name_{};
     std::shared_ptr<request_span> parent_{ nullptr };

@@ -74,8 +74,8 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
         if (span_ == nullptr) {
             return;
         }
-        span_->add_tag(tracing::attributes::remote_socket, remote_address);
-        span_->add_tag(tracing::attributes::local_socket, local_address);
+        if (span_->uses_tags()) span_->add_tag(tracing::attributes::remote_socket, remote_address);
+        if (span_->uses_tags()) span_->add_tag(tracing::attributes::local_socket, local_address);
         span_->end();
         span_ = nullptr;
     }
@@ -83,8 +83,8 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     void start(http_command_handler&& handler)
     {
         span_ = tracer_->start_span(tracing::span_name_for_http_service(request.type), parent_span);
-        span_->add_tag(tracing::attributes::service, tracing::service_name_for_http_service(request.type));
-        span_->add_tag(tracing::attributes::operation_id, client_context_id_);
+        if (span_->uses_tags()) span_->add_tag(tracing::attributes::service, tracing::service_name_for_http_service(request.type));
+        if (span_->uses_tags()) span_->add_tag(tracing::attributes::operation_id, client_context_id_);
         handler_ = std::move(handler);
         deadline.expires_after(timeout_);
         deadline.async_wait([self = this->shared_from_this()](std::error_code ec) {
@@ -123,7 +123,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
             return;
         }
         session_ = std::move(session);
-        span_->add_tag(tracing::attributes::local_id, session_->id());
+        if (span_->uses_tags()) span_->add_tag(tracing::attributes::local_id, session_->id());
         send();
     }
 
