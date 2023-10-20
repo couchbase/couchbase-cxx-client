@@ -1323,15 +1323,13 @@ class mcbp_session_impl
             local_endpoint_ = stream_->local_endpoint();
             if (endpoint_.protocol() == asio::ip::tcp::v6()) {
                 local_endpoint_address_ = fmt::format("[{}]:{}", local_endpoint_.address().to_string(), local_endpoint_.port());
-            }
-            else {
+            } else {
                 local_endpoint_address_ = fmt::format("{}:{}", local_endpoint_.address().to_string(), local_endpoint_.port());
             }
             endpoint_ = it->endpoint();
             if (endpoint_.protocol() == asio::ip::tcp::v6()) {
                 endpoint_address_ = fmt::format("[{}]:{}", endpoint_.address().to_string(), endpoint_.port());
-            }
-            else {
+            } else {
                 endpoint_address_ = fmt::format("{}:{}", endpoint_.address().to_string(), endpoint_.port());
             }
             CB_LOG_DEBUG("{} connected to {}:{}", log_prefix_, endpoint_address_, it->endpoint().port());
