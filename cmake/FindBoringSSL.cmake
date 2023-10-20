@@ -40,34 +40,6 @@ The following variables may be set to control search behavior:
 
 #]=======================================================================]
 
-# We want to _only_ use boringssl specific include and libs
-function(valid_boringssl_path var var_name)
-  message("var_name=${var_name}")
-  message("var=${var}")
-  if(NOT
-     var
-     MATCHES
-     "${BORINGSSL_ROOT_DIR}")
-    message("no match!")
-    if(var_name MATCHES "CRYPTO")
-      set(BORINGSSL_CRYPTO_LIBRARY
-          "${var_name}-NOTFOUND"
-          PARENT_SCOPE)
-    elseif(var_name MATCHES "SSL")
-      set(BORINGSSL_SSL_LIBRARY
-          "${var_name}-NOTFOUND"
-          PARENT_SCOPE)
-    elseif(var_name MATCHES "INCLUDE")
-      set(BORINGSSL_INCLUDE_DIR
-          "${var_name}-NOTFOUND"
-          PARENT_SCOPE)
-    endif()
-
-  else()
-    message("matched!")
-  endif()
-endfunction()
-
 if(BORINGSSL_ROOT_DIR
    OR NOT
       "$ENV{BORINGSSL_ROOT_DIR}"
@@ -79,8 +51,7 @@ endif()
 find_path(
   BORINGSSL_ROOT_DIR
   NAMES include/openssl/ssl.h include/openssl/base.h
-  HINTS ${_BORINGSSL_ROOT_HINTS}
-  PATHS NO_DEFAULT_PATH)
+  HINTS ${_BORINGSSL_ROOT_HINTS})
 
 message(STATUS "BORINGSSL_ROOT_DIR=${BORINGSSL_ROOT_DIR}")
 if(BORINGSSL_ROOT_DIR AND EXISTS ${BORINGSSL_ROOT_DIR})
@@ -88,7 +59,6 @@ if(BORINGSSL_ROOT_DIR AND EXISTS ${BORINGSSL_ROOT_DIR})
     BORINGSSL_INCLUDE_DIR
     NAMES openssl/ssl.h openssl/base.h
     HINTS ${_BORINGSSL_ROOT_HINTS}/include)
-  valid_boringssl_path(${BORINGSSL_INCLUDE_DIR} "BORINGSSL_INCLUDE_DIR")
 
   if(WIN32)
     set(LIB_CRYPTO "crypto${CMAKE_STATIC_LIBRARY_SUFFIX}")
@@ -101,19 +71,13 @@ if(BORINGSSL_ROOT_DIR AND EXISTS ${BORINGSSL_ROOT_DIR})
   find_library(
     BORINGSSL_SSL_LIBRARY
     NAMES ${LIB_SSL}
-    HINTS ${BORINGSSL_ROOT_DIR}/lib ${BORINGSSL_ROOT_DIR}/lib/ssl ${BORINGSSL_ROOT_DIR}/ssl
-    PATHS
-    NO_DEFAULT_PATH)
+    HINTS ${BORINGSSL_ROOT_DIR}/lib ${BORINGSSL_ROOT_DIR}/lib/ssl ${BORINGSSL_ROOT_DIR}/ssl)
 
   find_library(
     BORINGSSL_CRYPTO_LIBRARY
     NAMES ${LIB_CRYPTO}
-    HINTS ${BORINGSSL_ROOT_DIR}/lib ${BORINGSSL_ROOT_DIR}/lib/crypto ${BORINGSSL_ROOT_DIR}/crypto
-    PATHS
-    NO_DEFAULT_PATH)
+    HINTS ${BORINGSSL_ROOT_DIR}/lib ${BORINGSSL_ROOT_DIR}/lib/crypto ${BORINGSSL_ROOT_DIR}/crypto)
 
-  valid_boringssl_path(${BORINGSSL_CRYPTO_LIBRARY} "BORINGSSL_CRYPTO_LIBRARY")
-  valid_boringssl_path(${BORINGSSL_SSL_LIBRARY} "BORINGSSL_SSL_LIBRARY")
   if(COUCHBASE_CXX_CLIENT_USE_BORINGSSL_PREFIX)
     if(EXISTS "${BORINGSSL_INCLUDE_DIR}/boringssl_prefix_symbols.h")
       set(BORINGSSL_PREFIX_SYMBOLS_FOUND TRUE)
