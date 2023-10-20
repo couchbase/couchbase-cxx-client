@@ -39,7 +39,7 @@ class noop_span : public couchbase::tracing::request_span
         /* do nothing */
     }
 
-    virtual bool uses_tags() const
+    bool uses_tags() const override
     {
         return false;
     }
