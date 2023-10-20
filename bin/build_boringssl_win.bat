@@ -82,11 +82,11 @@ if [%BORINGSSL_PREFIX%] NEQ [] (
         exit 1
     )
 
-    @copy %BORINGSSL_BUILD_DIR%\symbol_prefix_include\boringssl_prefix_symbols.h %BORINGSSL_INCLUDE_DIR%
+    @copy "%BORINGSSL_BUILD_DIR%\symbol_prefix_include\boringssl_prefix_symbols.h" "%BORINGSSL_INCLUDE_DIR%"
 )
 
-@copy %BORINGSSL_BUILD_DIR%\ssl\ssl.lib %BORINGSSL_LIB_DIR%
-@copy %BORINGSSL_BUILD_DIR%\crypto\crypto.lib %BORINGSSL_LIB_DIR%
+@copy "%BORINGSSL_BUILD_DIR%\ssl\ssl.lib" "%BORINGSSL_LIB_DIR%"
+@copy "%BORINGSSL_BUILD_DIR%\crypto\crypto.lib" "%BORINGSSL_LIB_DIR%"
 @robocopy %BORINGSSL_SRC_DIR%\include\openssl %BORINGSSL_INCLUDE_DIR%\openssl /s /np /nfl /njh /njs /ndl /nc /ns
 @echo "Done.  Libs saved in: %BORINGSSL_LIB_DIR%, headers saved in: %BORINGSSL_INCLUDE_DIR%"
 exit 0
