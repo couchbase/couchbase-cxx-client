@@ -60,7 +60,7 @@ if(BORINGSSL_ROOT_DIR AND EXISTS ${BORINGSSL_ROOT_DIR})
     NAMES openssl/ssl.h openssl/base.h
     HINTS ${_BORINGSSL_ROOT_HINTS}/include)
 
-  if(WIN32)
+  if(WIN32 AND NOT MINGW)
     set(LIB_CRYPTO "crypto${CMAKE_STATIC_LIBRARY_SUFFIX}")
     set(LIB_SSL "ssl${CMAKE_STATIC_LIBRARY_SUFFIX}")
   else()

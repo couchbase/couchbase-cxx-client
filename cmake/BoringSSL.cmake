@@ -17,6 +17,18 @@ set(BORINGSSL_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/boringssl)
 set(BORINGSSL_INCLUDE_DIR ${BORINGSSL_OUTPUT_DIR}/include)
 set(BORINGSSL_LIB_DIR ${BORINGSSL_OUTPUT_DIR}/lib)
 
+if(MINGW)
+   set(boringssl_PATCH "${PROJECT_SOURCE_DIR}/cmake/BoringSSL-third_party-fiat-curve25519_64_adx-h.patch")
+   message("Applying ${boringssl_PATCH} in ${boringssl_SOURCE_DIR} for MinGW gcc")
+   execute_process(
+            COMMAND patch --input ${boringssl_PATCH} --ignore-whitespace --strip=0
+            WORKING_DIRECTORY ${boringssl_SOURCE_DIR}
+            RESULT_VARIABLE PATCH_RESULT)
+   if(NOT PATCH_RESULT EQUAL "0")
+       message(FATAL_ERROR "Failed to apply patch to BoringSSL. Failed with: ${PATCH_RESULT}.")
+   endif()
+endif()
+
 # we need Go in order to read BoringSSL's symbols via the utils they provide...thanks Google!
 find_program(GO_EXECUTABLE go)
 if(NOT GO_EXECUTABLE)
@@ -38,7 +50,7 @@ if(WIN32)
   execute_process(
     COMMAND cmd /C build_boringssl_win.bat ${BORINGSSL_SRC_DIR} ${BORINGSSL_BIN_DIR} ${BORINGSSL_OUTPUT_DIR}
             ${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX} ${BORINGSSL_CMAKE_OPTIONS}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/bin
     RESULT_VARIABLE BUILD_RESULT)
 else()
   string(
@@ -50,7 +62,7 @@ else()
   execute_process(
     COMMAND bash build_boringssl ${BORINGSSL_SRC_DIR} ${BORINGSSL_BIN_DIR} ${BORINGSSL_OUTPUT_DIR}
             ${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX} ${BORINGSSL_CMAKE_OPTIONS}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/bin
     RESULT_VARIABLE BUILD_RESULT)
 endif()
 if(NOT
@@ -77,7 +89,7 @@ else()
   if(CMAKE_BUILD_TYPE_LOWER MATCHES "deb")
     try_compile(
       BORINGSSL_USABLE ${CMAKE_CURRENT_BINARY_DIR}
-      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/test_openssl.cxx
+      ${PROJECT_SOURCE_DIR}/cmake/test_openssl.cxx
       CMAKE_FLAGS "-DINCLUDE_DIRECTORIES:STRING=${BORINGSSL_INCLUDE_DIR}"
       COMPILE_DEFINITIONS "${BORINGSSL_TEST_COMPILE_DEFINITIONS}"
       OUTPUT_VARIABLE TRY_COMPILE_OUTPUT
@@ -91,7 +103,7 @@ else()
   else()
     try_compile(
       BORINGSSL_USABLE ${CMAKE_CURRENT_BINARY_DIR}
-      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/test_openssl.cxx
+      ${PROJECT_SOURCE_DIR}/cmake/test_openssl.cxx
       CMAKE_FLAGS "-DINCLUDE_DIRECTORIES:STRING=${BORINGSSL_INCLUDE_DIR}"
       COMPILE_DEFINITIONS "${BORINGSSL_TEST_COMPILE_DEFINITIONS}"
       LINK_LIBRARIES
