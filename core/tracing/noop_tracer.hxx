@@ -38,6 +38,11 @@ class noop_span : public couchbase::tracing::request_span
     {
         /* do nothing */
     }
+
+    bool uses_tags() const override
+    {
+        return false;
+    }
 };
 
 class noop_tracer : public couchbase::tracing::request_tracer
