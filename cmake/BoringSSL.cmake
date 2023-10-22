@@ -18,15 +18,18 @@ set(BORINGSSL_INCLUDE_DIR ${BORINGSSL_OUTPUT_DIR}/include)
 set(BORINGSSL_LIB_DIR ${BORINGSSL_OUTPUT_DIR}/lib)
 
 if(MINGW)
-   set(boringssl_PATCH "${PROJECT_SOURCE_DIR}/cmake/0001-fix-build-for-mingw-w64-ucrt-x86_64-toolchain.patch")
-   message("Applying ${boringssl_PATCH} in ${boringssl_SOURCE_DIR} for MinGW gcc")
-   execute_process(
-            COMMAND patch --input ${boringssl_PATCH} --ignore-whitespace --strip=1
-            WORKING_DIRECTORY ${boringssl_SOURCE_DIR}
-            RESULT_VARIABLE PATCH_RESULT)
-   if(NOT PATCH_RESULT EQUAL "0")
-       message(FATAL_ERROR "Failed to apply patch to BoringSSL. Failed with: ${PATCH_RESULT}.")
-   endif()
+  set(boringssl_PATCH "${PROJECT_SOURCE_DIR}/cmake/0001-fix-build-for-mingw-w64-ucrt-x86_64-toolchain.patch")
+  message("Applying ${boringssl_PATCH} in ${boringssl_SOURCE_DIR} for MinGW gcc")
+  execute_process(
+    COMMAND patch --input ${boringssl_PATCH} --ignore-whitespace --strip=1
+    WORKING_DIRECTORY ${boringssl_SOURCE_DIR}
+    RESULT_VARIABLE PATCH_RESULT)
+  if(NOT
+     PATCH_RESULT
+     EQUAL
+     "0")
+    message(FATAL_ERROR "Failed to apply patch to BoringSSL. Failed with: ${PATCH_RESULT}.")
+  endif()
 endif()
 
 # we need Go in order to read BoringSSL's symbols via the utils they provide...thanks Google!
@@ -57,8 +60,7 @@ if(WIN32)
 
   execute_process(
     COMMAND cmd /C build_boringssl_win.bat ${BORINGSSL_SRC_DIR} ${BORINGSSL_BIN_DIR} ${BORINGSSL_OUTPUT_DIR}
-            ${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX} ${LIB_CRYPTO} ${LIB_SSL}
-	    ${BORINGSSL_CMAKE_OPTIONS}
+            ${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX} ${LIB_CRYPTO} ${LIB_SSL} ${BORINGSSL_CMAKE_OPTIONS}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/bin
     RESULT_VARIABLE BUILD_RESULT)
 else()
