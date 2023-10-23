@@ -45,7 +45,7 @@ if(NOT TARGET hdr_histogram::hdr_histogram_static)
     GITHUB_REPOSITORY
     "HdrHistogram/HdrHistogram_c"
     OPTIONS
-    "HDR_LOG_REQUIRED ON"
+    "HDR_LOG_REQUIRED OFF"
     "HDR_HISTOGRAM_BUILD_SHARED OFF"
     "HDR_HISTOGRAM_BUILD_PROGRAMS OFF")
 endif()

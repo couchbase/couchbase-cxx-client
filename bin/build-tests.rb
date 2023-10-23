@@ -17,17 +17,19 @@
 require "fileutils"
 require "rbconfig"
 
-def which(name)
+def which(name, extra_location = [])
   ENV.fetch("PATH", "")
      .split(File::PATH_SEPARATOR)
+     .prepend(*extra_location)
+     .select { |path| File.directory?(path) }
      .map { |path| [path, name].join(File::SEPARATOR) + RbConfig::CONFIG["EXEEXT"] }
      .find { |file| File.executable?(file) }
 end
 
 def run(*args)
   args = args.compact.map(&:to_s)
-  puts args.join(" ")
-  system(*args) || abort("command returned non-zero status: #{args.join(" ")}")
+  STDERR.puts args.join(" ")
+  system(*args) || abort("#{args.join(" ")}\ncommand returned non-zero status: #{$?.inspect}")
 end
 
 PROJECT_ROOT = Dir.pwd
@@ -43,7 +45,14 @@ unless CB_SANITIZER.empty?
   CB_DEFAULT_CXX = CB_CLANGXX
 end
 
-CB_CMAKE = ENV.fetch("CB_CMAKE", which("cmake"))
+
+cmake_extra_location = [ 
+  'C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+  'C:\Program Files\Microsoft Visual Studio\2019\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+]
+CB_CMAKE = ENV.fetch("CB_CMAKE", which("cmake", cmake_extra_location))
+
+
 CB_CC = ENV.fetch("CB_CC", which(CB_DEFAULT_CC))
 CB_CXX = ENV.fetch("CB_CXX", which(CB_DEFAULT_CXX))
 CB_NUMBER_OF_JOBS = ENV.fetch("CB_NUMBER_OF_JOBS", "1").to_i
@@ -85,7 +94,7 @@ FileUtils.rm_rf(BUILD_DIR, verbose: true)
 FileUtils.mkdir_p(BUILD_DIR, verbose: true)
 
 Dir.chdir(BUILD_DIR) do
-  if RUBY_PLATFORM =~ /mswin|mingw/ && ENV["GITHUB_ACTIONS"]
+  if RUBY_PLATFORM =~ /mswin|mingw/
     CB_CMAKE_EXTRAS << "-DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON"
   else
     CB_CMAKE_EXTRAS << "-DCMAKE_C_COMPILER=#{CB_CC}" << "-DCMAKE_CXX_COMPILER=#{CB_CXX}"
