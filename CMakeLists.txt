@@ -429,7 +429,6 @@ target_include_directories(couchbase_cxx_client PUBLIC ${PROJECT_SOURCE_DIR} ${P
 target_include_directories(
         couchbase_cxx_client SYSTEM
         PUBLIC
-        ${PROJECT_SOURCE_DIR}/third_party/http_parser/include
         ${PROJECT_SOURCE_DIR}/third_party/json/external/PEGTL/include
         ${PROJECT_SOURCE_DIR}/third_party/json/include
         ${PROJECT_SOURCE_DIR}/third_party/cxx_function

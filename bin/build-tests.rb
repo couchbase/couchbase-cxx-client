@@ -47,6 +47,7 @@ end
 
 
 cmake_extra_location = [ 
+  'C:\Program Files\CMake\bin',
   'C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
   'C:\Program Files\Microsoft Visual Studio\2019\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
 ]
@@ -118,8 +119,8 @@ end
 if RUBY_PLATFORM =~ /mswin|mingw/
   cbc = Dir["#{BUILD_DIR}/**/cbc.exe"].first
   if File.exist?(cbc)
-    run("#{cbc} version --json")
+    run("#{cbc}", "version", "--json")
   end
 else
-  run("#{BUILD_DIR}/tools/cbc version --json")
+  run("#{BUILD_DIR}/tools/cbc", "version", "--json")
 end
