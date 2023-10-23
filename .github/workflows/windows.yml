@@ -23,7 +23,7 @@ jobs:
           key: ${{ github.job }}-${{ matrix.os }}
           variant: sccache
       - name: Build tests
-        timeout-minutes: 40
+        timeout-minutes: 80
         env:
           CB_CACHE_OPTION: sccache
           CB_CMAKE_BUILD_TYPE: Release
