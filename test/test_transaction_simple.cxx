@@ -27,7 +27,7 @@
 #include <stdexcept>
 
 #if defined(__GNUC__)
-#if __GNUC__ <= 10
+#if __GNUC__ <= 11
 #pragma GCC diagnostic ignored "-Wparentheses"
 #endif
 #if __GNUC__ < 9

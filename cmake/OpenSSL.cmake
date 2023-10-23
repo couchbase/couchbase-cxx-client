@@ -1,11 +1,16 @@
 option(COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL "Rely on application to link OpenSSL library" FALSE)
 option(COUCHBASE_CXX_CLIENT_USE_HOMEBREW_TO_DETECT_OPENSSL "Use homebrew to determine OpenSSL root directory" TRUE)
 option(COUCHBASE_CXX_CLIENT_USE_SCOOP_TO_DETECT_OPENSSL "Use scoop to determine OpenSSL root directory" TRUE)
+option(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL "Build and statically link BoringSSL library" FALSE)
 
 if(COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
   message(
     STATUS "COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL is set, assuming OpenSSL headers and symbols are available already"
   )
+elseif(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+  # so CMake can find our FindBoringSSL.cmake module
+  list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
+  include(cmake/BoringSSL.cmake)
 else()
   option(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL "Statically link OpenSSL library" FALSE)
   if(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL)

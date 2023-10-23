@@ -143,7 +143,7 @@ class Sha512ClientBackend : public ClientBackend
 {
   public:
     Sha512ClientBackend(GetUsernameCallback& user_cb, GetPasswordCallback& password_cb, ClientContext& ctx)
-      : ClientBackend(user_cb, password_cb, ctx, Mechanism::SCRAM_SHA512, couchbase::core::crypto::Algorithm::SHA512)
+      : ClientBackend(user_cb, password_cb, ctx, Mechanism::SCRAM_SHA512, couchbase::core::crypto::Algorithm::ALG_SHA512)
     {
     }
 
@@ -157,7 +157,7 @@ class Sha256ClientBackend : public ClientBackend
 {
   public:
     Sha256ClientBackend(GetUsernameCallback& user_cb, GetPasswordCallback& password_cb, ClientContext& ctx)
-      : ClientBackend(user_cb, password_cb, ctx, Mechanism::SCRAM_SHA256, couchbase::core::crypto::Algorithm::SHA256)
+      : ClientBackend(user_cb, password_cb, ctx, Mechanism::SCRAM_SHA256, couchbase::core::crypto::Algorithm::ALG_SHA256)
     {
     }
 
@@ -171,7 +171,7 @@ class Sha1ClientBackend : public ClientBackend
 {
   public:
     Sha1ClientBackend(GetUsernameCallback& user_cb, GetPasswordCallback& password_cb, ClientContext& ctx)
-      : ClientBackend(user_cb, password_cb, ctx, Mechanism::SCRAM_SHA1, couchbase::core::crypto::Algorithm::SHA1)
+      : ClientBackend(user_cb, password_cb, ctx, Mechanism::SCRAM_SHA1, couchbase::core::crypto::Algorithm::ALG_SHA1)
     {
     }
 
