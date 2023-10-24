@@ -20,6 +20,10 @@ project(
         VERSION "1.0.0.${couchbase_cxx_client_BUILD_NUMBER}"
         LANGUAGES CXX C)
 message(STATUS "Couchbase C++ client ${couchbase_cxx_client_VERSION}, master: ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT}")
+message(STATUS "System: ${CMAKE_SYSTEM_NAME}, ${CMAKE_SYSTEM_VERSION}, ${CMAKE_SYSTEM_PROCESSOR}")
+if (WIN32)
+    message(STATUS "Windows SDK: ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
+endif ()
 
 include(cmake/PreventInSourceBuilds.cmake)
 include(cmake/StandardProjectSettings.cmake)

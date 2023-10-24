@@ -96,7 +96,10 @@ FileUtils.mkdir_p(BUILD_DIR, verbose: true)
 
 Dir.chdir(BUILD_DIR) do
   if RUBY_PLATFORM =~ /mswin|mingw/
-    CB_CMAKE_EXTRAS << "-DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON"
+    # https://cmake.org/cmake/help/latest/variable/CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION.html
+    # https://github.com/actions/runner-images/blob/main/images/win/Windows2019-Readme.md#installed-windows-sdks
+    # https://github.com/actions/runner-images/blob/main/images/win/Windows2022-Readme.md#installed-windows-sdks
+    CB_CMAKE_EXTRAS << "-DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON" << "-DCMAKE_SYSTEM_VERSION=10.0.20348.0"
   else
     CB_CMAKE_EXTRAS << "-DCMAKE_C_COMPILER=#{CB_CC}" << "-DCMAKE_CXX_COMPILER=#{CB_CXX}"
   end

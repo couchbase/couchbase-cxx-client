@@ -59,6 +59,10 @@ if(WIN32)
   if(CMAKE_GENERATOR MATCHES "Visual Studio")
     set(LIB_CRYPTO "${CMAKE_BUILD_TYPE}/${LIB_CRYPTO}")
     set(LIB_SSL "${CMAKE_BUILD_TYPE}/${LIB_SSL}")
+    # https://cmake.org/cmake/help/latest/variable/CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION.html
+    string(CONCAT BORINGSSL_CMAKE_OPTIONS
+                  "-DCMAKE_SYSTEM_VERSION=${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION} "
+                  ${BORINGSSL_CMAKE_OPTIONS})
   endif()
 
   execute_process(
