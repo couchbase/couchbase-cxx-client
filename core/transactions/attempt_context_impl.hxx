@@ -439,6 +439,11 @@ class attempt_context_impl
         return is_done_;
     }
 
+    [[nodiscard]] transaction_context& overall()
+    {
+        return overall_;
+    }
+
     [[nodiscard]] const std::string& transaction_id()
     {
         return overall_.transaction_id();

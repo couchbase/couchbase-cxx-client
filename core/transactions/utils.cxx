@@ -63,10 +63,9 @@ wrap_collection_call(result& res, std::function<void(result&)> call)
     }
 }
 
-result
-wrap_operation_future(std::future<result>& fut, bool ignore_subdoc_errors)
+void
+validate_operation_result(result& res, bool ignore_subdoc_errors)
 {
-    auto res = fut.get();
     if (!res.is_success()) {
         throw client_error(res);
     }
@@ -83,6 +82,13 @@ wrap_operation_future(std::future<result>& fut, bool ignore_subdoc_errors)
             }
         }
     }
+}
+
+result
+wrap_operation_future(std::future<result>& fut, bool ignore_subdoc_errors)
+{
+    auto res = fut.get();
+    validate_operation_result(res, ignore_subdoc_errors);
     return res;
 }
 

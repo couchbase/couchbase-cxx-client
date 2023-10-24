@@ -160,6 +160,7 @@ main(int argc, const char* argv[])
               barrier->set_value(tx_err.ec());
           });
         if (auto async_err = f.get()) {
+            fmt::print("received async error from future: message - {}", async_err.message());
             retval = 1;
         }
         //! [simple-async-txn]

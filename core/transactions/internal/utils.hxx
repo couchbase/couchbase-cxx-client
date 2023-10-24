@@ -30,6 +30,9 @@
 #include <string>
 #include <thread>
 
+#include <asio/steady_timer.hpp>
+#include <utility>
+
 namespace couchbase::core::transactions
 {
 // returns the parsed server time from the result of a lookup_in_spec::get(subdoc::lookup_in_macro::vbucket).xattr() call
@@ -81,6 +84,9 @@ wrap_durable_request(T&& req, const couchbase::transactions::transactions_config
     req.durability_level = level;
     return req;
 }
+
+void
+validate_operation_result(result& res, bool ignore_subdoc_errors = true);
 
 result
 wrap_operation_future(std::future<result>& fut, bool ignore_subdoc_errors = true);
@@ -151,6 +157,7 @@ error_class_from_response(const Resp& resp)
 
 static constexpr std::chrono::milliseconds DEFAULT_RETRY_OP_DELAY{ 3 };
 static constexpr std::chrono::milliseconds DEFAULT_RETRY_OP_EXP_DELAY{ 1 };
+static constexpr std::chrono::milliseconds DEFAULT_RETRY_OP_MAX_EXP_DELAY{ 100 };
 static constexpr std::size_t DEFAULT_RETRY_OP_MAX_RETRIES{ 100 };
 static constexpr double RETRY_OP_JITTER{ 0.1 }; // means +/- 10% for jitter.
 static constexpr std::size_t DEFAULT_RETRY_OP_EXPONENT_CAP{ 8 };
@@ -297,6 +304,90 @@ struct constant_delay {
             throw retry_operation_retries_exhausted("retries exhausted");
         }
         std::this_thread::sleep_for(delay);
+    }
+};
+
+struct async_exp_delay {
+    std::shared_ptr<asio::steady_timer> timer;
+    std::chrono::microseconds initial_delay;
+    std::chrono::microseconds max_delay;
+    std::size_t max_retries;
+    mutable std::size_t retries;
+
+    template<typename R1, typename P1, typename R2, typename P2>
+    async_exp_delay(std::shared_ptr<asio::steady_timer> timer,
+                    std::chrono::duration<R1, P1> initial,
+                    std::chrono::duration<R2, P2> max,
+                    std::size_t max_retries)
+      : timer(std::move(timer))
+      , initial_delay(std::chrono::duration_cast<std::chrono::microseconds>(initial))
+      , max_delay(std::chrono::duration_cast<std::chrono::microseconds>(max))
+      , max_retries(max_retries)
+      , retries(0)
+    {
+    }
+
+    async_exp_delay(std::shared_ptr<asio::steady_timer> timer)
+      : async_exp_delay(std::move(timer), DEFAULT_RETRY_OP_EXP_DELAY, DEFAULT_RETRY_OP_MAX_EXP_DELAY, DEFAULT_RETRY_OP_MAX_RETRIES)
+    {
+    }
+
+    void operator()(utils::movable_function<void(std::exception_ptr)> callback) const
+    {
+        if (retries >= max_retries) {
+            callback(std::make_exception_ptr(retry_operation_retries_exhausted("retries exhausted")));
+            return;
+        }
+        auto delay =
+          std::chrono::duration_cast<std::chrono::microseconds>(initial_delay * (jitter() * pow(2, static_cast<double>(retries++))));
+        if (delay > max_delay) {
+            delay = max_delay;
+        }
+        timer->expires_after(delay);
+        timer->async_wait([callback = std::move(callback)](std::error_code ec) mutable {
+            if (ec == asio::error::operation_aborted) {
+                callback(std::make_exception_ptr(retry_operation_retries_exhausted("retry aborted")));
+                return;
+            }
+            callback({});
+        });
+    }
+};
+
+struct async_constant_delay {
+    std::shared_ptr<asio::steady_timer> timer;
+    std::chrono::microseconds delay;
+    std::size_t max_retries;
+    std::size_t retries;
+
+    template<typename R, typename P>
+    async_constant_delay(std::shared_ptr<asio::steady_timer> timer, std::chrono::duration<R, P> d, std::size_t max)
+      : timer(std::move(timer))
+      , delay(std::chrono::duration_cast<std::chrono::microseconds>(d))
+      , max_retries(max)
+      , retries(0)
+    {
+    }
+
+    explicit async_constant_delay(std::shared_ptr<asio::steady_timer> timer)
+      : async_constant_delay(std::move(timer), DEFAULT_RETRY_OP_DELAY, DEFAULT_RETRY_OP_MAX_RETRIES)
+    {
+    }
+
+    void operator()(utils::movable_function<void(std::exception_ptr)> callback)
+    {
+        if (retries++ >= max_retries) {
+            callback(std::make_exception_ptr(retry_operation_retries_exhausted("retries exhausted")));
+            return;
+        }
+        timer->expires_after(delay);
+        timer->async_wait([callback = std::move(callback)](std::error_code ec) mutable {
+            if (ec == asio::error::operation_aborted) {
+                callback(std::make_exception_ptr(retry_operation_retries_exhausted("retry aborted")));
+                return;
+            }
+            callback({});
+        });
     }
 };
 
