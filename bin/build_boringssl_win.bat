@@ -7,7 +7,8 @@ set LIB_SSL=%~6
 set BORINGSSL_CMAKE_EXE=%7
 set BORINGSSL_CMAKE_GENERATOR=%8
 set BORINGSSL_CMAKE_BUILD_TYPE=%9
-set BORINGSSL_CMAKE_OPTIONS=%~10
+shift
+set BORINGSSL_CMAKE_OPTIONS=%~9
 
 rem Normalize all paths by replacing Unix '/' with Windows '\'.
 rem Also all quotes removed from the arguments, so all paths must be quoted below.
