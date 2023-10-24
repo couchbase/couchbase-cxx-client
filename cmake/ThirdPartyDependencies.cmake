@@ -9,7 +9,9 @@ if(NOT TARGET fmt::fmt)
     VERSION
     10.1.1
     GITHUB_REPOSITORY
-    "fmtlib/fmt")
+    "fmtlib/fmt"
+    OPTIONS
+    "CMAKE_POSITION_INDEPENDENT_CODE ON")
 endif()
 
 if(NOT TARGET spdlog::spdlog)
@@ -21,6 +23,7 @@ if(NOT TARGET spdlog::spdlog)
     GITHUB_REPOSITORY
     "gabime/spdlog"
     OPTIONS
+    "CMAKE_POSITION_INDEPENDENT_CODE ON"
     "SPDLOG_FMT_EXTERNAL ON")
 endif()
 
@@ -31,7 +34,9 @@ if(NOT TARGET Microsoft.GSL::GSL)
     VERSION
     4.0.0
     GITHUB_REPOSITORY
-    "microsoft/gsl")
+    "microsoft/gsl"
+    OPTIONS
+    "CMAKE_POSITION_INDEPENDENT_CODE ON")
 endif()
 
 if(NOT TARGET hdr_histogram::hdr_histogram_static)
@@ -45,6 +50,7 @@ if(NOT TARGET hdr_histogram::hdr_histogram_static)
     GITHUB_REPOSITORY
     "HdrHistogram/HdrHistogram_c"
     OPTIONS
+    "CMAKE_POSITION_INDEPENDENT_CODE ON"
     "HDR_LOG_REQUIRED OFF"
     "HDR_HISTOGRAM_BUILD_SHARED OFF"
     "HDR_HISTOGRAM_BUILD_PROGRAMS OFF")
@@ -64,6 +70,7 @@ if(NOT TARGET llhttp::llhttp)
     GITHUB_REPOSITORY
     "nodejs/llhttp"
     OPTIONS
+    "CMAKE_POSITION_INDEPENDENT_CODE ON"
     "BUILD_SHARED_LIBS OFF"
     "BUILD_STATIC_LIBS ON")
 endif()
@@ -79,6 +86,7 @@ if(NOT TARGET snappy)
     GITHUB_REPOSITORY
     "google/snappy"
     OPTIONS
+    "CMAKE_POSITION_INDEPENDENT_CODE ON"
     "BUILD_SHARED_LIBS OFF"
     "SNAPPY_INSTALL OFF"
     "SNAPPY_BUILD_TESTS OFF"
@@ -115,6 +123,8 @@ if(asio_ADDED)
   target_compile_definitions(asio INTERFACE ASIO_STANDALONE ASIO_NO_DEPRECATED)
 
   target_link_libraries(asio INTERFACE Threads::Threads)
+
+  set_target_properties(asio PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 
   if(WIN32)
     # macro see @ https://stackoverflow.com/a/40217291/1746503
