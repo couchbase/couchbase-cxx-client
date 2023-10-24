@@ -32,6 +32,7 @@
 
 #include <couchbase/error_codes.hxx>
 
+#include <openssl/crypto.h>
 #include <tao/json.hpp>
 
 TEST_CASE("unit: transformer to deduplicate JSON keys", "[unit]")
@@ -87,16 +88,27 @@ TEST_CASE("unit: join strings (fmt version)", "[unit]")
     REQUIRE(couchbase::core::utils::join_strings_fmt("{}", field_specs, ",") == "testkey:string,volume:double,id:integer");
 }
 
+constexpr const char* ssl_lib_id =
+#if defined(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+  "bssl"
+#else
+  "ssl"
+#endif
+  ;
+
 TEST_CASE("unit: user_agent string", "[unit]")
 {
-    std::string os_version = fmt::format(";{}/{}", COUCHBASE_CXX_CLIENT_SYSTEM_NAME, COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR);
-    std::string core_version = fmt::format("cxx/{}.{}.{}/{};{}/{}",
+    std::string os_version = fmt::format(
+      ";{}/{};{}/{}", COUCHBASE_CXX_CLIENT_SYSTEM_NAME, COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR, ssl_lib_id, OpenSSL_version_num());
+    std::string core_version = fmt::format("cxx/{}.{}.{}/{};{}/{};{}/{}",
                                            COUCHBASE_CXX_CLIENT_VERSION_MAJOR,
                                            COUCHBASE_CXX_CLIENT_VERSION_MINOR,
                                            COUCHBASE_CXX_CLIENT_VERSION_PATCH,
                                            COUCHBASE_CXX_CLIENT_GIT_REVISION_SHORT,
                                            COUCHBASE_CXX_CLIENT_SYSTEM_NAME,
-                                           COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR);
+                                           COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR,
+                                           ssl_lib_id,
+                                           OpenSSL_version_num());
 
     auto simple_user_agent = couchbase::core::meta::user_agent_for_mcbp("0xDEADBEEF", "0xCAFEBEBE");
     REQUIRE(simple_user_agent == fmt::format(R"({{"a":"{}","i":"0xDEADBEEF/0xCAFEBEBE"}})", core_version));
@@ -136,7 +148,7 @@ TEST_CASE("unit: user_agent string", "[unit]")
     trimmed_user_agent = couchbase::core::meta::user_agent_for_mcbp("0xDEADBEEF", "0xCAFEBEBE", long_and_weird_extra, 250);
     REQUIRE(trimmed_user_agent == simple_user_agent);
 
-    REQUIRE(fmt::format("{}; client/0xDEADBEEF; session/0xCAFEBEBE; {}; hello world", core_version, couchbase::core::meta::os()) ==
+    REQUIRE(fmt::format("{};client/0xDEADBEEF;session/0xCAFEBEBE;{};hello world", core_version, couchbase::core::meta::os()) ==
             couchbase::core::meta::user_agent_for_http("0xDEADBEEF", "0xCAFEBEBE", "hello\nworld"));
 }
 
