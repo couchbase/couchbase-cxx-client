@@ -22,7 +22,7 @@
 #include "core/protocol/magic.hxx"
 #include "core/utils/byteswap.hxx"
 
-#include "third_party/snappy/snappy.h"
+#include <snappy.h>
 #include <spdlog/fmt/bin_to_hex.h>
 
 #include <algorithm>

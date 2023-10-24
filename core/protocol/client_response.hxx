@@ -33,10 +33,11 @@
 #include "status.hxx"
 #include <couchbase/cas.hxx>
 
-#include <cmath>
-#include <cstring>
 #include <fmt/core.h>
 #include <gsl/assert>
+
+#include <cmath>
+#include <cstring>
 #include <optional>
 
 namespace couchbase::core::protocol

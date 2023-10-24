@@ -17,17 +17,19 @@
 require "fileutils"
 require "rbconfig"
 
-def which(name)
+def which(name, extra_location = [])
   ENV.fetch("PATH", "")
      .split(File::PATH_SEPARATOR)
+     .prepend(*extra_location)
+     .select { |path| File.directory?(path) }
      .map { |path| [path, name].join(File::SEPARATOR) + RbConfig::CONFIG["EXEEXT"] }
      .find { |file| File.executable?(file) }
 end
 
 def run(*args)
   args = args.compact.map(&:to_s)
-  puts args.join(" ")
-  system(*args) || abort("command returned non-zero status: #{args.join(" ")}")
+  STDERR.puts args.join(" ")
+  system(*args) || abort("#{args.join(" ")}\ncommand returned non-zero status: #{$?.inspect}")
 end
 
 PROJECT_ROOT = Dir.pwd
@@ -43,7 +45,15 @@ unless CB_SANITIZER.empty?
   CB_DEFAULT_CXX = CB_CLANGXX
 end
 
-CB_CMAKE = ENV.fetch("CB_CMAKE", which("cmake"))
+
+cmake_extra_location = [ 
+  'C:\Program Files\CMake\bin',
+  'C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+  'C:\Program Files\Microsoft Visual Studio\2019\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+]
+CB_CMAKE = ENV.fetch("CB_CMAKE", which("cmake", cmake_extra_location))
+
+
 CB_CC = ENV.fetch("CB_CC", which(CB_DEFAULT_CC))
 CB_CXX = ENV.fetch("CB_CXX", which(CB_DEFAULT_CXX))
 CB_NUMBER_OF_JOBS = ENV.fetch("CB_NUMBER_OF_JOBS", "1").to_i
@@ -86,7 +96,10 @@ FileUtils.mkdir_p(BUILD_DIR, verbose: true)
 
 Dir.chdir(BUILD_DIR) do
   if RUBY_PLATFORM =~ /mswin|mingw/
-    CB_CMAKE_EXTRAS << "-DOPENSSL_ROOT_DIR=C:/Program Files/OpenSSL"
+    # https://cmake.org/cmake/help/latest/variable/CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION.html
+    # https://github.com/actions/runner-images/blob/main/images/win/Windows2019-Readme.md#installed-windows-sdks
+    # https://github.com/actions/runner-images/blob/main/images/win/Windows2022-Readme.md#installed-windows-sdks
+    CB_CMAKE_EXTRAS << "-DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON" << "-DCMAKE_SYSTEM_VERSION=10.0.20348.0"
   else
     CB_CMAKE_EXTRAS << "-DCMAKE_C_COMPILER=#{CB_CC}" << "-DCMAKE_CXX_COMPILER=#{CB_CXX}"
   end
@@ -109,8 +122,8 @@ end
 if RUBY_PLATFORM =~ /mswin|mingw/
   cbc = Dir["#{BUILD_DIR}/**/cbc.exe"].first
   if File.exist?(cbc)
-    run("#{cbc} version --json")
+    run("#{cbc}", "version", "--json")
   end
 else
-  run("#{BUILD_DIR}/tools/cbc version --json")
+  run("#{BUILD_DIR}/tools/cbc", "version", "--json")
 end

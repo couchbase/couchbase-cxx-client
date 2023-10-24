@@ -23,7 +23,7 @@
 #include "core/utils/json.hxx"
 #include "noop_meter.hxx"
 
-#include <hdr_histogram.h>
+#include <hdr/hdr_histogram.h>
 
 #include <gsl/assert>
 

@@ -1,5 +1,14 @@
-add_subdirectory(third_party/catch2)
-list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/third_party/catch2/contrib")
+if(NOT TARGET Catch2::Catch2WithMain)
+  cpmaddpackage(
+    NAME
+    catch2
+    VERSION
+    3.4.0
+    GITHUB_REPOSITORY
+    "catchorg/catch2")
+endif()
+
+list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
 enable_testing()
 include(Catch)
 
@@ -19,7 +28,8 @@ macro(integration_test name)
     project_warnings
     Catch2::Catch2WithMain
     Threads::Threads
-    snappy
+    Microsoft.GSL::GSL
+    asio
     couchbase_cxx_client
     test_utils)
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
@@ -56,7 +66,8 @@ macro(transaction_test name)
     project_warnings
     Catch2::Catch2WithMain
     Threads::Threads
-    snappy
+    Microsoft.GSL::GSL
+    asio
     couchbase_cxx_client
     test_utils)
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
@@ -92,7 +103,8 @@ macro(unit_test name)
     project_warnings
     Catch2::Catch2WithMain
     Threads::Threads
-    snappy
+    Microsoft.GSL::GSL
+    asio
     couchbase_cxx_client
     test_utils)
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
@@ -128,7 +140,8 @@ macro(integration_benchmark name)
     project_warnings
     Catch2::Catch2WithMain
     Threads::Threads
-    snappy
+    Microsoft.GSL::GSL
+    asio
     couchbase_cxx_client
     test_utils)
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)

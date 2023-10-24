@@ -68,53 +68,6 @@ class retry_operation_retries_exhausted : public std::runtime_error
 external_exception
 external_exception_from_error_class(error_class ec);
 
-template<typename OStream>
-OStream&
-operator<<(OStream& os, const error_class& ec)
-{
-    switch (ec) {
-        case FAIL_HARD:
-            os << "FAIL_HARD";
-            break;
-        case FAIL_OTHER:
-            os << "FAIL_OTHER";
-            break;
-        case FAIL_TRANSIENT:
-            os << "FAIL_TRANSIENT";
-            break;
-        case FAIL_AMBIGUOUS:
-            os << "FAIL_AMBIGUOUS";
-            break;
-        case FAIL_DOC_ALREADY_EXISTS:
-            os << "FAIL_DOC_ALREADY_EXISTS";
-            break;
-        case FAIL_DOC_NOT_FOUND:
-            os << "FAIL_DOC_NOT_FOUND";
-            break;
-        case FAIL_PATH_NOT_FOUND:
-            os << "FAIL_PATH_NOT_FOUND";
-            break;
-        case FAIL_CAS_MISMATCH:
-            os << "FAIL_CAS_MISMATCH";
-            break;
-        case FAIL_WRITE_WRITE_CONFLICT:
-            os << "FAIL_WRITE_WRITE_CONFLICT";
-            break;
-        case FAIL_ATR_FULL:
-            os << "FAIL_ATR_FULL";
-            break;
-        case FAIL_PATH_ALREADY_EXISTS:
-            os << "FAIL_PATH_ALREADY_EXISTS";
-            break;
-        case FAIL_EXPIRY:
-            os << "FAIL_EXPIRY";
-            break;
-        default:
-            os << "UNKNOWN ERROR CLASS";
-            break;
-    }
-    return os;
-}
 enum final_error { FAILED, EXPIRED, FAILED_POST_COMMIT, AMBIGUOUS };
 
 error_class
@@ -391,3 +344,57 @@ class test_fail_other : public client_error
 };
 } // namespace internal
 } // namespace couchbase::core::transactions
+
+template<>
+struct fmt::formatter<couchbase::core::transactions::error_class> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(couchbase::core::transactions::error_class ec, FormatContext& ctx) const
+    {
+        string_view name = "UNKNOWN ERROR CLASS";
+        switch (ec) {
+            case couchbase::core::transactions::FAIL_HARD:
+                name = "FAIL_HARD";
+                break;
+            case couchbase::core::transactions::FAIL_OTHER:
+                name = "FAIL_OTHER";
+                break;
+            case couchbase::core::transactions::FAIL_TRANSIENT:
+                name = "FAIL_TRANSIENT";
+                break;
+            case couchbase::core::transactions::FAIL_AMBIGUOUS:
+                name = "FAIL_AMBIGUOUS";
+                break;
+            case couchbase::core::transactions::FAIL_DOC_ALREADY_EXISTS:
+                name = "FAIL_DOC_ALREADY_EXISTS";
+                break;
+            case couchbase::core::transactions::FAIL_DOC_NOT_FOUND:
+                name = "FAIL_DOC_NOT_FOUND";
+                break;
+            case couchbase::core::transactions::FAIL_PATH_NOT_FOUND:
+                name = "FAIL_PATH_NOT_FOUND";
+                break;
+            case couchbase::core::transactions::FAIL_CAS_MISMATCH:
+                name = "FAIL_CAS_MISMATCH";
+                break;
+            case couchbase::core::transactions::FAIL_WRITE_WRITE_CONFLICT:
+                name = "FAIL_WRITE_WRITE_CONFLICT";
+                break;
+            case couchbase::core::transactions::FAIL_ATR_FULL:
+                name = "FAIL_ATR_FULL";
+                break;
+            case couchbase::core::transactions::FAIL_PATH_ALREADY_EXISTS:
+                name = "FAIL_PATH_ALREADY_EXISTS";
+                break;
+            case couchbase::core::transactions::FAIL_EXPIRY:
+                name = "FAIL_EXPIRY";
+                break;
+        }
+        return format_to(ctx.out(), "{}", name);
+    }
+};

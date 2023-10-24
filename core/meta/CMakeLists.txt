@@ -5,10 +5,13 @@ target_link_libraries(
   PRIVATE project_options
           project_warnings
           snappy
+          asio
+          llhttp::llhttp
+          Microsoft.GSL::GSL
           fmt::fmt
           spdlog::spdlog)
 target_include_directories(couchbase_meta PRIVATE ${PROJECT_BINARY_DIR}/generated ${PROJECT_SOURCE_DIR}
-                                                  ${PROJECT_SOURCE_DIR}/third_party/http_parser)
+                                                  ${hdr_histogram_SOURCE_DIR}/include)
 
 if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND COUCHBASE_CXX_CLIENT_USE_BORINGSSL_PREFIX)
   target_compile_definitions(couchbase_meta PUBLIC BORINGSSL_PREFIX=${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX})

@@ -110,8 +110,16 @@ option(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE
        "Download and embed Mozilla certificates from https://curl.se/ca/cacert.pem" TRUE)
 
 if(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE)
-  file(DOWNLOAD "https://curl.se/ca/cacert.pem.sha256" "${CMAKE_CURRENT_BINARY_DIR}/mozilla-ca-bundle.sha256"
-       TLS_VERIFY ON)
+  message(STATUS "Download CA bundle checksum: https://curl.se/ca/cacert.pem.sha256")
+  file(
+    DOWNLOAD "https://curl.se/ca/cacert.pem.sha256" "${CMAKE_CURRENT_BINARY_DIR}/mozilla-ca-bundle.sha256"
+    TLS_VERIFY ON
+    STATUS DOWNLOAD_STATUS)
+  list(GET DOWNLOAD_STATUS 0 STATUS_CODE)
+  if(NOT ${STATUS_CODE} EQUAL 0)
+    list(GET DOWNLOAD_STATUS 1 ERROR_MESSAGE)
+    message(FATAL_ERROR "Unable to download CA bundle checksum file, status=${STATUS_CODE}: ${ERROR_MESSAGE}")
+  endif()
   file(READ "${CMAKE_CURRENT_BINARY_DIR}/mozilla-ca-bundle.sha256" HASH_FILE_CONTENT)
   string(
     REGEX MATCH
@@ -121,10 +129,17 @@ if(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE)
   if(NOT COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256)
     message(FATAL_ERROR "Failed to extract expected hash from file")
   endif()
+  message(STATUS "Download CA bundle: https://curl.se/ca/cacert.pem")
   file(
     DOWNLOAD "https://curl.se/ca/cacert.pem" "${CMAKE_CURRENT_BINARY_DIR}/mozilla-ca-bundle.crt"
     TLS_VERIFY ON
-    EXPECTED_HASH SHA256=${COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256})
+    EXPECTED_HASH SHA256=${COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256}
+    STATUS DOWNLOAD_STATUS)
+  list(GET DOWNLOAD_STATUS 0 STATUS_CODE)
+  if(NOT ${STATUS_CODE} EQUAL 0)
+    list(GET DOWNLOAD_STATUS 1 ERROR_MESSAGE)
+    message(FATAL_ERROR "Unable to download CA bundle, status=${STATUS_CODE}: ${ERROR_MESSAGE}")
+  endif()
 
   file(READ "${CMAKE_CURRENT_BINARY_DIR}/mozilla-ca-bundle.crt" CA_BUNDLE_CONTENT)
   string(

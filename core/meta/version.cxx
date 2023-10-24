@@ -28,7 +28,8 @@
 
 #include <asio/version.hpp>
 #include <fmt/core.h>
-#include <http_parser.h>
+#include <hdr/hdr_histogram_version.h>
+#include <llhttp.h>
 #include <openssl/crypto.h>
 #include <openssl/x509.h>
 #include <snappy-stubs-public.h>
@@ -106,7 +107,8 @@ sdk_build_info()
     info["fmt"] = fmt::format("{}.{}.{}", FMT_VERSION / 10'000, FMT_VERSION / 100 % 1000, FMT_VERSION % 100);
     info["asio"] = fmt::format("{}.{}.{}", ASIO_VERSION / 100'000, ASIO_VERSION / 100 % 1000, ASIO_VERSION % 100);
     info["snappy"] = fmt::format("{}.{}.{}", SNAPPY_MAJOR, SNAPPY_MINOR, SNAPPY_PATCHLEVEL);
-    info["http_parser"] = fmt::format("{}.{}.{}", HTTP_PARSER_VERSION_MAJOR, HTTP_PARSER_VERSION_MINOR, HTTP_PARSER_VERSION_PATCH);
+    info["llhttp"] = fmt::format("{}.{}.{}", LLHTTP_VERSION_MAJOR, LLHTTP_VERSION_MINOR, LLHTTP_VERSION_PATCH);
+    info["hdr_histogram_c"] = HDR_HISTOGRAM_VERSION;
     info["openssl_headers"] = OPENSSL_VERSION_TEXT;
 #if defined(OPENSSL_VERSION)
     info["openssl_runtime"] = OpenSSL_version(OPENSSL_VERSION);

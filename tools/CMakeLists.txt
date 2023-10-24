@@ -13,6 +13,8 @@ target_link_libraries(
   cbc
   ${CMAKE_THREAD_LIBS_INIT}
   couchbase_cxx_client
+  Microsoft.GSL::GSL
+  asio
   docopt)
 
 if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)

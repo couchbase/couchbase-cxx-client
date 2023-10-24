@@ -19,8 +19,6 @@
 
 #include "core/timeout_defaults.hxx"
 
-#include <asio/ip/address.hpp>
-
 #include <cstdint>
 #include <filesystem>
 #include <fstream>

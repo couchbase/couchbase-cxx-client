@@ -6,7 +6,9 @@ BORINGSSL_SRC_DIR=$1
 BORINGSSL_BUILD_DIR=$2
 BORINGSSL_OUTPUT_DIR=$3
 BORINGSSL_PREFIX=$4
-BORINGSSL_CMAKE_OPTIONS="$5"
+BORINGSSL_CMAKE_EXE="$5"
+BORINGSSL_CMAKE_GENERATOR="$6"
+BORINGSSL_CMAKE_OPTIONS="$7"
 BORINGSSL_LIB_DIR=$BORINGSSL_OUTPUT_DIR/lib
 BORINGSSL_INCLUDE_DIR=$BORINGSSL_OUTPUT_DIR/include
 
@@ -16,10 +18,12 @@ rm -rf build
 mkdir -p build
 cd build
 echo "Starting initial build phase."
-cmake -S$BORINGSSL_SRC_DIR \
+$BORINGSSL_CMAKE_EXE \
+    -G"${BORINGSSL_CMAKE_GENERATOR}" \
+    -S$BORINGSSL_SRC_DIR \
     -B$BORINGSSL_BUILD_DIR \
     ${BORINGSSL_CMAKE_OPTIONS}
-cmake --build $BORINGSSL_BUILD_DIR --verbose --target crypto ssl
+$BORINGSSL_CMAKE_EXE --build $BORINGSSL_BUILD_DIR --verbose --target crypto ssl
 
 cd $BORINGSSL_BUILD_DIR
 [ -f ssl/libssl.a ] || { echo "Failed to build libssl.a" ; exit 1 ; }
@@ -31,12 +35,14 @@ if [ -n "$BORINGSSL_PREFIX" ]; then
     go run read_symbols.go $BORINGSSL_BUILD_DIR/crypto/libcrypto.a >> $BORINGSSL_OUTPUT_DIR/symbols.txt
 
     echo "Starting build phase with symbol prefixing."
-    cmake .. -S$BORINGSSL_SRC_DIR \
+    $BORINGSSL_CMAKE_EXE \
+        -G"${BORINGSSL_CMAKE_GENERATOR}" \
+        -S$BORINGSSL_SRC_DIR \
         -B$BORINGSSL_BUILD_DIR \
         -DBORINGSSL_PREFIX=$BORINGSSL_PREFIX \
         -DBORINGSSL_PREFIX_SYMBOLS=$BORINGSSL_OUTPUT_DIR/symbols.txt \
         ${BORINGSSL_CMAKE_OPTIONS}
-    cmake --build $BORINGSSL_BUILD_DIR --verbose --target crypto ssl
+    $BORINGSSL_CMAKE_EXE --build $BORINGSSL_BUILD_DIR --verbose --target crypto ssl
     cd $BORINGSSL_BUILD_DIR
     [ -f symbol_prefix_include/boringssl_prefix_symbols.h ] || { echo "Failed to build boringssl_prefix_symbols.h" ; exit 1 ; }
 

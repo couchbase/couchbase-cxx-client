@@ -36,7 +36,7 @@ rm -rf "${BUILD_DIR}" "${REPORT_DIR}"
 mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 
-SCAN_BUILD_ARGS="--exclude third_party -o ${REPORT_DIR} --use-analyzer=${CB_CC} --use-c++=${CB_CXX} --use-cc=${CB_CC} --status-bugs"
+SCAN_BUILD_ARGS="--exclude third_party --exclude _deps -o ${REPORT_DIR} --use-analyzer=${CB_CC} --use-c++=${CB_CXX} --use-cc=${CB_CC} --status-bugs"
 
 ${CB_SCAN_BUILD} ${SCAN_BUILD_ARGS} ${CB_CMAKE} -DENABLE_CACHE=OFF  ..
 set +e

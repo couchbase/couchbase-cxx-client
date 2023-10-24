@@ -21,6 +21,8 @@
 
 #include <algorithm>
 #include <memory>
+#include <string>
+#include <string_view>
 
 namespace couchbase::core::io
 {
@@ -45,9 +47,9 @@ struct http_parser {
 
     void reset();
 
-    std::string error_message() const;
+    [[nodiscard]] const char* error_message() const;
 
-    feeding_result feed(const char* data, size_t data_len);
+    feeding_result feed(const char* data, size_t data_len) const;
 
   private:
     std::shared_ptr<http_parser_state> state_{};
