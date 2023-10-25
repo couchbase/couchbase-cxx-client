@@ -14,9 +14,6 @@ BORINGSSL_INCLUDE_DIR=$BORINGSSL_OUTPUT_DIR/include
 
 cd $BORINGSSL_SRC_DIR
 
-rm -rf build
-mkdir -p build
-cd build
 echo "Starting initial build phase."
 $BORINGSSL_CMAKE_EXE \
     -G"${BORINGSSL_CMAKE_GENERATOR}" \
@@ -33,6 +30,8 @@ if [ -n "$BORINGSSL_PREFIX" ]; then
     cd $BORINGSSL_SRC_DIR/util
     go run read_symbols.go $BORINGSSL_BUILD_DIR/ssl/libssl.a > $BORINGSSL_OUTPUT_DIR/symbols.txt
     go run read_symbols.go $BORINGSSL_BUILD_DIR/crypto/libcrypto.a >> $BORINGSSL_OUTPUT_DIR/symbols.txt
+
+    rm -rf $BORINGSSL_BUILD_DIR
 
     echo "Starting build phase with symbol prefixing."
     $BORINGSSL_CMAKE_EXE \
