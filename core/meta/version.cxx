@@ -262,13 +262,26 @@ os()
     return system;
 }
 
+constexpr const char* ssl_lib_id =
+#if defined(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+  "bssl"
+#else
+  "ssl"
+#endif
+  ;
+
 std::string
 user_agent_for_http(const std::string& client_id, const std::string& session_id, const std::string& extra)
 {
-    auto user_agent =
-      fmt::format("{}; client/{}; session/{}; {}", couchbase::core::meta::sdk_id(), client_id, session_id, couchbase::core::meta::os());
+    auto user_agent = fmt::format("{};{}/{};client/{};session/{};{}",
+                                  couchbase::core::meta::sdk_id(),
+                                  ssl_lib_id,
+                                  OpenSSL_version_num(),
+                                  client_id,
+                                  session_id,
+                                  couchbase::core::meta::os());
     if (!extra.empty()) {
-        user_agent.append("; ").append(extra);
+        user_agent.append(";").append(extra);
     }
     for (auto& ch : user_agent) {
         if (ch == '\n' || ch == '\r') {
@@ -284,7 +297,8 @@ user_agent_for_mcbp(const std::string& client_id, const std::string& session_id,
     tao::json::value user_agent{
         { "i", fmt::format("{}/{}", client_id, session_id) },
     };
-    std::string sdk_id = couchbase::core::meta::sdk_id();
+    const std::string core_id = fmt::format("{};{}/{}", couchbase::core::meta::sdk_id(), ssl_lib_id, OpenSSL_version_num());
+    std::string sdk_id = core_id;
     if (!extra.empty()) {
         sdk_id.append(";").append(extra);
     }
@@ -297,7 +311,7 @@ user_agent_for_mcbp(const std::string& client_id, const std::string& session_id,
             auto escaped_characters = sdk_id_length - sdk_id.size();
             if (escaped_characters >= allowed_length) {
                 /* user-provided string is too weird, lets just fall back to just core */
-                sdk_id = couchbase::core::meta::sdk_id();
+                sdk_id = core_id;
             } else {
                 sdk_id.erase(allowed_length - escaped_characters);
             }
