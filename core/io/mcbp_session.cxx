@@ -61,6 +61,28 @@
 
 namespace couchbase::core::io
 {
+struct connection_endpoints {
+    connection_endpoints(asio::ip::tcp::endpoint remote_endpoint, asio::ip::tcp::endpoint local_endpoint)
+      : remote{ std::move(remote_endpoint) }
+      , remote_address{ remote.address().to_string() }
+      , remote_address_with_port{ fmt::format(remote.protocol() == asio::ip::tcp::v6() ? "[{}]:{}" : "{}:{}",
+                                              remote_address,
+                                              remote.port()) }
+      , local{ std::move(local_endpoint) }
+      , local_address{ local.address().to_string() }
+      , local_address_with_port{ fmt::format(local.protocol() == asio::ip::tcp::v6() ? "[{}]:{}" : "{}:{}", local_address, local.port()) }
+    {
+    }
+
+    asio::ip::tcp::endpoint remote;
+    std::string remote_address{};
+    std::string remote_address_with_port{};
+
+    asio::ip::tcp::endpoint local;
+    std::string local_address{};
+    std::string local_address_with_port{};
+};
+
 class collection_cache
 {
   private:
@@ -341,7 +363,8 @@ class mcbp_session_impl
                             }
                         } break;
                         case protocol::client_opcode::get_cluster_config: {
-                            protocol::cmd_info info{ session_->endpoint_address_, session_->endpoint_.port() };
+                            protocol::cmd_info info{ session_->connection_endpoints_.remote_address,
+                                                     session_->connection_endpoints_.remote.port() };
                             protocol::client_response<protocol::get_cluster_config_response_body> resp(std::move(msg), info);
                             if (resp.status() == key_value_status_code::success) {
                                 session_->update_configuration(resp.body().config());
@@ -359,8 +382,8 @@ class mcbp_session_impl
                                 session_->supports_gcccp_ = false;
                                 CB_LOG_WARNING("{} this server does not support GCCCP, open bucket before making any cluster-level command",
                                                session_->log_prefix_);
-                                session_->update_configuration(
-                                  topology::make_blank_configuration(session_->endpoint_address_, session_->endpoint_.port(), 0));
+                                session_->update_configuration(topology::make_blank_configuration(
+                                  session_->connection_endpoints_.remote_address, session_->connection_endpoints_.remote.port(), 0));
                                 complete({});
                             } else {
                                 CB_LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
@@ -666,12 +689,12 @@ class mcbp_session_impl
 
     std::string remote_address() const
     {
-        return endpoint_address_;
+        return connection_endpoints_.remote_address_with_port;
     }
 
     std::string local_address() const
     {
-        return local_endpoint_address_;
+        return connection_endpoints_.local_address_with_port;
     }
 
     [[nodiscard]] diag::endpoint_diag_info diag_info() const
@@ -1328,27 +1351,16 @@ class mcbp_session_impl
             }
         } else {
             stream_->set_options();
-            local_endpoint_ = stream_->local_endpoint();
-            if (endpoint_.protocol() == asio::ip::tcp::v6()) {
-                local_endpoint_address_ = fmt::format("[{}]:{}", local_endpoint_.address().to_string(), local_endpoint_.port());
-            } else {
-                local_endpoint_address_ = fmt::format("{}:{}", local_endpoint_.address().to_string(), local_endpoint_.port());
-            }
-            endpoint_ = it->endpoint();
-            if (endpoint_.protocol() == asio::ip::tcp::v6()) {
-                endpoint_address_ = fmt::format("[{}]:{}", endpoint_.address().to_string(), endpoint_.port());
-            } else {
-                endpoint_address_ = fmt::format("{}:{}", endpoint_.address().to_string(), endpoint_.port());
-            }
-            CB_LOG_DEBUG("{} connected to {}:{}", log_prefix_, endpoint_address_, it->endpoint().port());
+            connection_endpoints_ = { it->endpoint(), stream_->local_endpoint() };
+            CB_LOG_DEBUG("{} connected to {}:{}", log_prefix_, connection_endpoints_.remote_address, connection_endpoints_.remote.port());
             log_prefix_ = fmt::format("[{}/{}/{}/{}] <{}/{}:{}>",
                                       client_id_,
                                       id_,
                                       stream_->log_prefix(),
                                       bucket_name_.value_or("-"),
                                       bootstrap_hostname_,
-                                      endpoint_address_,
-                                      endpoint_.port());
+                                      connection_endpoints_.remote_address,
+                                      connection_endpoints_.remote.port());
             bootstrap_handler_ = std::make_shared<bootstrap_handler>(shared_from_this());
             connection_deadline_.cancel();
         }
@@ -1376,15 +1388,15 @@ class mcbp_session_impl
           [self = shared_from_this(), stream_id = stream_->id()](std::error_code ec, std::size_t bytes_transferred) {
               if (ec == asio::error::operation_aborted || self->stopped_) {
                   CB_LOG_PROTOCOL("[MCBP, IN] host=\"{}\", port={}, rc={}, bytes_received={}",
-                                  self->endpoint_address_,
-                                  self->endpoint_.port(),
+                                  self->connection_endpoints_.remote_address,
+                                  self->connection_endpoints_.remote.port(),
                                   ec ? ec.message() : "ok",
                                   bytes_transferred);
                   return;
               } else {
                   CB_LOG_PROTOCOL("[MCBP, IN] host=\"{}\", port={}, rc={}, bytes_received={}{:a}",
-                                  self->endpoint_address_,
-                                  self->endpoint_.port(),
+                                  self->connection_endpoints_.remote_address,
+                                  self->connection_endpoints_.remote.port(),
                                   ec ? ec.message() : "ok",
                                   bytes_transferred,
                                   spdlog::to_hex(self->input_buffer_.data(),
@@ -1456,14 +1468,17 @@ class mcbp_session_impl
         std::vector<asio::const_buffer> buffers;
         buffers.reserve(writing_buffer_.size());
         for (auto& buf : writing_buffer_) {
-            CB_LOG_PROTOCOL(
-              "[MCBP, OUT] host=\"{}\", port={}, buffer_size={}{:a}", endpoint_address_, endpoint_.port(), buf.size(), spdlog::to_hex(buf));
+            CB_LOG_PROTOCOL("[MCBP, OUT] host=\"{}\", port={}, buffer_size={}{:a}",
+                            connection_endpoints_.remote_address,
+                            connection_endpoints_.remote.port(),
+                            buf.size(),
+                            spdlog::to_hex(buf));
             buffers.emplace_back(asio::buffer(buf));
         }
         stream_->async_write(buffers, [self = shared_from_this()](std::error_code ec, std::size_t bytes_transferred) {
             CB_LOG_PROTOCOL("[MCBP, OUT] host=\"{}\", port={}, rc={}, bytes_sent={}",
-                            self->endpoint_address_,
-                            self->endpoint_.port(),
+                            self->connection_endpoints_.remote_address,
+                            self->connection_endpoints_.remote.port(),
                             ec ? ec.message() : "ok",
                             bytes_transferred);
             if (ec == asio::error::operation_aborted || self->stopped_) {
@@ -1529,10 +1544,7 @@ class mcbp_session_impl
     std::string bootstrap_port_{};
     std::string bootstrap_address_{};
     std::uint16_t bootstrap_port_number_{};
-    asio::ip::tcp::endpoint endpoint_{}; // connected endpoint
-    std::string endpoint_address_{};     // cached string with endpoint address
-    asio::ip::tcp::endpoint local_endpoint_{};
-    std::string local_endpoint_address_{};
+    connection_endpoints connection_endpoints_{ {}, {} };
     asio::ip::tcp::resolver::results_type endpoints_;
     std::vector<protocol::hello_feature> supported_features_;
     std::optional<topology::configuration> config_;
