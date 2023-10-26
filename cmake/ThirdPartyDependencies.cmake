@@ -1,5 +1,8 @@
 include(cmake/CPM.cmake)
 
+# https://cmake.org/cmake/help/v3.28/policy/CMP0063.html
+set(CMAKE_POLICY_DEFAULT_CMP0063 NEW)
+
 if(NOT TARGET fmt::fmt)
   cpmaddpackage(
     NAME
@@ -11,6 +14,8 @@ if(NOT TARGET fmt::fmt)
     GITHUB_REPOSITORY
     "fmtlib/fmt"
     OPTIONS
+    "CMAKE_C_VISIBILITY_PRESET hidden"
+    "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON")
 endif()
 
@@ -23,6 +28,8 @@ if(NOT TARGET spdlog::spdlog)
     GITHUB_REPOSITORY
     "gabime/spdlog"
     OPTIONS
+    "CMAKE_C_VISIBILITY_PRESET hidden"
+    "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
     "SPDLOG_FMT_EXTERNAL ON")
 endif()
@@ -36,6 +43,8 @@ if(NOT TARGET Microsoft.GSL::GSL)
     GITHUB_REPOSITORY
     "microsoft/gsl"
     OPTIONS
+    "CMAKE_C_VISIBILITY_PRESET hidden"
+    "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON")
 endif()
 
@@ -50,6 +59,8 @@ if(NOT TARGET hdr_histogram::hdr_histogram_static)
     GITHUB_REPOSITORY
     "HdrHistogram/HdrHistogram_c"
     OPTIONS
+    "CMAKE_C_VISIBILITY_PRESET hidden"
+    "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
     "HDR_LOG_REQUIRED OFF"
     "HDR_HISTOGRAM_BUILD_SHARED OFF"
@@ -70,6 +81,8 @@ if(NOT TARGET llhttp::llhttp)
     GITHUB_REPOSITORY
     "nodejs/llhttp"
     OPTIONS
+    "CMAKE_C_VISIBILITY_PRESET hidden"
+    "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
     "BUILD_SHARED_LIBS OFF"
     "BUILD_STATIC_LIBS ON")
@@ -86,6 +99,8 @@ if(NOT TARGET snappy)
     GITHUB_REPOSITORY
     "google/snappy"
     OPTIONS
+    "CMAKE_C_VISIBILITY_PRESET hidden"
+    "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
     "BUILD_SHARED_LIBS OFF"
     "SNAPPY_INSTALL OFF"
