@@ -35,6 +35,7 @@
 #include <couchbase/key_value_error_map_info.hxx>
 
 #include <asio/steady_timer.hpp>
+#include <fmt/chrono.h>
 
 #include <functional>
 #include <utility>
@@ -134,6 +135,16 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
             span_ = nullptr;
         }
         if (handler) {
+            if (ec == errc::common::unambiguous_timeout || ec == errc::common::ambiguous_timeout) {
+                auto time_left = deadline.expiry() - std::chrono::steady_clock::now();
+                CB_LOG_TRACE(R"([{}] timeout operation id="{}", {}, key="{}", partition={}, time_left={})",
+                             session_ ? session_->log_prefix() : manager_->log_prefix(),
+                             id_,
+                             encoded_request_type::body_type::opcode,
+                             request.id,
+                             request.partition,
+                             time_left);
+            }
             handler(ec, std::move(msg));
         }
     }
@@ -268,7 +279,6 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                   error_code = self->session_->decode_error_code(msg.header.status());
               }
               if (status == key_value_status_code::not_my_vbucket) {
-                  self->session_->handle_not_my_vbucket(msg);
                   return io::retry_orchestrator::maybe_retry(self->manager_, self, retry_reason::key_value_not_my_vbucket, ec);
               }
               if (status == key_value_status_code::unknown_collection) {

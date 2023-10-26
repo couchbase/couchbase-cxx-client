@@ -55,11 +55,12 @@ retry_with_duration(std::shared_ptr<Manager> manager,
                     std::chrono::milliseconds duration)
 {
     command->request.retries.record_retry_attempt(reason);
-    CB_LOG_TRACE(R"({} retrying operation {} (duration={}ms, id="{}", reason={}, attempts={}, last_dispatched_to=\"{}\"))",
+    CB_LOG_TRACE(R"({} retrying operation {} (duration={}ms, id="{}", vbucket_id={}, reason={}, attempts={}, last_dispatched_to="{}"))",
                  manager->log_prefix(),
                  decltype(command->request)::encoded_request_type::body_type::opcode,
                  duration.count(),
                  command->id_,
+                 command->request.partition,
                  reason,
                  command->request.retries.retry_attempts(),
                  command->session_ ? command->session_->remote_address() : "");

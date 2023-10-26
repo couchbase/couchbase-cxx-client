@@ -58,8 +58,97 @@
 #include <cstring>
 #include <utility>
 
+namespace
+{
+template<typename Container>
+struct mcbp_header_view {
+    const Container& buf_;
+
+    mcbp_header_view(const Container& buf)
+      : buf_{ buf }
+    {
+    }
+};
+
+struct mcbp_header_layout {
+    std::uint8_t magic;
+    std::uint8_t opcode;
+    union {
+        std::uint16_t normal;
+        struct {
+            std::uint8_t framing_extras;
+            std::uint8_t key;
+        } alt;
+    } keylen;
+    std::uint8_t extlen;
+    std::uint8_t datatype;
+    std::uint16_t specific;
+    std::uint32_t bodylen;
+    std::uint32_t opaque;
+    std::uint64_t cas;
+
+    [[nodiscard]] constexpr auto specific_name() const -> std::string_view
+    {
+        if (magic == 0x18 || magic == 0x81) {
+            return "status";
+        }
+        return "vbucket";
+    }
+
+    [[nodiscard]] constexpr auto key_length() const -> std::uint16_t
+    {
+        if (magic == 0x18 || magic == 0x08) {
+            return keylen.alt.key;
+        }
+        return couchbase::core::utils::byte_swap(keylen.normal);
+    }
+
+    [[nodiscard]] constexpr auto framing_extras_length() const -> std::uint8_t
+    {
+        if (magic == 0x18 || magic == 0x08) {
+            return keylen.alt.framing_extras;
+        }
+        return 0;
+    }
+};
+} // namespace
+
+template<typename Container>
+struct fmt::formatter<mcbp_header_view<Container>> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(const mcbp_header_view<Container>& view, FormatContext& ctx) const
+    {
+        if (view.buf_.size() < sizeof(couchbase::core::io::binary_header)) {
+            return format_to(ctx.out(), "{:n}", spdlog::to_hex(view.buf_));
+        }
+
+        const auto* header = reinterpret_cast<const mcbp_header_layout*>(view.buf_.data());
+        return format_to(
+          ctx.out(),
+          "{{magic=0x{:x}, opcode=0x{:x}, fextlen={}, keylen={}, extlen={}, datatype={}, {}={}, bodylen={}, opaque={}, cas={}}}",
+          header->magic,
+          header->opcode,
+          header->framing_extras_length(),
+          header->key_length(),
+          header->extlen,
+          header->datatype,
+          header->specific_name(),
+          couchbase::core::utils::byte_swap(header->specific),
+          couchbase::core::utils::byte_swap(header->bodylen),
+          couchbase::core::utils::byte_swap(header->opaque),
+          couchbase::core::utils::byte_swap(header->cas));
+    }
+};
+
 namespace couchbase::core::io
 {
+
 class collection_cache
 {
   private:
@@ -869,9 +958,7 @@ class mcbp_session_impl
         if (stopped_) {
             return;
         }
-        std::uint32_t opaque{ 0 };
-        std::memcpy(&opaque, buf.data() + 12, sizeof(opaque));
-        CB_LOG_TRACE("{} MCBP send, opaque={}, {:n}", log_prefix_, utils::byte_swap(opaque), spdlog::to_hex(buf.begin(), buf.begin() + 24));
+        CB_LOG_TRACE("{} MCBP send {}", log_prefix_, mcbp_header_view(buf));
         std::scoped_lock lock(output_buffer_mutex_);
         output_buffer_.emplace_back(std::move(buf));
     }
@@ -1108,11 +1195,17 @@ class mcbp_session_impl
                 return;
             }
             if (config == config_) {
-                CB_LOG_TRACE("{} received a configuration with identical revision (rev={}), ignoring", log_prefix_, config.rev_str());
+                CB_LOG_TRACE("{} received a configuration with identical revision (new={}, old={}), ignoring",
+                             log_prefix_,
+                             config.rev_str(),
+                             config_->rev_str());
                 return;
             }
             if (config < config_) {
-                CB_LOG_DEBUG("{} received a configuration with older revision, ignoring", log_prefix_);
+                CB_LOG_DEBUG("{} received a configuration with older revision (new={}, old={}), ignoring",
+                             log_prefix_,
+                             config.rev_str(),
+                             config_->rev_str());
                 return;
             }
         }
@@ -1407,10 +1500,7 @@ class mcbp_session_impl
                           if (self->stopped_) {
                               return;
                           }
-                          CB_LOG_TRACE("{} MCBP recv, opaque={}, {:n}",
-                                       self->log_prefix_,
-                                       utils::byte_swap(msg.header.opaque),
-                                       spdlog::to_hex(msg.header_data()));
+                          CB_LOG_TRACE("{} MCBP recv {}", self->log_prefix_, mcbp_header_view(msg.header_data()));
                           if (self->bootstrapped_) {
                               self->handler_->handle(std::move(msg));
                           } else {
