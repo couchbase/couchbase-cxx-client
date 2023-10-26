@@ -91,6 +91,11 @@ class client_request
         partition_ = val;
     }
 
+    [[nodiscard]] auto partition() const -> std::uint16_t
+    {
+        return partition_;
+    }
+
     Body& body()
     {
         return body_;
