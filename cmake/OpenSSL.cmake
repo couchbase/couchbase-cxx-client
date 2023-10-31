@@ -109,18 +109,27 @@ option(COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE
 option(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE
        "Download and embed Mozilla certificates from https://curl.se/ca/cacert.pem" TRUE)
 
+option(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT "Path to downloaded certificate bundle and its checksum")
+
 if(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE)
-  message(STATUS "Download CA bundle checksum: https://curl.se/ca/cacert.pem.sha256")
-  file(
-    DOWNLOAD "https://curl.se/ca/cacert.pem.sha256" "${CMAKE_CURRENT_BINARY_DIR}/mozilla-ca-bundle.sha256"
-    TLS_VERIFY ON
-    STATUS DOWNLOAD_STATUS)
-  list(GET DOWNLOAD_STATUS 0 STATUS_CODE)
-  if(NOT ${STATUS_CODE} EQUAL 0)
-    list(GET DOWNLOAD_STATUS 1 ERROR_MESSAGE)
-    message(FATAL_ERROR "Unable to download CA bundle checksum file, status=${STATUS_CODE}: ${ERROR_MESSAGE}")
+  if(NOT EXISTS "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}")
+    set(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT "${CMAKE_CURRENT_BINARY_DIR}")
   endif()
-  file(READ "${CMAKE_CURRENT_BINARY_DIR}/mozilla-ca-bundle.sha256" HASH_FILE_CONTENT)
+  message(STATUS "Using ${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT} to keep Mozilla certificates")
+  if(NOT EXISTS "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}/mozilla-ca-bundle.sha256")
+    message(STATUS "Download CA bundle checksum: https://curl.se/ca/cacert.pem.sha256")
+    file(
+      DOWNLOAD "https://curl.se/ca/cacert.pem.sha256"
+      "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}/mozilla-ca-bundle.sha256"
+      TLS_VERIFY ON
+      STATUS DOWNLOAD_STATUS)
+    list( GET DOWNLOAD_STATUS 0 STATUS_CODE)
+    if(NOT ${STATUS_CODE} EQUAL 0)
+      list( GET DOWNLOAD_STATUS 1 ERROR_MESSAGE)
+      message(FATAL_ERROR "Unable to download CA bundle checksum file, status=${STATUS_CODE}: ${ERROR_MESSAGE}")
+    endif()
+  endif()
+  file(READ "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}/mozilla-ca-bundle.sha256" HASH_FILE_CONTENT)
   string(
     REGEX MATCH
           "^([0-9a-f]+)"
@@ -129,19 +138,30 @@ if(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE)
   if(NOT COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256)
     message(FATAL_ERROR "Failed to extract expected hash from file")
   endif()
-  message(STATUS "Download CA bundle: https://curl.se/ca/cacert.pem")
-  file(
-    DOWNLOAD "https://curl.se/ca/cacert.pem" "${CMAKE_CURRENT_BINARY_DIR}/mozilla-ca-bundle.crt"
-    TLS_VERIFY ON
-    EXPECTED_HASH SHA256=${COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256}
-    STATUS DOWNLOAD_STATUS)
-  list(GET DOWNLOAD_STATUS 0 STATUS_CODE)
-  if(NOT ${STATUS_CODE} EQUAL 0)
-    list(GET DOWNLOAD_STATUS 1 ERROR_MESSAGE)
-    message(FATAL_ERROR "Unable to download CA bundle, status=${STATUS_CODE}: ${ERROR_MESSAGE}")
+  if(EXISTS "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}/mozilla-ca-bundle.crt")
+    file(SHA256 "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}/mozilla-ca-bundle.crt" SHA256_OF_CRT_FILE)
+    if(NOT
+       COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256
+       STREQUAL
+       SHA256_OF_CRT_FILE)
+      message(FATAL_ERROR "SHA256 of mozilla-ca-bundle.crt does not match")
+    endif()
+  else()
+    message(STATUS "Download CA bundle: https://curl.se/ca/cacert.pem")
+    file(
+      DOWNLOAD "https://curl.se/ca/cacert.pem"
+      "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}/mozilla-ca-bundle.crt"
+      TLS_VERIFY ON
+      EXPECTED_HASH SHA256=${COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256}
+      STATUS DOWNLOAD_STATUS)
+    list( GET DOWNLOAD_STATUS 0 STATUS_CODE)
+    if(NOT ${STATUS_CODE} EQUAL 0)
+      list( GET DOWNLOAD_STATUS 1 ERROR_MESSAGE)
+      message(FATAL_ERROR "Unable to download CA bundle, status=${STATUS_CODE}: ${ERROR_MESSAGE}")
+    endif()
   endif()
 
-  file(READ "${CMAKE_CURRENT_BINARY_DIR}/mozilla-ca-bundle.crt" CA_BUNDLE_CONTENT)
+  file(READ "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}/mozilla-ca-bundle.crt" CA_BUNDLE_CONTENT)
   string(
     REGEX MATCH
           "Certificate data from Mozilla as of: ([^\n]*)"
