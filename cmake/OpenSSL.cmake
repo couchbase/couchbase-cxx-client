@@ -25,7 +25,17 @@ elseif(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
           "CMAKE_C_VISIBILITY_PRESET hidden"
           "CMAKE_CXX_VISIBILITY_PRESET hidden"
           "CMAKE_POSITION_INDEPENDENT_CODE ON")
-
+  if(MINGW)
+    set(boringssl_PATCH "${PROJECT_SOURCE_DIR}/cmake/0001-fix-build-for-mingw-w64-ucrt-x86_64-toolchain.patch")
+    message("Applying ${boringssl_PATCH} in ${boringssl_SOURCE_DIR} for MinGW gcc")
+    execute_process(
+      COMMAND patch --input ${boringssl_PATCH} --ignore-whitespace --strip=1
+      WORKING_DIRECTORY ${boringssl_SOURCE_DIR}
+      RESULT_VARIABLE PATCH_RESULT)
+    if(NOT PATCH_RESULT EQUAL "0")
+      message(FATAL_ERROR "Failed to apply patch to BoringSSL. Failed with: ${PATCH_RESULT}.")
+    endif()
+  endif()
   add_library(OpenSSL::SSL ALIAS ssl)
   add_library(OpenSSL::Crypto ALIAS ssl)
 else()
