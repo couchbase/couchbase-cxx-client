@@ -8,9 +8,26 @@ if(COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
     STATUS "COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL is set, assuming OpenSSL headers and symbols are available already"
   )
 elseif(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
-  # so CMake can find our FindBoringSSL.cmake module
-  list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
-  include(cmake/BoringSSL.cmake)
+  # gRPC uses it since 2023-08-21: https://github.com/grpc/grpc/commit/650c2ea4928dc221747738ecbcf7db7f81dc7496
+  set(COUCHBASE_CXX_CLIENT_BORINGSSL_SHA "2ff4b968a7e0cfee66d9f151cb95635b43dc1d5b")
+  set(COUCHBASE_CXX_CLIENT_BORINGSSL_VERSION "202308211007")
+  cpmaddpackage(
+          NAME
+          boringssl
+          GIT_TAG
+          ${COUCHBASE_CXX_CLIENT_BORINGSSL_SHA}
+          VERSION
+          ${COUCHBASE_CXX_CLIENT_BORINGSSL_VERSION}
+          GITHUB_REPOSITORY
+          "google/boringssl"
+          OPTIONS
+          "BUILD_SHARED_LIBS OFF"
+          "CMAKE_C_VISIBILITY_PRESET hidden"
+          "CMAKE_CXX_VISIBILITY_PRESET hidden"
+          "CMAKE_POSITION_INDEPENDENT_CODE ON")
+
+  add_library(OpenSSL::SSL ALIAS ssl)
+  add_library(OpenSSL::Crypto ALIAS ssl)
 else()
   option(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL "Statically link OpenSSL library" FALSE)
   if(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL)
