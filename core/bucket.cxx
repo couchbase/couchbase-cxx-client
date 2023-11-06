@@ -273,6 +273,15 @@ class bucket_impl
         return config_->map_key(id.key(), id.node_index());
     }
 
+    auto config_rev() const -> std::string
+    {
+        std::scoped_lock lock(config_mutex_);
+        if (config_) {
+            return config_->rev_str();
+        }
+        return "<no-config>";
+    }
+
     [[nodiscard]] auto map_id(const std::vector<std::byte>& key, std::size_t node_index)
       -> std::pair<std::uint16_t, std::optional<std::size_t>>
     {
@@ -907,6 +916,12 @@ auto
 bucket::map_id(const document_id& id) -> std::pair<std::uint16_t, std::optional<std::size_t>>
 {
     return impl_->map_id(id);
+}
+
+auto
+bucket::config_rev() const -> std::string
+{
+    return impl_->config_rev();
 }
 
 auto
