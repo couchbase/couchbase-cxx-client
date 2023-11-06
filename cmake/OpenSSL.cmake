@@ -12,20 +12,48 @@ elseif(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
   set(COUCHBASE_CXX_CLIENT_BORINGSSL_SHA "2ff4b968a7e0cfee66d9f151cb95635b43dc1d5b")
   set(COUCHBASE_CXX_CLIENT_BORINGSSL_VERSION "202308211007")
   cpmaddpackage(
-          NAME
-          boringssl
-          GIT_TAG
-          ${COUCHBASE_CXX_CLIENT_BORINGSSL_SHA}
-          VERSION
-          ${COUCHBASE_CXX_CLIENT_BORINGSSL_VERSION}
-          GITHUB_REPOSITORY
-          "google/boringssl"
-          OPTIONS
-          "BUILD_SHARED_LIBS OFF"
-          "CMAKE_C_VISIBILITY_PRESET hidden"
-          "CMAKE_CXX_VISIBILITY_PRESET hidden"
-          "CMAKE_POSITION_INDEPENDENT_CODE ON")
-
+    NAME
+    boringssl
+    GIT_TAG
+    ${COUCHBASE_CXX_CLIENT_BORINGSSL_SHA}
+    VERSION
+    ${COUCHBASE_CXX_CLIENT_BORINGSSL_VERSION}
+    GITHUB_REPOSITORY
+    "google/boringssl"
+    OPTIONS
+    "BUILD_SHARED_LIBS OFF"
+    "CMAKE_C_VISIBILITY_PRESET hidden"
+    "CMAKE_CXX_VISIBILITY_PRESET hidden"
+    "CMAKE_POSITION_INDEPENDENT_CODE ON")
+  if(MINGW)
+    set(boringssl_PATCH "${PROJECT_SOURCE_DIR}/cmake/0001-fix-build-for-mingw-w64-ucrt-x86_64-toolchain.patch")
+    message("Applying ${boringssl_PATCH} in ${boringssl_SOURCE_DIR} for MinGW gcc")
+    execute_process(
+      COMMAND patch --input ${boringssl_PATCH} --ignore-whitespace --strip=1 --forward
+      WORKING_DIRECTORY ${boringssl_SOURCE_DIR}
+      RESULT_VARIABLE PATCH_RESULT)
+    if(PATCH_RESULT GREATER 1)
+      message(FATAL_ERROR "Failed to apply patch to BoringSSL. Failed with: ${PATCH_RESULT}.")
+    endif()
+  endif()
+  if(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+    include(CheckCXXSourceCompiles)
+    check_cxx_source_compiles(
+      "int main() {
+       #if defined(__ARM_FEATURE_SHA2)
+       return 0;
+       #else
+       #error __ARM_FEATURE_SHA2 not defined
+       #endif
+     }"
+      HAVE_ARM_FEATURE_SHA2)
+    if(NOT HAVE_ARM_FEATURE_SHA2)
+      message(
+        FATAL_ERROR
+          "The compiler ${CMAKE_CXX_COMPILER} (${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}) does not support BoringSSL, use OpenSSL or different compiler"
+      )
+    endif()
+  endif()
   add_library(OpenSSL::SSL ALIAS ssl)
   add_library(OpenSSL::Crypto ALIAS ssl)
 else()
