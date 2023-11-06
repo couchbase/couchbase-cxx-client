@@ -24,8 +24,6 @@ set BORINGSSL_INCLUDE_DIR=%BORINGSSL_OUTPUT_DIR%\include
 
 cd %BORINGSSL_SRC_DIR%
 
-rd /S /Q build
-md build
 @echo "Starting initial build phase."
 
 %BORINGSSL_CMAKE_EXE% ^
@@ -89,6 +87,8 @@ if [%BORINGSSL_PREFIX%] NEQ [] (
     if exist "%BORINGSSL_OUTPUT_DIR%\symbols_parsed.txt" (
         move "%BORINGSSL_OUTPUT_DIR%\symbols_parsed.txt" "%BORINGSSL_OUTPUT_DIR%\symbols.txt"
     )
+
+    rd /S /Q "%BORINGSSL_BUILD_DIR%"
 
     @echo "Starting build phase with symbol prefixing."
     %BORINGSSL_CMAKE_EXE% ^

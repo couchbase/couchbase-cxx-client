@@ -8,9 +8,54 @@ if(COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
     STATUS "COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL is set, assuming OpenSSL headers and symbols are available already"
   )
 elseif(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
-  # so CMake can find our FindBoringSSL.cmake module
-  list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
-  include(cmake/BoringSSL.cmake)
+  # gRPC uses it since 2023-08-21: https://github.com/grpc/grpc/commit/650c2ea4928dc221747738ecbcf7db7f81dc7496
+  set(COUCHBASE_CXX_CLIENT_BORINGSSL_SHA "2ff4b968a7e0cfee66d9f151cb95635b43dc1d5b")
+  set(COUCHBASE_CXX_CLIENT_BORINGSSL_VERSION "202308211007")
+  cpmaddpackage(
+    NAME
+    boringssl
+    GIT_TAG
+    ${COUCHBASE_CXX_CLIENT_BORINGSSL_SHA}
+    VERSION
+    ${COUCHBASE_CXX_CLIENT_BORINGSSL_VERSION}
+    GITHUB_REPOSITORY
+    "google/boringssl"
+    OPTIONS
+    "BUILD_SHARED_LIBS OFF"
+    "CMAKE_C_VISIBILITY_PRESET hidden"
+    "CMAKE_CXX_VISIBILITY_PRESET hidden"
+    "CMAKE_POSITION_INDEPENDENT_CODE ON")
+  if(MINGW)
+    set(boringssl_PATCH "${PROJECT_SOURCE_DIR}/cmake/0001-fix-build-for-mingw-w64-ucrt-x86_64-toolchain.patch")
+    message("Applying ${boringssl_PATCH} in ${boringssl_SOURCE_DIR} for MinGW gcc")
+    execute_process(
+      COMMAND patch --input ${boringssl_PATCH} --ignore-whitespace --strip=1 --forward
+      WORKING_DIRECTORY ${boringssl_SOURCE_DIR}
+      RESULT_VARIABLE PATCH_RESULT)
+    if(PATCH_RESULT GREATER 1)
+      message(FATAL_ERROR "Failed to apply patch to BoringSSL. Failed with: ${PATCH_RESULT}.")
+    endif()
+  endif()
+  if(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+    include(CheckCXXSourceCompiles)
+    check_cxx_source_compiles(
+      "int main() {
+       #if defined(__ARM_FEATURE_SHA2)
+       return 0;
+       #else
+       #error __ARM_FEATURE_SHA2 not defined
+       #endif
+     }"
+      HAVE_ARM_FEATURE_SHA2)
+    if(NOT HAVE_ARM_FEATURE_SHA2)
+      message(
+        FATAL_ERROR
+          "The compiler ${CMAKE_CXX_COMPILER} (${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}) does not support BoringSSL, use OpenSSL or different compiler"
+      )
+    endif()
+  endif()
+  add_library(OpenSSL::SSL ALIAS ssl)
+  add_library(OpenSSL::Crypto ALIAS ssl)
 else()
   option(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL "Statically link OpenSSL library" FALSE)
   if(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL)
@@ -109,18 +154,27 @@ option(COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE
 option(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE
        "Download and embed Mozilla certificates from https://curl.se/ca/cacert.pem" TRUE)
 
+option(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT "Path to downloaded certificate bundle and its checksum")
+
 if(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE)
-  message(STATUS "Download CA bundle checksum: https://curl.se/ca/cacert.pem.sha256")
-  file(
-    DOWNLOAD "https://curl.se/ca/cacert.pem.sha256" "${CMAKE_CURRENT_BINARY_DIR}/mozilla-ca-bundle.sha256"
-    TLS_VERIFY ON
-    STATUS DOWNLOAD_STATUS)
-  list(GET DOWNLOAD_STATUS 0 STATUS_CODE)
-  if(NOT ${STATUS_CODE} EQUAL 0)
-    list(GET DOWNLOAD_STATUS 1 ERROR_MESSAGE)
-    message(FATAL_ERROR "Unable to download CA bundle checksum file, status=${STATUS_CODE}: ${ERROR_MESSAGE}")
+  if(NOT EXISTS "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}")
+    set(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT "${CMAKE_CURRENT_BINARY_DIR}")
   endif()
-  file(READ "${CMAKE_CURRENT_BINARY_DIR}/mozilla-ca-bundle.sha256" HASH_FILE_CONTENT)
+  message(STATUS "Using ${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT} to keep Mozilla certificates")
+  if(NOT EXISTS "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}/mozilla-ca-bundle.sha256")
+    message(STATUS "Download CA bundle checksum: https://curl.se/ca/cacert.pem.sha256")
+    file(
+      DOWNLOAD "https://curl.se/ca/cacert.pem.sha256"
+      "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}/mozilla-ca-bundle.sha256"
+      TLS_VERIFY ON
+      STATUS DOWNLOAD_STATUS)
+    list( GET DOWNLOAD_STATUS 0 STATUS_CODE)
+    if(NOT ${STATUS_CODE} EQUAL 0)
+      list( GET DOWNLOAD_STATUS 1 ERROR_MESSAGE)
+      message(FATAL_ERROR "Unable to download CA bundle checksum file, status=${STATUS_CODE}: ${ERROR_MESSAGE}")
+    endif()
+  endif()
+  file(READ "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}/mozilla-ca-bundle.sha256" HASH_FILE_CONTENT)
   string(
     REGEX MATCH
           "^([0-9a-f]+)"
@@ -129,19 +183,30 @@ if(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE)
   if(NOT COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256)
     message(FATAL_ERROR "Failed to extract expected hash from file")
   endif()
-  message(STATUS "Download CA bundle: https://curl.se/ca/cacert.pem")
-  file(
-    DOWNLOAD "https://curl.se/ca/cacert.pem" "${CMAKE_CURRENT_BINARY_DIR}/mozilla-ca-bundle.crt"
-    TLS_VERIFY ON
-    EXPECTED_HASH SHA256=${COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256}
-    STATUS DOWNLOAD_STATUS)
-  list(GET DOWNLOAD_STATUS 0 STATUS_CODE)
-  if(NOT ${STATUS_CODE} EQUAL 0)
-    list(GET DOWNLOAD_STATUS 1 ERROR_MESSAGE)
-    message(FATAL_ERROR "Unable to download CA bundle, status=${STATUS_CODE}: ${ERROR_MESSAGE}")
+  if(EXISTS "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}/mozilla-ca-bundle.crt")
+    file(SHA256 "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}/mozilla-ca-bundle.crt" SHA256_OF_CRT_FILE)
+    if(NOT
+       COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256
+       STREQUAL
+       SHA256_OF_CRT_FILE)
+      message(FATAL_ERROR "SHA256 of mozilla-ca-bundle.crt does not match")
+    endif()
+  else()
+    message(STATUS "Download CA bundle: https://curl.se/ca/cacert.pem")
+    file(
+      DOWNLOAD "https://curl.se/ca/cacert.pem"
+      "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}/mozilla-ca-bundle.crt"
+      TLS_VERIFY ON
+      EXPECTED_HASH SHA256=${COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256}
+      STATUS DOWNLOAD_STATUS)
+    list( GET DOWNLOAD_STATUS 0 STATUS_CODE)
+    if(NOT ${STATUS_CODE} EQUAL 0)
+      list( GET DOWNLOAD_STATUS 1 ERROR_MESSAGE)
+      message(FATAL_ERROR "Unable to download CA bundle, status=${STATUS_CODE}: ${ERROR_MESSAGE}")
+    endif()
   endif()
 
-  file(READ "${CMAKE_CURRENT_BINARY_DIR}/mozilla-ca-bundle.crt" CA_BUNDLE_CONTENT)
+  file(READ "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}/mozilla-ca-bundle.crt" CA_BUNDLE_CONTENT)
   string(
     REGEX MATCH
           "Certificate data from Mozilla as of: ([^\n]*)"

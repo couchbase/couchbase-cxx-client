@@ -3,6 +3,15 @@ include(cmake/CPM.cmake)
 # https://cmake.org/cmake/help/v3.28/policy/CMP0063.html
 set(CMAKE_POLICY_DEFAULT_CMP0063 NEW)
 
+function(declare_system_library target)
+  message(STATUS "Declaring system library ${target}")
+  get_target_property(target_aliased_name ${target} ALIASED_TARGET)
+  if (target_aliased_name)
+    set(target ${target_aliased_name})
+  endif()
+  set_target_properties(${target} PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:${target},INTERFACE_INCLUDE_DIRECTORIES>)
+endfunction()
+
 if(NOT TARGET fmt::fmt)
   cpmaddpackage(
     NAME
@@ -14,6 +23,7 @@ if(NOT TARGET fmt::fmt)
     GITHUB_REPOSITORY
     "fmtlib/fmt"
     OPTIONS
+    "BUILD_SHARED_LIBS OFF"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON")
@@ -28,9 +38,11 @@ if(NOT TARGET spdlog::spdlog)
     GITHUB_REPOSITORY
     "gabime/spdlog"
     OPTIONS
+    "BUILD_SHARED_LIBS OFF"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
+    "SPDLOG_BUILD_SHARED OFF"
     "SPDLOG_FMT_EXTERNAL ON")
 endif()
 
@@ -48,7 +60,7 @@ if(NOT TARGET Microsoft.GSL::GSL)
     "CMAKE_POSITION_INDEPENDENT_CODE ON")
 endif()
 
-if(NOT TARGET hdr_histogram::hdr_histogram_static)
+if(NOT TARGET hdr_histogram_static)
   cpmaddpackage(
     NAME
     hdr_histogram
@@ -65,9 +77,6 @@ if(NOT TARGET hdr_histogram::hdr_histogram_static)
     "HDR_LOG_REQUIRED OFF"
     "HDR_HISTOGRAM_BUILD_SHARED OFF"
     "HDR_HISTOGRAM_BUILD_PROGRAMS OFF")
-endif()
-if(NOT MSVC)
-  target_compile_options(hdr_histogram_static PRIVATE -Wno-unused-parameter)
 endif()
 
 if(NOT TARGET llhttp::llhttp)
@@ -210,11 +219,19 @@ set(PEGTL_BUILD_EXAMPLES
     CACHE BOOL "" FORCE)
 add_subdirectory(third_party/json)
 
-include_directories(BEFORE SYSTEM ${PROJECT_SOURCE_DIR}/third_party/json/include)
-include_directories(BEFORE SYSTEM ${PROJECT_SOURCE_DIR}/third_party/json/external/PEGTL/include)
-include_directories(BEFORE SYSTEM ${PROJECT_SOURCE_DIR}/third_party/cxx_function)
-include_directories(BEFORE SYSTEM ${PROJECT_SOURCE_DIR}/third_party/expected/include)
+include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third_party/json/include)
+include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third_party/json/external/PEGTL/include)
+include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third_party/cxx_function)
+include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third_party/expected/include)
 
 add_library(jsonsl OBJECT ${PROJECT_SOURCE_DIR}/third_party/jsonsl/jsonsl.c)
 set_target_properties(jsonsl PROPERTIES C_VISIBILITY_PRESET hidden POSITION_INDEPENDENT_CODE TRUE)
-target_include_directories(jsonsl PUBLIC SYSTEM ${PROJECT_SOURCE_DIR}/third_party/jsonsl)
+target_include_directories(jsonsl SYSTEM PUBLIC ${PROJECT_SOURCE_DIR}/third_party/jsonsl)
+
+declare_system_library(snappy)
+declare_system_library(llhttp::llhttp)
+declare_system_library(hdr_histogram_static)
+declare_system_library(Microsoft.GSL::GSL)
+declare_system_library(spdlog::spdlog)
+declare_system_library(fmt::fmt)
+declare_system_library(asio)

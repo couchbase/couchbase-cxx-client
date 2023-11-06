@@ -99,8 +99,8 @@ constexpr const char* ssl_lib_id =
 TEST_CASE("unit: user_agent string", "[unit]")
 {
     std::string os_version = fmt::format(
-      ";{}/{};{}/{}", COUCHBASE_CXX_CLIENT_SYSTEM_NAME, COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR, ssl_lib_id, OpenSSL_version_num());
-    std::string core_version = fmt::format("cxx/{}.{}.{}/{};{}/{};{}/{}",
+      ";{}/{};{}/0x{:x}", COUCHBASE_CXX_CLIENT_SYSTEM_NAME, COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR, ssl_lib_id, OpenSSL_version_num());
+    std::string core_version = fmt::format("cxx/{}.{}.{}/{};{}/{};{}/0x{:x}",
                                            COUCHBASE_CXX_CLIENT_VERSION_MAJOR,
                                            COUCHBASE_CXX_CLIENT_VERSION_MINOR,
                                            COUCHBASE_CXX_CLIENT_VERSION_PATCH,
