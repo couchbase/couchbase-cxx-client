@@ -1,3 +1,0 @@
-[submodule "third_party/docopt"]
-	path = third_party/docopt
-	url = https://github.com/docopt/docopt.cpp.git

@@ -516,6 +516,5 @@ endif ()
 
 option(COUCHBASE_CXX_CLIENT_BUILD_TOOLS "Build tools" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if (COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
-    add_subdirectory(third_party/docopt)
     add_subdirectory(tools)
 endif ()

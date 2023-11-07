@@ -15,12 +15,13 @@
  *   limitations under the License.
  */
 
-#include "command.hxx"
+#include <CLI/App.hpp>
 
 namespace cbc
 {
-class pillowfight : public command
-{
-    void execute(const std::vector<std::string>& argv) override;
-};
+auto
+make_pillowfight_command() -> std::shared_ptr<CLI::App>;
+
+auto
+execute_pillowfight_command(const CLI::App* app) -> int;
 } // namespace cbc
