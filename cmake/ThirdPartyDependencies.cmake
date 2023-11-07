@@ -6,10 +6,11 @@ set(CMAKE_POLICY_DEFAULT_CMP0063 NEW)
 function(declare_system_library target)
   message(STATUS "Declaring system library ${target}")
   get_target_property(target_aliased_name ${target} ALIASED_TARGET)
-  if (target_aliased_name)
+  if(target_aliased_name)
     set(target ${target_aliased_name})
   endif()
-  set_target_properties(${target} PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:${target},INTERFACE_INCLUDE_DIRECTORIES>)
+  set_target_properties(${target} PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES
+                                             $<TARGET_PROPERTY:${target},INTERFACE_INCLUDE_DIRECTORIES>)
 endfunction()
 
 if(NOT TARGET fmt::fmt)
@@ -121,6 +122,28 @@ if(NOT MSVC)
   target_compile_options(snappy PRIVATE -Wno-sign-compare)
 endif()
 
+if(NOT TARGET taocpp::json)
+  cpmaddpackage(
+    NAME
+    json
+    GIT_TAG
+    1.0.0-beta.14
+    VERSION
+    1.0.0-beta.14
+    GITHUB_REPOSITORY
+    "taocpp/json"
+    OPTIONS
+    "CMAKE_C_VISIBILITY_PRESET hidden"
+    "CMAKE_CXX_VISIBILITY_PRESET hidden"
+    "CMAKE_POSITION_INDEPENDENT_CODE ON"
+    "BUILD_SHARED_LIBS OFF"
+    "PEGTL_BUILD_TESTS OFF"
+    "PEGTL_BUILD_EXAMPLES OFF"
+    "PEGTL_USE_BOOST_FILESYSTEM OFF"
+    "TAOCPP_JSON_BUILD_TESTS OFF"
+    "TAOCPP_JSON_BUILD_EXAMPLES OFF")
+endif()
+
 if(NOT TARGET asio::asio)
   cpmaddpackage(
     NAME
@@ -143,51 +166,30 @@ if(asio_ADDED)
   add_library(asio INTERFACE)
 
   target_include_directories(asio SYSTEM INTERFACE ${asio_SOURCE_DIR}/asio/include)
-
   target_compile_definitions(asio INTERFACE ASIO_STANDALONE ASIO_NO_DEPRECATED)
-
   target_link_libraries(asio INTERFACE Threads::Threads)
-
-  set_target_properties(asio PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+  set_target_properties(
+    asio
+    PROPERTIES C_VISIBILITY_PRESET hidden
+               CXX_VISIBILITY_PRESET hidden
+               POSITION_INDEPENDENT_CODE TRUE)
 
   if(WIN32)
     # macro see @ https://stackoverflow.com/a/40217291/1746503
     macro(get_win32_winnt version)
       if(CMAKE_SYSTEM_VERSION)
         set(ver ${CMAKE_SYSTEM_VERSION})
-        string(
-          REGEX MATCH
-                "^([0-9]+).([0-9])"
-                ver
-                ${ver})
-        string(
-          REGEX MATCH
-                "^([0-9]+)"
-                verMajor
-                ${ver})
+        string(REGEX MATCH "^([0-9]+).([0-9])" ver ${ver})
+        string(REGEX MATCH "^([0-9]+)" verMajor ${ver})
         # Check for Windows 10, b/c we'll need to convert to hex 'A'.
         if("${verMajor}" MATCHES "10")
           set(verMajor "A")
-          string(
-            REGEX
-            REPLACE "^([0-9]+)"
-                    ${verMajor}
-                    ver
-                    ${ver})
+          string(REGEX REPLACE "^([0-9]+)" ${verMajor} ver ${ver})
         endif("${verMajor}" MATCHES "10")
         # Remove all remaining '.' characters.
-        string(
-          REPLACE "."
-                  ""
-                  ver
-                  ${ver})
+        string(REPLACE "." "" ver ${ver})
         # Prepend each digit with a zero.
-        string(
-          REGEX
-          REPLACE "([0-9A-Z])"
-                  "0\\1"
-                  ver
-                  ${ver})
+        string(REGEX REPLACE "([0-9A-Z])" "0\\1" ver ${ver})
         set(${version} "0x${ver}")
       endif()
     endmacro()
@@ -205,22 +207,6 @@ if(asio_ADDED)
   add_library(asio::asio ALIAS asio)
 endif()
 
-set(TAOCPP_JSON_BUILD_TESTS
-    OFF
-    CACHE BOOL "" FORCE)
-set(TAOCPP_JSON_BUILD_EXAMPLES
-    OFF
-    CACHE BOOL "" FORCE)
-set(PEGTL_BUILD_TESTS
-    OFF
-    CACHE BOOL "" FORCE)
-set(PEGTL_BUILD_EXAMPLES
-    OFF
-    CACHE BOOL "" FORCE)
-add_subdirectory(third_party/json)
-
-include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third_party/json/include)
-include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third_party/json/external/PEGTL/include)
 include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third_party/cxx_function)
 include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third_party/expected/include)
 
@@ -235,3 +221,5 @@ declare_system_library(Microsoft.GSL::GSL)
 declare_system_library(spdlog::spdlog)
 declare_system_library(fmt::fmt)
 declare_system_library(asio)
+declare_system_library(taocpp::pegtl)
+declare_system_library(taocpp::json)

@@ -6,6 +6,7 @@ target_link_libraries(
           project_warnings
           asio
           Microsoft.GSL::GSL
+          taocpp::json
           fmt::fmt
           spdlog::spdlog)
 target_include_directories(couchbase_tracing PRIVATE ${PROJECT_BINARY_DIR}/generated ${PROJECT_SOURCE_DIR})

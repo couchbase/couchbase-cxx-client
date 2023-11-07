@@ -433,8 +433,6 @@ target_include_directories(couchbase_cxx_client PUBLIC ${PROJECT_SOURCE_DIR} ${P
 target_include_directories(
         couchbase_cxx_client SYSTEM
         PUBLIC
-        ${PROJECT_SOURCE_DIR}/third_party/json/external/PEGTL/include
-        ${PROJECT_SOURCE_DIR}/third_party/json/include
         ${PROJECT_SOURCE_DIR}/third_party/cxx_function
         ${PROJECT_SOURCE_DIR}/third_party/expected/include)
 target_link_libraries(couchbase_cxx_client PRIVATE project_options project_warnings)
@@ -453,24 +451,27 @@ else ()
 endif ()
 
 target_link_libraries(
-        couchbase_cxx_client
-        PUBLIC fmt::fmt
-        spdlog::spdlog
-        snappy
-        jsonsl
-        hdr_histogram_static
-        couchbase_backtrace
-        couchbase_logger
-        couchbase_platform
-        couchbase_meta
-        couchbase_crypto
-        couchbase_sasl
-        couchbase_tracing
-        couchbase_metrics)
+  couchbase_cxx_client
+  PUBLIC fmt::fmt
+         spdlog::spdlog
+         couchbase_backtrace
+         couchbase_logger
+         couchbase_platform
+         couchbase_meta
+         couchbase_crypto
+         couchbase_sasl
+         couchbase_tracing
+         couchbase_metrics)
 
 target_link_libraries(
-        couchbase_cxx_client
-        PRIVATE Microsoft.GSL::GSL asio llhttp::llhttp)
+  couchbase_cxx_client
+  PRIVATE Microsoft.GSL::GSL
+          asio
+          llhttp::llhttp
+          taocpp::json
+          snappy
+          jsonsl
+          hdr_histogram_static)
 
 if (WIN32)
     target_link_libraries(couchbase_cxx_client PRIVATE iphlpapi)

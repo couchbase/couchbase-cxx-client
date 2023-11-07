@@ -30,6 +30,7 @@ macro(integration_test name)
     Threads::Threads
     Microsoft.GSL::GSL
     asio
+    taocpp::json
     couchbase_cxx_client
     test_utils)
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
@@ -68,6 +69,7 @@ macro(transaction_test name)
     Threads::Threads
     Microsoft.GSL::GSL
     asio
+    taocpp::json
     couchbase_cxx_client
     test_utils)
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
@@ -105,6 +107,7 @@ macro(unit_test name)
     Threads::Threads
     Microsoft.GSL::GSL
     asio
+    taocpp::json
     couchbase_cxx_client
     test_utils)
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
@@ -142,6 +145,7 @@ macro(integration_benchmark name)
     Threads::Threads
     Microsoft.GSL::GSL
     asio
+    taocpp::json
     couchbase_cxx_client
     test_utils)
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
