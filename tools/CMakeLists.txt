@@ -14,6 +14,7 @@ target_link_libraries(
   ${CMAKE_THREAD_LIBS_INIT}
   couchbase_cxx_client
   Microsoft.GSL::GSL
+  taocpp::json
   asio
   docopt)
 

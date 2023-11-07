@@ -1,7 +1,3 @@
-[submodule "third_party/json"]
-	path = third_party/json
-	url = https://github.com/couchbasedeps/taocpp-json.git
-    branch = 1.0.0-couchbase
 [submodule "third_party/docopt"]
 	path = third_party/docopt
 	url = https://github.com/docopt/docopt.cpp.git
