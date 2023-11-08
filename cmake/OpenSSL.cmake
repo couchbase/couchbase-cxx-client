@@ -49,7 +49,7 @@ elseif(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
       HAVE_ARM_FEATURE_SHA2)
     if(NOT HAVE_ARM_FEATURE_SHA2)
       message(
-        FATAL_ERROR
+        WARNING
           "The compiler ${CMAKE_CXX_COMPILER} (${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}) does not support BoringSSL, use OpenSSL or different compiler"
       )
     endif()
