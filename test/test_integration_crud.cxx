@@ -246,7 +246,7 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
         couchbase::core::operations::unlock_request req{ id };
         req.cas = couchbase::cas{ cas.value() - 1 };
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_locked);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::common::cas_mismatch);
         REQUIRE_FALSE(resp.ctx.retried_because_of(couchbase::retry_reason::key_value_locked));
     }
 
@@ -841,7 +841,7 @@ TEST_CASE("integration: pessimistic locking with public API", "[integration]")
     {
         auto wrong_cas = couchbase::cas{ cas.value() - 1 };
         auto ctx = collection.unlock(id, wrong_cas, {}).get();
-        REQUIRE(ctx.ec() == couchbase::errc::key_value::document_locked);
+        REQUIRE(ctx.ec() == couchbase::errc::common::cas_mismatch);
         REQUIRE_FALSE(ctx.retried_because_of(couchbase::retry_reason::key_value_locked));
     }
 
