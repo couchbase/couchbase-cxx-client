@@ -75,6 +75,9 @@ map_status_code(protocol::client_opcode opcode, std::uint16_t status)
             return errc::common::bucket_not_found;
 
         case key_value_status_code::locked:
+            if (opcode == protocol::client_opcode::unlock) {
+                return errc::common::cas_mismatch;
+            }
             return errc::key_value::document_locked;
 
         case key_value_status_code::auth_stale:
