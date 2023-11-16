@@ -92,12 +92,12 @@ class bucket_impl
             return req->try_callback(resp, req->idempotent() ? errc::common::unambiguous_timeout : errc::common::ambiguous_timeout);
         }
         if (ec == errc::common::request_canceled) {
-            if (reason == retry_reason::do_not_retry) {
+            if (!req->idempotent() && !allows_non_idempotent_retry(reason)) {
                 // TODO: fix tracing
                 // self->span_->add_tag(tracing::attributes::orphan, "canceled");
                 return req->try_callback(resp, ec);
             }
-            backoff_and_retry(req, retry_reason::node_not_available);
+            backoff_and_retry(req, reason == retry_reason::do_not_retry ? retry_reason::node_not_available : reason);
             return;
         }
         key_value_status_code status{ key_value_status_code::unknown };

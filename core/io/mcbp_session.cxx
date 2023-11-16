@@ -1040,8 +1040,10 @@ class mcbp_session_impl
             }
         }
 
+        auto reason = status == static_cast<std::uint16_t>(key_value_status_code::not_my_vbucket) ? retry_reason::key_value_not_my_vbucket
+                                                                                                  : retry_reason::do_not_retry;
         if (fun) {
-            fun(protocol::map_status_code(opcode, status), retry_reason::do_not_retry, std::move(msg), decode_error_code(status));
+            fun(protocol::map_status_code(opcode, status), reason, std::move(msg), decode_error_code(status));
             return true;
         }
 
@@ -1059,11 +1061,8 @@ class mcbp_session_impl
             }
         }
         if (request) {
-            handler->handle_response(std::move(request),
-                                     protocol::map_status_code(opcode, status),
-                                     retry_reason::do_not_retry,
-                                     std::move(msg),
-                                     decode_error_code(status));
+            handler->handle_response(
+              std::move(request), protocol::map_status_code(opcode, status), reason, std::move(msg), decode_error_code(status));
             return true;
         }
         return false;
