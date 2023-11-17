@@ -16,10 +16,20 @@
 
 PROJECT_ROOT="$( cd "$(dirname "$0"/..)" >/dev/null 2>&1 ; pwd -P )"
 
-CB_GIT_CLANG_FORMAT=${CB_GIT_CLANG_FORMAT:-git-clang-format}
 CB_CLANG_FORMAT=${CB_CLANG_FORMAT:-$(which clang-format)}
+if [[ ! -x ${CB_CLANG_FORMAT} ]]
+then
+    echo "ERROR: clang-format must be executable, '${CB_CLANG_FORMAT}' is not"
+    exit 1
+fi
 
-set -euo pipefail
+CB_GIT_CLANG_FORMAT=${CB_GIT_CLANG_FORMAT:-$(which git-clang-format)}
+if [[ ! -x ${CB_GIT_CLANG_FORMAT} ]]
+then
+    echo "ERROR: git-clang-format must be executable, '${CB_GIT_CLANG_FORMAT}' is not"
+    exit 1
+fi
+
 IFS=$'\n\t'
 
 cd "${PROJECT_ROOT}"

@@ -118,7 +118,8 @@ class cluster
     void execute(om::bucket_get_request request, mf<void(om::bucket_get_response)>&& handler) const;
     void execute(om::bucket_get_all_request request, mf<void(om::bucket_get_all_response)>&& handler) const;
     void execute(om::bucket_update_request request, mf<void(om::bucket_update_response)>&& handler) const;
-    void execute(om::cluster_developer_preview_enable_request request, mf<void(om::cluster_developer_preview_enable_response)>&& handler) const;
+    void execute(om::cluster_developer_preview_enable_request request,
+                 mf<void(om::cluster_developer_preview_enable_response)>&& handler) const;
     void execute(om::collection_create_request request, mf<void(om::collection_create_response)>&& handler) const;
     void execute(om::collection_update_request request, mf<void(om::collection_update_response)>&& handler) const;
     void execute(om::collection_drop_request request, mf<void(om::collection_drop_response)>&& handler) const;
