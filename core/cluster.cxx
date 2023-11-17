@@ -38,6 +38,7 @@
 #include "core/operations/management/bucket.hxx"
 #include "core/operations/management/bucket_describe.hxx"
 #include "core/operations/management/cluster_describe.hxx"
+#include "core/operations/management/cluster_developer_preview_enable.hxx"
 #include "core/operations/management/collections.hxx"
 #include "core/operations/management/eventing.hxx"
 #include "core/operations/management/freeform.hxx"
@@ -1406,6 +1407,13 @@ cluster::execute(operations::management::bucket_describe_request request,
 void
 cluster::execute(operations::management::cluster_describe_request request,
                  utils::movable_function<void(operations::management::cluster_describe_response)>&& handler) const
+{
+    return impl_->execute(std::move(request), std::move(handler));
+}
+
+void
+cluster::execute(operations::management::cluster_developer_preview_enable_request request,
+                 utils::movable_function<void(operations::management::cluster_developer_preview_enable_response)>&& handler) const
 {
     return impl_->execute(std::move(request), std::move(handler));
 }
