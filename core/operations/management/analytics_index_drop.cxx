@@ -21,6 +21,8 @@
 #include "core/utils/name_codec.hxx"
 #include "error_utils.hxx"
 
+#include <fmt/core.h>
+
 namespace couchbase::core::operations::management
 {
 std::error_code

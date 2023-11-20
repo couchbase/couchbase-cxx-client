@@ -25,13 +25,13 @@
 
 namespace couchbase::core::operations::management
 {
-struct search_index_stats_response {
+struct search_get_stats_response {
     error_context::http ctx;
     std::string stats{};
 };
 
-struct search_index_stats_request {
-    using response_type = search_index_stats_response;
+struct search_get_stats_request {
+    using response_type = search_get_stats_response;
     using encoded_request_type = io::http_request;
     using encoded_response_type = io::http_response;
     using error_context_type = error_context::http;
@@ -43,6 +43,6 @@ struct search_index_stats_request {
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
 
-    [[nodiscard]] search_index_stats_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
+    [[nodiscard]] search_get_stats_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::operations::management

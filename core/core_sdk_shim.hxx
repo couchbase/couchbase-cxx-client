@@ -15,7 +15,8 @@
 
 #pragma once
 
-#include <memory>
+#include "cluster.hxx"
+
 #include <string>
 
 namespace couchbase::core
@@ -23,7 +24,7 @@ namespace couchbase::core
 class cluster;
 
 struct core_sdk_shim {
-    std::shared_ptr<core::cluster> cluster;
+    core::cluster cluster;
 
     [[nodiscard]] auto to_string() const -> std::string;
 };

@@ -34,7 +34,7 @@
 namespace couchbase::tracing
 {
 class request_span;
-}
+} // namespace couchbase::tracing
 
 namespace couchbase::core::operations
 {

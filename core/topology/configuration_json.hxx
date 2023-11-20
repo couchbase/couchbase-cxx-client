@@ -21,6 +21,8 @@
 
 #include <tao/json/forward.hpp>
 
+#include <limits>
+
 namespace tao::json
 {
 template<>

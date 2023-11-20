@@ -32,7 +32,7 @@ class retry_strategy;
 namespace couchbase::core
 {
 struct agent_group_config {
-    core_sdk_shim shim{}; // TODO: remove once refactoring will be finished.
+    core_sdk_shim shim; // TODO: remove once refactoring will be finished.
 
     std::string user_agent{};
     std::shared_ptr<retry_strategy> default_retry_strategy{ make_best_effort_retry_strategy() };

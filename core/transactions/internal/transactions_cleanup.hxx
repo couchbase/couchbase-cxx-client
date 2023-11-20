@@ -87,10 +87,10 @@ struct atr_cleanup_stats {
 class transactions_cleanup
 {
   public:
-    transactions_cleanup(std::shared_ptr<core::cluster> cluster, const couchbase::transactions::transactions_config::built& config);
+    transactions_cleanup(core::cluster cluster, const couchbase::transactions::transactions_config::built& config);
     ~transactions_cleanup();
 
-    [[nodiscard]] std::shared_ptr<core::cluster> cluster_ref() const
+    [[nodiscard]] const core::cluster& cluster_ref() const
     {
         return cluster_;
     };
@@ -130,7 +130,7 @@ class transactions_cleanup
     void close();
 
   private:
-    std::shared_ptr<core::cluster> cluster_;
+    core::cluster cluster_;
     couchbase::transactions::transactions_config::built config_;
     const std::chrono::milliseconds cleanup_loop_delay_{ 100 };
 

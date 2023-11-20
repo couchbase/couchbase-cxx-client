@@ -22,6 +22,8 @@
 
 #include <regex>
 
+#include <fmt/core.h>
+
 namespace couchbase::core::operations::management
 {
 std::error_code

@@ -26,8 +26,8 @@
 #include "internal/transactions_cleanup.hxx"
 #include "internal/utils.hxx"
 
-#include <algorithm>
-#include <chrono>
+#include <couchbase/fmt/transaction_keyspace.hxx>
+
 #include <functional>
 
 namespace couchbase::core::transactions
@@ -41,9 +41,8 @@ transactions_cleanup_attempt::transactions_cleanup_attempt(const atr_cleanup_ent
 {
 }
 
-transactions_cleanup::transactions_cleanup(std::shared_ptr<core::cluster> cluster,
-                                           const couchbase::transactions::transactions_config::built& config)
-  : cluster_(cluster)
+transactions_cleanup::transactions_cleanup(core::cluster cluster, const couchbase::transactions::transactions_config::built& config)
+  : cluster_(std::move(cluster))
   , config_(config)
   , client_uuid_(uid_generator::next())
   , running_(config.cleanup_config.cleanup_client_attempts || config.cleanup_config.cleanup_lost_attempts)
@@ -254,8 +253,7 @@ transactions_cleanup::create_client_record(const couchbase::transactions::transa
         if (ec) {
             throw client_error(*ec, "client_record_before_create hook raised error");
         }
-        cluster_->execute(
-          req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
+        cluster_.execute(req, [barrier](auto&& resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
         wrap_operation_future(f);
 
     } catch (const client_error& e) {
@@ -292,8 +290,7 @@ transactions_cleanup::get_active_clients(const couchbase::transactions::transact
         if (ec) {
             throw client_error(*ec, "client_record_before_get hook raised error");
         }
-        cluster_->execute(
-          req, [barrier](core::operations::lookup_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
+        cluster_.execute(req, [barrier](auto&& resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
         auto res = wrap_operation_future(f);
 
         std::vector<std::string> active_client_uids;
@@ -375,9 +372,8 @@ transactions_cleanup::get_active_clients(const couchbase::transactions::transact
         auto mutate_barrier = std::make_shared<std::promise<result>>();
         auto mutate_f = mutate_barrier->get_future();
         CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("updating record");
-        cluster_->execute(mutate_req, [mutate_barrier](core::operations::mutate_in_response resp) {
-            mutate_barrier->set_value(result::create_from_subdoc_response(resp));
-        });
+        cluster_.execute(mutate_req,
+                         [mutate_barrier](auto&& resp) { mutate_barrier->set_value(result::create_from_subdoc_response(resp)); });
         res = wrap_operation_future(mutate_f);
 
         // just update the cas, and return the details
@@ -420,9 +416,7 @@ transactions_cleanup::remove_client_record_from_all_buckets(const std::string& u
                       wrap_durable_request(req, config_);
                       auto barrier = std::make_shared<std::promise<result>>();
                       auto f = barrier->get_future();
-                      cluster_->execute(req, [barrier](core::operations::mutate_in_response resp) {
-                          barrier->set_value(result::create_from_subdoc_response(resp));
-                      });
+                      cluster_.execute(req, [barrier](auto&& resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
                       wrap_operation_future(f);
                       CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("removed {} from {}", uuid, keyspace);
                   } catch (const client_error& e) {

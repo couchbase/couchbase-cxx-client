@@ -17,8 +17,9 @@
 #include "attempt_context_impl.hxx"
 
 #include "core/cluster.hxx"
-
+#include "core/meta/version.hxx"
 #include "core/transactions.hxx"
+
 #include "internal/exceptions_internal.hxx"
 #include "internal/logging.hxx"
 #include "internal/transaction_context.hxx"
@@ -27,13 +28,13 @@
 
 namespace couchbase::core::transactions
 {
-transactions::transactions(std::shared_ptr<core::cluster> cluster, const couchbase::transactions::transactions_config& config)
-  : transactions(cluster, config.build())
+transactions::transactions(core::cluster cluster, const couchbase::transactions::transactions_config& config)
+  : transactions(std::move(cluster), config.build())
 {
 }
 
-transactions::transactions(std::shared_ptr<core::cluster> cluster, const couchbase::transactions::transactions_config::built& config)
-  : cluster_(cluster)
+transactions::transactions(core::cluster cluster, const couchbase::transactions::transactions_config::built& config)
+  : cluster_(std::move(cluster))
   , config_(config)
   , cleanup_(new transactions_cleanup(cluster_, config_))
 {
@@ -48,7 +49,7 @@ transactions::transactions(std::shared_ptr<core::cluster> cluster, const couchba
         auto barrier = std::make_shared<std::promise<std::error_code>>();
         auto f = barrier->get_future();
         std::atomic<bool> callback_called{ false };
-        cluster_->open_bucket(config_.metadata_collection->bucket, [&callback_called, barrier](std::error_code ec) {
+        cluster_.open_bucket(config_.metadata_collection->bucket, [&callback_called, barrier](std::error_code ec) {
             if (callback_called.load()) {
                 return;
             }

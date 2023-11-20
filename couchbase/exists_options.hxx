@@ -71,27 +71,4 @@ struct exists_options : public common_options<exists_options> {
  * @uncommitted
  */
 using exists_handler = std::function<void(couchbase::key_value_error_context, exists_result)>;
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core
-{
-class cluster;
-namespace impl
-{
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_exists_operation(std::shared_ptr<couchbase::core::cluster> core,
-                          std::string bucket_name,
-                          std::string scope_name,
-                          std::string collection_name,
-                          std::string document_key,
-                          exists_options::built options,
-                          exists_handler&& handler);
-#endif
-} // namespace impl
-} // namespace core
 } // namespace couchbase

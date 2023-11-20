@@ -44,8 +44,8 @@ static const tao::json::value KV_TXDATA{ { "kv", true } };
 // the config may have nullptr for attempt context hooks, so we use the noop here in that case
 static auto noop_hooks = attempt_context_testing_hooks{};
 
-std::shared_ptr<core::cluster>
-attempt_context_impl::cluster_ref()
+const core::cluster&
+attempt_context_impl::cluster_ref() const
 {
     return overall_.cluster_ref();
 }
@@ -393,7 +393,7 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
     }
     CB_ATTEMPT_CTX_LOG_TRACE(
       this, "about to replace doc {} with cas {} in txn {}", document.id(), document.cas().value(), overall_.transaction_id());
-    overall_.cluster_ref()->execute(
+    overall_.cluster_ref().execute(
       req,
       [this, document = std::move(document), content, cb = std::move(cb), error_handler = std::move(error_handler)](
         core::operations::mutate_in_response resp) mutable {
@@ -645,7 +645,7 @@ attempt_context_impl::remove(const transaction_get_result& document, VoidCallbac
                         auto req = create_staging_request(document.id(), &document, "remove", op_id);
                         req.cas = document.cas();
                         req.access_deleted = document.links().is_deleted();
-                        overall_.cluster_ref()->execute(
+                        overall_.cluster_ref().execute(
                           req,
                           [this, document = std::move(document), cb = std::move(cb), error_handler = std::move(error_handler)](
                             core::operations::mutate_in_response resp) mutable {
@@ -702,23 +702,23 @@ attempt_context_impl::remove_staged_insert(const core::document_id& id, VoidCall
     wrap_durable_request(req, overall_.config());
     req.access_deleted = true;
 
-    overall_.cluster_ref()->execute(req,
-                                    [this, id = std::move(id), cb = std::move(cb), error_handler = std::move(error_handler)](
-                                      core::operations::mutate_in_response resp) mutable {
-                                        auto ec = error_class_from_response(resp);
-                                        if (!ec) {
+    overall_.cluster_ref().execute(req,
+                                   [this, id = std::move(id), cb = std::move(cb), error_handler = std::move(error_handler)](
+                                     core::operations::mutate_in_response resp) mutable {
+                                       auto ec = error_class_from_response(resp);
+                                       if (!ec) {
 
-                                            if (auto err = hooks_.after_remove_staged_insert(this, id.key()); err) {
-                                                error_handler(*err, "after_remove_staged_insert hook returned error", std::move(cb));
-                                                return;
-                                            }
-                                            staged_mutations_->remove_any(id);
-                                            op_completed_with_callback(std::move(cb));
-                                            return;
-                                        }
-                                        CB_ATTEMPT_CTX_LOG_DEBUG(this, "remove_staged_insert got error {}", *ec);
-                                        return error_handler(*ec, resp.ctx.ec().message(), std::move(cb));
-                                    });
+                                           if (auto err = hooks_.after_remove_staged_insert(this, id.key()); err) {
+                                               error_handler(*err, "after_remove_staged_insert hook returned error", std::move(cb));
+                                               return;
+                                           }
+                                           staged_mutations_->remove_any(id);
+                                           op_completed_with_callback(std::move(cb));
+                                           return;
+                                       }
+                                       CB_ATTEMPT_CTX_LOG_DEBUG(this, "remove_staged_insert got error {}", *ec);
+                                       return error_handler(*ec, resp.ctx.ec().message(), std::move(cb));
+                                   });
 }
 
 void
@@ -1026,7 +1026,7 @@ attempt_context_impl::wrap_query(const std::string& statement,
         return cb(std::make_exception_ptr(transaction_operation_failed(*ec, "before_query hook raised error")), {});
     }
     CB_ATTEMPT_CTX_LOG_TRACE(this, "http request: {}", dump_request(req));
-    overall_.cluster_ref()->execute(req, [this, cb = std::move(cb)](core::operations::query_response resp) mutable {
+    overall_.cluster_ref().execute(req, [this, cb = std::move(cb)](core::operations::query_response resp) mutable {
         CB_ATTEMPT_CTX_LOG_TRACE(this, "response: {} status: {}", resp.ctx.http_body, resp.meta.status);
         if (auto ec = hooks_.after_query(this, resp.ctx.statement)) {
             auto err = std::make_exception_ptr(transaction_operation_failed(*ec, "after_query hook raised error"));
@@ -1397,7 +1397,7 @@ attempt_context_impl::atr_commit(bool ambiguity_resolution_mode)
             auto barrier = std::make_shared<std::promise<result>>();
             auto f = barrier->get_future();
             CB_ATTEMPT_CTX_LOG_TRACE(this, "updating atr {}, setting to {}", req.id, attempt_state_name(attempt_state::COMMITTED));
-            overall_.cluster_ref()->execute(
+            overall_.cluster_ref().execute(
               req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
             auto res = wrap_operation_future(f, false);
             ec = hooks_.after_atr_commit(this);
@@ -1499,7 +1499,7 @@ attempt_context_impl::atr_commit_ambiguity_resolution()
         wrap_request(req, overall_.config());
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
-        overall_.cluster_ref()->execute(
+        overall_.cluster_ref().execute(
           req, [barrier](core::operations::lookup_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
         auto res = wrap_operation_future(f);
         auto atr_status_raw = res.values[0].content_as<std::string>();
@@ -1560,7 +1560,7 @@ attempt_context_impl::atr_complete()
         wrap_durable_request(req, overall_.config());
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
-        overall_.cluster_ref()->execute(
+        overall_.cluster_ref().execute(
           req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
         wrap_operation_future(f);
         ec = hooks_.after_atr_complete(this);
@@ -1660,7 +1660,7 @@ attempt_context_impl::atr_abort()
         wrap_durable_request(req, overall_.config());
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
-        overall_.cluster_ref()->execute(
+        overall_.cluster_ref().execute(
           req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
         wrap_operation_future(f);
         state(attempt_state::ABORTED);
@@ -1718,7 +1718,7 @@ attempt_context_impl::atr_rollback_complete()
         wrap_durable_request(req, overall_.config());
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
-        overall_.cluster_ref()->execute(
+        overall_.cluster_ref().execute(
           req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
         wrap_operation_future(f);
         state(attempt_state::ROLLED_BACK);
@@ -1966,7 +1966,7 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id, std::u
             req.store_semantics = couchbase::store_semantics::upsert;
 
             wrap_durable_request(req, overall_.config());
-            overall_.cluster_ref()->execute(
+            overall_.cluster_ref().execute(
               req, [this, fn = std::forward<Handler>(fn), error_handler](core::operations::mutate_in_response resp) mutable {
                   auto ec = error_class_from_response(resp);
                   if (!ec) {
@@ -2178,7 +2178,7 @@ attempt_context_impl::get_doc(
     req.access_deleted = true;
     wrap_request(req, overall_.config());
     try {
-        overall_.cluster_ref()->execute(req, [this, id, cb = std::move(cb)](core::operations::lookup_in_response resp) {
+        overall_.cluster_ref().execute(req, [this, id, cb = std::move(cb)](core::operations::lookup_in_response resp) {
             auto ec = error_class_from_response(resp);
             if (ec) {
                 CB_ATTEMPT_CTX_LOG_TRACE(this, "get_doc got error {} : {}", resp.ctx.ec().message(), *ec);
@@ -2369,7 +2369,7 @@ attempt_context_impl::create_staged_insert(const core::document_id& id,
     req.cas = couchbase::cas(cas);
     req.store_semantics = cas == 0 ? couchbase::store_semantics::insert : couchbase::store_semantics::replace;
     wrap_durable_request(req, overall_.config());
-    overall_.cluster_ref()->execute(
+    overall_.cluster_ref().execute(
       req,
       [this, id, content, cas, op_id, cb = std::forward<Handler>(cb), delay = std::forward<Delay>(delay)](
         core::operations::mutate_in_response resp) mutable {

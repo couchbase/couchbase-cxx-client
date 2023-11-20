@@ -15,12 +15,14 @@
  */
 
 #include "staged_mutation.hxx"
+
 #include "attempt_context_impl.hxx"
 #include "core/cluster.hxx"
 
 #include "internal/transaction_fields.hxx"
 #include "internal/utils.hxx"
 #include "result.hxx"
+#include "result_fmt.hxx"
 
 #include <asio/bind_executor.hpp>
 #include <asio/post.hpp>
@@ -124,16 +126,16 @@ staged_mutation_queue::extract_to(const std::string& prefix, core::operations::m
 void
 staged_mutation_queue::remove_any(const core::document_id& id)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     auto new_end =
-      std::remove_if(queue_.begin(), queue_.end(), [id](const staged_mutation& item) { return document_ids_equal(item.id(), id); });
+      std::remove_if(queue_.begin(), queue_.end(), [&id](const staged_mutation& item) { return document_ids_equal(item.id(), id); });
     queue_.erase(new_end, queue_.end());
 }
 
 staged_mutation*
 staged_mutation_queue::find_any(const core::document_id& id)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     for (auto& item : queue_) {
         if (document_ids_equal(item.doc().id(), id)) {
             return &item;
@@ -209,7 +211,7 @@ staged_mutation_queue::commit(attempt_context_impl* ctx)
         auto future = barrier->get_future();
 
         try {
-            auto timer = std::make_shared<asio::steady_timer>(ctx->cluster_ref()->io_context());
+            auto timer = std::make_shared<asio::steady_timer>(ctx->cluster_ref().io_context());
             async_constant_delay delay(timer);
 
             switch (item.type()) {
@@ -292,7 +294,7 @@ staged_mutation_queue::rollback(attempt_context_impl* ctx)
         auto future = barrier->get_future();
 
         try {
-            auto timer = std::make_shared<asio::steady_timer>(ctx->cluster_ref()->io_context());
+            auto timer = std::make_shared<asio::steady_timer>(ctx->cluster_ref().io_context());
             async_exp_delay delay(timer);
 
             switch (item.type()) {
@@ -360,7 +362,7 @@ staged_mutation_queue::rollback_insert(attempt_context_impl* ctx,
 {
     CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rolling back staged insert for {} with cas {}", item.doc().id(), item.doc().cas().value());
 
-    asio::post(asio::bind_executor(ctx->cluster_ref()->io_context(), [this, callback = std::move(callback), ctx, &item, delay]() mutable {
+    asio::post(asio::bind_executor(ctx->cluster_ref().io_context(), [this, callback = std::move(callback), ctx, &item, delay]() mutable {
         try {
             auto ec = ctx->error_if_expired_and_not_in_overtime(STAGE_DELETE_INSERTED, item.doc().id().key());
             if (ec) {
@@ -379,7 +381,7 @@ staged_mutation_queue::rollback_insert(attempt_context_impl* ctx,
             req.access_deleted = true;
             req.cas = item.doc().cas();
             wrap_durable_request(req, ctx->overall().config());
-            return ctx->cluster_ref()->execute(
+            return ctx->cluster_ref().execute(
               req, [this, callback = std::move(callback), ctx, &item, delay](const core::operations::mutate_in_response& resp) mutable {
                   CB_ATTEMPT_CTX_LOG_TRACE(ctx, "mutate_in for {} with cas {}", item.doc().id(), item.doc().cas().value());
 
@@ -407,7 +409,7 @@ staged_mutation_queue::rollback_remove_or_replace(attempt_context_impl* ctx,
 {
     CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rolling back staged remove/replace for {} with cas {}", item.doc().id(), item.doc().cas().value());
 
-    asio::post(asio::bind_executor(ctx->cluster_ref()->io_context(), [this, callback = std::move(callback), ctx, &item, delay]() mutable {
+    asio::post(asio::bind_executor(ctx->cluster_ref().io_context(), [this, callback = std::move(callback), ctx, &item, delay]() mutable {
         try {
             auto ec = ctx->error_if_expired_and_not_in_overtime(STAGE_ROLLBACK_DOC, item.doc().id().key());
             if (ec) {
@@ -425,7 +427,7 @@ staged_mutation_queue::rollback_remove_or_replace(attempt_context_impl* ctx,
                 .specs();
             req.cas = item.doc().cas();
             wrap_durable_request(req, ctx->overall().config());
-            return ctx->cluster_ref()->execute(
+            return ctx->cluster_ref().execute(
               req, [this, callback = std::move(callback), ctx, &item, delay](const core::operations::mutate_in_response& resp) mutable {
                   auto res = result::create_from_subdoc_response(resp);
                   try {
@@ -455,7 +457,7 @@ staged_mutation_queue::commit_doc(attempt_context_impl* ctx,
       ctx, "commit doc {}, cas_zero_mode {}, ambiguity_resolution_mode {}", item.doc().id(), cas_zero_mode, ambiguity_resolution_mode);
 
     asio::post(asio::bind_executor(
-      ctx->cluster_ref()->io_context(),
+      ctx->cluster_ref().io_context(),
       [this, callback = std::move(callback), ctx, &item, delay, cas_zero_mode, ambiguity_resolution_mode]() mutable {
           try {
               ctx->check_expiry_during_commit_or_rollback(STAGE_COMMIT_DOC, std::optional<const std::string>(item.doc().id().key()));
@@ -472,7 +474,7 @@ staged_mutation_queue::commit_doc(attempt_context_impl* ctx,
                   core::operations::insert_request req{ item.doc().id(), item.content() };
                   req.flags = couchbase::codec::codec_flags::json_common_flags;
                   wrap_durable_request(req, ctx->overall().config());
-                  return ctx->cluster_ref()->execute(
+                  return ctx->cluster_ref().execute(
                     req,
                     [this, callback = std::move(callback), ctx, &item, delay, ambiguity_resolution_mode, cas_zero_mode](
                       const core::operations::insert_response& resp) mutable {
@@ -498,7 +500,7 @@ staged_mutation_queue::commit_doc(attempt_context_impl* ctx,
                   req.store_semantics = couchbase::store_semantics::replace;
                   req.cas = couchbase::cas(cas_zero_mode ? 0 : item.doc().cas().value());
                   wrap_durable_request(req, ctx->overall().config());
-                  return ctx->cluster_ref()->execute(
+                  return ctx->cluster_ref().execute(
                     req,
                     [this, callback = std::move(callback), ctx, &item, delay, ambiguity_resolution_mode, cas_zero_mode](
                       const core::operations::mutate_in_response resp) mutable {
@@ -527,7 +529,7 @@ staged_mutation_queue::remove_doc(attempt_context_impl* ctx,
 {
     CB_ATTEMPT_CTX_LOG_TRACE(ctx, "remove doc {}", item.doc().id());
 
-    asio::post(asio::bind_executor(ctx->cluster_ref()->io_context(), [this, callback = std::move(callback), ctx, &item, delay]() mutable {
+    asio::post(asio::bind_executor(ctx->cluster_ref().io_context(), [this, callback = std::move(callback), ctx, &item, delay]() mutable {
         try {
             ctx->check_expiry_during_commit_or_rollback(STAGE_REMOVE_DOC, std::optional<const std::string>(item.doc().id().key()));
             auto ec = ctx->hooks_.before_doc_removed(ctx, item.doc().id().key());
@@ -536,7 +538,7 @@ staged_mutation_queue::remove_doc(attempt_context_impl* ctx,
             }
             core::operations::remove_request req{ item.doc().id() };
             wrap_durable_request(req, ctx->overall().config());
-            return ctx->cluster_ref()->execute(
+            return ctx->cluster_ref().execute(
               req, [this, callback = std::move(callback), ctx, &item, delay](core::operations::remove_response resp) mutable {
                   auto res = result::create_from_mutation_response(resp);
                   try {

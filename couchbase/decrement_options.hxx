@@ -140,27 +140,4 @@ struct decrement_options : public common_durability_options<decrement_options> {
  * @uncommitted
  */
 using decrement_handler = std::function<void(couchbase::key_value_error_context, counter_result)>;
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core
-{
-class cluster;
-namespace impl
-{
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_decrement_operation(std::shared_ptr<couchbase::core::cluster> core,
-                             std::string bucket_name,
-                             std::string scope_name,
-                             std::string collection_name,
-                             std::string document_key,
-                             decrement_options::built options,
-                             decrement_handler&& handler);
-#endif
-} // namespace impl
-} // namespace core
 } // namespace couchbase

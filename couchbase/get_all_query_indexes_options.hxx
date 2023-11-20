@@ -55,8 +55,6 @@ class get_all_query_indexes_options : public common_options<get_all_query_indexe
     {
         return { build_common_options() };
     }
-
-  private:
 };
 
 /**
@@ -66,6 +64,5 @@ class get_all_query_indexes_options : public common_options<get_all_query_indexe
  * @uncommitted
  */
 
-using get_all_query_indexes_handler =
-  std::function<void(couchbase::manager_error_context, std::vector<couchbase::management::query::index>)>;
+using get_all_query_indexes_handler = std::function<void(couchbase::manager_error_context, std::vector<management::query_index>)>;
 } // namespace couchbase

@@ -34,32 +34,30 @@ struct with_legacy_durability : public mutation_request {
     template<typename Core, typename Handler>
     void execute(Core core, Handler handler)
     {
-        using mutation_response = typename mutation_request::response_type;
-        core->template execute<mutation_request>(*this,
-                                                 [core,
-                                                  id = mutation_request::id,
-                                                  timeout = mutation_request::timeout,
-                                                  persist_to = persist_to,
-                                                  replicate_to = replicate_to,
-                                                  handler = std::forward<Handler>(handler)](mutation_response&& resp) mutable {
-                                                     if (resp.ctx.ec()) {
-                                                         return handler(std::move(resp));
-                                                     }
+        core.execute(*static_cast<mutation_request*>(this),
+                     [core,
+                      id = mutation_request::id,
+                      timeout = mutation_request::timeout,
+                      persist_to_ = persist_to,
+                      replicate_to_ = replicate_to,
+                      handler = std::forward<Handler>(handler)](auto&& resp) mutable {
+                         if (resp.ctx.ec()) {
+                             return handler(std::move(resp));
+                         }
 
-                                                     initiate_observe_poll(
-                                                       core,
-                                                       id,
-                                                       resp.token,
-                                                       timeout,
-                                                       persist_to,
-                                                       replicate_to,
-                                                       [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
-                                                           if (ec) {
-                                                               resp.ctx.override_ec(ec);
-                                                           }
-                                                           return handler(std::move(resp));
-                                                       });
-                                                 });
+                         initiate_observe_poll(core,
+                                               id,
+                                               resp.token,
+                                               timeout,
+                                               persist_to_,
+                                               replicate_to_,
+                                               [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
+                                                   if (ec) {
+                                                       resp.ctx.override_ec(ec);
+                                                   }
+                                                   return handler(std::move(resp));
+                                               });
+                     });
     }
 };
 } // namespace couchbase::core::impl

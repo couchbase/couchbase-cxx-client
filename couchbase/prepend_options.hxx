@@ -97,28 +97,4 @@ struct prepend_options : public common_durability_options<prepend_options> {
  * @uncommitted
  */
 using prepend_handler = std::function<void(couchbase::key_value_error_context, mutation_result)>;
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core
-{
-class cluster;
-namespace impl
-{
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_prepend_operation(std::shared_ptr<couchbase::core::cluster> core,
-                           std::string bucket_name,
-                           std::string scope_name,
-                           std::string collection_name,
-                           std::string document_key,
-                           std::vector<std::byte> data,
-                           prepend_options::built options,
-                           prepend_handler&& handler);
-#endif
-} // namespace impl
-} // namespace core
 } // namespace couchbase

@@ -17,15 +17,19 @@
 
 #pragma once
 
-#include "core/utils/connection_string.hxx"
-
-#include <fmt/core.h>
+#include "cluster_options.hxx"
 
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace couchbase::core
 {
+namespace utils
+{
+struct connection_string;
+} // namespace utils
+
 struct cluster_credentials {
     std::string username{};
     std::string password{};
@@ -33,10 +37,7 @@ struct cluster_credentials {
     std::string key_path{};
     std::optional<std::vector<std::string>> allowed_sasl_mechanisms{};
 
-    [[nodiscard]] bool uses_certificate() const
-    {
-        return !certificate_path.empty();
-    }
+    [[nodiscard]] bool uses_certificate() const;
 };
 
 struct origin {
@@ -44,146 +45,35 @@ struct origin {
     using node_list = std::vector<node_entry>;
 
     origin() = default;
-
     ~origin() = default;
 
     origin(origin&& other) = default;
-
-    origin(const origin& other)
-      : options_(other.options_)
-      , credentials_(other.credentials_)
-      , nodes_(other.nodes_)
-      , next_node_(nodes_.begin())
-    {
-    }
-
-    origin(cluster_credentials auth, const std::string& hostname, std::uint16_t port, cluster_options options)
-      : options_(std::move(options))
-      , credentials_(std::move(auth))
-      , nodes_{ { hostname, std::to_string(port) } }
-      , next_node_(nodes_.begin())
-    {
-    }
-
-    origin(cluster_credentials auth, const std::string& hostname, const std::string& port, cluster_options options)
-      : options_(std::move(options))
-      , credentials_(std::move(auth))
-      , nodes_{ { hostname, port } }
-      , next_node_(nodes_.begin())
-    {
-    }
-
-    origin(cluster_credentials auth, const utils::connection_string& connstr)
-      : options_(connstr.options)
-      , credentials_(std::move(auth))
-    {
-        nodes_.reserve(connstr.bootstrap_nodes.size());
-        for (const auto& node : connstr.bootstrap_nodes) {
-            nodes_.emplace_back(node.address, node.port > 0 ? std::to_string(node.port) : std::to_string(connstr.default_port));
-        }
-        next_node_ = nodes_.begin();
-    }
-
+    origin(const origin& other);
+    origin(cluster_credentials auth, const std::string& hostname, std::uint16_t port, cluster_options options);
+    origin(cluster_credentials auth, const std::string& hostname, const std::string& port, cluster_options options);
+    origin(cluster_credentials auth, const utils::connection_string& connstr);
     origin& operator=(origin&& other) = default;
+    origin& operator=(const origin& other);
 
-    origin& operator=(const origin& other)
-    {
-        if (this != &other) {
-            options_ = other.options_;
-            credentials_ = other.credentials_;
-            nodes_ = other.nodes_;
-            next_node_ = nodes_.begin();
-            exhausted_ = false;
-        }
-        return *this;
-    }
+    [[nodiscard]] const std::string& username() const;
+    [[nodiscard]] const std::string& password() const;
+    [[nodiscard]] const std::string& certificate_path() const;
+    [[nodiscard]] const std::string& key_path() const;
 
-    [[nodiscard]] const std::string& username() const
-    {
-        return credentials_.username;
-    }
+    [[nodiscard]] std::vector<std::string> get_hostnames() const;
+    [[nodiscard]] std::vector<std::string> get_nodes() const;
 
-    [[nodiscard]] const std::string& password() const
-    {
-        return credentials_.password;
-    }
+    void set_nodes(node_list nodes);
 
-    [[nodiscard]] const std::string& certificate_path() const
-    {
-        return credentials_.certificate_path;
-    }
+    [[nodiscard]] std::pair<std::string, std::string> next_address();
 
-    [[nodiscard]] const std::string& key_path() const
-    {
-        return credentials_.key_path;
-    }
+    [[nodiscard]] bool exhausted() const;
 
-    [[nodiscard]] std::vector<std::string> get_hostnames() const
-    {
-        std::vector<std::string> res;
-        res.reserve(nodes_.size());
-        for (const auto& [hostname, _] : nodes_) {
-            res.emplace_back(hostname);
-        }
-        return res;
-    }
+    void restart();
 
-    [[nodiscard]] std::vector<std::string> get_nodes() const
-    {
-        std::vector<std::string> res;
-        res.reserve(nodes_.size());
-        for (const auto& [hostname, port] : nodes_) {
-            res.emplace_back(fmt::format("\"{}:{}\"", hostname, port));
-        }
-        return res;
-    }
-
-    void set_nodes(node_list nodes)
-    {
-        nodes_ = std::move(nodes);
-        next_node_ = nodes_.begin();
-        exhausted_ = false;
-    }
-
-    [[nodiscard]] std::pair<std::string, std::string> next_address()
-    {
-        if (exhausted_) {
-            restart();
-        }
-
-        auto address = *next_node_;
-        if (++next_node_ == nodes_.end()) {
-            exhausted_ = true;
-        }
-        return address;
-    }
-
-    [[nodiscard]] bool exhausted() const
-    {
-        return exhausted_;
-    }
-
-    void restart()
-    {
-        exhausted_ = false;
-        next_node_ = nodes_.begin();
-    }
-
-    [[nodiscard]] const couchbase::core::cluster_options& options() const
-    {
-        return options_;
-    }
-
-    [[nodiscard]] couchbase::core::cluster_options& options()
-    {
-        return options_;
-    }
-
-    [[nodiscard]] const couchbase::core::cluster_credentials& credentials() const
-    {
-        return credentials_;
-    }
-
+    [[nodiscard]] const couchbase::core::cluster_options& options() const;
+    [[nodiscard]] couchbase::core::cluster_options& options();
+    [[nodiscard]] const couchbase::core::cluster_credentials& credentials() const;
     [[nodiscard]] auto to_json() const -> std::string;
 
   private:

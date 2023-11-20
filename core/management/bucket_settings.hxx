@@ -116,7 +116,7 @@ struct bucket_settings {
     bucket_eviction_policy eviction_policy{ bucket_eviction_policy::unknown };
     bucket_conflict_resolution conflict_resolution_type{ bucket_conflict_resolution::unknown };
     std::optional<bool> history_retention_collection_default{};
-    std::optional<std::uint32_t> history_retention_bytes;
+    std::optional<std::uint32_t> history_retention_bytes{};
     std::optional<std::uint32_t> history_retention_duration{};
 
     /**

@@ -19,6 +19,8 @@
 
 #include "core/document_id.hxx"
 
+#include <tao/json/forward.hpp>
+
 #include <cstdint>
 #include <string>
 
@@ -26,6 +28,8 @@ namespace couchbase::core::transactions
 {
 struct doc_record {
   public:
+    static doc_record create_from(const tao::json::value& obj);
+
     doc_record(std::string bucket_name, std::string scope_name, std::string collection_name, std::string id)
       : id_(std::move(bucket_name), std::move(scope_name), std::move(collection_name), std::move(id))
     {
@@ -51,15 +55,6 @@ struct doc_record {
         return id_;
     }
 
-    static doc_record create_from(const tao::json::value& obj)
-    {
-        std::string bucket_name = obj.at(ATR_FIELD_PER_DOC_BUCKET).get_string();
-        std::string scope_name = obj.at(ATR_FIELD_PER_DOC_SCOPE).get_string();
-        std::string collection_name = obj.at(ATR_FIELD_PER_DOC_COLLECTION).get_string();
-        std::string id = obj.at(ATR_FIELD_PER_DOC_ID).get_string();
-        return doc_record(bucket_name, scope_name, collection_name, id);
-    }
-
     template<typename OStream>
     friend OStream& operator<<(OStream& os, const doc_record& dr)
     {
@@ -76,24 +71,3 @@ struct doc_record {
     core::document_id id_;
 };
 } // namespace couchbase::core::transactions
-
-template<>
-struct fmt::formatter<couchbase::core::transactions::doc_record> {
-  public:
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
-
-    template<typename FormatContext>
-    constexpr auto format(const couchbase::core::transactions::doc_record& r, FormatContext& ctx) const
-    {
-        return format_to(ctx.out(),
-                         "doc_record:{{ bucket: {}, scope: {}, collection: {}, key: {} }}",
-                         r.document_id().bucket(),
-                         r.document_id().scope(),
-                         r.document_id().collection(),
-                         r.document_id().key());
-    }
-};

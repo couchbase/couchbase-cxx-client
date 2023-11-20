@@ -72,7 +72,7 @@ class transaction_context
         attempts_.back().state = s;
     }
 
-    [[nodiscard]] std::shared_ptr<core::cluster> cluster_ref()
+    [[nodiscard]] const core::cluster& cluster_ref() const
     {
         return transactions_.cluster_ref();
     }

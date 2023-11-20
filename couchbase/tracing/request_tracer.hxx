@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "request_span.hxx"
+#include <couchbase/tracing/request_span.hxx>
 
 #include <memory>
 #include <string>

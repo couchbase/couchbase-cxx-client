@@ -33,7 +33,10 @@
 
 #include <asio/ip/address.hpp>
 
+#include <filesystem>
+#include <fstream>
 #include <mutex>
+#include <utility>
 
 namespace couchbase::core::io::dns
 {
@@ -157,5 +160,30 @@ dns_config::system_config()
     });
 
     return instance;
+}
+
+dns_config::dns_config(std::string nameserver, std::uint16_t port, std::chrono::milliseconds timeout)
+  : nameserver_{ std::move(nameserver) }
+  , port_{ port }
+  , timeout_{ timeout }
+{
+}
+
+std::uint16_t
+dns_config::port() const
+{
+    return port_;
+}
+
+const std::string&
+dns_config::nameserver() const
+{
+    return nameserver_;
+}
+
+std::chrono::milliseconds
+dns_config::timeout() const
+{
+    return timeout_;
 }
 } // namespace couchbase::core::io::dns

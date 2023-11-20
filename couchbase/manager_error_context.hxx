@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include "core/impl/internal_manager_error_context.hxx"
 #include <couchbase/error_context.hxx>
 
 #include <cstdint>

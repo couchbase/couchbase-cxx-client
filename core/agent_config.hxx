@@ -30,7 +30,7 @@ class retry_strategy;
 namespace couchbase::core
 {
 struct agent_config {
-    core_sdk_shim shim{}; // TODO: remove once refactoring will be finished.
+    core_sdk_shim shim; // TODO: remove once refactoring will be finished.
 
     std::string bucket_name{};
     std::string user_agent{};

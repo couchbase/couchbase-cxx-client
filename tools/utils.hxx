@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/cluster_options.hxx>
+#include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/codec/transcoder_traits.hxx>
 
 #include <core/utils/duration_parser.hxx>

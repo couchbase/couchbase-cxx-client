@@ -17,13 +17,28 @@
 
 #include "test_helper_integration.hxx"
 
-#include <catch2/generators/catch_generators.hpp>
-
+#include "core/operations/document_analytics.hxx"
+#include "core/operations/document_append.hxx"
+#include "core/operations/document_decrement.hxx"
+#include "core/operations/document_get.hxx"
+#include "core/operations/document_increment.hxx"
+#include "core/operations/document_insert.hxx"
+#include "core/operations/document_lookup_in.hxx"
+#include "core/operations/document_mutate_in.hxx"
+#include "core/operations/document_prepend.hxx"
+#include "core/operations/document_query.hxx"
+#include "core/operations/document_remove.hxx"
+#include "core/operations/document_replace.hxx"
+#include "core/operations/document_search.hxx"
+#include "core/operations/document_upsert.hxx"
+#include "core/operations/document_view.hxx"
 #include "core/platform/uuid.h"
 
 #include <couchbase/lookup_in_specs.hxx>
 #include <couchbase/mutate_in_specs.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
+
+#include <catch2/generators/catch_generators.hpp>
 
 class test_span : public couchbase::tracing::request_span
 {

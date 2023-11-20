@@ -27,6 +27,7 @@
 #include <couchbase/fmt/analytics_scan_consistency.hxx>
 #include <couchbase/fmt/durability_level.hxx>
 #include <couchbase/fmt/query_scan_consistency.hxx>
+#include <couchbase/scope.hxx>
 
 #include <fmt/chrono.h>
 #include <spdlog/details/os.h>

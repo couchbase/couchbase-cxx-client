@@ -96,28 +96,4 @@ struct append_options : public common_durability_options<append_options> {
  * @uncommitted
  */
 using append_handler = std::function<void(couchbase::key_value_error_context, mutation_result)>;
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core
-{
-class cluster;
-namespace impl
-{
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_append_operation(std::shared_ptr<couchbase::core::cluster> core,
-                          std::string bucket_name,
-                          std::string scope_name,
-                          std::string collection_name,
-                          std::string document_key,
-                          std::vector<std::byte> data,
-                          append_options::built options,
-                          append_handler&& handler);
-#endif
-} // namespace impl
-} // namespace core
 } // namespace couchbase

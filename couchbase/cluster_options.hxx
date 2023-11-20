@@ -25,6 +25,7 @@
 #include <couchbase/metrics_options.hxx>
 #include <couchbase/network_options.hxx>
 #include <couchbase/password_authenticator.hxx>
+#include <couchbase/retry_strategy.hxx>
 #include <couchbase/security_options.hxx>
 #include <couchbase/timeout_options.hxx>
 #include <couchbase/tracing_options.hxx>
@@ -312,31 +313,4 @@ class cluster;
  * @uncommitted
  */
 using cluster_connect_handler = std::function<void(cluster, std::error_code)>;
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core
-{
-class cluster;
-}
-
-namespace core::impl
-{
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_cluster_connect(asio::io_context& io,
-                         const std::string& connection_string,
-                         const couchbase::cluster_options& options,
-                         cluster_connect_handler&& handler);
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_cluster_close(std::shared_ptr<couchbase::core::cluster> core);
-#endif
-} // namespace core::impl
 } // namespace couchbase

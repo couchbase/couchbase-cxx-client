@@ -16,13 +16,18 @@
 
 #pragma once
 
+#include <couchbase/durability_level.hxx>
 #include <couchbase/query_scan_consistency.hxx>
 #include <couchbase/transactions/transactions_config.hxx>
 
 #include <chrono>
 #include <optional>
 
-namespace couchbase::transactions
+namespace couchbase
+{
+class collection;
+
+namespace transactions
 {
 /**
  * The transaction_options can be passed in to override some elements of the global @ref transactions_config.
@@ -40,11 +45,8 @@ class transaction_options
      * @param level Durability level for this transaction.
      * @return reference to this object, convenient for chaining operations.
      */
-    transaction_options& durability_level(durability_level level)
-    {
-        durability_ = level;
-        return *this;
-    }
+    transaction_options& durability_level(durability_level level);
+
     /**
      * Get the durability if it has been set.
      *
@@ -52,10 +54,8 @@ class transaction_options
      *
      * @return durability if set.
      */
-    std::optional<couchbase::durability_level> durability_level()
-    {
-        return durability_;
-    }
+    [[nodiscard]] std::optional<couchbase::durability_level> durability_level() const;
+
     /**
      * Set the @ref query_scan_consistency for this transaction.
      *
@@ -64,11 +64,8 @@ class transaction_options
      * @param scan_consistency The desired @ref query_scan_consistency for this transaction.
      * @return reference to this object, convenient for chaining operations.
      */
-    transaction_options& scan_consistency(query_scan_consistency scan_consistency)
-    {
-        scan_consistency_ = scan_consistency;
-        return *this;
-    }
+    transaction_options& scan_consistency(query_scan_consistency scan_consistency);
+
     /**
      * Get the scan_consistency if it has been set.
      *
@@ -76,31 +73,22 @@ class transaction_options
      *
      * @return The scan_consistency, if set.
      */
-    std::optional<query_scan_consistency> scan_consistency()
-    {
-        return scan_consistency_;
-    }
+    [[nodiscard]] std::optional<query_scan_consistency> scan_consistency() const;
+
     /**
      * Set the timeout for key-value operations for this transaction.
      *
      * @param kv_timeout Desired key-value timeout.
      * @return reference to this object, convenient for chaining operations.
      */
-    transaction_options& kv_timeout(std::chrono::milliseconds kv_timeout)
-    {
-        kv_timeout_ = kv_timeout;
-        return *this;
-    }
+    transaction_options& kv_timeout(std::chrono::milliseconds kv_timeout);
 
     /**
      * Get the key-value timeout if it has been set.
      *
      * @return The key-value timeout, if set.
      */
-    std::optional<std::chrono::milliseconds> kv_timeout()
-    {
-        return kv_timeout_;
-    }
+    std::optional<std::chrono::milliseconds> kv_timeout();
 
     /**
      * Set the expiration time for this transaction.
@@ -121,10 +109,7 @@ class transaction_options
      *
      * @return the expiration time, if set.
      */
-    std::optional<std::chrono::nanoseconds> expiration_time()
-    {
-        return expiration_time_;
-    }
+    std::optional<std::chrono::nanoseconds> expiration_time();
 
     /**
      * Set the metadata collection to use for this transaction
@@ -136,11 +121,8 @@ class transaction_options
      * @param coll The desired collection to use.
      * @return reference to this object, convenient for chaining operations.
      */
-    transaction_options& metadata_collection(const couchbase::collection& coll)
-    {
-        metadata_collection_.emplace(coll.bucket_name(), coll.scope_name(), coll.name());
-        return *this;
-    }
+    transaction_options& metadata_collection(const couchbase::collection& coll);
+
     /**
      * Set metadata collection to use for this transaction
      *
@@ -157,19 +139,11 @@ class transaction_options
      *
      * @return the metadata collection, as a @ref transaction_keyspace, if set.
      */
-    std::optional<transaction_keyspace> metadata_collection()
-    {
-        return metadata_collection_;
-    }
+    [[nodiscard]] std::optional<transaction_keyspace> metadata_collection() const;
 
     /** @private */
     transaction_options& test_factories(std::shared_ptr<core::transactions::attempt_context_testing_hooks> hooks,
-                                        std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks)
-    {
-        attempt_context_hooks_ = hooks;
-        cleanup_hooks_ = cleanup_hooks;
-        return *this;
-    }
+                                        std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks);
     /** @private */
     [[nodiscard]] transactions_config::built apply(const transactions_config::built& conf) const;
 
@@ -182,5 +156,5 @@ class transaction_options
     std::shared_ptr<core::transactions::attempt_context_testing_hooks> attempt_context_hooks_;
     std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks_;
 };
-
-} // namespace couchbase::transactions
+} // namespace transactions
+} // namespace couchbase

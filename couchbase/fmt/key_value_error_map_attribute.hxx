@@ -88,6 +88,12 @@ struct fmt::formatter<couchbase::key_value_error_map_attribute> {
             case couchbase::key_value_error_map_attribute::rate_limit:
                 name = "rate-limit";
                 break;
+            case couchbase::key_value_error_map_attribute::system_constraint:
+                name = "system-constraint";
+                break;
+            case couchbase::key_value_error_map_attribute::no_retry:
+                name = "no-retry";
+                break;
         }
         return format_to(ctx.out(), "{}", name);
     }

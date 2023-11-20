@@ -19,7 +19,12 @@
 #include <couchbase/transactions/transaction_query_options.hxx>
 #include <couchbase/transactions/transaction_query_result.hxx>
 
-namespace couchbase::transactions
+namespace couchbase
+{
+class collection;
+class scope;
+
+namespace transactions
 {
 /**
  * The attempt_context is used for all synchronous transaction operations
@@ -108,10 +113,7 @@ class attempt_context
      * @return The result of the operation, with is an @ref transaction_op_error_context and a @ref transaction_query_result.
      */
     std::pair<transaction_op_error_context, transaction_query_result> query(const std::string& statement,
-                                                                            const transaction_query_options& options = {})
-    {
-        return do_public_query(statement, options, {});
-    }
+                                                                            const transaction_query_options& options = {});
 
     /**
      * Perform a scoped query.
@@ -123,10 +125,7 @@ class attempt_context
      */
     std::pair<transaction_op_error_context, transaction_query_result> query(const scope& scope,
                                                                             const std::string& statement,
-                                                                            const transaction_query_options& opts = {})
-    {
-        return do_public_query(statement, opts, fmt::format("{}.{}", scope.bucket_name(), scope.name()));
-    }
+                                                                            const transaction_query_options& opts = {});
 
     virtual ~attempt_context() = default;
 
@@ -143,4 +142,5 @@ class attempt_context
                                                                                               const transaction_query_options& options,
                                                                                               std::optional<std::string> query_context) = 0;
 };
-} // namespace couchbase::transactions
+} // namespace transactions
+} // namespace couchbase

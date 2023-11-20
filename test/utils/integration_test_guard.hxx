@@ -116,7 +116,7 @@ class integration_test_guard
     test_context ctx;
     asio::io_context io;
     std::vector<std::thread> io_threads;
-    std::shared_ptr<couchbase::core::cluster> cluster;
+    couchbase::core::cluster cluster;
     couchbase::core::origin origin;
 
     std::map<std::string, couchbase::core::operations::management::bucket_describe_response::bucket_info, std::less<>> info{};

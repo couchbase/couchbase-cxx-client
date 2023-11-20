@@ -90,7 +90,7 @@ query_index_get_all_request::make_response(couchbase::core::error_context::http&
             return response;
         }
         for (const auto& entry : payload.at("results").get_array()) {
-            couchbase::management::query::index index;
+            couchbase::management::query_index index;
             index.type = entry.at("using").get_string();
             index.name = entry.at("name").get_string();
             index.state = entry.at("state").get_string();

@@ -43,4 +43,3 @@
 #include "core/operations/document_upsert.hxx"
 #include "core/operations/document_view.hxx"
 #include "core/operations/http_noop.hxx"
-#include "core/operations/mcbp_noop.hxx"

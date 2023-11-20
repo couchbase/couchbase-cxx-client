@@ -17,11 +17,13 @@
 #pragma once
 
 #include "atr_entry.hxx"
+#include "core/document_id_fmt.hxx"
 #include "core/transactions/transaction_get_result.hxx"
 #include "logging.hxx"
 
-#include <chrono>
 #include <fmt/format.h>
+
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <optional>

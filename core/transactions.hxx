@@ -25,6 +25,7 @@
 #include "transactions/attempt_context.hxx"
 #include "transactions/exceptions.hxx"
 
+#include "core/cluster.hxx"
 #include "core/logger/logger.hxx"
 
 #include <spdlog/common.h>
@@ -134,8 +135,8 @@ class transactions : public couchbase::transactions::transactions
      * @param cluster The cluster to use for the transactions.
      * @param config The configuration parameters to use for the transactions.
      */
-    transactions(std::shared_ptr<core::cluster> cluster, const couchbase::transactions::transactions_config::built& config);
-    transactions(std::shared_ptr<core::cluster> cluster, const couchbase::transactions::transactions_config& config);
+    transactions(core::cluster cluster, const couchbase::transactions::transactions_config::built& config);
+    transactions(core::cluster cluster, const couchbase::transactions::transactions_config& config);
 
     /**
      * @brief Destructor
@@ -239,13 +240,13 @@ class transactions : public couchbase::transactions::transactions
      *
      * @return Ref to the cluster used by this transaction object.
      */
-    [[nodiscard]] std::shared_ptr<core::cluster> cluster_ref()
+    [[nodiscard]] core::cluster& cluster_ref()
     {
         return cluster_;
     }
 
   private:
-    std::shared_ptr<core::cluster> cluster_;
+    core::cluster cluster_;
     couchbase::transactions::transactions_config::built config_;
     std::unique_ptr<transactions_cleanup> cleanup_;
     const std::size_t max_attempts_{ 1000 };

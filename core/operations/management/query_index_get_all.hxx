@@ -30,7 +30,7 @@ namespace couchbase::core::operations::management
 struct query_index_get_all_response {
     error_context::http ctx;
     std::string status{};
-    std::vector<couchbase::management::query::index> indexes{};
+    std::vector<couchbase::management::query_index> indexes{};
 };
 
 struct query_index_get_all_request {

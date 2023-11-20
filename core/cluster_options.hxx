@@ -21,14 +21,12 @@
 #include "core/io/ip_protocol.hxx"
 #include "core/metrics/logging_meter_options.hxx"
 #include "core/tracing/threshold_logging_options.hxx"
-#include "core/transactions/attempt_context_testing_hooks.hxx"
-#include "core/transactions/cleanup_testing_hooks.hxx"
 #include "service_type.hxx"
 #include "timeout_defaults.hxx"
 #include "tls_verify_mode.hxx"
 
-#include <couchbase/best_effort_retry_strategy.hxx>
 #include <couchbase/metrics/meter.hxx>
+#include <couchbase/retry_strategy.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
 #include <couchbase/transactions/transactions_config.hxx>
 
@@ -38,6 +36,12 @@
 namespace couchbase::core
 {
 struct cluster_options {
+  public:
+    cluster_options();
+
+    void apply_profile(std::string_view profile_name);
+    [[nodiscard]] std::chrono::milliseconds default_timeout_for(service_type type) const;
+
     std::chrono::milliseconds bootstrap_timeout = timeout_defaults::bootstrap_timeout;
     std::chrono::milliseconds resolve_timeout = timeout_defaults::resolve_timeout;
     std::chrono::milliseconds connect_timeout = timeout_defaults::connect_timeout;
@@ -71,7 +75,7 @@ struct cluster_options {
     tls_verify_mode tls_verify{ tls_verify_mode::peer };
     std::shared_ptr<couchbase::tracing::request_tracer> tracer{ nullptr };
     std::shared_ptr<couchbase::metrics::meter> meter{ nullptr };
-    std::shared_ptr<retry_strategy> default_retry_strategy_{ make_best_effort_retry_strategy() };
+    std::shared_ptr<retry_strategy> default_retry_strategy_;
 
     std::chrono::milliseconds tcp_keep_alive_interval = timeout_defaults::tcp_keep_alive_interval;
     std::chrono::milliseconds config_poll_interval = timeout_defaults::config_poll_interval;
@@ -83,11 +87,8 @@ struct cluster_options {
     std::string user_agent_extra{};
     couchbase::transactions::transactions_config::built transactions{};
 
-    [[nodiscard]] std::chrono::milliseconds default_timeout_for(service_type type) const;
-
     bool dump_configuration{ false };
     bool disable_mozilla_ca_certificates{ false };
-    void apply_profile(std::string profile_name);
 };
 
 } // namespace couchbase::core

@@ -23,21 +23,21 @@
 #include <couchbase/drop_primary_query_index_options.hxx>
 #include <couchbase/drop_query_index_options.hxx>
 #include <couchbase/get_all_query_indexes_options.hxx>
+#include <couchbase/management/query_index.hxx>
 #include <couchbase/watch_query_indexes_options.hxx>
 
 #include <future>
 #include <memory>
 
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace couchbase::core
-{
-class cluster;
-} // namespace couchbase::core
-#endif
-
 namespace couchbase
 {
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+namespace core
+{
 class cluster;
+} // namespace core
+class query_index_manager_impl;
+#endif
 
 /**
  * The Query Index Manager interface contains the means for managing indexes used for queries.
@@ -63,8 +63,19 @@ class query_index_manager
                          const get_all_query_indexes_options& options,
                          get_all_query_indexes_handler&& handler) const;
 
+    /**
+     * Get all indexes within a bucket.
+     *
+     *
+     * @param bucket_name specifies the bucket in which we look for the indexes
+     * @param options optional parameters
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
     [[nodiscard]] auto get_all_indexes(std::string bucket_name, const get_all_query_indexes_options& options) const
-      -> std::future<std::pair<manager_error_context, std::vector<couchbase::management::query::index>>>;
+      -> std::future<std::pair<manager_error_context, std::vector<management::query_index>>>;
 
     /**
      * Create an index on a bucket.
@@ -84,6 +95,18 @@ class query_index_manager
                       const create_query_index_options& options,
                       create_query_index_handler&& handler) const;
 
+    /**
+     * Create an index on a bucket.
+     *
+     * @param bucket_name specifies the bucket in which to create the index
+     * @param index_name name of the index
+     * @param fields the fields to create the index over
+     * @param options optional parameters
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
     [[nodiscard]] auto create_index(std::string bucket_name,
                                     std::string index_name,
                                     std::vector<std::string> fields,
@@ -101,10 +124,21 @@ class query_index_manager
      */
     void create_primary_index(std::string bucket_name,
                               const create_primary_query_index_options& options,
-                              create_query_index_handler&& handler);
+                              create_query_index_handler&& handler) const;
 
-    [[nodiscard]] auto create_primary_index(std::string bucket_name, const create_primary_query_index_options& options)
+    /**
+     * Create a primary index on a bucket.
+     *
+     * @param bucket_name specifies the bucket in which to create the index
+     * @param options optional parameters
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto create_primary_index(std::string bucket_name, const create_primary_query_index_options& options) const
       -> std::future<manager_error_context>;
+
     /**
      * Drop primary index on a bucket.
      *
@@ -115,12 +149,25 @@ class query_index_manager
      * @since 1.0.0
      * @committed
      */
-    void drop_primary_index(std::string bucket_name, const drop_primary_query_index_options& options, drop_query_index_handler&& handler);
+    void drop_primary_index(std::string bucket_name,
+                            const drop_primary_query_index_options& options,
+                            drop_query_index_handler&& handler) const;
 
-    [[nodiscard]] auto drop_primary_index(std::string bucket_name, const drop_primary_query_index_options& options)
+    /**
+     * Drop primary index on a bucket.
+     *
+     * @param bucket_name name of the bucket in which to drop the primary index
+     * @param options optional parameters
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto drop_primary_index(std::string bucket_name, const drop_primary_query_index_options& options) const
       -> std::future<manager_error_context>;
 
     /**
+     * Drop specified query index.
      *
      * @param bucket_name name of the bucket in which to drop the index
      * @param index_name name of the index to drop
@@ -133,10 +180,22 @@ class query_index_manager
     void drop_index(std::string bucket_name,
                     std::string index_name,
                     const drop_query_index_options& options,
-                    drop_query_index_handler&& handler);
+                    drop_query_index_handler&& handler) const;
 
-    [[nodiscard]] auto drop_index(std::string bucket_name, std::string index_name, const drop_query_index_options& options)
+    /**
+     * Drop specified query index.
+     *
+     * @param bucket_name name of the bucket in which to drop the index
+     * @param index_name name of the index to drop
+     * @param options optional parameters
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto drop_index(std::string bucket_name, std::string index_name, const drop_query_index_options& options) const
       -> std::future<manager_error_context>;
+
     /**
      * Builds all currently deferred indexes.
      *
@@ -153,6 +212,18 @@ class query_index_manager
                                 const build_query_index_options& options,
                                 build_deferred_query_indexes_handler&& handler) const;
 
+    /**
+     * Builds all currently deferred indexes.
+     *
+     * By default, this method will build the indexes on the bucket.
+     *
+     * @param bucket_name name of the bucket
+     * @param options the custom options
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
     [[nodiscard]] auto build_deferred_indexes(std::string bucket_name, const build_query_index_options& options) const
       -> std::future<manager_error_context>;
 
@@ -170,20 +241,28 @@ class query_index_manager
     void watch_indexes(std::string bucket_name,
                        std::vector<std::string> index_names,
                        const watch_query_indexes_options& options,
-                       watch_query_indexes_handler&& handler);
+                       watch_query_indexes_handler&& handler) const;
 
+    /**
+     * Polls the state of a set of indexes, until they all are online.
+     *
+     * @param bucket_name name of the bucket in which to look for the indexes
+     * @param index_names names of the indexes to watch
+     * @param options optional parameters
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
     [[nodiscard]] auto watch_indexes(std::string bucket_name,
                                      std::vector<std::string> index_names,
-                                     const watch_query_indexes_options& options) -> std::future<manager_error_context>;
+                                     const watch_query_indexes_options& options) const -> std::future<manager_error_context>;
 
   private:
     friend class cluster;
 
-    explicit query_index_manager(std::shared_ptr<couchbase::core::cluster> core)
-      : core_(std::move(core))
-    {
-    }
+    explicit query_index_manager(core::cluster core);
 
-    std::shared_ptr<couchbase::core::cluster> core_;
+    std::shared_ptr<query_index_manager_impl> impl_;
 };
 } // namespace couchbase

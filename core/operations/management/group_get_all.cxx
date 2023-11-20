@@ -27,7 +27,7 @@ std::error_code
 group_get_all_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
     encoded.method = "GET";
-    encoded.path = fmt::format("/settings/rbac/groups");
+    encoded.path = "/settings/rbac/groups";
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";
     return {};
 }

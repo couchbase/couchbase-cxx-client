@@ -15,10 +15,21 @@
  *   limitations under the License.
  */
 
+#include "test_helper_integration.hxx"
+
+#include "core/operations/document_analytics.hxx"
+#include "core/operations/document_append.hxx"
+#include "core/operations/document_decrement.hxx"
+#include "core/operations/document_increment.hxx"
+#include "core/operations/document_insert.hxx"
+#include "core/operations/document_mutate_in.hxx"
+#include "core/operations/document_prepend.hxx"
+#include "core/operations/document_remove.hxx"
+#include "core/operations/document_replace.hxx"
+#include "core/operations/document_upsert.hxx"
 #include "core/operations/management/analytics.hxx"
 #include "core/operations/management/collection_create.hxx"
 #include "core/operations/management/collections.hxx"
-#include "test_helper_integration.hxx"
 
 TEST_CASE("integration: analytics query")
 {

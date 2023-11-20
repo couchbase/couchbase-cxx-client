@@ -37,7 +37,7 @@ class active_transaction_record
   public:
     // TODO: we should get the kv_timeout and put it in the request (pass in the transactions_config)
     template<typename Callback>
-    static void get_atr(std::shared_ptr<core::cluster> cluster, const core::document_id& atr_id, Callback&& cb)
+    static void get_atr(const core::cluster& cluster, const core::document_id& atr_id, Callback&& cb)
     {
         core::operations::lookup_in_request req{ atr_id };
         req.specs =
@@ -46,7 +46,7 @@ class active_transaction_record
               lookup_in_specs::get(subdoc::lookup_in_macro::vbucket).xattr(),
           }
             .specs();
-        cluster->execute(req, [atr_id, cb = std::move(cb)](core::operations::lookup_in_response resp) mutable {
+        cluster.execute(req, [atr_id, cb = std::move(cb)](core::operations::lookup_in_response resp) mutable {
             try {
                 if (resp.ctx.ec() == couchbase::errc::key_value::document_not_found) {
                     // that's ok, just return an empty one.
@@ -69,7 +69,7 @@ class active_transaction_record
         });
     }
 
-    static std::optional<active_transaction_record> get_atr(std::shared_ptr<core::cluster> cluster, const core::document_id& atr_id)
+    static std::optional<active_transaction_record> get_atr(const core::cluster& cluster, const core::document_id& atr_id)
     {
         auto barrier = std::promise<std::optional<active_transaction_record>>();
         auto f = barrier.get_future();
@@ -82,7 +82,7 @@ class active_transaction_record
         return f.get();
     }
 
-    active_transaction_record(const core::document_id& id, uint64_t, std::vector<atr_entry> entries)
+    active_transaction_record(core::document_id id, uint64_t, std::vector<atr_entry> entries)
       : id_(std::move(id))
       , entries_(std::move(entries))
     {
@@ -140,41 +140,7 @@ class active_transaction_record
         return records;
     }
 
-    static inline active_transaction_record map_to_atr(const core::operations::lookup_in_response& resp)
-    {
-        std::vector<atr_entry> entries;
-        if (resp.fields[0].status == key_value_status_code::success) {
-            auto attempts = core::utils::json::parse_binary(resp.fields[0].value);
-            auto vbucket = core::utils::json::parse_binary(resp.fields[1].value);
-            auto now_ns = now_ns_from_vbucket(vbucket);
-            entries.reserve(attempts.get_object().size());
-            for (const auto& [key, val] : attempts.get_object()) {
-                std::optional<tao::json::value> forward_compat;
-                if (const auto* compat = val.find(ATR_FIELD_FORWARD_COMPAT); compat != nullptr) {
-                    forward_compat = *compat;
-                }
-                std::optional<uint32_t> expires_after_msec = std::max(val.optional<int32_t>(ATR_FIELD_EXPIRES_AFTER_MSECS).value_or(0), 0);
-                entries.emplace_back(resp.ctx.bucket(),
-                                     resp.ctx.id(),
-                                     key,
-                                     attempt_state_value(val.at(ATR_FIELD_STATUS).get_string()),
-                                     parse_mutation_cas(val.optional<std::string>(ATR_FIELD_START_TIMESTAMP).value_or("")),
-                                     parse_mutation_cas(val.optional<std::string>(ATR_FIELD_START_COMMIT).value_or("")),
-                                     parse_mutation_cas(val.optional<std::string>(ATR_FIELD_TIMESTAMP_COMPLETE).value_or("")),
-                                     parse_mutation_cas(val.optional<std::string>(ATR_FIELD_TIMESTAMP_ROLLBACK_START).value_or("")),
-                                     parse_mutation_cas(val.optional<std::string>(ATR_FIELD_TIMESTAMP_ROLLBACK_COMPLETE).value_or("")),
-                                     expires_after_msec,
-                                     process_document_ids(val, ATR_FIELD_DOCS_INSERTED),
-                                     process_document_ids(val, ATR_FIELD_DOCS_REPLACED),
-                                     process_document_ids(val, ATR_FIELD_DOCS_REMOVED),
-                                     forward_compat,
-                                     now_ns,
-                                     val.optional<std::string>(ATR_FIELD_DURABILITY_LEVEL));
-            }
-        }
-        return active_transaction_record(
-          { resp.ctx.bucket(), resp.ctx.scope(), resp.ctx.collection(), resp.ctx.id() }, resp.cas.value(), std::move(entries));
-    }
+    static active_transaction_record map_to_atr(const core::operations::lookup_in_response& resp);
 };
 
 } // namespace couchbase::core::transactions

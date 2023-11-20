@@ -26,7 +26,7 @@
 namespace test::utils
 {
 struct test_context {
-    std::string connection_string{ "couchbase://127.0.0.1" };
+    std::string connection_string{ "couchbase://localhost" };
     std::string username{ "Administrator" };
     std::string password{ "password" };
     std::string certificate_path{};
@@ -40,18 +40,7 @@ struct test_context {
     std::size_t number_of_io_threads{ 1 };
     std::string other_bucket{ "secBucket" };
 
-    [[nodiscard]] couchbase::core::cluster_credentials build_auth() const
-    {
-        couchbase::core::cluster_credentials auth{};
-        if (certificate_path.empty()) {
-            auth.username = username;
-            auth.password = password;
-        } else {
-            auth.certificate_path = certificate_path;
-            auth.key_path = key_path;
-        }
-        return auth;
-    }
+    [[nodiscard]] couchbase::core::cluster_credentials build_auth() const;
 
     static test_context load_from_environment();
 };

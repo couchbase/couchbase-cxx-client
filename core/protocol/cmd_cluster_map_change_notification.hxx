@@ -31,9 +31,9 @@ class cluster_map_change_notification_request_body
     static const inline server_opcode opcode = server_opcode::cluster_map_change_notification;
 
   private:
-    std::uint32_t protocol_revision_;
-    std::string bucket_;
-    std::optional<topology::configuration> config_;
+    std::uint32_t protocol_revision_{};
+    std::string bucket_{};
+    std::optional<topology::configuration> config_{};
 
   public:
     [[nodiscard]] std::uint32_t protocol_revision() const

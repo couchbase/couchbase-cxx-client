@@ -19,13 +19,15 @@
 #include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
+#include <fmt/core.h>
+
 namespace couchbase::core::operations::management
 {
 std::error_code
 change_password_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
     encoded.method = "POST";
-    encoded.path = fmt::format("/controller/changePassword");
+    encoded.path = "/controller/changePassword";
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";
     encoded.body = fmt::format("password={}", utils::string_codec::form_encode(newPassword));
 

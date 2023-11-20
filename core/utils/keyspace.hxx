@@ -26,11 +26,11 @@ template<typename Request>
 static bool
 check_query_management_request(const Request& req)
 {
-    // if there is a query_context, then bucket, scope should not be specified, but collection should be.
-    // collection should be.
+    // if there is a query_context, then bucket and scope will be ignored
     if (req.query_ctx.has_value()) {
-        return !req.collection_name.empty() && req.bucket_name.empty() && req.scope_name.empty();
+        return true;
     }
+
     // otherwise, both scope and collection must be specified, if one is
     // and bucket _must_ be there as well.
     return !req.bucket_name.empty() &&

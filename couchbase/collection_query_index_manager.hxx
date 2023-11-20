@@ -29,13 +29,14 @@
 #include <memory>
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace couchbase::core
+namespace couchbase
+{
+namespace core
 {
 class cluster;
-
-class query_context;
-
-} // namespace couchbase::core
+} // namespace core
+class query_index_manager_impl;
+} // namespace couchbase
 #endif
 
 namespace couchbase
@@ -64,7 +65,7 @@ class collection_query_index_manager
     void get_all_indexes(const get_all_query_indexes_options& options, get_all_query_indexes_handler&& handler) const;
 
     [[nodiscard]] auto get_all_indexes(const get_all_query_indexes_options& options) const
-      -> std::future<std::pair<manager_error_context, std::vector<couchbase::management::query::index>>>;
+      -> std::future<std::pair<manager_error_context, std::vector<couchbase::management::query_index>>>;
     /**
      * Create an index on the collection.
      *
@@ -96,7 +97,8 @@ class collection_query_index_manager
      */
     void create_primary_index(const create_primary_query_index_options& options, create_query_index_handler&& handler) const;
 
-    [[nodiscard]] auto create_primary_index(const create_primary_query_index_options& options) -> std::future<manager_error_context>;
+    [[nodiscard]] auto create_primary_index(const create_primary_query_index_options& options) const -> std::future<manager_error_context>;
+
     /**
      * Drop primary index on a collection.
      *
@@ -122,7 +124,8 @@ class collection_query_index_manager
      */
     void drop_index(std::string index_name, const drop_query_index_options& options, drop_query_index_handler&& handler) const;
 
-    [[nodiscard]] auto drop_index(std::string index_name, const drop_query_index_options& options) -> std::future<manager_error_context>;
+    [[nodiscard]] auto drop_index(std::string index_name, const drop_query_index_options& options) const
+      -> std::future<manager_error_context>;
     /**
      * Builds all currently deferred indexes in this collection.
      *
@@ -152,26 +155,20 @@ class collection_query_index_manager
                        const watch_query_indexes_options& options,
                        watch_query_indexes_handler&& handler) const;
 
-    [[nodiscard]] auto watch_indexes(std::vector<std::string> index_names, const watch_query_indexes_options& options)
+    [[nodiscard]] auto watch_indexes(std::vector<std::string> index_names, const watch_query_indexes_options& options) const
       -> std::future<manager_error_context>;
 
   private:
     friend class collection;
 
-    explicit collection_query_index_manager(std::shared_ptr<couchbase::core::cluster> core,
-                                            std::string bucket_name,
-                                            std::string scope_name,
-                                            std::string collection_name)
-      : core_(core)
-      , bucket_name_(std::move(bucket_name))
-      , scope_name_(std::move(scope_name))
-      , collection_name_(std::move(collection_name))
-    {
-    }
+    collection_query_index_manager(couchbase::core::cluster core,
+                                   std::string bucket_name,
+                                   std::string scope_name,
+                                   std::string collection_name);
 
-    std::shared_ptr<couchbase::core::cluster> core_;
-    std::string bucket_name_;
-    std::string scope_name_;
-    std::string collection_name_;
+    std::shared_ptr<query_index_manager_impl> impl_;
+    std::string bucket_name_{};
+    std::string scope_name_{};
+    std::string collection_name_{};
 };
 } // namespace couchbase

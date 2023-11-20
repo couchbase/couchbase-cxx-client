@@ -34,10 +34,10 @@ class observe_seqno_response_body
     static const inline client_opcode opcode = client_opcode::observe_seqno;
 
   private:
-    std::uint16_t partition_id_;
-    std::uint64_t partition_uuid_;
-    std::uint64_t last_persisted_sequence_number_;
-    std::uint64_t current_sequence_number_;
+    std::uint16_t partition_id_{};
+    std::uint64_t partition_uuid_{};
+    std::uint64_t last_persisted_sequence_number_{};
+    std::uint64_t current_sequence_number_{};
     std::optional<std::uint64_t> old_partition_uuid_{};
     std::optional<std::uint64_t> last_received_sequence_number_{};
 

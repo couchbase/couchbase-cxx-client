@@ -25,6 +25,8 @@
 #include "core/operations/management/user.hxx"
 #include "couchbase/cluster.hxx"
 
+#include <thread>
+
 namespace test::utils
 {
 template<class ConditionChecker>
@@ -56,25 +58,23 @@ wait_until(ConditionChecker&& condition_checker)
 }
 
 bool
-wait_until_bucket_healthy(std::shared_ptr<couchbase::core::cluster> cluster, const std::string& bucket_name);
+wait_until_bucket_healthy(const couchbase::core::cluster& cluster, const std::string& bucket_name);
 
 bool
-wait_until_collection_manifest_propagated(std::shared_ptr<couchbase::core::cluster> cluster,
+wait_until_collection_manifest_propagated(const couchbase::core::cluster& cluster,
                                           const std::string& bucket_name,
-                                          const std::uint64_t current_manifest_uid,
+                                          std::uint64_t current_manifest_uid,
                                           std::size_t successful_rounds = 4,
                                           std::chrono::seconds total_timeout = std::chrono::minutes{ 5 });
 bool
-wait_until_user_present(const std::shared_ptr<couchbase::core::cluster>& cluster, const std::string& username);
+wait_until_user_present(const couchbase::core::cluster& cluster, const std::string& username);
 
 bool
 wait_until_cluster_connected(const std::string& username, const std::string& password, const std::string& connection_string);
 
 bool
-wait_for_search_pindexes_ready(std::shared_ptr<couchbase::core::cluster> cluster,
-                               const std::string& bucket_name,
-                               const std::string& index_name);
+wait_for_search_pindexes_ready(const couchbase::core::cluster& cluster, const std::string& bucket_name, const std::string& index_name);
 
 bool
-wait_until_indexed(std::shared_ptr<couchbase::core::cluster> cluster, const std::string& index_name, std::uint64_t expected_count);
+wait_until_indexed(const couchbase::core::cluster& cluster, const std::string& index_name, std::uint64_t expected_count);
 } // namespace test::utils

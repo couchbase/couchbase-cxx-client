@@ -25,15 +25,17 @@
 
 #include <memory>
 
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace couchbase
+{
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+namespace core
 {
 class cluster;
-} // namespace couchbase
+} // namespace core
+class bucket;
+class scope_impl;
 #endif
 
-namespace couchbase
-{
 /**
  * The scope identifies a group of collections and allows high application density as a result.
  *
@@ -58,10 +60,7 @@ class scope
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto bucket_name() const -> const std::string&
-    {
-        return bucket_name_;
-    }
+    [[nodiscard]] auto bucket_name() const -> const std::string&;
 
     /**
      * Returns name of the scope.
@@ -71,10 +70,7 @@ class scope
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto name() const -> const std::string&
-    {
-        return name_;
-    }
+    [[nodiscard]] auto name() const -> const std::string&;
 
     /**
      * Opens a collection for this scope with an explicit name.
@@ -85,15 +81,10 @@ class scope
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto collection(std::string_view collection_name) const -> collection
-    {
-        return { core_, bucket_name_, name_, collection_name };
-    }
+    [[nodiscard]] auto collection(std::string_view collection_name) const -> collection;
 
     /**
      * Performs a query against the query (N1QL) services.
-     *
-     * @tparam Handler callable type that implements @ref query_handler signature
      *
      * @param statement the N1QL query statement.
      * @param options options to customize the query request.
@@ -105,15 +96,7 @@ class scope
      * @since 1.0.0
      * @committed
      */
-    template<typename Handler>
-    void query(std::string statement, const query_options& options, Handler&& handler) const
-    {
-        return core::impl::initiate_query_operation(core_,
-                                                    std::move(statement),
-                                                    fmt::format("default:`{}`.`{}`", bucket_name_, name_),
-                                                    options.build(),
-                                                    std::forward<Handler>(handler));
-    }
+    void query(std::string statement, const query_options& options, query_handler&& handler) const;
 
     /**
      * Performs a query against the query (N1QL) services.
@@ -126,15 +109,7 @@ class scope
      * @committed
      */
     [[nodiscard]] auto query(std::string statement, const query_options& options = {}) const
-      -> std::future<std::pair<query_error_context, query_result>>
-    {
-        auto barrier = std::make_shared<std::promise<std::pair<query_error_context, query_result>>>();
-        auto future = barrier->get_future();
-        query(std::move(statement), options, [barrier](auto ctx, auto result) {
-            barrier->set_value({ std::move(ctx), std::move(result) });
-        });
-        return future;
-    }
+      -> std::future<std::pair<query_error_context, query_result>>;
 
     /**
      * Performs a query against the full text search services.
@@ -208,15 +183,8 @@ class scope
   private:
     friend class bucket;
 
-    scope(std::shared_ptr<couchbase::core::cluster> core, std::string_view bucket_name, std::string_view name)
-      : core_(std::move(core))
-      , bucket_name_(bucket_name)
-      , name_(name)
-    {
-    }
+    scope(core::cluster core, std::string_view bucket_name, std::string_view name);
 
-    std::shared_ptr<couchbase::core::cluster> core_;
-    std::string bucket_name_;
-    std::string name_;
+    std::shared_ptr<scope_impl> impl_;
 };
 } // namespace couchbase

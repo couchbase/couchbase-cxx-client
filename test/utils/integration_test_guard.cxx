@@ -17,7 +17,9 @@
 
 #include "integration_test_guard.hxx"
 
+#include "core/logger/logger.hxx"
 #include "core/operations/management/freeform.hxx"
+#include "core/utils/connection_string.hxx"
 #include "core/utils/json.hxx"
 #include "logger.hxx"
 
@@ -72,7 +74,7 @@ build_origin(const test_context& ctx,
 integration_test_guard::integration_test_guard()
   : ctx(test_context::load_from_environment())
   , io(static_cast<int>(ctx.number_of_io_threads))
-  , cluster(couchbase::core::cluster::create(io))
+  , cluster(couchbase::core::cluster(io))
 {
     init_logger();
     auto connstr = couchbase::core::utils::parse_connection_string(ctx.connection_string);
@@ -92,7 +94,7 @@ integration_test_guard::integration_test_guard()
 integration_test_guard::integration_test_guard(const couchbase::core::cluster_options& opts)
   : ctx(test_context::load_from_environment())
   , io(static_cast<int>(ctx.number_of_io_threads))
-  , cluster(couchbase::core::cluster::create(io))
+  , cluster(couchbase::core::cluster(io))
 {
     init_logger();
     auto auth = ctx.build_auth();

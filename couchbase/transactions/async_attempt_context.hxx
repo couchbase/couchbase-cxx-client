@@ -15,12 +15,16 @@
  */
 #pragma once
 
-#include <couchbase/scope.hxx>
 #include <couchbase/transactions/transaction_get_result.hxx>
 #include <couchbase/transactions/transaction_query_options.hxx>
 #include <couchbase/transactions/transaction_query_result.hxx>
 
-namespace couchbase::transactions
+namespace couchbase
+{
+class collection;
+class scope;
+
+namespace transactions
 {
 using async_result_handler = std::function<void(transaction_op_error_context, transaction_get_result)>;
 using async_query_handler = std::function<void(transaction_op_error_context, transaction_query_result)>;
@@ -111,10 +115,8 @@ class async_attempt_context
      * @param opts Options for the query
      * @param handler Handler which implements @ref async_query_handler.
      */
-    void query(const scope& scope, std::string statement, transaction_query_options opts, async_query_handler&& handler)
-    {
-        return query(std::move(statement), std::move(opts), fmt::format("{}.{}", scope.bucket_name(), scope.name()), std::move(handler));
-    }
+    void query(const scope& scope, std::string statement, transaction_query_options opts, async_query_handler&& handler);
+
     /**
      * Perform a query.
      *
@@ -154,4 +156,5 @@ class async_attempt_context
                        std::optional<std::string> query_context,
                        async_query_handler&&) = 0;
 };
-} // namespace couchbase::transactions
+} // namespace transactions
+} // namespace couchbase

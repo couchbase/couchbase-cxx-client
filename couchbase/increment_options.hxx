@@ -140,27 +140,4 @@ struct increment_options : public common_durability_options<increment_options> {
  * @uncommitted
  */
 using increment_handler = std::function<void(couchbase::key_value_error_context, counter_result)>;
-
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace core
-{
-class cluster;
-namespace impl
-{
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_increment_operation(std::shared_ptr<couchbase::core::cluster> core,
-                             std::string bucket_name,
-                             std::string scope_name,
-                             std::string collection_name,
-                             std::string document_key,
-                             increment_options::built options,
-                             increment_handler&& handler);
-#endif
-} // namespace impl
-} // namespace core
 } // namespace couchbase

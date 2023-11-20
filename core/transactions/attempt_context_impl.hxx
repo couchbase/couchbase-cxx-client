@@ -331,7 +331,7 @@ class attempt_context_impl
         }
     }
 
-    std::shared_ptr<core::cluster> cluster_ref();
+    const core::cluster& cluster_ref() const;
 
   public:
     explicit attempt_context_impl(transaction_context& transaction_ctx);
@@ -627,7 +627,7 @@ class attempt_context_impl
             CB_LOG_DEBUG("ensure_open_bucket called with empty bucket_name");
             return handler(couchbase::errc::common::bucket_not_found);
         }
-        cluster_ref()->open_bucket(bucket_name, [handler = std::move(handler)](std::error_code ec) { handler(ec); });
+        cluster_ref().open_bucket(bucket_name, [handler = std::move(handler)](std::error_code ec) { handler(ec); });
     }
 };
 

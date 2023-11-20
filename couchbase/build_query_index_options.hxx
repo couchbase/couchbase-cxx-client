@@ -22,7 +22,6 @@
 #include <couchbase/manager_error_context.hxx>
 
 #include <functional>
-#include <memory>
 #include <optional>
 #include <string>
 

@@ -23,16 +23,16 @@
 
 #include <memory>
 
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace couchbase::core
-{
-class cluster;
-} // namespace couchbase::core
-#endif
-
 namespace couchbase
 {
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+namespace core
+{
 class cluster;
+} // namespace core
+class cluster;
+class bucket_impl;
+#endif
 
 /**
  * Provides access to Couchbase bucket
@@ -51,10 +51,7 @@ class bucket
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto default_scope() const -> scope
-    {
-        return { core_, name_, scope::default_name };
-    }
+    [[nodiscard]] auto default_scope() const -> scope;
 
     /**
      * Opens the default collection for this bucket using the default scope.
@@ -64,10 +61,7 @@ class bucket
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto default_collection() const -> collection
-    {
-        return { core_, name_, scope::default_name, collection::default_name };
-    }
+    [[nodiscard]] auto default_collection() const -> collection;
 
     /**
      * Opens the {@link scope} with the given name.
@@ -78,10 +72,7 @@ class bucket
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto scope(std::string_view scope_name) const -> scope
-    {
-        return { core_, name_, scope_name };
-    }
+    [[nodiscard]] auto scope(std::string_view scope_name) const -> scope;
 
     /**
      * Provides access to the collection management services.
@@ -91,21 +82,13 @@ class bucket
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto collections() const -> collection_manager
-    {
-        return collection_manager{ core_, name_ };
-    }
+    [[nodiscard]] auto collections() const -> collection_manager;
 
   private:
-    friend class cluster;
+    friend cluster;
 
-    bucket(std::shared_ptr<couchbase::core::cluster> core, std::string_view name)
-      : core_(std::move(core))
-      , name_(name)
-    {
-    }
+    bucket(core::cluster core, std::string_view name);
 
-    std::shared_ptr<couchbase::core::cluster> core_;
-    std::string name_;
+    std::shared_ptr<bucket_impl> impl_;
 };
 } // namespace couchbase

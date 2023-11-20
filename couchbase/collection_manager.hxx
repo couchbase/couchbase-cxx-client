@@ -29,10 +29,14 @@
 #include <memory>
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace couchbase::core
+namespace couchbase
+{
+namespace core
 {
 class cluster;
-} // namespace couchbase::core
+} // namespace core
+class collection_manager_impl;
+} // namespace couchbase
 #endif
 
 namespace couchbase
@@ -148,13 +152,8 @@ class collection_manager
   private:
     friend class bucket;
 
-    explicit collection_manager(std::shared_ptr<couchbase::core::cluster> core, std::string bucket_name)
-      : core_(std::move(core))
-      , bucket_name_(std::move(bucket_name))
-    {
-    }
+    collection_manager(core::cluster core, std::string_view bucket_name);
 
-    std::shared_ptr<couchbase::core::cluster> core_;
-    std::string bucket_name_;
+    std::shared_ptr<collection_manager_impl> impl_;
 };
 } // namespace couchbase

@@ -30,8 +30,8 @@ namespace management
 {
 struct query_index_build_deferred_response {
     struct query_problem {
-        std::uint64_t code;
-        std::string message;
+        std::uint64_t code{};
+        std::string message{};
     };
     error_context::http ctx;
     std::string status{};
