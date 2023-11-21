@@ -18,6 +18,7 @@
 #include "core/cluster.hxx"
 
 #include "analytics.hxx"
+#include "core/agent_group.hxx"
 #include "core/transactions.hxx"
 #include "core/utils/connection_string.hxx"
 #include "internal_search_error_context.hxx"
@@ -341,4 +342,21 @@ cluster::buckets() const -> bucket_manager
     return bucket_manager{ impl_->core() };
 }
 
+namespace core
+{
+auto
+get_core_cluster(couchbase::cluster public_api_cluster) -> core::cluster
+{
+    auto* impl_ptr = reinterpret_cast<std::shared_ptr<couchbase::cluster_impl>*>(&public_api_cluster);
+    return (*impl_ptr)->core();
+}
+
+auto
+make_agent_group(couchbase::cluster public_api_cluster) -> core::agent_group
+{
+    auto core_cluster = get_core_cluster(std::move(public_api_cluster));
+    return { core_cluster.io_context(), core::agent_group_config{ core::core_sdk_shim{ core_cluster } } };
+}
+
+} // namespace core
 } // namespace couchbase

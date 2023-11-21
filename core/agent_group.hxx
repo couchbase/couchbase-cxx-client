@@ -36,6 +36,11 @@ namespace asio
 class io_context;
 } // namespace asio
 
+namespace couchbase
+{
+class cluster;
+} // namespace couchbase
+
 namespace couchbase::core
 {
 class agent_group_impl;
@@ -76,4 +81,8 @@ class agent_group
   private:
     std::shared_ptr<agent_group_impl> impl_;
 };
+
+// FIXME: temporary solution for the core API migration. FIT performer needs to access core for KV range APIs
+auto
+make_agent_group(couchbase::cluster public_api_cluster) -> agent_group;
 } // namespace couchbase::core

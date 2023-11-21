@@ -803,6 +803,33 @@ TEST_CASE("integration: upsert is cancelled immediately if the cluster was close
     }
 }
 
+TEST_CASE("integration: extract core from public API cluster", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    auto public_api_cluster = couchbase::cluster(integration.cluster);
+
+    auto id = test::utils::uniq_id("counter");
+
+    {
+        auto collection = public_api_cluster.bucket(integration.ctx.bucket)
+                            .scope(couchbase::scope::default_name)
+                            .collection(couchbase::collection::default_name);
+
+        auto [ctx, resp] = collection.insert(id, basic_doc, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+    }
+
+    {
+        auto core_cluster = couchbase::core::get_core_cluster(public_api_cluster);
+        couchbase::core::operations::get_request req{ couchbase::core::document_id{ integration.ctx.bucket, "_default", "_default", id } };
+        auto resp = test::utils::execute(core_cluster, req);
+        REQUIRE(resp.value == basic_doc_json);
+    }
+}
+
 TEST_CASE("integration: pessimistic locking with public API", "[integration]")
 {
     test::utils::integration_test_guard integration;

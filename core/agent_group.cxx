@@ -215,5 +215,4 @@ agent_group::diagnostics(diagnostics_options options) -> tl::expected<diagnostic
 {
     return impl_->diagnostics(options);
 }
-
 } // namespace couchbase::core

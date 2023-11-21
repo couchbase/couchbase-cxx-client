@@ -73,3 +73,8 @@
 #define COUCHBASE_CXX_CLIENT_HAS_COLLECTION_QUERY_INDEX_MANAGEMENT 1
 
 #define COUCHBASE_CXX_CLIENT_TRANSACTIONS_EXT_PARALLEL_UNSTAGING
+
+/**
+ * core cluster implementation has been hidden and not accessible through the public API
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_CORE_CLUSTER_HIDDEN 1
