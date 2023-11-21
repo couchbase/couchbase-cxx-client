@@ -26,6 +26,11 @@
 #include <asio/io_context.hpp>
 #include <utility>
 
+namespace couchbase
+{
+class cluster;
+} // namespace couchbase
+
 namespace couchbase::core
 {
 class crud_component;
@@ -34,7 +39,7 @@ class cluster_impl;
 namespace mcbp
 {
 class queue_request;
-}
+} // namespace mcbp
 
 namespace o = operations;
 namespace om = operations::management;
@@ -209,4 +214,8 @@ class cluster
   private:
     std::shared_ptr<cluster_impl> impl_;
 };
+
+// FIXME: temporary solution for the core API migration. FIT performer needs to access core for KV range APIs
+auto
+get_core_cluster(couchbase::cluster public_api_cluster) -> core::cluster;
 } // namespace couchbase::core
