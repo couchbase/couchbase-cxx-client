@@ -129,8 +129,7 @@ struct network_options {
 
 struct transactions_options {
     std::string durability_level{};
-    std::chrono::milliseconds expiration_time{};
-    std::chrono::milliseconds key_value_timeout{};
+    std::chrono::milliseconds timeout{};
     std::string metadata_bucket{};
     std::string metadata_scope{};
     std::string metadata_collection{};

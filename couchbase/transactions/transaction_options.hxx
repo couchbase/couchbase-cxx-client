@@ -76,40 +76,25 @@ class transaction_options
     [[nodiscard]] std::optional<query_scan_consistency> scan_consistency() const;
 
     /**
-     * Set the timeout for key-value operations for this transaction.
+     * Set the timeout for this transaction.
      *
-     * @param kv_timeout Desired key-value timeout.
-     * @return reference to this object, convenient for chaining operations.
-     */
-    transaction_options& kv_timeout(std::chrono::milliseconds kv_timeout);
-
-    /**
-     * Get the key-value timeout if it has been set.
-     *
-     * @return The key-value timeout, if set.
-     */
-    std::optional<std::chrono::milliseconds> kv_timeout();
-
-    /**
-     * Set the expiration time for this transaction.
-     *
-     * @tparam T expiration time type, e.g. @ref std::chrono::milliseconds, or similar
-     * @param expiration_time Desired expiration time.
+     * @tparam T timeout type, e.g. @ref std::chrono::milliseconds, or similar
+     * @param timeout Desired timeout
      * @return reference to this object, convenient for chaining operations.
      */
     template<typename T>
-    transaction_options& expiration_time(T expiration_time)
+    transaction_options& timeout(T timeout)
     {
-        expiration_time_ = std::chrono::duration_cast<std::chrono::nanoseconds>(expiration_time);
+        timeout_ = std::chrono::duration_cast<std::chrono::nanoseconds>(timeout);
         return *this;
     }
 
     /**
-     * Get the expiration time, if set.
+     * Get the timeout, if set.
      *
-     * @return the expiration time, if set.
+     * @return the timeout, if set.
      */
-    std::optional<std::chrono::nanoseconds> expiration_time();
+    std::optional<std::chrono::nanoseconds> timeout();
 
     /**
      * Set the metadata collection to use for this transaction
@@ -150,8 +135,7 @@ class transaction_options
   private:
     std::optional<couchbase::durability_level> durability_;
     std::optional<couchbase::query_scan_consistency> scan_consistency_;
-    std::optional<std::chrono::milliseconds> kv_timeout_;
-    std::optional<std::chrono::nanoseconds> expiration_time_;
+    std::optional<std::chrono::nanoseconds> timeout_;
     std::optional<transaction_keyspace> metadata_collection_;
     std::shared_ptr<core::transactions::attempt_context_testing_hooks> attempt_context_hooks_;
     std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks_;

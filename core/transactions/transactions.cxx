@@ -77,7 +77,7 @@ wrap_run(transactions& txns, const couchbase::transactions::transaction_options&
     while (attempts++ < max_attempts) {
         // NOTE: new_attempt_context has the exponential backoff built in.  So, after
         // the first time it is called, it has a 1ms delay, then 2ms, etc... capped at 100ms
-        // until (for now) a timeout is reached (2x the expiration_time).   Soon, will build in
+        // until (for now) a timeout is reached (2x the timeout).   Soon, will build in
         // a max attempts instead.  In any case, the timeout occurs in the logic - adding
         // a max attempts or timeout is just in case a bug prevents timeout, etc...
         overall.new_attempt_context();

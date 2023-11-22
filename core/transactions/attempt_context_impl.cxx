@@ -340,8 +340,7 @@ attempt_context_impl::replace_raw(const transaction_get_result& document, const 
                             }
                             if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::INSERT) {
                                 CB_ATTEMPT_CTX_LOG_DEBUG(this, "found existing INSERT of {} while replacing", document);
-                                exp_delay delay(
-                                  std::chrono::milliseconds(5), std::chrono::milliseconds(300), overall_.config().expiration_time);
+                                exp_delay delay(std::chrono::milliseconds(5), std::chrono::milliseconds(300), overall_.config().timeout);
                                 create_staged_insert(document.id(), content, existing_sm->doc().cas().value(), delay, op_id, std::move(cb));
                                 return;
                             }
@@ -478,7 +477,7 @@ attempt_context_impl::insert_raw(const core::document_id& id, const std::vector<
                           return create_staged_replace(existing_sm->doc(), content, op_id, std::move(cb));
                       }
                       uint64_t cas = 0;
-                      exp_delay delay(std::chrono::milliseconds(5), std::chrono::milliseconds(300), overall_.config().expiration_time);
+                      exp_delay delay(std::chrono::milliseconds(5), std::chrono::milliseconds(300), overall_.config().timeout);
                       create_staged_insert(id, content, cas, delay, op_id, std::move(cb));
                   });
             } catch (const std::exception& e) {
@@ -764,8 +763,7 @@ attempt_context_impl::query_begin_work(std::optional<std::string> query_context,
     txdata["state"] = tao::json::empty_object;
     txdata["state"]["timeLeftMs"] = overall_.remaining().count() / 1000000;
     txdata["config"] = tao::json::empty_object;
-    txdata["config"]["kvTimeoutMs"] =
-      overall_.config().kv_timeout ? overall_.config().kv_timeout->count() : core::timeout_defaults::key_value_timeout.count();
+    txdata["config"]["kvTimeoutMs"] = core::timeout_defaults::key_value_durable_timeout.count();
     txdata["config"]["numAtrs"] = 1024;
     opts.raw("numatrs", jsonify(1024));
     txdata["config"]["durabilityLevel"] = durability_level_to_string(overall_.config().level);
@@ -1496,7 +1494,6 @@ attempt_context_impl::atr_commit_ambiguity_resolution()
         std::string prefix(ATR_FIELD_ATTEMPTS + "." + id() + ".");
         core::operations::lookup_in_request req{ atr_id_.value() };
         req.specs = lookup_in_specs{ lookup_in_specs::get(prefix + ATR_FIELD_STATUS).xattr() }.specs();
-        wrap_request(req, overall_.config());
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
         overall_.cluster_ref().execute(
@@ -1935,10 +1932,10 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id, std::u
             CB_ATTEMPT_CTX_LOG_DEBUG(this, "updating atr {}", atr_id_.value());
 
             std::chrono::nanoseconds remaining = overall_.remaining();
-            // This bounds the value to [0-expirationTime].  It should always be in this range, this is just to protect
+            // This bounds the value to [0-timeout].  It should always be in this range, this is just to protect
             // against the application clock changing.
-            long remaining_bounded_nanos = std::max(std::min(remaining.count(), overall_.config().expiration_time.count()),
-                                                    static_cast<std::chrono::nanoseconds::rep>(0));
+            long remaining_bounded_nanos =
+              std::max(std::min(remaining.count(), overall_.config().timeout.count()), static_cast<std::chrono::nanoseconds::rep>(0));
             long remaining_bounded_msecs = remaining_bounded_nanos / 1'000'000;
 
             core::operations::mutate_in_request req{ atr_id_.value() };
@@ -2176,7 +2173,6 @@ attempt_context_impl::get_doc(
       }
         .specs();
     req.access_deleted = true;
-    wrap_request(req, overall_.config());
     try {
         overall_.cluster_ref().execute(req, [this, id, cb = std::move(cb)](core::operations::lookup_in_response resp) {
             auto ec = error_class_from_response(resp);

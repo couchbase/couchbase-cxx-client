@@ -79,55 +79,28 @@ class transactions_config
     }
 
     /**
-     * @brief Set kv_timeout
-     *
-     * @see kv_timeout()
-     * @param duration An std::chrono::duration representing the desired default kv operation timeout.
-     * @return reference to this, so calls can be chained.
-     */
-    template<typename T>
-    transactions_config& kv_timeout(T duration)
-    {
-        kv_timeout_ = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
-        return *this;
-    }
-
-    /**
-     * @brief Get kv_timeout
-     *
-     * This is the default kv operation timeout used throughout the transactions.  Note all the operations
-     * have an options class which allows you to override this value for a particular operation, if desired.
-     *
-     * @return The default kv operation timeout.
-     */
-    [[nodiscard]] std::optional<std::chrono::milliseconds> kv_timeout() const
-    {
-        return kv_timeout_;
-    }
-
-    /**
-     * @brief Get expiration time for transactions
+     * @brief Get the timeout for transactions
      *
      * Transactions can conflict (or other operations on those documents), and may retry.
      * This is the maximum time a transaction can take, including any retries.  The transaction will throw
      * an @ref transaction_expired and rollback when this occurs.
      *
-     * @return expiration time for transactions.
+     * @return timeout for transactions.
      */
-    [[nodiscard]] std::chrono::nanoseconds expiration_time() const
+    [[nodiscard]] std::chrono::nanoseconds timeout() const
     {
-        return expiration_time_;
+        return timeout_;
     }
     /**
-     * @brief Set the expiration time for transactions.
+     * @brief Set the timeout for transactions.
      *
      * @param duration desired expiration for transactions.
      * @return reference to this, so calls can be chained.
      */
     template<typename T>
-    transactions_config& expiration_time(T duration)
+    transactions_config& timeout(T duration)
     {
-        expiration_time_ = std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
+        timeout_ = std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
         return *this;
     }
 
@@ -236,8 +209,7 @@ class transactions_config
     /** @private */
     struct built {
         couchbase::durability_level level;
-        std::chrono::nanoseconds expiration_time;
-        std::optional<std::chrono::milliseconds> kv_timeout;
+        std::chrono::nanoseconds timeout;
         std::shared_ptr<core::transactions::attempt_context_testing_hooks> attempt_context_hooks;
         std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks;
         std::optional<couchbase::transactions::transaction_keyspace> metadata_collection;
@@ -250,8 +222,7 @@ class transactions_config
 
   private:
     couchbase::durability_level level_{ couchbase::durability_level::majority };
-    std::chrono::nanoseconds expiration_time_{ std::chrono::seconds(15) };
-    std::optional<std::chrono::milliseconds> kv_timeout_;
+    std::chrono::nanoseconds timeout_{ std::chrono::seconds(15) };
     std::shared_ptr<core::transactions::attempt_context_testing_hooks> attempt_context_hooks_;
     std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks_;
     std::optional<couchbase::transactions::transaction_keyspace> metadata_collection_;

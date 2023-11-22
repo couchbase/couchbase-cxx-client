@@ -217,10 +217,8 @@ add_options(CLI::App* app, transactions_options& options)
     group->add_option("--transactions-durability-level", options.durability_level, "Durability level of the transaction.")
       ->default_val(fmt::format("{}", defaults.transactions.level))
       ->transform(CLI::IsMember(available_durability_levels));
-    group->add_option("--transactions-expiration-time", options.expiration_time, "Expiration time of the transaction.")
-      ->default_val(defaults.transactions.expiration_time)
-      ->type_name("DURATION");
-    group->add_option("--transactions-key-value-timeout", options.key_value_timeout, "Override Key/Value timeout just for the transaction.")
+    group->add_option("--transactions-timeout", options.timeout, "Timeout of the transaction.")
+      ->default_val(defaults.transactions.timeout)
       ->type_name("DURATION");
     group->add_option("--transactions-metadata-bucket", options.metadata_bucket, "Bucket name where transaction metadata is stored.");
     group->add_option("--transactions-metadata-scope", options.metadata_scope, "Scope name where transaction metadata is stored.")
@@ -424,10 +422,7 @@ apply_options(couchbase::cluster_options& options, const transactions_options& t
     } else if (!transactions.durability_level.empty()) {
         fail(fmt::format("unexpected value '{}' for --transactions-durability-level", transactions.durability_level));
     }
-    options.transactions().expiration_time(transactions.expiration_time);
-    if (transactions.key_value_timeout > std::chrono::milliseconds::zero()) {
-        options.transactions().kv_timeout(transactions.key_value_timeout);
-    }
+    options.transactions().timeout(transactions.timeout);
     if (!transactions.metadata_bucket.empty()) {
         options.transactions().metadata_collection(
           { transactions.metadata_bucket, transactions.metadata_scope, transactions.metadata_collection });
