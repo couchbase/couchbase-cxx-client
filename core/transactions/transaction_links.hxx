@@ -257,6 +257,7 @@ struct fmt::formatter<couchbase::core::transactions::transaction_links> {
                          r.atr_scope_name().value_or("none"),
                          r.atr_collection_name().value_or("none"),
                          r.atr_id().value_or("none"),
+                         r.staged_transaction_id().value_or("none"),
                          r.staged_attempt_id().value_or("none"),
                          r.staged_operation_id().value_or("none"),
                          r.crc32_of_staging().value_or("none"));

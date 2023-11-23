@@ -46,9 +46,10 @@ struct binary_header {
 };
 
 struct mcbp_message {
-    binary_header header;
-    std::vector<std::byte> body;
+    binary_header header{};
+    std::vector<std::byte> body{};
 
+    mcbp_message() = default;
     mcbp_message(const mcbp_message& other) = delete;
     mcbp_message& operator=(const mcbp_message& other) = delete;
     mcbp_message(mcbp_message&& other) = default;

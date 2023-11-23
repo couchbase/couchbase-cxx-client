@@ -154,12 +154,12 @@ struct connection_endpoints {
     connection_endpoints(asio::ip::tcp::endpoint remote_endpoint, asio::ip::tcp::endpoint local_endpoint)
       : remote{ std::move(remote_endpoint) }
       , remote_address{ remote.address().to_string() }
-      , remote_address_with_port{ fmt::format(remote.protocol() == asio::ip::tcp::v6() ? "[{}]:{}" : "{}:{}",
-                                              remote_address,
-                                              remote.port()) }
+      , remote_address_with_port{ remote.protocol() == asio::ip::tcp::v6() ? fmt::format("[{}]:{}", remote_address, remote.port())
+                                                                           : fmt::format("{}:{}", remote_address, remote.port()) }
       , local{ std::move(local_endpoint) }
       , local_address{ local.address().to_string() }
-      , local_address_with_port{ fmt::format(local.protocol() == asio::ip::tcp::v6() ? "[{}]:{}" : "{}:{}", local_address, local.port()) }
+      , local_address_with_port{ local.protocol() == asio::ip::tcp::v6() ? fmt::format("[{}]:{}", local_address, local.port())
+                                                                         : fmt::format("{}:{}", local_address, local.port()) }
     {
     }
 
@@ -261,7 +261,7 @@ class mcbp_session_impl
             CB_LOG_DEBUG("{} user_agent={}, requested_features=[{}]",
                          session_->log_prefix_,
                          user_agent,
-                         utils::join_strings_fmt("{}", hello_req.body().features(), ", "));
+                         utils::join_strings_fmt(hello_req.body().features(), ", "));
             session_->write(hello_req.data());
 
             if (!session_->origin_.credentials().uses_certificate()) {
@@ -349,7 +349,7 @@ class mcbp_session_impl
                                 session_->supported_features_ = resp.body().supported_features();
                                 CB_LOG_DEBUG("{} supported_features=[{}]",
                                              session_->log_prefix_,
-                                             utils::join_strings_fmt("{}", session_->supported_features_, ", "));
+                                             utils::join_strings_fmt(session_->supported_features_, ", "));
                                 if (session_->origin_.credentials().uses_certificate()) {
                                     CB_LOG_DEBUG("{} skip SASL authentication, because TLS certificate was specified",
                                                  session_->log_prefix_);
