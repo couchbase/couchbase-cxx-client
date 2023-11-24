@@ -107,12 +107,12 @@ map_search_index(const couchbase::management::search::index& index)
         }
     }
     if (index.source_params_json.has_value()) {
-        if (index.source_params_json.value() != "{}" || !index.source_params_json.value().empty()) {
+        if (index.source_params_json.value() != "{}" && !index.source_params_json.value().empty()) {
             search_index.source_params_json = index.source_params_json.value();
         }
     }
     if (index.plan_params_json.has_value()) {
-        if (index.plan_params_json.value() != "{}" || !index.plan_params_json->empty()) {
+        if (index.plan_params_json.value() != "{}" && !index.plan_params_json->empty()) {
             search_index.plan_params_json = index.plan_params_json.value();
         }
     }
