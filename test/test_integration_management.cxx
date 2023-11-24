@@ -3750,7 +3750,7 @@ TEST_CASE("integration: search index management analyze document", "[integration
         bool operation_completed = test::utils::wait_until([&integration, &index_name, &resp]() {
             couchbase::core::operations::management::search_index_analyze_document_request req{};
             req.index_name = index_name;
-            req.encoded_document = R"({ "name": hello world })";
+            req.encoded_document = R"({ "name": "hello world" })";
             resp = test::utils::execute(integration.cluster, req);
             return resp.ctx.ec != couchbase::errc::common::internal_server_failure;
         });
