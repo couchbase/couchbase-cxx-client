@@ -42,7 +42,6 @@ struct analyze_document_options : public common_options<analyze_document_options
 
 using analyze_document_handler = std::function<void(couchbase::manager_error_context, std::vector<std::string>)>;
 
-
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace core
 {
@@ -56,10 +55,10 @@ namespace impl
  */
 void
 initiate_analyze_document_operation(std::shared_ptr<couchbase::core::cluster> core,
-                             std::string index_name,
-                             std::string document,
-                             analyze_document_options::built options,
-                             analyze_document_handler&& handler);
+                                    std::string index_name,
+                                    std::string document,
+                                    analyze_document_options::built options,
+                                    analyze_document_handler&& handler);
 #endif
 } // namespace impl
 } // namespace core
