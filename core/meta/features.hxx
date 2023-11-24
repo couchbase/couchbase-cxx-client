@@ -78,3 +78,9 @@
  * core cluster implementation has been hidden and not accessible through the public API
  */
 #define COUCHBASE_CXX_CLIENT_HAS_CORE_CLUSTER_HIDDEN 1
+
+/**
+ * Search index management is accessible from the public API
+ * couchbase::cluster::search_indexes() support
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_PUBLIC_SEARCH_INDEX_MANAGEMENT 1
