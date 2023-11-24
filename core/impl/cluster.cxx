@@ -342,6 +342,12 @@ cluster::buckets() const -> bucket_manager
     return bucket_manager{ impl_->core() };
 }
 
+auto
+cluster::search_indexes() const -> search_index_manager
+{
+    return search_index_manager{ impl_->core() };
+}
+
 namespace core
 {
 auto
