@@ -261,7 +261,7 @@ class search_index_manager
         auto decoded = std::string{ reinterpret_cast<const char*>(encoded.data.data()), encoded.data.size() };
 
         return analyze_document(std::move(index_name), decoded, options);
-    };
+    }
 
     /**
      * Allows to see how a document is analyzed against a specific index.
