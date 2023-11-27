@@ -169,6 +169,7 @@ set(couchbase_cxx_client_FILES
     core/impl/search.cxx
     core/impl/search_error_category.cxx
     core/impl/search_error_context.cxx
+    core/impl/search_index_manager.cxx
     core/impl/search_meta_data.cxx
     core/impl/search_result.cxx
     core/impl/search_row.cxx
