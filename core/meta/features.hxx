@@ -84,7 +84,7 @@
  * kv_timeout removed from transactions_options and transactions_config
  */
 #define COUCHBASE_CXX_CLIENT_TRANSACTIONS_OPTIONS_HAVE_TIMEOUT 1
- 
+
 /**
  * Search index management is accessible from the public API
  * couchbase::cluster::search_indexes() support
