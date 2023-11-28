@@ -325,6 +325,12 @@ cluster::query_indexes() const -> query_index_manager
 }
 
 auto
+cluster::analytics_indexes() const -> analytics_index_manager
+{
+    return analytics_index_manager{ impl_->core() };
+}
+
+auto
 cluster::bucket(std::string_view bucket_name) const -> couchbase::bucket
 {
     return { impl_->core(), bucket_name };
