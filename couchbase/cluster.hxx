@@ -23,6 +23,7 @@
 #include <couchbase/cluster_options.hxx>
 #include <couchbase/query_index_manager.hxx>
 #include <couchbase/query_options.hxx>
+#include <couchbase/search_index_manager.hxx>
 #include <couchbase/search_options.hxx>
 #include <couchbase/search_query.hxx>
 #include <couchbase/transactions.hxx>
@@ -224,6 +225,16 @@ class cluster
      * @committed
      */
     [[nodiscard]] auto buckets() const -> bucket_manager;
+
+    /**
+     * Provides access to search index management services
+     *
+     * @return a manager instance
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto search_indexes() const -> search_index_manager;
 
     /**
      * Provides access to transaction services.
