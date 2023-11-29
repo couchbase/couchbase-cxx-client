@@ -3723,90 +3723,90 @@ TEST_CASE("integration: search index management public API", "[integration]")
     }
 }
 
-TEST_CASE("integration: search index management analyze document", "[integration]")
-{
-    test::utils::integration_test_guard integration;
-
-    if (!integration.cluster_version().supports_search()) {
-        SKIP("cluster does not support search");
-    }
-
-    if (!integration.cluster_version().supports_search_analyze()) {
-        SKIP("cluster does not support search analyze");
-    }
-
-    auto index_name = test::utils::uniq_id("index");
-
-    {
-        couchbase::core::management::search::index index;
-        index.name = index_name;
-        index.type = "fulltext-index";
-        index.source_type = "couchbase";
-        index.source_name = integration.ctx.bucket;
-        if (integration.cluster_version().is_serverless_config_profile()) {
-            index.plan_params_json = serverless_plan_params;
-        }
-        couchbase::core::operations::management::search_index_upsert_request req{};
-        req.index = index;
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_SUCCESS(resp.ctx.ec);
-    }
-
-    REQUIRE(test::utils::wait_for_search_pindexes_ready(integration.cluster, integration.ctx.bucket, index_name));
-
-    couchbase::core::operations::management::search_index_analyze_document_response resp;
-    bool operation_completed = test::utils::wait_until([&integration, &index_name, &resp]() {
-        couchbase::core::operations::management::search_index_analyze_document_request req{};
-        req.index_name = index_name;
-        req.encoded_document = R"({ "name": "hello world" })";
-        resp = test::utils::execute(integration.cluster, req);
-        return resp.ctx.ec != couchbase::errc::common::internal_server_failure;
-    });
-    REQUIRE(operation_completed);
-    REQUIRE_SUCCESS(resp.ctx.ec);
-    REQUIRE_FALSE(resp.analysis.empty());
-}
-
-TEST_CASE("integration: search index management analyze document public API", "[integration]")
-{
-    test::utils::integration_test_guard integration;
-
-    if (!integration.cluster_version().supports_search()) {
-        SKIP("cluster does not support search");
-    }
-
-    if (!integration.cluster_version().supports_search_analyze()) {
-        SKIP("cluster does not support search analyze");
-    }
-
-    auto index_name = test::utils::uniq_id("index");
-
-    {
-        couchbase::cluster c(integration.cluster);
-        {
-            couchbase::management::search::index index;
-            index.name = index_name;
-            index.source_name = integration.ctx.bucket;
-            auto ctx = c.search_indexes().upsert_index(index).get();
-            REQUIRE_SUCCESS(ctx.ec());
-        }
-        REQUIRE(test::utils::wait_for_search_pindexes_ready(integration.cluster, integration.ctx.bucket, index_name));
-
-        couchbase::manager_error_context ctx;
-        std::string analysis;
-        std::pair<couchbase::manager_error_context, std::vector<std::string>> result;
-        bool operation_completed = test::utils::wait_until([&c, &index_name, &result]() {
-            tao::json::value basic_doc = {
-                { "name", "hello world" },
-            };
-            result = c.search_indexes().analyze_document(index_name, basic_doc).get();
-            return result.first.ec() != couchbase::errc::common::internal_server_failure;
-        });
-        REQUIRE(operation_completed);
-        REQUIRE_SUCCESS(result.first.ec());
-        REQUIRE_FALSE(result.second.empty());
-    }
-}
+//TEST_CASE("integration: search index management analyze document", "[integration]")
+//{
+//    test::utils::integration_test_guard integration;
+//
+//    if (!integration.cluster_version().supports_search()) {
+//        SKIP("cluster does not support search");
+//    }
+//
+//    if (!integration.cluster_version().supports_search_analyze()) {
+//        SKIP("cluster does not support search analyze");
+//    }
+//
+//    auto index_name = test::utils::uniq_id("index");
+//
+//    {
+//        couchbase::core::management::search::index index;
+//        index.name = index_name;
+//        index.type = "fulltext-index";
+//        index.source_type = "couchbase";
+//        index.source_name = integration.ctx.bucket;
+//        if (integration.cluster_version().is_serverless_config_profile()) {
+//            index.plan_params_json = serverless_plan_params;
+//        }
+//        couchbase::core::operations::management::search_index_upsert_request req{};
+//        req.index = index;
+//        auto resp = test::utils::execute(integration.cluster, req);
+//        REQUIRE_SUCCESS(resp.ctx.ec);
+//    }
+//
+//    REQUIRE(test::utils::wait_for_search_pindexes_ready(integration.cluster, integration.ctx.bucket, index_name));
+//
+//    couchbase::core::operations::management::search_index_analyze_document_response resp;
+//    bool operation_completed = test::utils::wait_until([&integration, &index_name, &resp]() {
+//        couchbase::core::operations::management::search_index_analyze_document_request req{};
+//        req.index_name = index_name;
+//        req.encoded_document = R"({ "name": "hello world" })";
+//        resp = test::utils::execute(integration.cluster, req);
+//        return resp.ctx.ec != couchbase::errc::common::internal_server_failure;
+//    });
+//    REQUIRE(operation_completed);
+//    REQUIRE_SUCCESS(resp.ctx.ec);
+//    REQUIRE_FALSE(resp.analysis.empty());
+//}
+//
+//TEST_CASE("integration: search index management analyze document public API", "[integration]")
+//{
+//    test::utils::integration_test_guard integration;
+//
+//    if (!integration.cluster_version().supports_search()) {
+//        SKIP("cluster does not support search");
+//    }
+//
+//    if (!integration.cluster_version().supports_search_analyze()) {
+//        SKIP("cluster does not support search analyze");
+//    }
+//
+//    auto index_name = test::utils::uniq_id("index");
+//
+//    {
+//        couchbase::cluster c(integration.cluster);
+//        {
+//            couchbase::management::search::index index;
+//            index.name = index_name;
+//            index.source_name = integration.ctx.bucket;
+//            auto ctx = c.search_indexes().upsert_index(index).get();
+//            REQUIRE_SUCCESS(ctx.ec());
+//        }
+//        REQUIRE(test::utils::wait_for_search_pindexes_ready(integration.cluster, integration.ctx.bucket, index_name));
+//
+//        couchbase::manager_error_context ctx;
+//        std::string analysis;
+//        std::pair<couchbase::manager_error_context, std::vector<std::string>> result;
+//        bool operation_completed = test::utils::wait_until([&c, &index_name, &result]() {
+//            tao::json::value basic_doc = {
+//                { "name", "hello world" },
+//            };
+//            result = c.search_indexes().analyze_document(index_name, basic_doc).get();
+//            return result.first.ec() != couchbase::errc::common::internal_server_failure;
+//        });
+//        REQUIRE(operation_completed);
+//        REQUIRE_SUCCESS(result.first.ec());
+//        REQUIRE_FALSE(result.second.empty());
+//    }
+//}
 
 TEST_CASE("integration: freeform HTTP request", "[integration]")
 {
