@@ -716,7 +716,7 @@ class bucket_impl
         }
     }
 
-    void ping(std::shared_ptr<diag::ping_collector> collector)
+    void ping(std::shared_ptr<diag::ping_collector> collector, std::optional<std::chrono::milliseconds> timeout)
     {
         std::map<size_t, io::mcbp_session> sessions;
         {
@@ -724,7 +724,7 @@ class bucket_impl
             sessions = sessions_;
         }
         for (const auto& [index, session] : sessions) {
-            session.ping(collector->build_reporter());
+            session.ping(collector->build_reporter(), timeout);
         }
     }
 
@@ -812,9 +812,9 @@ bucket::export_diag_info(diag::diagnostics_result& res) const
 }
 
 void
-bucket::ping(std::shared_ptr<diag::ping_collector> collector)
+bucket::ping(std::shared_ptr<diag::ping_collector> collector, std::optional<std::chrono::milliseconds> timeout)
 {
-    return impl_->ping(std::move(collector));
+    return impl_->ping(std::move(collector), std::move(timeout));
 }
 
 void

@@ -731,6 +731,7 @@ class mcbp_session_impl
       , bootstrap_deadline_(ctx_)
       , connection_deadline_(ctx_)
       , retry_backoff_(ctx_)
+      , ping_deadline_(ctx_)
       , origin_{ std::move(origin) }
       , bucket_name_{ std::move(bucket_name) }
       , supported_features_{ std::move(known_features) }
@@ -755,6 +756,7 @@ class mcbp_session_impl
       , bootstrap_deadline_(ctx_)
       , connection_deadline_(ctx_)
       , retry_backoff_(ctx_)
+      , ping_deadline_(ctx_)
       , origin_(std::move(origin))
       , bucket_name_(std::move(bucket_name))
       , supported_features_(std::move(known_features))
@@ -799,7 +801,7 @@ class mcbp_session_impl
                  bucket_name_ };
     }
 
-    void ping(std::shared_ptr<diag::ping_reporter> handler)
+    void ping(std::shared_ptr<diag::ping_reporter> handler, std::optional<std::chrono::milliseconds> timeout)
     {
         protocol::client_request<protocol::mcbp_noop_request_body> req;
         req.opaque(next_opaque());
@@ -813,7 +815,11 @@ class mcbp_session_impl
                                 diag::ping_state state = diag::ping_state::ok;
                                 std::optional<std::string> error{};
                                 if (ec) {
-                                    state = diag::ping_state::error;
+                                    if (ec == errc::common::unambiguous_timeout || ec == errc::common::ambiguous_timeout) {
+                                        state = diag::ping_state::timeout;
+                                    } else {
+                                        state = diag::ping_state::error;
+                                    }
                                     error.emplace(fmt::format("code={}, message={}, reason={}", ec.value(), ec.message(), reason));
                                 }
                                 handler->report({
@@ -827,6 +833,13 @@ class mcbp_session_impl
                                   error,
                                 });
                             });
+        ping_deadline_.expires_after(timeout.value_or(origin_.options().key_value_timeout));
+        ping_deadline_.async_wait([self = this->shared_from_this(), opaque = req.opaque()](std::error_code ec) {
+            if (ec == asio::error::operation_aborted) {
+                return;
+            }
+            static_cast<void>(self->cancel(opaque, errc::common::unambiguous_timeout, retry_reason::do_not_retry));
+        });
     }
 
     [[nodiscard]] mcbp_context context() const
@@ -928,6 +941,7 @@ class mcbp_session_impl
         bootstrap_deadline_.cancel();
         connection_deadline_.cancel();
         retry_backoff_.cancel();
+        ping_deadline_.cancel();
         resolver_.cancel();
         stream_->close([](std::error_code) {});
         if (auto h = std::move(bootstrap_handler_); h) {
@@ -1604,6 +1618,7 @@ class mcbp_session_impl
     asio::steady_timer bootstrap_deadline_;
     asio::steady_timer connection_deadline_;
     asio::steady_timer retry_backoff_;
+    asio::steady_timer ping_deadline_;
     couchbase::core::origin origin_;
     std::optional<std::string> bucket_name_;
     mcbp_parser parser_;
@@ -1829,9 +1844,9 @@ mcbp_session::supported_features() const
 }
 
 void
-mcbp_session::ping(std::shared_ptr<diag::ping_reporter> handler) const
+mcbp_session::ping(std::shared_ptr<diag::ping_reporter> handler, std::optional<std::chrono::milliseconds> timeout) const
 {
-    return impl_->ping(std::move(handler));
+    return impl_->ping(std::move(handler), std::move(timeout));
 }
 
 bool
