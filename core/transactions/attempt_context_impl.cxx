@@ -763,7 +763,9 @@ attempt_context_impl::query_begin_work(std::optional<std::string> query_context,
     txdata["state"] = tao::json::empty_object;
     txdata["state"]["timeLeftMs"] = overall_.remaining().count() / 1000000;
     txdata["config"] = tao::json::empty_object;
-    txdata["config"]["kvTimeoutMs"] = core::timeout_defaults::key_value_durable_timeout.count();
+    auto [ec, origin] = overall_.cluster_ref().origin();
+    txdata["config"]["kvTimeoutMs"] =
+      (ec) ? core::timeout_defaults::key_value_durable_timeout.count() : origin.options().key_value_durable_timeout.count();
     txdata["config"]["numAtrs"] = 1024;
     opts.raw("numatrs", jsonify(1024));
     txdata["config"]["durabilityLevel"] = durability_level_to_string(overall_.config().level);
