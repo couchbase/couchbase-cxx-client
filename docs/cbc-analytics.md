@@ -103,8 +103,7 @@ Execute one or more Analytics queries and print results to standard output.
 
 <dl>
 <dt>`--transactions-durability-level=LEVEL`</dt><dd>Durability level of the transaction (allowed values: `none`, `majority`, `majority_and_persist_to_active`, `persist_to_majority`). [default: `majority`]</dd>
-<dt>`--transactions-expiration-time=DURATION`</dt><dd>Expiration time of the transaction. [default: `15000ms`]</dd>
-<dt>`--transactions-key-value-timeout=DURATION`</dt><dd>Override Key/Value timeout just for the transaction.</dd>
+<dt>`--transactions-timeout=DURATION`</dt><dd>Timeout of the transaction. [default: `15000ms`]</dd>
 <dt>`--transactions-metadata-bucket=STRING`</dt><dd>Bucket name where transaction metadata is stored.</dd>
 <dt>`--transactions-metadata-scope=STRING`</dt><dd>Scope name where transaction metadata is stored. [default: `_default`]</dd>
 <dt>`--transactions-metadata-collection=STRING`</dt><dd>Collection name where transaction metadata is stored. [default: `_default`]</dd>

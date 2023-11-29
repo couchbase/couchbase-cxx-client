@@ -37,7 +37,7 @@ struct program_arguments {
     std::string collection_name{ couchbase::collection::default_name };
     std::size_t number_of_operations{ 1'000 };
     std::size_t document_body_size{ 1'024 };
-    std::chrono::seconds transaction_expiration_time{ 120 };
+    std::chrono::seconds transaction_timeout{ 120 };
 
     static auto load_from_environment() -> program_arguments
     {
@@ -74,11 +74,11 @@ struct program_arguments {
                 arguments.document_body_size = int_val;
             }
         }
-        if (const auto* val = getenv("CB_TRANSACTION_EXPIRATION_TIME"); val != nullptr && val[0] != '\0') {
+        if (const auto* val = getenv("CB_TRANSACTION_TIMEOUT"); val != nullptr && val[0] != '\0') {
             char* end = nullptr;
             auto int_val = std::strtoul(val, &end, 10);
             if (end != val) {
-                arguments.transaction_expiration_time = std::chrono::seconds{ int_val };
+                arguments.transaction_timeout = std::chrono::seconds{ int_val };
             }
         }
         return arguments;
@@ -193,8 +193,7 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
         if (err.ec()) {
             fmt::print("\tTransaction completed with error {}, cause={}\n", err.ec().message(), err.cause().message());
             if (err.ec() == couchbase::errc::transaction::expired) {
-                fmt::print("\tINFO: Try to increase CB_TRANSACTION_EXPIRATION_TIME, current value is {} seconds\n",
-                           arguments.transaction_expiration_time);
+                fmt::print("\tINFO: Try to increase CB_TRANSACTION_TIMEOUT, current value is {} seconds\n", arguments.transaction_timeout);
             }
         } else {
             fmt::print("\tTransaction completed successfully\n");
@@ -235,8 +234,7 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
         if (err.ec()) {
             fmt::print("\tTransaction completed with error {}, cause={}\n", err.ec().message(), err.cause().message());
             if (err.ec() == couchbase::errc::transaction::expired) {
-                fmt::print("\tINFO: Try to increase CB_TRANSACTION_EXPIRATION_TIME, current value is {} seconds\n",
-                           arguments.transaction_expiration_time);
+                fmt::print("\tINFO: Try to increase CB_TRANSACTION_TIMEOUT, current value is {} seconds\n", arguments.transaction_timeout);
             }
         } else {
             fmt::print("\tTransaction completed successfully\n");
@@ -361,8 +359,7 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
         if (err.ec()) {
             fmt::print("\tTransaction completed with error {}, cause={}\n", err.ec().message(), err.cause().message());
             if (err.ec() == couchbase::errc::transaction::expired) {
-                fmt::print("\tINFO: Try to increase CB_TRANSACTION_EXPIRATION_TIME, current value is {} seconds\n",
-                           arguments.transaction_expiration_time);
+                fmt::print("\tINFO: Try to increase CB_TRANSACTION_TIMEOUT, current value is {} seconds\n", arguments.transaction_timeout);
             }
         } else {
             fmt::print("\tTransaction completed successfully\n");
@@ -419,15 +416,13 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
         if (err.ec()) {
             fmt::print("\tTransaction completed with error {}, cause={}\n", err.ec().message(), err.cause().message());
             if (err.ec() == couchbase::errc::transaction::expired) {
-                fmt::print("\tINFO: Try to increase CB_TRANSACTION_EXPIRATION_TIME, current value is {} seconds\n",
-                           arguments.transaction_expiration_time);
+                fmt::print("\tINFO: Try to increase CB_TRANSACTION_TIMEOUT, current value is {} seconds\n", arguments.transaction_timeout);
             }
         } else {
             fmt::print("\tTransaction completed successfully\n");
         }
         if (err.ec() == couchbase::errc::transaction::expired) {
-            fmt::print("\tINFO: Try to increase CB_TRANSACTION_EXPIRATION_TIME, current value is {} seconds\n",
-                       arguments.transaction_expiration_time);
+            fmt::print("\tINFO: Try to increase CB_TRANSACTION_TIMEOUT, current value is {} seconds\n", arguments.transaction_timeout);
         }
         if (errors.empty()) {
             fmt::print("\tAll operations completed successfully\n");
@@ -459,7 +454,7 @@ main()
     fmt::print("CB_COLLECTION_NAME={}\n", arguments.collection_name);
     fmt::print("CB_NUMBER_OF_OPERATIONS={}\n", arguments.number_of_operations);
     fmt::print("CB_DOCUMENT_BODY_SIZE={}\n", arguments.document_body_size);
-    fmt::print("CB_TRANSACTION_EXPIRATION_TIME={}\n", arguments.transaction_expiration_time.count());
+    fmt::print("CB_TRANSACTION_TIMEOUT={}\n", arguments.transaction_timeout.count());
 
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
@@ -467,7 +462,7 @@ main()
 
     auto options = couchbase::cluster_options(arguments.username, arguments.password);
     options.apply_profile("wan_development");
-    options.transactions().expiration_time(arguments.transaction_expiration_time);
+    options.transactions().timeout(arguments.transaction_timeout);
     auto [cluster, ec] = couchbase::cluster::connect(io, arguments.connection_string, options).get();
     if (ec) {
         fmt::print("Unable to connect to cluster at \"{}\", error: {}\n", arguments.connection_string, ec.message());

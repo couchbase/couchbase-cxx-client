@@ -34,7 +34,7 @@ couchbase::transactions::transaction_options
 txn_opts()
 {
     couchbase::transactions::transaction_options opts{};
-    opts.expiration_time(std::chrono::seconds(2));
+    opts.timeout(std::chrono::seconds(2));
     return opts;
 }
 void
@@ -366,7 +366,7 @@ TEST_CASE("transactions public blocking API: can pass per-transaction configs", 
     auto [err, upsert_res] = coll.upsert(id, content, {}).get();
     REQUIRE_SUCCESS(err.ec());
 
-    auto opts = couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(2));
+    auto opts = couchbase::transactions::transaction_options().timeout(std::chrono::seconds(2));
     auto begin = std::chrono::steady_clock::now();
     auto [tx_err, result] = c.transactions()->run(
       [id, coll](couchbase::transactions::attempt_context& ctx) {
@@ -380,10 +380,10 @@ TEST_CASE("transactions public blocking API: can pass per-transaction configs", 
       opts);
     auto end = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin);
-    // should be greater than the expiration time
-    CHECK(elapsed > *opts.expiration_time());
+    // should be greater than the timeout
+    CHECK(elapsed > *opts.timeout());
     // but not by too much (default is 15 seconds, we wanted 2, 2x that is plenty)
-    CHECK(elapsed < (2 * *opts.expiration_time()));
+    CHECK(elapsed < (2 * *opts.timeout()));
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
     // could have failed in rollback, which returns fail rather than expired
@@ -405,7 +405,7 @@ TEST_CASE("transactions public blocking API: can do simple query", "[transaction
           CHECK_FALSE(e.ec());
           CHECK(content == res.rows_as_json().front()["default"]);
       },
-      couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(10)));
+      couchbase::transactions::transaction_options().timeout(std::chrono::seconds(10)));
     CHECK_FALSE(tx_err.ec());
     CHECK(result.unstaging_complete);
     CHECK_FALSE(result.transaction_id.empty());
@@ -426,7 +426,7 @@ TEST_CASE("transactions public blocking API: can do simple mutating query", "[tr
           auto [e, res] = ctx.query(fmt::format("UPDATE `{}` USE KEYS '{}' SET `some_number` = 10", test_ctx.bucket, id));
           CHECK_FALSE(e.ec());
       },
-      couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(10)));
+      couchbase::transactions::transaction_options().timeout(std::chrono::seconds(10)));
     CHECK_FALSE(tx_err.ec());
     CHECK(result.unstaging_complete);
     CHECK_FALSE(result.transaction_id.empty());
@@ -451,7 +451,7 @@ TEST_CASE("transactions public blocking API: some query errors don't force rollb
             ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES ("{}", {}))", test_ctx.bucket, id, content_json));
           CHECK_FALSE(insert_err.ec());
       },
-      couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(10)));
+      couchbase::transactions::transaction_options().timeout(std::chrono::seconds(10)));
     CHECK_FALSE(tx_err.ec());
     CHECK(result.unstaging_complete);
     CHECK_FALSE(result.transaction_id.empty());
@@ -479,7 +479,7 @@ TEST_CASE("transactions public blocking API: some query errors do rollback", "[t
           auto [e2, __] = ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES ("{}", {}))", test_ctx.bucket, id, content_json));
           CHECK_FALSE(e2.ec());
       },
-      couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(10)));
+      couchbase::transactions::transaction_options().timeout(std::chrono::seconds(10)));
     CHECK(tx_err.ec() == couchbase::errc::transaction::failed);
 
     // id2 should not exist, since the txn should have rolled back.
@@ -501,7 +501,7 @@ TEST_CASE("transactions public blocking API: some query errors are seen immediat
           CHECK(e.ec());
           CHECK(std::holds_alternative<couchbase::query_error_context>(e.cause()));
       },
-      couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(10)));
+      couchbase::transactions::transaction_options().timeout(std::chrono::seconds(10)));
     CHECK_FALSE(tx_err.ec());
     CHECK_FALSE(result.transaction_id.empty());
     CHECK(result.unstaging_complete);

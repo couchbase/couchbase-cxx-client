@@ -191,7 +191,6 @@ atr_cleanup_entry::do_per_doc(std::vector<doc_record> docs,
               }
                 .specs();
             req.access_deleted = true;
-            wrap_request(req, cleanup_->config());
             // now a blocking lookup_in...
             auto barrier = std::make_shared<std::promise<result>>();
             cleanup_->cluster_ref().execute(
@@ -255,10 +254,9 @@ atr_cleanup_entry::commit_docs(std::optional<std::vector<doc_record>> docs, dura
                     core::operations::insert_request req{ doc.id(), content };
                     auto barrier = std::make_shared<std::promise<result>>();
                     auto f = barrier->get_future();
-                    cleanup_->cluster_ref().execute(wrap_durable_request(req, cleanup_->config(), dl),
-                                                    [barrier](core::operations::insert_response resp) {
-                                                        barrier->set_value(result::create_from_mutation_response(resp));
-                                                    });
+                    cleanup_->cluster_ref().execute(wrap_durable_request(req, dl), [barrier](core::operations::insert_response resp) {
+                        barrier->set_value(result::create_from_mutation_response(resp));
+                    });
                     wrap_operation_future(f);
                 } else {
                     core::operations::mutate_in_request req{ doc.id() };
@@ -270,7 +268,7 @@ atr_cleanup_entry::commit_docs(std::optional<std::vector<doc_record>> docs, dura
                         .specs();
                     req.cas = doc.cas();
                     req.store_semantics = couchbase::store_semantics::replace;
-                    wrap_durable_request(req, cleanup_->config(), dl);
+                    wrap_durable_request(req, dl);
                     auto barrier = std::make_shared<std::promise<result>>();
                     auto f = barrier->get_future();
                     cleanup_->cluster_ref().execute(req, [barrier](core::operations::mutate_in_response resp) {
@@ -303,7 +301,7 @@ atr_cleanup_entry::remove_docs(std::optional<std::vector<doc_record>> docs, dura
                     .specs();
                 req.cas = doc.cas();
                 req.access_deleted = true;
-                wrap_durable_request(req, cleanup_->config(), dl);
+                wrap_durable_request(req, dl);
                 auto barrier = std::make_shared<std::promise<result>>();
                 auto f = barrier->get_future();
                 cleanup_->cluster_ref().execute(req, [barrier](core::operations::mutate_in_response resp) {
@@ -313,7 +311,7 @@ atr_cleanup_entry::remove_docs(std::optional<std::vector<doc_record>> docs, dura
             } else {
                 core::operations::remove_request req{ doc.id() };
                 req.cas = doc.cas();
-                wrap_durable_request(req, cleanup_->config(), dl);
+                wrap_durable_request(req, dl);
                 auto barrier = std::make_shared<std::promise<result>>();
                 auto f = barrier->get_future();
                 cleanup_->cluster_ref().execute(req, [barrier](core::operations::remove_response resp) {
@@ -338,7 +336,7 @@ atr_cleanup_entry::remove_docs_staged_for_removal(std::optional<std::vector<doc_
                 }
                 core::operations::remove_request req{ doc.id() };
                 req.cas = doc.cas();
-                wrap_durable_request(req, cleanup_->config(), dl);
+                wrap_durable_request(req, dl);
                 auto barrier = std::make_shared<std::promise<result>>();
                 auto f = barrier->get_future();
                 cleanup_->cluster_ref().execute(req, [barrier](core::operations::remove_response resp) {
@@ -372,7 +370,7 @@ atr_cleanup_entry::remove_txn_links(std::optional<std::vector<doc_record>> docs,
                 .specs();
             req.access_deleted = true;
             req.cas = doc.cas();
-            wrap_durable_request(req, cleanup_->config(), dl);
+            wrap_durable_request(req, dl);
             auto barrier = std::make_shared<std::promise<result>>();
             auto f = barrier->get_future();
             cleanup_->cluster_ref().execute(
@@ -399,7 +397,7 @@ atr_cleanup_entry::cleanup_entry(durability_level dl)
         }
         mut_specs.push_back(couchbase::mutate_in_specs::remove("attempts." + atr_entry_->attempt_id()).xattr());
         req.specs = mut_specs.specs();
-        wrap_durable_request(req, cleanup_->config(), dl);
+        wrap_durable_request(req, dl);
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
         cleanup_->cluster_ref().execute(

@@ -39,7 +39,7 @@ struct program_arguments {
     std::size_t number_of_transactions{ 5 };
     std::size_t number_of_keys_per_transaction{ 10 };
     std::size_t document_body_size{ 1'024 };
-    std::chrono::seconds transaction_expiration_time{ 120 };
+    std::chrono::seconds transaction_timeout{ 120 };
 
     static auto load_from_environment() -> program_arguments
     {
@@ -90,11 +90,11 @@ struct program_arguments {
                 arguments.document_body_size = int_val;
             }
         }
-        if (const auto* val = getenv("CB_TRANSACTION_EXPIRATION_TIME"); val != nullptr && val[0] != '\0') {
+        if (const auto* val = getenv("CB_TRANSACTION_TIMEOUT"); val != nullptr && val[0] != '\0') {
             char* end = nullptr;
             auto int_val = std::strtoul(val, &end, 10);
             if (end != val) {
-                arguments.transaction_expiration_time = std::chrono::seconds{ int_val };
+                arguments.transaction_timeout = std::chrono::seconds{ int_val };
             }
         }
         return arguments;
@@ -254,7 +254,7 @@ main()
     fmt::print("CB_NUMBER_OF_TRANSACTIONS={}\n", arguments.number_of_transactions);
     fmt::print("CB_NUMBER_OF_KEYS_PER_TRANSACTION={}\n", arguments.number_of_keys_per_transaction);
     fmt::print("CB_DOCUMENT_BODY_SIZE={}\n", arguments.document_body_size);
-    fmt::print("CB_TRANSACTION_EXPIRATION_TIME={}\n", arguments.transaction_expiration_time.count());
+    fmt::print("CB_TRANSACTION_TIMEOUT={}\n", arguments.transaction_timeout.count());
 
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
@@ -262,7 +262,7 @@ main()
 
     auto options = couchbase::cluster_options(arguments.username, arguments.password);
     options.apply_profile("wan_development");
-    options.transactions().expiration_time(arguments.transaction_expiration_time);
+    options.transactions().timeout(arguments.transaction_timeout);
     auto [cluster, ec] = couchbase::cluster::connect(io, arguments.connection_string, options).get();
     if (ec) {
         fmt::print("Unable to connect to cluster at \"{}\", error: {}\n", arguments.connection_string, ec.message());

@@ -30,8 +30,7 @@ transaction_options::apply(const transactions_config::built& conf) const
         query_config.scan_consistency = *scan_consistency_;
     }
     return { durability_.value_or(conf.level),
-             expiration_time_.value_or(conf.expiration_time),
-             kv_timeout_ ? kv_timeout_ : conf.kv_timeout,
+             timeout_.value_or(conf.timeout),
              attempt_context_hooks_ ? attempt_context_hooks_ : conf.attempt_context_hooks,
              cleanup_hooks_ ? cleanup_hooks_ : conf.cleanup_hooks,
              metadata_collection_ ? metadata_collection_ : conf.metadata_collection,
@@ -80,23 +79,10 @@ transaction_options::scan_consistency() const
     return scan_consistency_;
 }
 
-transaction_options&
-transaction_options::kv_timeout(std::chrono::milliseconds kv_timeout)
-{
-    kv_timeout_ = kv_timeout;
-    return *this;
-}
-
-std::optional<std::chrono::milliseconds>
-transaction_options::kv_timeout()
-{
-    return kv_timeout_;
-}
-
 std::optional<std::chrono::nanoseconds>
-transaction_options::expiration_time()
+transaction_options::timeout()
 {
-    return expiration_time_;
+    return timeout_;
 }
 
 transaction_options&

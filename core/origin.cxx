@@ -168,7 +168,7 @@ struct traits<couchbase::transactions::transactions_config::built> {
     static void assign(tao::json::basic_value<Traits>& v, const couchbase::transactions::transactions_config::built& o)
     {
         v = {
-            { "expiration_time", o.expiration_time },
+            { "timeout", o.timeout },
             { "durability_level", o.level },
             {
               "query_config",
@@ -186,9 +186,6 @@ struct traits<couchbase::transactions::transactions_config::built> {
               },
             },
         };
-        if (const auto& p = o.kv_timeout; p.has_value()) {
-            v["key_value_timeout"] = p.value();
-        }
         if (const auto& p = o.metadata_collection; p.has_value()) {
             v["metadata_collection"] = {
                 { "bucket", p.value().bucket },
