@@ -223,7 +223,7 @@ main()
     options.transactions().durability_level(couchbase::durability_level::majority);
     options.transactions().cleanup_config().cleanup_lost_attempts(true);
     options.transactions().cleanup_config().cleanup_client_attempts(true);
-    options.transactions().expiration_time(std::chrono::milliseconds(100));
+    options.transactions().timeout(std::chrono::milliseconds(100));
 
     auto [cluster, ec] = couchbase::cluster::connect(io, "couchbase://localhost", options).get();
     if (ec) {

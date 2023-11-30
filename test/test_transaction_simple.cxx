@@ -45,7 +45,7 @@ couchbase::transactions::transactions_config
 get_conf()
 {
     couchbase::transactions::transactions_config cfg{};
-    cfg.expiration_time(std::chrono::seconds(2));
+    cfg.timeout(std::chrono::seconds(2));
     return cfg;
 }
 
@@ -228,7 +228,7 @@ TEST_CASE("transactions: non existent scope in custom metadata collections", "[t
       "i_dont_exist",
       couchbase::collection::default_name,
     });
-    cfg.expiration_time(std::chrono::seconds(2));
+    cfg.timeout(std::chrono::seconds(2));
     transactions txn(cluster, cfg);
 
     // upsert initial doc
@@ -266,7 +266,7 @@ TEST_CASE("transactions: non existent collection in custom metadata collections"
       get_conf()
         .metadata_collection(couchbase::transactions::transaction_keyspace{ "secBucket", couchbase::scope::default_name, "i_dont_exist" })
         .cleanup_config(couchbase::transactions::transactions_cleanup_config().cleanup_lost_attempts(true));
-    cfg.expiration_time(std::chrono::seconds(2));
+    cfg.timeout(std::chrono::seconds(2));
     transactions txn(cluster, cfg);
 
     // upsert initial doc

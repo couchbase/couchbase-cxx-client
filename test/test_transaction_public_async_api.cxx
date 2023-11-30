@@ -28,7 +28,7 @@ couchbase::transactions::transaction_options
 async_options()
 {
     couchbase::transactions::transaction_options cfg;
-    cfg.expiration_time(std::chrono::seconds(1));
+    cfg.timeout(std::chrono::seconds(1));
     return cfg;
 }
 
@@ -305,7 +305,7 @@ TEST_CASE("transactions public async API: can set transaction options", "[transa
     REQUIRE_SUCCESS(err.ec());
 
     auto begin = std::chrono::steady_clock::now();
-    auto cfg = couchbase::transactions::transaction_options().expiration_time(std::chrono::seconds(2));
+    auto cfg = couchbase::transactions::transaction_options().timeout(std::chrono::seconds(2));
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     c.transactions()->run(
@@ -320,10 +320,10 @@ TEST_CASE("transactions public async API: can set transaction options", "[transa
       [&begin, &cfg, barrier](auto e, auto res) {
           auto end = std::chrono::steady_clock::now();
           auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin);
-          // should be greater than the expiration time
-          CHECK(elapsed > *cfg.expiration_time());
+          // should be greater than the timeout
+          CHECK(elapsed > *cfg.timeout());
           // but not by too much (default is 15 seconds, we wanted 1, 2 is plenty)
-          CHECK(elapsed < (2 * *cfg.expiration_time()));
+          CHECK(elapsed < (2 * *cfg.timeout()));
           // and of course the txn should have expired
           CHECK_FALSE(res.transaction_id.empty());
           CHECK_FALSE(res.unstaging_complete);

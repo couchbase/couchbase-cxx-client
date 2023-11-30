@@ -34,7 +34,7 @@ couchbase::transactions::transactions_config
 get_conf()
 {
     couchbase::transactions::transactions_config cfg{};
-    cfg.expiration_time(std::chrono::seconds(1));
+    cfg.timeout(std::chrono::seconds(1));
     return cfg;
 }
 

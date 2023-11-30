@@ -32,7 +32,7 @@ transaction_context::transaction_context(transactions& txns, const couchbase::tr
   , config_(config.apply(txns.config()))
   , deferred_elapsed_(0)
   , cleanup_(txns.cleanup())
-  , delay_(new exp_delay(std::chrono::milliseconds(1), std::chrono::milliseconds(100), 2 * config_.expiration_time))
+  , delay_(new exp_delay(std::chrono::milliseconds(1), std::chrono::milliseconds(100), 2 * config_.timeout))
 {
     // add metadata_collection to cleanup, if present
     if (config_.metadata_collection) {
@@ -54,7 +54,7 @@ transaction_context::remaining() const
 {
     const auto& now = std::chrono::steady_clock::now();
     auto expired_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(now - start_time_client_) + deferred_elapsed_;
-    return config_.expiration_time - expired_nanos;
+    return config_.timeout - expired_nanos;
 }
 
 [[nodiscard]] bool
@@ -64,7 +64,7 @@ transaction_context::has_expired_client_side()
     const auto& now = std::chrono::steady_clock::now();
     auto expired_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(now - start_time_client_) + deferred_elapsed_;
     auto expired_millis = std::chrono::duration_cast<std::chrono::milliseconds>(expired_nanos);
-    bool is_expired = expired_nanos > config_.expiration_time;
+    bool is_expired = expired_nanos > config_.timeout;
     if (is_expired) {
         CB_ATTEMPT_CTX_LOG_INFO(current_attempt_context_,
                                 "has expired client side (now={}ns, start={}ns, deferred_elapsed={}ns, expired={}ns ({}ms), config={}ms)",
@@ -73,7 +73,7 @@ transaction_context::has_expired_client_side()
                                 deferred_elapsed_.count(),
                                 expired_nanos.count(),
                                 expired_millis.count(),
-                                std::chrono::duration_cast<std::chrono::milliseconds>(config_.expiration_time).count());
+                                std::chrono::duration_cast<std::chrono::milliseconds>(config_.timeout).count());
     }
     return is_expired;
 }

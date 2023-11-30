@@ -283,7 +283,6 @@ transactions_cleanup::get_active_clients(const couchbase::transactions::transact
               lookup_in_specs::get(subdoc::lookup_in_macro::vbucket).xattr(),
           }
             .specs();
-        wrap_request(req, config_);
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
         auto ec = config_.cleanup_hooks->client_record_before_get(keyspace.bucket);

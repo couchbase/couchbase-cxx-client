@@ -35,7 +35,6 @@ namespace couchbase::core::transactions
 class active_transaction_record
 {
   public:
-    // TODO: we should get the kv_timeout and put it in the request (pass in the transactions_config)
     template<typename Callback>
     static void get_atr(const core::cluster& cluster, const core::document_id& atr_id, Callback&& cb)
     {
