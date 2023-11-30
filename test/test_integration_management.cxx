@@ -3808,7 +3808,7 @@ TEST_CASE("integration: search index management analyze document public API", "[
         REQUIRE_SUCCESS(result.first.ec());
         REQUIRE_FALSE(result.second.empty());
 
-        auto drop_ctx =c.search_indexes().drop_index(index_name).get();
+        auto drop_ctx = c.search_indexes().drop_index(index_name).get();
         REQUIRE_SUCCESS(drop_ctx.ec());
     }
 }
