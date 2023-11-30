@@ -3721,6 +3721,8 @@ TEST_CASE("integration: search index management public API", "[integration]")
             }
         }
     }
+    auto ctx = c.search_indexes().drop_index(index_name).get();
+    REQUIRE_SUCCESS(ctx.ec());
 }
 
 TEST_CASE("integration: search index management analyze document", "[integration]")
@@ -3805,6 +3807,9 @@ TEST_CASE("integration: search index management analyze document public API", "[
         REQUIRE(operation_completed);
         REQUIRE_SUCCESS(result.first.ec());
         REQUIRE_FALSE(result.second.empty());
+
+        auto drop_ctx = c.search_indexes().drop_index(index_name).get();
+        REQUIRE_SUCCESS(drop_ctx.ec());
     }
 }
 
