@@ -123,6 +123,7 @@ set(couchbase_cxx_client_FILES
     core/impl/date_range_query.cxx
     core/impl/disjunction_query.cxx
     core/impl/dns_srv_tracker.cxx
+    core/impl/doc_id_query.cxx
     core/impl/expiry.cxx
     core/impl/fail_fast_retry_strategy.cxx
     core/impl/field_level_encryption_error_category.cxx
@@ -176,6 +177,7 @@ set(couchbase_cxx_client_FILES
     core/impl/search_row_location.cxx
     core/impl/search_row_locations.cxx
     core/impl/search_sort_field.cxx
+    core/impl/search_sort_geo_distance.cxx
     core/impl/search_sort_id.cxx
     core/impl/search_sort_score.cxx
     core/impl/streaming_json_lexer_error_category.cxx
