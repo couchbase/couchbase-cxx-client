@@ -41,6 +41,16 @@ class search_row_location
      */
     explicit search_row_location(internal_search_row_location location);
 
+    search_row_location();
+
+    ~search_row_location();
+
+    search_row_location(const search_row_location&) = delete;
+    search_row_location& operator=(const search_row_location&) = delete;
+
+    search_row_location(search_row_location&&) noexcept;
+    search_row_location& operator=(search_row_location&&) noexcept;
+
     [[nodiscard]] auto field() const -> const std::string&;
     [[nodiscard]] auto term() const -> const std::string&;
     [[nodiscard]] auto position() const -> const std::uint64_t&;
