@@ -23,6 +23,7 @@
 #include "mcbp_context.hxx"
 #include "mcbp_message.hxx"
 
+#include <chrono>
 #include <cinttypes>
 #include <memory>
 #include <optional>
@@ -118,7 +119,7 @@ class mcbp_session
     [[nodiscard]] bool has_config() const;
     [[nodiscard]] diag::endpoint_diag_info diag_info() const;
     void on_configuration_update(std::shared_ptr<config_listener> handler);
-    void ping(std::shared_ptr<diag::ping_reporter> handler) const;
+    void ping(std::shared_ptr<diag::ping_reporter> handler, std::optional<std::chrono::milliseconds> = {}) const;
     [[nodiscard]] bool supports_gcccp() const;
     [[nodiscard]] std::optional<key_value_error_map_info> decode_error_code(std::uint16_t code);
     void handle_not_my_vbucket(const io::mcbp_message& msg) const;

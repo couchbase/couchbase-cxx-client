@@ -26,6 +26,8 @@
 #include <asio/post.hpp>
 #include <asio/ssl.hpp>
 
+#include <chrono>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -182,7 +184,7 @@ class bucket
     void on_configuration_update(std::shared_ptr<config_listener> handler);
     void close();
     void export_diag_info(diag::diagnostics_result& res) const;
-    void ping(std::shared_ptr<diag::ping_collector> collector);
+    void ping(std::shared_ptr<diag::ping_collector> collector, std::optional<std::chrono::milliseconds> timeout);
     void defer_command(utils::movable_function<void()> command);
 
     [[nodiscard]] auto name() const -> const std::string&;

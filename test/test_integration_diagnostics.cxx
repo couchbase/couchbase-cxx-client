@@ -359,8 +359,9 @@ TEST_CASE("integration: ping", "[integration]")
     {
         auto barrier = std::make_shared<std::promise<couchbase::core::diag::ping_result>>();
         auto f = barrier->get_future();
-        integration.cluster.ping(
-          "my_report_id", {}, {}, [barrier](couchbase::core::diag::ping_result&& resp) mutable { barrier->set_value(std::move(resp)); });
+        integration.cluster.ping("my_report_id", {}, {}, {}, [barrier](couchbase::core::diag::ping_result&& resp) mutable {
+            barrier->set_value(std::move(resp));
+        });
         auto res = f.get();
         REQUIRE(res.services.size() > 0);
 
@@ -409,6 +410,7 @@ TEST_CASE("integration: ping allows to select services", "[integration]")
         integration.cluster.ping({},
                                  {},
                                  { couchbase::core::service_type::key_value, couchbase::core::service_type::query },
+                                 {},
                                  [barrier](couchbase::core::diag::ping_result&& resp) mutable { barrier->set_value(std::move(resp)); });
         auto res = f.get();
         REQUIRE(res.services.size() == 2);
@@ -431,6 +433,7 @@ TEST_CASE("integration: ping allows to select bucket and opens it automatically"
         integration.cluster.ping({},
                                  integration.ctx.bucket,
                                  { couchbase::core::service_type::key_value },
+                                 {},
                                  [barrier](couchbase::core::diag::ping_result&& resp) mutable { barrier->set_value(std::move(resp)); });
         auto res = f.get();
         REQUIRE(res.services.size() == 1);
@@ -439,5 +442,61 @@ TEST_CASE("integration: ping allows to select bucket and opens it automatically"
         REQUIRE(res.services[couchbase::core::service_type::key_value].size() > 0);
         REQUIRE(res.services[couchbase::core::service_type::key_value][0].bucket.has_value());
         REQUIRE(res.services[couchbase::core::service_type::key_value][0].bucket.value() == integration.ctx.bucket);
+    }
+}
+
+TEST_CASE("integration: ping allows setting timeout", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    {
+        auto barrier = std::make_shared<std::promise<couchbase::core::diag::ping_result>>();
+        auto f = barrier->get_future();
+        integration.cluster.ping({}, {}, {}, std::chrono::milliseconds(1), [barrier](couchbase::core::diag::ping_result&& resp) mutable {
+            barrier->set_value(std::move(resp));
+        });
+        auto res = f.get();
+        REQUIRE(res.services.size() > 0);
+
+        REQUIRE(res.services.count(couchbase::core::service_type::key_value) > 0);
+        REQUIRE(res.services[couchbase::core::service_type::key_value].size() > 0);
+        REQUIRE(res.services[couchbase::core::service_type::key_value][0].error.has_value());
+        REQUIRE(res.services[couchbase::core::service_type::key_value][0].state == couchbase::core::diag::ping_state::timeout);
+
+        REQUIRE(res.services.count(couchbase::core::service_type::management) > 0);
+        REQUIRE(res.services[couchbase::core::service_type::management].size() > 0);
+        REQUIRE(res.services[couchbase::core::service_type::management][0].error.has_value());
+        REQUIRE(res.services[couchbase::core::service_type::management][0].state == couchbase::core::diag::ping_state::timeout);
+
+        if (integration.ctx.deployment != test::utils::deployment_type::elixir) {
+            REQUIRE(res.services.count(couchbase::core::service_type::view) > 0);
+            REQUIRE(res.services[couchbase::core::service_type::view].size() > 0);
+            REQUIRE(res.services[couchbase::core::service_type::view][0].error.has_value());
+            REQUIRE(res.services[couchbase::core::service_type::view][0].state == couchbase::core::diag::ping_state::timeout);
+        }
+
+        REQUIRE(res.services.count(couchbase::core::service_type::query) > 0);
+        REQUIRE(res.services[couchbase::core::service_type::query].size() > 0);
+        REQUIRE(res.services[couchbase::core::service_type::query][0].error.has_value());
+        REQUIRE(res.services[couchbase::core::service_type::query][0].state == couchbase::core::diag::ping_state::timeout);
+
+        REQUIRE(res.services.count(couchbase::core::service_type::search) > 0);
+        REQUIRE(res.services[couchbase::core::service_type::search].size() > 0);
+        REQUIRE(res.services[couchbase::core::service_type::search][0].error.has_value());
+        REQUIRE(res.services[couchbase::core::service_type::search][0].state == couchbase::core::diag::ping_state::timeout);
+
+        if (integration.ctx.version.supports_analytics()) {
+            REQUIRE(res.services.count(couchbase::core::service_type::analytics) > 0);
+            REQUIRE(res.services[couchbase::core::service_type::analytics].size() > 0);
+            REQUIRE(res.services[couchbase::core::service_type::analytics][0].error.has_value());
+            REQUIRE(res.services[couchbase::core::service_type::analytics][0].state == couchbase::core::diag::ping_state::timeout);
+        }
+
+        if (integration.ctx.version.supports_eventing_functions()) {
+            REQUIRE(res.services.count(couchbase::core::service_type::eventing) > 0);
+            REQUIRE(res.services[couchbase::core::service_type::eventing].size() > 0);
+            REQUIRE(res.services[couchbase::core::service_type::eventing][0].error.has_value());
+            REQUIRE(res.services[couchbase::core::service_type::eventing][0].state == couchbase::core::diag::ping_state::timeout);
+        }
     }
 }

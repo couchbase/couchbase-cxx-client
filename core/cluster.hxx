@@ -24,6 +24,8 @@
 #include "utils/movable_function.hxx"
 
 #include <asio/io_context.hpp>
+#include <chrono>
+#include <optional>
 #include <utility>
 
 namespace couchbase
@@ -201,6 +203,7 @@ class cluster
     void ping(std::optional<std::string> report_id,
               std::optional<std::string> bucket_name,
               std::set<service_type> services,
+              std::optional<std::chrono::milliseconds> timeout,
               utils::movable_function<void(diag::ping_result)>&& handler) const;
 
     [[nodiscard]] auto direct_dispatch(const std::string& bucket_name, std::shared_ptr<couchbase::core::mcbp::queue_request> req) const

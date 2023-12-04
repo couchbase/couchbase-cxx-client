@@ -535,6 +535,7 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
     void ping(std::optional<std::string> report_id,
               std::optional<std::string> bucket_name,
               std::set<service_type> services,
+              std::optional<std::chrono::milliseconds> timeout,
               utils::movable_function<void(diag::ping_result)> handler)
     {
         if (!report_id) {
@@ -550,17 +551,17 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
             };
         }
         asio::post(asio::bind_executor(
-          ctx_, [cluster = shared_from_this(), report_id, bucket_name, services, handler = std::move(handler)]() mutable {
+          ctx_, [cluster = shared_from_this(), report_id, bucket_name, services, timeout, handler = std::move(handler)]() mutable {
               auto collector = std::make_shared<ping_collector_impl>(report_id.value(), std::move(handler));
               if (bucket_name) {
                   if (services.find(service_type::key_value) != services.end()) {
                       if (auto bucket = cluster->find_bucket_by_name(bucket_name.value()); bucket) {
-                          return bucket->ping(collector);
+                          return bucket->ping(collector, timeout);
                       }
-                      cluster->open_bucket(bucket_name.value(), [collector, cluster, bucket_name](std::error_code ec) {
+                      cluster->open_bucket(bucket_name.value(), [collector, cluster, bucket_name, timeout](std::error_code ec) {
                           if (!ec) {
                               if (auto bucket = cluster->find_bucket_by_name(bucket_name.value()); bucket) {
-                                  return bucket->ping(collector);
+                                  return bucket->ping(collector, timeout);
                               }
                           }
                       });
@@ -568,11 +569,11 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
               } else {
                   if (services.find(service_type::key_value) != services.end()) {
                       if (cluster->session_) {
-                          cluster->session_->ping(collector->build_reporter());
+                          cluster->session_->ping(collector->build_reporter(), timeout);
                       }
-                      cluster->for_each_bucket([&collector](auto bucket) { bucket->ping(collector); });
+                      cluster->for_each_bucket([&collector, &timeout](auto bucket) { bucket->ping(collector, timeout); });
                   }
-                  cluster->session_manager_->ping(services, collector, cluster->origin_.credentials());
+                  cluster->session_manager_->ping(services, timeout, collector, cluster->origin_.credentials());
               }
           }));
     }
@@ -739,10 +740,11 @@ void
 cluster::ping(std::optional<std::string> report_id,
               std::optional<std::string> bucket_name,
               std::set<service_type> services,
+              std::optional<std::chrono::milliseconds> timeout,
               utils::movable_function<void(diag::ping_result)>&& handler) const
 {
     if (impl_) {
-        impl_->ping(std::move(report_id), std::move(bucket_name), std::move(services), std::move(handler));
+        impl_->ping(std::move(report_id), std::move(bucket_name), std::move(services), std::move(timeout), std::move(handler));
     }
 }
 
