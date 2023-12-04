@@ -77,7 +77,7 @@ class phrase_query : public search_query
       : terms_{ std::move(terms) }
     {
         if (terms_.empty()) {
-            throw std::invalid_argument("terms must not be empty in phrase query");
+            throw std::invalid_argument("terms must not be empty in phrase_query");
         }
     }
 
