@@ -29,6 +29,8 @@
 
 #include <gsl/narrow>
 
+#include <chrono>
+#include <optional>
 #include <random>
 
 namespace couchbase::core::io
@@ -104,6 +106,7 @@ class http_session_manager
 
     template<typename Collector>
     void ping(std::set<service_type> services,
+              std::optional<std::chrono::milliseconds> timeout,
               std::shared_ptr<Collector> collector,
               const couchbase::core::cluster_credentials& credentials)
     {
@@ -153,6 +156,7 @@ class http_session_manager
                     }
                     operations::http_noop_request request{};
                     request.type = type;
+                    request.timeout = timeout;
                     auto cmd = std::make_shared<operations::http_command<operations::http_noop_request>>(
                       ctx_, request, tracer_, meter_, options_.default_timeout_for(request.type));
                     cmd->start([start = std::chrono::steady_clock::now(),
@@ -163,7 +167,11 @@ class http_session_manager
                         diag::ping_state state = diag::ping_state::ok;
                         std::optional<std::string> error{};
                         if (ec) {
-                            state = diag::ping_state::error;
+                            if (ec == errc::common::unambiguous_timeout || ec == errc::common::ambiguous_timeout) {
+                                state = diag::ping_state::timeout;
+                            } else {
+                                state = diag::ping_state::error;
+                            }
                             error.emplace(fmt::format("code={}, message={}, http_code={}", ec.value(), ec.message(), msg.status_code));
                         }
                         handler->report(diag::endpoint_ping_info{
