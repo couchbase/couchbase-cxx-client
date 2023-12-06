@@ -18,12 +18,14 @@
 #include "test_helper.hxx"
 
 #include "core/impl/encoded_search_query.hxx"
+#include "core/impl/encoded_search_sort.hxx"
 
 #include <couchbase/boolean_field_query.hxx>
 #include <couchbase/boolean_query.hxx>
 #include <couchbase/conjunction_query.hxx>
 #include <couchbase/date_range_query.hxx>
 #include <couchbase/disjunction_query.hxx>
+#include <couchbase/doc_id_query.hxx>
 #include <couchbase/geo_bounding_box_query.hxx>
 #include <couchbase/geo_distance_query.hxx>
 #include <couchbase/geo_polygon_query.hxx>
@@ -37,6 +39,8 @@
 #include <couchbase/term_query.hxx>
 #include <couchbase/term_range_query.hxx>
 #include <couchbase/wildcard_query.hxx>
+
+#include <couchbase/search_sort_geo_distance.hxx>
 
 #include <tao/json.hpp>
 
@@ -136,6 +140,20 @@ auto query = couchbase::disjunction_query{
     {"field":"reviews.content","match":"location hostel"},
     {"bool":true,"field":"free_breakfast"}
 ]}
+)"_json);
+}
+
+TEST_CASE("unit: doc id search query", "[unit]")
+{
+    // clang-format off
+//! [search-docid]
+auto query = couchbase::doc_id_query(std::initializer_list<std::string>{"airport_1258", "hotel_10160"});
+//! [search-docid]
+    // clang-format on
+    const auto encoded = query.encode();
+    REQUIRE_FALSE(encoded.ec);
+    REQUIRE(encoded.query == R"(
+{"ids": ["airport_1258", "hotel_10160"]}
 )"_json);
 }
 
@@ -422,6 +440,29 @@ auto query = couchbase::geo_polygon_query({
       {"lat": 37.79571192027403, "lon": -122.40735054016113},
       {"lat": 37.79393211306212, "lon": -122.44234633404847}
     ]
+}
+)"_json);
+}
+
+TEST_CASE("unit: search sort geo distance", "[unit]")
+{
+    // clang-format off
+//! [search-sort-geo-distance]
+auto geo_distance = couchbase::search_sort_geo_distance(couchbase::geo_point{ 37.79393211306212, -122.44234633404847 }
+, "hotel").unit(couchbase::search_geo_distance_units::nautical_miles);
+//! [search-sort-geo-distance]
+    // clang-format on
+    const auto encoded = geo_distance.encode();
+    REQUIRE_FALSE(encoded.ec);
+    REQUIRE(encoded.sort == R"(
+{
+    "by": "geo_distance",
+    "field": "hotel",
+    "location": {
+      "lat": 37.79393211306212,
+      "lon": -122.44234633404847
+    },
+    "unit": "nauticalmiles"
 }
 )"_json);
 }
