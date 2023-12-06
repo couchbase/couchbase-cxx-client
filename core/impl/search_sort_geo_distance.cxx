@@ -41,7 +41,7 @@ search_sort_geo_distance::encode() const -> encoded_search_sort
     encoded_search_sort built;
     built.sort = {
         { "by", "geo_distance" },
-        {"field", field_ },
+        { "field", field_ },
     };
     built.sort["location"] = {
         { "lat", location_.latitude },

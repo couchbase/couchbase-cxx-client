@@ -42,7 +42,7 @@ class search_sort_geo_distance : public search_sort
     }
 
     search_sort_geo_distance(double latitude, double longitude, std::string field)
-      : location_ { geo_point{ latitude, longitude } }
+      : location_{ geo_point{ latitude, longitude } }
       , field_{ std::move(field) }
     {
     }
