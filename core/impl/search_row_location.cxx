@@ -26,6 +26,18 @@ search_row_location::search_row_location(internal_search_row_location internal)
 {
 }
 
+search_row_location::search_row_location()
+  : internal_{ nullptr }
+{
+}
+
+search_row_location::~search_row_location() = default;
+
+search_row_location::search_row_location(search_row_location&&) noexcept = default;
+
+search_row_location&
+search_row_location::operator=(couchbase::search_row_location&&) noexcept = default;
+
 auto
 search_row_location::field() const -> const std::string&
 {

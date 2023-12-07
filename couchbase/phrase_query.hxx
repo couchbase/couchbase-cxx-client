@@ -63,6 +63,25 @@ class phrase_query : public search_query
     }
 
     /**
+     * Create a new phrase query.
+     *
+     * The mandatory list of terms that must exactly match in the index. Note that the index can (and usually will) contain terms that are
+     * derived from the text in documents, as analyzers can apply process like stemming.
+     *
+     * @param terms non-empty vector of terms.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    explicit phrase_query(std::vector<std::string> terms)
+      : terms_{ std::move(terms) }
+    {
+        if (terms_.empty()) {
+            throw std::invalid_argument("terms must not be empty in phrase_query");
+        }
+    }
+
+    /**
      * If a field is specified, only terms in that field will be matched.
      *
      * @param field_name name of the field to be matched

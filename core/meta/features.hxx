@@ -90,3 +90,9 @@
  * couchbase::cluster::search_indexes() support
  */
 #define COUCHBASE_CXX_CLIENT_HAS_PUBLIC_SEARCH_INDEX_MANAGEMENT 1
+
+/**
+ * FTS is accessible from the public API
+ * couchbase::cluster::search_query() and couchbase::scope::search_query() support
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_PUBLIC_SEARCH 1
