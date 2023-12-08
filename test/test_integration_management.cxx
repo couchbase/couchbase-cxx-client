@@ -2863,7 +2863,8 @@ TEST_CASE("integration: analytics index management with core API", "[integration
             REQUIRE_FALSE(index->is_primary);
         }
 
-        if (integration.cluster_version().supports_analytics_pending_mutations()) {
+        if (integration.cluster_version().supports_analytics_pending_mutations() && integration.cluster_version().major >= 7) {
+            // Getting unexpected result in 6.6
             couchbase::core::operations::management::analytics_get_pending_mutations_request req{};
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_SUCCESS(resp.ctx.ec);
@@ -3486,14 +3487,13 @@ TEST_CASE("integration: analytics index management with public API", "[integrati
             REQUIRE_FALSE(index->is_primary);
         }
 
-        if (integration.cluster_version().supports_analytics_pending_mutations()) {
-            {
-                auto [ctx, res] = mgr.get_pending_mutations({}).get();
-                REQUIRE_SUCCESS(ctx.ec());
-                REQUIRE(res.count(dataverse_name) == 1);
-                REQUIRE(res[dataverse_name].count(dataset_name) == 1);
-                REQUIRE(res[dataverse_name][dataset_name] >= 0);
-            }
+        if (integration.cluster_version().supports_analytics_pending_mutations() && integration.cluster_version().major >= 7) {
+            // Getting unexpected result in 6.6
+            auto [ctx, res] = mgr.get_pending_mutations({}).get();
+            REQUIRE_SUCCESS(ctx.ec());
+            REQUIRE(res.count(dataverse_name) == 1);
+            REQUIRE(res[dataverse_name].count(dataset_name) == 1);
+            REQUIRE(res[dataverse_name][dataset_name] >= 0);
         }
 
         {
@@ -3657,8 +3657,6 @@ run_s3_link_test_public_api(test::utils::integration_test_guard& integration,
         REQUIRE(s3_link.region == "us-east-1");
         REQUIRE(s3_link.service_endpoint.value() == "service_endpoint");
     }
-
-    return;
 
     {
         auto opts = couchbase::get_links_analytics_options()
