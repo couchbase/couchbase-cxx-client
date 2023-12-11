@@ -65,7 +65,7 @@ struct cluster_options {
     io::dns::dns_config dns_config{ io::dns::dns_config::system_config() };
     bool show_queries{ false };
     bool enable_unordered_execution{ true };
-    bool enable_clustermap_notification{ false };
+    bool enable_clustermap_notification{ true };
     bool enable_compression{ true };
     bool enable_tracing{ true };
     bool enable_metrics{ true };

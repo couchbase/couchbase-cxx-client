@@ -96,7 +96,7 @@ class behavior_options
   private:
     std::string user_agent_extra_{};
     bool show_queries_{ false };
-    bool enable_clustermap_notification_{ false };
+    bool enable_clustermap_notification_{ true };
     bool enable_mutation_tokens_{ true };
     bool enable_unordered_execution_{ true };
     bool dump_configuration_{ false };

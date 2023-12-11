@@ -557,6 +557,7 @@ class bucket_impl
             } else {
                 added = config.nodes;
             }
+            config_.reset();
             config_ = config;
             configured_ = true;
 

@@ -109,6 +109,9 @@ struct fmt::formatter<couchbase::core::protocol::hello_feature> {
             case couchbase::core::protocol::hello_feature::subdoc_replica_read:
                 name = "subdoc_replica_read";
                 break;
+            case couchbase::core::protocol::hello_feature::deduplicate_not_my_vbucket_clustermap:
+                name = "deduplicate_not_my_vbucket_clustermap";
+                break;
         }
         return format_to(ctx.out(), "{}", name);
     }
