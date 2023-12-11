@@ -269,7 +269,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                                                                                                  : errc::common::ambiguous_timeout));
               }
               if (ec == errc::common::request_canceled) {
-                  if (reason == retry_reason::do_not_retry) {
+                  if (!self->request.retries.idempotent() && !allows_non_idempotent_retry(reason)) {
                       if (self->span_->uses_tags())
                           self->span_->add_tag(tracing::attributes::orphan, "canceled");
                       return self->invoke_handler(ec);
