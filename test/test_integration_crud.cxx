@@ -297,6 +297,16 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
+
+    if (integration.cluster_version().supports_document_not_locked_status()) {
+        // if unlock is performer again, a document_not_locked error code should be returned
+        {
+            couchbase::core::operations::unlock_request req{ id };
+            req.cas = cas;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_locked);
+        }
+    }
 }
 
 TEST_CASE("integration: lock/unlock without lock time", "[integration]")
@@ -907,6 +917,14 @@ TEST_CASE("integration: pessimistic locking with public API", "[integration]")
     {
         auto ctx = collection.unlock(id, cas, {}).get();
         REQUIRE_SUCCESS(ctx.ec());
+    }
+
+    if (integration.cluster_version().supports_document_not_locked_status()) {
+        // if unlock is performer again, a document_not_locked error code should be returned
+        {
+            auto ctx = collection.unlock(id, cas, {}).get();
+            REQUIRE(ctx.ec() == couchbase::errc::key_value::document_not_locked);
+        }
     }
 
     // now the key is not locked

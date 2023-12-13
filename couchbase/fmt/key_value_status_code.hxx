@@ -71,6 +71,9 @@ struct fmt::formatter<couchbase::key_value_status_code> {
             case key_value_status_code::locked:
                 name = "locked (0x09)";
                 break;
+            case key_value_status_code::not_locked:
+                name = "not_locked (0x0e)";
+                break;
             case key_value_status_code::auth_stale:
                 name = "auth_stale (0x1f)";
                 break;

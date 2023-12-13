@@ -96,3 +96,8 @@
  * couchbase::cluster::search_query() and couchbase::scope::search_query() support
  */
 #define COUCHBASE_CXX_CLIENT_HAS_PUBLIC_SEARCH 1
+
+/**
+ * The document not locked (couchbase::errc::key_value::document_not_locked) error code is supported
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_DOCUMENT_NOT_LOCKED

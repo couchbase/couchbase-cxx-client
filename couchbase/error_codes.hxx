@@ -591,15 +591,36 @@ enum class key_value {
     xattr_no_access = 130,
 
     /**
+     * The document is already locked - generally returned when an unlocking operation is being performed.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    // KV Code: 0x0e
+    document_not_locked = 131,
+
+    /**
      * Only deleted document could be revived
      *
      * @since 1.0.0
      * @committed
      */
     // KV Code: 0xd6
-    cannot_revive_living_document = 131,
+    cannot_revive_living_document = 132,
 
+    /**
+     * The provided mutation token is outdated compared to the current state of the server.
+     *
+     * @since 1.0.0
+     * @uncommitted
+     */
+    // KV Code: 0xa8
     mutation_token_outdated = 133,
+
+    /**
+     * @internal
+     */
+    // KV Code: 0xa7
     range_scan_completed = 134,
 };
 

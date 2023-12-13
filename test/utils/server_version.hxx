@@ -221,6 +221,11 @@ struct server_version {
         return supports_search() && (is_mad_hatter() || is_cheshire_cat() || is_neo());
     }
 
+    [[nodiscard]] bool supports_document_not_locked_status() const
+    {
+        return !use_gocaves && (major > 7 || (major == 7 && minor >= 6));
+    }
+
     [[nodiscard]] bool is_capella() const
     {
         return deployment == deployment_type::capella;
