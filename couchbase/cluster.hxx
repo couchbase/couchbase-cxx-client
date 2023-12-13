@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <couchbase/analytics_index_manager.hxx>
 #include <couchbase/analytics_options.hxx>
 #include <couchbase/bucket.hxx>
 #include <couchbase/bucket_manager.hxx>
@@ -215,6 +216,16 @@ class cluster
      * @committed
      */
     [[nodiscard]] auto query_indexes() const -> query_index_manager;
+
+    /**
+     * Provides access ot the Analytics index management services.
+     *
+     * @return a manager instance
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto analytics_indexes() const -> analytics_index_manager;
 
     /**
      * Provides access to the bucket management services.

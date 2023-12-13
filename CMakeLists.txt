@@ -104,6 +104,7 @@ set(couchbase_cxx_client_FILES
     core/free_form_http_request.cxx
     core/impl/analytics.cxx
     core/impl/analytics_error_category.cxx
+    core/impl/analytics_index_manager.cxx
     core/impl/best_effort_retry_strategy.cxx
     core/impl/binary_collection.cxx
     core/impl/boolean_field_query.cxx
