@@ -1804,7 +1804,7 @@ attempt_context_impl::rollback()
     }
     if (is_done()) {
         std::string msg("Transaction already done, cannot rollback");
-        CB_ATTEMPT_CTX_LOG_ERROR(this, msg);
+        CB_ATTEMPT_CTX_LOG_ERROR(this, "{}", msg);
         // need to raise a FAIL_OTHER which is not retryable or rollback-able
         throw transaction_operation_failed(FAIL_OTHER, msg).no_rollback();
     }
@@ -2030,7 +2030,7 @@ attempt_context_impl::do_get(const core::document_id& id, const std::optional<st
         staged_mutation* own_remove = staged_mutations_->find_remove(id);
         if (own_remove) {
             auto msg = fmt::format("found own-write of removed doc {}", id);
-            CB_ATTEMPT_CTX_LOG_DEBUG(this, msg);
+            CB_ATTEMPT_CTX_LOG_DEBUG(this, "{}", msg);
             return cb(FAIL_DOC_NOT_FOUND, msg, std::nullopt);
         }
 

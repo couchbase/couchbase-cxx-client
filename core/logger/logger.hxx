@@ -178,16 +178,16 @@ log_protocol(const char* file, int line, const char* function, std::string_view 
  * @param msg message to log
  * @param args the formatting arguments
  */
-template<typename String, typename... Args>
+template<typename... Args>
 inline void
-log(const char* file, int line, const char* function, level lvl, const String& msg, Args&&... args)
+log(const char* file, int line, const char* function, level lvl, fmt::format_string<Args...> msg, Args&&... args)
 {
     detail::log(file, line, function, lvl, fmt::format(msg, std::forward<Args>(args)...));
 }
 
-template<typename String, typename... Args>
+template<typename... Args>
 inline void
-log_protocol(const char* file, int line, const char* function, const String& msg, Args&&... args)
+log_protocol(const char* file, int line, const char* function, fmt::format_string<Args...> msg, Args&&... args)
 {
     detail::log_protocol(file, line, function, fmt::format(msg, std::forward<Args>(args)...));
 }

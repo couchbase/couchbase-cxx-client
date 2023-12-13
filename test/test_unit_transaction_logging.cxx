@@ -96,7 +96,7 @@ TEST_CASE("transactions: can use custom sink", "[unit]")
     std::string log_message = "I am a log";
     auto sink = std::make_shared<TrivialFileSink>();
     create_logger(sink, couchbase::core::logger::level::trace);
-    CB_TXN_LOG_DEBUG(log_message);
+    CB_TXN_LOG_DEBUG("{}", log_message);
     couchbase::core::logger::flush();
     // ASYNC logger, so flush returns immediately.   Gotta wait...
     REQUIRE(sink_has_output(sink));
@@ -109,10 +109,10 @@ TEST_CASE("transactions: custom sink respects log levels", "[unit]")
     std::string log_message2 = "I am also a log";
     auto sink = std::make_shared<TrivialFileSink>();
     create_logger(sink, couchbase::core::logger::level::info);
-    CB_TXN_LOG_DEBUG(log_message);
+    CB_TXN_LOG_DEBUG("{}", log_message);
     couchbase::core::logger::flush();
     REQUIRE(sink_is_empty(sink));
-    CB_TXN_LOG_INFO(log_message2);
+    CB_TXN_LOG_INFO("{}", log_message2);
     couchbase::core::logger::flush();
     REQUIRE(sink_has_output(sink));
     REQUIRE(sink_output_contains(sink, log_message2));
@@ -124,7 +124,7 @@ TEST_CASE("transactions: custom sink respects log level changes", "[unit]")
     auto sink = std::make_shared<TrivialFileSink>();
     create_logger(sink, couchbase::core::logger::level::trace);
     couchbase::core::logger::set_log_levels(couchbase::core::logger::level::info);
-    CB_TXN_LOG_DEBUG(log_message);
+    CB_TXN_LOG_DEBUG("{}", log_message);
     couchbase::core::logger::flush();
     REQUIRE(sink_is_empty(sink));
 }

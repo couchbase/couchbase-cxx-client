@@ -81,11 +81,11 @@ TEST_CASE("unit: join strings (fmt version)", "[unit]")
 {
     std::vector<std::string> field_specs{ "testkey:string" };
 
-    REQUIRE(couchbase::core::utils::join_strings_fmt("{}", field_specs, ",") == "testkey:string");
+    REQUIRE(couchbase::core::utils::join_strings_fmt(field_specs, ",") == "testkey:string");
 
     field_specs.emplace_back("volume:double");
     field_specs.emplace_back("id:integer");
-    REQUIRE(couchbase::core::utils::join_strings_fmt("{}", field_specs, ",") == "testkey:string,volume:double,id:integer");
+    REQUIRE(couchbase::core::utils::join_strings_fmt(field_specs, ",") == "testkey:string,volume:double,id:integer");
 }
 
 constexpr const char* ssl_lib_id =
