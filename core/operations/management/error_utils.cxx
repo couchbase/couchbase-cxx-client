@@ -18,6 +18,8 @@
 #include "error_utils.hxx"
 #include "core/utils/json.hxx"
 
+#include <regex>
+
 namespace couchbase::core::operations::management
 {
 
@@ -116,13 +118,12 @@ translate_query_error_code(std::uint64_t error, const std::string& message, std:
 {
     switch (error) {
         case 5000: /* IKey: "Internal Error" */
-            if (message.find(" already exists") != std::string::npos) {
+            if (std::regex_search(message, std::regex{ ".*[iI]ndex .*already exist.*" })) {
                 return errc::common::index_exists;
-            }
-            if (message.find("not found.") != std::string::npos) {
+            } else if (message.find("Index does not exist") != std::string::npos ||
+                       std::regex_search(message, std::regex{ ".*[iI]ndex .*[nN]ot [fF]ound.*" })) {
                 return errc::common::index_not_found;
-            }
-            if (message.find("Bucket Not Found") != std::string::npos) {
+            } else if (message.find("Bucket Not Found") != std::string::npos) {
                 return errc::common::bucket_not_found;
             }
             break;

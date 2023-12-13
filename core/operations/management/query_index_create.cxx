@@ -23,6 +23,7 @@
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
+#include <regex>
 
 namespace couchbase::core::operations::management
 {
@@ -97,7 +98,7 @@ query_index_create_request::make_response(error_context::http&& ctx, const encod
                 error.message = entry.at("msg").get_string();
                 switch (error.code) {
                     case 5000: /* IKey: "Internal Error" */
-                        if (error.message.find(" already exists") != std::string::npos) {
+                        if (std::regex_search(error.message, std::regex{ ".*[iI]ndex .*already exist.*" })) {
                             index_already_exists = true;
                         }
                         if (error.message.find("Bucket Not Found") != std::string::npos) {
