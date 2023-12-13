@@ -319,9 +319,9 @@ add_options(CLI::App* app, behavior_options& options)
       ->default_val(default_user_agent_extra);
     group->add_option("--network", options.network, "Network (a.k.a. Alternate Addresses) to use.")->default_val(default_network);
     group->add_flag("--show-queries", options.show_queries, "Log queries on INFO level.");
-    group->add_flag("--enable-clustermap-notifications",
-                    options.enable_clustermap_notifications,
-                    "Allow server to send notifications when cluster configuration changes.");
+    group->add_flag("--disable-clustermap-notifications",
+                    options.disable_clustermap_notifications,
+                    "Do not allow server to send notifications when cluster configuration changes.");
     group->add_flag(
       "--disable-mutation-tokens", options.disable_mutation_tokens, "Do not request Key/Value service to send mutation tokens.");
     group->add_flag(
@@ -469,7 +469,7 @@ apply_options(couchbase::cluster_options& options, const behavior_options& behav
     options.behavior().append_to_user_agent(behavior.user_agent_extra);
     options.behavior().show_queries(behavior.show_queries);
     options.behavior().dump_configuration(behavior.dump_configuration);
-    options.behavior().enable_clustermap_notification(behavior.enable_clustermap_notifications);
+    options.behavior().enable_clustermap_notification(!behavior.disable_clustermap_notifications);
     options.behavior().enable_mutation_tokens(!behavior.disable_mutation_tokens);
     options.behavior().enable_unordered_execution(!behavior.disable_unordered_execution);
 }

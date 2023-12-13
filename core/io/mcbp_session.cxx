@@ -246,6 +246,7 @@ class mcbp_session_impl
             }
             if (session_->origin_.options().enable_clustermap_notification) {
                 hello_req.body().enable_clustermap_change_notification();
+                hello_req.body().enable_deduplicate_not_my_vbucket_clustermap();
             }
             if (session_->origin_.options().enable_compression) {
                 hello_req.body().enable_compression();
@@ -665,7 +666,18 @@ class mcbp_session_impl
                     Expects(protocol::is_valid_server_request_opcode(msg.header.opcode));
                     switch (static_cast<protocol::server_opcode>(msg.header.opcode)) {
                         case protocol::server_opcode::cluster_map_change_notification: {
-                            protocol::server_request<protocol::cluster_map_change_notification_request_body> req(std::move(msg));
+                            protocol::cmd_info info{ session_->bootstrap_hostname_, session_->bootstrap_port_number_ };
+                            if (session_->origin_.options().dump_configuration) {
+                                std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()), msg.body.size() };
+                                CB_LOG_TRACE(
+                                  "{} configuration from cluster_map_change_notification request (size={}, endpoint=\"{}:{}\"), {}",
+                                  session_->log_prefix_,
+                                  config_text.size(),
+                                  info.endpoint_address,
+                                  info.endpoint_port,
+                                  config_text);
+                            }
+                            protocol::server_request<protocol::cluster_map_change_notification_request_body> req(std::move(msg), info);
                             std::optional<topology::configuration> config = req.body().config();
                             if (session_ && config.has_value()) {
                                 if ((!config->bucket.has_value() && req.body().bucket().empty()) ||
@@ -1260,11 +1272,12 @@ class mcbp_session_impl
                 }
             }
         }
+        config_.reset();
         config_.emplace(std::move(config));
         configured_ = true;
         for (const auto& listener : config_listeners_) {
-            asio::post(asio::bind_executor(
-              ctx_, [listener, config = config_.value()]() mutable { return listener->update_config(std::move(config)); }));
+            asio::post(
+              asio::bind_executor(ctx_, [listener, c = config_.value()]() mutable { return listener->update_config(std::move(c)); }));
         }
     }
 

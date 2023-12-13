@@ -16,6 +16,7 @@
  */
 
 #include "analytics.hxx"
+#include "beam.hxx"
 #include "get.hxx"
 #include "pillowfight.hxx"
 #include "query.hxx"
@@ -38,6 +39,7 @@ main(int argc, const char** argv)
     app.add_subcommand(cbc::make_query_command());
     app.add_subcommand(cbc::make_analytics_command());
     app.add_subcommand(cbc::make_pillowfight_command());
+    app.add_subcommand(cbc::make_beam_command());
 
     try {
         app.parse(argc, argv);
@@ -60,6 +62,9 @@ main(int argc, const char** argv)
         }
         if (item->get_name() == "pillowfight") {
             return cbc::execute_pillowfight_command(item);
+        }
+        if (item->get_name() == "beam") {
+            return cbc::execute_beam_command(item);
         }
     }
 

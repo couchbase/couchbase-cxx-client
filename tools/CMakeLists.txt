@@ -15,6 +15,7 @@ add_executable(
   cbc.cxx
   utils.cxx
   analytics.cxx
+  beam.cxx
   get.cxx
   pillowfight.cxx
   query.cxx

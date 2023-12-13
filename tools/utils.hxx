@@ -165,7 +165,7 @@ struct behavior_options {
     std::string user_agent_extra{};
     std::string network{};
     bool show_queries{};
-    bool enable_clustermap_notifications{};
+    bool disable_clustermap_notifications{};
     bool disable_mutation_tokens{};
     bool disable_unordered_execution{};
     bool dump_configuration{};

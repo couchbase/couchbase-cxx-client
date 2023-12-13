@@ -533,6 +533,7 @@ class bucket_impl
     {
         std::vector<topology::configuration::node> added{};
         std::vector<topology::configuration::node> removed{};
+        bool sequence_changed = false;
         {
             std::scoped_lock lock(config_mutex_);
             if (!config_) {
@@ -554,9 +555,21 @@ class bucket_impl
             if (config_) {
                 diff_nodes(config_->nodes, config.nodes, added);
                 diff_nodes(config.nodes, config_->nodes, removed);
+                if (added.empty() && removed.empty() && config.nodes.size() == config_->nodes.size()) {
+                    for (std::size_t i = 0; i < config.nodes.size(); ++i) {
+                        if (config.nodes[i] != config_->nodes[i]) {
+                            sequence_changed = true;
+                            break;
+                        }
+                    }
+                } else {
+                    sequence_changed = true;
+                }
             } else {
+                sequence_changed = true;
                 added = config.nodes;
             }
+            config_.reset();
             config_ = config;
             configured_ = true;
 
@@ -567,7 +580,7 @@ class bucket_impl
                 }
             }
         }
-        if (!added.empty() || !removed.empty()) {
+        if (!added.empty() || !removed.empty() || sequence_changed) {
             std::scoped_lock lock(sessions_mutex_);
             std::map<size_t, io::mcbp_session> new_sessions{};
 
