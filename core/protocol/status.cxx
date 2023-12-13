@@ -80,6 +80,9 @@ map_status_code(protocol::client_opcode opcode, std::uint16_t status)
             }
             return errc::key_value::document_locked;
 
+        case key_value_status_code::not_locked:
+            return errc::key_value::document_not_locked;
+
         case key_value_status_code::auth_stale:
         case key_value_status_code::auth_error:
         case key_value_status_code::no_access:
