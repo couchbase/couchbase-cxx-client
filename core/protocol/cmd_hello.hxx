@@ -88,6 +88,11 @@ class hello_request_body
         features_.emplace_back(hello_feature::clustermap_change_notification);
     }
 
+    void enable_deduplicate_not_my_vbucket_clustermap()
+    {
+        features_.emplace_back(hello_feature::deduplicate_not_my_vbucket_clustermap);
+    }
+
     void enable_compression()
     {
         features_.emplace_back(hello_feature::snappy);

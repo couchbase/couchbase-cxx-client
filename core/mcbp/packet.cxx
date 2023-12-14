@@ -86,7 +86,7 @@ packet::debug_string() const
         }
     }
 
-    fmt::format_to(std::back_insert_iterator(out), "}");
+    fmt::format_to(std::back_insert_iterator(out), "}}");
     return { out.begin(), out.end() };
 }
 } // namespace couchbase::core::mcbp

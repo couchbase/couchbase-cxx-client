@@ -46,16 +46,17 @@ join_strings(const Range& values, const std::string& sep)
  * Joins a list of objects together using fmt:: for formatting.
  */
 template<typename Range>
+
 std::string
-join_strings_fmt(const std::string& item_fmt, const Range& values, const std::string& sep)
+join_strings_fmt(const Range& values, const std::string& sep)
 {
     std::stringstream stream;
     auto sentinel = std::end(values);
     if (auto it = std::begin(values); it != sentinel) {
-        stream << fmt::format(item_fmt, *it);
+        stream << fmt::format("{}", *it);
         ++it;
         while (it != sentinel) {
-            stream << sep << fmt::format(item_fmt, *it);
+            stream << sep << fmt::format("{}", *it);
             ++it;
         }
     }

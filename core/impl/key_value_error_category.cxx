@@ -80,10 +80,12 @@ struct key_value_error_category : std::error_category {
                 return "xattr_unknown_virtual_attribute (127)";
             case errc::key_value::xattr_cannot_modify_virtual_attribute:
                 return "xattr_cannot_modify_virtual_attribute (128)";
-            case errc::key_value::cannot_revive_living_document:
-                return "cannot_revive_living_document (131)";
             case errc::key_value::xattr_no_access:
                 return "xattr_no_access (130)";
+            case errc::key_value::document_not_locked:
+                return "document_not_locked (131)";
+            case errc::key_value::cannot_revive_living_document:
+                return "cannot_revive_living_document (132)";
             case errc::key_value::mutation_token_outdated:
                 return "mutation_token_outdated (133)";
             case errc::key_value::range_scan_completed:

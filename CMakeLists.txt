@@ -1,5 +1,4 @@
-cmake_minimum_required(VERSION 3.17)
-# node.js uses cmake 3.17
+cmake_minimum_required(VERSION 3.19)
 message(STATUS "CMake version ${CMAKE_VERSION}")
 
 set(couchbase_cxx_client_BUILD_NUMBER 0)
@@ -105,6 +104,7 @@ set(couchbase_cxx_client_FILES
     core/free_form_http_request.cxx
     core/impl/analytics.cxx
     core/impl/analytics_error_category.cxx
+    core/impl/analytics_index_manager.cxx
     core/impl/best_effort_retry_strategy.cxx
     core/impl/binary_collection.cxx
     core/impl/boolean_field_query.cxx

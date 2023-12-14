@@ -61,6 +61,12 @@ struct configuration {
         port_map services_tls{};
         std::map<std::string, alternate_address> alt{};
 
+        bool operator!=(const node& other) const
+        {
+            return hostname != other.hostname || services_plain.key_value != other.services_plain.key_value ||
+                   services_tls.key_value != other.services_tls.key_value;
+        }
+
         [[nodiscard]] std::uint16_t port_or(service_type type, bool is_tls, std::uint16_t default_value) const;
 
         [[nodiscard]] std::uint16_t port_or(const std::string& network, service_type type, bool is_tls, std::uint16_t default_value) const;

@@ -60,7 +60,7 @@ transactions::transactions(core::cluster cluster, const couchbase::transactions:
         if (err) {
             auto err_msg =
               fmt::format("error opening metadata_collection bucket '{}' specified in the config!", config_.metadata_collection->bucket);
-            CB_TXN_LOG_DEBUG(err_msg);
+            CB_TXN_LOG_DEBUG("{}", err_msg);
             throw std::runtime_error(err_msg);
         }
     }

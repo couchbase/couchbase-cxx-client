@@ -160,6 +160,11 @@ enum class hello_feature : std::uint16_t {
      * Indicates support for subdoc lookup operations on replicas
      */
     subdoc_replica_read = 0x1c,
+
+    /**
+     * The server will not send configuration body to the connections, that already has seen it.
+     */
+    deduplicate_not_my_vbucket_clustermap = 0x1e,
 };
 
 constexpr bool
@@ -191,6 +196,7 @@ is_valid_hello_feature(std::uint16_t code)
         case hello_feature::replace_body_with_xattr:
         case hello_feature::resource_units:
         case hello_feature::subdoc_replica_read:
+        case hello_feature::deduplicate_not_my_vbucket_clustermap:
             return true;
     }
     return false;

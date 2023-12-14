@@ -41,6 +41,7 @@ is_valid_status(std::uint16_t code)
         case key_value_status_code::not_my_vbucket:
         case key_value_status_code::no_bucket:
         case key_value_status_code::locked:
+        case key_value_status_code::not_locked:
         case key_value_status_code::auth_stale:
         case key_value_status_code::auth_error:
         case key_value_status_code::auth_continue:

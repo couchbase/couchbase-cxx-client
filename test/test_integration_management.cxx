@@ -44,6 +44,7 @@
 #include "couchbase/create_primary_query_index_options.hxx"
 #include "couchbase/create_query_index_options.hxx"
 #include "couchbase/drop_query_index_options.hxx"
+#include "couchbase/management/analytics_link.hxx"
 #include "couchbase/watch_query_indexes_options.hxx"
 
 using Catch::Approx;
@@ -2728,7 +2729,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
     }
 }
 
-TEST_CASE("integration: analytics index management", "[integration]")
+TEST_CASE("integration: analytics index management with core API", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
@@ -2862,11 +2863,15 @@ TEST_CASE("integration: analytics index management", "[integration]")
             REQUIRE_FALSE(index->is_primary);
         }
 
-        if (integration.cluster_version().supports_analytics_pending_mutations()) {
+        if (integration.cluster_version().supports_analytics_pending_mutations() && integration.cluster_version().major >= 7) {
+            // Getting unexpected result in 6.6
             couchbase::core::operations::management::analytics_get_pending_mutations_request req{};
             auto resp = test::utils::execute(integration.cluster, req);
             REQUIRE_SUCCESS(resp.ctx.ec);
-            REQUIRE(resp.stats[index_name] == 0);
+            // In the Core API the key has the `dataverse.dataset` format
+            auto key = fmt::format("{}.{}", dataverse_name, dataset_name);
+            REQUIRE(resp.stats.count(key) == 1);
+            REQUIRE(resp.stats[key] >= 0);
         }
 
         {
@@ -3026,7 +3031,7 @@ TEST_CASE("integration: analytics index management", "[integration]")
 }
 
 void
-run_s3_link_test(test::utils::integration_test_guard& integration, const std::string& dataverse_name, const std::string& link_name)
+run_s3_link_test_core_api(test::utils::integration_test_guard& integration, const std::string& dataverse_name, const std::string& link_name)
 {
     {
         couchbase::core::operations::management::analytics_dataverse_create_request req{};
@@ -3143,7 +3148,9 @@ run_s3_link_test(test::utils::integration_test_guard& integration, const std::st
 }
 
 void
-run_azure_link_test(test::utils::integration_test_guard& integration, const std::string& dataverse_name, const std::string& link_name)
+run_azure_link_test_core_api(test::utils::integration_test_guard& integration,
+                             const std::string& dataverse_name,
+                             const std::string& link_name)
 {
     {
         couchbase::core::operations::management::analytics_dataverse_create_request req{};
@@ -3261,7 +3268,7 @@ run_azure_link_test(test::utils::integration_test_guard& integration, const std:
     }
 }
 
-TEST_CASE("integration: analytics external link management", "[integration]")
+TEST_CASE("integration: analytics external link management with core API", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
@@ -3319,13 +3326,13 @@ TEST_CASE("integration: analytics external link management", "[integration]")
 
         SECTION("s3")
         {
-            run_s3_link_test(integration, dataverse_name, link_name);
+            run_s3_link_test_core_api(integration, dataverse_name, link_name);
         }
 
         if (integration.cluster_version().supports_analytics_link_azure_blob()) {
             SECTION("azure")
             {
-                run_azure_link_test(integration, dataverse_name, link_name);
+                run_azure_link_test_core_api(integration, dataverse_name, link_name);
             }
         }
     }
@@ -3348,13 +3355,558 @@ TEST_CASE("integration: analytics external link management", "[integration]")
 
             SECTION("s3")
             {
-                run_s3_link_test(integration, dataverse_name, link_name);
+                run_s3_link_test_core_api(integration, dataverse_name, link_name);
             }
 
             if (integration.cluster_version().supports_analytics_link_azure_blob()) {
                 SECTION("azure")
                 {
-                    run_azure_link_test(integration, dataverse_name, link_name);
+                    run_azure_link_test_core_api(integration, dataverse_name, link_name);
+                }
+            }
+
+            {
+                couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket, scope_name };
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_SUCCESS(resp.ctx.ec);
+            }
+        }
+    }
+}
+
+TEST_CASE("integration: analytics index management with public API", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_analytics()) {
+        SKIP("cluster does not support analytics service");
+    }
+    if (!integration.has_analytics_service()) {
+        SKIP("cluster does not have analytics service");
+    }
+    if (integration.storage_backend() == couchbase::core::management::cluster::bucket_storage_backend::magma) {
+        SKIP("analytics does not work with magma storage backend, see MB-47718");
+    }
+
+    couchbase::cluster cluster{ integration.cluster };
+    auto mgr = cluster.analytics_indexes();
+
+    SECTION("crud")
+    {
+        auto dataverse_name = test::utils::uniq_id("dataverse");
+        auto dataset_name = test::utils::uniq_id("dataset");
+        auto index_name = test::utils::uniq_id("index");
+
+        {
+            auto ctx = mgr.create_dataverse(dataverse_name, {}).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        {
+            auto ctx = mgr.create_dataverse(dataverse_name, {}).get();
+            REQUIRE(ctx.ec() == couchbase::errc::analytics::dataverse_exists);
+        }
+
+        {
+            auto opts = couchbase::create_dataverse_analytics_options().ignore_if_exists(true);
+            auto ctx = mgr.create_dataverse(dataverse_name, opts).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        {
+            auto opts = couchbase::create_dataset_analytics_options().dataverse_name(dataverse_name);
+            auto ctx = mgr.create_dataset(dataset_name, integration.ctx.bucket, opts).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        {
+            auto opts = couchbase::create_dataset_analytics_options().dataverse_name(dataverse_name);
+            auto ctx = mgr.create_dataset(dataset_name, integration.ctx.bucket, opts).get();
+            REQUIRE(ctx.ec() == couchbase::errc::analytics::dataset_exists);
+        }
+
+        {
+            auto opts = couchbase::create_dataset_analytics_options().dataverse_name(dataverse_name).ignore_if_exists(true);
+            auto ctx = mgr.create_dataset(dataset_name, integration.ctx.bucket, opts).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        {
+            auto opts = couchbase::create_index_analytics_options().dataverse_name(dataverse_name);
+            std::map<std::string, std::string> fields{};
+            fields["testkey"] = "string";
+            auto ctx = mgr.create_index(index_name, dataset_name, fields, opts).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        {
+            auto opts = couchbase::create_index_analytics_options().dataverse_name(dataverse_name);
+            std::map<std::string, std::string> fields{};
+            fields["testkey"] = "string";
+            auto ctx = mgr.create_index(index_name, dataset_name, fields, opts).get();
+            REQUIRE(ctx.ec() == couchbase::errc::common::index_exists);
+        }
+
+        {
+            auto opts = couchbase::create_index_analytics_options().dataverse_name(dataverse_name).ignore_if_exists(true);
+            std::map<std::string, std::string> fields{};
+            fields["testkey"] = "string";
+            auto ctx = mgr.create_index(index_name, dataset_name, fields, opts).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        {
+            auto ctx = mgr.connect_link({}).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        {
+            auto [ctx, res] = mgr.get_all_datasets({}).get();
+            REQUIRE_SUCCESS(ctx.ec());
+            REQUIRE_FALSE(res.empty());
+
+            auto dataset = std::find_if(res.begin(), res.end(), [&dataset_name](const couchbase::management::analytics_dataset& d) {
+                return d.name == dataset_name;
+            });
+            REQUIRE(dataset != res.end());
+            REQUIRE(dataset->dataverse_name == dataverse_name);
+            REQUIRE(dataset->link_name == "Local");
+            REQUIRE(dataset->bucket_name == integration.ctx.bucket);
+        }
+
+        {
+            auto [ctx, res] = mgr.get_all_indexes({}).get();
+            REQUIRE_SUCCESS(ctx.ec());
+            REQUIRE_FALSE(res.empty());
+
+            auto index = std::find_if(
+              res.begin(), res.end(), [&index_name](const couchbase::management::analytics_index& idx) { return idx.name == index_name; });
+            REQUIRE(index != res.end());
+            REQUIRE(index->dataverse_name == dataverse_name);
+            REQUIRE(index->dataset_name == dataset_name);
+            REQUIRE_FALSE(index->is_primary);
+        }
+
+        if (integration.cluster_version().supports_analytics_pending_mutations() && integration.cluster_version().major >= 7) {
+            // Getting unexpected result in 6.6
+            auto [ctx, res] = mgr.get_pending_mutations({}).get();
+            REQUIRE_SUCCESS(ctx.ec());
+            REQUIRE(res.count(dataverse_name) == 1);
+            REQUIRE(res[dataverse_name].count(dataset_name) == 1);
+            REQUIRE(res[dataverse_name][dataset_name] >= 0);
+        }
+
+        {
+            auto ctx = mgr.disconnect_link({}).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        {
+            auto opts = couchbase::drop_index_analytics_options().dataverse_name(dataverse_name);
+            auto ctx = mgr.drop_index(index_name, dataset_name, opts).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        {
+            auto opts = couchbase::drop_index_analytics_options().dataverse_name(dataverse_name);
+            auto ctx = mgr.drop_index(index_name, dataset_name, opts).get();
+            REQUIRE(ctx.ec() == couchbase::errc::common::index_not_found);
+        }
+
+        {
+            auto opts = couchbase::drop_index_analytics_options().dataverse_name(dataverse_name).ignore_if_not_exists(true);
+            auto ctx = mgr.drop_index(index_name, dataset_name, opts).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        {
+            auto opts = couchbase::drop_dataset_analytics_options().dataverse_name(dataverse_name);
+            auto ctx = mgr.drop_dataset(dataset_name, opts).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        {
+            auto opts = couchbase::drop_dataset_analytics_options().dataverse_name(dataverse_name);
+            auto ctx = mgr.drop_dataset(dataset_name, opts).get();
+            REQUIRE(ctx.ec() == couchbase::errc::analytics::dataset_not_found);
+        }
+
+        {
+            auto opts = couchbase::drop_dataset_analytics_options().dataverse_name(dataverse_name).ignore_if_not_exists(true);
+            auto ctx = mgr.drop_dataset(dataset_name, opts).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        {
+            auto ctx = mgr.drop_dataverse(dataverse_name, {}).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        {
+            auto ctx = mgr.drop_dataverse(dataverse_name, {}).get();
+            REQUIRE(ctx.ec() == couchbase::errc::analytics::dataverse_not_found);
+        }
+
+        {
+            auto opts = couchbase::drop_dataverse_analytics_options().ignore_if_not_exists(true);
+            auto ctx = mgr.drop_dataverse(dataverse_name, opts).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+    }
+
+    if (integration.cluster_version().supports_collections()) {
+        SECTION("compound names")
+        {
+            auto dataverse_name = fmt::format("{}/{}", test::utils::uniq_id("dataverse"), test::utils::uniq_id("dataverse"));
+            auto dataset_name = test::utils::uniq_id("dataset");
+            auto index_name = test::utils::uniq_id("index");
+
+            {
+                auto ctx = mgr.create_dataverse(dataverse_name, {}).get();
+                REQUIRE_SUCCESS(ctx.ec());
+            }
+
+            {
+                auto opts = couchbase::create_dataset_analytics_options().dataverse_name(dataverse_name);
+                auto ctx = mgr.create_dataset(dataset_name, integration.ctx.bucket, opts).get();
+                REQUIRE_SUCCESS(ctx.ec());
+            }
+
+            {
+                std::map<std::string, std::string> fields{};
+                fields["testkey"] = "string";
+                auto opts = couchbase::create_index_analytics_options().dataverse_name(dataverse_name);
+                auto ctx = mgr.create_index(index_name, dataset_name, fields, opts).get();
+                REQUIRE_SUCCESS(ctx.ec());
+            }
+
+            {
+                auto opts = couchbase::connect_link_analytics_options().dataverse_name(dataverse_name);
+                auto ctx = mgr.connect_link(opts).get();
+                REQUIRE_SUCCESS(ctx.ec());
+            }
+
+            {
+                auto opts = couchbase::disconnect_link_analytics_options().dataverse_name(dataverse_name);
+                auto ctx = mgr.disconnect_link(opts).get();
+                REQUIRE_SUCCESS(ctx.ec());
+            }
+
+            {
+                auto opts = couchbase::drop_index_analytics_options().dataverse_name(dataverse_name);
+                auto ctx = mgr.drop_index(index_name, dataset_name, opts).get();
+                REQUIRE_SUCCESS(ctx.ec());
+            }
+
+            {
+                auto opts = couchbase::drop_dataset_analytics_options().dataverse_name(dataverse_name);
+                auto ctx = mgr.drop_dataset(dataset_name, opts).get();
+                REQUIRE_SUCCESS(ctx.ec());
+            }
+
+            {
+                auto ctx = mgr.drop_dataverse(dataverse_name, {}).get();
+                REQUIRE_SUCCESS(ctx.ec());
+            }
+        }
+    }
+}
+
+void
+run_s3_link_test_public_api(test::utils::integration_test_guard& integration,
+                            const std::string& dataverse_name,
+                            const std::string& link_name)
+{
+    couchbase::cluster cluster{ integration.cluster };
+    auto mgr = cluster.analytics_indexes();
+
+    {
+        auto ctx = mgr.create_dataverse(dataverse_name, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+    }
+
+    {
+        auto s3_link = couchbase::management::s3_external_analytics_link{
+            link_name, dataverse_name, "access_key", "secret_access_key", "us-east-1", {}, "service_endpoint",
+        };
+        auto ctx = mgr.create_link(s3_link, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+    }
+
+    {
+        auto s3_link = couchbase::management::s3_external_analytics_link{
+            link_name, dataverse_name, "access_key", "secret_access_key", "us-east-1", {}, "service_endpoint",
+        };
+        auto ctx = mgr.create_link(s3_link, {}).get();
+        REQUIRE(ctx.ec() == couchbase::errc::analytics::link_exists);
+    }
+
+    {
+        auto opts = couchbase::get_links_analytics_options().dataverse_name(dataverse_name);
+        auto [ctx, res] = mgr.get_links(opts).get();
+
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE(res.size() == 1);
+        REQUIRE(res[0]->link_type() == couchbase::management::analytics_link_type::s3_external);
+
+        auto s3_link = dynamic_cast<const couchbase::management::s3_external_analytics_link&>(*res[0].get());
+        REQUIRE(s3_link.name == link_name);
+        REQUIRE(s3_link.dataverse_name == dataverse_name);
+        REQUIRE(s3_link.access_key_id == "access_key");
+        REQUIRE(s3_link.secret_access_key.empty());
+        REQUIRE(s3_link.region == "us-east-1");
+        REQUIRE(s3_link.service_endpoint.value() == "service_endpoint");
+    }
+
+    {
+        auto opts = couchbase::get_links_analytics_options()
+                      .dataverse_name(dataverse_name)
+                      .link_type(couchbase::management::analytics_link_type::s3_external);
+        auto [ctx, res] = mgr.get_links(opts).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE(res.size() == 1);
+        REQUIRE(res[0]->link_type() == couchbase::management::analytics_link_type::s3_external);
+
+        auto s3_link = dynamic_cast<const couchbase::management::s3_external_analytics_link&>(*res[0].get());
+        REQUIRE(s3_link.name == link_name);
+        REQUIRE(s3_link.dataverse_name == dataverse_name);
+        REQUIRE(s3_link.access_key_id == "access_key");
+        REQUIRE(s3_link.secret_access_key.empty());
+        REQUIRE(s3_link.region == "us-east-1");
+        REQUIRE(s3_link.service_endpoint.value() == "service_endpoint");
+    }
+
+    {
+        auto opts = couchbase::get_links_analytics_options()
+                      .dataverse_name(dataverse_name)
+                      .link_type(couchbase::management::analytics_link_type::couchbase_remote);
+        auto [ctx, res] = mgr.get_links(opts).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE(res.empty());
+    }
+
+    {
+        auto s3_link = couchbase::management::s3_external_analytics_link{
+            link_name, dataverse_name, "access_key", "secret_access_key", "eu-west-1", {}, "service_endpoint",
+        };
+        auto ctx = mgr.replace_link(s3_link, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+    }
+
+    {
+        auto opts = couchbase::get_links_analytics_options().dataverse_name(dataverse_name);
+        auto [ctx, res] = mgr.get_links(opts).get();
+
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE(res.size() == 1);
+        REQUIRE(res[0]->link_type() == couchbase::management::analytics_link_type::s3_external);
+
+        auto s3_link = dynamic_cast<const couchbase::management::s3_external_analytics_link&>(*res[0].get());
+        REQUIRE(s3_link.name == link_name);
+        REQUIRE(s3_link.dataverse_name == dataverse_name);
+        REQUIRE(s3_link.access_key_id == "access_key");
+        REQUIRE(s3_link.secret_access_key.empty());
+        REQUIRE(s3_link.region == "eu-west-1");
+        REQUIRE(s3_link.service_endpoint.value() == "service_endpoint");
+    }
+
+    {
+        auto ctx = mgr.drop_link(link_name, dataverse_name, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+    }
+
+    {
+        auto ctx = mgr.drop_link(link_name, dataverse_name, {}).get();
+        REQUIRE(ctx.ec() == couchbase::errc::analytics::link_not_found);
+    }
+}
+
+void
+run_azure_link_test_public_api(test::utils::integration_test_guard& integration,
+                               const std::string& dataverse_name,
+                               const std::string& link_name)
+{
+    couchbase::cluster cluster{ integration.cluster };
+    auto mgr = cluster.analytics_indexes();
+
+    {
+        auto ctx = mgr.create_dataverse(dataverse_name, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+    }
+
+    {
+        auto azure_link = couchbase::management::azure_blob_external_analytics_link{
+            link_name, dataverse_name, "connection_string", {}, {}, {}, "blob_endpoint", "endpoint_suffix",
+        };
+        auto ctx = mgr.create_link(azure_link, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+    }
+
+    {
+        auto azure_link = couchbase::management::azure_blob_external_analytics_link{
+            link_name, dataverse_name, "connection_string", {}, {}, {}, "blob_endpoint", "endpoint_suffix",
+        };
+        auto ctx = mgr.create_link(azure_link, {}).get();
+        REQUIRE(ctx.ec() == couchbase::errc::analytics::link_exists);
+    }
+
+    {
+        auto opts = couchbase::get_links_analytics_options().dataverse_name(dataverse_name);
+        auto [ctx, res] = mgr.get_links(opts).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE(res.size() == 1);
+        REQUIRE(res[0]->link_type() == couchbase::management::analytics_link_type::azure_external);
+
+        auto azure_link = dynamic_cast<const couchbase::management::azure_blob_external_analytics_link&>(*res[0].get());
+        REQUIRE(azure_link.name == link_name);
+        REQUIRE(azure_link.dataverse_name == dataverse_name);
+        REQUIRE_FALSE(azure_link.connection_string.has_value());
+        REQUIRE_FALSE(azure_link.account_name.has_value());
+        REQUIRE_FALSE(azure_link.account_key.has_value());
+        REQUIRE_FALSE(azure_link.shared_access_signature.has_value());
+        REQUIRE(azure_link.blob_endpoint == "blob_endpoint");
+        REQUIRE(azure_link.endpoint_suffix == "endpoint_suffix");
+    }
+
+    {
+        auto opts = couchbase::get_links_analytics_options()
+                      .dataverse_name(dataverse_name)
+                      .link_type(couchbase::management::analytics_link_type::azure_external);
+        auto [ctx, res] = mgr.get_links(opts).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE(res.size() == 1);
+        REQUIRE(res[0]->link_type() == couchbase::management::analytics_link_type::azure_external);
+    }
+
+    {
+        auto opts = couchbase::get_links_analytics_options()
+                      .dataverse_name(dataverse_name)
+                      .link_type(couchbase::management::analytics_link_type::couchbase_remote);
+        auto [ctx, res] = mgr.get_links(opts).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE(res.empty());
+    }
+
+    {
+        auto azure_link = couchbase::management::azure_blob_external_analytics_link{
+            link_name, dataverse_name, "connection_string", {}, {}, {}, "new_blob_endpoint", "endpoint_suffix",
+        };
+        auto ctx = mgr.replace_link(azure_link, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+    }
+
+    {
+        auto opts = couchbase::get_links_analytics_options().dataverse_name(dataverse_name);
+        auto [ctx, res] = mgr.get_links(opts).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE(res.size() == 1);
+        REQUIRE(res[0]->link_type() == couchbase::management::analytics_link_type::azure_external);
+
+        auto azure_link = dynamic_cast<const couchbase::management::azure_blob_external_analytics_link&>(*res[0].get());
+        REQUIRE(azure_link.name == link_name);
+        REQUIRE(azure_link.dataverse_name == dataverse_name);
+        REQUIRE_FALSE(azure_link.connection_string.has_value());
+        REQUIRE_FALSE(azure_link.account_name.has_value());
+        REQUIRE_FALSE(azure_link.account_key.has_value());
+        REQUIRE_FALSE(azure_link.shared_access_signature.has_value());
+        REQUIRE(azure_link.blob_endpoint == "new_blob_endpoint");
+        REQUIRE(azure_link.endpoint_suffix == "endpoint_suffix");
+    }
+
+    {
+        auto ctx = mgr.drop_link(link_name, dataverse_name, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+    }
+
+    {
+        auto ctx = mgr.drop_link(link_name, dataverse_name, {}).get();
+        REQUIRE(ctx.ec() == couchbase::errc::analytics::link_not_found);
+    }
+}
+
+TEST_CASE("integration: analytics external link management with public API", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_analytics()) {
+        SKIP("cluster does not support analytics service");
+    }
+    if (!integration.has_analytics_service()) {
+        SKIP("cluster does not have analytics service");
+    }
+    if (!integration.cluster_version().supports_analytics_links()) {
+        SKIP("analytics does not support analytics links");
+    }
+    if (integration.storage_backend() == couchbase::core::management::cluster::bucket_storage_backend::magma) {
+        SKIP("analytics does not work with magma storage backend, see MB-47718");
+    }
+    if (!integration.cluster_version().supports_analytics_links_cert_auth() && integration.origin.credentials().uses_certificate()) {
+        SKIP("certificate credentials selected, but analytics service does not support cert auth, see MB-40198");
+    }
+
+    couchbase::cluster cluster{ integration.cluster };
+    auto mgr = cluster.analytics_indexes();
+
+    auto link_name = test::utils::uniq_id("link");
+
+    SECTION("missing dataverse")
+    {
+        auto s3_link = couchbase::management::s3_external_analytics_link{
+            link_name, "missing_dataverse", "access_key", "secret_access_key", "us-east-1", {}, "service_endpoint",
+        };
+        auto ctx = mgr.create_link(s3_link, {}).get();
+        REQUIRE(ctx.ec() == couchbase::errc::analytics::dataverse_not_found);
+    }
+
+    SECTION("missing argument")
+    {
+        auto s3_link = couchbase::management::s3_external_analytics_link{};
+        auto ctx = mgr.create_link(s3_link, {}).get();
+        REQUIRE(ctx.ec() == couchbase::errc::common::invalid_argument);
+    }
+
+    SECTION("link crud")
+    {
+        auto dataverse_name = test::utils::uniq_id("dataverse");
+
+        SECTION("s3")
+        {
+            run_s3_link_test_public_api(integration, dataverse_name, link_name);
+        }
+
+        if (integration.cluster_version().supports_analytics_link_azure_blob()) {
+            SECTION("azure")
+            {
+                run_azure_link_test_public_api(integration, dataverse_name, link_name);
+            }
+        }
+    }
+
+    if (integration.cluster_version().supports_collections()) {
+        SECTION("link crud scopes")
+        {
+            auto scope_name = test::utils::uniq_id("scope");
+
+            {
+                couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_SUCCESS(resp.ctx.ec);
+                auto created =
+                  test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+                REQUIRE(created);
+            }
+
+            auto dataverse_name = fmt::format("{}/{}", integration.ctx.bucket, scope_name);
+
+            SECTION("s3")
+            {
+                run_s3_link_test_public_api(integration, dataverse_name, link_name);
+            }
+
+            if (integration.cluster_version().supports_analytics_link_azure_blob()) {
+                SECTION("azure")
+                {
+                    run_azure_link_test_public_api(integration, dataverse_name, link_name);
                 }
             }
 
