@@ -41,7 +41,7 @@ class mutation_result : public result
     mutation_result() = default;
 
     /**
-     * Constructs result for get_any_replica operation, or an entry for get_all_replicas operation.
+     * Constructs result for all mutation operations.
      *
      * @param cas
      * @param token mutation token returned by the server
@@ -52,6 +52,19 @@ class mutation_result : public result
     mutation_result(couchbase::cas cas, mutation_token token)
       : result{ cas }
       , mutation_token_{ std::move(token) }
+    {
+    }
+
+    /**
+     * Constructs result for all mutation operations
+     *
+     * @param cas
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    explicit mutation_result(couchbase::cas cas)
+      : result{ cas }
     {
     }
 

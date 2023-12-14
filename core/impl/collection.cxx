@@ -144,7 +144,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
             options.timeout,
             { options.retry_strategy },
           },
-          [handler = std::move(handler)](auto resp) mutable { return handler(std::move(resp.ctx), result{ resp.cas }); });
+          [handler = std::move(handler)](auto resp) mutable { return handler(std::move(resp.ctx), mutation_result{ resp.cas }); });
     }
 
     void get_any_replica(std::string document_key,
@@ -1103,9 +1103,9 @@ collection::touch(std::string document_id, std::chrono::seconds duration, const 
 
 auto
 collection::touch(std::string document_id, std::chrono::seconds duration, const touch_options& options) const
-  -> std::future<std::pair<key_value_error_context, result>>
+  -> std::future<std::pair<key_value_error_context, mutation_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
     auto future = barrier->get_future();
     touch(std::move(document_id), duration, options, [barrier](auto ctx, auto result) {
         barrier->set_value({ std::move(ctx), std::move(result) });
