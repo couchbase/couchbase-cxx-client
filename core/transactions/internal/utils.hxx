@@ -242,6 +242,7 @@ struct exp_delay {
     std::chrono::nanoseconds timeout;
     mutable std::uint32_t retries;
     mutable std::optional<std::chrono::time_point<std::chrono::steady_clock>> end_time;
+    std::size_t max_retries{ 100 };
 
     template<typename R1, typename P1, typename R2, typename P2, typename R3, typename P3>
     exp_delay(std::chrono::duration<R1, P1> initial, std::chrono::duration<R2, P2> max, std::chrono::duration<R3, P3> limit)
@@ -255,6 +256,9 @@ struct exp_delay {
     void operator()() const
     {
         auto now = std::chrono::steady_clock::now();
+        if (retries >= max_retries) {
+            throw retry_operation_retries_exhausted("retries exhausted");
+        }
         if (!end_time) {
             end_time = std::chrono::steady_clock::now() + timeout;
             return;
