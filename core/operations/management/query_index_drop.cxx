@@ -22,6 +22,7 @@
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
+#include <regex>
 
 namespace couchbase::core::operations::management
 {
@@ -80,7 +81,7 @@ query_index_drop_request::make_response(error_context::http&& ctx, const encoded
                 error.message = entry.at("msg").get_string();
                 switch (error.code) {
                     case 5000: /* IKey: "Internal Error" */
-                        if (error.message.find("not found.") != std::string::npos) {
+                        if (std::regex_search(error.message, std::regex{ ".*[iI]ndex .*[nN]ot [fF]ound.*" })) {
                             index_not_found = true;
                         }
                         break;
