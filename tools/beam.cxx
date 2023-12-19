@@ -63,13 +63,13 @@ class beam_app : public CLI::App
         focus->add_option("--node-index", node_indexes_, "vBucketIDs to send the operations.");
         focus->require_option(1, 0);
 
+        add_flag("--use-upsert", use_upsert_, "Use 'upsert' operation instead of 'get' to generate workload.");
         add_flag("--verbose", verbose_, "Include more context and information where it is applicable.");
         add_option("--bucket-name", bucket_name_, "Name of the bucket.")->default_val(default_bucket_name);
         add_option("--scope-name", scope_name_, "Name of the scope.")->default_val(couchbase::scope::default_name);
         add_option("--collection-name", collection_name_, "Name of the collection.")->default_val(couchbase::collection::default_name);
 
         add_common_options(this, common_options_);
-        allow_extras(true);
     }
 
     [[nodiscard]] int execute()
@@ -156,11 +156,15 @@ class beam_app : public CLI::App
 
         auto collection = cluster.bucket(bucket_name_).scope(scope_name_).collection(collection_name_);
 
-        // Populate the keys first
-        for (const auto& id : ids) {
-            auto [ctx, resp] = collection.upsert(id, "value").get();
-            if (ctx.ec()) {
-                fail(fmt::format("Failed to store value for key {:?}: {}", id, ctx.ec().message()));
+        const auto dummy_value{ "{\"value\":42}" };
+
+        if (!use_upsert_) {
+            // Populate the keys first
+            for (const auto& id : ids) {
+                auto [ctx, resp] = collection.upsert(id, dummy_value).get();
+                if (ctx.ec()) {
+                    fail(fmt::format("Failed to store value for key {:?}: {}", id, ctx.ec().message()));
+                }
             }
         }
 
@@ -171,12 +175,20 @@ class beam_app : public CLI::App
 
         while (running.test_and_set()) {
             for (const auto& id : ids) {
-                auto [ctx, resp] = collection.get(id, {}).get();
+                couchbase::key_value_error_context ctx;
+                if (use_upsert_) {
+                    auto [c, _] = collection.upsert(id, dummy_value).get();
+                    ctx = std::move(c);
+                } else {
+                    auto [c, _] = collection.get(id, {}).get();
+                    ctx = std::move(c);
+                }
 
                 if (ctx.ec()) {
                     fmt::print(stderr,
-                               "{} failed to get value for key {:?}: {}, last_dispatched_to={:?}, retries={} ({})\n",
+                               "{} failed to {} value for key {:?}: {}, last_dispatched_to={:?}, retries={} ({})\n",
                                timestamp(),
+                               use_upsert_ ? "upsert" : "get",
                                id,
                                ctx.ec().message(),
                                ctx.last_dispatched_to().value_or("-"),
@@ -210,6 +222,7 @@ class beam_app : public CLI::App
     std::string bucket_name_{ default_bucket_name };
     std::string scope_name_{ couchbase::scope::default_name };
     std::string collection_name_{ couchbase::collection::default_name };
+    bool use_upsert_{ false };
     bool verbose_{ false };
 
     std::vector<std::size_t> node_indexes_{};
