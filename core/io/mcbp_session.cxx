@@ -1481,6 +1481,7 @@ class mcbp_session_impl
                                       bootstrap_hostname_,
                                       connection_endpoints_.remote_address,
                                       connection_endpoints_.remote.port());
+            parser_.reset();
             bootstrap_handler_ = std::make_shared<bootstrap_handler>(shared_from_this());
             connection_deadline_.cancel();
         }
