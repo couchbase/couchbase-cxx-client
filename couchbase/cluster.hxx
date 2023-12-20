@@ -22,6 +22,8 @@
 #include <couchbase/bucket.hxx>
 #include <couchbase/bucket_manager.hxx>
 #include <couchbase/cluster_options.hxx>
+#include <couchbase/diagnostics_options.hxx>
+#include <couchbase/ping_options.hxx>
 #include <couchbase/query_index_manager.hxx>
 #include <couchbase/query_options.hxx>
 #include <couchbase/search_index_manager.hxx>
@@ -206,6 +208,66 @@ class cluster
      */
     [[nodiscard]] auto analytics_query(std::string statement, const analytics_options& options = {}) const
       -> std::future<std::pair<analytics_error_context, analytics_result>>;
+
+    /**
+     * Performs application-level ping requests against services in the Couchbase cluster.
+     *
+     * @note This operation performs active I/O against services and endpoints to assess their health. If you do not
+     * wish to performs I/O, consider using @ref diagnostics() instead.
+     *
+     * @param options custom options to change the default behavior.
+     * @param handler the handler that implements @ref ping_handler.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    void ping(const ping_options& options, ping_handler&& handler) const;
+
+    /**
+     * Performs application-level ping requests against services in the Couchbase cluster.
+     *
+     * @note This operation performs active I/O against services and endpoints to assess their health. If you do not
+     * wish to performs I/O, consider using @ref diagnostics() instead.
+     *
+     * @param options custom options to change the default behavior.
+     * @return future object that carries result of the operation.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto ping(const ping_options& options = {}) const -> std::future<ping_result>;
+
+    /**
+     * Assembles a diagnostics report on the current state of the cluster from the SDK's point of view.
+     *
+     * @note This operation does not perform any I/O to produce the report. It will only use the current known state of
+     * the cluster to assemble the report So, if for example, no SQL++ queries have been run, the Query service's socket
+     * pool might be empty and as a result not show up in the report. If you wish to actively assess the health of the
+     * cluster by performing I/O, consider using @ref ping() instead.
+     *
+     * @param options custom options to change the default behavior.
+     * @param handler the handler that implements @ref diagnostics_handler.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    void diagnostics(const diagnostics_options& options, diagnostics_handler&& handler) const;
+
+    /**
+     * Assembles a diagnostics report on the current state of the cluster from the SDK's point of view.
+     *
+     * @note This operation does not perform any I/O to produce the report. It will only use the current known state of
+     * the cluster to assemble the report So, if for example, no SQL++ queries have been run, the Query service's socket
+     * pool might be empty and as a result not show up in the report. If you wish to actively assess the health of the
+     * cluster by performing I/O, consider using @ref ping() instead.
+     *
+     * @param options custom options to change the default behavior.
+     * @return future object that carries result of the operation.
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto diagnostics(const diagnostics_options& options = {}) const -> std::future<diagnostics_result>;
 
     /**
      * Provides access to the N1QL index management services.

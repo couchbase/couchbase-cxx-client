@@ -121,6 +121,7 @@ set(couchbase_cxx_client_FILES
     core/impl/date_range_facet.cxx
     core/impl/date_range_facet_result.cxx
     core/impl/date_range_query.cxx
+    core/impl/diagnostics.cxx
     core/impl/disjunction_query.cxx
     core/impl/dns_srv_tracker.cxx
     core/impl/doc_id_query.cxx

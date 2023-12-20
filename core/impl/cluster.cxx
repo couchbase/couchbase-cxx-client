@@ -21,6 +21,7 @@
 #include "core/agent_group.hxx"
 #include "core/transactions.hxx"
 #include "core/utils/connection_string.hxx"
+#include "diagnostics.hxx"
 #include "internal_search_error_context.hxx"
 #include "internal_search_meta_data.hxx"
 #include "internal_search_result.hxx"
@@ -186,6 +187,21 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
                              });
     }
 
+    void ping(const ping_options::built& options, ping_handler&& handler) const
+    {
+        return core_.ping(options.report_id,
+                          {},
+                          core::impl::to_core_service_types(options.service_types),
+                          options.timeout,
+                          [handler = std::move(handler)](auto resp) mutable { return handler(core::impl::build_result(resp)); });
+    };
+
+    void diagnostics(const diagnostics_options::built& options, diagnostics_handler&& handler) const
+    {
+        return core_.diagnostics(options.report_id,
+                                 [handler = std::move(handler)](auto resp) mutable { return handler(core::impl::build_result(resp)); });
+    }
+
     void close(core::utils::movable_function<void()> handler)
     {
         if (transactions_) {
@@ -280,6 +296,34 @@ cluster::search_query(std::string index_name, const class search_query& query, c
     search_query(std::move(index_name), query, options, [barrier](auto ctx, auto result) mutable {
         barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
     });
+    return barrier->get_future();
+}
+
+void
+cluster::ping(const couchbase::ping_options& options, couchbase::ping_handler&& handler) const
+{
+    return impl_->ping(options.build(), std::move(handler));
+}
+
+auto
+cluster::ping(const couchbase::ping_options& options) const -> std::future<ping_result>
+{
+    auto barrier = std::make_shared<std::promise<ping_result>>();
+    ping(options, [barrier](auto result) mutable { barrier->set_value(std::move(result)); });
+    return barrier->get_future();
+}
+
+void
+cluster::diagnostics(const couchbase::diagnostics_options& options, couchbase::diagnostics_handler&& handler) const
+{
+    return impl_->diagnostics(options.build(), std::move(handler));
+}
+
+auto
+cluster::diagnostics(const couchbase::diagnostics_options& options) const -> std::future<diagnostics_result>
+{
+    auto barrier = std::make_shared<std::promise<diagnostics_result>>();
+    diagnostics(options, [barrier](auto result) mutable { barrier->set_value(std::move(result)); });
     return barrier->get_future();
 }
 

@@ -28,6 +28,7 @@ unit_test(config_profiles)
 unit_test(options)
 unit_test(search)
 unit_test(query)
+unit_test(diagnostics)
 target_link_libraries(test_unit_jsonsl jsonsl)
 
 integration_benchmark(get)
