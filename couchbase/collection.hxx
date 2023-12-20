@@ -259,7 +259,7 @@ class collection
      * @committed
      */
     [[nodiscard]] auto touch(std::string document_id, std::chrono::seconds duration, const touch_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, mutation_result>>;
+      -> std::future<std::pair<key_value_error_context, result>>;
 
     /**
      * Updates the expiration a document given an id, without modifying or returning its value.
