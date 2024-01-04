@@ -47,10 +47,9 @@ class get_app : public CLI::App
                  inlined_keyspace_,
                  "Extract bucket, scope, collection and key from the IDs (captures will be done with /^(.*?):(.*?)\\.(.*?):(.*)$/).");
         add_flag("--with-expiry", with_expiry_, "Return document expiry time, if set.");
-        add_option(
-          "--project",
-          projections_,
-          fmt::format("Return only part of the document, that corresponds given JSON-pointer (could be used multiple times)."))
+        add_option("--project",
+                   projections_,
+                   fmt::format("Return only part of the document, that corresponds given JSON-pointer (could be used multiple times)."))
           ->allow_extra_args(false);
         add_flag("--hexdump", hexdump_, "Print value using hexdump encoding (safe for binary data on STDOUT).");
         add_flag("--pretty-json", pretty_json_, "Try to pretty-print as JSON value (prints AS-IS if the document is not a JSON).");
