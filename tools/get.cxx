@@ -50,8 +50,7 @@ class get_app : public CLI::App
         add_option(
           "--project",
           projections_,
-          fmt::format("Return only part of the document, that corresponds given JSON-pointer (could be used multiple times, up to {}).",
-                      couchbase::get_options::maximum_number_of_projections))
+          fmt::format("Return only part of the document, that corresponds given JSON-pointer (could be used multiple times)."))
           ->allow_extra_args(false);
         add_flag("--hexdump", hexdump_, "Print value using hexdump encoding (safe for binary data on STDOUT).");
         add_flag("--pretty-json", pretty_json_, "Try to pretty-print as JSON value (prints AS-IS if the document is not a JSON).");
