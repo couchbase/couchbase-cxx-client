@@ -58,7 +58,7 @@ struct get_options : public common_options<get_options> {
      */
     [[nodiscard]] auto build() const -> built
     {
-        return { build_common_options(), with_expiry_, {} };
+        return { build_common_options(), with_expiry_, projections_ };
     }
 
     /**
