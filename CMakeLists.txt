@@ -206,6 +206,8 @@ set(couchbase_cxx_client_FILES
     core/impl/transaction_error_category.cxx
     core/impl/transaction_get_result.cxx
     core/impl/transaction_op_error_category.cxx
+    core/impl/vector_query.cxx
+    core/impl/vector_search.cxx
     core/impl/view_error_category.cxx
     core/impl/wildcard_query.cxx
     core/io/dns_client.cxx

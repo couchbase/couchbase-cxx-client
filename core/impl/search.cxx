@@ -26,6 +26,8 @@
 #include "internal_term_facet_result.hxx"
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/match_none_query.hxx>
+#include <utility>
 
 #include <fmt/core.h>
 
@@ -102,6 +104,21 @@ map_raw(std::map<std::string, codec::binary, std::less<>>& raw)
     }
     return core_raw;
 }
+
+static std::optional<core::vector_query_combination>
+map_vector_query_combination(const std::optional<couchbase::vector_query_combination>& combination)
+{
+    if (combination) {
+        switch(combination.value()) {
+            case couchbase::vector_query_combination::combination_and:
+                return core::vector_query_combination::combination_and;
+            case couchbase::vector_query_combination::combination_or:
+                return core::vector_query_combination::combination_or;
+        }
+    }
+    return {};
+}
+
 } // namespace
 
 core::operations::search_request
@@ -118,6 +135,9 @@ build_search_request(std::string index_name,
     core::operations::search_request request{
         std::move(index_name),
         core::utils::json::generate_binary(encoded.query),
+        {},
+        {},
+        {},
         options.limit,
         options.skip,
         options.explain,
@@ -139,4 +159,39 @@ build_search_request(std::string index_name,
     return request;
 }
 
+core::operations::search_request
+build_search_request(std::string index_name,
+                     couchbase::search_request request,
+                     search_options::built options,
+                     std::optional<std::string> bucket_name,
+                     std::optional<std::string> scope_name )
+{
+    if (!request.search_query().has_value()) {
+        auto match_none = couchbase::match_none_query{};
+        auto match_none_ptr = std::make_unique<couchbase::match_none_query>(match_none);
+        request.search_query(std::move(match_none_ptr));
+    }
+
+    auto core_request = build_search_request(
+      std::move(index_name),
+      *request.search_query().value(),
+      std::move(options),
+      std::move(bucket_name),
+      std::move(scope_name)
+    );
+    core_request.show_request = false;
+
+    if (!request.vector_search().has_value()) {
+        return core_request;
+    }
+    auto encoded_vector_search = request.vector_search().value().encode();
+    if (encoded_vector_search.ec) {
+        throw std::system_error(encoded_vector_search.ec, fmt::format("unable to encode vector_search for index \"{}\"", index_name));
+    }
+    core_request.vector_query = core::utils::json::generate_binary(encoded_vector_search.query);
+
+    auto vector_search_opts = request.vector_search().value().options();
+    core_request.vector_query_combination = map_vector_query_combination(vector_search_opts.combination_);
+    return core_request;
+}
 } // namespace couchbase::core::impl

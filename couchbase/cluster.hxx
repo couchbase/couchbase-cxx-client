@@ -29,6 +29,7 @@
 #include <couchbase/search_index_manager.hxx>
 #include <couchbase/search_options.hxx>
 #include <couchbase/search_query.hxx>
+#include <couchbase/search_request.hxx>
 #include <couchbase/transactions.hxx>
 
 #include <memory>
@@ -175,6 +176,11 @@ class cluster
      * @committed
      */
     [[nodiscard]] auto search_query(std::string index_name, const class search_query& query, const search_options& options = {}) const
+      -> std::future<std::pair<search_error_context, search_result>>;
+
+    void search(std::string index_name, search_request request, const search_options& options, search_handler&& handler) const;
+
+    [[nodiscard]] auto search(std::string index_name, search_request request, const search_options& = {}) const
       -> std::future<std::pair<search_error_context, search_result>>;
 
     /**
