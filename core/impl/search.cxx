@@ -109,7 +109,7 @@ static std::optional<core::vector_query_combination>
 map_vector_query_combination(const std::optional<couchbase::vector_query_combination>& combination)
 {
     if (combination) {
-        switch(combination.value()) {
+        switch (combination.value()) {
             case couchbase::vector_query_combination::combination_and:
                 return core::vector_query_combination::combination_and;
             case couchbase::vector_query_combination::combination_or:
@@ -164,7 +164,7 @@ build_search_request(std::string index_name,
                      couchbase::search_request request,
                      search_options::built options,
                      std::optional<std::string> bucket_name,
-                     std::optional<std::string> scope_name )
+                     std::optional<std::string> scope_name)
 {
     if (!request.search_query().has_value()) {
         auto match_none = couchbase::match_none_query{};
@@ -173,12 +173,7 @@ build_search_request(std::string index_name,
     }
 
     auto core_request = build_search_request(
-      std::move(index_name),
-      *request.search_query().value(),
-      std::move(options),
-      std::move(bucket_name),
-      std::move(scope_name)
-    );
+      std::move(index_name), *request.search_query().value(), std::move(options), std::move(bucket_name), std::move(scope_name));
     core_request.show_request = false;
 
     if (!request.vector_search().has_value()) {

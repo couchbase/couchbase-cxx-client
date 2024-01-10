@@ -89,10 +89,7 @@ class scope_impl
                              });
     }
 
-    void search(std::string index_name,
-                couchbase::search_request request,
-                search_options::built options,
-                search_handler&& handler) const
+    void search(std::string index_name, couchbase::search_request request, search_options::built options, search_handler&& handler) const
     {
         return core_.execute(core::impl::build_search_request(std::move(index_name), std::move(request), options, bucket_name_, name_),
                              [handler = std::move(handler)](auto&& resp) mutable {
@@ -195,7 +192,7 @@ scope::search(std::string index_name, search_request request, const search_optio
     auto barrier = std::make_shared<std::promise<std::pair<search_error_context, search_result>>>();
     auto future = barrier->get_future();
     search(std::move(index_name), std::move(request), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({std::move(ctx), std::move(result) });
+        barrier->set_value({ std::move(ctx), std::move(result) });
     });
     return future;
 }

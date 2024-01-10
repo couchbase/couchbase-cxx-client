@@ -25,8 +25,8 @@ class vector_query
 {
   public:
     vector_query(std::string vector_field_name, std::vector<float> vector_query)
-      : vector_field_name_{ std::move(vector_field_name) },
-      vector_query_{std::move( vector_query )}
+      : vector_field_name_{ std::move(vector_field_name) }
+      , vector_query_{ std::move(vector_query) }
     {
         if (vector_query_.empty()) {
             throw std::invalid_argument("the vector_query cannot be empty");

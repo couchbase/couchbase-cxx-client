@@ -27,8 +27,8 @@ class vector_search
 {
   public:
     explicit vector_search(std::vector<vector_query> vector_queries, vector_search_options options = {})
-      : vector_queries_{std::move( vector_queries )},
-      options_{ options }
+      : vector_queries_{ std::move(vector_queries) }
+      , options_{ options }
     {
     }
 

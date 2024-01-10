@@ -19,10 +19,9 @@
 
 namespace couchbase
 {
-enum class vector_query_combination{ combination_and, combination_or };
+enum class vector_query_combination { combination_and, combination_or };
 
-struct vector_search_options
-{
+struct vector_search_options {
     std::optional<vector_query_combination> combination_{};
 };
 } // namespace couchbase

@@ -22,7 +22,8 @@
 
 namespace couchbase
 {
-auto vector_search::encode() const -> encoded_search_query
+auto
+vector_search::encode() const -> encoded_search_query
 {
     CB_LOG_CRITICAL("ENCODING VECTOR_SEARCH");
     encoded_search_query built;

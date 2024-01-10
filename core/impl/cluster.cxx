@@ -340,10 +340,7 @@ cluster::diagnostics(const couchbase::diagnostics_options& options) const -> std
 }
 
 void
-cluster::search(std::string index_name,
-                search_request request,
-                const search_options& options,
-                search_handler&& handler) const
+cluster::search(std::string index_name, search_request request, const search_options& options, search_handler&& handler) const
 {
     return impl_->search(std::move(index_name), std::move(request), options.build(), std::move(handler));
 }
