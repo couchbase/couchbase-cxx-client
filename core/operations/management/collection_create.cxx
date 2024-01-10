@@ -34,8 +34,12 @@ collection_create_request::encode_to(encoded_request_type& encoded, http_context
     encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}/collections", bucket_name, scope_name);
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";
     encoded.body = fmt::format("name={}", utils::string_codec::form_encode(collection_name));
-    if (max_expiry > 0) {
-        encoded.body.append(fmt::format("&maxTTL={}", max_expiry));
+    if (max_expiry >= -1) {
+        if (max_expiry != 0) {
+            encoded.body.append(fmt::format("&maxTTL={}", max_expiry));
+        }
+    } else {
+        return couchbase::errc::common::invalid_argument;
     }
     if (history.has_value()) {
         encoded.body.append(fmt::format("&history={}", history.value()));

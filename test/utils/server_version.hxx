@@ -226,6 +226,16 @@ struct server_version {
         return !use_gocaves && (major > 7 || (major == 7 && minor >= 6));
     }
 
+    [[nodiscard]] bool supports_collection_update_max_expiry() const
+    {
+        return !use_gocaves && (major > 7 || (major == 7 && minor >= 6));
+    }
+
+    [[nodiscard]] bool supports_collection_set_max_expiry_to_no_expiry() const
+    {
+        return !use_gocaves && (major > 7 || (major == 7 && minor >= 6));
+    }
+
     [[nodiscard]] bool is_capella() const
     {
         return deployment == deployment_type::capella;

@@ -28,7 +28,7 @@ struct collections_manifest {
     struct collection {
         std::uint64_t uid;
         std::string name;
-        std::uint32_t max_expiry{ 0 };
+        std::int32_t max_expiry{ 0 };
         std::optional<bool> history{};
     };
 

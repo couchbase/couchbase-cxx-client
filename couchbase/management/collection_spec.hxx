@@ -22,7 +22,7 @@ namespace couchbase::management::bucket
 struct collection_spec {
     std::string name;
     std::string scope_name;
-    std::uint32_t max_expiry{};
+    std::int32_t max_expiry{};
     std::optional<bool> history{};
 };
 

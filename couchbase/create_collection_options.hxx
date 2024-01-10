@@ -20,6 +20,7 @@
 #include <couchbase/common_options.hxx>
 #include <couchbase/manager_error_context.hxx>
 
+#include <cstdint>
 #include <functional>
 #include <optional>
 
@@ -27,17 +28,44 @@ namespace couchbase
 {
 struct create_collection_options : public common_options<create_collection_options> {
   public:
+    /**
+     * Immutable value object representing consistent options.
+     *
+     * @since 1.0.0
+     * @internal
+     */
     struct built : public common_options<create_collection_options>::built {
     };
 
+    /**
+     * Validates the options and returns them as an immutable value.
+     *
+     * @return consistent options as an immutable value
+     *
+     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
+     *
+     * @since 1.0.0
+     * @internal
+     */
     [[nodiscard]] auto build() const -> built
     {
         return { build_common_options() };
     }
 };
 
+/**
+ * The settings to use when creating the collection
+ */
 struct create_collection_settings {
-    std::uint32_t max_expiry{ 0 };
+    /**
+     * The maximum expiry, in seconds, for documents in this collection. Values greater than or equal to -1 are valid.
+     * Value of 0 sets max_expiry to the bucket-level setting and value of -1 to set it as no-expiry.
+     */
+    std::int32_t max_expiry{ 0 };
+
+    /**
+     * Whether history retention should be enabled. If unset, the bucket-level setting is used.
+     */
     std::optional<bool> history{};
 };
 

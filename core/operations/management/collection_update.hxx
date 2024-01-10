@@ -41,7 +41,7 @@ struct collection_update_request {
     std::string bucket_name;
     std::string scope_name;
     std::string collection_name;
-    std::optional<std::uint32_t> max_expiry{};
+    std::optional<std::int32_t> max_expiry{};
     std::optional<bool> history{};
 
     std::optional<std::string> client_context_id{};

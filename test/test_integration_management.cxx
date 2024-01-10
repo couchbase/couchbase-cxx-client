@@ -1017,6 +1017,28 @@ get_collection(const couchbase::core::cluster& cluster,
     return std::nullopt;
 }
 
+std::error_code
+create_collection(const couchbase::core::cluster& cluster,
+                  const std::string& bucket_name,
+                  const std::string& scope_name,
+                  const std::string& collection_name)
+{
+    couchbase::core::operations::management::collection_create_request req{ bucket_name, scope_name, collection_name };
+    auto resp = test::utils::execute(cluster, req);
+    return resp.ctx.ec;
+}
+
+std::error_code
+drop_collection(const couchbase::core::cluster& cluster,
+                const std::string& bucket_name,
+                const std::string& scope_name,
+                const std::string& collection_name)
+{
+    couchbase::core::operations::management::collection_drop_request req{ bucket_name, scope_name, collection_name };
+    auto resp = test::utils::execute(cluster, req);
+    return resp.ctx.ec;
+}
+
 bool
 scope_exists(const couchbase::core::cluster& cluster, const std::string& bucket_name, const std::string& scope_name)
 {
@@ -1043,7 +1065,7 @@ TEST_CASE("integration: collection management", "[integration]")
 
     auto scope_name = test::utils::uniq_id("scope");
     auto collection_name = test::utils::uniq_id("collection");
-    std::uint32_t max_expiry = 5;
+    std::int32_t max_expiry = 5;
     SECTION("core api")
     {
         {
@@ -1228,6 +1250,292 @@ TEST_CASE("integration: collection management", "[integration]")
             });
             REQUIRE(does_not_exist);
         }
+    }
+}
+
+TEST_CASE("integration: collection management create collection with max expiry", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    if (!integration.cluster_version().supports_collections()) {
+        SKIP("cluster does not support collections");
+    }
+
+    auto scope_name = "_default";
+    auto collection_name = test::utils::uniq_id("collection");
+
+    couchbase::cluster c(integration.cluster);
+    auto manager = c.bucket(integration.ctx.bucket).collections();
+
+    SECTION("default max expiry")
+    {
+        SECTION("core API")
+        {
+            couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_SUCCESS(resp.ctx.ec);
+        }
+
+        SECTION("public API")
+        {
+            auto ctx = manager.create_collection(scope_name, collection_name).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        auto coll = get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
+        REQUIRE(coll);
+        REQUIRE(coll.value().max_expiry == 0);
+    }
+
+    SECTION("positive max expiry")
+    {
+        SECTION("core API")
+        {
+            couchbase::core::operations::management::collection_create_request req{
+                integration.ctx.bucket,
+                scope_name,
+                collection_name,
+                3600,
+            };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_SUCCESS(resp.ctx.ec);
+        }
+
+        SECTION("public API")
+        {
+            couchbase::create_collection_settings settings{ 3600 };
+            auto ctx = manager.create_collection(scope_name, collection_name, settings).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        auto coll = get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
+        REQUIRE(coll);
+        REQUIRE(coll.value().max_expiry == 3600);
+    }
+
+    SECTION("setting max expiry to no-expiry")
+    {
+        if (integration.cluster_version().supports_collection_set_max_expiry_to_no_expiry()) {
+            SECTION("core API")
+            {
+                couchbase::core::operations::management::collection_create_request req{
+                    integration.ctx.bucket,
+                    scope_name,
+                    collection_name,
+                    -1,
+                };
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_SUCCESS(resp.ctx.ec);
+            }
+
+            SECTION("public API")
+            {
+                couchbase::create_collection_settings settings{ -1 };
+                auto ctx = manager.create_collection(scope_name, collection_name, settings).get();
+                REQUIRE_SUCCESS(ctx.ec());
+            }
+
+            auto coll = get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
+            REQUIRE(coll);
+            REQUIRE(coll.value().max_expiry == -1);
+        } else {
+            SECTION("core API")
+            {
+                couchbase::core::operations::management::collection_create_request req{
+                    integration.ctx.bucket,
+                    scope_name,
+                    collection_name,
+                    -1,
+                };
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE(resp.ctx.ec == couchbase::errc::common::invalid_argument);
+            }
+
+            SECTION("public API")
+            {
+                couchbase::create_collection_settings settings{ -1 };
+                auto ctx = manager.create_collection(scope_name, collection_name, settings).get();
+                REQUIRE(ctx.ec() == couchbase::errc::common::invalid_argument);
+            }
+        }
+    }
+
+    SECTION("invalid max expiry")
+    {
+        SECTION("core API")
+        {
+            couchbase::core::operations::management::collection_create_request req{
+                integration.ctx.bucket,
+                scope_name,
+                collection_name,
+                -20,
+            };
+
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec == couchbase::errc::common::invalid_argument);
+        }
+
+        SECTION("public API")
+        {
+            couchbase::create_collection_settings settings{ -20 };
+            auto ctx = manager.create_collection(scope_name, collection_name, settings).get();
+            REQUIRE(ctx.ec() == couchbase::errc::common::invalid_argument);
+        }
+    }
+
+    // Clean up the collection that was created
+    {
+        auto ec = drop_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
+        REQUIRE((!ec || ec == couchbase::errc::common::collection_not_found));
+    }
+}
+
+TEST_CASE("integration: collection management update collection with max expiry", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    if (!integration.cluster_version().supports_collections()) {
+        SKIP("cluster does not support collections");
+    }
+    if (!integration.cluster_version().supports_collection_update_max_expiry()) {
+        SKIP("cluster does not support updating the max expiry of collections");
+    }
+
+    auto scope_name = "_default";
+    auto collection_name = test::utils::uniq_id("collection");
+
+    {
+        auto ec = create_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
+        REQUIRE_SUCCESS(ec);
+    }
+
+    couchbase::cluster c(integration.cluster);
+    auto manager = c.bucket(integration.ctx.bucket).collections();
+
+    SECTION("zero max expiry (bucket-level default)")
+    {
+        SECTION("core API")
+        {
+            couchbase::core::operations::management::collection_update_request req{
+                integration.ctx.bucket, scope_name, collection_name, 0
+            };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_SUCCESS(resp.ctx.ec);
+        }
+
+        SECTION("public API")
+        {
+            couchbase::update_collection_settings settings{ 0 };
+            auto ctx = manager.update_collection(scope_name, collection_name, settings).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        auto coll = get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
+        REQUIRE(coll);
+        REQUIRE(coll.value().max_expiry == 0);
+    }
+
+    SECTION("positive max expiry")
+    {
+        SECTION("core API")
+        {
+            couchbase::core::operations::management::collection_update_request req{
+                integration.ctx.bucket,
+                scope_name,
+                collection_name,
+                3600,
+            };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE_SUCCESS(resp.ctx.ec);
+        }
+
+        SECTION("public API")
+        {
+            couchbase::update_collection_settings settings{ 3600 };
+            auto ctx = manager.update_collection(scope_name, collection_name, settings).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+
+        auto coll = get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
+        REQUIRE(coll);
+        REQUIRE(coll.value().max_expiry == 3600);
+    }
+
+    SECTION("setting max expiry to no-expiry")
+    {
+        if (integration.cluster_version().supports_collection_set_max_expiry_to_no_expiry()) {
+            SECTION("core API")
+            {
+                couchbase::core::operations::management::collection_update_request req{
+                    integration.ctx.bucket,
+                    scope_name,
+                    collection_name,
+                    -1,
+                };
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE_SUCCESS(resp.ctx.ec);
+            }
+
+            SECTION("public API")
+            {
+                couchbase::update_collection_settings settings{ -1 };
+                auto ctx = manager.update_collection(scope_name, collection_name, settings).get();
+                REQUIRE_SUCCESS(ctx.ec());
+            }
+
+            auto coll = get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
+            REQUIRE(coll);
+            REQUIRE(coll.value().max_expiry == -1);
+        } else {
+            SECTION("core API")
+            {
+                couchbase::core::operations::management::collection_update_request req{
+                    integration.ctx.bucket,
+                    scope_name,
+                    collection_name,
+                    -1,
+                };
+                auto resp = test::utils::execute(integration.cluster, req);
+                REQUIRE(resp.ctx.ec == couchbase::errc::common::invalid_argument);
+            }
+
+            SECTION("public API")
+            {
+                couchbase::update_collection_settings settings{ -1 };
+                auto ctx = manager.update_collection(scope_name, collection_name, settings).get();
+                REQUIRE(ctx.ec() == couchbase::errc::common::invalid_argument);
+            }
+        }
+    }
+
+    SECTION("invalid max expiry")
+    {
+        SECTION("core API")
+        {
+            couchbase::core::operations::management::collection_update_request req{
+                integration.ctx.bucket,
+                scope_name,
+                collection_name,
+                -20,
+            };
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec == couchbase::errc::common::invalid_argument);
+        }
+
+        SECTION("public API")
+        {
+            couchbase::update_collection_settings settings{ -20 };
+            auto ctx = manager.update_collection(scope_name, collection_name, settings).get();
+            REQUIRE(ctx.ec() == couchbase::errc::common::invalid_argument);
+        }
+    }
+
+    {
+        // Clean up the collection that was created
+        auto ec = drop_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
+        REQUIRE((!ec || ec == couchbase::errc::common::collection_not_found));
     }
 }
 

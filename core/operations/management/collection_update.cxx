@@ -35,7 +35,11 @@ collection_update_request::encode_to(encoded_request_type& encoded, http_context
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";
     std::map<std::string, std::string> values{};
     if (max_expiry.has_value()) {
-        values["maxTTL"] = std::to_string(max_expiry.value());
+        if (max_expiry.value() >= -1) {
+            values["maxTTL"] = std::to_string(max_expiry.value());
+        } else {
+            return errc::common::invalid_argument;
+        }
     }
     if (history.has_value()) {
         values["history"] = history.value() ? "true" : "false";
