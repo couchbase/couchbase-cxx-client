@@ -16,6 +16,7 @@
  */
 
 #include "core/cluster.hxx"
+#include "diagnostics.hxx"
 
 #include <couchbase/bucket.hxx>
 
@@ -40,6 +41,15 @@ class bucket_impl : public std::enable_shared_from_this<bucket_impl>
     [[nodiscard]] auto core() const -> const core::cluster&
     {
         return core_;
+    }
+
+    void ping(const ping_options::built& options, ping_handler&& handler) const
+    {
+        return core_.ping(options.report_id,
+                          name_,
+                          core::impl::to_core_service_types(options.service_types),
+                          options.timeout,
+                          [handler = std::move(handler)](auto resp) mutable { return handler(core::impl::build_result(resp)); });
     }
 
   private:
@@ -68,6 +78,20 @@ auto
 bucket::scope(std::string_view scope_name) const -> couchbase::scope
 {
     return { impl_->core(), impl_->name(), scope_name };
+}
+
+void
+bucket::ping(const couchbase::ping_options& options, couchbase::ping_handler&& handler) const
+{
+    return impl_->ping(options.build(), std::move(handler));
+}
+
+auto
+bucket::ping(const couchbase::ping_options& options) const -> std::future<ping_result>
+{
+    auto barrier = std::make_shared<std::promise<ping_result>>();
+    ping(options, [barrier](auto result) mutable { barrier->set_value(std::move(result)); });
+    return barrier->get_future();
 }
 
 auto
