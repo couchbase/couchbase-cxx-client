@@ -20,51 +20,35 @@
 #include <couchbase/search_query.hxx>
 #include <couchbase/vector_search.hxx>
 
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+namespace couchbase
+{
+namespace core
+{
+class cluster;
+} // namespace core
+class search_request_impl;
+} // namespace couchbase
+#endif
+
 namespace couchbase
 {
 class search_request
 {
   public:
-    explicit search_request(std::unique_ptr<couchbase::search_query> search_query)
-      : search_query_{ std::move(search_query) }
-    {
-    }
+    explicit search_request(const couchbase::search_query& search_query);
 
-    explicit search_request(couchbase::vector_search vector_search)
-      : vector_search_{ vector_search }
-    {
-    }
+    explicit search_request(const couchbase::vector_search& vector_search);
 
-    auto search_query(std::unique_ptr<couchbase::search_query> search_query) -> search_request&
-    {
-        if (search_query_.has_value()) {
-            throw std::invalid_argument("There can only be one search_query in a search request");
-        }
-        search_query_ = std::move(search_query);
-        return *this;
-    }
+    auto search_query(const couchbase::search_query& search_query) -> search_request&;
 
-    auto vector_search(couchbase::vector_search vector_search) -> search_request&
-    {
-        if (vector_search_.has_value()) {
-            throw std::invalid_argument("There can only be one vector_search in a search request");
-        }
-        vector_search_ = std::move(vector_search);
-        return *this;
-    }
+    auto vector_search(const couchbase::vector_search& vector_search) -> search_request&;
 
-    [[nodiscard]] const std::optional<std::unique_ptr<couchbase::search_query>>& search_query() const
-    {
-        return search_query_;
-    }
+    [[nodiscard]] std::optional<encoded_search_query> search_query() const;
 
-    [[nodiscard]] const std::optional<couchbase::vector_search>& vector_search() const
-    {
-        return vector_search_;
-    }
+    [[nodiscard]] std::optional<couchbase::vector_search> vector_search() const;
 
   private:
-    std::optional<std::unique_ptr<couchbase::search_query>> search_query_;
-    std::optional<couchbase::vector_search> vector_search_;
+    std::shared_ptr<search_request_impl> impl_;
 };
 } // namespace couchbase

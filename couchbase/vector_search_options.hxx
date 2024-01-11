@@ -29,6 +29,11 @@ struct vector_search_options {
         return *this;
     }
 
+    auto query_combination() -> std::optional<vector_query_combination>&
+    {
+        return combination_;
+    }
+
   private:
     std::optional<vector_query_combination> combination_{};
 };

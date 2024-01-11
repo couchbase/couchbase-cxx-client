@@ -163,18 +163,37 @@ core::operations::search_request
 build_search_request(std::string index_name,
                      couchbase::search_request request,
                      search_options::built options,
-                     std::optional<std::string> bucket_name,
-                     std::optional<std::string> scope_name)
+                     std::optional<std::string> /* bucket_name */,
+                     std::optional<std::string> /* scope_name */)
 {
     if (!request.search_query().has_value()) {
-        auto match_none = couchbase::match_none_query{};
-        auto match_none_ptr = std::make_unique<couchbase::match_none_query>(match_none);
-        request.search_query(std::move(match_none_ptr));
+        request.search_query(couchbase::match_none_query{});
     }
 
-    auto core_request = build_search_request(
-      std::move(index_name), *request.search_query().value(), std::move(options), std::move(bucket_name), std::move(scope_name));
-    core_request.show_request = false;
+    core::operations::search_request core_request{
+        std::move(index_name),
+        core::utils::json::generate_binary(request.search_query().value().query),
+        true,
+        {},
+        {},
+        options.limit,
+        options.skip,
+        options.explain,
+        options.disable_scoring,
+        options.include_locations,
+        map_highlight_style(options.highlight_style),
+        options.highlight_fields,
+        options.fields,
+        options.collections,
+        map_scan_consistency(options.scan_consistency),
+        options.mutation_state,
+        map_sort(options.sort, options.sort_string),
+        map_facets(options.facets),
+        map_raw(options.raw),
+        {},
+        options.client_context_id,
+        options.timeout,
+    };
 
     if (!request.vector_search().has_value()) {
         return core_request;
@@ -186,7 +205,7 @@ build_search_request(std::string index_name,
     core_request.vector_query = core::utils::json::generate_binary(encoded_vector_search.query);
 
     auto vector_search_opts = request.vector_search().value().options();
-    core_request.vector_query_combination = map_vector_query_combination(vector_search_opts.combination_);
+    core_request.vector_query_combination = map_vector_query_combination(vector_search_opts.query_combination());
     return core_request;
 }
 } // namespace couchbase::core::impl
