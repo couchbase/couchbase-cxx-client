@@ -22,6 +22,14 @@ namespace couchbase
 enum class vector_query_combination { combination_and, combination_or };
 
 struct vector_search_options {
+  public:
+    auto query_combination(vector_query_combination combination) -> vector_search_options&
+    {
+        combination_ = combination;
+        return *this;
+    }
+
+  private:
     std::optional<vector_query_combination> combination_{};
 };
 } // namespace couchbase
