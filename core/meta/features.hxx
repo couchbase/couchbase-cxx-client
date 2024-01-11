@@ -101,3 +101,8 @@
  * The document not locked (couchbase::errc::key_value::document_not_locked) error code is supported
  */
 #define COUCHBASE_CXX_CLIENT_HAS_ERRC_DOCUMENT_NOT_LOCKED 1
+
+/**
+ * Vector search is supported via couchbase::cluster::search() or couchbase::scope::search()
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_VECTOR_SEARCH 1
