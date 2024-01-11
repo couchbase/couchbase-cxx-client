@@ -987,6 +987,7 @@ TEST_CASE("integration: bucket management history", "[integration]")
             REQUIRE(get_resp.bucket.history_retention_bytes == 2147483648);
         }
     }
+
     {
         couchbase::core::operations::management::bucket_drop_request req{ bucket_name };
         couchbase::core::operations::management::bucket_drop_request update_req{ update_bucket_name };
@@ -1534,6 +1535,59 @@ TEST_CASE("integration: collection management update collection with max expiry"
 
     {
         // Clean up the collection that was created
+        auto ec = drop_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
+        REQUIRE((!ec || ec == couchbase::errc::common::collection_not_found));
+    }
+}
+
+TEST_CASE("integration: collection management history retention not supported in bucket", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    if (!integration.cluster_version().supports_collections()) {
+        SKIP("cluster does not support collections");
+    }
+    if (integration.has_bucket_capability("nonDedupedHistory")) {
+        SKIP("bucket supports non deduped history");
+    }
+
+    auto scope_name = "_default";
+    auto collection_name = test::utils::uniq_id("collection");
+
+    SECTION("create collection")
+    {
+        couchbase::core::operations::management::collection_create_request req{
+            integration.ctx.bucket,
+            scope_name,
+            collection_name,
+        };
+
+        req.history = true;
+
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::feature_not_available);
+    }
+
+    SECTION("update collection")
+    {
+        auto ec = create_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
+        REQUIRE_SUCCESS(ec);
+
+        couchbase::core::operations::management::collection_update_request req{
+            integration.ctx.bucket,
+            scope_name,
+            collection_name,
+        };
+
+        req.history = true;
+
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.ctx.ec == couchbase::errc::common::feature_not_available);
+    }
+
+    // Clean up the collection that was created
+    {
         auto ec = drop_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
         REQUIRE((!ec || ec == couchbase::errc::common::collection_not_found));
     }
