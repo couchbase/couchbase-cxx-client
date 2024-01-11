@@ -41,7 +41,7 @@ struct traits<couchbase::core::topology::collections_manifest> {
                 collection.uid = std::stoull(c.at("uid").get_string(), nullptr, 16);
                 collection.name = c.at("name").get_string();
                 if (const auto* max_ttl = c.find("maxTTL"); max_ttl != nullptr) {
-                    collection.max_expiry = max_ttl->template as<std::uint32_t>();
+                    collection.max_expiry = max_ttl->template as<std::int32_t>();
                 }
                 if (const auto* history = c.find("history"); history != nullptr) {
                     collection.history = history->template as<std::optional<bool>>();
