@@ -46,8 +46,6 @@ struct get_options : public common_options<get_options> {
         const std::vector<std::string> projections;
     };
 
-    static constexpr std::size_t maximum_number_of_projections{ 16U };
-
     /**
      * Validates options and returns them as an immutable value.
      *
@@ -60,10 +58,7 @@ struct get_options : public common_options<get_options> {
      */
     [[nodiscard]] auto build() const -> built
     {
-        if (projections_.size() + (with_expiry_ ? 2 : 1) < maximum_number_of_projections) {
-            return { build_common_options(), with_expiry_, projections_ };
-        }
-        return { build_common_options(), with_expiry_, {} };
+        return { build_common_options(), with_expiry_, projections_ };
     }
 
     /**
