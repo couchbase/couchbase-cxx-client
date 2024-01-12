@@ -199,7 +199,7 @@ build_search_request(std::string index_name,
     }
     core_request.vector_query = core::utils::json::generate_binary(request.vector_search().value().query);
 
-    auto vector_search_options = request.vector_search_options();
+    auto vector_search_options = request.vector_options();
     if (!vector_search_options.has_value()) {
         return core_request;
     }
