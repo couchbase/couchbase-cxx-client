@@ -78,7 +78,7 @@ class search_request_impl
         return vector_search_;
     }
 
-    [[nodiscard]] std::optional<vector_search_options::built> vector_search_options() const
+    [[nodiscard]] std::optional<vector_search_options::built> vector_options() const
     {
         return vector_search_options_;
     }
@@ -131,9 +131,9 @@ search_request::vector_search() const
     return impl_->vector_search();
 }
 
-[[nodiscard]] std::optional<vector_search_options::built>
-search_request::vector_search_options() const
+[[nodiscard]] std::optional<couchbase::vector_search_options::built>
+search_request::vector_options()
 {
-    return impl_->vector_search_options();
+    return impl_->vector_options();
 }
 } // namespace couchbase

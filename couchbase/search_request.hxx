@@ -112,7 +112,7 @@ class search_request
      * @since 1.0.0
      * @internal
      */
-    [[nodiscard]] std::optional<vector_search_options::built> vector_search_options() const;
+    [[nodiscard]] std::optional<vector_search_options::built> vector_options();
 
   private:
     std::shared_ptr<search_request_impl> impl_;
