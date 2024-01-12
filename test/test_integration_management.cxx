@@ -1596,43 +1596,57 @@ TEST_CASE("integration: collection management history retention not supported in
 TEST_CASE("integration: collection management bucket dedup", "[integration]")
 {
     test::utils::integration_test_guard integration;
-    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
     if (!integration.cluster_version().supports_collections()) {
         SKIP("cluster does not support collections");
     }
-    if (!integration.has_bucket_capability("nonDedupedHistory")) {
-        SKIP("Bucket does not support non deduped history");
+    if (!integration.cluster_version().supports_bucket_history()) {
+        SKIP("cluster does not support history retention");
     }
 
     auto bucket_name = test::utils::uniq_id("bucket");
     auto scope_name = test::utils::uniq_id("scope");
     auto collection_name = test::utils::uniq_id("collection");
+
+    // Create a magma bucket for use in this test
     {
-        couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket, scope_name };
+        couchbase::core::management::cluster::bucket_settings bucket_settings;
+        bucket_settings.name = bucket_name;
+        bucket_settings.ram_quota_mb = 1'024;
+        bucket_settings.storage_backend = couchbase::core::management::cluster::bucket_storage_backend::magma;
+        couchbase::core::operations::management::bucket_create_request req{ bucket_settings };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
-        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+    }
+    {
+        auto resp = wait_for_bucket_created(integration, bucket_name);
+        REQUIRE_SUCCESS(resp.ctx.ec);
+    }
+    {
+        couchbase::core::operations::management::scope_create_request req{ bucket_name, scope_name };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, bucket_name, resp.uid);
         REQUIRE(created);
     }
 
     {
-        auto created = test::utils::wait_until([&]() { return scope_exists(integration.cluster, integration.ctx.bucket, scope_name); });
+        auto created = test::utils::wait_until([&]() { return scope_exists(integration.cluster, bucket_name, scope_name); });
         REQUIRE(created);
     }
 
     {
-        couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket, scope_name, collection_name };
+        couchbase::core::operations::management::collection_create_request req{ bucket_name, scope_name, collection_name };
         req.history = true;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
-        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, integration.ctx.bucket, resp.uid);
+        auto created = test::utils::wait_until_collection_manifest_propagated(integration.cluster, bucket_name, resp.uid);
         REQUIRE(created);
     }
     {
         couchbase::core::topology::collections_manifest::collection collection;
         auto created = test::utils::wait_until([&]() {
-            auto coll = get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
+            auto coll = get_collection(integration.cluster, bucket_name, scope_name, collection_name);
             if (coll) {
                 collection = *coll;
                 return true;
@@ -1643,7 +1657,7 @@ TEST_CASE("integration: collection management bucket dedup", "[integration]")
         REQUIRE(collection.history.value());
     }
     {
-        couchbase::core::operations::management::collection_update_request req{ integration.ctx.bucket, scope_name, collection_name };
+        couchbase::core::operations::management::collection_update_request req{ bucket_name, scope_name, collection_name };
         req.history = false;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
@@ -1651,7 +1665,7 @@ TEST_CASE("integration: collection management bucket dedup", "[integration]")
     {
         couchbase::core::topology::collections_manifest::collection collection;
         auto no_history = test::utils::wait_until([&]() {
-            auto coll = get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
+            auto coll = get_collection(integration.cluster, bucket_name, scope_name, collection_name);
             if (coll.has_value()) {
                 if (!coll.value().history.value()) {
                     return true;
@@ -1661,6 +1675,13 @@ TEST_CASE("integration: collection management bucket dedup", "[integration]")
             return false;
         });
         REQUIRE(no_history);
+    }
+
+    // Clean up the bucket that was created for this test
+    {
+        couchbase::core::operations::management::bucket_drop_request req{ bucket_name };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
     }
 }
 
