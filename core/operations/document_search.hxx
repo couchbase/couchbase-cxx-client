@@ -121,9 +121,10 @@ struct search_request {
     couchbase::core::json_string query;
 
     /**
-     * UNCOMMITTED: This should be set to false if using the .search() API, ignore for old .search_query() API
+     * UNCOMMITTED: This should be set to false if using the .search() API, leave unset for old .search_query() API
      */
     std::optional<bool> show_request;
+
     std::optional<couchbase::core::json_string> vector_query;
     std::optional<couchbase::core::vector_query_combination> vector_query_combination;
 

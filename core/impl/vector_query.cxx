@@ -15,7 +15,6 @@
  *   limitations under the License.
  */
 
-#include "core/logger/logger.hxx"
 #include "encoded_search_query.hxx"
 
 #include <couchbase/vector_query.hxx>

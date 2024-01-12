@@ -207,7 +207,7 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
                 const search_options::built& options,
                 search_handler&& handler) const
     {
-        return core_.execute(core::impl::build_search_request(std::move(index_name), request, options, {}, {}),
+        return core_.execute(core::impl::build_search_request(std::move(index_name), std::move(request), options, {}, {}),
                              [handler = std::move(handler)](auto resp) mutable {
                                  return handler(search_error_context{ internal_search_error_context{ resp } },
                                                 search_result{ internal_search_result{ resp } });

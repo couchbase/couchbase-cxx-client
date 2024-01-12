@@ -15,7 +15,6 @@
  *   limitations under the License.
  */
 
-#include "core/logger/logger.hxx"
 #include "encoded_search_query.hxx"
 
 #include <couchbase/vector_search.hxx>
@@ -25,7 +24,6 @@ namespace couchbase
 auto
 vector_search::encode() const -> encoded_search_query
 {
-    CB_LOG_CRITICAL("ENCODING VECTOR_SEARCH");
     encoded_search_query built;
 
     built.query = tao::json::empty_array;

@@ -21,17 +21,53 @@ namespace couchbase
 {
 enum class vector_query_combination { combination_and, combination_or };
 
+/**
+ * Options related to executing a @ref vector_search
+ *
+ * @since 1.0.0
+ * @volatile
+ */
 struct vector_search_options {
-  public:
+
+    /**
+     * Immutable value object representing consistent options
+     *
+     * @since 1.0.0
+     * @internal
+     */
+    struct built {
+        std::optional<vector_query_combination> combination;
+    };
+
+    /**
+     * Validates options and returns them as an immutable value.
+     *
+     * @return consistent options as an immutable value
+     *
+     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
+     *
+     * @since 1.0.0
+     * @internal
+     */
+    [[nodiscard]] auto build() const -> built
+    {
+        return { combination_ };
+    }
+
+    /**
+     * Sets how the vector query results are combined.
+     *
+     * @param combination @ref vector_query_combination
+     * @return this for chaining purposes
+     *
+     * @since 1.0.0
+     * @volatile
+     *
+     */
     auto query_combination(vector_query_combination combination) -> vector_search_options&
     {
         combination_ = combination;
         return *this;
-    }
-
-    auto query_combination() -> std::optional<vector_query_combination>&
-    {
-        return combination_;
     }
 
   private:

@@ -16,6 +16,7 @@
  */
 
 #include "core/impl/encoded_search_query.hxx"
+
 #include <couchbase/search_request.hxx>
 
 namespace couchbase
@@ -23,24 +24,48 @@ namespace couchbase
 class search_request_impl
 {
   public:
-    explicit search_request_impl(const search_query& query)
-      : search_query_(query.encode())
+    explicit search_request_impl(std::optional<encoded_search_query> search_query,
+                                 std::optional<encoded_search_query> vector_search,
+                                 std::optional<vector_search_options::built> options)
+      : search_query_(std::move(search_query))
+      , vector_search_(std::move(vector_search))
+      , vector_search_options_(std::move(options))
     {
     }
 
-    explicit search_request_impl(couchbase::vector_search vector_search)
-      : vector_search_(vector_search)
+    static search_request_impl create(const search_query& query)
     {
+        auto encoded = query.encode();
+        if (encoded.ec) {
+            throw std::system_error(encoded.ec, "unable to encode the search_query");
+        }
+        return search_request_impl(encoded, {}, {});
+    }
+
+    static search_request_impl create(const vector_search& search)
+    {
+        auto encoded = search.encode();
+        if (encoded.ec) {
+            throw std::system_error(encoded.ec, "unable to encode the vector_search");
+        }
+        return search_request_impl({}, encoded, search.options());
     }
 
     void search_query(const couchbase::search_query& query)
     {
         search_query_ = query.encode();
+        if (search_query_.value().ec) {
+            throw std::system_error(search_query_.value().ec, "unable to encode the search_query");
+        }
     }
 
-    void vector_search(const couchbase::vector_search& vector_search)
+    void vector_search(const couchbase::vector_search& search)
     {
-        vector_search_ = vector_search;
+        vector_search_ = search.encode();
+        if (vector_search_.value().ec) {
+            throw std::system_error(vector_search_.value().ec, "unable to encode the vector_search");
+        }
+        vector_search_options_ = search.options();
     }
 
     [[nodiscard]] std::optional<encoded_search_query> search_query() const
@@ -48,24 +73,30 @@ class search_request_impl
         return search_query_;
     }
 
-    [[nodiscard]] std::optional<couchbase::vector_search> vector_search() const
+    [[nodiscard]] std::optional<encoded_search_query> vector_search() const
     {
         return vector_search_;
     }
 
+    [[nodiscard]] std::optional<vector_search_options::built> vector_search_options() const
+    {
+        return vector_search_options_;
+    }
+
   private:
     std::optional<encoded_search_query> search_query_;
-    std::optional<couchbase::vector_search> vector_search_;
+    std::optional<encoded_search_query> vector_search_;
+    std::optional<vector_search_options::built> vector_search_options_;
 };
 
 search_request::search_request(const couchbase::search_query& query)
-  : impl_(std::make_shared<search_request_impl>(query))
 {
+    impl_->create(query);
 }
 
 search_request::search_request(const couchbase::vector_search& search)
-  : impl_(std::make_shared<search_request_impl>(search))
 {
+    impl_->create(search);
 }
 
 auto
@@ -94,9 +125,15 @@ search_request::search_query() const
     return impl_->search_query();
 }
 
-[[nodiscard]] std::optional<couchbase::vector_search>
+[[nodiscard]] std::optional<encoded_search_query>
 search_request::vector_search() const
 {
     return impl_->vector_search();
+}
+
+[[nodiscard]] std::optional<vector_search_options::built>
+search_request::vector_search_options() const
+{
+    return impl_->vector_search_options();
 }
 } // namespace couchbase

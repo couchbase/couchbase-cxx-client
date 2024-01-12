@@ -27,7 +27,6 @@
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/match_none_query.hxx>
-#include <utility>
 
 #include <fmt/core.h>
 
@@ -173,7 +172,7 @@ build_search_request(std::string index_name,
     core::operations::search_request core_request{
         std::move(index_name),
         core::utils::json::generate_binary(request.search_query().value().query),
-        true,
+        false,
         {},
         {},
         options.limit,
@@ -198,14 +197,14 @@ build_search_request(std::string index_name,
     if (!request.vector_search().has_value()) {
         return core_request;
     }
-    auto encoded_vector_search = request.vector_search().value().encode();
-    if (encoded_vector_search.ec) {
-        throw std::system_error(encoded_vector_search.ec, fmt::format("unable to encode vector_search for index \"{}\"", index_name));
-    }
-    core_request.vector_query = core::utils::json::generate_binary(encoded_vector_search.query);
+    core_request.vector_query = core::utils::json::generate_binary(request.vector_search().value().query);
 
-    auto vector_search_opts = request.vector_search().value().options();
-    core_request.vector_query_combination = map_vector_query_combination(vector_search_opts.query_combination());
+    auto vector_search_options = request.vector_search_options();
+    if (!vector_search_options.has_value()) {
+        return core_request;
+    }
+
+    core_request.vector_query_combination = map_vector_query_combination(vector_search_options.value().combination);
     return core_request;
 }
 } // namespace couchbase::core::impl

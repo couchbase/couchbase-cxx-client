@@ -21,9 +21,22 @@
 
 namespace couchbase
 {
+/**
+ * @since 1.0.0
+ * @volatile
+ */
 class vector_query
 {
   public:
+    /**
+     * Creates a vector query
+     *
+     * @param vector_field_name the document field that contains the vector
+     * @param vector_query the vector query to run. Cannot be empty.
+     *
+     * @since 1.0.0
+     * @volatile
+     */
     vector_query(std::string vector_field_name, std::vector<float> vector_query)
       : vector_field_name_{ std::move(vector_field_name) }
       , vector_query_{ std::move(vector_query) }
@@ -33,6 +46,16 @@ class vector_query
         }
     }
 
+    /**
+     * The number of results that will be returned from this vector query. Defaults to 3.
+     *
+     * @param num_candidates the number of results returned
+     *
+     * @return this vector_query for chaining purposes
+     *
+     * @since 1.0.0
+     * @volatile
+     */
     auto num_candidates(std::uint32_t num_candidates) -> vector_query&
     {
         if (num_candidates < 1) {
@@ -42,12 +65,29 @@ class vector_query
         return *this;
     }
 
+    /**
+     * The boost parameter is used to increase the relative weight of a clause (with a boost greater than 1) or decrease the relative weight
+     * (with a boost between 0 and 1).
+     *
+     * @param boost boost value
+     *
+     * @return this vector_query for chaining purposes.
+     *
+     * @since 1.0.0
+     * @volatile
+     */
     auto boost(double boost) -> vector_query&
     {
         boost_ = boost;
         return *this;
     }
 
+    /**
+     * @return encoded representation of the query.
+     *
+     * @since 1.0.0
+     * @internal
+     */
     [[nodiscard]] auto encode() const -> encoded_search_query;
 
   private:
