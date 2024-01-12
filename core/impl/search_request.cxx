@@ -90,13 +90,13 @@ class search_request_impl
 };
 
 search_request::search_request(const couchbase::search_query& query)
+: impl_{ std::make_shared<search_request_impl>(search_request_impl::create(query)) }
 {
-    impl_->create(query);
 }
 
 search_request::search_request(const couchbase::vector_search& search)
+: impl_{ std::make_shared<search_request_impl>(search_request_impl::create(search)) }
 {
-    impl_->create(search);
 }
 
 auto
