@@ -37,7 +37,7 @@ class vector_query
      * @since 1.0.0
      * @volatile
      */
-    vector_query(std::string vector_field_name, std::vector<float> vector_query)
+    vector_query(std::string vector_field_name, std::vector<double> vector_query)
       : vector_field_name_{ std::move(vector_field_name) }
       , vector_query_{ std::move(vector_query) }
     {
@@ -92,7 +92,7 @@ class vector_query
 
   private:
     std::string vector_field_name_;
-    std::vector<float> vector_query_;
+    std::vector<double> vector_query_;
     std::uint32_t num_candidates_{ 3 };
     std::optional<double> boost_{};
 };

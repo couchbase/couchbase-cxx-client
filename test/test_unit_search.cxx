@@ -38,6 +38,7 @@
 #include <couchbase/regexp_query.hxx>
 #include <couchbase/term_query.hxx>
 #include <couchbase/term_range_query.hxx>
+#include <couchbase/vector_search.hxx>
 #include <couchbase/wildcard_query.hxx>
 
 #include <couchbase/search_sort_geo_distance.hxx>
@@ -463,6 +464,30 @@ auto geo_distance = couchbase::search_sort_geo_distance(couchbase::geo_point{ 37
       "lon": -122.44234633404847
     },
     "unit": "nauticalmiles"
+}
+)"_json);
+}
+
+TEST_CASE("unit: vector query", "[unit]")
+{
+    // clang-format off
+//! [vector-query]
+auto query = couchbase::vector_query("foo", std::vector<double>{ 0.352, 0.6238, -0.32226 }).boost(0.5).num_candidates(4);
+//! [vector-query]
+    // clang-format on
+    const auto encoded = query.encode();
+    REQUIRE_FALSE(encoded.ec);
+
+    REQUIRE(encoded.query == R"(
+{
+    "boost": 0.5,
+    "field": "foo",
+    "k": 4,
+    "vector": [
+      0.352,
+      0.6238,
+      -0.32226
+    ]
 }
 )"_json);
 }
