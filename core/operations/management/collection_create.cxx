@@ -28,7 +28,7 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-collection_create_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+collection_create_request::encode_to(encoded_request_type& encoded, http_context& context) const
 {
     encoded.method = "POST";
     encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}/collections", bucket_name, scope_name);
@@ -42,6 +42,11 @@ collection_create_request::encode_to(encoded_request_type& encoded, http_context
         return couchbase::errc::common::invalid_argument;
     }
     if (history.has_value()) {
+        auto bucket_caps = context.config.bucket_capabilities;
+        if (bucket_caps.find(bucket_capability::non_deduped_history) == bucket_caps.end()) {
+            return errc::common::feature_not_available;
+        }
+
         encoded.body.append(fmt::format("&history={}", history.value()));
     }
     return {};
@@ -57,9 +62,6 @@ collection_create_request::make_response(error_context::http&& ctx, const encode
                 std::regex collection_exists("Collection with name .+ already exists");
                 if (std::regex_search(encoded.body.data(), collection_exists)) {
                     response.ctx.ec = errc::management::collection_exists;
-                } else if (encoded.body.data().find("Not allowed on this version of cluster") != std::string::npos ||
-                           encoded.body.data().find("Bucket must have storage_mode=magma") != std::string::npos) {
-                    response.ctx.ec = errc::common::feature_not_available;
                 } else {
                     response.ctx.ec = errc::common::invalid_argument;
                 }
