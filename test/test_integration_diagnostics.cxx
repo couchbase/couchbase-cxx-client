@@ -254,7 +254,7 @@ TEST_CASE("integration: ping allows setting timeout", "[integration]")
     {
         auto barrier = std::make_shared<std::promise<couchbase::core::diag::ping_result>>();
         auto f = barrier->get_future();
-        integration.cluster.ping({}, {}, {}, std::chrono::milliseconds(1), [barrier](couchbase::core::diag::ping_result&& resp) mutable {
+        integration.cluster.ping({}, {}, {}, std::chrono::milliseconds(0), [barrier](couchbase::core::diag::ping_result&& resp) mutable {
             barrier->set_value(std::move(resp));
         });
         auto res = f.get();
@@ -306,7 +306,7 @@ TEST_CASE("integration: ping allows setting timeout", "[integration]")
     {
         auto cluster = couchbase::cluster(integration.cluster);
 
-        auto res = cluster.ping(couchbase::ping_options().timeout(std::chrono::milliseconds{ 1 })).get();
+        auto res = cluster.ping(couchbase::ping_options().timeout(std::chrono::milliseconds(0))).get();
 
         REQUIRE(res.endpoints().size() > 0);
 
