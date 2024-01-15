@@ -125,7 +125,7 @@ struct search_request {
      */
     std::optional<bool> show_request;
 
-    std::optional<couchbase::core::json_string> vector_query;
+    std::optional<couchbase::core::json_string> vector_search;
     std::optional<couchbase::core::vector_query_combination> vector_query_combination;
 
     std::optional<std::uint32_t> limit{};

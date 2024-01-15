@@ -39,8 +39,8 @@ search_request::encode_to(search_request::encoded_request_type& encoded, http_co
         body["showrequest"] = show_request.value() ? "true" : "false";
     }
 
-    if (vector_query.has_value()) {
-        body["knn"] = utils::json::parse(vector_query.value());
+    if (vector_search.has_value()) {
+        body["knn"] = utils::json::parse(vector_search.value());
     }
     if (vector_query_combination.has_value()) {
         switch (*vector_query_combination) {
