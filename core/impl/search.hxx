@@ -21,6 +21,7 @@
 
 #include <couchbase/search_options.hxx>
 #include <couchbase/search_query.hxx>
+#include <couchbase/search_request.hxx>
 
 #include <optional>
 #include <string>
@@ -30,6 +31,13 @@ namespace couchbase::core::impl
 core::operations::search_request
 build_search_request(std::string index_name,
                      const search_query& query,
+                     search_options::built options,
+                     std::optional<std::string> bucket_name,
+                     std::optional<std::string> scope_name);
+
+core::operations::search_request
+build_search_request(std::string index_name,
+                     search_request request,
                      search_options::built options,
                      std::optional<std::string> bucket_name,
                      std::optional<std::string> scope_name);

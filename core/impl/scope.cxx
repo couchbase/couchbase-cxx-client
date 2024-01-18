@@ -89,6 +89,15 @@ class scope_impl
                              });
     }
 
+    void search(std::string index_name, couchbase::search_request request, search_options::built options, search_handler&& handler) const
+    {
+        return core_.execute(core::impl::build_search_request(std::move(index_name), std::move(request), options, bucket_name_, name_),
+                             [handler = std::move(handler)](auto&& resp) mutable {
+                                 return handler(search_error_context{ internal_search_error_context{ resp } },
+                                                search_result{ internal_search_result{ resp } });
+                             });
+    }
+
   private:
     core::cluster core_;
     std::string bucket_name_;
@@ -165,6 +174,24 @@ scope::search_query(std::string index_name, const class search_query& query, con
     auto barrier = std::make_shared<std::promise<std::pair<search_error_context, search_result>>>();
     auto future = barrier->get_future();
     search_query(std::move(index_name), query, options, [barrier](auto ctx, auto result) {
+        barrier->set_value({ std::move(ctx), std::move(result) });
+    });
+    return future;
+}
+
+void
+scope::search(std::string index_name, search_request request, const search_options& options, search_handler&& handler) const
+{
+    return impl_->search(std::move(index_name), std::move(request), options.build(), std::move(handler));
+}
+
+auto
+scope::search(std::string index_name, search_request request, const search_options& options) const
+  -> std::future<std::pair<search_error_context, search_result>>
+{
+    auto barrier = std::make_shared<std::promise<std::pair<search_error_context, search_result>>>();
+    auto future = barrier->get_future();
+    search(std::move(index_name), std::move(request), options, [barrier](auto ctx, auto result) {
         barrier->set_value({ std::move(ctx), std::move(result) });
     });
     return future;

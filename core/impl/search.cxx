@@ -26,6 +26,7 @@
 #include "internal_term_facet_result.hxx"
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/match_none_query.hxx>
 
 #include <fmt/core.h>
 
@@ -102,6 +103,21 @@ map_raw(std::map<std::string, codec::binary, std::less<>>& raw)
     }
     return core_raw;
 }
+
+static std::optional<core::vector_query_combination>
+map_vector_query_combination(const std::optional<couchbase::vector_query_combination>& combination)
+{
+    if (combination) {
+        switch (combination.value()) {
+            case couchbase::vector_query_combination::combination_and:
+                return core::vector_query_combination::combination_and;
+            case couchbase::vector_query_combination::combination_or:
+                return core::vector_query_combination::combination_or;
+        }
+    }
+    return {};
+}
+
 } // namespace
 
 core::operations::search_request
@@ -118,6 +134,9 @@ build_search_request(std::string index_name,
     core::operations::search_request request{
         std::move(index_name),
         core::utils::json::generate_binary(encoded.query),
+        {},
+        {},
+        {},
         options.limit,
         options.skip,
         options.explain,
@@ -139,4 +158,53 @@ build_search_request(std::string index_name,
     return request;
 }
 
+core::operations::search_request
+build_search_request(std::string index_name,
+                     couchbase::search_request request,
+                     search_options::built options,
+                     std::optional<std::string> /* bucket_name */,
+                     std::optional<std::string> /* scope_name */)
+{
+    if (!request.search_query().has_value()) {
+        request.search_query(couchbase::match_none_query{});
+    }
+
+    core::operations::search_request core_request{
+        std::move(index_name),
+        core::utils::json::generate_binary(request.search_query().value().query),
+        false,
+        {},
+        {},
+        options.limit,
+        options.skip,
+        options.explain,
+        options.disable_scoring,
+        options.include_locations,
+        map_highlight_style(options.highlight_style),
+        options.highlight_fields,
+        options.fields,
+        options.collections,
+        map_scan_consistency(options.scan_consistency),
+        options.mutation_state,
+        map_sort(options.sort, options.sort_string),
+        map_facets(options.facets),
+        map_raw(options.raw),
+        {},
+        options.client_context_id,
+        options.timeout,
+    };
+
+    if (!request.vector_search().has_value()) {
+        return core_request;
+    }
+    core_request.vector_search = core::utils::json::generate_binary(request.vector_search().value().query);
+
+    auto vector_search_options = request.vector_options();
+    if (!vector_search_options.has_value()) {
+        return core_request;
+    }
+
+    core_request.vector_query_combination = map_vector_query_combination(vector_search_options.value().combination);
+    return core_request;
+}
 } // namespace couchbase::core::impl

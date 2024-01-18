@@ -202,6 +202,18 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
                                  [handler = std::move(handler)](auto resp) mutable { return handler(core::impl::build_result(resp)); });
     }
 
+    void search(std::string index_name,
+                couchbase::search_request request,
+                const search_options::built& options,
+                search_handler&& handler) const
+    {
+        return core_.execute(core::impl::build_search_request(std::move(index_name), std::move(request), options, {}, {}),
+                             [handler = std::move(handler)](auto resp) mutable {
+                                 return handler(search_error_context{ internal_search_error_context{ resp } },
+                                                search_result{ internal_search_result{ resp } });
+                             });
+    }
+
     void close(core::utils::movable_function<void()> handler)
     {
         if (transactions_) {
@@ -324,6 +336,23 @@ cluster::diagnostics(const couchbase::diagnostics_options& options) const -> std
 {
     auto barrier = std::make_shared<std::promise<diagnostics_result>>();
     diagnostics(options, [barrier](auto result) mutable { barrier->set_value(std::move(result)); });
+    return barrier->get_future();
+}
+
+void
+cluster::search(std::string index_name, search_request request, const search_options& options, search_handler&& handler) const
+{
+    return impl_->search(std::move(index_name), std::move(request), options.build(), std::move(handler));
+}
+
+auto
+cluster::search(std::string index_name, search_request request, const search_options& options) const
+  -> std::future<std::pair<search_error_context, search_result>>
+{
+    auto barrier = std::make_shared<std::promise<std::pair<search_error_context, search_result>>>();
+    search(std::move(index_name), std::move(request), options, [barrier](auto ctx, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
+    });
     return barrier->get_future();
 }
 

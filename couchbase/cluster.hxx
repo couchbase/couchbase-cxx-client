@@ -29,6 +29,7 @@
 #include <couchbase/search_index_manager.hxx>
 #include <couchbase/search_options.hxx>
 #include <couchbase/search_query.hxx>
+#include <couchbase/search_request.hxx>
 #include <couchbase/transactions.hxx>
 
 #include <memory>
@@ -143,6 +144,9 @@ class cluster
     /**
      * Performs a query against the full text search services.
      *
+     * Consider using the newer @ref cluster::search() interface instead, which can be used
+     * for both traditional FTS queries, and to perform a @ref vector_search
+     *
      * @param index_name name of the search index
      * @param query query object, see hierarchy of @ref search_query for more details.
      * @param options options to customize the query request.
@@ -161,6 +165,9 @@ class cluster
     /**
      * Performs a query against the full text search services.
      *
+     * Consider using the newer @ref cluster::search() interface instead, which can be used
+     * for both traditional FTS queries, and to perform a vector search.
+     *
      * @param index_name name of the search index
      * @param query query object, see hierarchy of @ref search_query for more details.
      * @param options options to customize the query request.
@@ -175,6 +182,47 @@ class cluster
      * @committed
      */
     [[nodiscard]] auto search_query(std::string index_name, const class search_query& query, const search_options& options = {}) const
+      -> std::future<std::pair<search_error_context, search_result>>;
+
+    /**
+     * Performs a request against the full text search services.
+     *
+     * This can be used to perform a traditional FTS query, and/or a vector search.
+     *
+     * @param index_name name of the search index
+     * @param request request object, see @ref search_request for more details.
+     * @param options options to customize the query request.
+     * @param handler the handler that implements @ref search_handler
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @see https://docs.couchbase.com/server/current/fts/fts-introduction.html
+     *
+     * @since 1.0.0
+     * @volatile
+     */
+    void search(std::string index_name, search_request request, const search_options& options, search_handler&& handler) const;
+
+    /**
+     * Performs a request against the full text search services.
+     *
+     * This can be used to perform a traditional FTS query, and/or a vector search.
+     *
+     * @param index_name name of the search index
+     * @param request request object, see @ref search_request for more details.
+     * @param options options to customize the query request.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @see https://docs.couchbase.com/server/current/fts/fts-introduction.html
+     *
+     * @since 1.0.0
+     * @volatile
+     */
+    [[nodiscard]] auto search(std::string index_name, search_request request, const search_options& = {}) const
       -> std::future<std::pair<search_error_context, search_result>>;
 
     /**
