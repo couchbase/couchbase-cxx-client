@@ -840,16 +840,15 @@ class bucket_impl
     std::atomic_size_t round_robin_next_{ 0 };
 };
 
-bucket::
-bucket(std::string client_id,
-       asio::io_context& ctx,
-       asio::ssl::context& tls,
-       std::shared_ptr<couchbase::tracing::request_tracer> tracer,
-       std::shared_ptr<couchbase::metrics::meter> meter,
-       std::string name,
-       couchbase::core::origin origin,
-       std::vector<protocol::hello_feature> known_features,
-       std::shared_ptr<impl::bootstrap_state_listener> state_listener)
+bucket::bucket(std::string client_id,
+               asio::io_context& ctx,
+               asio::ssl::context& tls,
+               std::shared_ptr<couchbase::tracing::request_tracer> tracer,
+               std::shared_ptr<couchbase::metrics::meter> meter,
+               std::string name,
+               couchbase::core::origin origin,
+               std::vector<protocol::hello_feature> known_features,
+               std::shared_ptr<impl::bootstrap_state_listener> state_listener)
 
   : ctx_(ctx)
   , impl_{ std::make_shared<bucket_impl>(std::move(client_id),
@@ -864,8 +863,7 @@ bucket(std::string client_id,
 {
 }
 
-bucket::~
-bucket()
+bucket::~bucket()
 {
     impl_->close();
 }
