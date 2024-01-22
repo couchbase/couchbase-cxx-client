@@ -28,6 +28,7 @@
 #include "mcbp/queue_response.hxx"
 #include "origin.hxx"
 #include "ping_collector.hxx"
+#include "protocol/cmd_get_cluster_config.hxx"
 #include "retry_orchestrator.hxx"
 
 #include <couchbase/metrics/meter.hxx>
@@ -67,6 +68,10 @@ class bucket_impl
       , codec_{ { known_features_.begin(), known_features_.end() } }
       , ctx_{ ctx }
       , tls_{ tls }
+      , heartbeat_timer_(ctx_)
+      , heartbeat_interval_{ origin_.options().config_poll_floor > origin_.options().config_poll_interval
+                               ? origin_.options().config_poll_floor
+                               : origin_.options().config_poll_interval }
     {
     }
 
@@ -421,6 +426,7 @@ class bucket_impl
                 }
                 self->update_config(cfg);
                 self->drain_deferred_queue();
+                self->fetch_config({});
             }
             asio::post(asio::bind_executor(self->ctx_, [h = std::move(h), ec, cfg = std::move(cfg)]() mutable { h(ec, cfg); }));
         });
@@ -476,12 +482,52 @@ class bucket_impl
         }
     }
 
-    void close()
+    void fetch_config(std::error_code ec)
     {
-        if (closed_) {
+        if (ec == asio::error::operation_aborted || closed_) {
             return;
         }
-        closed_ = true;
+        if (heartbeat_timer_.expiry() > std::chrono::steady_clock::now()) {
+            return;
+        }
+
+        std::optional<io::mcbp_session> session{};
+        {
+            std::scoped_lock lock(sessions_mutex_);
+
+            std::size_t start = heartbeat_next_index_.fetch_add(1);
+            std::size_t i = start;
+            do {
+                auto ptr = sessions_.find(i % sessions_.size());
+                if (ptr != sessions_.end() && ptr->second.supports_gcccp()) {
+                    session = ptr->second;
+                }
+                i = heartbeat_next_index_.fetch_add(1);
+            } while (start % sessions_.size() != i % sessions_.size());
+        }
+        if (session) {
+            protocol::client_request<protocol::get_cluster_config_request_body> req;
+            req.opaque(session->next_opaque());
+            session->write_and_flush(req.data());
+        } else {
+            CB_LOG_WARNING(R"({} unable to find session with GCCCP support, retry in {})", log_prefix_, heartbeat_interval_);
+        }
+        heartbeat_timer_.expires_after(heartbeat_interval_);
+        return heartbeat_timer_.async_wait([self = shared_from_this()](std::error_code e) {
+            if (e == asio::error::operation_aborted) {
+                return;
+            }
+            self->fetch_config(e);
+        });
+    }
+
+    void close()
+    {
+        if (bool expected_state{ false }; !closed_.compare_exchange_strong(expected_state, true)) {
+            return;
+        }
+
+        heartbeat_timer_.cancel();
 
         drain_deferred_queue();
 
@@ -772,6 +818,10 @@ class bucket_impl
 
     asio::io_context& ctx_;
     asio::ssl::context& tls_;
+
+    asio::steady_timer heartbeat_timer_;
+    std::chrono::milliseconds heartbeat_interval_;
+    std::atomic_size_t heartbeat_next_index_{ 0 };
 
     std::atomic_bool closed_{ false };
     std::atomic_bool configured_{ false };

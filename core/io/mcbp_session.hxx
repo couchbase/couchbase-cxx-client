@@ -109,6 +109,7 @@ class mcbp_session
     [[nodiscard]] const std::string& bootstrap_hostname() const;
     [[nodiscard]] const std::string& bootstrap_port() const;
     [[nodiscard]] std::uint16_t bootstrap_port_number() const;
+    void write_and_flush(std::vector<std::byte>&& buffer);
     void write_and_subscribe(std::shared_ptr<mcbp::queue_request>, std::shared_ptr<response_handler> handler);
     void write_and_subscribe(std::uint32_t opaque, std::vector<std::byte>&& data, command_handler&& handler);
     void bootstrap(utils::movable_function<void(std::error_code, topology::configuration)>&& handler,

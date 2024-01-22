@@ -542,17 +542,11 @@ class mcbp_session_impl
     {
       private:
         std::shared_ptr<mcbp_session_impl> session_;
-        asio::steady_timer heartbeat_timer_;
-        std::chrono::milliseconds heartbeat_interval_;
         std::atomic_bool stopped_{ false };
 
       public:
         explicit message_handler(std::shared_ptr<mcbp_session_impl> session)
           : session_(std::move(session))
-          , heartbeat_timer_(session_->ctx_)
-          , heartbeat_interval_{ session_->origin_.options().config_poll_floor > session_->origin_.options().config_poll_interval
-                                   ? session_->origin_.options().config_poll_floor
-                                   : session_->origin_.options().config_poll_interval }
         {
         }
 
@@ -563,16 +557,10 @@ class mcbp_session_impl
 
         void start()
         {
-            if (session_->supports_gcccp_) {
-                fetch_config({});
-            }
         }
 
         void stop()
         {
-            if (bool expected_state{ false }; stopped_.compare_exchange_strong(expected_state, true)) {
-                heartbeat_timer_.cancel();
-            }
         }
 
         void handle(mcbp_message&& msg)
@@ -708,23 +696,6 @@ class mcbp_session_impl
                                    spdlog::to_hex(msg.body));
                     break;
             }
-        }
-
-        void fetch_config(std::error_code ec)
-        {
-            if (ec == asio::error::operation_aborted || stopped_ || !session_) {
-                return;
-            }
-            protocol::client_request<protocol::get_cluster_config_request_body> req;
-            req.opaque(session_->next_opaque());
-            session_->write_and_flush(req.data());
-            heartbeat_timer_.expires_after(heartbeat_interval_);
-            heartbeat_timer_.async_wait([self = shared_from_this()](std::error_code e) {
-                if (e == asio::error::operation_aborted) {
-                    return;
-                }
-                self->fetch_config(e);
-            });
         }
     };
 
@@ -1890,6 +1861,12 @@ void
 mcbp_session::write_and_subscribe(std::shared_ptr<mcbp::queue_request> request, std::shared_ptr<response_handler> handler)
 {
     return impl_->write_and_subscribe(std::move(request), std::move(handler));
+}
+
+void
+mcbp_session::write_and_flush(std::vector<std::byte>&& buffer)
+{
+    return impl_->write_and_flush(std::move(buffer));
 }
 
 } // namespace couchbase::core::io
