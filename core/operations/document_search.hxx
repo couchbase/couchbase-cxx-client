@@ -27,6 +27,7 @@
 #include "core/search_highlight_style.hxx"
 #include "core/search_scan_consistency.hxx"
 #include "core/timeout_defaults.hxx"
+#include "core/vector_query_combination.hxx"
 
 #include <couchbase/mutation_token.hxx>
 
@@ -118,6 +119,14 @@ struct search_request {
 
     std::string index_name;
     couchbase::core::json_string query;
+
+    /**
+     * UNCOMMITTED: This should be set to false if using the .search() API, leave unset for old .search_query() API
+     */
+    std::optional<bool> show_request;
+
+    std::optional<couchbase::core::json_string> vector_search;
+    std::optional<couchbase::core::vector_query_combination> vector_query_combination;
 
     std::optional<std::uint32_t> limit{};
     std::optional<std::uint32_t> skip{};

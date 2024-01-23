@@ -34,6 +34,25 @@ search_request::encode_to(search_request::encoded_request_type& encoded, http_co
         { "query", utils::json::parse(query) },
         { "ctl", { { "timeout", encoded.timeout.count() } } },
     };
+
+    if (show_request.has_value()) {
+        body["showrequest"] = show_request.value() ? "true" : "false";
+    }
+
+    if (vector_search.has_value()) {
+        body["knn"] = utils::json::parse(vector_search.value());
+    }
+    if (vector_query_combination.has_value()) {
+        switch (*vector_query_combination) {
+            case couchbase::core::vector_query_combination::combination_or:
+                body["knn_operator"] = "or";
+                break;
+            case couchbase::core::vector_query_combination::combination_and:
+                body["knn_operator"] = "and";
+                break;
+        }
+    }
+
     if (explain) {
         body["explain"] = *explain;
     }

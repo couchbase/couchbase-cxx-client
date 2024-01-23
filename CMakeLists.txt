@@ -174,6 +174,7 @@ set(couchbase_cxx_client_FILES
     core/impl/search_index_manager.cxx
     core/impl/search_meta_data.cxx
     core/impl/search_result.cxx
+    core/impl/search_request.cxx
     core/impl/search_row.cxx
     core/impl/search_row_location.cxx
     core/impl/search_row_locations.cxx
@@ -206,6 +207,8 @@ set(couchbase_cxx_client_FILES
     core/impl/transaction_error_category.cxx
     core/impl/transaction_get_result.cxx
     core/impl/transaction_op_error_category.cxx
+    core/impl/vector_query.cxx
+    core/impl/vector_search.cxx
     core/impl/view_error_category.cxx
     core/impl/wildcard_query.cxx
     core/io/dns_client.cxx
