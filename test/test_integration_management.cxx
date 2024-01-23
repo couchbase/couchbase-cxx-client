@@ -1557,16 +1557,29 @@ TEST_CASE("integration: collection management history retention not supported in
 
     SECTION("create collection")
     {
-        couchbase::core::operations::management::collection_create_request req{
-            integration.ctx.bucket,
-            scope_name,
-            collection_name,
-        };
+        SECTION("core API")
+        {
+            couchbase::core::operations::management::collection_create_request req{
+                integration.ctx.bucket,
+                scope_name,
+                collection_name,
+            };
+            req.history = true;
 
-        req.history = true;
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec == couchbase::errc::common::feature_not_available);
+        }
 
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::errc::common::feature_not_available);
+        SECTION("public API")
+        {
+            auto manager = couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).collections();
+
+            couchbase::create_collection_settings settings{};
+            settings.history = true;
+
+            auto ctx = manager.create_collection(scope_name, collection_name, settings).get();
+            REQUIRE(ctx.ec() == couchbase::errc::common::feature_not_available);
+        }
     }
 
     SECTION("update collection")
@@ -1574,16 +1587,30 @@ TEST_CASE("integration: collection management history retention not supported in
         auto ec = create_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
         REQUIRE_SUCCESS(ec);
 
-        couchbase::core::operations::management::collection_update_request req{
-            integration.ctx.bucket,
-            scope_name,
-            collection_name,
-        };
+        SECTION("core API")
+        {
+            couchbase::core::operations::management::collection_update_request req{
+                integration.ctx.bucket,
+                scope_name,
+                collection_name,
+            };
 
-        req.history = true;
+            req.history = true;
 
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec == couchbase::errc::common::feature_not_available);
+            auto resp = test::utils::execute(integration.cluster, req);
+            REQUIRE(resp.ctx.ec == couchbase::errc::common::feature_not_available);
+        }
+
+        SECTION("public API")
+        {
+            auto manager = couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).collections();
+
+            couchbase::update_collection_settings settings{};
+            settings.history = true;
+
+            auto ctx = manager.update_collection(scope_name, collection_name, settings).get();
+            REQUIRE(ctx.ec() == couchbase::errc::common::feature_not_available);
+        }
     }
 
     // Clean up the collection that was created
