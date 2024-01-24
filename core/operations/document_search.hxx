@@ -119,6 +119,8 @@ struct search_request {
 
     std::string index_name;
     couchbase::core::json_string query;
+    std::optional<std::string> bucket_name;
+    std::optional<std::string> scope_name;
 
     /**
      * UNCOMMITTED: This should be set to false if using the .search() API, leave unset for old .search_query() API

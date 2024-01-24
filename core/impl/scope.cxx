@@ -162,24 +162,6 @@ scope::analytics_query(std::string statement, const analytics_options& options) 
 }
 
 void
-scope::search_query(std::string index_name, const class search_query& query, const search_options& options, search_handler&& handler) const
-{
-    return impl_->search_query(std::move(index_name), query, options.build(), std::move(handler));
-}
-
-auto
-scope::search_query(std::string index_name, const class search_query& query, const search_options& options) const
-  -> std::future<std::pair<search_error_context, search_result>>
-{
-    auto barrier = std::make_shared<std::promise<std::pair<search_error_context, search_result>>>();
-    auto future = barrier->get_future();
-    search_query(std::move(index_name), query, options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
-    });
-    return future;
-}
-
-void
 scope::search(std::string index_name, search_request request, const search_options& options, search_handler&& handler) const
 {
     return impl_->search(std::move(index_name), std::move(request), options.build(), std::move(handler));
@@ -195,5 +177,11 @@ scope::search(std::string index_name, search_request request, const search_optio
         barrier->set_value({ std::move(ctx), std::move(result) });
     });
     return future;
+}
+
+auto
+scope::search_indexes() const -> scope_search_index_manager
+{
+    return scope_search_index_manager{ impl_->core(), impl_->bucket_name(), impl_->name() };
 }
 } // namespace couchbase
