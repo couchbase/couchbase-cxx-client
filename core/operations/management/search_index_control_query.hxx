@@ -42,6 +42,9 @@ struct search_index_control_query_request {
     std::string index_name;
     bool allow;
 
+    std::optional<std::string> bucket_name;
+    std::optional<std::string> scope_name;
+
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
 

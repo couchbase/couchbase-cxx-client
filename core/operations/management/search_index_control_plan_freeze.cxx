@@ -31,7 +31,15 @@ search_index_control_plan_freeze_request::encode_to(encoded_request_type& encode
         return errc::common::invalid_argument;
     }
     encoded.method = "POST";
-    encoded.path = fmt::format("/api/index/{}/planFreezeControl/{}", index_name, freeze ? "freeze" : "unfreeze");
+    if (bucket_name.has_value() && scope_name.has_value()) {
+        encoded.path = fmt::format("/api/bucket/{}/scope/{}/index/{}/planFreezeControl/{}",
+                                   bucket_name.value(),
+                                   scope_name.value(),
+                                   index_name,
+                                   freeze ? "freeze" : "unfreeze");
+    } else {
+        encoded.path = fmt::format("/api/index/{}/planFreezeControl/{}", index_name, freeze ? "freeze" : "unfreeze");
+    }
     return {};
 }
 
@@ -64,6 +72,20 @@ search_index_control_plan_freeze_request::make_response(error_context::http&& ct
             response.error = payload.at("error").get_string();
             if (response.error.find("index not found") != std::string::npos) {
                 response.ctx.ec = errc::common::index_not_found;
+                return response;
+            }
+        } else if (encoded.status_code == 404) {
+            tao::json::value payload{};
+            try {
+                payload = utils::json::parse(encoded.body.data());
+            } catch (const tao::pegtl::parse_error&) {
+                response.ctx.ec = errc::common::parsing_failure;
+                return response;
+            }
+            response.status = payload.at("status").get_string();
+            response.error = payload.at("error").get_string();
+            if (response.error.find("Scoped indexes can not be used with this server version") != std::string::npos) {
+                response.ctx.ec = errc::common::feature_not_available;
                 return response;
             }
         }
