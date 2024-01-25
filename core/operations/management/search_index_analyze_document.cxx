@@ -92,10 +92,8 @@ search_index_analyze_document_request::make_response(error_context::http&& ctx, 
             }
             response.status = payload.at("status").get_string();
             response.error = payload.at("error").get_string();
-            if (response.error.find("Scoped indexes can not be used with this server version") != std::string::npos) {
-                response.ctx.ec = errc::common::feature_not_available;
-                return response;
-            }
+            response.ctx.ec = errc::common::feature_not_available;
+            return response;
         }
         response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
     }

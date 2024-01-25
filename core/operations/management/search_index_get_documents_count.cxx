@@ -66,11 +66,9 @@ search_index_get_documents_count_request::make_response(error_context::http&& ct
                 }
                 response.status = payload.at("status").get_string();
                 response.error = payload.at("error").get_string();
-                if (response.error.find("Scoped indexes can not be used with this server version") != std::string::npos) {
-                    response.ctx.ec = errc::common::feature_not_available;
-                    return response;
-                }
-            } break;
+                response.ctx.ec = errc::common::feature_not_available;
+                return response;
+            }
             case 400:
             case 500: {
                 tao::json::value payload{};

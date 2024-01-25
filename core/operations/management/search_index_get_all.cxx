@@ -30,7 +30,7 @@ search_index_get_all_request::encode_to(encoded_request_type& encoded, http_cont
 {
     encoded.method = "GET";
     if (bucket_name.has_value() && scope_name.has_value()) {
-        encoded.path = fmt::format("/api/bucket/{bucketName}/scope/{scopeName}/index", bucket_name.value(), scope_name.value());
+        encoded.path = fmt::format("/api/bucket/{}/scope/{}/index", bucket_name.value(), scope_name.value());
     } else {
         encoded.path = "/api/index";
     }
@@ -62,6 +62,7 @@ search_index_get_all_request::make_response(error_context::http&& ctx, const enc
                 for (const auto& [name, index] : indexes->get_object()) {
                     response.indexes.emplace_back(index.as<couchbase::core::management::search::index>());
                 }
+                return response;
             }
         } else if (encoded.status_code == 404) {
             tao::json::value payload{};
@@ -72,11 +73,8 @@ search_index_get_all_request::make_response(error_context::http&& ctx, const enc
                 return response;
             }
             response.status = payload.at("status").get_string();
-            auto error = payload.at("error").get_string();
-            if (error.find("Scoped indexes can not be used with this server version") != std::string::npos) {
-                response.ctx.ec = errc::common::feature_not_available;
-                return response;
-            }
+            response.ctx.ec = errc::common::feature_not_available;
+            return response;
         }
         response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
     }
