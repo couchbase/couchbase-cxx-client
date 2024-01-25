@@ -7,14 +7,27 @@ on:
     branches: [main]
 
 jobs:
-  address:
+  sanitize:
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer:
+          - asan
+          - lsan
+          - tsan
+          - ubsan
+        tls:
+          - tls
+          - plain
     runs-on: ubuntu-20.04
     services:
       couchbase:
-        image: couchbase:enterprise-7.1.4
+        image: couchbase:enterprise-7.2.3
         ports:
           - 8091-8096:8091-8096
           - 11210:11210
+          - 18091-18096:18091-18096
+          - 11207:11207
     steps:
       - name: Install dependencies
         run: |
@@ -37,7 +50,7 @@ jobs:
           key: ${{ github.job }}
       - name: Build tests
         env:
-          CB_SANITIZER: asan
+          CB_SANITIZER: ${{ matrix.sanitizer }}
           CB_CLANG: clang-13
           CB_CLANGXX: clang++-13
         run: ./bin/build-tests
@@ -46,144 +59,8 @@ jobs:
       - name: Run tests
         timeout-minutes: 30
         env:
-          CB_SANITIZER: asan
-          TEST_SERVER_VERSION: 7.1.4
-          TEST_CONNECTION_STRING: couchbase://127.0.0.1
-          TEST_LOG_LEVEL: trace
-        run: ./bin/run-unit-tests
-
-  leak:
-    runs-on: ubuntu-20.04
-    services:
-      couchbase:
-        image: couchbase:enterprise-7.1.4
-        ports:
-          - 8091-8096:8091-8096
-          - 11210:11210
-    steps:
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 gdb
-          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo bash -c "echo 'deb https://apt.llvm.org/focal/ llvm-toolchain-focal-13 main' >> /etc/apt/sources.list"
-          sudo apt-get update -y
-          sudo apt-get install -y clang-13 clang-tools-13
-      - uses: actions/checkout@v2
-        with:
-          submodules: recursive
-      - name: Initialize couchbase
-        env:
-          CB_TRAVEL_SAMPLE: yes
-        run: ./bin/init-cluster
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: ${{ github.job }}
-      - name: Build tests
-        env:
-          CB_SANITIZER: lsan
-          CB_CLANG: clang-13
-          CB_CLANGXX: clang++-13
-        run: ./bin/build-tests
-      - name: Check couchbase
-        run: ./bin/check-cluster
-      - name: Run tests
-        timeout-minutes: 30
-        env:
-          CB_SANITIZER: lsan
-          TEST_SERVER_VERSION: 7.1.4
-          TEST_CONNECTION_STRING: couchbase://127.0.0.1
-          TEST_LOG_LEVEL: trace
-        run: ./bin/run-unit-tests
-
-  undefined_behaviour:
-    runs-on: ubuntu-20.04
-    services:
-      couchbase:
-        image: couchbase:enterprise-7.1.4
-        ports:
-          - 8091-8096:8091-8096
-          - 11210:11210
-    steps:
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 gdb
-          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo bash -c "echo 'deb https://apt.llvm.org/focal/ llvm-toolchain-focal-13 main' >> /etc/apt/sources.list"
-          sudo apt-get update -y
-          sudo apt-get install -y clang-13 clang-tools-13
-      - uses: actions/checkout@v2
-        with:
-          submodules: recursive
-      - name: Initialize couchbase
-        env:
-          CB_TRAVEL_SAMPLE: yes
-        run: ./bin/init-cluster
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: ${{ github.job }}
-      - name: Build tests
-        env:
-          CB_SANITIZER: ubsan
-          CB_CLANG: clang-13
-          CB_CLANGXX: clang++-13
-        run: ./bin/build-tests
-      - name: Check couchbase
-        run: ./bin/check-cluster
-      - name: Run tests
-        timeout-minutes: 30
-        env:
-          CB_SANITIZER: ubsan
-          TEST_SERVER_VERSION: 7.1.4
-          TEST_CONNECTION_STRING: couchbase://127.0.0.1
-          TEST_LOG_LEVEL: trace
-        run: ./bin/run-unit-tests
-
-  thread:
-    runs-on: ubuntu-20.04
-    services:
-      couchbase:
-        image: couchbase:enterprise-7.1.4
-        ports:
-          - 8091-8096:8091-8096
-          - 11210:11210
-    steps:
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 gdb
-          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo bash -c "echo 'deb https://apt.llvm.org/focal/ llvm-toolchain-focal-13 main' >> /etc/apt/sources.list"
-          sudo apt-get update -y
-          sudo apt-get install -y clang-13 clang-tools-13
-      - uses: actions/checkout@v2
-        with:
-          submodules: recursive
-      - name: Initialize couchbase
-        env:
-          CB_TRAVEL_SAMPLE: yes
-        run: ./bin/init-cluster
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: ${{ github.job }}
-      - name: Build tests
-        env:
-          CB_SANITIZER: tsan
-          CB_CLANG: clang-13
-          CB_CLANGXX: clang++-13
-        run: ./bin/build-tests
-      - name: Check couchbase
-        run: ./bin/check-cluster
-      - name: Run tests
-        timeout-minutes: 30
-        env:
-          CB_SANITIZER: tsan
-          TSAN_OPTIONS: second_deadlock_stack=1
-          TEST_SERVER_VERSION: 7.1.4
-          TEST_CONNECTION_STRING: couchbase://127.0.0.1
+          CB_SANITIZER: ${{ matrix.sanitizer }}
+          TEST_SERVER_VERSION: 7.2.3
+          TEST_CONNECTION_STRING: ${{ matrix.tls == 'tls' && 'couchbases://127.0.0.1?trust_certificate=cluster.crt' || 'couchbase://127.0.0.1' }}
           TEST_LOG_LEVEL: trace
         run: ./bin/run-unit-tests
