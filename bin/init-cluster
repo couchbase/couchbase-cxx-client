@@ -45,7 +45,7 @@ options[:sample_buckets] << "beer-sample" if ENV.fetch("CB_BEER_SAMPLE", false).
 options[:sample_buckets] << "travel-sample" if ENV.fetch("CB_TRAVEL_SAMPLE", false).to_b
 
 
-api = 
+api =
   begin
     API.new(options)
   rescue => ex
@@ -56,6 +56,9 @@ api =
 
 resp = api.get("/pools")
 services = resp['allowedServices']
+
+resp = api.get("/pools/default/certificate")
+File.write("cluster.crt", resp)
 
 api.post_form("/pools/default",
               memoryQuota: options[:server_quota],
@@ -121,7 +124,7 @@ api.post_form("/pools/default/buckets",
               bucketType: "membase",
               name: options[:bucket])
 
-if options[:sec_bucket].to_b 
+if options[:sec_bucket].to_b
     api.post_form("/pools/default/buckets",
               flushEnabled: 1,
               threadsNumber: 3,
@@ -153,10 +156,9 @@ if options[:sample_buckets].include?("travel-sample") && services.include?("fts"
   service_address = service_address_for_bucket(api, "fts", options[:bucket], options)
   puts search_service: service_address
 
-  has_v6_nodes = 
+  has_v6_nodes =
     api.get("/pools/default")["nodes"]
     .any? { |node| node["version"] =~ /^6\./ && node["services"].include?("fts") }
   index_definition_path = File.join(__dir__, "travel-sample-index#{"-v6" if has_v6_nodes}.json")
   ensure_search_index_created(index_definition_path, options.merge(service_address))
 end
-

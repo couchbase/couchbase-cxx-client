@@ -12,7 +12,8 @@ jobs:
       fail-fast: false
       matrix:
         server:
-          - 7.1.4
+          - 7.2.3
+          - 7.1.6
           - 7.0.5
         suite:
           - unit
@@ -28,6 +29,8 @@ jobs:
         ports:
           - 8091-8096:8091-8096
           - 11210:11210
+          - 18091-18096:18091-18096
+          - 11207:11207
     steps:
       - name: Install build environment
         run: |
@@ -38,7 +41,7 @@ jobs:
           submodules: recursive
       - name: Initialize couchbase for transactions testing
         if: ${{ matrix.suite  == 'transaction' }}
-        env: 
+        env:
           CB_SEC_BUCKET: 'secBucket'
         run: ./bin/init-cluster
       - name: Initialize couchbase for non-transactions testing
