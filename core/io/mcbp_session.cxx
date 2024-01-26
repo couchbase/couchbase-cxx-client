@@ -1371,6 +1371,7 @@ class mcbp_session_impl
             return initiate_bootstrap();
         }
         endpoints_ = endpoints;
+        CB_LOG_TRACE("{} resolved \"{}:{}\" to {} endpoint(s)", log_prefix_, bootstrap_hostname_, bootstrap_port_, endpoints_.size());
         do_connect(endpoints_.begin());
         connection_deadline_.expires_after(origin_.options().resolve_timeout);
         connection_deadline_.async_wait([self = shared_from_this()](const auto timer_ec) {
@@ -1390,19 +1391,33 @@ class mcbp_session_impl
         if (it != endpoints_.end()) {
             auto hostname = it->endpoint().address().to_string();
             auto port = it->endpoint().port();
-            CB_LOG_DEBUG("{} connecting to {}:{}, timeout={}ms", log_prefix_, hostname, port, origin_.options().connect_timeout.count());
+            CB_LOG_DEBUG("{} connecting to {}:{} (\"{}:{}\"), timeout={}ms",
+                         log_prefix_,
+                         hostname,
+                         port,
+                         bootstrap_hostname_,
+                         bootstrap_port_,
+                         origin_.options().connect_timeout.count());
             connection_deadline_.expires_after(origin_.options().connect_timeout);
             connection_deadline_.async_wait([self = shared_from_this(), hostname, port](const auto timer_ec) {
                 if (timer_ec == asio::error::operation_aborted || self->stopped_) {
                     return;
                 }
-                CB_LOG_DEBUG("{} unable to connect to {}:{} in time, reconnecting", self->log_prefix_, hostname, port);
+                CB_LOG_DEBUG("{} unable to connect to {}:{} (\"{}:{}\") in time, reconnecting",
+                             self->log_prefix_,
+                             hostname,
+                             port,
+                             self->bootstrap_hostname_,
+                             self->bootstrap_port_);
                 return self->stream_->close([self](std::error_code) { self->initiate_bootstrap(); });
             });
             stream_->async_connect(it->endpoint(),
                                    std::bind(&mcbp_session_impl::on_connect, shared_from_this(), std::placeholders::_1, it));
         } else {
-            CB_LOG_ERROR("{} no more endpoints left to connect, will try another address", log_prefix_);
+            CB_LOG_ERROR("{} no more endpoints left to connect to \"{}:{}\", will try another address",
+                         log_prefix_,
+                         bootstrap_hostname_,
+                         bootstrap_port_);
             if (state_listener_) {
                 state_listener_->report_bootstrap_error(fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_),
                                                         errc::network::no_endpoints_left);

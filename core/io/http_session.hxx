@@ -370,11 +370,12 @@ class http_session : public std::enable_shared_from_this<http_session>
             return;
         }
         if (ec) {
-            CB_LOG_ERROR("{} error on resolve: {}", info_.log_prefix(), ec.message());
+            CB_LOG_ERROR("{} error on resolve \"{}:{}\": {}", info_.log_prefix(), hostname_, service_, ec.message());
             return;
         }
         last_active_ = std::chrono::steady_clock::now();
         endpoints_ = endpoints;
+        CB_LOG_TRACE("{} resolved \"{}:{}\" to {} endpoint(s)", info_.log_prefix(), hostname_, service_, endpoints_.size());
         do_connect(endpoints_.begin());
         deadline_timer_.async_wait(std::bind(&http_session::check_deadline, shared_from_this(), std::placeholders::_1));
     }
@@ -385,15 +386,17 @@ class http_session : public std::enable_shared_from_this<http_session>
             return;
         }
         if (it != endpoints_.end()) {
-            CB_LOG_DEBUG("{} connecting to {}:{}, timeout={}ms",
+            CB_LOG_DEBUG("{} connecting to {}:{} (\"{}:{}\"), timeout={}ms",
                          info_.log_prefix(),
                          it->endpoint().address().to_string(),
                          it->endpoint().port(),
+                         hostname_,
+                         service_,
                          http_ctx_.options.connect_timeout.count());
             deadline_timer_.expires_after(http_ctx_.options.connect_timeout);
             stream_->async_connect(it->endpoint(), std::bind(&http_session::on_connect, shared_from_this(), std::placeholders::_1, it));
         } else {
-            CB_LOG_ERROR("{} no more endpoints left to connect", info_.log_prefix());
+            CB_LOG_ERROR("{} no more endpoints left to connect, \"{}:{}\" is not reachable", info_.log_prefix(), hostname_, service_);
             stop();
         }
     }
