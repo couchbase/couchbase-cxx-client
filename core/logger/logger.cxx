@@ -30,7 +30,7 @@ static const std::string protocol_logger_name{ "couchbase_cxx_client_protocol_lo
  * This pattern is duplicated for some test cases. If you need to update it,
  * please also update in all relevant places.
  */
-static const std::string log_pattern{ "[%Y-%m-%d %T.%e] [%P,%t] [%^%l%$] %oms, %v" };
+static const std::string log_pattern{ "[%Y-%m-%d %T.%e] %4oms [%^%4!l%$] [%P,%t] %v" };
 
 /**
  * Instances of spdlog (async) file logger.

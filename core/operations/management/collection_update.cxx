@@ -28,7 +28,7 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-collection_update_request::encode_to(encoded_request_type& encoded, http_context& context) const
+collection_update_request::encode_to(encoded_request_type& encoded, http_context& /*context*/) const
 {
     encoded.method = "PATCH";
     encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}/collections/{}", bucket_name, scope_name, collection_name);
@@ -42,11 +42,6 @@ collection_update_request::encode_to(encoded_request_type& encoded, http_context
         }
     }
     if (history.has_value()) {
-        auto bucket_caps = context.config.bucket_capabilities;
-        if (bucket_caps.find(bucket_capability::non_deduped_history) == bucket_caps.end()) {
-            return errc::common::feature_not_available;
-        }
-
         values["history"] = history.value() ? "true" : "false";
     }
     encoded.body = utils::string_codec::v2::form_encode(values);

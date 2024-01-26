@@ -333,6 +333,38 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
         }
     }
 
+    template<class Request,
+             class Handler,
+             typename std::enable_if_t<std::is_same_v<typename Request::encoded_request_type, io::http_request>, int> = 0>
+    void execute_with_bucket_capability_check(Request request, bucket_capability cap, Handler&& handler)
+    {
+        auto bucket_name = request.bucket_name;
+        return open_bucket(
+          bucket_name,
+          [self = shared_from_this(), bucket_name, cap, request = std::move(request), handler = std::forward<Handler>(handler)](
+            std::error_code ec) mutable {
+              if (ec) {
+                  handler(request.make_response({ ec }, {}));
+                  return;
+              }
+              return self->with_bucket_configuration(
+                bucket_name,
+                [self = std::move(self), cap, request = std::move(request), handler = std::forward<Handler>(handler)](
+                  std::error_code ec, topology::configuration config) mutable {
+                    if (ec) {
+                        handler(request.make_response({ ec }, {}));
+                        return;
+                    }
+                    auto bucket_caps = config.bucket_capabilities;
+                    if (bucket_caps.find(cap) == bucket_caps.end()) {
+                        handler(request.make_response({ errc::common::feature_not_available }, {}));
+                        return;
+                    }
+                    return self->execute(std::move(request), std::forward<Handler>(handler));
+                });
+          });
+    }
+
     std::shared_ptr<bucket> find_bucket_by_name(const std::string& name)
     {
         std::scoped_lock lock(buckets_mutex_);
@@ -1074,6 +1106,9 @@ void
 cluster::execute(operations::management::collection_create_request request,
                  utils::movable_function<void(operations::management::collection_create_response)>&& handler) const
 {
+    if (request.history.has_value()) {
+        return impl_->execute_with_bucket_capability_check(std::move(request), bucket_capability::non_deduped_history, std::move(handler));
+    }
     return impl_->execute(std::move(request), std::move(handler));
 }
 
@@ -1081,6 +1116,9 @@ void
 cluster::execute(operations::management::collection_update_request request,
                  utils::movable_function<void(operations::management::collection_update_response)>&& handler) const
 {
+    if (request.history.has_value()) {
+        return impl_->execute_with_bucket_capability_check(std::move(request), bucket_capability::non_deduped_history, std::move(handler));
+    }
     return impl_->execute(std::move(request), std::move(handler));
 }
 
