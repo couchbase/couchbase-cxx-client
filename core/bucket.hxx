@@ -151,7 +151,7 @@ class bucket
         }
         cmd->last_dispatched_from_ = session->local_address();
         cmd->last_dispatched_to_ = session->bootstrap_address();
-        CB_LOG_TRACE(R"([{}] send operation id="{}", key="{}", partition={}, index={}, address="{}", rev={})",
+        CB_LOG_TRACE(R"({} send operation id="{}", key="{}", partition={}, index={}, address="{}", rev={})",
                      session->log_prefix(),
                      cmd->id_,
                      cmd->request.id,
