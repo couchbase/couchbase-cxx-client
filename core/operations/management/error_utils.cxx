@@ -47,6 +47,9 @@ extract_common_query_error_code(std::uint64_t code, const std::string& message)
         case 1194: /* ICode: E_SERVICE_USER_RESULT_SIZE_EXCEEDED, IKey: "service.result.size.exceeded" */
             return errc::common::rate_limited;
 
+        case 13014: /*ICode: E_DATASTORE_INSUFFICIENT_CREDENTIALS, IKey: "datastore.couchbase.insufficient_credentials" */
+            return errc::common::authentication_failure;
+
         case 5000:
             if (message.find("Limit for number of indexes that can be created per scope has been reached") != std::string::npos) {
                 return errc::common::quota_limited;
