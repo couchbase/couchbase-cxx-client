@@ -327,7 +327,12 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                 response.ctx.first_error_message = response.meta.errors->front().message;
                 switch (response.ctx.first_error_code) {
                     case 1065: /* IKey: "service.io.request.unrecognized_parameter" */
-                        response.ctx.ec = errc::common::invalid_argument;
+                        if ((response.ctx.first_error_message.find("Unrecognized parameter in request") != std::string::npos) &&
+                            (response.ctx.first_error_message.find("preserve_expiry") != std::string::npos)) {
+                            response.ctx.ec = errc::common::feature_not_available;
+                        } else {
+                            response.ctx.ec = errc::common::invalid_argument;
+                        }
                         break;
                     case 1080: /* IKey: "timeout" */
                         response.ctx.ec = errc::common::unambiguous_timeout;
