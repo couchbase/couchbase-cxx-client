@@ -43,6 +43,9 @@ struct search_index_analyze_document_request {
     std::string index_name;
     std::string encoded_document;
 
+    std::optional<std::string> bucket_name;
+    std::optional<std::string> scope_name;
+
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
 

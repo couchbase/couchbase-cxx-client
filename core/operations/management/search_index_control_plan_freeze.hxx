@@ -44,6 +44,9 @@ struct search_index_control_plan_freeze_request {
     std::string index_name;
     bool freeze;
 
+    std::optional<std::string> bucket_name;
+    std::optional<std::string> scope_name;
+
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
 

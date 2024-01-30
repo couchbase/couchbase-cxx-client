@@ -122,10 +122,15 @@ search_request::encode_to(search_request::encoded_request_type& encoded, http_co
         body[key] = utils::json::parse(value);
     }
 
+    if (bucket_name.has_value() && scope_name.has_value()) {
+        encoded.path = fmt::format("/api/bucket/{}/scope/{}/index/{}/query", bucket_name.value(), scope_name.value(), index_name);
+    } else {
+        encoded.path = fmt::format("/api/index/{}/query", index_name);
+    }
+
     encoded.type = type;
     encoded.headers["content-type"] = "application/json";
     encoded.method = "POST";
-    encoded.path = fmt::format("/api/index/{}/query", index_name);
     body_str = utils::json::generate(body);
     encoded.body = body_str;
     if (context.options.show_queries) {

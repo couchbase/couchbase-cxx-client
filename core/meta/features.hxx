@@ -106,3 +106,8 @@
  * Vector search is supported via couchbase::cluster::search() or couchbase::scope::search()
  */
 #define COUCHBASE_CXX_CLIENT_HAS_VECTOR_SEARCH 1
+
+/**
+ * Scope level search index management is supported via couchbase::scope::search_indexes()
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_SCOPE_SEARCH_INDEX_MANAGEMENT 1

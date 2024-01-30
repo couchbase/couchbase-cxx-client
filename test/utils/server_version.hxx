@@ -176,6 +176,11 @@ struct server_version {
         return !use_gocaves && is_enterprise() && (is_cheshire_cat() || is_neo()) && deployment == deployment_type::on_prem;
     }
 
+    [[nodiscard]] bool supports_scope_search() const
+    {
+        return (major == 7 && minor >= 6) || major > 7;
+    }
+
     [[nodiscard]] bool is_enterprise() const
     {
         return edition == server_edition::enterprise;

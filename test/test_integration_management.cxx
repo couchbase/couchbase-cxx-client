@@ -4775,6 +4775,162 @@ TEST_CASE("integration: search index management analyze document public API", "[
     }
 }
 
+TEST_CASE("integration: scope search index management public API", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_scope_search()) {
+        SKIP("cluster does not support scope search");
+    }
+
+    if (!integration.cluster_version().supports_gcccp()) {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    }
+
+    couchbase::cluster c(integration.cluster);
+    auto manager = c.bucket(integration.ctx.bucket).scope("_default").search_indexes();
+    auto index_name = test::utils::uniq_id("index");
+
+    SECTION("search indexes crud")
+    {
+        {
+            couchbase::management::search::index index;
+            index.name = index_name;
+            index.source_name = integration.ctx.bucket;
+
+            auto ctx = manager.upsert_index(index).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+        {
+            couchbase::management::search::index index;
+            index.name = index_name;
+            index.source_name = integration.ctx.bucket;
+
+            auto ctx = manager.upsert_index(index).get();
+            REQUIRE(ctx.ec() == couchbase::errc::common::index_exists);
+        }
+        {
+            auto [ctx, index] = manager.get_index(index_name).get();
+            REQUIRE_SUCCESS(ctx.ec());
+            REQUIRE(index.name == index_name);
+            REQUIRE(index.type == "fulltext-index");
+        }
+        {
+            auto [ctx, index] = manager.get_index("missing-index").get();
+            REQUIRE(ctx.ec() == couchbase::errc::common::index_not_found);
+        }
+        {
+            auto [ctx, indexes] = manager.get_all_indexes().get();
+            REQUIRE_SUCCESS(ctx.ec());
+            REQUIRE_FALSE(indexes.empty());
+            REQUIRE(1 == std::count_if(indexes.begin(), indexes.end(), [&index_name](const auto& i) { return i.name == index_name; }));
+        }
+    }
+    SECTION("control")
+    {
+        couchbase::management::search::index index;
+        index.name = index_name;
+        index.source_name = integration.ctx.bucket;
+
+        auto upsert_ctx = manager.upsert_index(index).get();
+        REQUIRE_SUCCESS(upsert_ctx.ec());
+        SECTION("ingest control")
+        {
+            {
+                auto ctx = manager.pause_ingest(index_name).get();
+                REQUIRE_SUCCESS(ctx.ec());
+            }
+            {
+                auto ctx = manager.resume_ingest(index_name).get();
+                REQUIRE_SUCCESS(ctx.ec());
+            }
+        }
+        SECTION("query control")
+        {
+            {
+                auto ctx = manager.allow_querying(index_name).get();
+                REQUIRE_SUCCESS(ctx.ec());
+            }
+            {
+                auto ctx = manager.disallow_querying(index_name).get();
+                REQUIRE_SUCCESS(ctx.ec());
+            }
+        }
+        SECTION("partition control")
+        {
+            {
+                auto ctx = manager.freeze_plan(index_name).get();
+                REQUIRE_SUCCESS(ctx.ec());
+            }
+            {
+                auto ctx = manager.unfreeze_plan(index_name).get();
+                REQUIRE_SUCCESS(ctx.ec());
+            }
+        }
+    }
+    auto ctx = manager.drop_index(index_name).get();
+    REQUIRE_SUCCESS(ctx.ec());
+}
+
+TEST_CASE("integration: scope search index management analyze document public API", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_scope_search()) {
+        SKIP("cluster does not support scope search");
+    }
+
+    couchbase::cluster c(integration.cluster);
+    auto manager = c.bucket(integration.ctx.bucket).scope("_default").search_indexes();
+    auto index_name = test::utils::uniq_id("index");
+    {
+        {
+            couchbase::management::search::index index;
+            index.name = index_name;
+            index.source_name = integration.ctx.bucket;
+            auto ctx = manager.upsert_index(index).get();
+            REQUIRE_SUCCESS(ctx.ec());
+        }
+        REQUIRE(test::utils::wait_for_search_pindexes_ready(integration.cluster, integration.ctx.bucket, index_name));
+
+        couchbase::manager_error_context ctx;
+        std::string analysis;
+        std::pair<couchbase::manager_error_context, std::vector<std::string>> result;
+        bool operation_completed = test::utils::wait_until([&manager, &index_name, &result]() {
+            tao::json::value basic_doc = {
+                { "name", "hello world" },
+            };
+            result = manager.analyze_document(index_name, basic_doc).get();
+            return result.first.ec() != couchbase::errc::common::internal_server_failure;
+        });
+        REQUIRE(operation_completed);
+        REQUIRE_SUCCESS(result.first.ec());
+        REQUIRE_FALSE(result.second.empty());
+
+        auto drop_ctx = manager.drop_index(index_name).get();
+        REQUIRE_SUCCESS(drop_ctx.ec());
+    }
+}
+
+TEST_CASE("integration: scope search returns feature not available", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (integration.cluster_version().supports_scope_search()) {
+        SKIP("cluster supports scope search");
+    }
+    couchbase::cluster c(integration.cluster);
+    auto manager = c.bucket(integration.ctx.bucket).scope("_default").search_indexes();
+    auto index_name = test::utils::uniq_id("index");
+    {
+        couchbase::management::search::index index;
+        index.name = index_name;
+        index.source_name = integration.ctx.bucket;
+        auto ctx = manager.upsert_index(index).get();
+        REQUIRE(ctx.ec() == couchbase::errc::common::feature_not_available);
+    }
+}
+
 TEST_CASE("integration: freeform HTTP request", "[integration]")
 {
     test::utils::integration_test_guard integration;

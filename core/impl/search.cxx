@@ -27,6 +27,7 @@
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/match_none_query.hxx>
+#include <utility>
 
 #include <fmt/core.h>
 
@@ -124,8 +125,8 @@ core::operations::search_request
 build_search_request(std::string index_name,
                      const search_query& query,
                      search_options::built options,
-                     std::optional<std::string> /* bucket_name */,
-                     std::optional<std::string> /* scope_name */)
+                     std::optional<std::string> bucket_name,
+                     std::optional<std::string> scope_name)
 {
     auto encoded = query.encode();
     if (encoded.ec) {
@@ -134,6 +135,8 @@ build_search_request(std::string index_name,
     core::operations::search_request request{
         std::move(index_name),
         core::utils::json::generate_binary(encoded.query),
+        std::move(bucket_name),
+        std::move(scope_name),
         {},
         {},
         {},
@@ -162,8 +165,8 @@ core::operations::search_request
 build_search_request(std::string index_name,
                      couchbase::search_request request,
                      search_options::built options,
-                     std::optional<std::string> /* bucket_name */,
-                     std::optional<std::string> /* scope_name */)
+                     std::optional<std::string> bucket_name,
+                     std::optional<std::string> scope_name)
 {
     if (!request.search_query().has_value()) {
         request.search_query(couchbase::match_none_query{});
@@ -172,6 +175,8 @@ build_search_request(std::string index_name,
     core::operations::search_request core_request{
         std::move(index_name),
         core::utils::json::generate_binary(request.search_query().value().query),
+        std::move(bucket_name),
+        std::move(scope_name),
         false,
         {},
         {},

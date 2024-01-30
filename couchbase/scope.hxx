@@ -20,6 +20,7 @@
 #include <couchbase/analytics_options.hxx>
 #include <couchbase/collection.hxx>
 #include <couchbase/query_options.hxx>
+#include <couchbase/scope_search_index_manager.hxx>
 #include <couchbase/search_options.hxx>
 #include <couchbase/search_query.hxx>
 #include <couchbase/search_request.hxx>
@@ -113,49 +114,6 @@ class scope
       -> std::future<std::pair<query_error_context, query_result>>;
 
     /**
-     * Performs a query against the full text search services.
-     *
-     * Consider using the newer @ref scope::search() interface instead, which can be used
-     * for both traditional FTS queries, and to perform a vector search.
-     *
-     * @param index_name name of the search index
-     * @param query query object, see hierarchy of @ref search_query for more details.
-     * @param options options to customize the query request.
-     * @param handler the handler that implements @ref search_handler
-     *
-     * @exception errc::common::ambiguous_timeout
-     * @exception errc::common::unambiguous_timeout
-     *
-     * @see https://docs.couchbase.com/server/current/fts/fts-introduction.html
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void search_query(std::string index_name, const search_query& query, const search_options& options, search_handler&& handler) const;
-
-    /**
-     * Performs a query against the full text search services.
-     *
-     * Consider using the newer @ref cluster::search() interface instead, which can be used
-     * for both traditional FTS queries, and to perform a vector search.
-     *
-     * @param index_name name of the search index
-     * @param query query object, see hierarchy of @ref search_query for more details.
-     * @param options options to customize the query request.
-     * @return future object that carries result of the operation
-     *
-     * @exception errc::common::ambiguous_timeout
-     * @exception errc::common::unambiguous_timeout
-     *
-     * @see https://docs.couchbase.com/server/current/fts/fts-introduction.html
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto search_query(std::string index_name, const class search_query& query, const search_options& options = {}) const
-      -> std::future<std::pair<search_error_context, search_result>>;
-
-    /**
      * Performs a request against the full text search services.
      *
      * This can be used to perform a traditional FTS query, and/or a vector search.
@@ -227,6 +185,16 @@ class scope
      */
     [[nodiscard]] auto analytics_query(std::string statement, const analytics_options& options = {}) const
       -> std::future<std::pair<analytics_error_context, analytics_result>>;
+
+    /**
+     * Provides access to search index management services at the scope level
+     *
+     * @return a manager instance
+     *
+     * @since 1.0.0
+     * @volatile
+     */
+    [[nodiscard]] auto search_indexes() const -> scope_search_index_manager;
 
   private:
     friend class bucket;

@@ -31,7 +31,15 @@ search_index_control_query_request::encode_to(encoded_request_type& encoded, htt
         return errc::common::invalid_argument;
     }
     encoded.method = "POST";
-    encoded.path = fmt::format("/api/index/{}/queryControl/{}", index_name, allow ? "allow" : "disallow");
+    if (bucket_name.has_value() && scope_name.has_value()) {
+        encoded.path = fmt::format("/api/bucket/{}/scope/{}/index/{}/queryControl/{}",
+                                   bucket_name.value(),
+                                   scope_name.value(),
+                                   index_name,
+                                   allow ? "allow" : "disallow");
+    } else {
+        encoded.path = fmt::format("/api/index/{}/queryControl/{}", index_name, allow ? "allow" : "disallow");
+    }
     return {};
 }
 
@@ -66,6 +74,18 @@ search_index_control_query_request::make_response(error_context::http&& ctx, con
                 response.ctx.ec = errc::common::index_not_found;
                 return response;
             }
+        } else if (encoded.status_code == 404) {
+            tao::json::value payload{};
+            try {
+                payload = utils::json::parse(encoded.body.data());
+            } catch (const tao::pegtl::parse_error&) {
+                response.ctx.ec = errc::common::parsing_failure;
+                return response;
+            }
+            response.status = payload.at("status").get_string();
+            response.error = payload.at("error").get_string();
+            response.ctx.ec = errc::common::feature_not_available;
+            return response;
         }
         response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
     }

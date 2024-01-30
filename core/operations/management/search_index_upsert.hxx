@@ -44,6 +44,9 @@ struct search_index_upsert_request {
 
     couchbase::core::management::search::index index;
 
+    std::optional<std::string> bucket_name;
+    std::optional<std::string> scope_name;
+
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
 
