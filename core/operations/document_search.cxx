@@ -334,6 +334,18 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
                 response.ctx.ec = errc::common::rate_limited;
                 return response;
             }
+        } else if (encoded.status_code == 404) {
+            tao::json::value payload{};
+            try {
+                payload = utils::json::parse(encoded.body.data());
+            } catch (const tao::pegtl::parse_error&) {
+                response.ctx.ec = errc::common::parsing_failure;
+                return response;
+            }
+            response.status = payload.at("status").get_string();
+            response.error = payload.at("error").get_string();
+            response.ctx.ec = errc::common::feature_not_available;
+            return response;
         }
         response.ctx.ec = errc::common::internal_server_failure;
     }
