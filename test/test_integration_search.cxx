@@ -35,6 +35,7 @@
 #include "core/operations/management/search_index_drop.hxx"
 #include "core/operations/management/search_index_upsert.hxx"
 
+#include <couchbase/match_none_query.hxx>
 #include <couchbase/query_string_query.hxx>
 
 #include <regex>
@@ -639,4 +640,20 @@ TEST_CASE("integration: search query collections")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
     }
+}
+
+TEST_CASE("integration: scope search returns feature not available", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (integration.cluster_version().supports_scope_search()) {
+        SKIP("cluster supports scope search");
+    }
+
+    couchbase::cluster c(integration.cluster);
+
+    auto search_request = couchbase::search_request(couchbase::match_none_query{});
+    auto [ctx, result] = c.bucket(integration.ctx.bucket).default_scope().search("does-not-exist", search_request).get();
+
+    REQUIRE(ctx.ec() == couchbase::errc::common::feature_not_available);
 }
