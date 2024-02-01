@@ -23,6 +23,9 @@
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
+#include <couchbase/codec/raw_json_transcoder.hxx>
+#include <couchbase/codec/raw_string_transcoder.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 
 #include <tao/json/contrib/vector_traits.hpp>
 
@@ -592,5 +595,122 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
         REQUIRE(resp.exists(couchbase::subdoc::lookup_in_macro::cas));
         REQUIRE(resp.content_as<std::string>(0) == fmt::format("0x{:016x}", cas.value()));
         REQUIRE(resp.content_as<std::string>(couchbase::subdoc::lookup_in_macro::cas) == fmt::format("0x{:016x}", cas.value()));
+    }
+}
+
+TEST_CASE("integration: upsert with raw json transcoder, get with json and raw json transcoders", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    auto collection = couchbase::cluster(integration.cluster)
+                        .bucket(integration.ctx.bucket)
+                        .scope(couchbase::scope::default_name)
+                        .collection(couchbase::collection::default_name);
+    auto id = test::utils::uniq_id("foo");
+    profile albert{ "this_guy_again", "Albert Einstein", 1879 };
+    auto data = couchbase::codec::tao_json_serializer::serialize(albert);
+
+    // Upsert with raw_json_transcoder
+    {
+        auto [ctx, resp] = collection.upsert<couchbase::codec::raw_json_transcoder>(id, data, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.mutation_token().has_value());
+    }
+
+    // Get with default_json_transcoder
+    {
+        auto [ctx, resp] = collection.get(id, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.content_as<profile>() == albert);
+    }
+
+    // Get with raw_json_transcoder
+    {
+        auto [ctx, resp] = collection.get(id, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.content_as<couchbase::codec::binary, couchbase::codec::raw_json_transcoder>() == data);
+    }
+}
+
+TEST_CASE("integration: upsert and get string with raw json transcoder", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    auto collection = couchbase::cluster(integration.cluster)
+                        .bucket(integration.ctx.bucket)
+                        .scope(couchbase::scope::default_name)
+                        .collection(couchbase::collection::default_name);
+    auto id = test::utils::uniq_id("foo");
+    std::string data{ R"({"foo": "bar"})" };
+
+    // Upsert with raw_json_transcoder
+    {
+        auto [ctx, resp] = collection.upsert<couchbase::codec::raw_json_transcoder>(id, data, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.mutation_token().has_value());
+    }
+
+    // Get with default_json_transcoder
+    {
+        auto [ctx, resp] = collection.get(id, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.content_as<tao::json::value>() == tao::json::value{ { "foo", "bar" } });
+    }
+
+    // Get with raw_json_transcoder
+    {
+        auto [ctx, resp] = collection.get(id, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.content_as<std::string, couchbase::codec::raw_json_transcoder>() == data);
+        REQUIRE(resp.content_as<couchbase::codec::binary, couchbase::codec::raw_json_transcoder>() ==
+                couchbase::core::utils::to_binary(data));
+    }
+}
+
+TEST_CASE("integration: upsert and get with raw string transcoder, attempt to get with json transcoder", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    auto collection = couchbase::cluster(integration.cluster)
+                        .bucket(integration.ctx.bucket)
+                        .scope(couchbase::scope::default_name)
+                        .collection(couchbase::collection::default_name);
+    auto id = test::utils::uniq_id("foo");
+    std::string document{ "lorem ipsum dolor sit amet" };
+
+    // Upsert with raw_string_transcoder
+    {
+        auto [ctx, resp] = collection.upsert<couchbase::codec::raw_string_transcoder>(id, document, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.mutation_token().has_value());
+    }
+
+    // Get with raw_string_transcoder
+    {
+        auto [ctx, resp] = collection.get(id, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE(resp.content_as<std::string, couchbase::codec::raw_string_transcoder>() == document);
+    }
+
+    // Get with default_json_transcoder
+    {
+        auto [ctx, resp] = collection.get(id, {}).get();
+        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_FALSE(resp.cas().empty());
+        REQUIRE_THROWS_WITH(resp.content_as<std::string>(), ContainsSubstring("document to have JSON common flags"));
     }
 }
