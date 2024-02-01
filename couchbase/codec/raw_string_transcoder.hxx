@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-Present Couchbase, Inc.
+ *   Copyright 2024. Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -22,36 +22,51 @@
 #include <couchbase/codec/transcoder_traits.hxx>
 #include <couchbase/error_codes.hxx>
 
+#include <cstddef>
+#include <string>
+#include <string_view>
 #include <type_traits>
+#include <vector>
 
-namespace couchbase::codec
+namespace couchbase
 {
-class raw_binary_transcoder
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+namespace core::utils
+{
+std::vector<std::byte>
+to_binary(std::string_view value) noexcept;
+} // namespace core::utils
+#endif
+
+namespace codec
+{
+class raw_string_transcoder
 {
   public:
-    using document_type = std::vector<std::byte>;
+    using document_type = std::string;
 
     static auto encode(document_type document) -> encoded_value
     {
-        return { std::move(document), codec_flags::binary_common_flags };
+        return { core::utils::to_binary(document), codec_flags::string_common_flags };
     }
 
     template<typename Document = document_type, std::enable_if_t<std::is_same_v<Document, document_type>, bool> = true>
     static auto decode(const encoded_value& encoded) -> Document
     {
-        if (!codec_flags::has_common_flags(encoded.flags, codec_flags::binary_common_flags)) {
+        if (!codec_flags::has_common_flags(encoded.flags, codec_flags::string_common_flags)) {
             throw std::system_error(errc::common::decoding_failure,
-                                    "raw_binary_transcoder expects document to have BINARY common flags, flags=" +
+                                    "raw_string_transcoder expects document to have STRING common flags, flags=" +
                                       std::to_string(encoded.flags));
         }
 
-        return encoded.data;
+        return std::string{ reinterpret_cast<const char*>(encoded.data.data()), encoded.data.size() };
     }
 };
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 template<>
-struct is_transcoder<raw_binary_transcoder> : public std::true_type {
+struct is_transcoder<raw_string_transcoder> : public std::true_type {
 };
 #endif
-} // namespace couchbase::codec
+} // namespace codec
+} // namespace couchbase

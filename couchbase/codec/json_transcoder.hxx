@@ -40,7 +40,7 @@ class json_transcoder
     {
         if (encoded.flags != 0 && !codec_flags::has_common_flags(encoded.flags, codec_flags::json_common_flags)) {
             throw std::system_error(errc::common::decoding_failure,
-                                    "json_transcoder excepts document to have JSON common flags, flags=" + std::to_string(encoded.flags));
+                                    "json_transcoder expects document to have JSON common flags, flags=" + std::to_string(encoded.flags));
         }
 
         return Serializer::template deserialize<Document>(encoded.data);
