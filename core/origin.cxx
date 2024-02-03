@@ -18,6 +18,7 @@
 #include "origin.hxx"
 
 #include "core/utils/connection_string.hxx"
+#include "topology/configuration.hxx"
 
 #include <fmt/chrono.h>
 #include <fmt/core.h>
@@ -281,6 +282,19 @@ couchbase::core::origin::origin(const couchbase::core::origin& other)
   , next_node_(nodes_.begin())
 {
 }
+
+couchbase::core::origin::origin(const origin& other, const topology::configuration& config)
+  : origin(other)
+{
+    nodes_.clear();
+    for (const auto& node : config.nodes) {
+        if (auto port = options_.enable_tls ? node.services_tls.key_value : node.services_plain.key_value; port.has_value()) {
+            nodes_.emplace_back(node.hostname, std::to_string(port.value()));
+        }
+    }
+    next_node_ = nodes_.begin();
+}
+
 couchbase::core::origin::origin(couchbase::core::cluster_credentials auth,
                                 const std::string& hostname,
                                 std::uint16_t port,

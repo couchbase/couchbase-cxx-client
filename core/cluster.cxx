@@ -238,10 +238,14 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
             auto ptr = buckets_.find(bucket_name);
             if (ptr == buckets_.end()) {
                 std::vector<protocol::hello_feature> known_features;
+
+                auto origin = origin_;
                 if (session_ && session_->has_config()) {
                     known_features = session_->supported_features();
+                    origin = { origin_, session_->config().value() };
                 }
-                b = std::make_shared<bucket>(id_, ctx_, tls_, tracer_, meter_, bucket_name, origin_, known_features, dns_srv_tracker_);
+
+                b = std::make_shared<bucket>(id_, ctx_, tls_, tracer_, meter_, bucket_name, origin, known_features, dns_srv_tracker_);
                 buckets_.try_emplace(bucket_name, b);
             }
         }
