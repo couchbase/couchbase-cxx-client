@@ -1139,6 +1139,11 @@ class mcbp_session_impl
         return supports_gcccp_;
     }
 
+    std::optional<topology::configuration> config() const
+    {
+        return config_;
+    }
+
     [[nodiscard]] bool has_config() const
     {
         return configured_;
@@ -1816,6 +1821,12 @@ std::size_t
 mcbp_session::index() const
 {
     return impl_->index();
+}
+
+std::optional<topology::configuration>
+mcbp_session::config() const
+{
+    return impl_->config();
 }
 
 bool
