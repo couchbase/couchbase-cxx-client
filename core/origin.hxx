@@ -40,6 +40,11 @@ struct cluster_credentials {
     [[nodiscard]] bool uses_certificate() const;
 };
 
+namespace topology
+{
+struct configuration;
+}
+
 struct origin {
     using node_entry = std::pair<std::string, std::string>;
     using node_list = std::vector<node_entry>;
@@ -49,6 +54,7 @@ struct origin {
 
     origin(origin&& other) = default;
     origin(const origin& other);
+    origin(const origin& other, const topology::configuration& config);
     origin(cluster_credentials auth, const std::string& hostname, std::uint16_t port, cluster_options options);
     origin(cluster_credentials auth, const std::string& hostname, const std::string& port, cluster_options options);
     origin(cluster_credentials auth, const utils::connection_string& connstr);

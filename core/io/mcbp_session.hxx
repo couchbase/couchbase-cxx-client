@@ -118,6 +118,7 @@ class mcbp_session
     void stop(retry_reason reason);
     [[nodiscard]] std::size_t index() const;
     [[nodiscard]] bool has_config() const;
+    [[nodiscard]] std::optional<topology::configuration> config() const;
     [[nodiscard]] diag::endpoint_diag_info diag_info() const;
     void on_configuration_update(std::shared_ptr<config_listener> handler);
     void ping(std::shared_ptr<diag::ping_reporter> handler, std::optional<std::chrono::milliseconds> = {}) const;
