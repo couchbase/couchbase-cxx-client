@@ -77,6 +77,9 @@ document_view_request::encode_to(document_view_request::encoded_request_type& en
     if (group_level) {
         query_string.emplace_back(fmt::format("group_level={}", *group_level));
     }
+    if (full_set) {
+        query_string.emplace_back(fmt::format("full_set={}", full_set.value() ? "true" : "false"));
+    }
     if (order) {
         switch (*order) {
             case couchbase::core::view_sort_order::descending:
