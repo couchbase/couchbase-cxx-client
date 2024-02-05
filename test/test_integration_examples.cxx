@@ -20,6 +20,7 @@
 #include "core/operations/management/query_index_build.hxx"
 #include "core/operations/management/query_index_create.hxx"
 #include "core/operations/management/query_index_get_all.hxx"
+#include "utils/logger.hxx"
 
 #include <couchbase/boolean_query.hxx>
 #include <couchbase/cluster.hxx>
@@ -31,6 +32,10 @@
 #include <couchbase/term_facet.hxx>
 
 #include <tao/json.hpp>
+
+#ifndef _WIN32
+#include <sys/wait.h>
+#endif
 
 namespace start_using
 {
@@ -588,3 +593,205 @@ TEST_CASE("example: bucket management", "[integration]")
 
     REQUIRE(example_buckets::main(4, argv) == 0);
 }
+
+#ifndef _WIN32
+namespace example_fork
+{
+//! [fork-for-scaling]
+#include <couchbase/cluster.hxx>
+#include <couchbase/fmt/cas.hxx>
+#include <couchbase/fmt/mutation_token.hxx>
+
+#include <tao/json.hpp>
+
+#include <sys/wait.h>
+
+int
+main(int argc, const char* argv[])
+{
+    if (argc != 4) {
+        fmt::print("USAGE: ./example_fork couchbase://127.0.0.1 Administrator password\n");
+        return 1;
+    }
+
+    std::string connection_string{ argv[1] }; // "couchbase://127.0.0.1"
+    std::string username{ argv[2] };          // "Administrator"
+    std::string password{ argv[3] };          // "password"
+    std::string bucket_name{ "travel-sample" };
+
+    // run IO context on separate thread
+    asio::io_context io;
+    auto guard = asio::make_work_guard(io);
+    std::thread io_thread([&io]() {
+        fmt::print("PARENT(pid={}): start IO thread\n", getpid());
+        io.run();
+        fmt::print("PARENT(pid={}): stop IO thread\n", getpid());
+    });
+
+    auto options = couchbase::cluster_options(username, password);
+    options.apply_profile("wan_development");
+
+    auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
+    if (ec) {
+        fmt::print("PARENT(pid={}): sunable to connect to the cluster: {}\n", getpid(), ec.message());
+        return 1;
+    }
+
+    auto bucket = cluster.bucket(bucket_name);
+
+    cluster.notify_fork(couchbase::fork_event::prepare);
+    guard.reset();
+    io.stop();
+    io_thread.join();
+    io.notify_fork(asio::execution_context::fork_prepare);
+    auto child_pid = fork();
+    if (child_pid == 0) {
+        io.notify_fork(asio::execution_context::fork_child);
+        cluster.notify_fork(couchbase::fork_event::child);
+        io.restart();
+        fmt::print("CHILD(pid={}): restarting IO thread\n", getpid());
+        auto child_guard = asio::make_work_guard(io);
+        io_thread = std::thread([&io]() {
+            fmt::print("CHILD(pid={}): start new IO thread\n", getpid());
+            io.run();
+            fmt::print("CHILD(pid={}): stop new IO thread\n", getpid());
+        });
+
+        fmt::print("CHILD(pid={}): continue after fork()\n", getpid());
+        auto collection = bucket.scope("tenant_agent_00").collection("users");
+
+        {
+            fmt::print("CHILD(pid={}): upsert into collection\n", getpid());
+            auto [ctx, upsert_result] = collection.upsert("child-document", tao::json::value{ { "name", "mike" } }).get();
+            if (ctx.ec()) {
+                fmt::print("CHILD(pid={}): unable to upsert the document \"{}\": {}\n", getpid(), ctx.id(), ctx.ec().message());
+                return 1;
+            }
+            fmt::print("CHILD(pid={}): saved document \"{}\", cas={}, token={}\n",
+                       getpid(),
+                       ctx.id(),
+                       upsert_result.cas(),
+                       upsert_result.mutation_token().value());
+        }
+
+        {
+            fmt::print("CHILD(pid={}): get from collection\n", getpid());
+            auto [ctx, get_result] = collection.get("parent-document").get();
+            if (ctx.ec()) {
+                fmt::print("CHILD(pid={}): unable to get the document \"{}\": {}\n", getpid(), ctx.id(), ctx.ec().message());
+                return 1;
+            }
+            auto name = get_result.content_as<tao::json::value>()["name"].get_string();
+            fmt::print("CHILD(pid={}): retrieved document \"{}\", name=\"{}\"\n", getpid(), ctx.id(), name);
+        }
+
+        child_guard.reset();
+    } else {
+        io.notify_fork(asio::execution_context::fork_parent);
+        cluster.notify_fork(couchbase::fork_event::parent);
+        io.restart();
+        auto parent_guard = asio::make_work_guard(io);
+        fmt::print("PARENT(pid={}): restarting IO thread\n", getpid());
+        io_thread = std::thread([&io]() {
+            fmt::print("PARENT(pid={}): start IO new thread\n", getpid());
+            io.run();
+            fmt::print("PARENT(pid={}): stop IO new thread\n", getpid());
+        });
+        fmt::print("PARENT(pid={}): continue after fork() child_pid={}\n", getpid(), child_pid);
+
+        {
+            auto collection = bucket.scope("tenant_agent_00").collection("users");
+            auto [ctx, upsert_result] = collection.upsert("parent-document", tao::json::value{ { "name", "mike" } }).get();
+            if (ctx.ec()) {
+                fmt::print("unable to upsert the document \"{}\": {}\n", ctx.id(), ctx.ec().message());
+                return 1;
+            }
+            fmt::print("saved document \"{}\", cas={}, token={}\n", ctx.id(), upsert_result.cas(), upsert_result.mutation_token().value());
+        }
+        {
+            auto inventory_scope = bucket.scope("inventory");
+            auto [ctx, query_result] = inventory_scope.query("SELECT * FROM airline WHERE id = 10").get();
+            if (ctx.ec()) {
+                fmt::print("PARENT(pid={}): unable to perform query: {}, ({}, {})\n",
+                           getpid(),
+                           ctx.ec().message(),
+                           ctx.first_error_code(),
+                           ctx.first_error_message());
+                return 1;
+            }
+            for (const auto& row : query_result.rows_as_json()) {
+                fmt::print("PARENT(pid={}): row: {}\n", getpid(), tao::json::to_string(row));
+            }
+        }
+        parent_guard.reset();
+
+        int status{};
+        fmt::print("PARENT(pid={}): waiting for child pid={}...\n", getpid(), child_pid);
+        const auto rc = waitpid(child_pid, &status, 0);
+
+        if (rc == -1) {
+            fmt::print("PARENT(pid={}): unable to wait for child pid={} (rc={})\n", getpid(), child_pid, rc);
+            return 1;
+        }
+        auto pretty_status = [](int status) {
+            std::vector<std::string> flags{};
+            if (WIFCONTINUED(status)) {
+                flags.emplace_back("continued");
+            }
+            if (WIFSTOPPED(status)) {
+                flags.emplace_back("stopped");
+            }
+            if (WIFEXITED(status)) {
+                flags.emplace_back("exited");
+            }
+            if (WIFSIGNALED(status)) {
+                flags.emplace_back("signaled");
+            }
+            if (const auto signal = WSTOPSIG(status); signal > 0) {
+                flags.emplace_back(fmt::format("stopsig={}", signal));
+            }
+            if (const auto signal = WTERMSIG(status); signal > 0) {
+                flags.emplace_back(fmt::format("termsig={}", signal));
+            }
+            return fmt::format("status=0x{:02x} ({})", status, fmt::join(flags, ", "));
+        };
+        fmt::print("PARENT(pid={}): Child pid={} returned {}, {}\n", getpid(), child_pid, WEXITSTATUS(status), pretty_status(status));
+    }
+
+    fmt::print("COMMON(pid={}): close cluster\n", getpid());
+    cluster.close();
+
+    fmt::print("COMMON(pid={}): join thread\n", getpid());
+    io_thread.join();
+    return 0;
+}
+
+/*
+
+$ ./example_fork couchbase://127.0.0.1 Administrator password
+saved document "my-document", cas=17486a1722b20000
+retrieved document "my-document", name="mike"
+row: {"airline":{"callsign":"MILE-AIR","country":"United States","iata":"Q5","icao":"MLA","id":10,"name":"40-Mile Air","type":"airline"}}
+
+ */
+//! [fork-for-scaling]
+
+} // namespace example_fork
+
+TEST_CASE("example: using fork() for scaling", "[integration]")
+{
+    setbuf(stdout, nullptr); // disable buffering for output
+    test::utils::init_logger();
+
+    const auto env = test::utils::test_context::load_from_environment();
+
+    const char* argv[] = {
+        "example_fork", // name of the "executable"
+        env.connection_string.c_str(),
+        env.username.c_str(),
+        env.password.c_str(),
+    };
+
+    REQUIRE(example_fork::main(4, argv) == 0);
+}
+#endif
