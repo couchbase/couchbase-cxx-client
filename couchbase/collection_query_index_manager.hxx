@@ -53,8 +53,7 @@ class collection_query_index_manager
 {
   public:
     /**
-     * Get all indexes within a collection.
-     *
+     * Get all indexes within the collection.
      *
      * @param options optional parameters
      * @param handler the handler that implements @ref get_all_query_indexes_handler
@@ -64,13 +63,23 @@ class collection_query_index_manager
      */
     void get_all_indexes(const get_all_query_indexes_options& options, get_all_query_indexes_handler&& handler) const;
 
+    /**
+     * Get all indexes within the collection..
+     *
+     * @param options optional parameters
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
     [[nodiscard]] auto get_all_indexes(const get_all_query_indexes_options& options) const
       -> std::future<std::pair<manager_error_context, std::vector<couchbase::management::query_index>>>;
+
     /**
      * Create an index on the collection.
      *
      * @param index_name name of the index
-     * @param fields the fields to create the index over
+     * @param keys the keys to create the index over
      * @param options optional parameters
      * @param handler the handler that implements @ref create_query_index_handler
      *
@@ -78,16 +87,26 @@ class collection_query_index_manager
      * @committed
      */
     void create_index(std::string index_name,
-                      std::vector<std::string> fields,
+                      std::vector<std::string> keys,
                       const create_query_index_options& options,
                       create_query_index_handler&& handler) const;
 
-    [[nodiscard]] auto create_index(std::string index_name,
-                                    std::vector<std::string> fields,
-                                    const create_query_index_options& options) const -> std::future<manager_error_context>;
+    /**
+     * Create an index on the collection.
+     *
+     * @param index_name name of the index
+     * @param keys the keys to create the index over
+     * @param options optional parameters
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto create_index(std::string index_name, std::vector<std::string> keys, const create_query_index_options& options) const
+      -> std::future<manager_error_context>;
 
     /**
-     * Create a primary index on a collection.
+     * Create a primary index on the collection.
      *
      * @param options optional parameters
      * @param handler the handler that implements @ref create_query_index_handler
@@ -97,10 +116,19 @@ class collection_query_index_manager
      */
     void create_primary_index(const create_primary_query_index_options& options, create_query_index_handler&& handler) const;
 
+    /**
+     * Create a primary index on the collection.
+     *
+     * @param options optional parameters
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
     [[nodiscard]] auto create_primary_index(const create_primary_query_index_options& options) const -> std::future<manager_error_context>;
 
     /**
-     * Drop primary index on a collection.
+     * Drop primary index on the collection.
      *
      * @param options optional parameters
      * @param handler the handler that implements @ref drop_query_index_handler
@@ -110,10 +138,19 @@ class collection_query_index_manager
      */
     void drop_primary_index(const drop_primary_query_index_options& options, drop_query_index_handler&& handler) const;
 
+    /**
+     * Drop primary index on the collection.
+     *
+     * @param options optional parameters
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
     [[nodiscard]] auto drop_primary_index(const drop_primary_query_index_options& options) const -> std::future<manager_error_context>;
 
     /**
-     * Drop index in collection.
+     * Drop specified query index in the collection.
      *
      * @param index_name name of the index to drop
      * @param options optional parameters
@@ -124,14 +161,25 @@ class collection_query_index_manager
      */
     void drop_index(std::string index_name, const drop_query_index_options& options, drop_query_index_handler&& handler) const;
 
+    /**
+     * Drop specified query index in the collection.
+     *
+     * @param index_name name of the index to drop
+     * @param options optional parameters
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
     [[nodiscard]] auto drop_index(std::string index_name, const drop_query_index_options& options) const
       -> std::future<manager_error_context>;
+
     /**
      * Builds all currently deferred indexes in this collection.
      *
      * By default, this method will build the indexes on the collection.
      *
-     * @param options the custom options
+     * @param options optional parameters
      * @param handler the handler that implements @ref build_deferred_query_indexes_handler
      *
      * @since 1.0.0
@@ -139,6 +187,17 @@ class collection_query_index_manager
      */
     void build_deferred_indexes(const build_query_index_options& options, build_deferred_query_indexes_handler&& handler) const;
 
+    /**
+     * Builds all currently deferred indexes in this collection.
+     *
+     * By default, this method will build the indexes on the collection.
+     *
+     * @param options optional parameters
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
     [[nodiscard]] auto build_deferred_indexes(const build_query_index_options& options) const -> std::future<manager_error_context>;
 
     /**
@@ -155,6 +214,16 @@ class collection_query_index_manager
                        const watch_query_indexes_options& options,
                        watch_query_indexes_handler&& handler) const;
 
+    /**
+     * Polls the state of a set of indexes, until they all are online.
+     *
+     * @param index_names names of the indexes to watch
+     * @param options optional parameters
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
     [[nodiscard]] auto watch_indexes(std::vector<std::string> index_names, const watch_query_indexes_options& options) const
       -> std::future<manager_error_context>;
 

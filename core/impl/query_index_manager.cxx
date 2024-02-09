@@ -215,7 +215,7 @@ class query_index_manager_impl : public std::enable_shared_from_this<query_index
                       const std::string& scope_name,
                       const std::string& collection_name,
                       std::string index_name,
-                      std::vector<std::string> fields,
+                      std::vector<std::string> keys,
                       const create_query_index_options::built& options,
                       create_query_index_handler&& handler) const
     {
@@ -225,7 +225,7 @@ class query_index_manager_impl : public std::enable_shared_from_this<query_index
             scope_name,
             collection_name,
             std::move(index_name),
-            std::move(fields),
+            std::move(keys),
             {},
             false /* is_primary */,
             options.ignore_if_exists,
@@ -521,22 +521,22 @@ collection_query_index_manager::get_all_indexes(const get_all_query_indexes_opti
 
 void
 collection_query_index_manager::create_index(std::string index_name,
-                                             std::vector<std::string> fields,
+                                             std::vector<std::string> keys,
                                              const create_query_index_options& options,
                                              create_query_index_handler&& handler) const
 {
     return impl_->create_index(
-      bucket_name_, scope_name_, collection_name_, std::move(index_name), std::move(fields), options.build(), std::move(handler));
+      bucket_name_, scope_name_, collection_name_, std::move(index_name), std::move(keys), options.build(), std::move(handler));
 }
 
 auto
 collection_query_index_manager::create_index(std::string index_name,
-                                             std::vector<std::string> fields,
+                                             std::vector<std::string> keys,
                                              const create_query_index_options& options) const -> std::future<manager_error_context>
 {
     auto barrier = std::make_shared<std::promise<manager_error_context>>();
     auto future = barrier->get_future();
-    create_index(std::move(index_name), std::move(fields), options, [barrier](auto ctx) { barrier->set_value(std::move(ctx)); });
+    create_index(std::move(index_name), std::move(keys), options, [barrier](auto ctx) { barrier->set_value(std::move(ctx)); });
     return future;
 }
 

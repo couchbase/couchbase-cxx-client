@@ -17,7 +17,6 @@
 
 #include "query_index_create.hxx"
 
-#include "core/utils/join_strings.hxx"
 #include "core/utils/json.hxx"
 #include "core/utils/keyspace.hxx"
 #include "error_utils.hxx"
@@ -49,19 +48,31 @@ query_index_create_request::encode_to(encoded_request_type& encoded, http_contex
     if (with) {
         with_clause = fmt::format("WITH {}", utils::json::generate(with));
     }
+    std::string encoded_keys{};
+    for (std::size_t i = 0; i < keys.size(); i++) {
+        if (i != 0) {
+            encoded_keys += ", ";
+        }
+        auto key = keys.at(i);
+
+        // Add backticks around the key unless they are already present
+        if (key.at(0) == '`' && key.at(key.size() - 1) == '`') {
+            encoded_keys += key;
+        } else {
+            encoded_keys += fmt::format("`{}`", key);
+        }
+    }
     std::string keyspace = utils::build_keyspace(*this);
-    tao::json::value body{ { "statement",
-                             is_primary ? fmt::format(R"(CREATE PRIMARY INDEX {} ON {} USING GSI {})",
-                                                      index_name.empty() ? "" : fmt::format("`{}`", index_name),
-                                                      keyspace,
-                                                      with_clause)
-                                        : fmt::format(R"(CREATE INDEX `{}` ON {}({}) {} USING GSI {})",
-                                                      index_name,
-                                                      keyspace,
-                                                      utils::join_strings(fields, ", "),
-                                                      where_clause,
-                                                      with_clause) },
-                           { "client_context_id", encoded.client_context_id } };
+    tao::json::value body{
+        { "statement",
+          is_primary ? fmt::format(R"(CREATE PRIMARY INDEX {} ON {} USING GSI {})",
+                                   index_name.empty() ? "" : fmt::format("`{}`", index_name),
+                                   keyspace,
+                                   with_clause)
+                     : fmt::format(
+                         R"(CREATE INDEX `{}` ON {}({}) {} USING GSI {})", index_name, keyspace, encoded_keys, where_clause, with_clause) },
+        { "client_context_id", encoded.client_context_id }
+    };
     if (query_ctx.has_value()) {
         body["query_context"] = query_ctx.value();
     }
