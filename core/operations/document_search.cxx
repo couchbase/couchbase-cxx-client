@@ -36,7 +36,7 @@ search_request::encode_to(search_request::encoded_request_type& encoded, http_co
     };
 
     if (show_request.has_value()) {
-        body["showrequest"] = show_request.value() ? "true" : "false";
+        body["showrequest"] = show_request.value();
     }
 
     if (vector_search.has_value()) {
