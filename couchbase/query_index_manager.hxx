@@ -51,7 +51,6 @@ class query_index_manager
     /**
      * Get all indexes within a bucket.
      *
-     *
      * @param bucket_name specifies the bucket in which we look for the indexes
      * @param options optional parameters
      * @param handler the handler that implements @ref get_all_query_indexes_handler
@@ -65,7 +64,6 @@ class query_index_manager
 
     /**
      * Get all indexes within a bucket.
-     *
      *
      * @param bucket_name specifies the bucket in which we look for the indexes
      * @param options optional parameters
@@ -82,7 +80,7 @@ class query_index_manager
      *
      * @param bucket_name specifies the bucket in which to create the index
      * @param index_name name of the index
-     * @param fields the fields to create the index over
+     * @param keys the keys to create the index over
      * @param options optional parameters
      * @param handler the handler that implements @ref create_query_index_handler
      *
@@ -91,7 +89,7 @@ class query_index_manager
      */
     void create_index(std::string bucket_name,
                       std::string index_name,
-                      std::vector<std::string> fields,
+                      std::vector<std::string> keys,
                       const create_query_index_options& options,
                       create_query_index_handler&& handler) const;
 
@@ -100,7 +98,7 @@ class query_index_manager
      *
      * @param bucket_name specifies the bucket in which to create the index
      * @param index_name name of the index
-     * @param fields the fields to create the index over
+     * @param keys the keys to create the index over
      * @param options optional parameters
      * @return future object that carries result of the operation
      *
@@ -109,7 +107,7 @@ class query_index_manager
      */
     [[nodiscard]] auto create_index(std::string bucket_name,
                                     std::string index_name,
-                                    std::vector<std::string> fields,
+                                    std::vector<std::string> keys,
                                     const create_query_index_options& options) const -> std::future<manager_error_context>;
 
     /**
@@ -202,7 +200,7 @@ class query_index_manager
      * By default, this method will build the indexes on the bucket.
      *
      * @param bucket_name name of the bucket
-     * @param options the custom options
+     * @param options optional parameters
      * @param handler the handler that implements @ref build_deferred_query_indexes_handler
      *
      * @since 1.0.0
@@ -218,7 +216,7 @@ class query_index_manager
      * By default, this method will build the indexes on the bucket.
      *
      * @param bucket_name name of the bucket
-     * @param options the custom options
+     * @param options optional parameters
      * @return future object that carries result of the operation
      *
      * @since 1.0.0

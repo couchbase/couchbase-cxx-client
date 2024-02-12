@@ -2184,7 +2184,6 @@ TEST_CASE("integration: query index management", "[integration]")
             REQUIRE(!wait_for_bucket_created(integration, bucket_name).ctx.ec);
             SECTION("core API")
             {
-                SKIP("XXX");
                 {
                     couchbase::core::operations::management::query_index_create_response resp;
                     bool operation_completed = test::utils::wait_until([&integration, &bucket_name, &resp]() {
@@ -2257,7 +2256,6 @@ TEST_CASE("integration: query index management", "[integration]")
     {
         SECTION("core API")
         {
-            SKIP("XXX");
             auto index_name = test::utils::uniq_id("index");
             {
                 couchbase::core::operations::management::query_index_create_response resp;
@@ -2265,7 +2263,7 @@ TEST_CASE("integration: query index management", "[integration]")
                     couchbase::core::operations::management::query_index_create_request req{};
                     req.bucket_name = integration.ctx.bucket;
                     req.index_name = index_name;
-                    req.fields = { "field", "field2 DESC", "`two words` DESC" };
+                    req.keys = { "field", "field2", "two words" };
                     resp = test::utils::execute(integration.cluster, req);
                     return resp.ctx.ec != couchbase::errc::common::bucket_not_found;
                 });
@@ -2277,7 +2275,7 @@ TEST_CASE("integration: query index management", "[integration]")
                 couchbase::core::operations::management::query_index_create_request req{};
                 req.bucket_name = integration.ctx.bucket;
                 req.index_name = index_name;
-                req.fields = { "field" };
+                req.keys = { "field" };
                 auto resp = test::utils::execute(integration.cluster, req);
                 REQUIRE(resp.ctx.ec == couchbase::errc::common::index_exists);
             }
@@ -2286,7 +2284,7 @@ TEST_CASE("integration: query index management", "[integration]")
                 couchbase::core::operations::management::query_index_create_request req{};
                 req.bucket_name = integration.ctx.bucket;
                 req.index_name = index_name;
-                req.fields = { "field" };
+                req.keys = { "field" };
                 req.ignore_if_exists = true;
                 auto resp = test::utils::execute(integration.cluster, req);
                 REQUIRE_SUCCESS(resp.ctx.ec);
@@ -2304,8 +2302,8 @@ TEST_CASE("integration: query index management", "[integration]")
                 REQUIRE_FALSE(index->is_primary);
                 REQUIRE(index->index_key.size() == 3);
                 REQUIRE(index->index_key[0] == "`field`");
-                REQUIRE(index->index_key[1] == "`field2` DESC");
-                REQUIRE(index->index_key[2] == "`two words` DESC");
+                REQUIRE(index->index_key[1] == "`field2`");
+                REQUIRE(index->index_key[2] == "`two words`");
                 REQUIRE(index->bucket_name == integration.ctx.bucket);
                 REQUIRE(index->state == "online");
             }
@@ -2332,9 +2330,8 @@ TEST_CASE("integration: query index management", "[integration]")
             {
                 std::error_code ec;
                 bool operation_completed = test::utils::wait_until([&integration, &index_name, c, &ec]() {
-                    auto ctx = c.query_indexes()
-                                 .create_index(integration.ctx.bucket, index_name, { "field", "field2 DESC", "`two words` DESC" }, {})
-                                 .get();
+                    auto ctx =
+                      c.query_indexes().create_index(integration.ctx.bucket, index_name, { "field", "field2", "two words" }, {}).get();
                     ec = ctx.ec();
                     return ec != couchbase::errc::common::bucket_not_found;
                 });
@@ -2376,8 +2373,8 @@ TEST_CASE("integration: query index management", "[integration]")
                 REQUIRE_FALSE(index->is_primary);
                 REQUIRE(index->index_key.size() == 3);
                 REQUIRE(index->index_key[0] == "`field`");
-                REQUIRE(index->index_key[1] == "`field2` DESC");
-                REQUIRE(index->index_key[2] == "`two words` DESC");
+                REQUIRE(index->index_key[1] == "`field2`");
+                REQUIRE(index->index_key[2] == "`two words`");
                 REQUIRE(index->bucket_name == integration.ctx.bucket);
                 REQUIRE(index->state == "online");
             }
@@ -2463,7 +2460,7 @@ TEST_CASE("integration: query index management", "[integration]")
                     couchbase::core::operations::management::query_index_create_request req{};
                     req.bucket_name = integration.ctx.bucket;
                     req.index_name = index_name;
-                    req.fields = { "field" };
+                    req.keys = { "field" };
                     req.deferred = true;
                     resp = test::utils::execute(integration.cluster, req);
                     return resp.ctx.ec != couchbase::errc::common::bucket_not_found;
@@ -2768,7 +2765,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
                     req.index_name = index_name;
                     req.scope_name = scope_name;
                     req.collection_name = collection_name;
-                    req.fields = { "field" };
+                    req.keys = { "field" };
                     resp = test::utils::execute(integration.cluster, req);
                     return resp.ctx.ec != couchbase::errc::common::bucket_not_found &&
                            resp.ctx.ec != couchbase::errc::common::scope_not_found;
@@ -2783,7 +2780,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
                 req.index_name = index_name;
                 req.scope_name = scope_name;
                 req.collection_name = collection_name;
-                req.fields = { "field" };
+                req.keys = { "field" };
                 auto resp = test::utils::execute(integration.cluster, req);
                 REQUIRE(resp.ctx.ec == couchbase::errc::common::index_exists);
             }
@@ -2794,7 +2791,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
                 req.index_name = index_name;
                 req.scope_name = scope_name;
                 req.collection_name = collection_name;
-                req.fields = { "field" };
+                req.keys = { "field" };
                 req.ignore_if_exists = true;
                 auto resp = test::utils::execute(integration.cluster, req);
                 REQUIRE_SUCCESS(resp.ctx.ec);
@@ -2942,7 +2939,7 @@ TEST_CASE("integration: collections query index management", "[integration]")
                     req.index_name = index_name;
                     req.scope_name = scope_name;
                     req.collection_name = collection_name;
-                    req.fields = { "field" };
+                    req.keys = { "field" };
                     req.deferred = true;
                     resp = test::utils::execute(integration.cluster, req);
                     return resp.ctx.ec != couchbase::errc::common::bucket_not_found &&

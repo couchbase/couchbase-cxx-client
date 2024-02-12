@@ -49,7 +49,7 @@ struct query_index_create_request {
     std::string scope_name;
     std::string collection_name;
     std::string index_name{};
-    std::vector<std::string> fields;
+    std::vector<std::string> keys;
     query_context query_ctx;
     bool is_primary{ false };
     bool ignore_if_exists{ false };
