@@ -47,7 +47,7 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
             }
         } else {
             body["statement"] = "PREPARE " + statement;
-            if (context.config.supports_enhanced_prepared_statements()) {
+            if (context.config.capabilities.supports_enhanced_prepared_statements()) {
                 body["auto_execute"] = true;
             } else {
                 extract_encoded_plan_ = true;
@@ -87,7 +87,7 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
             break;
     }
     if (use_replica.has_value()) {
-        if (context.config.supports_read_from_replica()) {
+        if (context.config.capabilities.supports_read_from_replica()) {
             if (use_replica.value()) {
                 body["use_replica"] = "on";
             } else {

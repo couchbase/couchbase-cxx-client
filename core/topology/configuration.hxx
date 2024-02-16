@@ -89,8 +89,7 @@ struct configuration {
     std::optional<std::string> bucket{};
     std::optional<vbucket_map> vbmap{};
     std::optional<std::uint64_t> collections_manifest_uid{};
-    std::set<bucket_capability> bucket_capabilities{};
-    std::set<cluster_capability> cluster_capabilities{};
+    configuration_capabilities capabilities{};
     node_locator_type node_locator{ node_locator_type::unknown };
     bool force{ false };
 
@@ -110,38 +109,6 @@ struct configuration {
     }
 
     [[nodiscard]] std::string rev_str() const;
-
-    [[nodiscard]] bool supports_enhanced_prepared_statements() const
-    {
-        return cluster_capabilities.find(cluster_capability::n1ql_enhanced_prepared_statements) != cluster_capabilities.end();
-    }
-
-    [[nodiscard]] bool supports_read_from_replica() const
-    {
-        return cluster_capabilities.find(cluster_capability::n1ql_read_from_replica) != cluster_capabilities.end();
-    }
-
-    [[nodiscard]] bool supports_range_scan() const
-    {
-        return bucket_capabilities.find(bucket_capability::range_scan) != bucket_capabilities.end();
-    }
-
-    [[nodiscard]] bool ephemeral() const
-    {
-        // Use bucket capabilities to identify if couchapi is missing (then its ephemeral). If its null then
-        // we are running an old version of couchbase which doesn't have ephemeral buckets at all.
-        return bucket_capabilities.count(couchbase::core::bucket_capability::couchapi) == 0;
-    }
-
-    [[nodiscard]] bool supports_subdoc_read_replica() const
-    {
-        return bucket_capabilities.find(bucket_capability::replica_read) != bucket_capabilities.end();
-    }
-
-    [[nodiscard]] bool supports_non_deduped_history() const
-    {
-        return bucket_capabilities.find(bucket_capability::non_deduped_history) != bucket_capabilities.end();
-    }
 
     [[nodiscard]] std::size_t index_for_this_node() const;
     [[nodiscard]] bool has_node(const std::string& network,

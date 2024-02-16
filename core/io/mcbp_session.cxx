@@ -455,6 +455,16 @@ class mcbp_session_impl
                         case protocol::client_opcode::get_cluster_config: {
                             protocol::cmd_info info{ session_->connection_endpoints_.remote_address,
                                                      session_->connection_endpoints_.remote.port() };
+                            if (session_->origin_.options().dump_configuration) {
+                                std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()), msg.body.size() };
+                                CB_LOG_TRACE(
+                                  "{} configuration from get_cluster_config request (bootstrap, size={}, endpoint=\"{}:{}\"), {}",
+                                  session_->log_prefix_,
+                                  config_text.size(),
+                                  info.endpoint_address,
+                                  info.endpoint_port,
+                                  config_text);
+                            }
                             protocol::client_response<protocol::get_cluster_config_response_body> resp(std::move(msg), info);
                             if (resp.status() == key_value_status_code::success) {
                                 session_->update_configuration(resp.body().config());

@@ -58,6 +58,12 @@ class http_session_manager
         meter_ = std::move(meter);
     }
 
+    auto configuration_capabilities() const -> configuration_capabilities
+    {
+        std::scoped_lock config_lock(config_mutex_);
+        return config_.capabilities;
+    }
+
     void update_config(topology::configuration config) override
     {
         std::scoped_lock config_lock(config_mutex_, sessions_mutex_);
@@ -387,7 +393,7 @@ class http_session_manager
     cluster_options options_{};
 
     topology::configuration config_{};
-    std::mutex config_mutex_{};
+    mutable std::mutex config_mutex_{};
     std::map<service_type, std::list<std::shared_ptr<http_session>>> busy_sessions_{};
     std::map<service_type, std::list<std::shared_ptr<http_session>>> idle_sessions_{};
     std::size_t next_index_{ 0 };

@@ -114,6 +114,26 @@ class ping_collector_impl
     }
 };
 
+template<typename Request>
+constexpr bool
+is_feature_supported(const Request& /* request */, const configuration_capabilities& /* capabilities */)
+{
+    return true;
+}
+
+constexpr bool
+is_feature_supported(const operations::search_request& request, const configuration_capabilities& capabilities)
+{
+    if (request.scope_name && !capabilities.supports_scoped_search_indexes()) {
+        return false;
+    }
+    if (request.vector_search && !capabilities.supports_vector_search()) {
+        return false;
+    }
+
+    return true;
+}
+
 class cluster_impl : public std::enable_shared_from_this<cluster_impl>
 {
   public:
@@ -330,6 +350,9 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
         if (stopped_) {
             return handler(request.make_response({ errc::network::cluster_closed }, response_type{}));
         }
+        if (!is_feature_supported(request, session_manager_->configuration_capabilities())) {
+            return handler(request.make_response({ errc::common::feature_not_available }, response_type{}));
+        }
         if constexpr (operations::is_compound_operation_v<Request>) {
             return request.execute(shared_from_this(), std::forward<Handler>(handler));
         } else {
@@ -359,8 +382,7 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
                         handler(request.make_response({ ec }, {}));
                         return;
                     }
-                    auto bucket_caps = config.bucket_capabilities;
-                    if (bucket_caps.find(cap) == bucket_caps.end()) {
+                    if (!config.capabilities.has_bucket_capability(cap)) {
                         handler(request.make_response({ errc::common::feature_not_available }, {}));
                         return;
                     }
