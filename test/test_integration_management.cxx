@@ -1630,6 +1630,9 @@ TEST_CASE("integration: collection management bucket dedup", "[integration]")
     if (!integration.cluster_version().supports_bucket_history()) {
         SKIP("cluster does not support history retention");
     }
+    if (integration.cluster_version().is_capella()) {
+        SKIP("the user for capella testing does not have the needed permissions for this test");
+    }
 
     auto bucket_name = test::utils::uniq_id("bucket");
     auto scope_name = test::utils::uniq_id("scope");
@@ -4875,6 +4878,10 @@ TEST_CASE("integration: scope search index management analyze document public AP
 
     if (!integration.cluster_version().supports_scope_search()) {
         SKIP("cluster does not support scope search");
+    }
+
+    if (integration.cluster_version().is_capella()) {
+        SKIP("Wait for search pindexes ready is used in this test, which doesn't work against Capella");
     }
 
     couchbase::cluster c(integration.cluster);
