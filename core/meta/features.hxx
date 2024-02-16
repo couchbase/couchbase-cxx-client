@@ -121,3 +121,8 @@
  * Support for couchbase::codec::raw_string_transcoder
  */
 #define COUCHBASE_CXX_CLIENT_HAS_RAW_STRING_TRANSCODER 1
+
+/**
+ * Transaction's transaction_operation_failed has a public getter for its final_error
+ */
+#define COUCHBASE_CXX_CLIENT_TRANSACTIONS_CAN_FETCH_TO_RAISE 1
