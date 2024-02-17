@@ -35,6 +35,7 @@ enum class key_value_status_code : std::uint16_t {
     opaque_no_match = 0x0b,
     locked = 0x09,
     not_locked = 0x0e,
+    config_only = 0x0d,
     auth_stale = 0x1f,
     auth_error = 0x20,
     auth_continue = 0x21,

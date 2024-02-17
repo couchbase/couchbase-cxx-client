@@ -426,7 +426,7 @@ class bucket_impl
                 }
                 self->update_config(cfg);
                 self->drain_deferred_queue();
-                self->fetch_config({});
+                self->poll_config({});
             }
             asio::post(asio::bind_executor(self->ctx_, [h = std::move(h), ec, cfg = std::move(cfg)]() mutable { h(ec, cfg); }));
         });
@@ -482,15 +482,11 @@ class bucket_impl
         }
     }
 
-    void fetch_config(std::error_code ec)
+    void fetch_config()
     {
-        if (ec == asio::error::operation_aborted || closed_) {
+        if (closed_) {
             return;
         }
-        if (heartbeat_timer_.expiry() > std::chrono::steady_clock::now()) {
-            return;
-        }
-
         std::optional<io::mcbp_session> session{};
         {
             std::scoped_lock lock(sessions_mutex_);
@@ -512,12 +508,25 @@ class bucket_impl
         } else {
             CB_LOG_WARNING(R"({} unable to find session with GCCCP support, retry in {})", log_prefix_, heartbeat_interval_);
         }
+    }
+
+    void poll_config(std::error_code ec)
+    {
+        if (ec == asio::error::operation_aborted || closed_) {
+            return;
+        }
+        if (heartbeat_timer_.expiry() > std::chrono::steady_clock::now()) {
+            return;
+        }
+
+        fetch_config();
+
         heartbeat_timer_.expires_after(heartbeat_interval_);
         return heartbeat_timer_.async_wait([self = shared_from_this()](std::error_code e) {
             if (e == asio::error::operation_aborted) {
                 return;
             }
-            self->fetch_config(e);
+            self->poll_config(e);
         });
     }
 
@@ -878,6 +887,12 @@ void
 bucket::ping(std::shared_ptr<diag::ping_collector> collector, std::optional<std::chrono::milliseconds> timeout)
 {
     return impl_->ping(std::move(collector), std::move(timeout));
+}
+
+void
+bucket::fetch_config()
+{
+    return impl_->fetch_config();
 }
 
 void

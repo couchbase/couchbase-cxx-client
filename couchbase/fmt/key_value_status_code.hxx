@@ -257,7 +257,9 @@ struct fmt::formatter<couchbase::key_value_status_code> {
             case key_value_status_code::range_scan_vb_uuid_not_equal:
                 name = "range_scan_vb_uuid_not_equal (0xa8)";
                 break;
-
+            case key_value_status_code::config_only:
+                name = "config_only (0x0d)";
+                break;
             case key_value_status_code::unknown:
                 name = "unknown (0xffff)";
                 break;
