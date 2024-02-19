@@ -35,7 +35,7 @@ make_http_context(couchbase::core::topology::configuration& config)
 TEST_CASE("unit: query with read from replica", "[unit]")
 {
     couchbase::core::topology::configuration config{};
-    config.cluster_capabilities.insert(couchbase::core::cluster_capability::n1ql_read_from_replica);
+    config.capabilities.cluster.insert(couchbase::core::cluster_capability::n1ql_read_from_replica);
     auto ctx = make_http_context(config);
 
     SECTION("use_replica true")

@@ -213,33 +213,47 @@ struct traits<couchbase::core::topology::configuration> {
             for (const auto& entry : m->get_array()) {
                 const auto& name = entry.get_string();
                 if (name == "couchapi") {
-                    result.bucket_capabilities.insert(couchbase::core::bucket_capability::couchapi);
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::couchapi);
                 } else if (name == "collections") {
-                    result.bucket_capabilities.insert(couchbase::core::bucket_capability::collections);
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::collections);
                 } else if (name == "durableWrite") {
-                    result.bucket_capabilities.insert(couchbase::core::bucket_capability::durable_write);
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::durable_write);
                 } else if (name == "tombstonedUserXAttrs") {
-                    result.bucket_capabilities.insert(couchbase::core::bucket_capability::tombstoned_user_xattrs);
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::tombstoned_user_xattrs);
                 } else if (name == "dcp") {
-                    result.bucket_capabilities.insert(couchbase::core::bucket_capability::dcp);
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::dcp);
                 } else if (name == "cbhello") {
-                    result.bucket_capabilities.insert(couchbase::core::bucket_capability::cbhello);
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::cbhello);
                 } else if (name == "touch") {
-                    result.bucket_capabilities.insert(couchbase::core::bucket_capability::touch);
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::touch);
                 } else if (name == "cccp") {
-                    result.bucket_capabilities.insert(couchbase::core::bucket_capability::cccp);
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::cccp);
                 } else if (name == "xdcrCheckpointing") {
-                    result.bucket_capabilities.insert(couchbase::core::bucket_capability::xdcr_checkpointing);
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::xdcr_checkpointing);
                 } else if (name == "nodesExt") {
-                    result.bucket_capabilities.insert(couchbase::core::bucket_capability::nodes_ext);
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::nodes_ext);
                 } else if (name == "xattr") {
-                    result.bucket_capabilities.insert(couchbase::core::bucket_capability::xattr);
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::xattr);
                 } else if (name == "rangeScan") {
-                    result.bucket_capabilities.insert(couchbase::core::bucket_capability::range_scan);
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::range_scan);
                 } else if (name == "subdoc.ReplicaRead") {
-                    result.bucket_capabilities.insert(couchbase::core::bucket_capability::replica_read);
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::subdoc_replica_read);
                 } else if (name == "nonDedupedHistory") {
-                    result.bucket_capabilities.insert(couchbase::core::bucket_capability::non_deduped_history);
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::non_deduped_history);
+                } else if (name == "subdoc.ReplaceBodyWithXattr") {
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::subdoc_replace_body_with_xattr);
+                } else if (name == "subdoc.DocumentMacroSupport") {
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::subdoc_document_macro_support);
+                } else if (name == "subdoc.ReviveDocument") {
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::subdoc_revive_document);
+                } else if (name == "dcp.IgnorePurgedTombstones") {
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::dcp_ignore_purged_tombstones);
+                } else if (name == "preserve_expiry") {
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::preserve_expiry);
+                } else if (name == "querySystemCollection") {
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::query_system_collection);
+                } else if (name == "mobileSystemCollection") {
+                    result.capabilities.bucket.insert(couchbase::core::bucket_capability::mobile_system_collection);
                 }
             }
         }
@@ -247,17 +261,26 @@ struct traits<couchbase::core::topology::configuration> {
             if (const auto nc = m->find("n1ql"); nc != nullptr && nc->is_array()) {
                 for (const auto& entry : nc->get_array()) {
                     if (const auto& name = entry.get_string(); name == "costBasedOptimizer") {
-                        result.cluster_capabilities.insert(couchbase::core::cluster_capability::n1ql_cost_based_optimizer);
+                        result.capabilities.cluster.insert(couchbase::core::cluster_capability::n1ql_cost_based_optimizer);
                     } else if (name == "indexAdvisor") {
-                        result.cluster_capabilities.insert(couchbase::core::cluster_capability::n1ql_index_advisor);
+                        result.capabilities.cluster.insert(couchbase::core::cluster_capability::n1ql_index_advisor);
                     } else if (name == "javaScriptFunctions") {
-                        result.cluster_capabilities.insert(couchbase::core::cluster_capability::n1ql_javascript_functions);
+                        result.capabilities.cluster.insert(couchbase::core::cluster_capability::n1ql_javascript_functions);
                     } else if (name == "inlineFunctions") {
-                        result.cluster_capabilities.insert(couchbase::core::cluster_capability::n1ql_inline_functions);
+                        result.capabilities.cluster.insert(couchbase::core::cluster_capability::n1ql_inline_functions);
                     } else if (name == "enhancedPreparedStatements") {
-                        result.cluster_capabilities.insert(couchbase::core::cluster_capability::n1ql_enhanced_prepared_statements);
+                        result.capabilities.cluster.insert(couchbase::core::cluster_capability::n1ql_enhanced_prepared_statements);
                     } else if (name == "readFromReplica") {
-                        result.cluster_capabilities.insert(couchbase::core::cluster_capability::n1ql_read_from_replica);
+                        result.capabilities.cluster.insert(couchbase::core::cluster_capability::n1ql_read_from_replica);
+                    }
+                }
+            }
+            if (const auto sc = m->find("search"); sc != nullptr && sc->is_array()) {
+                for (const auto& entry : sc->get_array()) {
+                    if (const auto& name = entry.get_string(); name == "vectorSearch") {
+                        result.capabilities.cluster.insert(couchbase::core::cluster_capability::search_vector_search);
+                    } else if (name == "scopedSearchIndex") {
+                        result.capabilities.cluster.insert(couchbase::core::cluster_capability::search_scoped_search_index);
                     }
                 }
             }

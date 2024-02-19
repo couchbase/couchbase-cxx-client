@@ -479,7 +479,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
           bucket_name_,
           [core = core_, r = std::move(request), h = std::move(handler)](std::error_code ec,
                                                                          const core::topology::configuration& config) mutable {
-              if (!config.supports_subdoc_read_replica()) {
+              if (!config.capabilities.supports_subdoc_read_replica()) {
                   ec = errc::common::feature_not_available;
               }
 
@@ -601,7 +601,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
           bucket_name_,
           [core = core_, r = std::move(request), h = std::move(handler)](std::error_code ec,
                                                                          const core::topology::configuration& config) mutable {
-              if (!config.supports_subdoc_read_replica()) {
+              if (!config.capabilities.supports_subdoc_read_replica()) {
                   ec = errc::common::feature_not_available;
               }
               if (r->specs().size() > 16) {
