@@ -54,7 +54,7 @@ TEST_CASE("integration: fetch diagnostics after N1QL query", "[integration]")
       auto res = f.get();
       REQUIRE(res.id == "my_report_id");
       REQUIRE(res.sdk.find("cxx/") == 0);
-      REQUIRE(res.services[couchbase::core::service_type::key_value].size() > 1);
+      REQUIRE(res.services[couchbase::core::service_type::key_value].size() > 0);
       REQUIRE(res.services[couchbase::core::service_type::query].size() == 1);
       REQUIRE(res.services[couchbase::core::service_type::query][0].state ==
               couchbase::core::diag::endpoint_state::connected);
@@ -63,7 +63,11 @@ TEST_CASE("integration: fetch diagnostics after N1QL query", "[integration]")
 
   SECTION("Public API")
   {
-    auto cluster = couchbase::cluster(integration.cluster);
+    auto test_ctx = integration.ctx;
+    auto [e, cluster] =
+      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+    REQUIRE_SUCCESS(e.ec());
+
     {
       auto [ctx, res] = cluster.query("SELECT 'hello, couchbase' AS greetings", {}).get();
       REQUIRE_SUCCESS(ctx.ec());
@@ -78,7 +82,7 @@ TEST_CASE("integration: fetch diagnostics after N1QL query", "[integration]")
         cluster.diagnostics(couchbase::diagnostics_options().report_id("my_report_id")).get();
       REQUIRE(res.id() == "my_report_id");
       REQUIRE(res.sdk().find("cxx/") == 0);
-      REQUIRE(res.endpoints()[couchbase::service_type::key_value].size() > 1);
+      REQUIRE(res.endpoints()[couchbase::service_type::key_value].size() > 0);
       REQUIRE(res.endpoints()[couchbase::service_type::query].size() == 1);
       REQUIRE(res.endpoints()[couchbase::service_type::query][0].state() ==
               couchbase::endpoint_state::connected);
@@ -137,7 +141,10 @@ TEST_CASE("integration: ping", "[integration]")
 
   SECTION("Public API")
   {
-    auto cluster = couchbase::cluster(integration.cluster);
+    auto test_ctx = integration.ctx;
+    auto [e, cluster] =
+      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+    REQUIRE_SUCCESS(e.ec());
 
     auto [err, res] = cluster.ping(couchbase::ping_options().report_id("my_report_id")).get();
     REQUIRE(res.endpoints().size() > 0);
@@ -205,7 +212,10 @@ TEST_CASE("integration: ping allows to select services", "[integration]")
 
   SECTION("Public API")
   {
-    auto cluster = couchbase::cluster(integration.cluster);
+    auto test_ctx = integration.ctx;
+    auto [e, cluster] =
+      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+    REQUIRE_SUCCESS(e.ec());
 
     auto opts = couchbase::ping_options().service_types(
       { couchbase::service_type::key_value, couchbase::service_type::query });
@@ -248,7 +258,11 @@ TEST_CASE("integration: ping allows to select bucket and opens it automatically"
 
   SECTION("Public API")
   {
-    auto cluster = couchbase::cluster(integration.cluster);
+    auto test_ctx = integration.ctx;
+    auto [e, cluster] =
+      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+    REQUIRE_SUCCESS(e.ec());
+
     auto bucket = cluster.bucket(integration.ctx.bucket);
 
     auto [err, res] =
@@ -334,7 +348,10 @@ TEST_CASE("integration: ping allows setting timeout", "[integration]")
 
   SECTION("Public API")
   {
-    auto cluster = couchbase::cluster(integration.cluster);
+    auto test_ctx = integration.ctx;
+    auto [e, cluster] =
+      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+    REQUIRE_SUCCESS(e.ec());
 
     auto [err, res] =
       cluster.ping(couchbase::ping_options().timeout(std::chrono::milliseconds(0))).get();

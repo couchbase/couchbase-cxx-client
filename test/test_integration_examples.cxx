@@ -63,20 +63,13 @@ main(int argc, const char* argv[])
   std::string password{ argv[3] };          // "password"
   std::string bucket_name{ "travel-sample" };
 
-  // run IO context on separate thread
-  asio::io_context io;
-  auto guard = asio::make_work_guard(io);
-  std::thread io_thread([&io]() {
-    io.run();
-  });
-
   auto options = couchbase::cluster_options(username, password);
   // customize through the 'options'.
   // For example, optimize timeouts for WAN
   options.apply_profile("wan_development");
 
   // [1] connect to cluster using the given connection string and the options
-  auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+  auto [connect_err, cluster] = couchbase::cluster::connect(connection_string, options).get();
   if (connect_err) {
     fmt::print("unable to connect to the cluster: {}\n", connect_err);
     return 1;
@@ -127,10 +120,7 @@ main(int argc, const char* argv[])
   }
 
   // [5] close cluster connection
-  cluster.close();
-  guard.reset();
-
-  io_thread.join();
+  cluster.close().get();
   return 0;
 }
 
@@ -250,13 +240,6 @@ main(int argc, const char* argv[])
   std::string password{ argv[3] };          // "password"
   std::string bucket_name{ "travel-sample" };
 
-  // run IO context on separate thread
-  asio::io_context io;
-  auto guard = asio::make_work_guard(io);
-  std::thread io_thread([&io]() {
-    io.run();
-  });
-
   auto options = couchbase::cluster_options(username, password);
   // customize through the 'options'.
   // For example, optimize timeouts for WAN
@@ -264,7 +247,7 @@ main(int argc, const char* argv[])
     "github_actions", std::make_shared<github_actions_configuration_profile>());
   options.apply_profile("github_actions");
 
-  auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+  auto [connect_err, cluster] = couchbase::cluster::connect(connection_string, options).get();
   if (connect_err) {
     fmt::print("unable to connect to the cluster: {}\n", connect_err);
     return 1;
@@ -497,10 +480,7 @@ main(int argc, const char* argv[])
   }
 
   // close cluster connection
-  cluster.close();
-  guard.reset();
-
-  io_thread.join();
+  cluster.close().get();
   return 0;
 }
 
@@ -570,19 +550,12 @@ main(int argc, const char* argv[])
   std::string password{ argv[3] };          // "password"
   std::string bucket_name{ "travel-sample" };
 
-  // run IO context on separate thread
-  asio::io_context io;
-  auto guard = asio::make_work_guard(io);
-  std::thread io_thread([&io]() {
-    io.run();
-  });
-
   auto options = couchbase::cluster_options(username, password);
   // customize through the 'options'.
   // For example, optimize timeouts for WAN
   options.apply_profile("wan_development");
 
-  auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+  auto [connect_err, cluster] = couchbase::cluster::connect(connection_string, options).get();
   if (connect_err) {
     fmt::print("unable to connect to the cluster: {}\n", connect_err);
     return 1;
@@ -657,10 +630,7 @@ main(int argc, const char* argv[])
   }
 
   // close cluster connection
-  cluster.close();
-  guard.reset();
-
-  io_thread.join();
+  cluster.close().get();
   return 0;
 }
 
@@ -712,19 +682,10 @@ main(int argc, const char* argv[])
   std::string password{ argv[3] };          // "password"
   std::string bucket_name{ "travel-sample" };
 
-  // run IO context on separate thread
-  asio::io_context io;
-  auto guard = asio::make_work_guard(io);
-  std::thread io_thread([&io]() {
-    fmt::print("PARENT(pid={}): start IO thread\n", getpid());
-    io.run();
-    fmt::print("PARENT(pid={}): stop IO thread\n", getpid());
-  });
-
   auto options = couchbase::cluster_options(username, password);
   options.apply_profile("wan_development");
 
-  auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+  auto [connect_err, cluster] = couchbase::cluster::connect(connection_string, options).get();
   if (connect_err) {
     fmt::print("PARENT(pid={}): sunable to connect to the cluster: {}\n", getpid(), connect_err);
     return 1;
@@ -733,22 +694,9 @@ main(int argc, const char* argv[])
   auto bucket = cluster.bucket(bucket_name);
 
   cluster.notify_fork(couchbase::fork_event::prepare);
-  guard.reset();
-  io.stop();
-  io_thread.join();
-  io.notify_fork(asio::execution_context::fork_prepare);
   auto child_pid = fork();
   if (child_pid == 0) {
-    io.notify_fork(asio::execution_context::fork_child);
     cluster.notify_fork(couchbase::fork_event::child);
-    io.restart();
-    fmt::print("CHILD(pid={}): restarting IO thread\n", getpid());
-    auto child_guard = asio::make_work_guard(io);
-    io_thread = std::thread([&io]() {
-      fmt::print("CHILD(pid={}): start new IO thread\n", getpid());
-      io.run();
-      fmt::print("CHILD(pid={}): stop new IO thread\n", getpid());
-    });
 
     fmt::print("CHILD(pid={}): continue after fork()\n", getpid());
     auto collection = bucket.scope("tenant_agent_00").collection("users");
@@ -782,18 +730,8 @@ main(int argc, const char* argv[])
       fmt::print("CHILD(pid={}): retrieved document \"{}\", name=\"{}\"\n", getpid(), doc_id, name);
     }
 
-    child_guard.reset();
   } else {
-    io.notify_fork(asio::execution_context::fork_parent);
     cluster.notify_fork(couchbase::fork_event::parent);
-    io.restart();
-    auto parent_guard = asio::make_work_guard(io);
-    fmt::print("PARENT(pid={}): restarting IO thread\n", getpid());
-    io_thread = std::thread([&io]() {
-      fmt::print("PARENT(pid={}): start IO new thread\n", getpid());
-      io.run();
-      fmt::print("PARENT(pid={}): stop IO new thread\n", getpid());
-    });
     fmt::print("PARENT(pid={}): continue after fork() child_pid={}\n", getpid(), child_pid);
 
     {
@@ -823,7 +761,6 @@ main(int argc, const char* argv[])
         fmt::print("PARENT(pid={}): row: {}\n", getpid(), tao::json::to_string(row));
       }
     }
-    parent_guard.reset();
 
     int status{};
     fmt::print("PARENT(pid={}): waiting for child pid={}...\n", getpid(), child_pid);
@@ -864,10 +801,7 @@ main(int argc, const char* argv[])
   }
 
   fmt::print("COMMON(pid={}): close cluster\n", getpid());
-  cluster.close();
-
-  fmt::print("COMMON(pid={}): join thread\n", getpid());
-  io_thread.join();
+  cluster.close().get();
   return 0;
 }
 

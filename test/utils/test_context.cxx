@@ -130,4 +130,28 @@ test_context::build_auth() const -> couchbase::core::cluster_credentials
   }
   return auth;
 }
+
+auto
+test_context::build_options() const -> couchbase::cluster_options
+{
+  auto options{ [this] {
+    if (certificate_path.empty()) {
+      return couchbase::cluster_options{
+        couchbase::password_authenticator{ username, password },
+      };
+    }
+    return couchbase::cluster_options{
+      couchbase::certificate_authenticator{ certificate_path, key_path },
+    };
+  }() };
+
+  if (deployment == deployment_type::capella || deployment == deployment_type::elixir) {
+    options.apply_profile("wan_development");
+  }
+  options.dns().nameserver(
+    dns_nameserver.value_or(couchbase::core::io::dns::dns_config::default_nameserver),
+    dns_port.value_or(couchbase::core::io::dns::dns_config::default_port));
+
+  return options;
+}
 } // namespace test::utils

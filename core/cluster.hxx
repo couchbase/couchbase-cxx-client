@@ -55,10 +55,9 @@ public:
 
   [[nodiscard]] auto io_context() const -> asio::io_context&;
 
-  [[nodiscard]] std::pair<std::error_code, couchbase::core::origin> origin() const;
+  [[nodiscard]] auto origin() const -> std::pair<std::error_code, core::origin>;
 
-  void open(couchbase::core::origin origin,
-            utils::movable_function<void(std::error_code)>&& handler) const;
+  void open(core::origin origin, utils::movable_function<void(std::error_code)>&& handler) const;
 
   void close(utils::movable_function<void()>&& handler) const;
 

@@ -19,8 +19,6 @@
 #include <couchbase/fmt/error.hxx>
 #include <couchbase/logger.hxx>
 
-#include <asio.hpp>
-
 #include <iostream>
 #include <system_error>
 
@@ -37,15 +35,9 @@ main()
   couchbase::logger::initialize_console_logger();
   couchbase::logger::set_level(couchbase::logger::log_level::trace);
 
-  asio::io_context io;
-  auto guard = asio::make_work_guard(io);
-  std::thread io_thread([&io]() {
-    io.run();
-  });
-
   auto options = couchbase::cluster_options(username, password);
   options.apply_profile("wan_development");
-  auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+  auto [connect_err, cluster] = couchbase::cluster::connect(connection_string, options).get();
   if (connect_err) {
     std::cout << "Unable to connect to the cluster. ec: " << fmt::format("{}", connect_err) << "\n";
   } else {
@@ -64,10 +56,7 @@ main()
     std::cout << "id: " << document_id << ", CAS: " << resp.cas().value() << "\n";
   }
 
-  cluster.close();
-  guard.reset();
-
-  io_thread.join();
+  cluster.close().get();
 
   return 0;
 }

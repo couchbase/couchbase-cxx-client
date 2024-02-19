@@ -21,6 +21,8 @@
 
 #include "core/origin.hxx"
 
+#include <couchbase/cluster_options.hxx>
+
 #include <string>
 
 namespace test::utils
@@ -42,6 +44,7 @@ struct test_context {
   bool use_wan_development_profile{ false };
 
   [[nodiscard]] auto build_auth() const -> couchbase::core::cluster_credentials;
+  [[nodiscard]] auto build_options() const -> couchbase::cluster_options;
 
   static auto load_from_environment() -> test_context;
 };

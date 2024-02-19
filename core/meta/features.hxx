@@ -184,3 +184,8 @@
  * transactions_get_result has `content_as` and `id` methods
  */
 #define COUCHBASE_CXX_CLIENT_TXNS_GET_RESULT_FINAL_API
+
+/**
+ * Public API does not require passing IO context when connecting
+ */
+#define COUCHBASE_CXX_CLIENT_PUBLIC_API_DOES_NOT_EXPOSE_ASIO

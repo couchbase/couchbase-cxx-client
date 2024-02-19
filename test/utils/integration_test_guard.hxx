@@ -116,7 +116,8 @@ public:
 
   auto number_of_query_nodes() -> std::size_t;
 
-  auto transactions() -> std::shared_ptr<couchbase::core::transactions::transactions>
+  [[nodiscard]] auto transactions() const
+    -> std::shared_ptr<couchbase::core::transactions::transactions>
   {
     couchbase::transactions::transactions_config cfg{};
     cfg.timeout(std::chrono::seconds(2));
@@ -128,9 +129,17 @@ public:
     return txns;
   }
 
-  auto public_cluster() -> couchbase::cluster
+  [[nodiscard]] auto public_cluster() const -> couchbase::cluster
   {
-    return couchbase::cluster{ cluster, transactions() };
+    auto options = ctx.build_options();
+    options.transactions().timeout(std::chrono::seconds(2));
+    auto [err, c] = couchbase::cluster::connect(ctx.connection_string, options).get();
+    if (err.ec()) {
+      CB_LOG_CRITICAL("unable to connect to cluster (public API): {}", err.message());
+      throw std::runtime_error(
+        fmt::format("unable to connect to cluster (public API): {}", err.message()));
+    }
+    return c;
   }
 
   auto cluster_version() -> server_version;

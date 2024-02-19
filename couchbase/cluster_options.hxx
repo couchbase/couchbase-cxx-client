@@ -38,13 +38,6 @@
 #include <system_error>
 #include <vector>
 
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace asio
-{
-class io_context;
-} // namespace asio
-#endif
-
 namespace couchbase
 {
 class cluster_options

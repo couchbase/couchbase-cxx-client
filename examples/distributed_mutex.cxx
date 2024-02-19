@@ -19,7 +19,6 @@
 #include <couchbase/cluster.hxx>
 #include <couchbase/fmt/error_context.hxx>
 
-#include <asio.hpp>
 #include <fmt/chrono.h>
 #include <fmt/format.h>
 
@@ -174,15 +173,9 @@ private:
 int
 main()
 {
-  asio::io_context io;
-  auto guard = asio::make_work_guard(io);
-  std::thread io_thread([&io]() {
-    io.run();
-  });
-
   auto options = couchbase::cluster_options(username, password);
   options.apply_profile("wan_development");
-  auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+  auto [connect_err, cluster] = couchbase::cluster::connect(connection_string, options).get();
   auto collection = cluster.bucket(bucket_name).scope(scope_name).collection(collection_name);
 
   // Obtain thread_id for simplicity. Could be pid_id, if it was more portable.
@@ -215,10 +208,7 @@ main()
     std::this_thread::sleep_for(std::chrono::seconds{ 7 });
   }
 
-  cluster.close();
-  guard.reset();
-
-  io_thread.join();
+  cluster.close().get();
 
   return 0;
 }

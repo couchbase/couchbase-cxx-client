@@ -314,7 +314,11 @@ TEST_CASE("integration: search index management public API", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
   }
 
-  couchbase::cluster c(integration.cluster);
+  auto test_ctx = integration.ctx;
+  auto [e, c] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(e.ec());
+
   auto index_name = test::utils::uniq_id("index");
 
   SECTION("search indexes crud")
@@ -464,7 +468,11 @@ TEST_CASE("integration: search index management analyze document public API", "[
   auto index_name = test::utils::uniq_id("index");
 
   {
-    couchbase::cluster c(integration.cluster);
+    auto test_ctx = integration.ctx;
+    auto [e, c] =
+      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+    REQUIRE_SUCCESS(e.ec());
+
     {
       couchbase::management::search::index index;
       index.name = index_name;
@@ -478,7 +486,7 @@ TEST_CASE("integration: search index management analyze document public API", "[
     couchbase::error err;
     std::string analysis;
     std::pair<couchbase::error, std::vector<std::string>> result;
-    bool operation_completed = test::utils::wait_until([&c, &index_name, &result]() {
+    bool operation_completed = test::utils::wait_until([c = c, &index_name, &result]() {
       tao::json::value basic_doc = {
         { "name", "hello world" },
       };
@@ -506,7 +514,11 @@ TEST_CASE("integration: scope search index management public API", "[integration
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
   }
 
-  couchbase::cluster c(integration.cluster);
+  auto test_ctx = integration.ctx;
+  auto [e, c] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(e.ec());
+
   auto manager = c.bucket(integration.ctx.bucket).scope("_default").search_indexes();
   auto index_name = test::utils::uniq_id("index");
 
@@ -606,7 +618,11 @@ TEST_CASE("integration: scope search index management analyze document public AP
     SKIP("Wait for search pindexes ready is used in this test, which doesn't work against Capella");
   }
 
-  couchbase::cluster c(integration.cluster);
+  auto test_ctx = integration.ctx;
+  auto [e, c] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(e.ec());
+
   auto manager = c.bucket(integration.ctx.bucket).scope("_default").search_indexes();
   auto index_name = test::utils::uniq_id("index");
   {
@@ -647,7 +663,11 @@ TEST_CASE("integration: scope search returns feature not available", "[integrati
   if (integration.cluster_version().supports_scope_search()) {
     SKIP("cluster supports scope search");
   }
-  couchbase::cluster c(integration.cluster);
+  auto test_ctx = integration.ctx;
+  auto [e, c] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(e.ec());
+
   auto manager = c.bucket(integration.ctx.bucket).scope("_default").search_indexes();
   auto index_name = test::utils::uniq_id("index");
   {
@@ -666,7 +686,12 @@ TEST_CASE("integration: upsert vector index feature not available", "[integratio
   if (integration.cluster_version().supports_vector_search()) {
     SKIP("cluster supports vector search");
   }
-  couchbase::cluster c(integration.cluster);
+
+  auto test_ctx = integration.ctx;
+  auto [e, c] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(e.ec());
+
   auto manager = c.search_indexes();
   {
     auto index_name = test::utils::uniq_id("index");

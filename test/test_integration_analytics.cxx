@@ -340,7 +340,10 @@ TEST_CASE("integration: public API analytics query")
     SKIP("cluster does not support analytics");
   }
 
-  auto cluster = couchbase::cluster(integration.cluster);
+  auto test_ctx = integration.ctx;
+  auto [err, cluster] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(err.ec());
   auto bucket = cluster.bucket(integration.ctx.bucket);
   auto collection = bucket.default_collection();
 
@@ -375,7 +378,7 @@ TEST_CASE("integration: public API analytics query")
   {
     couchbase::analytics_result resp{};
     couchbase::error error{};
-    CHECK(test::utils::wait_until([&]() {
+    CHECK(test::utils::wait_until([&, cluster = cluster]() {
       std::tie(error, resp) =
         cluster
           .analytics_query(fmt::format(
@@ -396,7 +399,7 @@ TEST_CASE("integration: public API analytics query")
   {
     couchbase::analytics_result resp{};
     couchbase::error error{};
-    CHECK(test::utils::wait_until([&]() {
+    CHECK(test::utils::wait_until([&, cluster = cluster]() {
       std::tie(error, resp) =
         cluster
           .analytics_query(
@@ -415,7 +418,7 @@ TEST_CASE("integration: public API analytics query")
   {
     couchbase::analytics_result resp{};
     couchbase::error error{};
-    CHECK(test::utils::wait_until([&]() {
+    CHECK(test::utils::wait_until([&, cluster = cluster]() {
       std::tie(error, resp) =
         cluster
           .analytics_query(
@@ -435,7 +438,7 @@ TEST_CASE("integration: public API analytics query")
   {
     couchbase::analytics_result resp{};
     couchbase::error error{};
-    CHECK(test::utils::wait_until([&]() {
+    CHECK(test::utils::wait_until([&, cluster = cluster]() {
       std::tie(error, resp) =
         cluster
           .analytics_query(
@@ -456,7 +459,7 @@ TEST_CASE("integration: public API analytics query")
   {
     couchbase::analytics_result resp{};
     couchbase::error error{};
-    CHECK(test::utils::wait_until([&]() {
+    CHECK(test::utils::wait_until([&, cluster = cluster]() {
       std::tie(error, resp) =
         cluster
           .analytics_query(
@@ -476,7 +479,7 @@ TEST_CASE("integration: public API analytics query")
   {
     couchbase::analytics_result resp{};
     couchbase::error error{};
-    CHECK(test::utils::wait_until([&]() {
+    CHECK(test::utils::wait_until([&, cluster = cluster]() {
       /*
        * In consistency test, always do fresh mutation
        */
@@ -544,7 +547,10 @@ TEST_CASE("integration: public API analytics scope query")
     SKIP("cluster does not support collections");
   }
 
-  auto cluster = couchbase::cluster(integration.cluster);
+  auto test_ctx = integration.ctx;
+  auto [err, cluster] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(err.ec());
   auto bucket = cluster.bucket(integration.ctx.bucket);
 
   auto scope_name = test::utils::uniq_id("scope");
@@ -572,7 +578,7 @@ TEST_CASE("integration: public API analytics scope query")
   }
 
   CHECK(test::utils::wait_until(
-    [&]() {
+    [&, cluster = cluster]() {
       auto [error, resp] =
         cluster
           .analytics_query(fmt::format("ALTER COLLECTION `{}`.`{}`.`{}` ENABLE ANALYTICS",

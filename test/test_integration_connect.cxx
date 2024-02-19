@@ -196,18 +196,11 @@ TEST_CASE("integration: destroy cluster without waiting for close completion", "
 }
 
 TEST_CASE("integration: connecting with a custom transactions metadata collection that is in a "
-          "bucket that does not "
-          "exist - Public API",
+          "bucket that does not exist - Public API",
           "[integration]")
 {
   test::utils::init_logger();
   auto ctx = test::utils::test_context::load_from_environment();
-
-  asio::io_context io{};
-  auto guard = asio::make_work_guard(io);
-  auto io_thread = std::thread([&io]() {
-    io.run();
-  });
 
   auto opts = couchbase::cluster_options(ctx.username, ctx.password);
   opts.transactions().metadata_collection(couchbase::transactions::transaction_keyspace{
@@ -216,10 +209,7 @@ TEST_CASE("integration: connecting with a custom transactions metadata collectio
     "_default",
   });
 
-  auto [err, cluster] = couchbase::cluster::connect(io, ctx.connection_string, opts).get();
+  auto [err, cluster] = couchbase::cluster::connect(ctx.connection_string, opts).get();
 
   REQUIRE(err.ec() == couchbase::errc::common::bucket_not_found);
-
-  guard.reset();
-  io_thread.join();
 }

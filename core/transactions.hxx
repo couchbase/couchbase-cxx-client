@@ -279,6 +279,8 @@ public:
                const couchbase::transactions::transactions_config::built& config);
   transactions(core::cluster cluster, const couchbase::transactions::transactions_config& config);
 
+  ~transactions() override;
+
 private:
   core::cluster cluster_;
   couchbase::transactions::transactions_config::built config_;

@@ -208,7 +208,11 @@ TEST_CASE("integration: bucket management", "[integration]")
     }
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto test_ctx = integration.ctx;
+      auto [err, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(err.ec());
+
       couchbase::management::cluster::bucket_settings bucket_settings;
       bucket_settings.name = bucket_name;
       bucket_settings.ram_quota_mb = 100;
@@ -274,7 +278,7 @@ TEST_CASE("integration: bucket management", "[integration]")
         auto error = c.buckets().update_bucket(bucket_settings, {}).get();
         REQUIRE_SUCCESS(error.ec());
       }
-      auto ram_quota_updated = test::utils::wait_until([&bucket_name, c, old_quota_mb]() {
+      auto ram_quota_updated = test::utils::wait_until([&bucket_name, c = c, old_quota_mb]() {
         auto [error, bucket] = c.buckets().get_bucket(bucket_name, {}).get();
         return !error.ec() && bucket.ram_quota_mb > old_quota_mb;
       });
@@ -284,7 +288,7 @@ TEST_CASE("integration: bucket management", "[integration]")
         REQUIRE_SUCCESS(error.ec());
       }
       {
-        auto bucket_not_found = test::utils::wait_until([&bucket_name, c]() {
+        auto bucket_not_found = test::utils::wait_until([&bucket_name, c = c]() {
           auto [error, bucket] = c.buckets().get_bucket(bucket_name, {}).get();
           return error.ec() == couchbase::errc::common::bucket_not_found;
         });
@@ -383,7 +387,11 @@ TEST_CASE("integration: bucket management", "[integration]")
     }
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto test_ctx = integration.ctx;
+      auto [err, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(err.ec());
+
       SECTION("flush item")
       {
         auto id = test::utils::uniq_id("foo");
@@ -476,7 +484,11 @@ TEST_CASE("integration: bucket management", "[integration]")
       }
       SECTION("public api")
       {
-        couchbase::cluster c(integration.cluster);
+        auto test_ctx = integration.ctx;
+        auto [err, c] =
+          couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+        REQUIRE_SUCCESS(err.ec());
+
         {
           couchbase::management::cluster::bucket_settings bucket_settings;
           bucket_settings.name = bucket_name;
@@ -571,7 +583,11 @@ TEST_CASE("integration: bucket management", "[integration]")
     }
     SECTION("public api")
     {
-      couchbase::cluster c(integration.cluster);
+      auto test_ctx = integration.ctx;
+      auto [err, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(err.ec());
+
       couchbase::management::cluster::bucket_settings bucket_settings;
       bucket_settings.name = bucket_name;
       bucket_settings.bucket_type = couchbase::management::cluster::bucket_type::ephemeral;
@@ -732,7 +748,11 @@ TEST_CASE("integration: bucket management", "[integration]")
     }
     SECTION("public api")
     {
-      couchbase::cluster c(integration.cluster);
+      auto test_ctx = integration.ctx;
+      auto [err, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(err.ec());
+
       couchbase::management::cluster::bucket_settings bucket_settings;
       bucket_settings.name = bucket_name;
       bucket_settings.bucket_type = couchbase::management::cluster::bucket_type::couchbase;
@@ -832,7 +852,11 @@ TEST_CASE("integration: bucket management", "[integration]")
     }
     SECTION("public api")
     {
-      couchbase::cluster c(integration.cluster);
+      auto test_ctx = integration.ctx;
+      auto [err, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(err.ec());
+
       couchbase::management::cluster::bucket_settings bucket_settings;
       bucket_settings.name = bucket_name;
       auto error = c.buckets().update_bucket(bucket_settings, {}).get();
@@ -888,7 +912,11 @@ TEST_CASE("integration: bucket management", "[integration]")
       }
       SECTION("public api")
       {
-        couchbase::cluster c(integration.cluster);
+        auto test_ctx = integration.ctx;
+        auto [err, c] =
+          couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+        REQUIRE_SUCCESS(err.ec());
+
         couchbase::management::cluster::bucket_settings bucket_settings;
         bucket_settings.name = bucket_name;
 
@@ -1217,7 +1245,11 @@ TEST_CASE("integration: collection management", "[integration]")
   }
   SECTION("public API")
   {
-    couchbase::cluster c(integration.cluster);
+    auto test_ctx = integration.ctx;
+    auto [err, c] =
+      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+    REQUIRE_SUCCESS(err.ec());
+
     auto manager = c.bucket(integration.ctx.bucket).collections();
     {
       auto error = manager.create_scope(scope_name).get();
@@ -1325,7 +1357,11 @@ TEST_CASE("integration: collection management create collection with max expiry"
   auto scope_name = "_default";
   auto collection_name = test::utils::uniq_id("collection");
 
-  couchbase::cluster c(integration.cluster);
+  auto test_ctx = integration.ctx;
+  auto [err, c] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(err.ec());
+
   auto manager = c.bucket(integration.ctx.bucket).collections();
 
   SECTION("default max expiry")
@@ -1487,7 +1523,11 @@ TEST_CASE("integration: collection management update collection with max expiry"
     REQUIRE_SUCCESS(ec);
   }
 
-  couchbase::cluster c(integration.cluster);
+  auto test_ctx = integration.ctx;
+  auto [err, c] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(err.ec());
+
   auto manager = c.bucket(integration.ctx.bucket).collections();
 
   SECTION("zero max expiry (bucket-level default)")
@@ -1661,8 +1701,12 @@ TEST_CASE("integration: collection management history retention not supported in
 
     SECTION("public API")
     {
-      auto manager =
-        couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).collections();
+      auto test_ctx = integration.ctx;
+      auto [err, cluster] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(err.ec());
+
+      auto manager = cluster.bucket(integration.ctx.bucket).collections();
 
       couchbase::create_collection_settings settings{};
       settings.history = true;
@@ -1694,8 +1738,12 @@ TEST_CASE("integration: collection management history retention not supported in
 
     SECTION("public API")
     {
-      auto manager =
-        couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).collections();
+      auto test_ctx = integration.ctx;
+      auto [err, cluster] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(err.ec());
+
+      auto manager = cluster.bucket(integration.ctx.bucket).collections();
 
       couchbase::update_collection_settings settings{};
       settings.history = true;
@@ -2122,12 +2170,6 @@ TEST_CASE("integration: user management", "[integration]")
       auto options_updated = couchbase::cluster_options(user_name, "newPassword");
 
       {
-        asio::io_context io;
-        auto guard = asio::make_work_guard(io);
-        std::thread io_thread([&io]() {
-          io.run();
-        });
-
         // Create new user and upsert
         couchbase::core::management::rbac::user new_user{ user_name };
         new_user.display_name = "change_password_user";
@@ -2136,28 +2178,19 @@ TEST_CASE("integration: user management", "[integration]")
           couchbase::core::management::rbac::role{ "admin" },
         };
         auto [err, cluster] =
-          couchbase::cluster::connect(io, integration.ctx.connection_string, options_original)
-            .get();
+          couchbase::cluster::connect(integration.ctx.connection_string, options_original).get();
         couchbase::core::operations::management::user_upsert_request upsertReq{};
         upsertReq.user = new_user;
         auto upsertResp = test::utils::execute(couchbase::extract_core_cluster(cluster), upsertReq);
         REQUIRE_SUCCESS(upsertResp.ctx.ec);
         test::utils::wait_until_user_present(integration.cluster, user_name);
-        cluster.close();
-        guard.reset();
-        io_thread.join();
+        cluster.close().get();
       }
 
       {
         // Connect with new credentials and change password
-        asio::io_context io;
-        auto guard = asio::make_work_guard(io);
-        std::thread io_thread([&io]() {
-          io.run();
-        });
         auto [ec_new, cluster_new] =
-          couchbase::cluster::connect(io, integration.ctx.connection_string, options_outdated)
-            .get();
+          couchbase::cluster::connect(integration.ctx.connection_string, options_outdated).get();
         couchbase::core::operations::management::change_password_request changePasswordReq{};
         changePasswordReq.newPassword = "newPassword";
         auto changePasswordResp =
@@ -2165,30 +2198,20 @@ TEST_CASE("integration: user management", "[integration]")
         REQUIRE_SUCCESS(changePasswordResp.ctx.ec);
         test::utils::wait_until_cluster_connected(
           user_name, changePasswordReq.newPassword, integration.ctx.connection_string);
-        cluster_new.close();
-        guard.reset();
-        io_thread.join();
+        cluster_new.close().get();
       }
 
       {
         // Connect with old credentials, should fail
-        asio::io_context io;
-        auto guard = asio::make_work_guard(io);
-        std::thread io_thread([&io]() {
-          io.run();
-        });
         auto [err_fail, cluster_fail] =
-          couchbase::cluster::connect(io, integration.ctx.connection_string, options_outdated)
-            .get();
+          couchbase::cluster::connect(integration.ctx.connection_string, options_outdated).get();
         REQUIRE(err_fail.ec() == couchbase::errc::common::authentication_failure);
 
         // Make connection with new credentials, should succeed
         auto [err_success, cluster_success] =
-          couchbase::cluster::connect(io, integration.ctx.connection_string, options_updated).get();
+          couchbase::cluster::connect(integration.ctx.connection_string, options_updated).get();
         REQUIRE_SUCCESS(err_success);
-        cluster_success.close();
-        guard.reset();
-        io_thread.join();
+        cluster_success.close().get();
       }
     }
   }
@@ -2343,10 +2366,14 @@ TEST_CASE("integration: query index management", "[integration]")
       }
       SECTION("public api")
       {
-        couchbase::cluster c(integration.cluster);
+        auto test_ctx = integration.ctx;
+        auto [err, c] =
+          couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+        REQUIRE_SUCCESS(err.ec());
+
         {
           std::error_code ec;
-          bool operation_completed = test::utils::wait_until([&bucket_name, &ec, &c]() {
+          bool operation_completed = test::utils::wait_until([&bucket_name, &ec, c = c]() {
             auto error = c.query_indexes().create_primary_index(bucket_name, {}).get();
             ec = error.ec();
             return ec != couchbase::errc::common::bucket_not_found;
@@ -2354,7 +2381,7 @@ TEST_CASE("integration: query index management", "[integration]")
           REQUIRE(operation_completed);
           REQUIRE_SUCCESS(ec);
         }
-        test::utils::wait_until([&c, &bucket_name]() {
+        test::utils::wait_until([c = c, &bucket_name]() {
           auto [error, res] = c.query_indexes().get_all_indexes(bucket_name, {}).get();
           if (error.ec()) {
             return false;
@@ -2466,23 +2493,28 @@ TEST_CASE("integration: query index management", "[integration]")
     }
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto test_ctx = integration.ctx;
+      auto [err, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(err.ec());
+
       auto index_name = test::utils::uniq_id("index");
       {
         std::error_code ec;
-        bool operation_completed = test::utils::wait_until([&integration, &index_name, c, &ec]() {
-          auto error =
-            c.query_indexes()
-              .create_index(
-                integration.ctx.bucket, index_name, { "field", "field2", "two words" }, {})
-              .get();
-          ec = error.ec();
-          return ec != couchbase::errc::common::bucket_not_found;
-        });
+        bool operation_completed =
+          test::utils::wait_until([&integration, &index_name, c = c, &ec]() {
+            auto error =
+              c.query_indexes()
+                .create_index(
+                  integration.ctx.bucket, index_name, { "field", "field2", "two words" }, {})
+                .get();
+            ec = error.ec();
+            return ec != couchbase::errc::common::bucket_not_found;
+          });
         REQUIRE(operation_completed);
         REQUIRE_SUCCESS(ec);
       }
-      test::utils::wait_until([&c, bucket_name = integration.ctx.bucket, &index_name]() {
+      test::utils::wait_until([c = c, bucket_name = integration.ctx.bucket, &index_name]() {
         auto [error, res] = c.query_indexes().get_all_indexes(bucket_name, {}).get();
         if (error.ec()) {
           return false;
@@ -2557,20 +2589,26 @@ TEST_CASE("integration: query index management", "[integration]")
   {
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto test_ctx = integration.ctx;
+      auto [e, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(e.ec());
+
       auto index_name = test::utils::uniq_id("index");
       {
         std::error_code ec;
-        bool operation_completed = test::utils::wait_until([c, &ec, &index_name, &integration]() {
-          auto error = c.query_indexes()
-                         .create_index(integration.ctx.bucket,
-                                       index_name,
-                                       { "field" },
-                                       couchbase::create_query_index_options().build_deferred(true))
-                         .get();
-          ec = error.ec();
-          return ec != couchbase::errc::common::bucket_not_found;
-        });
+        bool operation_completed =
+          test::utils::wait_until([c = c, &ec, &index_name, &integration]() {
+            auto error =
+              c.query_indexes()
+                .create_index(integration.ctx.bucket,
+                              index_name,
+                              { "field" },
+                              couchbase::create_query_index_options().build_deferred(true))
+                .get();
+            ec = error.ec();
+            return ec != couchbase::errc::common::bucket_not_found;
+          });
         REQUIRE(operation_completed);
         REQUIRE_SUCCESS(ec);
       }
@@ -2588,13 +2626,17 @@ TEST_CASE("integration: query index management", "[integration]")
       }
 
       {
-        auto manager = couchbase::cluster(integration.cluster).query_indexes();
+        auto [err, cluster] =
+          couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+        REQUIRE_SUCCESS(err.ec());
+
+        auto manager = cluster.query_indexes();
         auto error = manager.build_deferred_indexes(integration.ctx.bucket, {}).get();
         REQUIRE_SUCCESS(error.ec());
       }
       {
         // now wait till it is online before proceeding
-        auto operation_completed = test::utils::wait_until([&integration, &index_name, c]() {
+        auto operation_completed = test::utils::wait_until([&integration, &index_name, c = c]() {
           auto [error, indexes] =
             c.query_indexes().get_all_indexes(integration.ctx.bucket, {}).get();
           if (indexes.empty()) {
@@ -2678,7 +2720,11 @@ TEST_CASE("integration: query index management", "[integration]")
     }
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto test_ctx = integration.ctx;
+      auto [err, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(err.ec());
+
       auto error = c.query_indexes().create_primary_index("missing_bucket", {}).get();
       REQUIRE(error.ec() == couchbase::errc::common::bucket_not_found);
     }
@@ -2696,7 +2742,11 @@ TEST_CASE("integration: query index management", "[integration]")
     }
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto test_ctx = integration.ctx;
+      auto [err, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(err.ec());
+
       auto [error, indexes] = c.query_indexes().get_all_indexes("missing_bucket", {}).get();
       REQUIRE_SUCCESS(error.ec());
       REQUIRE(indexes.empty());
@@ -2715,7 +2765,11 @@ TEST_CASE("integration: query index management", "[integration]")
     }
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto test_ctx = integration.ctx;
+      auto [err, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(err.ec());
+
       auto error = c.query_indexes().drop_primary_index("missing_bucket", {}).get();
       REQUIRE(error.ec() == couchbase::errc::common::bucket_not_found);
     }
@@ -2725,7 +2779,11 @@ TEST_CASE("integration: query index management", "[integration]")
   {
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto test_ctx = integration.ctx;
+      auto [err, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(err.ec());
+
       auto error = c.query_indexes()
                      .watch_indexes(integration.ctx.bucket,
                                     { "idontexist", "neitherdoI" },
@@ -2740,7 +2798,11 @@ TEST_CASE("integration: query index management", "[integration]")
   {
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto test_ctx = integration.ctx;
+      auto [err, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(err.ec());
+
       auto error = c.query_indexes()
                      .watch_indexes("missing_buckeet",
                                     { "idontexist", "neitherdoI" },
@@ -2792,8 +2854,12 @@ TEST_CASE("integration: collections query index management", "[integration]")
     REQUIRE(created);
   }
 
-  auto manager = couchbase::cluster(integration.cluster)
-                   .bucket(integration.ctx.bucket)
+  auto test_ctx = integration.ctx;
+  auto [err, cluster] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(err.ec());
+
+  auto manager = cluster.bucket(integration.ctx.bucket)
                    .scope(scope_name)
                    .collection(collection_name)
                    .query_indexes();
@@ -3208,7 +3274,10 @@ TEST_CASE("integration: collections query index management", "[integration]")
     }
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto [e, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(e.ec());
+
       auto coll =
         c.bucket(integration.ctx.bucket).scope(scope_name).collection("missing_collection");
       REQUIRE(coll.query_indexes().create_primary_index({}).get().ec() ==
@@ -3230,7 +3299,10 @@ TEST_CASE("integration: collections query index management", "[integration]")
     }
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto [e, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(e.ec());
+
       auto coll =
         c.bucket(integration.ctx.bucket).scope("missing scope").collection(collection_name);
       REQUIRE(coll.query_indexes().create_primary_index({}).get().ec() ==
@@ -3252,7 +3324,10 @@ TEST_CASE("integration: collections query index management", "[integration]")
     }
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto [e, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(e.ec());
+
       auto coll =
         c.bucket(integration.ctx.bucket).scope(scope_name).collection("missing_collection");
       auto [error, indexes] = coll.query_indexes().get_all_indexes({}).get();
@@ -3274,7 +3349,10 @@ TEST_CASE("integration: collections query index management", "[integration]")
     }
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto [e, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(e.ec());
+
       auto coll =
         c.bucket(integration.ctx.bucket).scope("missing_scope").collection(collection_name);
       auto [error, indexes] = coll.query_indexes().get_all_indexes({}).get();
@@ -3297,7 +3375,10 @@ TEST_CASE("integration: collections query index management", "[integration]")
     }
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto [e, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(e.ec());
+
       auto coll =
         c.bucket(integration.ctx.bucket).scope(scope_name).collection("missing_collection");
       REQUIRE(coll.query_indexes().drop_index(index_name, {}).get().ec() ==
@@ -3318,7 +3399,10 @@ TEST_CASE("integration: collections query index management", "[integration]")
     }
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto [e, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(e.ec());
+
       auto coll =
         c.bucket(integration.ctx.bucket).scope("missing_scope").collection(collection_name);
       REQUIRE(coll.query_indexes().drop_index(index_name, {}).get().ec() ==
@@ -3329,7 +3413,10 @@ TEST_CASE("integration: collections query index management", "[integration]")
   {
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto [e, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(e.ec());
+
       auto coll =
         c.bucket(integration.ctx.bucket).scope("missing_scope").collection(collection_name);
       REQUIRE(
@@ -3344,7 +3431,10 @@ TEST_CASE("integration: collections query index management", "[integration]")
   {
     SECTION("public API")
     {
-      couchbase::cluster c(integration.cluster);
+      auto [e, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(e.ec());
+
       auto coll =
         c.bucket(integration.ctx.bucket).scope(scope_name).collection("missing_collection");
       REQUIRE(
@@ -4042,7 +4132,11 @@ TEST_CASE("integration: analytics index management with public API", "[integrati
     SKIP("analytics does not work with magma storage backend, see MB-47718");
   }
 
-  couchbase::cluster cluster{ integration.cluster };
+  auto test_ctx = integration.ctx;
+  auto [err, cluster] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(err.ec());
+
   auto mgr = cluster.analytics_indexes();
 
   SECTION("crud")
@@ -4296,7 +4390,11 @@ run_s3_link_test_public_api(test::utils::integration_test_guard& integration,
                             const std::string& dataverse_name,
                             const std::string& link_name)
 {
-  couchbase::cluster cluster{ integration.cluster };
+  auto test_ctx = integration.ctx;
+  auto [err, cluster] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(err.ec());
+
   auto mgr = cluster.analytics_indexes();
 
   {
@@ -4411,7 +4509,11 @@ run_azure_link_test_public_api(test::utils::integration_test_guard& integration,
                                const std::string& dataverse_name,
                                const std::string& link_name)
 {
-  couchbase::cluster cluster{ integration.cluster };
+  auto test_ctx = integration.ctx;
+  auto [err, cluster] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(err.ec());
+
   auto mgr = cluster.analytics_indexes();
 
   {
@@ -4537,7 +4639,11 @@ TEST_CASE("integration: analytics external link management with public API", "[i
          "MB-40198");
   }
 
-  couchbase::cluster cluster{ integration.cluster };
+  auto test_ctx = integration.ctx;
+  auto [err, cluster] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(err.ec());
+
   auto mgr = cluster.analytics_indexes();
 
   auto link_name = test::utils::uniq_id("link");

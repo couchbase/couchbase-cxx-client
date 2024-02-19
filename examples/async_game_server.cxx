@@ -19,8 +19,6 @@
 #include <couchbase/fmt/error.hxx>
 #include <couchbase/logger.hxx>
 
-#include <asio/io_context.hpp>
-
 #include <functional>
 #include <iostream>
 #include <random>
@@ -38,7 +36,7 @@ make_uuid()
   std::uniform_int_distribution<int> dist(0, 15);
 
   const char* v = "0123456789abcdef";
-  const bool dash_pattern[] = {
+  const std::array dash_pattern{
     false, false, false, false, true,  false, true,  false,
     true,  false, true,  false, false, false, false, false,
   };
@@ -244,15 +242,6 @@ main()
   const int NUM_THREADS = 4;
   std::atomic<bool> monster_exists = true;
   std::string bucket_name = "default";
-  asio::io_context io;
-  auto guard = asio::make_work_guard(io);
-
-  std::list<std::thread> io_threads;
-  for (int i = 0; i < 2 * (NUM_THREADS + 1); i++) {
-    io_threads.emplace_back([&io]() {
-      io.run();
-    });
-  }
 
   std::uniform_int_distribution<int> hit_distribution(1, 6);
   std::mt19937 random_number_engine; // pseudorandom number generator
@@ -264,8 +253,7 @@ main()
   options.transactions().cleanup_config().cleanup_lost_attempts(true);
   options.transactions().cleanup_config().cleanup_client_attempts(true);
 
-  auto [connect_err, cluster] =
-    couchbase::cluster::connect(io, "couchbase://localhost", options).get();
+  auto [connect_err, cluster] = couchbase::cluster::connect("couchbase://localhost", options).get();
   if (connect_err) {
     std::cout << "Error opening cluster: " << fmt::format("{}", connect_err) << std::endl;
     return -1;
@@ -298,6 +286,7 @@ main()
 
   GameServer game_server(cluster);
   std::vector<std::thread> threads;
+  threads.reserve(NUM_THREADS);
   for (int i = 0; i < NUM_THREADS; i++) {
     threads.emplace_back(
       [&rand, player_id, collection, monster_id, &monster_exists, &game_server]() {
@@ -331,13 +320,5 @@ main()
     }
   }
   // close the cluster...
-  cluster.close();
-
-  // then cleanup asio
-  guard.reset();
-  for (auto& t : io_threads) {
-    if (t.joinable()) {
-      t.join();
-    }
-  }
+  cluster.close().get();
 }

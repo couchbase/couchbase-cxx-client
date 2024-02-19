@@ -124,15 +124,7 @@ wait_until_cluster_connected(const std::string& username,
   auto cluster_options = couchbase::cluster_options(username, password);
 
   auto connected = test::utils::wait_until([cluster_options, connection_string]() {
-    asio::io_context io;
-    auto guard = asio::make_work_guard(io);
-    std::thread io_thread([&io]() {
-      io.run();
-    });
-    auto [err, cluster] = couchbase::cluster::connect(io, connection_string, cluster_options).get();
-    cluster.close();
-    guard.reset();
-    io_thread.join();
+    auto [err, _] = couchbase::cluster::connect(connection_string, cluster_options).get();
     return err.ec().value() == 0;
   });
   if (connected) {
