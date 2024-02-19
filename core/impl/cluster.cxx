@@ -32,11 +32,18 @@
 #include "query.hxx"
 #include "search.hxx"
 
+#include <asio/bind_executor.hpp>
+#include <asio/post.hpp>
 #include <couchbase/bucket.hxx>
 #include <couchbase/cluster.hxx>
 
 namespace couchbase
 {
+cluster::cluster(std::shared_ptr<cluster_impl> impl)
+  : impl_{ std::move(impl) }
+{
+}
+
 namespace
 {
 auto
@@ -45,7 +52,7 @@ options_to_origin(const std::string& connection_string,
 {
   auto opts = options.build();
 
-  couchbase::core::cluster_credentials auth;
+  core::cluster_credentials auth;
   auth.username = std::move(opts.username);
   auth.password = std::move(opts.password);
   auth.certificate_path = std::move(opts.certificate_path);
@@ -153,37 +160,84 @@ options_to_origin(const std::string& connection_string,
   }
   user_options.transactions = opts.transactions;
   // connection string might override some user options
-  return { auth, couchbase::core::utils::parse_connection_string(connection_string, user_options) };
+  return { auth, core::utils::parse_connection_string(connection_string, user_options) };
 }
+
+constexpr auto
+fork_event_to_asio(fork_event event) -> asio::execution_context::fork_event
+{
+  switch (event) {
+    case fork_event::parent:
+      return asio::execution_context::fork_parent;
+    case fork_event::child:
+      return asio::execution_context::fork_child;
+    case fork_event::prepare:
+      return asio::execution_context::fork_prepare;
+  }
+  return asio::execution_context::fork_prepare;
+}
+
 } // namespace
 
 class cluster_impl : public std::enable_shared_from_this<cluster_impl>
 {
 public:
-  explicit cluster_impl(couchbase::core::cluster core)
-    : core_{ std::move(core) }
+  ~cluster_impl()
   {
+    std::promise<void> barrier;
+    auto future = barrier.get_future();
+    close([&barrier] {
+      barrier.set_value();
+    });
+    future.get();
+
+    io_.stop();
+    io_thread_.join();
   }
 
-  explicit cluster_impl(couchbase::core::cluster core,
-                        std::shared_ptr<couchbase::core::transactions::transactions> transactions)
-    : core_{ std::move(core) }
-    , transactions_{ transactions }
+  void open(const std::string& connection_string,
+            const cluster_options& options,
+            cluster_connect_handler&& handler)
   {
-  }
-
-  void initialize_transactions(std::function<void(std::error_code)>&& handler)
-  {
-    return core::transactions::transactions::create(
-      core_,
-      core_.origin().second.options().transactions,
-      [self = shared_from_this(), handler = std::move(handler)](auto ec, auto txns) mutable {
+    core_.open(
+      options_to_origin(connection_string, options),
+      [impl = shared_from_this(), handler = std::move(handler)](std::error_code ec) mutable {
         if (ec) {
-          return handler(ec);
+          return handler(ec, {});
         }
-
-        self->transactions_ = txns;
-        handler({});
+        return core::transactions::transactions::create(
+          impl->core_,
+          impl->core_.origin().second.options().transactions,
+          [impl, handler = std::move(handler)](auto ec, auto txns) mutable {
+            if (ec) {
+              // Transactions need to open meta bucket, and this handler might be
+              // called in the context of bootstrapping MCBP connection.
+              // In case of error, we should be sure that the handler is scheduled
+              // for execution after it returns from bootstrap, so that connection
+              // will have chance to cleanup, and also we have to spawn separate
+              // thread to actually deallocate the half-baked connection and stop
+              // IO thread.
+              auto& io_context = impl->core_.io_context();
+              asio::post(asio::bind_executor(
+                io_context, [ec, impl = std::move(impl), handler = std::move(handler)]() mutable {
+                  std::thread([ec, impl = std::move(impl), handler = std::move(handler)]() mutable {
+                    {
+                      auto tmp = std::move(impl);
+                      auto barrier = std::make_shared<std::promise<void>>();
+                      auto future = barrier->get_future();
+                      tmp->close([barrier] {
+                        barrier->set_value();
+                      });
+                      future.get();
+                    }
+                    handler(ec, {});
+                  }).detach();
+                }));
+              return;
+            }
+            impl->transactions_ = txns;
+            handler(ec, couchbase::cluster(std::move(impl)));
+          });
       });
   }
 
@@ -240,6 +294,18 @@ public:
 
   void notify_fork(fork_event event)
   {
+    if (event == fork_event::prepare) {
+      io_.stop();
+      io_thread_.join();
+    } else {
+      // TODO(SA): close all sockets in fork_event::child
+      io_.restart();
+      io_thread_ = std::thread{ [&io = io_] {
+        io.run();
+      } };
+    }
+    io_.notify_fork(fork_event_to_asio(event));
+
     if (transactions_) {
       transactions_->notify_fork(event);
     }
@@ -247,11 +313,10 @@ public:
 
   void close(core::utils::movable_function<void()> handler)
   {
-    if (transactions_) {
+    if (auto txns = std::move(transactions_); txns != nullptr) {
       // blocks until cleanup is finished
-      transactions_->close();
+      txns->close();
     }
-    transactions_.reset();
     return core_.close(std::move(handler));
   }
 
@@ -260,15 +325,18 @@ public:
     return core_;
   }
 
-  [[nodiscard]] auto transactions() const
-    -> std::shared_ptr<couchbase::core::transactions::transactions>
+  [[nodiscard]] auto transactions() const -> std::shared_ptr<core::transactions::transactions>
   {
     return transactions_;
   }
 
 private:
-  couchbase::core::cluster core_;
-  std::shared_ptr<couchbase::core::transactions::transactions> transactions_;
+  asio::io_context io_{ ASIO_CONCURRENCY_HINT_1 };
+  core::cluster core_{ io_ };
+  std::shared_ptr<core::transactions::transactions> transactions_{ nullptr };
+  std::thread io_thread_{ [&io = io_] {
+    io.run();
+  } };
 };
 
 /*
@@ -284,16 +352,6 @@ extract_core_cluster(const couchbase::cluster& cluster) -> const core::cluster&
   static_assert(sizeof(couchbase::cluster) == sizeof(std::shared_ptr<cluster_impl>),
                 "expected size of couchbase::cluster and std::shared_ptr<cluster_impl> to match");
   return reinterpret_cast<const std::shared_ptr<cluster_impl>*>(&cluster)->get()->core();
-}
-
-cluster::cluster(core::cluster core)
-  : impl_{ std::make_shared<cluster_impl>(std::move(core)) }
-{
-}
-
-cluster::cluster(core::cluster core, std::shared_ptr<core::transactions::transactions> transactions)
-  : impl_{ std::make_shared<cluster_impl>(std::move(core), transactions) }
-{
 }
 
 void
@@ -393,40 +451,34 @@ cluster::search(std::string index_name,
 }
 
 auto
-cluster::connect(asio::io_context& io,
-                 const std::string& connection_string,
+cluster::connect(const std::string& connection_string,
                  const cluster_options& options) -> std::future<std::pair<error, cluster>>
 {
   auto barrier = std::make_shared<std::promise<std::pair<error, cluster>>>();
-  connect(io, connection_string, options, [barrier](auto err, auto c) mutable {
+  auto future = barrier->get_future();
+  connect(connection_string, options, [barrier](auto err, auto c) {
     barrier->set_value({ std::move(err), std::move(c) });
   });
-  return barrier->get_future();
+  return future;
 }
 
 void
-cluster::connect(asio::io_context& io,
-                 const std::string& connection_string,
+cluster::connect(const std::string& connection_string,
                  const cluster_options& options,
                  cluster_connect_handler&& handler)
 {
-  auto core = couchbase::core::cluster(io);
-  auto origin = options_to_origin(connection_string, options);
-  return core.open(origin, [core, handler = std::move(handler)](std::error_code ec) mutable {
-    if (ec) {
-      return handler(ec, {});
-    }
-    auto cluster = couchbase::cluster(std::move(core));
-    return cluster.impl_->initialize_transactions(
-      [cluster, handler = std::move(handler)](std::error_code ec) mutable {
-        if (ec) {
-          return cluster.impl_->close([ec, handler = std::move(handler)]() mutable {
-            return handler(ec, {});
-          });
-        }
-        return handler(ec, cluster);
-      });
-  });
+  // Spawn new thread for connection to ensure that cluster_impl pointer will
+  // not be deallocated in IO thread in case of error.
+  std::thread([connection_string, options, handler = std::move(handler)]() {
+    auto impl = std::make_shared<cluster_impl>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, cluster>>>();
+    auto future = barrier->get_future();
+    impl->open(connection_string, options, [barrier](auto err, auto c) {
+      barrier->set_value({ std::move(err), std::move(c) });
+    });
+    auto [err, c] = future.get();
+    handler(std::move(err), std::move(c));
+  }).detach();
 }
 
 auto
@@ -438,13 +490,34 @@ cluster::notify_fork(fork_event event) -> void
   return impl_->notify_fork(event);
 }
 
-auto
-cluster::close() const -> void
+void
+cluster::close(std::function<void()>&& handler)
 {
   if (!impl_) {
-    return;
+    return handler();
   }
-  return impl_->close([] { /* do nothing */ });
+  // Spawn new thread to ensure the IO will be safely shutdown before calling
+  // destructor
+  std::thread([impl = impl_, handler = std::move(handler)]() {
+    auto barrier = std::make_shared<std::promise<void>>();
+    auto future = barrier->get_future();
+    impl->close([barrier] {
+      barrier->set_value();
+    });
+    future.get();
+    handler();
+  }).detach();
+}
+
+auto
+cluster::close() -> std::future<void>
+{
+  auto barrier = std::make_shared<std::promise<void>>();
+  auto future = barrier->get_future();
+  close([barrier] {
+    barrier->set_value();
+  });
+  return future;
 }
 
 auto

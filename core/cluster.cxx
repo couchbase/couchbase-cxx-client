@@ -663,7 +663,19 @@ public:
     if (auto bucket = find_bucket_by_name(bucket_name); bucket != nullptr) {
       return bucket->with_configuration(std::move(handler));
     }
-    return handler(errc::common::bucket_not_found, {});
+    return open_bucket(
+      bucket_name,
+      [self = shared_from_this(), bucket_name, handler = std::move(handler)](auto ec) mutable {
+        if (ec) {
+          return handler(ec, {});
+        }
+
+        if (auto bucket = self->find_bucket_by_name(bucket_name); bucket != nullptr) {
+          return bucket->with_configuration(std::move(handler));
+        } else {
+          return handler(errc::common::bucket_not_found, {});
+        }
+      });
   }
 
   void ping(std::optional<std::string> report_id,

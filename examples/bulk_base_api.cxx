@@ -18,7 +18,6 @@
 #include <couchbase/cluster.hxx>
 #include <couchbase/fmt/error.hxx>
 
-#include <asio.hpp>
 #include <fmt/format.h>
 #include <tao/json/to_string.hpp>
 
@@ -363,16 +362,10 @@ main()
   fmt::print("CB_NUMBER_OF_OPERATIONS={}\n", arguments.number_of_operations);
   fmt::print("CB_DOCUMENT_BODY_SIZE={}\n", arguments.document_body_size);
 
-  asio::io_context io;
-  auto guard = asio::make_work_guard(io);
-  std::thread io_thread([&io]() {
-    io.run();
-  });
-
   auto options = couchbase::cluster_options(arguments.username, arguments.password);
   options.apply_profile("wan_development");
   auto [connect_err, cluster] =
-    couchbase::cluster::connect(io, arguments.connection_string, options).get();
+    couchbase::cluster::connect(arguments.connection_string, options).get();
   if (connect_err) {
     fmt::print("Unable to connect to cluster at \"{}\", error: {}\n",
                arguments.connection_string,
@@ -402,10 +395,7 @@ main()
     run_workload_bulk(collection, arguments);
   }
 
-  cluster.close();
-  guard.reset();
-
-  io_thread.join();
+  cluster.close().get();
 
   return 0;
 }

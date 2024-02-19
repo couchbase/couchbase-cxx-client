@@ -62,7 +62,6 @@ public:
   /**
    * Connect to a Couchbase cluster.
    *
-   * @param io IO context
    * @param connection_string connection string used to locate the Couchbase cluster object.
    * @param options options to customize connection (note, that connection_string takes precedence
    * over this options).
@@ -71,15 +70,13 @@ public:
    * @since 1.0.0
    * @committed
    */
-  static void connect(asio::io_context& io,
-                      const std::string& connection_string,
+  static void connect(const std::string& connection_string,
                       const cluster_options& options,
                       cluster_connect_handler&& handler);
 
   /**
    * Connect to a Couchbase cluster.
    *
-   * @param io IO context
    * @param connection_string connection string used to locate the Couchbase cluster object.
    * @param options options to customize connection (note, that connection_string takes precedence
    * over this options).
@@ -89,42 +86,21 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] static auto connect(asio::io_context& io,
-                                    const std::string& connection_string,
+  [[nodiscard]] static auto connect(const std::string& connection_string,
                                     const cluster_options& options)
     -> std::future<std::pair<error, cluster>>;
 
   cluster() = default;
   cluster(const cluster& other) = default;
   cluster(cluster&& other) = default;
+  ~cluster() = default;
   auto operator=(const cluster& other) -> cluster& = default;
   auto operator=(cluster&& other) -> cluster& = default;
 
   void notify_fork(fork_event event);
 
-  void close() const;
-
-  /**
-   * Wraps low-level implementation of the SDK to provide common API.
-   *
-   * @param core pointer to the low-level SDK handle
-   *
-   * @since 1.0.0
-   * @volatile
-   */
-  explicit cluster(core::cluster core);
-
-  /**
-   * Wraps low-level implementation of the SDK & transactions
-   *
-   * @param core pointer to the low-level SDK handle
-   * @param transactions pointer to the lowe-level transactions handle
-   *
-   * @since 1.0.0
-   * @volatile
-   */
-  explicit cluster(core::cluster core,
-                   std::shared_ptr<core::transactions::transactions> transactions);
+  void close(std::function<void()>&& handler);
+  [[nodiscard]] auto close() -> std::future<void>;
 
   /**
    * Opens a {@link bucket} with the given name.
@@ -364,6 +340,11 @@ public:
   [[nodiscard]] auto transactions() const -> std::shared_ptr<couchbase::transactions::transactions>;
 
 private:
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+  friend class cluster_impl;
+  explicit cluster(std::shared_ptr<cluster_impl> impl);
+#endif
+
   std::shared_ptr<cluster_impl> impl_{};
 };
 } // namespace couchbase

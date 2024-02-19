@@ -579,7 +579,10 @@ TEST_CASE("integration: query with public API", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
   }
 
-  auto cluster = couchbase::cluster(integration.cluster);
+  auto test_ctx = integration.ctx;
+  auto [err, cluster] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(err.ec());
 
   {
     auto [ctx, resp] = cluster.query("SELECT 42 AS the_answer", {}).get();
@@ -623,7 +626,11 @@ TEST_CASE("integration: query from scope with public API", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
   }
 
-  auto cluster = couchbase::cluster(integration.cluster);
+  auto test_ctx = integration.ctx;
+  auto [err, cluster] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(err.ec());
+
   auto scope_name = test::utils::uniq_id("scope");
   auto collection_name = test::utils::uniq_id("coll");
   auto key = test::utils::uniq_id("foo");

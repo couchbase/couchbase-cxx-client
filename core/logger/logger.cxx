@@ -15,6 +15,7 @@
 #include "custom_rotating_file_sink.hxx"
 
 #include <chrono>
+#include <mutex>
 #include <spdlog/async.h>
 #include <spdlog/async_logger.h>
 #include <spdlog/sinks/dist_sink.h>
@@ -41,6 +42,35 @@ static const std::string log_pattern{ "[%Y-%m-%d %T.%e] %4oms [%^%4!l%$] [%P,%t]
  * to stream etc.) or further processing.
  */
 static std::shared_ptr<spdlog::logger> file_logger{};
+static std::mutex file_logger_mutex;
+static std::atomic_int file_logger_version{ 0 };
+
+namespace
+{
+auto
+get_file_logger() -> std::shared_ptr<spdlog::logger>
+{
+  thread_local std::shared_ptr<spdlog::logger> logger{ nullptr };
+  thread_local int version{ -1 };
+  if (version != file_logger_version) {
+    std::scoped_lock lock(file_logger_mutex);
+    logger = file_logger;
+    version = file_logger_version;
+  }
+  return logger;
+}
+
+void
+update_file_logger(std::shared_ptr<spdlog::logger> new_logger)
+{
+  std::scoped_lock lock(file_logger_mutex);
+  // delete if already exists
+  spdlog::drop(file_logger_name);
+  file_logger = new_logger;
+  spdlog::register_logger(new_logger);
+  ++file_logger_version;
+}
+} // namespace
 
 /**
  * Instance of the protocol logger.
@@ -100,7 +130,7 @@ auto
 should_log(level lvl) -> bool
 {
   if (is_initialized()) {
-    return file_logger->should_log(translate_level(lvl));
+    return get_file_logger()->should_log(translate_level(lvl));
   }
   return false;
 }
@@ -111,7 +141,8 @@ void
 log(const char* file, int line, const char* function, level lvl, std::string_view msg)
 {
   if (is_initialized()) {
-    return file_logger->log(spdlog::source_loc{ file, line, function }, translate_level(lvl), msg);
+    return get_file_logger()->log(
+      spdlog::source_loc{ file, line, function }, translate_level(lvl), msg);
   }
 }
 } // namespace detail
@@ -120,7 +151,7 @@ void
 flush()
 {
   if (is_initialized()) {
-    file_logger->flush();
+    get_file_logger()->flush();
   }
 }
 
@@ -142,14 +173,14 @@ shutdown()
    * If the logger is running in unit test mode (synchronous) then this is a
    * no-op.
    */
-  file_logger.reset();
+  get_file_logger().reset();
   spdlog::details::registry::instance().shutdown();
 }
 
 auto
 is_initialized() -> bool
 {
-  return file_logger != nullptr;
+  return get_file_logger() != nullptr;
 }
 
 auto
@@ -301,14 +332,13 @@ log_protocol(const char* file, int line, const char* function, std::string_view 
 auto
 get() -> spdlog::logger*
 {
-  return file_logger.get();
+  return get_file_logger().get();
 }
 
 void
 reset()
 {
-  spdlog::drop(file_logger_name);
-  file_logger.reset();
+  update_file_logger(nullptr);
 
   spdlog::drop(protocol_logger_name);
   protocol_logger.reset();
@@ -317,45 +347,37 @@ reset()
 void
 create_blackhole_logger()
 {
-  // delete if already exists
-  spdlog::drop(file_logger_name);
+  auto new_logger = std::make_shared<spdlog::logger>(
+    file_logger_name, std::make_shared<spdlog::sinks::null_sink_mt>());
+  new_logger->set_level(spdlog::level::off);
+  new_logger->set_pattern(log_pattern);
 
-  file_logger = std::make_shared<spdlog::logger>(file_logger_name,
-                                                 std::make_shared<spdlog::sinks::null_sink_mt>());
-
-  file_logger->set_level(spdlog::level::off);
-  file_logger->set_pattern(log_pattern);
-
-  spdlog::register_logger(file_logger);
+  update_file_logger(new_logger);
 }
 
 void
 create_console_logger()
 {
-  // delete if already exists
-  spdlog::drop(file_logger_name);
-
   auto stderrsink = std::make_shared<spdlog::sinks::stderr_color_sink_mt>();
-
-  file_logger = std::make_shared<spdlog::logger>(file_logger_name, stderrsink);
-  file_logger->set_level(spdlog::level::info);
-  file_logger->set_pattern(log_pattern);
-
-  spdlog::register_logger(file_logger);
+  auto new_logger = std::make_shared<spdlog::logger>(file_logger_name, stderrsink);
+  new_logger->set_level(spdlog::level::info);
+  new_logger->set_pattern(log_pattern);
+  update_file_logger(new_logger);
 }
 
 void
 register_spdlog_logger(std::shared_ptr<spdlog::logger> l)
 {
   try {
-    file_logger->debug("Registering logger {}", l->name());
+    get_file_logger()->debug("Registering logger {}", l->name());
     spdlog::register_logger(l);
   } catch (const spdlog::spdlog_ex& e) {
-    file_logger->warn("Exception caught when attempting to register the logger {} in the spdlog "
-                      "registry. The verbosity of this logger "
-                      "cannot be changed at runtime. e.what()={}",
-                      l->name(),
-                      e.what());
+    get_file_logger()->warn(
+      "Exception caught when attempting to register the logger {} in the spdlog "
+      "registry. The verbosity of this logger "
+      "cannot be changed at runtime. e.what()={}",
+      l->name(),
+      e.what());
   }
 }
 

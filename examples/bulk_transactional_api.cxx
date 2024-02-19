@@ -19,7 +19,6 @@
 #include <couchbase/fmt/error.hxx>
 #include <couchbase/transactions.hxx>
 
-#include <asio.hpp>
 #include <fmt/chrono.h>
 #include <fmt/format.h>
 #include <tao/json/to_string.hpp>
@@ -508,17 +507,11 @@ main()
   fmt::print("CB_DOCUMENT_BODY_SIZE={}\n", arguments.document_body_size);
   fmt::print("CB_TRANSACTION_TIMEOUT={}\n", arguments.transaction_timeout.count());
 
-  asio::io_context io;
-  auto guard = asio::make_work_guard(io);
-  std::thread io_thread([&io]() {
-    io.run();
-  });
-
   auto options = couchbase::cluster_options(arguments.username, arguments.password);
   options.apply_profile("wan_development");
   options.transactions().timeout(arguments.transaction_timeout);
   auto [connect_err, cluster] =
-    couchbase::cluster::connect(io, arguments.connection_string, options).get();
+    couchbase::cluster::connect(arguments.connection_string, options).get();
   if (connect_err) {
     fmt::print("Unable to connect to cluster at \"{}\", error: {}\n",
                arguments.connection_string,
@@ -533,10 +526,7 @@ main()
     run_workload_bulk(transactions, collection, arguments);
   }
 
-  cluster.close();
-  guard.reset();
-
-  io_thread.join();
+  cluster.close().get();
 
   return 0;
 }

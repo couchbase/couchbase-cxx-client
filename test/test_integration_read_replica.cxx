@@ -111,10 +111,13 @@ TEST_CASE("integration: get any replica", "[integration]")
   }
 
   {
-    auto collection = couchbase::cluster(integration.cluster)
-                        .bucket(integration.ctx.bucket)
-                        .scope(scope_name)
-                        .collection(collection_name);
+    auto test_ctx = integration.ctx;
+    auto [e, cluster] =
+      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+    REQUIRE_SUCCESS(e.ec());
+
+    auto collection =
+      cluster.bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
     auto [err, result] = collection.get_any_replica(key, {}).get();
     REQUIRE_SUCCESS(err.ec());
     REQUIRE(result.content_as<smuggling_transcoder>().first == basic_doc_json);
@@ -157,10 +160,13 @@ TEST_CASE("integration: get all replicas", "[integration]")
   }
 
   {
-    auto collection = couchbase::cluster(integration.cluster)
-                        .bucket(integration.ctx.bucket)
-                        .scope(scope_name)
-                        .collection(collection_name);
+    auto test_ctx = integration.ctx;
+    auto [e, cluster] =
+      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+    REQUIRE_SUCCESS(e.ec());
+
+    auto collection =
+      cluster.bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
     auto [err, result] = collection.get_all_replicas(key, {}).get();
     REQUIRE_SUCCESS(err.ec());
     REQUIRE(result.size() == number_of_replicas + 1);
@@ -191,10 +197,13 @@ TEST_CASE("integration: get all replicas with missing key", "[integration]")
   std::string key = test::utils::uniq_id("get_all_replica_missing_key");
 
   {
-    auto collection = couchbase::cluster(integration.cluster)
-                        .bucket(integration.ctx.bucket)
-                        .scope(scope_name)
-                        .collection(collection_name);
+    auto test_ctx = integration.ctx;
+    auto [e, cluster] =
+      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+    REQUIRE_SUCCESS(e.ec());
+
+    auto collection =
+      cluster.bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
     auto [err, result] = collection.get_all_replicas(key, {}).get();
     REQUIRE(err.ec() == couchbase::errc::key_value::document_not_found);
     REQUIRE(result.empty());
@@ -218,10 +227,13 @@ TEST_CASE("integration: get any replica with missing key", "[integration]")
   std::string key = test::utils::uniq_id("get_any_replica_missing_key");
 
   {
-    auto collection = couchbase::cluster(integration.cluster)
-                        .bucket(integration.ctx.bucket)
-                        .scope(scope_name)
-                        .collection(collection_name);
+    auto test_ctx = integration.ctx;
+    auto [e, cluster] =
+      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+    REQUIRE_SUCCESS(e.ec());
+
+    auto collection =
+      cluster.bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
     auto [err, result] = collection.get_any_replica(key, {}).get();
     REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
   }
@@ -660,12 +672,6 @@ TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integra
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
-  asio::io_context io{};
-  auto guard = asio::make_work_guard(io);
-  auto io_thread = std::thread([&io]() {
-    io.run();
-  });
-
   auto connection_string =
     couchbase::core::utils::parse_connection_string(integration.ctx.connection_string);
   connection_string.options.server_group = server_groups.front();
@@ -676,11 +682,11 @@ TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integra
                            : couchbase::cluster_options(couchbase::certificate_authenticator(
                                integration.ctx.certificate_path, integration.ctx.certificate_path));
   cluster_options.network().preferred_server_group(server_groups.front());
-  auto [error, cluster] =
-    couchbase::cluster::connect(io, integration.ctx.connection_string, cluster_options).get();
-  REQUIRE_SUCCESS(error.ec());
+  auto [e, c] =
+    couchbase::cluster::connect(integration.ctx.connection_string, cluster_options).get();
+  REQUIRE_SUCCESS(e.ec());
 
-  auto collection = cluster.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+  auto collection = c.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
   {
     auto [err, result] = collection.get_any_replica(id.key(), {}).get();
     REQUIRE_SUCCESS(err.ec());
@@ -753,9 +759,7 @@ TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integra
     REQUIRE(result.size() <= number_of_replicas + 1);
   }
 
-  cluster.close();
-  guard.reset();
-  io_thread.join();
+  c.close().get();
 }
 
 TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integration]")
@@ -811,21 +815,15 @@ TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integ
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
-  asio::io_context io{};
-  auto guard = asio::make_work_guard(io);
-  auto io_thread = std::thread([&io]() {
-    io.run();
-  });
-
   auto cluster_options = integration.ctx.certificate_path.empty()
                            ? couchbase::cluster_options(couchbase::password_authenticator(
                                integration.ctx.username, integration.ctx.password))
                            : couchbase::cluster_options(couchbase::certificate_authenticator(
                                integration.ctx.certificate_path, integration.ctx.certificate_path));
   cluster_options.network().preferred_server_group(selected_server_group);
-  auto [error, cluster] =
-    couchbase::cluster::connect(io, integration.ctx.connection_string, cluster_options).get();
-  REQUIRE_SUCCESS(error.ec());
+  auto [e, cluster] =
+    couchbase::cluster::connect(integration.ctx.connection_string, cluster_options).get();
+  REQUIRE_SUCCESS(e.ec());
 
   auto collection = cluster.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
   {
@@ -898,7 +896,5 @@ TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integ
     REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
   }
 
-  cluster.close();
-  guard.reset();
-  io_thread.join();
+  cluster.close().get();
 }

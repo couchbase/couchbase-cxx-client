@@ -27,7 +27,6 @@
 #include <couchbase/fmt/error.hxx>
 #include <couchbase/fmt/retry_reason.hxx>
 
-#include <asio/io_context.hpp>
 #include <fmt/chrono.h>
 
 #include <csignal>
@@ -86,19 +85,11 @@ public:
 
     auto cluster_options = build_cluster_options(common_options_);
 
-    asio::io_context io;
-    auto guard = asio::make_work_guard(io);
-    std::thread io_thread([&io]() {
-      io.run();
-    });
     const auto connection_string = common_options_.connection.connection_string;
 
     auto [connect_err, cluster] =
-      couchbase::cluster::connect(io, connection_string, cluster_options).get();
+      couchbase::cluster::connect(connection_string, cluster_options).get();
     if (connect_err) {
-      guard.reset();
-      io_thread.join();
-
       fail(fmt::format(
         "Failed to connect to the cluster at {:?}: {}", connection_string, connect_err));
     }
@@ -222,10 +213,7 @@ public:
       }
     }
 
-    cluster.close();
-    guard.reset();
-
-    io_thread.join();
+    cluster.close().get();
 
     return 0;
   }

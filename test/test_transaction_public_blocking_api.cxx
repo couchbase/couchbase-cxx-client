@@ -52,26 +52,17 @@ with_new_cluster(test::utils::integration_test_guard& integration,
                  std::function<void(couchbase::cluster&)> fn)
 {
   // make new virginal public cluster
-
-  asio::io_context io;
-  std::thread io_thread([&io]() {
-    io.run();
-  });
-  auto options = couchbase::cluster_options(integration.ctx.username, integration.ctx.password);
+  auto test_ctx = integration.ctx;
   auto [err, cluster] =
-    couchbase::cluster::connect(io, integration.ctx.connection_string, options).get();
-  CHECK_FALSE(err);
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(err.ec());
+
   try {
     if (!err) {
       fn(cluster);
     }
   } catch (...) {
     // noop, just eat it.
-  }
-  cluster.close();
-  io.stop();
-  if (io_thread.joinable()) {
-    io_thread.join();
   }
 }
 

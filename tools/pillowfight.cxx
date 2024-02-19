@@ -312,7 +312,7 @@ public:
     const auto connection_string = common_options_.connection.connection_string;
 
     auto [connect_err, cluster] =
-      couchbase::cluster::connect(io, connection_string, cluster_options).get();
+      couchbase::cluster::connect(connection_string, cluster_options).get();
     if (connect_err) {
       guard.reset();
       for (auto& thread : io_pool) {
@@ -380,7 +380,7 @@ public:
       fmt::print("Total rate: {} ops/s\n", total / static_cast<std::uint64_t>(diff));
     }
 
-    cluster.close();
+    cluster.close().get();
     guard.reset();
     io.stop();
 

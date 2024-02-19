@@ -46,20 +46,13 @@ main(int argc, const char* argv[])
   const std::string username{ argv[2] };
   const std::string password{ argv[3] };
 
-  // run IO context on separate thread
-  asio::io_context io;
-  auto guard = asio::make_work_guard(io);
-  std::thread io_thread([&io]() {
-    io.run();
-  });
-
   auto options = couchbase::cluster_options(username, password);
   // customize through the 'options'.
   // For example, optimize timeouts for WAN
   options.apply_profile("wan_development");
 
   // [1] connect to cluster using the given connection string and the options
-  auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+  auto [connect_err, cluster] = couchbase::cluster::connect(connection_string, options).get();
   if (connect_err) {
     fmt::print("unable to connect to the cluster: {}\n", connect_err);
     return 1;
@@ -196,10 +189,7 @@ main(int argc, const char* argv[])
   }
 
   // [5], close cluster connection
-  cluster.close();
-  guard.reset();
-
-  io_thread.join();
+  cluster.close().get();
   return retval;
 }
 
@@ -248,16 +238,10 @@ main(int argc, const char* argv[])
   const std::string username{ argv[2] };
   const std::string password{ argv[3] };
 
-  asio::io_context io;
-  auto guard = asio::make_work_guard(io);
-  std::thread io_thread([&io]() {
-    io.run();
-  });
-
   auto options = couchbase::cluster_options(username, password);
   options.apply_profile("wan_development");
 
-  auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+  auto [connect_err, cluster] = couchbase::cluster::connect(connection_string, options).get();
   if (connect_err) {
     fmt::println("unable to connect to the cluster: {}", connect_err);
     return 1;
@@ -333,10 +317,7 @@ main(int argc, const char* argv[])
     }
   }
 
-  cluster.close();
-  guard.reset();
-
-  io_thread.join();
+  cluster.close().get();
   return retval;
 }
 

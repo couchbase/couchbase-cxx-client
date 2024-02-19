@@ -652,7 +652,10 @@ TEST_CASE("integration: scope search returns feature not available", "[integrati
     SKIP("cluster supports scope search");
   }
 
-  couchbase::cluster c(integration.cluster);
+  auto test_ctx = integration.ctx;
+  auto [err, c] =
+    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+  REQUIRE_SUCCESS(err.ec());
 
   auto search_request = couchbase::search_request(couchbase::match_none_query{});
   auto [error, result] =
