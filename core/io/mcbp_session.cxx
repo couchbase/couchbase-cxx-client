@@ -870,6 +870,8 @@ class mcbp_session_impl
         if (stopped_) {
             return;
         }
+        bootstrapped_ = false;
+        bootstrap_handler_ = nullptr;
         state_ = diag::endpoint_state::connecting;
         if (stream_->is_open()) {
             std::string old_id = stream_->id();
@@ -1554,7 +1556,7 @@ class mcbp_session_impl
                           CB_LOG_TRACE("{} MCBP recv {}", self->log_prefix_, mcbp_header_view(msg.header_data()));
                           if (self->bootstrapped_) {
                               self->handler_->handle(std::move(msg));
-                          } else {
+                          } else if (self->bootstrap_handler_) {
                               self->bootstrap_handler_->handle(std::move(msg));
                           }
                           if (self->stopped_) {
