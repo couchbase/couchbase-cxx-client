@@ -32,7 +32,7 @@ struct design_document {
         std::optional<std::string> reduce{};
     };
 
-    std::string rev;
+    std::optional<std::string> rev;
     std::string name;
     design_document_namespace ns;
     std::map<std::string, view> views;
