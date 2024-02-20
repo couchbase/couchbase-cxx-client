@@ -15,17 +15,16 @@
 
 #pragma once
 
-#include "scan_options.hxx"
+#include "range_scan_options.hxx"
 #include "timeout_defaults.hxx"
 
 #include <couchbase/mutation_token.hxx>
 #include <couchbase/retry_strategy.hxx>
 
-#include <cinttypes>
+#include <chrono>
+#include <cstdint>
 #include <memory>
 #include <optional>
-#include <system_error>
-#include <variant>
 #include <vector>
 
 namespace couchbase
@@ -39,6 +38,9 @@ class request_span;
 
 namespace couchbase::core
 {
+struct mutation_state {
+    std::vector<couchbase::mutation_token> tokens;
+};
 
 struct range_scan_orchestrator_options {
     static constexpr std::uint16_t default_concurrency{ 1 };

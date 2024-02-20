@@ -21,7 +21,6 @@
 #include "core/agent_unit_test_api.hxx"
 #include "core/collections_component_unit_test_api.hxx"
 #include "core/range_scan_orchestrator.hxx"
-#include "core/scan_options.hxx"
 #include "core/topology/configuration.hxx"
 
 #include <couchbase/cluster.hxx>
@@ -799,7 +798,7 @@ mutations_to_mutation_state(const std::map<std::string, couchbase::mutation_toke
     return state;
 }
 
-TEST_CASE("integration: manager scan range without content", "[integration]")
+TEST_CASE("integration: orchestrator scan range without content", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
@@ -856,7 +855,7 @@ TEST_CASE("integration: manager scan range without content", "[integration]")
     }
 }
 
-TEST_CASE("integration: manager scan range with content", "[integration]")
+TEST_CASE("integration: orchestrator scan range with content", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
@@ -913,7 +912,7 @@ TEST_CASE("integration: manager scan range with content", "[integration]")
     }
 }
 
-TEST_CASE("integration: manager sampling scan with custom collection", "[integration]")
+TEST_CASE("integration: orchestrator sampling scan with custom collection", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
@@ -973,7 +972,7 @@ TEST_CASE("integration: manager sampling scan with custom collection", "[integra
     }
 }
 
-TEST_CASE("integration: manager prefix scan without content", "[integration]")
+TEST_CASE("integration: orchestrator prefix scan without content", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
@@ -1027,7 +1026,7 @@ TEST_CASE("integration: manager prefix scan without content", "[integration]")
     }
 }
 
-TEST_CASE("integration: manager sampling scan with custom collection and up to 10 concurrent streams", "[integration]")
+TEST_CASE("integration: orchestrator sampling scan with custom collection and up to 10 concurrent streams", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
@@ -1088,7 +1087,7 @@ TEST_CASE("integration: manager sampling scan with custom collection and up to 1
     }
 }
 
-TEST_CASE("integration: manager sampling scan with custom collection and up to 128 concurrent streams and batch item limit 0",
+TEST_CASE("integration: orchestrator sampling scan with custom collection and up to 128 concurrent streams and batch item limit 0",
           "[integration]")
 {
     test::utils::integration_test_guard integration;
@@ -1151,7 +1150,7 @@ TEST_CASE("integration: manager sampling scan with custom collection and up to 1
     }
 }
 
-TEST_CASE("integration: manager prefix scan without content and up to 5 concurrent streams", "[integration]")
+TEST_CASE("integration: orchestrator prefix scan without content and up to 5 concurrent streams", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
@@ -1206,7 +1205,7 @@ TEST_CASE("integration: manager prefix scan without content and up to 5 concurre
     }
 }
 
-TEST_CASE("integration: manager prefix scan, get 10 items and cancel", "[integration]")
+TEST_CASE("integration: orchestrator prefix scan, get 10 items and cancel", "[integration]")
 {
     test::utils::integration_test_guard integration;
 
@@ -1219,7 +1218,7 @@ TEST_CASE("integration: manager prefix scan, get 10 items and cancel", "[integra
                         .scope(couchbase::scope::default_name)
                         .collection(couchbase::collection::default_name);
 
-    auto ids = make_doc_ids(15, "rangescancancel-");
+    auto ids = make_doc_ids(15, "prefixscancancel-");
     auto value = make_binary_value(1);
     auto mutations = populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
 
@@ -1230,7 +1229,7 @@ TEST_CASE("integration: manager prefix scan, get 10 items and cancel", "[integra
     auto agent = ag.get_agent(integration.ctx.bucket);
     REQUIRE(agent.has_value());
 
-    couchbase::core::prefix_scan scan{ "rangescancancel" };
+    couchbase::core::prefix_scan scan{ "prefixscancancel" };
     couchbase::core::range_scan_orchestrator_options options{};
     options.consistent_with = mutations_to_mutation_state(mutations);
     options.ids_only = true;
@@ -1258,8 +1257,8 @@ TEST_CASE("integration: manager prefix scan, get 10 items and cancel", "[integra
 
     REQUIRE(expected_id_count == entry_ids.size());
 
-    for (const auto& entry_id : entry_ids) {
-        REQUIRE(std::count(ids.begin(), ids.end(), entry_id) == 0);
+    for (const auto& id : entry_ids) {
+        REQUIRE(std::count(ids.begin(), ids.end(), id) == 1);
     }
 
     auto next_item = result->next();
@@ -1268,7 +1267,7 @@ TEST_CASE("integration: manager prefix scan, get 10 items and cancel", "[integra
     REQUIRE(result->is_cancelled());
 }
 
-TEST_CASE("integration: manager prefix scan with concurrency 0 (invalid argument)", "[integration]")
+TEST_CASE("integration: orchestrator prefix scan with concurrency 0 (invalid argument)", "[integration]")
 {
     test::utils::integration_test_guard integration;
 

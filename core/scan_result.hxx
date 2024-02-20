@@ -15,26 +15,16 @@
 
 #pragma once
 
-#include "scan_options.hxx"
-
+#include "range_scan_options.hxx"
 #include "utils/movable_function.hxx"
-
-#include <couchbase/mutation_token.hxx>
-#include <couchbase/retry_strategy.hxx>
 
 #include <tl/expected.hpp>
 
-#include <cinttypes>
 #include <future>
-#include <memory>
-#include <optional>
 #include <system_error>
-#include <variant>
-#include <vector>
 
 namespace couchbase::core
 {
-
 class scan_result_impl;
 
 class range_scan_item_iterator
