@@ -920,6 +920,11 @@ class mcbp_session_impl
         return stopped_;
     }
 
+    [[nodiscard]] bool is_bootstrapped() const
+    {
+        return bootstrapped_;
+    }
+
     void on_stop(utils::movable_function<void()> handler)
     {
         on_stop_handler_ = std::move(handler);
@@ -1737,6 +1742,12 @@ bool
 mcbp_session::is_stopped() const
 {
     return impl_->is_stopped();
+}
+
+bool
+mcbp_session::is_bootstrapped() const
+{
+    return impl_->is_bootstrapped();
 }
 
 std::uint32_t
