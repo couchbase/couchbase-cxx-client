@@ -938,7 +938,7 @@ TEST_CASE("integration: orchestrator sampling scan with custom collection", "[in
     auto agent = ag.get_agent(integration.ctx.bucket);
     REQUIRE(agent.has_value());
 
-    couchbase::core::sampling_scan scan{ 10, 50 };
+    couchbase::core::sampling_scan scan{ 10 };
     couchbase::core::range_scan_orchestrator_options options{};
     options.consistent_with = mutations_to_mutation_state(mutations);
     couchbase::core::range_scan_orchestrator orchestrator(
@@ -970,6 +970,88 @@ TEST_CASE("integration: orchestrator sampling scan with custom collection", "[in
     for (const auto& id : entry_ids) {
         REQUIRE(std::find(ids.begin(), ids.end(), id) != ids.end());
     }
+}
+
+TEST_CASE("integration: orchestrator sampling scan with seed & custom collection", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.has_bucket_capability("range_scan")) {
+        SKIP("cluster does not support range_scan");
+    }
+
+    const collection_guard new_collection(integration);
+
+    auto collection = couchbase::cluster(integration.cluster)
+                        .bucket(integration.ctx.bucket)
+                        .scope(couchbase::scope::default_name)
+                        .collection(new_collection.name());
+
+    auto ids = make_doc_ids(100, "samplingscan-");
+    auto value = make_binary_value(100);
+    auto mutations = populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 300 });
+
+    auto vbucket_map = get_vbucket_map(integration);
+
+    auto ag = couchbase::core::agent_group(integration.io, { { integration.cluster } });
+    ag.open_bucket(integration.ctx.bucket);
+    auto agent = ag.get_agent(integration.ctx.bucket);
+    REQUIRE(agent.has_value());
+
+    couchbase::core::sampling_scan scan{
+        10, // limit
+        50, // seed
+    };
+    couchbase::core::range_scan_orchestrator_options options{};
+    options.concurrency = 1;
+    options.ids_only = true;
+
+    options.consistent_with = mutations_to_mutation_state(mutations);
+    couchbase::core::range_scan_orchestrator orchestrator(
+      integration.io, agent.value(), vbucket_map, couchbase::scope::default_name, new_collection.name(), scan, options);
+
+    auto result = orchestrator.scan();
+    EXPECT_SUCCESS(result);
+
+    std::set<std::string> entry_ids{};
+    while (true) {
+        auto entry = result->next();
+        if (!entry) {
+            break;
+        }
+
+        auto [_, inserted] = entry_ids.insert(entry->key);
+        REQUIRE(inserted);
+    }
+
+    REQUIRE(entry_ids.size() >= 10);
+
+    for (const auto& id : entry_ids) {
+        REQUIRE(std::find(ids.begin(), ids.end(), id) != ids.end());
+    }
+
+    // Doing the scan again with the same seed & concurrency 1 should yield the same documents
+    couchbase::core::sampling_scan scan2{
+        10, // limit
+        50, // seed
+    };
+    couchbase::core::range_scan_orchestrator orchestrator2(
+      integration.io, agent.value(), vbucket_map, couchbase::scope::default_name, new_collection.name(), scan2, options);
+    auto result2 = orchestrator2.scan();
+    EXPECT_SUCCESS(result2);
+
+    std::set<std::string> entry_ids2{};
+    while (true) {
+        auto entry = result2->next();
+        if (!entry) {
+            break;
+        }
+
+        auto [_, inserted] = entry_ids2.insert(entry->key);
+        REQUIRE(inserted);
+    }
+    REQUIRE(entry_ids2.size() >= 10);
+    REQUIRE(entry_ids == entry_ids2);
 }
 
 TEST_CASE("integration: orchestrator prefix scan without content", "[integration]")

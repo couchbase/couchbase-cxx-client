@@ -342,7 +342,16 @@ class range_scan_orchestrator_impl
     {
 
         if (std::holds_alternative<sampling_scan>(scan_type_)) {
-            item_limit_ = std::get<sampling_scan>(scan_type).limit;
+            auto s = std::get<sampling_scan>(scan_type);
+            item_limit_ = s.limit;
+
+            // Set the seed of the load balancer to ensure that if the sampling scan is run multiple times the vbuckets
+            // are scanned in the same order when concurrency is 1. This guarantees that the items returned will be the
+            // same. We cannot guarantee this when concurrency is greater than 1, as the order of the vbucket scans
+            // depends on how long each scan takes and what the load on a node is at any given time.
+            if (s.seed.has_value()) {
+                load_balancer_.seed(s.seed.value());
+            }
         }
     }
 

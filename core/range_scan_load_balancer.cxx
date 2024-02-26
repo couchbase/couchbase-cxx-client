@@ -23,6 +23,7 @@
 #include <numeric>
 #include <queue>
 #include <random>
+#include <vector>
 
 namespace couchbase::core
 {
@@ -72,19 +73,24 @@ range_scan_node_state::pending_vbucket_count() -> std::size_t
     return pending_vbuckets_.size();
 }
 
-range_scan_load_balancer::range_scan_load_balancer(const topology::configuration::vbucket_map& vbucket_map)
+range_scan_load_balancer::range_scan_load_balancer(const topology::configuration::vbucket_map& vbucket_map,
+                                                   std::optional<std::uint64_t> seed)
+  : seed_{ seed }
 {
     std::map<std::int16_t, std::queue<std::uint16_t>> node_to_vbucket_map{};
     for (std::uint16_t vbucket_id = 0; vbucket_id < vbucket_map.size(); vbucket_id++) {
         auto node_id = vbucket_map[vbucket_id][0];
-        if (node_to_vbucket_map.count(node_id) == 0) {
-            node_to_vbucket_map[node_id] = {};
-        }
         node_to_vbucket_map[node_id].push(vbucket_id);
     }
     for (auto [node_id, vbucket_ids] : node_to_vbucket_map) {
         nodes_.emplace(node_id, std::move(vbucket_ids));
     }
+}
+
+void
+range_scan_load_balancer::seed(std::uint64_t seed)
+{
+    seed_ = seed;
 }
 
 auto
@@ -95,17 +101,20 @@ range_scan_load_balancer::select_vbucket() -> std::optional<std::uint16_t>
     auto min_stream_count = std::numeric_limits<std::uint16_t>::max();
     std::optional<std::int16_t> selected_node_id{};
 
-    // Iterating nodes in random order to avoid preference towards nodes with lower ID when there is a tie
     std::vector<std::map<int16_t, range_scan_node_state>::iterator> iterators{ nodes_.size() };
+
     std::iota(iterators.begin(), iterators.end(), nodes_.begin());
-    std::shuffle(iterators.begin(), iterators.end(), std::mt19937{ std::random_device{}() });
+    std::mt19937_64 gen{ std::random_device{}() };
+    if (seed_.has_value()) {
+        gen.seed(seed_.value());
+    }
+    std::shuffle(iterators.begin(), iterators.end(), gen);
 
     for (auto it : iterators) {
-        auto node_id = it->first;
-        auto* node_status = &it->second;
-        auto stream_count = node_status->active_stream_count();
+        auto& [node_id, node_status] = *it;
+        auto stream_count = node_status.active_stream_count();
 
-        if (stream_count < min_stream_count && node_status->pending_vbucket_count() > 0) {
+        if (stream_count < min_stream_count && node_status.pending_vbucket_count() > 0) {
             min_stream_count = stream_count;
             selected_node_id = node_id;
         }

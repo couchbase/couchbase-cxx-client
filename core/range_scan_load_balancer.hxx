@@ -43,7 +43,9 @@ class range_scan_node_state
 class range_scan_load_balancer
 {
   public:
-    range_scan_load_balancer(const topology::configuration::vbucket_map& vbucket_map);
+    range_scan_load_balancer(const topology::configuration::vbucket_map& vbucket_map, std::optional<std::uint64_t> seed = {});
+
+    void seed(std::uint64_t seed);
 
     /**
      * Returns the ID of a vbucket that corresponds to the node with the lowest number of active streams.
@@ -57,5 +59,6 @@ class range_scan_load_balancer
   private:
     std::map<std::int16_t, range_scan_node_state> nodes_{};
     std::mutex select_vbucket_mutex_{};
+    std::optional<std::uint64_t> seed_{};
 };
 } // namespace couchbase::core
