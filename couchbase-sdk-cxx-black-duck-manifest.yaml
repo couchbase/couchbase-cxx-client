@@ -1,3 +1,4 @@
+# NOTE: This file MUST be in sync with cmake/ThirdPartyDependencies.cmake
 components:
   boringssl:
     bd-id: 1e303b15-b82b-4a4d-8cd6-a2048fb2c73d

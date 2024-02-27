@@ -1,3 +1,5 @@
+# NOTE: This file MUST be in sync with couchbase-sdk-cxx-black-duck-manifest.yaml
+
 include(cmake/CPM.cmake)
 
 # https://cmake.org/cmake/help/v3.28/policy/CMP0063.html
