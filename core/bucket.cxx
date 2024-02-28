@@ -495,7 +495,7 @@ class bucket_impl
             std::size_t i = start;
             do {
                 auto ptr = sessions_.find(i % sessions_.size());
-                if (ptr != sessions_.end() && ptr->second.supports_gcccp()) {
+                if (ptr != sessions_.end() && ptr->second.is_bootstrapped() && ptr->second.supports_gcccp()) {
                     session = ptr->second;
                 }
                 i = heartbeat_next_index_.fetch_add(1);
@@ -506,7 +506,7 @@ class bucket_impl
             req.opaque(session->next_opaque());
             session->write_and_flush(req.data());
         } else {
-            CB_LOG_WARNING(R"({} unable to find session with GCCCP support, retry in {})", log_prefix_, heartbeat_interval_);
+            CB_LOG_WARNING(R"({} unable to find connected session with GCCCP support, retry in {})", log_prefix_, heartbeat_interval_);
         }
     }
 
