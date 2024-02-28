@@ -97,6 +97,7 @@ class mcbp_session
     [[nodiscard]] const std::string& log_prefix() const;
     [[nodiscard]] bool cancel(std::uint32_t opaque, std::error_code ec, retry_reason reason);
     [[nodiscard]] bool is_stopped() const;
+    [[nodiscard]] bool is_bootstrapped() const;
     [[nodiscard]] std::uint32_t next_opaque();
     [[nodiscard]] std::optional<std::uint32_t> get_collection_uid(const std::string& collection_path);
     [[nodiscard]] mcbp_context context() const;

@@ -160,7 +160,7 @@ struct fmt::formatter<couchbase::core::topology::configuration> {
                          config.vbmap.has_value() ? fmt::format(", partitions={}", config.vbmap->size()) : "",
                          config.nodes.size(),
                          couchbase::core::utils::join_strings_fmt(config.nodes, ", "),
-                         couchbase::core::utils::join_strings_fmt(config.bucket_capabilities, ", "),
-                         couchbase::core::utils::join_strings_fmt(config.cluster_capabilities, ", "));
+                         couchbase::core::utils::join_strings_fmt(config.capabilities.bucket, ", "),
+                         couchbase::core::utils::join_strings_fmt(config.capabilities.cluster, ", "));
     }
 };

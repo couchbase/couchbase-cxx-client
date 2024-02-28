@@ -202,6 +202,8 @@ map_status_code(protocol::client_opcode opcode, std::uint16_t status)
 
         case key_value_status_code::unknown:
             break;
+        case key_value_status_code::config_only:
+            break;
     }
     return errc::network::protocol_error;
 }

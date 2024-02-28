@@ -70,11 +70,32 @@ struct fmt::formatter<couchbase::core::bucket_capability> {
             case couchbase::core::bucket_capability::range_scan:
                 name = "range_scan";
                 break;
-            case couchbase::core::bucket_capability::replica_read:
-                name = "replica_read";
+            case couchbase::core::bucket_capability::subdoc_replica_read:
+                name = "subdoc_replica_read";
                 break;
             case couchbase::core::bucket_capability::non_deduped_history:
                 name = "non_deduped_history";
+                break;
+            case couchbase::core::bucket_capability::subdoc_replace_body_with_xattr:
+                name = "subdoc_replace_body_with_xattr";
+                break;
+            case couchbase::core::bucket_capability::subdoc_document_macro_support:
+                name = "subdoc_document_macro_support";
+                break;
+            case couchbase::core::bucket_capability::subdoc_revive_document:
+                name = "subdoc_revive_document";
+                break;
+            case couchbase::core::bucket_capability::dcp_ignore_purged_tombstones:
+                name = "dcp_ignore_purged_tombstones";
+                break;
+            case couchbase::core::bucket_capability::preserve_expiry:
+                name = "preserve_expiry";
+                break;
+            case couchbase::core::bucket_capability::query_system_collection:
+                name = "query_system_collection";
+                break;
+            case couchbase::core::bucket_capability::mobile_system_collection:
+                name = "mobile_system_collection";
                 break;
         }
         return format_to(ctx.out(), "{}", name);
@@ -111,6 +132,13 @@ struct fmt::formatter<couchbase::core::cluster_capability> {
                 break;
             case couchbase::core::cluster_capability::n1ql_read_from_replica:
                 name = "n1ql_read_from_replica";
+                break;
+            case couchbase::core::cluster_capability::search_vector_search:
+                name = "search_vector_search";
+                break;
+            case couchbase::core::cluster_capability::search_scoped_search_index:
+                name = "search_scoped_search_index";
+                break;
         }
         return format_to(ctx.out(), "{}", name);
     }

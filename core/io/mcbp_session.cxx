@@ -455,6 +455,16 @@ class mcbp_session_impl
                         case protocol::client_opcode::get_cluster_config: {
                             protocol::cmd_info info{ session_->connection_endpoints_.remote_address,
                                                      session_->connection_endpoints_.remote.port() };
+                            if (session_->origin_.options().dump_configuration) {
+                                std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()), msg.body.size() };
+                                CB_LOG_TRACE(
+                                  "{} configuration from get_cluster_config request (bootstrap, size={}, endpoint=\"{}:{}\"), {}",
+                                  session_->log_prefix_,
+                                  config_text.size(),
+                                  info.endpoint_address,
+                                  info.endpoint_port,
+                                  config_text);
+                            }
                             protocol::client_response<protocol::get_cluster_config_response_body> resp(std::move(msg), info);
                             if (resp.status() == key_value_status_code::success) {
                                 session_->update_configuration(resp.body().config());
@@ -860,6 +870,8 @@ class mcbp_session_impl
         if (stopped_) {
             return;
         }
+        bootstrapped_ = false;
+        bootstrap_handler_ = nullptr;
         state_ = diag::endpoint_state::connecting;
         if (stream_->is_open()) {
             std::string old_id = stream_->id();
@@ -906,6 +918,11 @@ class mcbp_session_impl
     [[nodiscard]] bool is_stopped() const
     {
         return stopped_;
+    }
+
+    [[nodiscard]] bool is_bootstrapped() const
+    {
+        return bootstrapped_;
     }
 
     void on_stop(utils::movable_function<void()> handler)
@@ -1544,7 +1561,7 @@ class mcbp_session_impl
                           CB_LOG_TRACE("{} MCBP recv {}", self->log_prefix_, mcbp_header_view(msg.header_data()));
                           if (self->bootstrapped_) {
                               self->handler_->handle(std::move(msg));
-                          } else {
+                          } else if (self->bootstrap_handler_) {
                               self->bootstrap_handler_->handle(std::move(msg));
                           }
                           if (self->stopped_) {
@@ -1725,6 +1742,12 @@ bool
 mcbp_session::is_stopped() const
 {
     return impl_->is_stopped();
+}
+
+bool
+mcbp_session::is_bootstrapped() const
+{
+    return impl_->is_bootstrapped();
 }
 
 std::uint32_t

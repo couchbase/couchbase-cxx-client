@@ -289,6 +289,16 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
               if (status == key_value_status_code::unknown_collection) {
                   return self->handle_unknown_collection();
               }
+              if (status == key_value_status_code::config_only) {
+                  CB_LOG_DEBUG(
+                    "{} server returned status 0x{:02x} ({}) meaning that the node does not serve data operations, requesting new "
+                    "configuration and retrying",
+                    self->session_->log_prefix(),
+                    msg.header.status(),
+                    status);
+                  self->manager_->fetch_config();
+                  return io::retry_orchestrator::maybe_retry(self->manager_, self, retry_reason::service_response_code_indicated, ec);
+              }
               if (error_code && error_code.value().has_retry_attribute()) {
                   reason = retry_reason::key_value_error_map_retry_indicated;
               } else {

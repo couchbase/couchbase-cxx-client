@@ -41,15 +41,15 @@ search_request::encode_to(search_request::encoded_request_type& encoded, http_co
 
     if (vector_search.has_value()) {
         body["knn"] = utils::json::parse(vector_search.value());
-    }
-    if (vector_query_combination.has_value()) {
-        switch (*vector_query_combination) {
-            case couchbase::core::vector_query_combination::combination_or:
-                body["knn_operator"] = "or";
-                break;
-            case couchbase::core::vector_query_combination::combination_and:
-                body["knn_operator"] = "and";
-                break;
+        if (vector_query_combination.has_value()) {
+            switch (*vector_query_combination) {
+                case couchbase::core::vector_query_combination::combination_or:
+                    body["knn_operator"] = "or";
+                    break;
+                case couchbase::core::vector_query_combination::combination_and:
+                    body["knn_operator"] = "and";
+                    break;
+            }
         }
     }
 

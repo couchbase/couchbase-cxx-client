@@ -103,6 +103,7 @@ is_valid_status(std::uint16_t code)
         case key_value_status_code::range_scan_more:
         case key_value_status_code::range_scan_complete:
         case key_value_status_code::range_scan_vb_uuid_not_equal:
+        case key_value_status_code::config_only:
             return true;
         case key_value_status_code::unknown:
             return false;

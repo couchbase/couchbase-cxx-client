@@ -230,6 +230,11 @@ class transaction_operation_failed : public std::runtime_error
         return cause_;
     }
 
+    final_error to_raise() const
+    {
+        return to_raise_;
+    }
+
     void do_throw(const transaction_context& context) const
     {
         if (to_raise_ == FAILED_POST_COMMIT) {
