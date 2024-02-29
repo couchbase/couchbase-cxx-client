@@ -16,19 +16,31 @@
 #include "range_scan_orchestrator.hxx"
 
 #include "agent.hxx"
-#include "core/logger/logger.hxx"
+#include "logger/logger.hxx"
+#include "range_scan_load_balancer.hxx"
+#include "range_scan_options.hxx"
+
 #include "couchbase/error_codes.hxx"
+#include "utils/movable_function.hxx"
 
 #include <asio/bind_executor.hpp>
+#include <asio/experimental/concurrent_channel.hpp>
 #include <asio/io_context.hpp>
 #include <asio/post.hpp>
 
-#include <asio/experimental/concurrent_channel.hpp>
+#include <gsl/util>
 
-#include <gsl/narrow>
-
+#include <atomic>
+#include <chrono>
 #include <future>
-#include <random>
+#include <limits>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <system_error>
+#include <variant>
+#include <vector>
 
 namespace couchbase::core
 {
@@ -50,24 +62,26 @@ mutation_state_to_snapshot_requirements(const std::optional<mutation_state>& sta
     return requirements;
 }
 
+// Sent by the vbucket scan stream when it either completes or fails with a fatal error
+struct scan_stream_end_signal {
+    std::uint16_t vbucket_id;
+    std::optional<std::error_code> error{};
+};
+
 class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
 {
+    // The stream has failed and should not be retried
     struct failed {
         std::error_code ec;
         bool fatal{ true };
     };
 
-    struct not_started {
-    };
-
-    struct awaiting_retry {
-        std::error_code ec;
-    };
-
+    // The stream is currently running
     struct running {
         std::vector<std::byte> uuid;
     };
 
+    // The stream has completed and the items have been retrieved
     struct completed {
     };
 
@@ -79,8 +93,8 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
                       range_scan_create_options create_options,
                       range_scan_continue_options continue_options,
                       std::shared_ptr<scan_stream_manager> stream_manager)
-      : items_{ io, continue_options.batch_item_limit }
-      , agent_{ std::move(kv_provider) }
+      : agent_{ std::move(kv_provider) }
+      , io_{ io }
       , vbucket_id_{ vbucket_id }
       , node_id_{ node_id }
       , create_options_{ std::move(create_options) }
@@ -91,147 +105,119 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
 
     void start()
     {
-        // Fail the stream if more time since the timeout has elapsed since the stream was first attempted (if this is a retry)
+        // Fail the stream if more time than the timeout has elapsed since the stream was first attempted (if this is a retry)
         if (first_attempt_timestamp_.has_value()) {
             if (std::chrono::steady_clock::now() - first_attempt_timestamp_.value() > create_options_.timeout) {
-                CB_LOG_DEBUG("stream for vbucket_id {} cannot be retried any longer because it has exceeded the timeout", vbucket_id_);
+                CB_LOG_DEBUG("stream for vbucket_id {} cannot be retried because it has exceeded the timeout", vbucket_id_);
                 state_ = failed{ errc::common::unambiguous_timeout, !is_sampling_scan() };
-                stream_manager_->stream_start_failed(node_id_, error_is_fatal());
-                drain_waiting_queue();
+                stream_manager_->stream_failed(node_id_, vbucket_id_, errc::common::unambiguous_timeout, error_is_fatal());
                 return;
             }
         } else {
             first_attempt_timestamp_ = std::chrono::steady_clock::now();
         }
 
-        CB_LOG_TRACE("starting stream {} in node {}", vbucket_id_, node_id_);
-        state_ = std::monostate{};
+        CB_LOG_TRACE("starting stream for vbucket {} in node {}", vbucket_id_, node_id_);
+
         if (std::holds_alternative<range_scan>(create_options_.scan_type) && !last_seen_key_.empty()) {
             std::get<range_scan>(create_options_.scan_type).from = scan_term{ last_seen_key_ };
         }
 
-        auto op = agent_.range_scan_create(vbucket_id_, create_options_, [self = shared_from_this()](auto res, auto ec) {
+        agent_.range_scan_create(vbucket_id_, create_options_, [self = shared_from_this()](auto res, auto ec) {
             if (ec) {
                 if (ec == errc::key_value::document_not_found) {
                     // Benign error
-                    CB_LOG_DEBUG("ignoring vbucket_id {} because no documents exist for it", self->vbucket_id_);
-                    CB_LOG_TRACE("setting state for stream {} to FAILED", self->vbucket_id_);
+                    CB_LOG_TRACE("ignoring vbucket_id {} because no documents exist for it", self->vbucket_id_);
                     self->state_ = failed{ ec, false };
-                    self->stream_manager_->stream_start_failed(self->node_id_, self->error_is_fatal());
+                    self->stream_manager_->stream_failed(self->node_id_, self->vbucket_id_, ec, self->error_is_fatal());
                 } else if (ec == errc::common::temporary_failure) {
-                    // Retryable error
-                    CB_LOG_DEBUG("received busy status from vbucket with ID {} - reducing concurrency & will retry", self->vbucket_id_);
-                    CB_LOG_TRACE("setting state for stream {} to AWAITING_RETRY", self->vbucket_id_);
-                    self->state_ = awaiting_retry{ ec };
+                    // Retryable error - server is overwhelmed, retry after reducing concurrency
+                    CB_LOG_DEBUG("received busy status during scan from vbucket with ID {} - reducing concurrency & retrying",
+                                 self->vbucket_id_);
+                    self->state_ = std::monostate{};
                     self->stream_manager_->stream_start_failed_awaiting_retry(self->node_id_, self->vbucket_id_);
                 } else if (ec == errc::common::internal_server_failure || ec == errc::common::collection_not_found) {
                     // Fatal errors
-                    CB_LOG_TRACE("setting state for stream {} to FAILED", self->vbucket_id_);
                     self->state_ = failed{ ec, true };
-                    self->stream_manager_->stream_start_failed(self->node_id_, self->error_is_fatal());
+                    self->stream_manager_->stream_failed(self->node_id_, self->vbucket_id_, ec, self->error_is_fatal());
                 } else {
                     // Unexpected errors
-                    CB_LOG_DEBUG(
-                      "received unexpected error {} from stream for vbucket {} ({})", ec.value(), self->vbucket_id_, ec.message());
-                    CB_LOG_TRACE("setting state for stream {} to FAILED", self->vbucket_id_);
+                    CB_LOG_DEBUG("received unexpected error {} from stream for vbucket {} during range scan continue ({})",
+                                 ec.value(),
+                                 self->vbucket_id_,
+                                 ec.message());
                     self->state_ = failed{ ec, true };
-                    self->stream_manager_->stream_start_failed(self->node_id_, self->error_is_fatal());
+                    self->stream_manager_->stream_failed(self->node_id_, self->vbucket_id_, ec, self->error_is_fatal());
                 }
-                self->drain_waiting_queue();
                 return;
             }
+
             self->state_ = running{ std::move(res.scan_uuid) };
-            CB_LOG_TRACE("setting state for stream {} to RUNNING", self->vbucket_id_);
-            self->drain_waiting_queue();
-            self->resume();
+
+            return self->resume();
         });
     }
 
-    void fail(std::error_code ec)
+    void should_cancel()
     {
-        if (!is_failed()) {
-            if (is_running()) {
-                agent_.range_scan_cancel(uuid(), vbucket_id_, {}, [](auto /* res */, auto /* ec */) {});
-            }
-
-            items_.cancel();
-            items_.close();
-
-            bool fatal{};
-            if (ec == errc::key_value::document_not_found || ec == errc::common::authentication_failure ||
-                ec == errc::common::collection_not_found || ec == errc::common::request_canceled) {
-                // Errors that are fatal unless this is a sampling scan
-                fatal = !is_sampling_scan();
-            } else if (ec == errc::common::feature_not_available || ec == errc::common::invalid_argument ||
-                       ec == errc::common::temporary_failure) {
-                // Errors that are always fatal
-                fatal = true;
-            } else {
-                // Unexpected error - always fatal
-                CB_LOG_DEBUG("received unexpected error {} from stream for vbucket during range scan continue {} ({})",
-                             ec.value(),
-                             vbucket_id_,
-                             ec.message());
-                fatal = true;
-            }
-
-            CB_LOG_TRACE("setting state for stream {} to FAILED after range scan continue", vbucket_id_);
-            state_ = failed{ ec, fatal };
-            stream_manager_->stream_continue_failed(node_id_, fatal);
-        }
+        should_cancel_ = true;
     }
 
-    void mark_not_started()
-    {
-        state_ = not_started{};
-    }
-
-    void complete()
-    {
-        if (!is_failed() && !is_completed()) {
-            CB_LOG_TRACE("setting state for stream {} to COMPLETED", vbucket_id_);
-
-            stream_manager_->stream_completed(node_id_);
-            state_ = completed{};
-            drain_waiting_queue();
-        }
-    }
-
-    void cancel()
-    {
-        if (!should_cancel_) {
-            should_cancel_ = true;
-            items_.cancel();
-            items_.close();
-        }
-    }
-
-    template<typename Handler>
-    void take(Handler&& handler)
-    {
-        do_when_ready([self = shared_from_this(), handler = std::forward<Handler>(handler)]() mutable {
-            self->take_when_ready(std::forward<Handler>(handler));
-        });
-    }
-
-    [[nodiscard]] auto node_id() const -> int16_t
+    [[nodiscard]] auto node_id() const -> std::int16_t
     {
         return node_id_;
     }
 
-    [[nodiscard]] auto is_ready() const -> bool
+  private:
+    void fail(std::error_code ec)
     {
-        return !std::holds_alternative<std::monostate>(state_);
+        if (is_failed()) {
+            return;
+        }
+
+        bool fatal;
+        if (ec == errc::key_value::document_not_found || ec == errc::common::authentication_failure ||
+            ec == errc::common::collection_not_found || ec == errc::common::request_canceled) {
+            // Errors that are fatal unless this is a sampling scan
+            fatal = !is_sampling_scan();
+        } else if (ec == errc::common::feature_not_available || ec == errc::common::invalid_argument ||
+                   ec == errc::common::temporary_failure) {
+            // Errors that are always fatal
+            fatal = true;
+        } else {
+            // Unexpected error - always fatal
+            CB_LOG_DEBUG("received unexpected error {} from stream for vbucket {} during range scan continue ({})",
+                         ec.value(),
+                         vbucket_id_,
+                         ec.message());
+            fatal = true;
+        }
+
+        state_ = failed{ ec, fatal };
+        stream_manager_->stream_failed(node_id_, vbucket_id_, ec, fatal);
     }
 
-    [[nodiscard]] auto is_not_started() const -> bool
+    void complete()
     {
-        return std::holds_alternative<not_started>(state_);
+        if (is_failed() || is_completed()) {
+            return;
+        }
+
+        stream_manager_->stream_completed(node_id_, vbucket_id_);
+        state_ = completed{};
     }
 
-    [[nodiscard]] auto is_awaiting_retry() const -> bool
+    void cancel()
     {
-        return std::holds_alternative<awaiting_retry>(state_);
+        auto scan_uuid = uuid();
+        if (scan_uuid.empty()) {
+            // The stream is not currently running
+            return;
+        }
+
+        asio::post(asio::bind_executor(io_, [self = shared_from_this(), scan_uuid]() mutable {
+            self->agent_.range_scan_cancel(scan_uuid, self->vbucket_id_, {}, [](auto /* res */, auto /* ec */) {});
+        }));
     }
 
     [[nodiscard]] auto is_running() const -> bool
@@ -249,94 +235,50 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
         return std::holds_alternative<completed>(state_);
     }
 
-  private:
-    template<typename Handler>
-    void take_when_ready(Handler&& handler)
-    {
-
-        if (is_failed()) {
-            if (error_is_fatal()) {
-                return handler(std::optional<range_scan_item>{}, false, std::optional<std::error_code>{ error() });
-            } else {
-                return handler(std::optional<range_scan_item>{}, false, std::optional<std::error_code>{});
-            }
-        }
-        if (is_awaiting_retry() || is_not_started()) {
-            return handler(std::optional<range_scan_item>{}, true, std::optional<std::error_code>{});
-        }
-        if (!items_.ready()) {
-            return handler(std::optional<range_scan_item>{}, is_running(), std::optional<std::error_code>{});
-        }
-        items_.async_receive(
-          [self = shared_from_this(), handler = std::forward<Handler>(handler)](std::error_code ec, range_scan_item item) mutable {
-              if (ec) {
-                  return handler(std::optional<range_scan_item>{}, false, std::optional<std::error_code>{});
-              }
-              handler(std::optional<range_scan_item>{ std::move(item) }, true, std::optional<std::error_code>{});
-          });
-    }
-
-    template<typename Handler>
-    void do_when_ready(Handler&& handler)
-    {
-        if (is_ready()) {
-            drain_waiting_queue();
-            return handler();
-        }
-        waiting_queue_.emplace_back(std::forward<Handler>(handler));
-    }
-
-    void drain_waiting_queue()
-    {
-        auto queue = std::move(waiting_queue_);
-        for (auto const& waiter : queue) {
-            waiter();
-        }
-    }
-
     void resume()
     {
         if (!is_running()) {
             return;
         }
         if (should_cancel_) {
-            agent_.range_scan_cancel(uuid(), vbucket_id_, {}, [](auto /* res */, auto /* ec */) {});
-            items_.close();
-            items_.cancel();
+            cancel();
             return;
         }
 
-        agent_.range_scan_continue(
-          uuid(),
-          vbucket_id_,
-          continue_options_,
-          [self = shared_from_this()](auto item) {
-              self->last_seen_key_ = item.key;
-              self->items_.async_send({}, std::move(item), [self](std::error_code ec) {
+        asio::post(asio::bind_executor(io_, [self = shared_from_this()]() mutable {
+            self->agent_.range_scan_continue(
+              self->uuid(),
+              self->vbucket_id_,
+              self->continue_options_,
+              [self](auto item) {
+                  // The scan has already been cancelled, no need to send items
+                  if (self->should_cancel_) {
+                      return;
+                  }
+                  self->last_seen_key_ = item.key;
+                  self->stream_manager_->stream_received_item(std::move(item));
+              },
+              [self](auto res, auto ec) {
                   if (ec) {
-                      self->fail(ec);
+                      return self->fail(ec);
+                  }
+                  if (res.complete) {
+                      return self->complete();
+                  }
+                  if (res.more) {
+                      return self->resume();
                   }
               });
-          },
-          [self = shared_from_this()](auto res, auto ec) {
-              if (ec) {
-                  return self->fail(ec);
-              }
-              if (res.complete) {
-                  return self->complete();
-              }
-              if (res.more) {
-                  return self->resume();
-              }
-          });
+        }));
     }
 
     [[nodiscard]] auto uuid() const -> std::vector<std::byte>
     {
-        if (is_running()) {
+        try {
             return std::get<running>(state_).uuid;
+        } catch (std::bad_variant_access&) {
+            return {};
         }
-        return {};
     }
 
     [[nodiscard]] auto error() const -> std::error_code
@@ -360,18 +302,17 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
         return std::holds_alternative<sampling_scan>(create_options_.scan_type);
     }
 
-    asio::experimental::concurrent_channel<void(std::error_code, range_scan_item)> items_;
     agent agent_;
+    asio::io_context& io_;
     std::uint16_t vbucket_id_;
     std::int16_t node_id_;
     range_scan_create_options create_options_;
     range_scan_continue_options continue_options_;
     std::shared_ptr<scan_stream_manager> stream_manager_;
     std::string last_seen_key_{};
-    std::variant<std::monostate, not_started, failed, awaiting_retry, running, completed> state_{};
+    std::variant<std::monostate, failed, running, completed> state_{};
     bool should_cancel_{ false };
     std::optional<std::chrono::time_point<std::chrono::steady_clock>> first_attempt_timestamp_{};
-    std::vector<utils::movable_function<void()>> waiting_queue_{};
 };
 
 class range_scan_orchestrator_impl
@@ -392,6 +333,8 @@ class range_scan_orchestrator_impl
       , vbucket_map_{ std::move(vbucket_map) }
       , scope_name_{ std::move(scope_name) }
       , collection_name_{ std::move(collection_name) }
+      , load_balancer_{ vbucket_map_ }
+      , items_{ io, 1024 }
       , scan_type_{ std::move(scan_type) }
       , options_{ std::move(options) }
       , vbucket_to_snapshot_requirements_{ mutation_state_to_snapshot_requirements(options_.consistent_with) }
@@ -399,16 +342,22 @@ class range_scan_orchestrator_impl
     {
 
         if (std::holds_alternative<sampling_scan>(scan_type_)) {
-            item_limit_ = std::get<sampling_scan>(scan_type).limit;
+            auto s = std::get<sampling_scan>(scan_type);
+            item_limit_ = s.limit;
+
+            // Set the seed of the load balancer to ensure that if the sampling scan is run multiple times the vbuckets
+            // are scanned in the same order when concurrency is 1. This guarantees that the items returned will be the
+            // same. We cannot guarantee this when concurrency is greater than 1, as the order of the vbucket scans
+            // depends on how long each scan takes and what the load on a node is at any given time.
+            if (s.seed.has_value()) {
+                load_balancer_.seed(s.seed.value());
+            }
         }
     }
 
     auto scan() -> tl::expected<scan_result, std::error_code>
     {
-        if (item_limit_ == 0) {
-            return tl::unexpected(errc::common::invalid_argument);
-        }
-        if (concurrency_ <= 0) {
+        if (item_limit_ == 0 || concurrency_ <= 0) {
             return tl::unexpected(errc::common::invalid_argument);
         }
 
@@ -434,6 +383,7 @@ class range_scan_orchestrator_impl
         range_scan_continue_options const continue_options{
             options_.batch_item_limit, options_.batch_byte_limit, batch_time_limit, options_.timeout, options_.retry_strategy,
         };
+
         for (std::uint16_t vbucket = 0; vbucket < gsl::narrow_cast<std::uint16_t>(vbucket_map_.size()); ++vbucket) {
             const range_scan_create_options create_options{
                 scope_name_,       {},
@@ -453,10 +403,6 @@ class range_scan_orchestrator_impl
                                                               continue_options,
                                                               std::static_pointer_cast<scan_stream_manager>(shared_from_this()));
             streams_[vbucket] = stream;
-            streams_[vbucket]->mark_not_started();
-            if (stream_count_per_node_.count(node_id) == 0) {
-                stream_count_per_node_[node_id] = 0;
-            }
         }
         start_streams(concurrency_);
 
@@ -467,7 +413,7 @@ class range_scan_orchestrator_impl
     {
         cancelled_ = true;
         for (const auto& [vbucket_id, stream] : streams_) {
-            stream->cancel();
+            stream->should_cancel();
         }
     }
 
@@ -479,212 +425,154 @@ class range_scan_orchestrator_impl
     auto next() -> std::future<tl::expected<range_scan_item, std::error_code>> override
     {
         auto barrier = std::make_shared<std::promise<tl::expected<range_scan_item, std::error_code>>>();
-        if (item_limit_ == 0 || item_limit_-- == 0) {
-            barrier->set_value(tl::unexpected{ errc::key_value::range_scan_completed });
-            cancel();
-        } else {
-            next_item(streams_.begin(), [barrier](std::optional<range_scan_item> item, std::optional<std::error_code> ec) {
-                if (item) {
-                    barrier->set_value(std::move(item.value()));
-                } else if (ec) {
-                    barrier->set_value(tl::unexpected{ ec.value() });
-                } else {
-                    barrier->set_value(tl::unexpected{ errc::key_value::range_scan_completed });
-                }
-            });
-        }
+        next([barrier](range_scan_item item, std::error_code ec) mutable {
+            if (ec) {
+                barrier->set_value(tl::unexpected{ ec });
+            } else {
+                barrier->set_value(std::move(item));
+            }
+        });
         return barrier->get_future();
     }
 
     void next(utils::movable_function<void(range_scan_item, std::error_code)> callback) override
     {
-        auto handler = [callback = std::move(callback)](std::optional<range_scan_item> item, std::optional<std::error_code> ec) mutable {
-            if (item) {
-                callback(std::move(item.value()), {});
-            } else if (ec) {
-                callback({}, ec.value());
-            } else {
-                callback({}, errc::key_value::range_scan_completed);
-            }
-        };
         if (item_limit_ == 0 || item_limit_-- == 0) {
-            handler({}, {});
+            callback({}, errc::key_value::range_scan_completed);
             cancel();
         } else {
-            next_item(streams_.begin(), std::move(handler));
+            next_item(std::move(callback));
         }
+    }
+
+    template<typename Handler>
+    void next_item(Handler&& handler)
+    {
+        if (streams_.empty() || cancelled_) {
+            items_.cancel();
+            items_.close();
+            return handler({}, errc::key_value::range_scan_completed);
+        }
+        items_.async_receive([self = shared_from_this(), handler = std::forward<Handler>(handler)](
+                               std::error_code ec, std::variant<range_scan_item, scan_stream_end_signal> it) mutable {
+            if (ec) {
+                return handler({}, ec);
+            }
+
+            if (std::holds_alternative<range_scan_item>(it)) {
+                handler(std::get<range_scan_item>(it), {});
+            } else {
+                auto signal = std::get<scan_stream_end_signal>(it);
+                if (signal.error.has_value()) {
+                    // Fatal error
+                    handler({}, signal.error.value());
+                } else {
+                    // Empty signal means that stream has completed
+                    {
+                        std::lock_guard<std::mutex> const lock{ self->stream_map_mutex_ };
+                        self->streams_.erase(signal.vbucket_id);
+                    }
+                    return asio::post(asio::bind_executor(self->io_, [self, handler = std::forward<Handler>(handler)]() mutable {
+                        self->next_item(std::forward<Handler>(handler));
+                    }));
+                }
+            }
+        });
     }
 
     void start_streams(std::uint16_t stream_count)
     {
-        std::lock_guard<std::recursive_mutex> const lock(stream_start_mutex_);
-
         if (cancelled_) {
             CB_LOG_TRACE("scan has been cancelled, do not start another stream");
             return;
         }
 
-        if (stream_count_per_node_.empty()) {
-            CB_LOG_TRACE("no more vbuckets to scan");
-            return;
-        }
-
-        std::uint16_t counter = 0;
+        std::uint16_t counter{ 0 };
         while (counter < stream_count) {
-            // Find the node with the least number of active streams from those recorded in stream_count_per_node_
-            int16_t least_busy_node{};
-            {
-                std::lock_guard<std::mutex> const stream_count_lock(stream_count_per_node_mutex_);
-
-                // Pick a random node
-                std::random_device rd;
-                std::mt19937_64 gen(rd());
-                std::uniform_int_distribution<std::size_t> dis(0, stream_count_per_node_.size() - 1);
-                auto it = stream_count_per_node_.begin();
-                std::advance(it, static_cast<decltype(stream_count_per_node_)::difference_type>(dis(gen)));
-                least_busy_node = it->first;
-
-                // If any other node has fewer streams running use that
-                for (const auto& [node_id, count] : stream_count_per_node_) {
-                    if (count < stream_count_per_node_[least_busy_node]) {
-                        least_busy_node = node_id;
-                    }
-                }
+            auto vbucket_id = load_balancer_.select_vbucket();
+            if (!vbucket_id.has_value()) {
+                CB_LOG_TRACE("no more scans, all vbuckets have been scanned");
+                return;
             }
 
+            auto v = vbucket_id.value();
             std::shared_ptr<range_scan_stream> stream{};
             {
-                std::lock_guard<std::mutex> const stream_map_lock(stream_map_mutex_);
-
-                for (const auto& [v, s] : streams_) {
-                    if ((s->is_not_started() || s->is_awaiting_retry()) && (s->node_id() == least_busy_node)) {
-                        CB_LOG_TRACE("selected vbucket {} to scan", v);
-                        stream = s;
-                        break;
-                    }
-                }
+                std::lock_guard<std::mutex> const lock{ stream_map_mutex_ };
+                stream = streams_.at(v);
             }
-
-            if (stream == nullptr) {
-                CB_LOG_TRACE("no vbuckets to scan for node {}", least_busy_node);
-                {
-                    std::lock_guard<std::mutex> const stream_count_lock(stream_count_per_node_mutex_);
-                    stream_count_per_node_.erase(least_busy_node);
-                }
-                return start_streams(static_cast<std::uint16_t>(stream_count - counter));
-            }
-
-            auto node_id = stream->node_id();
+            CB_LOG_TRACE("scanning vbucket {} at node {}", vbucket_id.value(), stream->node_id());
             active_stream_count_++;
-            stream_count_per_node_[node_id]++;
-            stream->start();
             counter++;
+            asio::post(asio::bind_executor(io_, [stream]() mutable { stream->start(); }));
         }
     }
 
-    void stream_start_failed(std::int16_t node_id, bool fatal) override
+    void stream_received_item(range_scan_item item) override
     {
-        stream_no_longer_running(node_id);
-        if (fatal) {
-            cancel();
-        } else {
-            start_streams(1);
-        }
-    }
-
-    void stream_start_failed_awaiting_retry(std::int16_t node_id, std::uint16_t /* vbucket_id */) override
-    {
-        {
-            std::lock_guard<std::mutex> const stream_count_lock(stream_count_per_node_mutex_);
-            if (stream_count_per_node_.count(node_id) == 0) {
-                stream_count_per_node_[node_id] = 1;
+        items_.async_send({}, std::move(item), [](std::error_code ec) {
+            if (ec && ec != asio::experimental::error::channel_closed && ec != asio::experimental::error::channel_cancelled) {
+                CB_LOG_WARNING("unexpected error while sending to scan item channel: {} ({})", ec.value(), ec.message());
             }
-        }
-        stream_no_longer_running(node_id);
-        if (active_stream_count_ == 0) {
-            start_streams(1);
-        }
-    }
-
-    void stream_continue_failed(std::int16_t node_id, bool fatal) override
-    {
-        stream_no_longer_running(node_id);
-        if (fatal) {
-            cancel();
-        } else {
-            start_streams(1);
-        }
-    }
-
-    void stream_completed(std::int16_t node_id) override
-    {
-        stream_no_longer_running(node_id);
-        start_streams(1);
-    }
-
-  private:
-    void stream_no_longer_running(std::int16_t node_id)
-    {
-        {
-            std::lock_guard<std::mutex> const stream_count_lock(stream_count_per_node_mutex_);
-            if (stream_count_per_node_.count(node_id) > 0) {
-                stream_count_per_node_[node_id]--;
-            }
-        }
-        active_stream_count_--;
-    }
-
-    template<typename Iterator, typename Handler>
-    void next_item(Iterator it, Handler&& handler)
-    {
-        if (streams_.empty() || cancelled_) {
-            return handler({}, {});
-        }
-        auto vbucket_id = it->first;
-        auto stream = it->second;
-        stream->take([it = std::next(it), vbucket_id, self = shared_from_this(), handler = std::forward<Handler>(handler)](
-                       auto item, bool has_more, auto ec) mutable {
-            if (ec) {
-                // Fatal error
-                self->streams_.clear();
-                return handler({}, ec);
-            }
-            if (!has_more) {
-                std::lock_guard<std::mutex> const lock(self->stream_map_mutex_);
-                self->streams_.erase(vbucket_id);
-            }
-            if (item) {
-                return handler(std::move(item), {});
-            }
-            if (self->streams_.empty()) {
-                return handler({}, {});
-            }
-            if (it == self->streams_.end()) {
-                it = self->streams_.begin();
-            }
-            return asio::post(asio::bind_executor(self->io_, [it, self, handler = std::forward<Handler>(handler)]() mutable {
-                self->next_item(it, std::forward<Handler>(handler));
-            }));
         });
     }
 
+    void stream_failed(std::int16_t node_id, std::uint16_t vbucket_id, std::error_code ec, bool fatal) override
+    {
+        if (!fatal) {
+            return stream_completed(node_id, vbucket_id);
+        }
+
+        load_balancer_.notify_stream_ended(node_id);
+        active_stream_count_--;
+        items_.async_send({}, scan_stream_end_signal{ vbucket_id, ec }, [](std::error_code ec) {
+            if (ec && ec != asio::experimental::error::channel_closed && ec != asio::experimental::error::channel_cancelled) {
+                CB_LOG_WARNING("unexpected error while sending to scan item channel: {} ({})", ec.value(), ec.message());
+            }
+        });
+        return cancel();
+    }
+
+    void stream_completed(std::int16_t node_id, std::uint16_t vbucket_id) override
+    {
+        load_balancer_.notify_stream_ended(node_id);
+        active_stream_count_--;
+        items_.async_send({}, scan_stream_end_signal{ vbucket_id }, [](std::error_code ec) {
+            if (ec && ec != asio::experimental::error::channel_closed && ec != asio::experimental::error::channel_cancelled) {
+                CB_LOG_WARNING("unexpected error while sending to scan item channel: {} ({})", ec.value(), ec.message());
+            }
+        });
+        return start_streams(1);
+    }
+
+    void stream_start_failed_awaiting_retry(std::int16_t node_id, std::uint16_t vbucket_id) override
+    {
+        load_balancer_.notify_stream_ended(node_id);
+        active_stream_count_--;
+
+        load_balancer_.enqueue_vbucket(node_id, vbucket_id);
+        if (active_stream_count_ == 0) {
+            return start_streams(1);
+        }
+    }
+
+  private:
     asio::io_context& io_;
     agent agent_;
     topology::configuration::vbucket_map vbucket_map_;
     std::string scope_name_;
     std::string collection_name_;
+    range_scan_load_balancer load_balancer_;
+    asio::experimental::concurrent_channel<void(std::error_code, std::variant<range_scan_item, scan_stream_end_signal>)> items_;
     std::uint32_t collection_id_{ 0 };
     std::variant<std::monostate, range_scan, prefix_scan, sampling_scan> scan_type_;
     range_scan_orchestrator_options options_;
     std::map<std::size_t, std::optional<range_snapshot_requirements>> vbucket_to_snapshot_requirements_;
     std::map<std::uint16_t, std::shared_ptr<range_scan_stream>> streams_{};
-    std::map<std::int16_t, std::atomic_uint16_t> stream_count_per_node_{};
-    std::recursive_mutex stream_start_mutex_{};
     std::mutex stream_map_mutex_{};
-    std::mutex stream_count_per_node_mutex_{};
-    std::atomic_uint16_t active_stream_count_ = 0;
-    std::uint16_t concurrency_ = 1;
-    std::size_t item_limit_{ std::numeric_limits<size_t>::max() };
+    std::atomic_uint16_t active_stream_count_{ 0 };
+    std::uint16_t concurrency_{ 1 };
+    std::size_t item_limit_{ std::numeric_limits<std::size_t>::max() };
     bool cancelled_{ false };
 };
 

@@ -360,6 +360,7 @@ set(couchbase_cxx_client_FILES
     core/protocol/cmd_upsert.cxx
     core/protocol/frame_info_utils.cxx
     core/protocol/status.cxx
+    core/range_scan_load_balancer.cxx
     core/range_scan_options.cxx
     core/range_scan_orchestrator.cxx
     core/retry_orchestrator.cxx

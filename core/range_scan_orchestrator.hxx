@@ -22,8 +22,8 @@
 
 #include <tl/expected.hpp>
 
-#include <memory>
-#include <optional>
+#include <cstdint>
+#include <system_error>
 
 namespace asio
 {
@@ -39,10 +39,10 @@ class scan_stream_manager
 {
   public:
     virtual ~scan_stream_manager() = default;
-    virtual void stream_start_failed(std::int16_t node_id, bool fatal) = 0;
     virtual void stream_start_failed_awaiting_retry(std::int16_t node_id, std::uint16_t vbucket_id) = 0;
-    virtual void stream_continue_failed(std::int16_t node_id, bool fatal) = 0;
-    virtual void stream_completed(std::int16_t node_id) = 0;
+    virtual void stream_received_item(range_scan_item item) = 0;
+    virtual void stream_failed(std::int16_t node_id, std::uint16_t vbucket_id, std::error_code ec, bool fatal) = 0;
+    virtual void stream_completed(std::int16_t node_id, std::uint16_t vbucket_id) = 0;
 };
 
 class range_scan_orchestrator
@@ -61,5 +61,4 @@ class range_scan_orchestrator
   private:
     std::shared_ptr<range_scan_orchestrator_impl> impl_;
 };
-
 } // namespace couchbase::core
