@@ -222,7 +222,7 @@ class cluster
      * @since 1.0.0
      * @volatile
      */
-    [[nodiscard]] auto search(std::string index_name, search_request request, const search_options& = {}) const
+    [[nodiscard]] auto search(std::string index_name, search_request request, const search_options& options = {}) const
       -> std::future<std::pair<search_error_context, search_result>>;
 
     /**

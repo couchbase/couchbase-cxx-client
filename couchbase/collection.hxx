@@ -791,6 +791,7 @@ class collection
      * @param document_id the outer document ID
      * @param specs an object that specifies the types of lookups to perform
      * @param options custom options to modify the lookup options
+     * @param handler callable that implements @ref lookup_in_any_replica_handler
      *
      * @exception errc::key_value::document_not_found the given document id is not found in the collection.
      * @exception errc::common::ambiguous_timeout

@@ -48,6 +48,7 @@ class error_context
     /**
      * Creates and initializes error context with given parameters.
      *
+     * @param operation_id
      * @param ec
      * @param last_dispatched_to
      * @param last_dispatched_from

@@ -79,7 +79,7 @@ class bucket
      * Performs application-level ping requests against services in the Couchbase cluster.
      *
      * @note This operation performs active I/O against services and endpoints to assess their health. If you do not
-     * wish to performs I/O, consider using @ref diagnostics() instead.
+     * wish to performs I/O, consider using @ref cluster::diagnostics() instead.
      *
      * @param options custom options to change the default behavior.
      * @param handler the handler that implements @ref ping_handler.
@@ -93,7 +93,7 @@ class bucket
      * Performs application-level ping requests against services in the Couchbase cluster.
      *
      * @note This operation performs active I/O against services and endpoints to assess their health. If you do not
-     * wish to performs I/O, consider using @ref diagnostics() instead.
+     * wish to performs I/O, consider using @ref cluster::diagnostics() instead.
      *
      * @param options custom options to change the default behavior.
      * @return future object that carries result of the operation.
