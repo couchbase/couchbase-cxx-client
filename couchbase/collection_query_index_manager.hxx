@@ -64,7 +64,7 @@ class collection_query_index_manager
     void get_all_indexes(const get_all_query_indexes_options& options, get_all_query_indexes_handler&& handler) const;
 
     /**
-     * Get all indexes within the collection..
+     * Get all indexes within the collection.
      *
      * @param options optional parameters
      * @return future object that carries result of the operation

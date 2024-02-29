@@ -78,7 +78,7 @@ class transaction_options
     /**
      * Set the timeout for this transaction.
      *
-     * @tparam T timeout type, e.g. @ref std::chrono::milliseconds, or similar
+     * @tparam T timeout type, e.g. std::chrono::milliseconds, or similar
      * @param timeout Desired timeout
      * @return reference to this object, convenient for chaining operations.
      */

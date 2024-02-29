@@ -35,7 +35,7 @@
 namespace couchbase
 {
 /**
- * Options for cluster#search_query() and scope#search_query().
+ * Options for @ref cluster#search_query(), @ref cluster#search() and @ref scope#search().
  *
  * @since 1.0.0
  * @committed
@@ -500,7 +500,7 @@ struct search_options : public common_options<search_options> {
 };
 
 /**
- * The signature for the handler of the @ref cluster#search_query() and @ref scope#search_query() operations
+ * The signature for the handler of the @ref cluster#search_query(), @ref cluster#search() and @ref scope#search() operations
  *
  * @since 1.0.0
  * @uncommitted

@@ -50,7 +50,7 @@ class get_links_analytics_options : public common_options<get_links_analytics_op
     /**
      * The name of the link to fetch.
      *
-     * @param link_name
+     * @param name link name
      * @return reference to this object, for use in chaining
      *
      * @since 1.0.0
@@ -65,7 +65,7 @@ class get_links_analytics_options : public common_options<get_links_analytics_op
     /**
      * The type of links to restrict returned links to.
      *
-     * @param link_type
+     * @param link_type link type
      * @return reference to this object, for use in chaining
      *
      * @since 1.0.0
