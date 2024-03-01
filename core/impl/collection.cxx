@@ -41,12 +41,101 @@
 #include "lookup_in_replica.hxx"
 #include "observe_poll.hxx"
 
+#include <couchbase/fmt/cas.hxx>
+#include <couchbase/fmt/key_value_error_map_attribute.hxx>
+#include <couchbase/fmt/key_value_status_code.hxx>
+#include <couchbase/fmt/retry_reason.hxx>
+
 #include <couchbase/collection.hxx>
 
 #include <memory>
 
+#include "internal_operation_error_context.hxx"
+
 namespace couchbase
 {
+namespace {
+
+auto
+key_value_error_context_to_json(const key_value_error_context& ctx) -> tao::json::value
+{
+    tao::json::value json = {
+        {
+          "ec",
+          tao::json::value{
+            { "value", ctx.ec().value() },
+            { "message", ctx.ec().message() },
+          },
+        },
+        { "operation_id", ctx.operation_id() },
+        { "id", ctx.id() },
+        { "bucket", ctx.bucket() },
+        { "scope", ctx.scope() },
+        { "collection", ctx.collection() },
+    };
+
+    if (auto val = ctx.retry_attempts(); val > 0) {
+        json["retry_attempts"] = val;
+    }
+    if (ctx.opaque() > 0) {
+        json["opaque"] = ctx.opaque();
+    }
+
+    if (!ctx.cas().empty()) {
+        json["cas"] = fmt::format("{}", ctx.cas());
+    }
+
+    if (const auto& reasons = ctx.retry_reasons(); !reasons.empty()) {
+        tao::json::value reasons_json = tao::json::empty_array;
+        for (const auto& reason : reasons) {
+            reasons_json.emplace_back(fmt::format("{}", reason));
+        }
+        json["retry_reasons"] = reasons_json;
+    }
+    if (const auto& val = ctx.last_dispatched_from(); val.has_value()) {
+        json["last_dispatched_from"] = val.value();
+    }
+    if (const auto& val = ctx.last_dispatched_to(); val.has_value()) {
+        json["last_dispatched_to"] = val.value();
+    }
+    if (const auto& val = ctx.status_code(); val.has_value()) {
+        json["status_code"] = fmt::format("{}", val.value());
+    }
+    if (const auto& val = ctx.extended_error_info(); val.has_value()) {
+        json["extended_error_info"] = tao::json::value{
+            { "context", val->context() },
+            { "reference", val->reference() },
+        };
+    }
+    if (const auto& val = ctx.error_map_info(); val.has_value()) {
+        tao::json::value info{
+            { "code", val->code() },
+            { "name", val->name() },
+            { "description", val->description() },
+        };
+        if (const auto& attributes = val->attributes(); !attributes.empty()) {
+            tao::json::value attrs_json = tao::json::empty_array;
+            for (const auto& attr : attributes) {
+                attrs_json.emplace_back(fmt::format("{}", attr));
+            }
+            info["attributes"] = attrs_json;
+        }
+        json["error_map_info"] = info;
+    }
+    return json;
+}
+
+couchbase::error
+key_value_error_context_to_error(const key_value_error_context& ctx)
+{
+    return {
+        ctx.ec(),
+        ctx.ec().message(),
+        operation_error_context { internal_operation_error_context{ key_value_error_context_to_json(ctx) } }
+    };
+}
+} // namespace
+
 class collection_impl : public std::enable_shared_from_this<collection_impl>
 {
   public:
@@ -111,6 +200,42 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                   expiry_time.emplace(std::chrono::seconds{ resp.expiry.value() });
               }
               return handler(std::move(resp.ctx), get_result{ resp.cas, { std::move(resp.value), resp.flags }, expiry_time });
+          });
+    }
+
+    void get_with_error(std::string document_key, get_options::built options, get_with_error_handler&& handler) const
+    {
+        if (!options.with_expiry && options.projections.empty()) {
+            return core_.execute(
+              core::operations::get_request{
+                core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
+                {},
+                {},
+                options.timeout,
+                { options.retry_strategy },
+              },
+              [handler = std::move(handler)](auto resp) mutable {
+                  return handler(key_value_error_context_to_error(resp.ctx), get_result{ resp.cas, { std::move(resp.value), resp.flags }, {} });
+              });
+        }
+        return core_.execute(
+          core::operations::get_projected_request{
+            core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
+            {},
+            {},
+            options.projections,
+            options.with_expiry,
+            {},
+            false,
+            options.timeout,
+            { options.retry_strategy },
+          },
+          [handler = std::move(handler)](auto resp) mutable {
+              std::optional<std::chrono::system_clock::time_point> expiry_time{};
+              if (resp.expiry && resp.expiry.value() > 0) {
+                  expiry_time.emplace(std::chrono::seconds{ resp.expiry.value() });
+              }
+              return handler(key_value_error_context_to_error(resp.ctx), get_result{ resp.cas, { std::move(resp.value), resp.flags }, expiry_time });
           });
     }
 
@@ -1064,6 +1189,21 @@ collection::get(std::string document_id, const get_options& options) const -> st
     auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
     auto future = barrier->get_future();
     get(std::move(document_id), options, [barrier](auto ctx, auto result) { barrier->set_value({ std::move(ctx), std::move(result) }); });
+    return future;
+}
+
+void
+collection::get_with_error(std::string document_id, const get_options& options, get_with_error_handler&& handler) const
+{
+    return impl_->get_with_error(std::move(document_id), options.build(), std::move(handler));
+}
+
+auto
+collection::get_with_error(std::string document_id, const get_options& options) const -> std::future<std::pair<error, get_result>>
+{
+    auto barrier = std::make_shared<std::promise<std::pair<error, get_result>>>();
+    auto future = barrier->get_future();
+    get_with_error(std::move(document_id), options, [barrier](auto ctx, auto result) { barrier->set_value({ std::move(ctx), std::move(result) }); });
     return future;
 }
 

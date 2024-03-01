@@ -147,6 +147,39 @@ class collection
       -> std::future<std::pair<key_value_error_context, get_result>>;
 
     /**
+     * Fetches the full document from this collection.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param options options to customize the get request.
+     * @param handler the handler that implements @ref get_handler
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    void get_with_error(std::string document_id, const get_options& options, get_with_error_handler&& handler) const;
+
+    /**
+     * Fetches the full document from this collection.
+     *
+     * @param document_id the document id which is used to uniquely identify it.
+     * @param options options to customize the get request.
+     * @return future object that carries result of the operation
+     *
+     * @exception errc::key_value::document_not_found the given document id is not found in the collection.
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto get_with_error(std::string document_id, const get_options& options = {}) const
+      -> std::future<std::pair<error, get_result>>;
+
+    /**
      * Fetches a full document and resets its expiration time to the value provided.
      *
      * @param document_id the document id which is used to uniquely identify it.
