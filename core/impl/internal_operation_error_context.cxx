@@ -40,6 +40,6 @@ internal_operation_error_context::to_json_pretty() const -> const std::string
 auto
 internal_operation_error_context::to_json() const -> const std::string
 {
-    return tao::json::to_string(ctx_); //TODO check the formatting
+    return tao::json::to_string(ctx_);
 }
 } // namespace couchbase

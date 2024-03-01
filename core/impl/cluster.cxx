@@ -22,6 +22,7 @@
 #include "core/transactions.hxx"
 #include "core/utils/connection_string.hxx"
 #include "diagnostics.hxx"
+#include "internal_operation_error_context.hxx"
 #include "internal_search_error_context.hxx"
 #include "internal_search_meta_data.hxx"
 #include "internal_search_result.hxx"
@@ -33,6 +34,8 @@
 
 #include <couchbase/bucket.hxx>
 #include <couchbase/cluster.hxx>
+
+#include <couchbase/fmt/retry_reason.hxx>
 
 namespace couchbase
 {
@@ -150,6 +153,66 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
     return { auth, couchbase::core::utils::parse_connection_string(connection_string, user_options) };
 }
 
+auto
+query_error_context_to_json(const query_error_context& ctx) -> tao::json::value
+{
+    tao::json::value json = {
+        {
+          "ec",
+          tao::json::value{
+            { "value", ctx.ec().value() },
+            { "message", ctx.ec().message() },
+          },
+        },
+        { "operation_id", ctx.operation_id() },
+        { "retry_attempts", ctx.retry_attempts() },
+        { "client_context_id", ctx.client_context_id() },
+        { "statement", ctx.statement() },
+        { "method", ctx.method() },
+        { "path", ctx.path() },
+        { "http_status", ctx.http_status() },
+        { "http_body", ctx.http_body() },
+        { "hostname", ctx.hostname() },
+        { "port", ctx.port() },
+    };
+
+    if (const auto& val = ctx.parameters(); val.has_value()) {
+        json["parameters"] = val.value();
+    }
+    if (ctx.first_error_code() > 0) {
+        json["first_error_code"] = ctx.first_error_code();
+    }
+    if (!ctx.first_error_message().empty()) {
+        json["first_error_message"] = ctx.first_error_message();
+    }
+
+    if (const auto& reasons = ctx.retry_reasons(); !reasons.empty()) {
+        tao::json::value reasons_json = tao::json::empty_array;
+        for (const auto& reason : reasons) {
+            reasons_json.emplace_back(fmt::format("{}", reason));
+        }
+        json["retry_reasons"] = reasons_json;
+    }
+    if (const auto& val = ctx.last_dispatched_from(); val.has_value()) {
+        json["last_dispatched_from"] = val.value();
+    }
+    if (const auto& val = ctx.last_dispatched_to(); val.has_value()) {
+        json["last_dispatched_to"] = val.value();
+    }
+
+    return json;
+}
+
+couchbase::error
+query_error_context_to_error(const query_error_context& ctx)
+{
+    return {
+        ctx.ec(),
+        ctx.ec().message(),
+        operation_error_context { internal_operation_error_context{ query_error_context_to_json(ctx) } }
+    };
+}
+
 } // namespace
 
 class cluster_impl : public std::enable_shared_from_this<cluster_impl>
@@ -186,6 +249,13 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
         return core_.execute(
           core::impl::build_query_request(std::move(statement), {}, std::move(options)),
           [handler = std::move(handler)](auto resp) { return handler(core::impl::build_context(resp), core::impl::build_result(resp)); });
+    }
+
+    void query_with_error(std::string statement, query_options::built options, query_with_error_handler&& handler) const
+    {
+        return core_.execute(
+          core::impl::build_query_request(std::move(statement), {}, std::move(options)),
+          [handler = std::move(handler)](auto resp) { return handler(query_error_context_to_error(core::impl::build_context(resp)), core::impl::build_result(resp)); });
     }
 
     void analytics_query(std::string statement, analytics_options::built options, analytics_handler&& handler) const
@@ -302,6 +372,21 @@ cluster::query(std::string statement, const query_options& options) const -> std
     auto barrier = std::make_shared<std::promise<std::pair<query_error_context, query_result>>>();
     auto future = barrier->get_future();
     query(std::move(statement), options, [barrier](auto ctx, auto result) { barrier->set_value({ std::move(ctx), std::move(result) }); });
+    return future;
+}
+
+void
+cluster::query_with_error(std::string statement, const query_options& options, query_with_error_handler&& handler) const
+{
+    return impl_->query_with_error(std::move(statement), options.build(), std::move(handler));
+}
+
+auto
+cluster::query_with_error(std::string statement, const query_options& options) const -> std::future<std::pair<error, query_result>>
+{
+    auto barrier = std::make_shared<std::promise<std::pair<error, query_result>>>();
+    auto future = barrier->get_future();
+    query_with_error(std::move(statement), options, [barrier](auto ctx, auto result) { barrier->set_value({ std::move(ctx), std::move(result) }); });
     return future;
 }
 

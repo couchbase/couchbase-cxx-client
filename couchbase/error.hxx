@@ -1,3 +1,5 @@
+#pragma once
+
 #include <system_error>
 #include <utility>
 

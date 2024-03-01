@@ -43,7 +43,6 @@
 
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/key_value_error_map_attribute.hxx>
-#include <couchbase/fmt/key_value_status_code.hxx>
 #include <couchbase/fmt/retry_reason.hxx>
 
 #include <couchbase/collection.hxx>

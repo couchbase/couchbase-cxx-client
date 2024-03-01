@@ -161,6 +161,34 @@ class cluster
       -> std::future<std::pair<query_error_context, query_result>>;
 
     /**
+     * Performs a query against the query (N1QL) services.
+     *
+     * @param statement the N1QL query statement.
+     * @param options options to customize the query request.
+     * @param handler the handler that implements @ref query_handler
+     *
+     * @exception errc::common::ambiguous_timeout
+     * @exception errc::common::unambiguous_timeout
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    void query_with_error(std::string statement, const query_options& options, query_with_error_handler&& handler) const;
+
+    /**
+     * Performs a query against the query (N1QL) services.
+     *
+     * @param statement the N1QL query statement.
+     * @param options options to customize the query request.
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto query_with_error(std::string statement, const query_options& options) const
+      -> std::future<std::pair<error, query_result>>;
+
+    /**
      * Performs a query against the full text search services.
      *
      * Consider using the newer @ref cluster::search() interface instead, which can be used
