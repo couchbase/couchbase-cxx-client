@@ -21,13 +21,13 @@
  * @page cli Command Line Tools
  * @brief Indexes of the API grouped by stability.
  *
- * @subpage md_docs_2cbc
+ * @subpage cbc
  *
- * @subpage md_docs_2cbc-get
+ * @subpage cbc-get
  *
- * @subpage md_docs_2cbc-query
+ * @subpage cbc-query
  *
- * @subpage md_docs_2cbc-analytics
+ * @subpage cbc-analytics
  *
- * @subpage md_docs_2cbc-pillowfight
+ * @subpage cbc-pillowfight
  */
