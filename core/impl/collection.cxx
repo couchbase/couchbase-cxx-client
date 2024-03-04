@@ -49,16 +49,15 @@
 
 namespace couchbase
 {
-namespace {
+namespace
+{
 
 couchbase::error
 key_value_error_context_to_error(const key_value_error_context& ctx)
 {
-    return {
-        ctx.ec(),
-        ctx.ec().message(),
-        operation_error_context { internal_operation_error_context{ core::impl::key_value_error_context_to_json(ctx) } }
-    };
+    return { ctx.ec(),
+             ctx.ec().message(),
+             operation_error_context{ internal_operation_error_context{ core::impl::key_value_error_context_to_json(ctx) } } };
 }
 } // namespace
 
@@ -141,7 +140,8 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                 { options.retry_strategy },
               },
               [handler = std::move(handler)](auto resp) mutable {
-                  return handler(key_value_error_context_to_error(resp.ctx), get_result{ resp.cas, { std::move(resp.value), resp.flags }, {} });
+                  return handler(key_value_error_context_to_error(resp.ctx),
+                                 get_result{ resp.cas, { std::move(resp.value), resp.flags }, {} });
               });
         }
         return core_.execute(
@@ -161,7 +161,8 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
               if (resp.expiry && resp.expiry.value() > 0) {
                   expiry_time.emplace(std::chrono::seconds{ resp.expiry.value() });
               }
-              return handler(key_value_error_context_to_error(resp.ctx), get_result{ resp.cas, { std::move(resp.value), resp.flags }, expiry_time });
+              return handler(key_value_error_context_to_error(resp.ctx),
+                             get_result{ resp.cas, { std::move(resp.value), resp.flags }, expiry_time });
           });
     }
 
@@ -1129,7 +1130,9 @@ collection::get_with_error(std::string document_id, const get_options& options) 
 {
     auto barrier = std::make_shared<std::promise<std::pair<error, get_result>>>();
     auto future = barrier->get_future();
-    get_with_error(std::move(document_id), options, [barrier](auto ctx, auto result) { barrier->set_value({ std::move(ctx), std::move(result) }); });
+    get_with_error(std::move(document_id), options, [barrier](auto ctx, auto result) {
+        barrier->set_value({ std::move(ctx), std::move(result) });
+    });
     return future;
 }
 

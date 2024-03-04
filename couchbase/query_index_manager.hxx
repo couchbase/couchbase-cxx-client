@@ -148,8 +148,8 @@ class query_index_manager
      * @committed
      */
     void create_primary_index_with_error(std::string bucket_name,
-                              const create_primary_query_index_options& options,
-                              create_primary_query_index_with_error_handler&& handler) const;
+                                         const create_primary_query_index_options& options,
+                                         create_primary_query_index_with_error_handler&& handler) const;
 
     /**
      * Create a primary index on a bucket.

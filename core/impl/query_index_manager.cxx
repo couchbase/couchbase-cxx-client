@@ -56,11 +56,9 @@ build_context(Response& resp)
 couchbase::error
 manager_error_context_to_error(const manager_error_context& ctx)
 {
-    return {
-        ctx.ec(),
-        ctx.ec().message(),
-        operation_error_context { internal_operation_error_context{ core::impl::manager_error_context_to_json(ctx) } }
-    };
+    return { ctx.ec(),
+             ctx.ec().message(),
+             operation_error_context{ internal_operation_error_context{ core::impl::manager_error_context_to_json(ctx) } } };
 }
 
 class watch_context : public std::enable_shared_from_this<watch_context>
@@ -276,10 +274,10 @@ class query_index_manager_impl : public std::enable_shared_from_this<query_index
     }
 
     void create_primary_index_with_error(const std::string& bucket_name,
-                              const std::string& scope_name,
-                              const std::string& collection_name,
-                              const create_primary_query_index_options::built& options,
-                              create_primary_query_index_with_error_handler&& handler) const
+                                         const std::string& scope_name,
+                                         const std::string& collection_name,
+                                         const create_primary_query_index_options::built& options,
+                                         create_primary_query_index_with_error_handler&& handler) const
     {
         return core_.execute(
           core::operations::management::query_index_create_request{
@@ -456,8 +454,8 @@ query_index_manager::create_primary_index(std::string bucket_name, const create_
 
 void
 query_index_manager::create_primary_index_with_error(std::string bucket_name,
-                                          const create_primary_query_index_options& options,
-                                          create_primary_query_index_with_error_handler && handler) const
+                                                     const create_primary_query_index_options& options,
+                                                     create_primary_query_index_with_error_handler&& handler) const
 {
     return impl_->create_primary_index_with_error(bucket_name, {}, {}, options.build(), std::move(handler));
 }

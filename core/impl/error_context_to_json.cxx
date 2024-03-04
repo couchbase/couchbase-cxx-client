@@ -24,7 +24,8 @@
 
 #include <fmt/core.h>
 
-namespace couchbase::core::impl {
+namespace couchbase::core::impl
+{
 
 auto
 key_value_error_context_to_json(const key_value_error_context& ctx) -> tao::json::value

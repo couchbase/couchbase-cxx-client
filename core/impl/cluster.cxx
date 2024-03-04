@@ -35,8 +35,6 @@
 #include <couchbase/bucket.hxx>
 #include <couchbase/cluster.hxx>
 
-#include <couchbase/fmt/retry_reason.hxx>
-
 namespace couchbase
 {
 namespace
@@ -153,16 +151,12 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
     return { auth, couchbase::core::utils::parse_connection_string(connection_string, user_options) };
 }
 
-
-
 couchbase::error
 query_error_context_to_error(const query_error_context& ctx)
 {
-    return {
-        ctx.ec(),
-        ctx.ec().message(),
-        operation_error_context { internal_operation_error_context{ core::impl::query_error_context_to_json(ctx) } }
-    };
+    return { ctx.ec(),
+             ctx.ec().message(),
+             operation_error_context{ internal_operation_error_context{ core::impl::query_error_context_to_json(ctx) } } };
 }
 
 } // namespace
@@ -206,8 +200,9 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
     void query_with_error(std::string statement, query_options::built options, query_with_error_handler&& handler) const
     {
         return core_.execute(
-          core::impl::build_query_request(std::move(statement), {}, std::move(options)),
-          [handler = std::move(handler)](auto resp) { return handler(query_error_context_to_error(core::impl::build_context(resp)), core::impl::build_result(resp)); });
+          core::impl::build_query_request(std::move(statement), {}, std::move(options)), [handler = std::move(handler)](auto resp) {
+              return handler(query_error_context_to_error(core::impl::build_context(resp)), core::impl::build_result(resp));
+          });
     }
 
     void analytics_query(std::string statement, analytics_options::built options, analytics_handler&& handler) const
@@ -338,7 +333,9 @@ cluster::query_with_error(std::string statement, const query_options& options) c
 {
     auto barrier = std::make_shared<std::promise<std::pair<error, query_result>>>();
     auto future = barrier->get_future();
-    query_with_error(std::move(statement), options, [barrier](auto ctx, auto result) { barrier->set_value({ std::move(ctx), std::move(result) }); });
+    query_with_error(std::move(statement), options, [barrier](auto ctx, auto result) {
+        barrier->set_value({ std::move(ctx), std::move(result) });
+    });
     return future;
 }
 

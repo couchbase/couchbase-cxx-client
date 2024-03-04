@@ -21,7 +21,6 @@
 
 #include <utility>
 
-
 namespace couchbase
 {
 internal_operation_error_context::internal_operation_error_context(internal_operation_error_context&& other) noexcept = default;
@@ -30,7 +29,7 @@ internal_operation_error_context&
 internal_operation_error_context::operator=(internal_operation_error_context&& other) noexcept = default;
 
 internal_operation_error_context::internal_operation_error_context(tao::json::value ctx)
-  : ctx_ {std::move( ctx )}
+  : ctx_{ std::move(ctx) }
 {
 }
 

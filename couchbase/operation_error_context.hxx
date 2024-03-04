@@ -28,8 +28,6 @@ class internal_operation_error_context;
 class operation_error_context
 {
   public:
-
-
     operation_error_context();
     explicit operation_error_context(internal_operation_error_context ctx);
     operation_error_context(operation_error_context&& other);
@@ -41,7 +39,6 @@ class operation_error_context
     [[nodiscard]] auto to_json_pretty() const -> std::string;
 
     [[nodiscard]] auto to_json() const -> std::string;
-
 
   private:
     std::unique_ptr<internal_operation_error_context> internal_;

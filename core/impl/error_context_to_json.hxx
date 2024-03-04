@@ -23,7 +23,8 @@
 
 #include <tao/json/value.hpp>
 
-namespace couchbase::core::impl {
+namespace couchbase::core::impl
+{
 
 auto
 key_value_error_context_to_json(const key_value_error_context& ctx) -> tao::json::value;
@@ -34,6 +35,6 @@ manager_error_context_to_json(const manager_error_context& ctx) -> tao::json::va
 auto
 query_error_context_to_json(const query_error_context& ctx) -> tao::json::value;
 
-//TODO other types of error_context_to_json
+// TODO other types of error_context_to_json
 
 } // namespace couchbase::core::impl

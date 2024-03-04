@@ -5,33 +5,31 @@
 
 #include "operation_error_context.hxx"
 
-namespace couchbase {
+namespace couchbase
+{
 
-
-class error {
+class error
+{
   public:
-
-    explicit operator bool () const { return ec_.value() != 0; }
+    explicit operator bool() const
+    {
+        return ec_.value() != 0;
+    }
 
     error() = default;
 
-    error(std::error_code ec,
-          std::string message,
-          operation_error_context  ctx)
-      : ec_{ ec },
-      message_{ std::move( message ) },
-      ctx_{ std::move( ctx ) }
+    error(std::error_code ec, std::string message, operation_error_context ctx)
+      : ec_{ ec }
+      , message_{ std::move(message) }
+      , ctx_{ std::move(ctx) }
     {
     }
 
-    error(std::error_code ec,
-          std::string message,
-          operation_error_context  ctx,
-          couchbase::error cause)
-      : ec_{ ec },
-      message_{ std::move( message ) },
-      ctx_{std::move( ctx )},
-      cause_{ std::make_unique<couchbase::error>(std::move(cause)) }
+    error(std::error_code ec, std::string message, operation_error_context ctx, couchbase::error cause)
+      : ec_{ ec }
+      , message_{ std::move(message) }
+      , ctx_{ std::move(ctx) }
+      , cause_{ std::make_unique<couchbase::error>(std::move(cause)) }
     {
     }
 

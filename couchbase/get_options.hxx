@@ -18,8 +18,8 @@
 #pragma once
 
 #include <couchbase/common_options.hxx>
-#include <couchbase/get_result.hxx>
 #include <couchbase/error.hxx>
+#include <couchbase/get_result.hxx>
 #include <couchbase/key_value_error_context.hxx>
 
 #include <chrono>
