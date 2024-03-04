@@ -15,6 +15,7 @@ macro(define_example name)
 endmacro()
 
 define_example(minimal)
+define_example(error)
 define_example(bulk_base_api)
 define_example(bulk_transactional_api)
 define_example(bulk_transactional_get_replace)
