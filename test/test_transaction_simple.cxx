@@ -215,8 +215,9 @@ TEST_CASE("transactions: non existent bucket in custom metadata collections", "[
       couchbase::scope::default_name,
       couchbase::collection::default_name,
     });
-    // can't open bucket upon creation of txns, so throws here.
-    REQUIRE_THROWS_AS([](auto cluster, auto cfg) { transactions txn(cluster, cfg); }(cluster, cfg), std::runtime_error);
+
+    auto [ec, txns] = transactions::create(cluster, cfg).get();
+    REQUIRE(ec == couchbase::errc::common::bucket_not_found);
 }
 
 TEST_CASE("transactions: non existent scope in custom metadata collections", "[transactions]")
