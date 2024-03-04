@@ -19,6 +19,7 @@
 
 #include "core/logger/logger.hxx"
 #include "core/operations/management/freeform.hxx"
+#include "core/transactions.hxx"
 #include "core/utils/connection_string.hxx"
 #include "core/utils/json.hxx"
 #include "logger.hxx"

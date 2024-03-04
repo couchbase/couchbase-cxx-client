@@ -160,6 +160,12 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
     {
     }
 
+    explicit cluster_impl(couchbase::core::cluster core, std::shared_ptr<couchbase::core::transactions::transactions> transactions)
+      : core_{ std::move(core) }
+      , transactions_{ transactions }
+    {
+    }
+
     void initialize_transactions(std::function<void(std::error_code)>&& handler)
     {
         return core::transactions::transactions::create(
@@ -269,6 +275,11 @@ extract_core_cluster(const couchbase::cluster& cluster) -> const core::cluster&
 
 cluster::cluster(core::cluster core)
   : impl_{ std::make_shared<cluster_impl>(std::move(core)) }
+{
+}
+
+cluster::cluster(core::cluster core, std::shared_ptr<core::transactions::transactions> transactions)
+  : impl_{ std::make_shared<cluster_impl>(std::move(core), transactions) }
 {
 }
 
