@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <tao/json/to_string.hpp>
+#include "error_context_to_json.hxx"
 
 namespace couchbase
 {

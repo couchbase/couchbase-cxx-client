@@ -15,9 +15,12 @@
  *   limitations under the License.
  */
 
+#include "internal_operation_error_context.hxx"
+
+#include <tao/json/to_string.hpp>
+
 #include <utility>
 
-#include "internal_operation_error_context.hxx"
 
 namespace couchbase
 {

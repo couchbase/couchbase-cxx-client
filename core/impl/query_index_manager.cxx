@@ -53,49 +53,13 @@ build_context(Response& resp)
                                                                   std::move(resp.ctx.path) } };
 }
 
-auto
-manager_error_context_to_json(const manager_error_context& ctx) -> tao::json::value
-{
-    tao::json::value json = {
-        {
-          "ec",
-          tao::json::value{
-            { "value", ctx.ec().value() },
-            { "message", ctx.ec().message() },
-          },
-        },
-        { "content", ctx.content() },
-        { "operation_id", ctx.operation_id() },
-        { "retry_attempts", ctx.retry_attempts() },
-        { "client_context_id", ctx.client_context_id() },
-        { "path", ctx.path() },
-        { "http_status", ctx.http_status() },
-    };
-
-    if (const auto& reasons = ctx.retry_reasons(); !reasons.empty()) {
-        tao::json::value reasons_json = tao::json::empty_array;
-        for (const auto& reason : reasons) {
-            reasons_json.emplace_back(fmt::format("{}", reason));
-        }
-        json["retry_reasons"] = reasons_json;
-    }
-    if (const auto& val = ctx.last_dispatched_from(); val.has_value()) {
-        json["last_dispatched_from"] = val.value();
-    }
-    if (const auto& val = ctx.last_dispatched_to(); val.has_value()) {
-        json["last_dispatched_to"] = val.value();
-    }
-
-    return json;
-}
-
 couchbase::error
 manager_error_context_to_error(const manager_error_context& ctx)
 {
     return {
         ctx.ec(),
         ctx.ec().message(),
-        operation_error_context { internal_operation_error_context{ manager_error_context_to_json(ctx) } }
+        operation_error_context { internal_operation_error_context{ core::impl::manager_error_context_to_json(ctx) } }
     };
 }
 
