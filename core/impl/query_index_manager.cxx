@@ -22,6 +22,7 @@
 #include "core/operations/management/query_index_drop.hxx"
 #include "core/operations/management/query_index_get_all.hxx"
 #include "internal_manager_error_context.hxx"
+#include "internal_operation_error_context.hxx"
 
 #include "core/logger/logger.hxx"
 
@@ -50,6 +51,52 @@ build_context(Response& resp)
                                                                   resp.ctx.http_status,
                                                                   std::move(resp.ctx.http_body),
                                                                   std::move(resp.ctx.path) } };
+}
+
+auto
+manager_error_context_to_json(const manager_error_context& ctx) -> tao::json::value
+{
+    tao::json::value json = {
+        {
+          "ec",
+          tao::json::value{
+            { "value", ctx.ec().value() },
+            { "message", ctx.ec().message() },
+          },
+        },
+        { "content", ctx.content() },
+        { "operation_id", ctx.operation_id() },
+        { "retry_attempts", ctx.retry_attempts() },
+        { "client_context_id", ctx.client_context_id() },
+        { "path", ctx.path() },
+        { "http_status", ctx.http_status() },
+    };
+
+    if (const auto& reasons = ctx.retry_reasons(); !reasons.empty()) {
+        tao::json::value reasons_json = tao::json::empty_array;
+        for (const auto& reason : reasons) {
+            reasons_json.emplace_back(fmt::format("{}", reason));
+        }
+        json["retry_reasons"] = reasons_json;
+    }
+    if (const auto& val = ctx.last_dispatched_from(); val.has_value()) {
+        json["last_dispatched_from"] = val.value();
+    }
+    if (const auto& val = ctx.last_dispatched_to(); val.has_value()) {
+        json["last_dispatched_to"] = val.value();
+    }
+
+    return json;
+}
+
+couchbase::error
+manager_error_context_to_error(const manager_error_context& ctx)
+{
+    return {
+        ctx.ec(),
+        ctx.ec().message(),
+        operation_error_context { internal_operation_error_context{ manager_error_context_to_json(ctx) } }
+    };
 }
 
 class watch_context : public std::enable_shared_from_this<watch_context>
@@ -264,6 +311,31 @@ class query_index_manager_impl : public std::enable_shared_from_this<query_index
           [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
     }
 
+    void create_primary_index_with_error(const std::string& bucket_name,
+                              const std::string& scope_name,
+                              const std::string& collection_name,
+                              const create_primary_query_index_options::built& options,
+                              create_primary_query_index_with_error_handler&& handler) const
+    {
+        return core_.execute(
+          core::operations::management::query_index_create_request{
+            bucket_name,
+            scope_name,
+            collection_name,
+            options.index_name.value_or(""),
+            {},
+            {},
+            true /* is_primary */,
+            options.ignore_if_exists,
+            {},
+            options.deferred,
+            options.num_replicas,
+            {},
+            options.timeout,
+          },
+          [handler = std::move(handler)](auto resp) { handler(manager_error_context_to_error(build_context(resp))); });
+    }
+
     void drop_index(const std::string& bucket_name,
                     const std::string& scope_name,
                     const std::string& collection_name,
@@ -415,6 +487,24 @@ query_index_manager::create_primary_index(std::string bucket_name, const create_
     auto barrier = std::make_shared<std::promise<manager_error_context>>();
     auto future = barrier->get_future();
     create_primary_index(std::move(bucket_name), options, [barrier](auto ctx) { barrier->set_value(std::move(ctx)); });
+    return future;
+}
+
+void
+query_index_manager::create_primary_index_with_error(std::string bucket_name,
+                                          const create_primary_query_index_options& options,
+                                          create_primary_query_index_with_error_handler && handler) const
+{
+    return impl_->create_primary_index_with_error(bucket_name, {}, {}, options.build(), std::move(handler));
+}
+
+auto
+query_index_manager::create_primary_index_with_error(std::string bucket_name, const create_primary_query_index_options& options) const
+  -> std::future<error>
+{
+    auto barrier = std::make_shared<std::promise<error>>();
+    auto future = barrier->get_future();
+    create_primary_index_with_error(std::move(bucket_name), options, [barrier](auto ctx) { barrier->set_value(std::move(ctx)); });
     return future;
 }
 

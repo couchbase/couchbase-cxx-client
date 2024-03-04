@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/manager_error_context.hxx>
 
@@ -134,4 +135,6 @@ class create_primary_query_index_options : public common_options<create_primary_
  */
 
 using create_primary_query_index_handler = std::function<void(couchbase::manager_error_context)>;
+using create_primary_query_index_with_error_handler = std::function<void(couchbase::error)>;
+
 } // namespace couchbase

@@ -138,6 +138,33 @@ class query_index_manager
       -> std::future<manager_error_context>;
 
     /**
+     * Create a primary index on a bucket.
+     *
+     * @param bucket_name specifies the bucket in which to create the index
+     * @param options optional parameters
+     * @param handler the handler that implements @ref create_query_index_handler
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    void create_primary_index_with_error(std::string bucket_name,
+                              const create_primary_query_index_options& options,
+                              create_primary_query_index_with_error_handler&& handler) const;
+
+    /**
+     * Create a primary index on a bucket.
+     *
+     * @param bucket_name specifies the bucket in which to create the index
+     * @param options optional parameters
+     * @return future object that carries result of the operation
+     *
+     * @since 1.0.0
+     * @committed
+     */
+    [[nodiscard]] auto create_primary_index_with_error(std::string bucket_name, const create_primary_query_index_options& options) const
+      -> std::future<couchbase::error>;
+
+    /**
      * Drop primary index on a bucket.
      *
      * @param bucket_name name of the bucket in which to drop the primary index
