@@ -30,6 +30,7 @@
 
 #include <asio/steady_timer.hpp>
 
+#include <algorithm>
 #include <utility>
 
 namespace couchbase
