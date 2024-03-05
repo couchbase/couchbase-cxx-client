@@ -40,7 +40,7 @@ class dns_config
     [[nodiscard]] std::chrono::milliseconds timeout() const;
 
   private:
-    std::string nameserver_{ default_nameserver };
+    std::string nameserver_{};
     std::uint16_t port_{ default_port };
     std::chrono::milliseconds timeout_{ timeout_defaults::dns_srv_timeout };
 };

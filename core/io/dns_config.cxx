@@ -53,6 +53,7 @@ load_resolv_conf()
     fixed_info = (FIXED_INFO*)malloc(sizeof(FIXED_INFO));
     if (fixed_info == NULL) {
         CB_LOG_WARNING("Error allocating memory needed to call GetNetworkParams");
+        return {};
     }
     buf = sizeof(FIXED_INFO);
 
@@ -63,6 +64,7 @@ load_resolv_conf()
         fixed_info = (FIXED_INFO*)malloc(buf);
         if (fixed_info == NULL) {
             CB_LOG_WARNING("Error allocating memory needed to call GetNetworkParams");
+            return {};
         }
     }
 
@@ -86,10 +88,12 @@ load_resolv_conf()
         }
     } else {
         CB_LOG_WARNING("GetNetworkParams failed with error: {}", ret);
+        return {};
     }
 
-    if (fixed_info)
+    if (fixed_info) {
         free(fixed_info);
+    }
 
     if (dns_servers.size() > 0) {
         CB_LOG_DEBUG(
@@ -153,10 +157,17 @@ dns_config::system_config()
         std::error_code ec;
         asio::ip::make_address(nameserver, ec);
         if (ec) {
-            CB_LOG_DEBUG("Unable to parse \"{}\" as a network address, fall back to \"{}\"", nameserver, default_nameserver);
-            nameserver = default_nameserver;
+            std::string extra_info{};
+#ifndef _WIN32
+            extra_info = fmt::format(" in \"{}\"", default_resolv_conf_path);
+#endif
+            CB_LOG_WARNING("System DNS detection failed: unable to parse \"{}\" as a network address{}. DNS-SRV will not work "
+                           "unless nameserver is specified explicitly in the options.",
+                           nameserver,
+                           extra_info);
+        } else {
+            instance.nameserver_ = nameserver;
         }
-        instance.nameserver_ = nameserver;
     });
 
     return instance;

@@ -285,6 +285,10 @@ dns_client::query_srv(const std::string& name,
                       const dns_config& config,
                       utils::movable_function<void(dns_srv_response&&)>&& handler)
 {
+    if (config.nameserver().empty()) {
+        return handler({ {} });
+    }
+
     std::error_code ec;
     auto address = asio::ip::make_address(config.nameserver(), ec);
     if (ec) {
