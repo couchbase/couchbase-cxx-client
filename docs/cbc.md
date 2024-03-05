@@ -53,4 +53,4 @@ Run simple workload generator. See [cbc-pillowfight](md_docs_2cbc-pillowfight) f
 
 ### SEE ALSO
 
-[cbc-get](md_docs_2cbc-get), [cbc-query](md_docs_2cbc-query).
+[cbc-get](#cbc-get), [cbc-query](#cbc-query).

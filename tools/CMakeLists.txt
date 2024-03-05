@@ -28,6 +28,7 @@ target_link_libraries(
   CLI11
   Microsoft.GSL::GSL
   taocpp::json
+  hdr_histogram_static
   asio)
 
 if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)

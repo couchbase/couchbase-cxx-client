@@ -177,4 +177,4 @@ Execute one or more N1QL queries and print results to standard output.
 
 ### SEE ALSO
 
-[cbc](md_docs_2cbc), [cbc-get](md_docs_2cbc-get).
+[cbc](#cbc), [cbc-get](#cbc-get).

@@ -30,8 +30,10 @@
 #include <asio/steady_timer.hpp>
 #include <fmt/chrono.h>
 #include <fmt/std.h>
+#include <hdr/hdr_histogram.h>
 
 #include <csignal>
+#include <deque>
 #include <numeric>
 #include <random>
 #include <thread>
@@ -46,11 +48,12 @@ const std::size_t default_number_of_worker_threads{ 1 };
 const double default_chance_of_get{ 0.6 };
 const double default_hit_chance_for_get{ 1.0 };
 const double default_hit_chance_for_upsert{ 1 };
-const double default_chance_of_query{ 0.0 };
+const double default_chance_of_query{ 1.0 };
 const std::string default_query_statement{ "SELECT COUNT(*) FROM `{bucket_name}` WHERE type = \"fake_profile\"" };
 const std::size_t default_document_body_size{ 0 };
 const std::size_t default_operations_limit{ 0 };
-const std::size_t default_batch_size{ 100 };
+const std::size_t default_key_value_batch_size{ 100 };
+const std::size_t default_query_batch_size{ 0 };
 const std::chrono::milliseconds default_batch_wait{ 0 };
 const std::size_t default_number_of_keys_to_populate{ 1'000 };
 
@@ -103,9 +106,8 @@ enum class operation {
 using raw_json_transcoder = couchbase::codec::json_transcoder<couchbase::codec::binary_noop_serializer>;
 
 std::atomic_flag running{ true };
-std::atomic_uint64_t total{ 0 };
 
-std::map<std::error_code, std::size_t> errors{};
+std::map<std::error_code, std::uint64_t> errors{};
 std::mutex errors_mutex{};
 
 void
@@ -115,19 +117,64 @@ sigint_handler(int signal)
     running.clear();
 }
 
+std::atomic_uint64_t total{ 0 };
+hdr_histogram* histogram{ nullptr };
+
 void
 dump_stats(asio::steady_timer& timer, std::chrono::system_clock::time_point start_time)
 {
+    struct stats_entry {
+        std::chrono::system_clock::time_point timestamp;
+        std::uint64_t operations;
+        std::uint64_t errors;
+    };
+
+    static constexpr std::size_t max_window_size{ 3 * 60 }; // average on last 3 minutes only
+    static std::deque<stats_entry> stats_window{};
+    static std::uint64_t last_total{ 0 };
+    static std::uint64_t last_errors{ 0 };
+
     timer.expires_after(std::chrono::seconds{ 1 });
     timer.async_wait([&timer, start_time](std::error_code ec) {
         if (ec == asio::error::operation_aborted) {
             return;
         }
-        auto uptime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
-        auto diff = uptime.count();
-        const std::uint64_t ops = total;
-        fmt::print(
-          stderr, "\r\033[Kuptime: {}, rate: {} ops/s, total: {}\r", uptime, diff == 0 ? ops : ops / static_cast<std::uint64_t>(diff), ops);
+        auto now = std::chrono::system_clock::now();
+        auto uptime = std::chrono::duration_cast<std::chrono::seconds>(now - start_time);
+        const std::uint64_t current_total = total;
+        const std::uint64_t current_errors = [] {
+            std::scoped_lock lock(errors_mutex);
+            return std::accumulate(
+              errors.begin(), errors.end(), std::uint64_t{ 0 }, [](auto acc, const auto& pair) { return acc + pair.second; });
+        }();
+        stats_window.push_back({
+          now,
+          current_total - last_total,
+          current_errors - last_errors,
+        });
+        last_total = current_total;
+        last_errors = current_errors;
+        while (stats_window.size() > max_window_size) {
+            stats_window.pop_front();
+        }
+        std::uint64_t window_ops{ 0 };
+        std::uint64_t window_err{ 0 };
+        for (const auto& [_, operations, errors] : stats_window) {
+            window_ops += operations;
+            window_err += errors;
+        }
+        const auto window_size = static_cast<double>(stats_window.size());
+        double ops_rate{ 0 };
+        double err_rate{ 0 };
+        const auto window_start = stats_window.front().timestamp;
+        const auto window_duration = std::chrono::duration_cast<std::chrono::seconds>(now - window_start).count();
+        if (window_duration > 0) {
+            ops_rate = static_cast<double>(window_ops) / window_size;
+            err_rate = static_cast<double>(window_err) / window_size;
+        }
+        fmt::print(stderr, "\r\033[Kuptime: {}, rate: {:.2f} ops/s, {:.2f} err/s, total: {}", uptime, ops_rate, err_rate, current_total);
+
+        fflush(stderr);
         return dump_stats(timer, start_time);
     });
 }
@@ -160,7 +207,13 @@ class pillowfight_app : public CLI::App
         add_flag("--verbose", verbose_, "Include more context and information where it is applicable.");
         add_option("--bucket-name", bucket_name_, "Name of the bucket.")->default_val(default_bucket_name);
         add_option("--scope-name", scope_name_, "Name of the scope.")->default_val(couchbase::scope::default_name);
-        add_option("--batch-size", batch_size_, "Number of the operations in single batch.")->default_val(default_batch_size);
+        add_option("--key-value-batch-size",
+                   key_value_batch_size_,
+                   "Number of the operations in single batch Key/Value operations (zero to disable).")
+          ->default_val(default_key_value_batch_size);
+        add_option(
+          "--query-batch-size", query_batch_size_, "Number of the operations in single batch for Query operations (zero to disable).")
+          ->default_val(default_query_batch_size);
         add_option("--batch-wait", batch_wait_, "Time to wait after the batch.")->default_val(default_batch_wait);
         add_option("--number-of-io-threads", number_of_io_threads_, "Number of the IO threads.")->default_val(default_number_of_io_threads);
         add_option("--number-of-worker-threads", number_of_worker_threads_, "Number of the worker threads.")
@@ -171,7 +224,7 @@ class pillowfight_app : public CLI::App
           ->default_val(default_hit_chance_for_get);
         add_option("--hit-chance-for-upsert", hit_chance_for_upsert_, "The probability of using existing ID for upsert operation.")
           ->default_val(default_hit_chance_for_upsert);
-        add_option("--chance-of-query", chance_of_query_, "The probability of N1QL query will be send on after get/upsert.")
+        add_option("--chance-of-query", chance_of_query_, "The probability of N1QL query will be sent during the iteration.")
           ->default_val(default_chance_of_query);
         add_option("--query-statement",
                    query_statement_,
@@ -197,9 +250,12 @@ class pillowfight_app : public CLI::App
 
     [[nodiscard]] int execute() const
     {
+        if (key_value_batch_size_ == 0 && query_batch_size_ == 0) {
+            throw CLI::ValidationError("--query-batch-size and --key-value-batch-size cannot be zero at the same time");
+        }
         apply_logger_options(common_options_.logger);
 
-        auto cluster_options = build_cluster_options(common_options_);
+        const auto cluster_options = build_cluster_options(common_options_);
 
         asio::io_context io;
         auto guard = asio::make_work_guard(io);
@@ -209,6 +265,11 @@ class pillowfight_app : public CLI::App
         for (std::size_t i = 0; i < number_of_io_threads_; ++i) {
             io_pool.emplace_back([&io]() { io.run(); });
         }
+
+        hdr_init(/* minimum - 1 us*/ 1'000,
+                 /* maximum - 30 s*/ 30'000'000'000LL,
+                 /* significant figures */ 2,
+                 /* output pointer */ &histogram);
 
         std::signal(SIGINT, sigint_handler);
         std::signal(SIGTERM, sigint_handler);
@@ -229,6 +290,25 @@ class pillowfight_app : public CLI::App
             populate_keys(cluster, known_keys);
         }
 
+        fmt::print(stderr,
+                   "Workload Plan\n"
+                   "| Key/Value: {}\n"
+                   "|   batch size: {}\n"
+                   "|   {:02.2f}% get ({:02.2f}% hit)\n"
+                   "|   {:02.2f}% upsert ({:02.2f}% hit)\n"
+                   "| Query: {}\n"
+                   "|   batch size: {}\n"
+                   "|   {:02.2f}% chance\n",
+                   key_value_batch_size_ == 0 ? "disabled" : "enabled",
+                   key_value_batch_size_,
+                   chance_of_get_ * 100,
+                   hit_chance_for_get_ * 100,
+                   100 - chance_of_get_ * 100,
+                   hit_chance_for_upsert_ * 100,
+                   query_batch_size_ == 0 ? "disabled" : "enabled",
+                   query_batch_size_,
+                   chance_of_query_ * 100);
+
         const auto start_time = std::chrono::system_clock::now();
 
         asio::steady_timer stats_timer(io);
@@ -246,32 +326,39 @@ class pillowfight_app : public CLI::App
         const auto finish_time = std::chrono::system_clock::now();
         stats_timer.cancel();
 
-        fmt::print("\n\ntotal operations: {}\n", total);
-        fmt::print("total keys used: {}\n", std::accumulate(known_keys.begin(), known_keys.end(), 0, [](auto count, const auto& keys) {
+        fmt::print("\n\nTotal operations: {}\n", total);
+        fmt::print("Total keys used: {}\n", std::accumulate(known_keys.begin(), known_keys.end(), 0, [](auto count, const auto& keys) {
                        return count + keys.size();
                    }));
         const auto total_time = finish_time - start_time;
-        fmt::print("total time: {}s ({}ms)\n",
+        fmt::print("Total time: {}s ({}ms)\n",
                    std::chrono::duration_cast<std::chrono::seconds>(total_time).count(),
                    std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count());
         if (auto diff = std::chrono::duration_cast<std::chrono::seconds>(total_time).count(); diff > 0) {
-            fmt::print("total rate: {} ops/s\n", total / static_cast<std::uint64_t>(diff));
+            fmt::print("Total rate: {} ops/s\n", total / static_cast<std::uint64_t>(diff));
         }
+
+        cluster.close();
+        guard.reset();
+        io.stop();
+
         {
             std::scoped_lock lock(errors_mutex);
             if (!errors.empty()) {
-                fmt::print("error stats:\n");
+                fmt::print("Error stats:\n");
                 for (auto [e, count] : errors) {
                     fmt::print("    {}: {}\n", e.message(), count);
                 }
             }
         }
 
-        cluster.close();
-        guard.reset();
-
         for (auto& thread : io_pool) {
             thread.join();
+        }
+
+        if (total > 0) {
+            fmt::print("Latency distribution (in ms)\n");
+            hdr_percentiles_print(histogram, stdout, 1, 1'000'000.0 /* in ms */, format_type::CLASSIC);
         }
 
         return 0;
@@ -299,13 +386,16 @@ class pillowfight_app : public CLI::App
         auto collection = cluster.bucket(bucket_name_).scope(scope_name_).collection(collection_name_);
 
         std::vector<std::byte> json_doc = generate_document_body();
+        auto query_statement{ fmt::format(query_statement_, fmt::arg("bucket_name", bucket_name_)) };
 
-        while (running.test_and_set()) {
-            std::list<std::variant<std::future<std::pair<couchbase::key_value_error_context, couchbase::mutation_result>>,
-                                   std::future<std::pair<couchbase::key_value_error_context, couchbase::get_result>>,
-                                   std::future<std::pair<couchbase::query_error_context, couchbase::query_result>>>>
+        bool stopping{ false };
+        while (running.test_and_set() && !stopping) {
+            std::list<std::pair<std::chrono::system_clock::time_point,
+                                std::variant<std::future<std::pair<couchbase::key_value_error_context, couchbase::mutation_result>>,
+                                             std::future<std::pair<couchbase::key_value_error_context, couchbase::get_result>>,
+                                             std::future<std::pair<couchbase::query_error_context, couchbase::query_result>>>>>
               futures;
-            for (std::size_t i = 0; i < batch_size_; ++i) {
+            for (std::size_t i = 0; i < key_value_batch_size_; ++i) {
                 auto opcode = (dist(gen) <= chance_of_get_) ? operation::get : operation::upsert;
                 if (opcode == operation::get && known_keys.empty()) {
                     opcode = operation::upsert;
@@ -327,26 +417,35 @@ class pillowfight_app : public CLI::App
 
                 switch (opcode) {
                     case operation::upsert:
-                        futures.emplace_back(collection.upsert<raw_json_transcoder>(document_id, json_doc));
+                        futures.emplace_back(std::chrono::system_clock::now(),
+                                             collection.upsert<raw_json_transcoder>(document_id, json_doc));
                         break;
                     case operation::get:
-                        futures.emplace_back(collection.get(document_id));
+                        futures.emplace_back(std::chrono::system_clock::now(), collection.get(document_id));
                         break;
-                }
-                if (chance_of_query_ > 0 && dist(gen) <= chance_of_query_) {
-                    futures.emplace_back(cluster.query(query_statement_, couchbase::query_options{}));
-                }
-                if (operations_limit_ > 0 && total >= operations_limit_) {
-                    running.clear();
                 }
             }
 
-            for (auto&& future : futures) {
+            for (std::size_t i = 0; i < query_batch_size_; ++i) {
+                if (chance_of_query_ > 0 && dist(gen) <= chance_of_query_) {
+                    futures.emplace_back(std::chrono::system_clock::now(), cluster.query(query_statement, couchbase::query_options{}));
+                }
+            }
+
+            for (auto&& [start, future] : futures) {
                 std::visit(
-                  [&known_keys, verbose = verbose_](auto f) mutable {
+                  [&stopping, start = start, &known_keys, verbose = verbose_](auto f) mutable {
                       using T = std::decay_t<decltype(f)>;
 
+                      while (f.wait_for(std::chrono::milliseconds{ 200 }) != std::future_status::ready) {
+                          if (!running.test_and_set()) {
+                              stopping = true;
+                              running.clear();
+                              return;
+                          }
+                      }
                       auto [ctx, resp] = f.get();
+                      hdr_record_value_atomic(histogram, (std::chrono::system_clock::now() - start).count());
                       ++total;
                       if (ctx.ec()) {
                           const std::scoped_lock lock(errors_mutex);
@@ -362,10 +461,16 @@ class pillowfight_app : public CLI::App
                   },
                   std::move(future));
             }
-            if (batch_wait_ != std::chrono::milliseconds::zero()) {
-                std::this_thread::sleep_for(batch_wait_);
+
+            if (stopping || (operations_limit_ > 0 && total >= operations_limit_)) {
+                running.clear();
+            } else {
+                if (batch_wait_ != std::chrono::milliseconds::zero()) {
+                    std::this_thread::sleep_for(batch_wait_);
+                }
             }
         }
+        running.clear();
     }
 
     void populate_keys(const couchbase::cluster& cluster, std::vector<std::vector<std::string>>& known_keys) const
@@ -377,6 +482,7 @@ class pillowfight_app : public CLI::App
         const auto json_doc = generate_document_body();
         const auto start_time = std::chrono::system_clock::now();
 
+        constexpr std::size_t minimum_batch_size{ 10 };
         std::size_t stored_keys{ 0 };
         std::size_t retried_keys{ 0 };
         for (std::size_t i = 0; i < number_of_worker_threads_; ++i) {
@@ -390,7 +496,7 @@ class pillowfight_app : public CLI::App
                            total_keys,
                            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start_time));
 
-                auto batch_size = std::min(keys_left, batch_size_);
+                auto batch_size = std::min(keys_left, std::max(key_value_batch_size_, minimum_batch_size));
 
                 std::vector<std::future<std::pair<couchbase::key_value_error_context, couchbase::mutation_result>>> futures;
                 futures.reserve(batch_size);
@@ -427,7 +533,8 @@ class pillowfight_app : public CLI::App
     std::string scope_name_{ couchbase::scope::default_name };
     std::string collection_name_{ couchbase::collection::default_name };
     bool verbose_{ false };
-    std::size_t batch_size_;
+    std::size_t key_value_batch_size_;
+    std::size_t query_batch_size_;
     std::chrono::milliseconds batch_wait_;
     std::size_t number_of_io_threads_;
     std::size_t number_of_worker_threads_;

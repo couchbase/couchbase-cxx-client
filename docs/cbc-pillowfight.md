@@ -21,14 +21,15 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 <dt>`--bucket-name=STRING`</dt><dd>Name of the bucket. [default: `default`]</dd>
 <dt>`--scope-name=STRING`</dt><dd>Name of the scope. [default: `_default`]</dd>
 <dt>`--collection-name=STRING`</dt><dd>Name of the collection. [default: `_default`]</dd>
-<dt>`--batch-size=INTEGER`</dt><dd>Number of the operations in single batch. [default: `100`]</dd>
+<dt>`--key-value-batch-size=INTEGER`</dt><dd>Number of the Key/Value operations in a single batch (set to zero to disable KV operations). [default: `100`]</dd>
+<dt>`--query-batch-size=INTEGER`</dt><dd>Number of the Query operations in a single batch (set to zero to disable Query operations). [default: `0`]</dd>
 <dt>`--batch-wait=DURATION`</dt><dd>Time to wait after the batch. [default: `0ms`]</dd>
 <dt>`--number-of-io-threads=INTEGER`</dt><dd>Number of the IO threads. [default: `1`]</dd>
 <dt>`--number-of-worker-threads=INTEGER`</dt><dd>Number of the IO threads. [default: `1`]</dd>
 <dt>`--chance-of-get=FLOAT`</dt><dd>The probability of get operation (where 1 means only get, and 0 - only upsert). [default: `0.6`]</dd>
 <dt>`--hit-chance-for-get=FLOAT`</dt><dd>The probability of using existing ID for get operation. [default: `1`]</dd>
 <dt>`--hit-chance-for-upsert=FLOAT`</dt><dd>The probability of using existing ID for upsert operation. [default: `0.5`]</dd>
-<dt>`--chance-of-query=FLOAT`</dt><dd>The probability of N1QL query will be send on after get/upsert. [default: `0`]</dd>
+<dt>`--chance-of-query=FLOAT`</dt><dd>The probability of N1QL query will be sent during iteration. [default: `1`]</dd>
 <dt>`--query-statement=STRING`</dt><dd>The N1QL query statement to use ({bucket_name}, {scope_name} and {collection_name} will be substituted). [default: <code>SELECT COUNT(*) FROM \`{bucket_name}\` WHERE type = "fake_profile"</code>]</dd>
 <dt>`--incompressible-body`</dt><dd>Use random characters to fill generated document value (by default uses 'x' to fill the body).</dd>
 <dt>`--document-body-size=INTEGER`</dt><dd>Size of the body (if zero, it will use predefined document). [default: `0`]</dd>
@@ -166,4 +167,4 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 
 ### SEE ALSO
 
-[cbc](md_docs_2cbc).
+[cbc](#cbc).
