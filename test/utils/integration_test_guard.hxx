@@ -106,13 +106,7 @@ class integration_test_guard
         return has_service(couchbase::core::service_type::analytics);
     }
 
-    auto number_of_query_nodes()
-    {
-        const auto& ci = load_cluster_info();
-        return std::count_if(ci.nodes.begin(), ci.nodes.end(), [](const auto& node) {
-            return std::find(node.services.begin(), node.services.end(), "n1ql") != node.services.end();
-        });
-    }
+    auto number_of_query_nodes() -> std::size_t;
 
     auto transactions() -> std::shared_ptr<couchbase::core::transactions::transactions>
     {

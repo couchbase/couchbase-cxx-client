@@ -25,6 +25,7 @@
 
 #include <fmt/core.h>
 
+#include <algorithm>
 #include <memory>
 
 namespace couchbase::core::mcbp
