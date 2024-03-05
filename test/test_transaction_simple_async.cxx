@@ -56,7 +56,7 @@ TEST_CASE("transactions: async get", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -69,7 +69,7 @@ TEST_CASE("transactions: async get", "[transactions]")
 
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
-    txn.run(
+    txn->run(
       [id, cb_called](async_attempt_context& ctx) {
           ctx.get(id, [cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
               if (!err) {
@@ -90,12 +90,12 @@ TEST_CASE("transactions: can't get from unopened bucket", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
     couchbase::core::document_id bad_id{ "secBucket", "_default", "default", test::utils::uniq_id("txns") };
     auto cb_called = std::make_shared<std::atomic<bool>>(false);
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
-    txn.run(
+    txn->run(
       [&bad_id, cb_called, barrier](async_attempt_context& ctx) {
           ctx.get(bad_id, [cb_called, barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
               cb_called->store(true);
@@ -115,7 +115,7 @@ TEST_CASE("transactions: async get fail", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -123,7 +123,7 @@ TEST_CASE("transactions: async get fail", "[transactions]")
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     try {
-        txn.run(
+        txn->run(
           [cb_called, id](async_attempt_context& ctx) {
               ctx.get(id, [cb_called](std::exception_ptr err, std::optional<transaction_get_result>) {
                   // should be an error
@@ -151,7 +151,7 @@ TEST_CASE("transactions: async remove fail", "[transactions]")
 
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -165,7 +165,7 @@ TEST_CASE("transactions: async remove fail", "[transactions]")
     auto cb_called = std::make_shared<std::atomic<bool>>(false);
 
     try {
-        txn.run(
+        txn->run(
           [cb_called, id](async_attempt_context& ctx) {
               ctx.get(id, [&ctx, cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
                   // let's just change the cas to make it fail, which it should
@@ -194,14 +194,14 @@ TEST_CASE("transactions: RYOW on insert", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
     auto cb_called = std::make_shared<std::atomic<bool>>(false);
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
-    txn.run(
+    txn->run(
       [cb_called, id](async_attempt_context& ctx) {
           ctx.insert(id, async_content, [&ctx, cb_called, id](std::exception_ptr err, std::optional<transaction_get_result> res) {
               CHECK_FALSE(err);
@@ -228,7 +228,7 @@ TEST_CASE("transactions: async remove", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -240,7 +240,7 @@ TEST_CASE("transactions: async remove", "[transactions]")
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     auto cb_called = std::make_shared<std::atomic<bool>>(false);
-    txn.run(
+    txn->run(
       [cb_called, id](async_attempt_context& ctx) {
           ctx.get(id, [&ctx, cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
               if (!err) {
@@ -268,7 +268,7 @@ TEST_CASE("transactions: async replace", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -283,7 +283,7 @@ TEST_CASE("transactions: async replace", "[transactions]")
     const tao::json::value new_content{
         { "shiny", "and new" },
     };
-    txn.run(
+    txn->run(
       [cb_called, &new_content, id](async_attempt_context& ctx) {
           ctx.get(id, [&ctx, &new_content, cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
               if (!err) {
@@ -317,7 +317,7 @@ TEST_CASE("transactions: async replace fail", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -334,7 +334,7 @@ TEST_CASE("transactions: async replace fail", "[transactions]")
     };
 
     try {
-        txn.run(
+        txn->run(
           [cb_called, &new_content, id](async_attempt_context& ctx) {
               ctx.get(id, [&ctx, &new_content, cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
                   if (!err) {
@@ -368,7 +368,7 @@ TEST_CASE("transactions: async insert", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -376,7 +376,7 @@ TEST_CASE("transactions: async insert", "[transactions]")
     auto f = barrier->get_future();
     auto cb_called = std::make_shared<std::atomic<bool>>(false);
 
-    txn.run(
+    txn->run(
       [cb_called, id](async_attempt_context& ctx) {
           ctx.insert(id, async_content, [cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
               if (!err) {
@@ -403,7 +403,7 @@ TEST_CASE("transactions: async insert can be rolled back", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -412,7 +412,7 @@ TEST_CASE("transactions: async insert can be rolled back", "[transactions]")
     auto cb_called = std::make_shared<std::atomic<bool>>(false);
 
     try {
-        txn.run(
+        txn->run(
           [cb_called, id, barrier](async_attempt_context& ctx) {
               ctx.insert(id, async_content, [cb_called](std::exception_ptr err, std::optional<transaction_get_result>) {
                   if (!err) {
@@ -441,7 +441,7 @@ TEST_CASE("transactions: async query", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -454,7 +454,7 @@ TEST_CASE("transactions: async query", "[transactions]")
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
     auto query_called = std::make_shared<std::atomic<bool>>(false);
-    txn.run(
+    txn->run(
       [query_called, id](async_attempt_context& ctx) {
           auto query = fmt::format("UPDATE `{}` USE KEYS '{}' SET `some` = 'thing else'", id.bucket(), id.key());
           ctx.query(query, [query_called](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
@@ -482,7 +482,7 @@ TEST_CASE("transactions: multiple racing queries", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -496,7 +496,7 @@ TEST_CASE("transactions: multiple racing queries", "[transactions]")
     }
 
     auto query_called = std::make_shared<std::atomic<int>>(0);
-    txn.run(
+    txn->run(
       [query_called, id](async_attempt_context& ctx) {
           auto query = fmt::format("UPDATE `{}` USE KEYS '{}' SET `some` = 'thing else'", id.bucket(), id.key());
           ctx.query(query, [query_called](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
@@ -534,7 +534,7 @@ TEST_CASE("transactions: rollback async query", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -548,7 +548,7 @@ TEST_CASE("transactions: rollback async query", "[transactions]")
     }
 
     auto query_called = std::make_shared<std::atomic<bool>>(false);
-    txn.run(
+    txn->run(
       [query_called, id](async_attempt_context& ctx) {
           auto query = fmt::format("UPDATE `{}` USE KEYS '{}' SET `some` = 'thing else'", id.bucket(), id.key());
           ctx.query(query, [query_called](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
@@ -579,7 +579,7 @@ TEST_CASE("transactions: async KV get", "[transactions]")
 
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -592,7 +592,7 @@ TEST_CASE("transactions: async KV get", "[transactions]")
     }
 
     auto get_called = std::make_shared<std::atomic<bool>>(false);
-    txn.run(
+    txn->run(
       [get_called, &id](async_attempt_context& ctx) {
           ctx.get(id, [get_called, &id, &ctx](std::exception_ptr, std::optional<transaction_get_result>) {
               auto query = fmt::format("UPDATE `{}` USE KEYS '{}' SET `some` = 'thing else'", id.bucket(), id.key());
@@ -626,7 +626,7 @@ TEST_CASE("transactions: rollback async KV get", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -638,7 +638,7 @@ TEST_CASE("transactions: rollback async KV get", "[transactions]")
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
     auto get_called = std::make_shared<std::atomic<bool>>(false);
-    txn.run(
+    txn->run(
       [get_called, &id](async_attempt_context& ctx) {
           ctx.get(id, [&ctx, get_called, &id](std::exception_ptr, std::optional<transaction_get_result>) {
               auto query = fmt::format("UPDATE `{}` USE KEYS '{}' SET `some` = 'thing else'", id.bucket(), id.key());
@@ -673,14 +673,14 @@ TEST_CASE("transactions: async KV insert", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     auto insert_called = std::make_shared<std::atomic<bool>>(false);
-    txn.run(
+    txn->run(
       [insert_called, id, barrier](async_attempt_context& ctx) {
           ctx.query("Select 'Yo' as greeting",
                     [&ctx, insert_called, id, barrier](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
@@ -710,14 +710,14 @@ TEST_CASE("transactions: rollback async KV insert", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
     auto insert_called = std::make_shared<std::atomic<bool>>(false);
-    txn.run(
+    txn->run(
       [insert_called, id, barrier](async_attempt_context& ctx) {
           ctx.query("Select 'Yo' as greeting",
                     [insert_called, &ctx, id, barrier](std::exception_ptr err, std::optional<couchbase::core::operations::query_response>) {
@@ -748,7 +748,7 @@ TEST_CASE("transactions: async KV replace", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -764,7 +764,7 @@ TEST_CASE("transactions: async KV replace", "[transactions]")
         { "some", "thing else" },
     };
     auto replace_called = std::make_shared<std::atomic<bool>>(false);
-    txn.run(
+    txn->run(
       [replace_called, &id, &new_content](async_attempt_context& ctx) {
           ctx.get(id, [replace_called, id, &ctx, &new_content](std::exception_ptr err, std::optional<transaction_get_result> result) {
               // do a query just to move into query mode.
@@ -806,7 +806,7 @@ TEST_CASE("transactions: rollback async KV replace", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -821,7 +821,7 @@ TEST_CASE("transactions: rollback async KV replace", "[transactions]")
         { "some", "thing else" },
     };
     auto replace_called = std::make_shared<std::atomic<bool>>(false);
-    txn.run(
+    txn->run(
       [replace_called, &id, &new_content](async_attempt_context& ctx) {
           ctx.get(id, [replace_called, &ctx, &id, &new_content](std::exception_ptr err, std::optional<transaction_get_result> result) {
               // do a query just to move into query mode.
@@ -865,7 +865,7 @@ TEST_CASE("transactions: async KV remove", "[transactions]")
 
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -878,7 +878,7 @@ TEST_CASE("transactions: async KV remove", "[transactions]")
     }
 
     auto remove_called = std::make_shared<std::atomic<bool>>(false);
-    txn.run(
+    txn->run(
       [remove_called, &id](async_attempt_context& ctx) {
           ctx.get(id, [remove_called, &ctx, &id](std::exception_ptr err, std::optional<transaction_get_result> result) {
               // do a query just to move into query mode.
@@ -918,7 +918,7 @@ TEST_CASE("transactions: rollback async KV remove", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
-    couchbase::core::transactions::transactions txn(integration.cluster, get_conf());
+    auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -931,7 +931,7 @@ TEST_CASE("transactions: rollback async KV remove", "[transactions]")
     }
 
     auto remove_called = std::make_shared<std::atomic<bool>>(false);
-    txn.run(
+    txn->run(
       [remove_called, &id](async_attempt_context& ctx) {
           ctx.get(id, [remove_called, &id, &ctx](std::exception_ptr err, std::optional<transaction_get_result> result) {
               // do a query just to move into query mode.

@@ -40,6 +40,11 @@ namespace couchbase
 namespace core
 {
 class cluster;
+
+namespace transactions
+{
+class transactions;
+}
 } // namespace core
 class cluster_impl;
 #endif
@@ -101,6 +106,17 @@ class cluster
      * @volatile
      */
     explicit cluster(core::cluster core);
+
+    /**
+     * Wraps low-level implementation of the SDK & transactions
+     *
+     * @param core pointer to the low-level SDK handle
+     * @param transactions pointer to the lowe-level transactions handle
+     *
+     * @since 1.0.0
+     * @volatile
+     */
+    explicit cluster(core::cluster core, std::shared_ptr<core::transactions::transactions> transactions);
 
     /**
      * Opens a {@link bucket} with the given name.

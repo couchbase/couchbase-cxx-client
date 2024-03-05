@@ -20,6 +20,8 @@
 #include "test/utils/logger.hxx"
 #include "utils/move_only_context.hxx"
 
+#include "couchbase/cluster.hxx"
+
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
 #include "core/operations/document_increment.hxx"
@@ -170,4 +172,29 @@ TEST_CASE("integration: destroy cluster without waiting for close completion", "
     cluster.close([&closed]() { closed = true; });
     io_thread.join();
     REQUIRE(closed);
+}
+
+TEST_CASE("integration: connecting with a custom transactions metadata collection that is in a bucket that does not exist - Public API",
+          "[integration]")
+{
+    test::utils::init_logger();
+    auto ctx = test::utils::test_context::load_from_environment();
+
+    asio::io_context io{};
+    auto guard = asio::make_work_guard(io);
+    auto io_thread = std::thread([&io]() { io.run(); });
+
+    auto opts = couchbase::cluster_options(ctx.username, ctx.password);
+    opts.transactions().metadata_collection(couchbase::transactions::transaction_keyspace{
+      "nonexistent",
+      "_default",
+      "_default",
+    });
+
+    auto [cluster, ec] = couchbase::cluster::connect(io, ctx.connection_string, opts).get();
+
+    REQUIRE(ec == couchbase::errc::common::bucket_not_found);
+
+    guard.reset();
+    io_thread.join();
 }

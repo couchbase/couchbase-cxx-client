@@ -23,6 +23,9 @@
 #include "core/management/bucket_settings.hxx"
 #include "core/operations/management/bucket_describe.hxx"
 #include "core/operations/management/cluster_describe.hxx"
+#include "core/transactions.hxx"
+
+#include <couchbase/cluster.hxx>
 
 #include <optional>
 
@@ -109,6 +112,23 @@ class integration_test_guard
         return std::count_if(ci.nodes.begin(), ci.nodes.end(), [](const auto& node) {
             return std::find(node.services.begin(), node.services.end(), "n1ql") != node.services.end();
         });
+    }
+
+    auto transactions() -> std::shared_ptr<couchbase::core::transactions::transactions>
+    {
+        couchbase::transactions::transactions_config cfg{};
+        cfg.timeout(std::chrono::seconds(2));
+        auto [ec, txns] = couchbase::core::transactions::transactions::create(cluster, cfg).get();
+        if (ec) {
+            CB_LOG_CRITICAL("unable to initialize transactions: {}", ec.message());
+            throw std::runtime_error(fmt::format("unable to initialize transactions: {}", ec.message()));
+        }
+        return txns;
+    }
+
+    auto public_cluster() -> couchbase::cluster
+    {
+        return couchbase::cluster{ cluster, transactions() };
     }
 
     server_version cluster_version();

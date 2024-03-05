@@ -26,6 +26,8 @@
 #include "internal/transactions_cleanup.hxx"
 #include "internal/utils.hxx"
 
+#include <system_error>
+
 namespace couchbase::core::transactions
 {
 transactions::transactions(core::cluster cluster, const couchbase::transactions::transactions_config& config)
@@ -38,35 +40,60 @@ transactions::transactions(core::cluster cluster, const couchbase::transactions:
   , config_(config)
   , cleanup_(new transactions_cleanup(cluster_, config_))
 {
-    CB_TXN_LOG_DEBUG(
-      "couchbase transactions {} ({}) creating new transaction object", couchbase::core::meta::sdk_id(), couchbase::core::meta::os());
-    // if the config specifies custom metadata collection, lets be sure to open that bucket
-    // on the cluster before we start.  NOTE: we actually do call get_and_open_buckets which opens all the buckets
-    // on the cluster (that we have permissions to open) in the cleanup.   However, that is happening asynchronously
-    // so there's a chance we will fail to have opened the custom metadata collection bucket before trying to make a
-    // transaction.   We have to open this one _now_.
-    if (config_.metadata_collection) {
-        auto barrier = std::make_shared<std::promise<std::error_code>>();
-        auto f = barrier->get_future();
-        std::atomic<bool> callback_called{ false };
-        cluster_.open_bucket(config_.metadata_collection->bucket, [&callback_called, barrier](std::error_code ec) {
-            if (callback_called.load()) {
-                return;
-            }
-            callback_called = true;
-            barrier->set_value(ec);
-        });
-        auto err = f.get();
-        if (err) {
-            auto err_msg =
-              fmt::format("error opening metadata_collection bucket '{}' specified in the config!", config_.metadata_collection->bucket);
-            CB_TXN_LOG_DEBUG("{}", err_msg);
-            throw std::runtime_error(err_msg);
-        }
-    }
 }
 
 transactions::~transactions() = default;
+
+void
+transactions::create(core::cluster cluster,
+                     const couchbase::transactions::transactions_config::built& config,
+                     utils::movable_function<void(std::error_code, std::shared_ptr<transactions>)>&& cb)
+{
+    if (config.metadata_collection) {
+        // if the config specifies custom metadata collection, lets be sure to open that bucket
+        // on the cluster before we start.  NOTE: we actually do call get_and_open_buckets which opens all the buckets
+        // on the cluster (that we have permissions to open) in the cleanup.   However, that is happening asynchronously
+        // so there's a chance we will fail to have opened the custom metadata collection bucket before trying to make a
+        // transaction. We have to open this one _now_.
+
+        auto bucket_name = config.metadata_collection->bucket;
+        return cluster.open_bucket(bucket_name, [cluster, config, bucket_name, cb = std::move(cb)](std::error_code ec) mutable {
+            if (ec) {
+                CB_TXN_LOG_ERROR("error opening metadata_collection bucket '{}' specified in the config!", bucket_name);
+                return cb(ec, {});
+            }
+
+            CB_TXN_LOG_DEBUG("couchbase transactions {} ({}) creating new transaction object",
+                             couchbase::core::meta::sdk_id(),
+                             couchbase::core::meta::os());
+            return cb({}, std::make_shared<transactions>(std::move(cluster), config));
+        });
+    }
+
+    return cb({}, std::make_shared<transactions>(std::move(cluster), config));
+}
+
+void
+transactions::create(core::cluster cluster,
+                     const couchbase::transactions::transactions_config& config,
+                     utils::movable_function<void(std::error_code, std::shared_ptr<transactions>)>&& cb)
+{
+    return create(std::move(cluster), config.build(), std::move(cb));
+}
+
+std::future<std::pair<std::error_code, std::shared_ptr<transactions>>>
+transactions::create(core::cluster cluster, const couchbase::transactions::transactions_config::built& config)
+{
+    auto barrier = std::make_shared<std::promise<std::pair<std::error_code, std::shared_ptr<transactions>>>>();
+    create(std::move(cluster), config, [barrier](auto ec, auto txns) mutable { barrier->set_value({ ec, txns }); });
+    return barrier->get_future();
+}
+
+std::future<std::pair<std::error_code, std::shared_ptr<transactions>>>
+transactions::create(core::cluster cluster, const couchbase::transactions::transactions_config& config)
+{
+    return create(std::move(cluster), config.build());
+}
 
 template<typename Handler>
 ::couchbase::transactions::transaction_result

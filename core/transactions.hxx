@@ -27,11 +27,13 @@
 
 #include "core/cluster.hxx"
 #include "core/logger/logger.hxx"
+#include "core/utils/movable_function.hxx"
 
 #include <spdlog/common.h>
 
 #include <cmath>
 #include <functional>
+#include <system_error>
 #include <thread>
 
 // workaround for MSVC define overlap with log levels
@@ -128,20 +130,41 @@ class transactions : public couchbase::transactions::transactions
 {
   public:
     /**
+     * @brief Destructor
+     */
+    ~transactions();
+
+    /**
      * @brief Create a transactions object.
      *
      * Creates a transactions object, which can be used to run transactions within the current thread.
      *
      * @param cluster The cluster to use for the transactions.
      * @param config The configuration parameters to use for the transactions.
+     * @param cb Called when the transactions object has been created or an error has occurred during the creation.
      */
-    transactions(core::cluster cluster, const couchbase::transactions::transactions_config::built& config);
-    transactions(core::cluster cluster, const couchbase::transactions::transactions_config& config);
+    static void create(core::cluster cluster,
+                       const couchbase::transactions::transactions_config::built&,
+                       utils::movable_function<void(std::error_code, std::shared_ptr<transactions>)>&& cb);
+    static void create(core::cluster cluster,
+                       const couchbase::transactions::transactions_config&,
+                       utils::movable_function<void(std::error_code, std::shared_ptr<transactions>)>&& cb);
 
     /**
-     * @brief Destructor
+     * @brief Create a transactions object.
+     *
+     * Creates a transactions object, which can be used to run transactions within the current thread.
+     *
+     * @param cluster The cluster to use for the transactions.
+     * @param config The configuration parameters to use for the transactions.
+     * @return a future containing the error that occurred or the transactions object.
      */
-    ~transactions();
+    static std::future<std::pair<std::error_code, std::shared_ptr<transactions>>> create(
+      core::cluster cluster,
+      const couchbase::transactions::transactions_config::built& config);
+    static std::future<std::pair<std::error_code, std::shared_ptr<transactions>>> create(
+      core::cluster cluster,
+      const couchbase::transactions::transactions_config& config);
 
     /**
      * @brief Run a transaction
@@ -244,6 +267,12 @@ class transactions : public couchbase::transactions::transactions
     {
         return cluster_;
     }
+
+    /**
+     * @internal
+     */
+    transactions(core::cluster cluster, const couchbase::transactions::transactions_config::built& config);
+    transactions(core::cluster cluster, const couchbase::transactions::transactions_config& config);
 
   private:
     core::cluster cluster_;

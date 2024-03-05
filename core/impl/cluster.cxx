@@ -157,8 +157,28 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
   public:
     explicit cluster_impl(couchbase::core::cluster core)
       : core_{ std::move(core) }
-      , transactions_{ std::make_shared<couchbase::core::transactions::transactions>(core_, core_.origin().second.options().transactions) }
     {
+    }
+
+    explicit cluster_impl(couchbase::core::cluster core, std::shared_ptr<couchbase::core::transactions::transactions> transactions)
+      : core_{ std::move(core) }
+      , transactions_{ transactions }
+    {
+    }
+
+    void initialize_transactions(std::function<void(std::error_code)>&& handler)
+    {
+        return core::transactions::transactions::create(
+          core_,
+          core_.origin().second.options().transactions,
+          [self = shared_from_this(), handler = std::move(handler)](auto ec, auto txns) mutable {
+              if (ec) {
+                  return handler(ec);
+              }
+
+              self->transactions_ = txns;
+              handler({});
+          });
     }
 
     void query(std::string statement, query_options::built options, query_handler&& handler) const
@@ -255,6 +275,11 @@ extract_core_cluster(const couchbase::cluster& cluster) -> const core::cluster&
 
 cluster::cluster(core::cluster core)
   : impl_{ std::make_shared<cluster_impl>(std::move(core)) }
+{
+}
+
+cluster::cluster(core::cluster core, std::shared_ptr<core::transactions::transactions> transactions)
+  : impl_{ std::make_shared<cluster_impl>(std::move(core), transactions) }
 {
 }
 
@@ -361,9 +386,8 @@ cluster::connect(asio::io_context& io, const std::string& connection_string, con
   -> std::future<std::pair<cluster, std::error_code>>
 {
     auto barrier = std::make_shared<std::promise<std::pair<cluster, std::error_code>>>();
-    auto future = barrier->get_future();
-    connect(io, connection_string, options, [barrier](auto c, auto ec) { barrier->set_value({ std::move(c), ec }); });
-    return future;
+    connect(io, connection_string, options, [barrier](auto c, auto ec) mutable { barrier->set_value({ std::move(c), ec }); });
+    return barrier->get_future();
 }
 
 void
@@ -378,7 +402,13 @@ cluster::connect(asio::io_context& io,
         if (ec) {
             return handler({}, ec);
         }
-        handler(couchbase::cluster(std::move(core)), {});
+        auto cluster = couchbase::cluster(std::move(core));
+        return cluster.impl_->initialize_transactions([cluster, handler = std::move(handler)](std::error_code ec) mutable {
+            if (ec) {
+                return cluster.impl_->close([ec, handler = std::move(handler)]() mutable { return handler({}, ec); });
+            }
+            return handler(cluster, ec);
+        });
     });
 }
 

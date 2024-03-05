@@ -70,8 +70,7 @@ TEST_CASE("transactions: can do simple transaction with transaction wrapper", "[
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster,
-                                                     couchbase::transactions::transactions_config().timeout(std::chrono::seconds(2)));
+    auto txns = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -83,7 +82,7 @@ TEST_CASE("transactions: can do simple transaction with transaction wrapper", "[
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
-    transaction_context tx(txns);
+    transaction_context tx(*txns);
     auto txn_logic = [&id, &tx, new_content]() {
         tx.get(id, [&tx, new_content](std::exception_ptr err, std::optional<transaction_get_result> res) {
             CHECK(res);
@@ -110,8 +109,7 @@ TEST_CASE("transactions: can do simple transaction with finalize", "[transaction
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster,
-                                                     couchbase::transactions::transactions_config().timeout(std::chrono::seconds(2)));
+    auto txns = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -123,7 +121,7 @@ TEST_CASE("transactions: can do simple transaction with finalize", "[transaction
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
-    transaction_context tx(txns);
+    transaction_context tx(*txns);
 
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
@@ -158,8 +156,7 @@ TEST_CASE("transactions: can do simple transaction explicit commit", "[transacti
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster,
-                                                     couchbase::transactions::transactions_config().timeout(std::chrono::seconds(2)));
+    auto txns = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -171,7 +168,7 @@ TEST_CASE("transactions: can do simple transaction explicit commit", "[transacti
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
-    transaction_context tx(txns);
+    transaction_context tx(*txns);
 
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
@@ -204,8 +201,7 @@ TEST_CASE("transactions: can do rollback simple transaction", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster,
-                                                     couchbase::transactions::transactions_config().timeout(std::chrono::seconds(2)));
+    auto txns = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -217,7 +213,7 @@ TEST_CASE("transactions: can do rollback simple transaction", "[transactions]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
-    transaction_context tx(txns);
+    transaction_context tx(*txns);
 
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
@@ -247,8 +243,7 @@ TEST_CASE("transactions: can get insert errors", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster,
-                                                     couchbase::transactions::transactions_config().timeout(std::chrono::seconds(2)));
+    auto txns = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -260,7 +255,7 @@ TEST_CASE("transactions: can get insert errors", "[transactions]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
-    transaction_context tx(txns);
+    transaction_context tx(*txns);
 
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
@@ -287,8 +282,7 @@ TEST_CASE("transactions: can get remove errors", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster,
-                                                     couchbase::transactions::transactions_config().timeout(std::chrono::seconds(2)));
+    auto txns = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -300,7 +294,7 @@ TEST_CASE("transactions: can get remove errors", "[transactions]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
-    transaction_context tx(txns);
+    transaction_context tx(*txns);
 
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
@@ -329,8 +323,7 @@ TEST_CASE("transactions: can get replace errors", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster,
-                                                     couchbase::transactions::transactions_config().timeout(std::chrono::seconds(2)));
+    auto txns = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -342,7 +335,7 @@ TEST_CASE("transactions: can get replace errors", "[transactions]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
-    transaction_context tx(txns);
+    transaction_context tx(*txns);
 
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
@@ -375,12 +368,11 @@ TEST_CASE("transactions: RYOW get after insert", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster,
-                                                     couchbase::transactions::transactions_config().timeout(std::chrono::seconds(2)));
+    auto txns = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
-    transaction_context tx(txns);
+    transaction_context tx(*txns);
 
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
@@ -408,12 +400,11 @@ TEST_CASE("transactions: can get get errors", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster,
-                                                     couchbase::transactions::transactions_config().timeout(std::chrono::seconds(2)));
+    auto txns = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
-    transaction_context tx(txns);
+    transaction_context tx(*txns);
 
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
@@ -437,8 +428,7 @@ TEST_CASE("transactions: can do query", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster,
-                                                     couchbase::transactions::transactions_config().timeout(std::chrono::seconds(2)));
+    auto txns = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -447,7 +437,7 @@ TEST_CASE("transactions: can do query", "[transactions]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
-    transaction_context tx(txns);
+    transaction_context tx(*txns);
 
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
@@ -474,12 +464,11 @@ TEST_CASE("transactions: can see some query errors but no transactions failed", 
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster,
-                                                     couchbase::transactions::transactions_config().timeout(std::chrono::seconds(2)));
+    auto txns = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
-    transaction_context tx(txns);
+    transaction_context tx(*txns);
 
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
@@ -515,8 +504,7 @@ TEST_CASE("transactions: can set per transaction config", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster,
-                                                     couchbase::transactions::transactions_config().timeout(std::chrono::seconds(2)));
+    auto txns = integration.transactions();
 
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
@@ -524,7 +512,7 @@ TEST_CASE("transactions: can set per transaction config", "[transactions]")
     per_txn_cfg.scan_consistency(couchbase::query_scan_consistency::not_bounded)
       .timeout(std::chrono::milliseconds(1))
       .durability_level(couchbase::durability_level::none);
-    transaction_context tx(txns, per_txn_cfg);
+    transaction_context tx(*txns, per_txn_cfg);
     REQUIRE(tx.config().level == per_txn_cfg.durability_level());
     REQUIRE(tx.config().timeout == per_txn_cfg.timeout());
     REQUIRE(tx.config().query_config.scan_consistency == per_txn_cfg.scan_consistency());
@@ -535,13 +523,12 @@ TEST_CASE("transactions: can not per transactions config", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto cluster = integration.cluster;
-    couchbase::core::transactions::transactions txns(cluster,
-                                                     couchbase::transactions::transactions_config().timeout(std::chrono::seconds(2)));
+    auto txns = integration.transactions();
 
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
-    transaction_context tx(txns);
-    REQUIRE(tx.config().level == txns.config().level);
-    REQUIRE(tx.config().timeout == txns.config().timeout);
-    REQUIRE(tx.config().query_config.scan_consistency == txns.config().query_config.scan_consistency);
+    transaction_context tx(*txns);
+    REQUIRE(tx.config().level == txns->config().level);
+    REQUIRE(tx.config().timeout == txns->config().timeout);
+    REQUIRE(tx.config().query_config.scan_consistency == txns->config().query_config.scan_consistency);
 }
