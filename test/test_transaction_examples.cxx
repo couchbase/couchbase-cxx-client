@@ -97,7 +97,7 @@ main(int argc, const char* argv[])
             fmt::print(stderr, "error in transaction {}, cause: {}\n", tx_err.ec().message(), tx_err.cause().message());
             retval = 1;
         } else {
-            fmt::print("transaction {} completed successfully", tx_res.transaction_id);
+            fmt::print("transaction {} completed successfully\n", tx_res.transaction_id);
         }
         //! [simple-blocking-txn]
     }
@@ -140,7 +140,7 @@ main(int argc, const char* argv[])
               });
               ctx.get(collection, id_3, [&](auto err_ctx_1, auto doc) {
                   if (err_ctx_1.ec()) {
-                      fmt::print("error getting doc {}: {}", id_3, err_ctx_1.ec().message());
+                      fmt::print(stderr, "error getting doc {}: {}\n", id_3, err_ctx_1.ec().message());
                       return;
                   }
                   ctx.replace(doc, ::tao::json::value{ { "some", "other async content" } }, [&](auto err_ctx_2, auto res) {
@@ -160,7 +160,7 @@ main(int argc, const char* argv[])
               barrier->set_value(tx_err.ec());
           });
         if (auto async_err = f.get()) {
-            fmt::print("received async error from future: message - {}", async_err.message());
+            fmt::print(stderr, "received async error from future: message - {}\n", async_err.message());
             retval = 1;
         }
         //! [simple-async-txn]
