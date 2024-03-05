@@ -130,13 +130,6 @@ class transactions : public couchbase::transactions::transactions
 {
   public:
     /**
-     * @internal
-     * Called internally
-     */
-    transactions(core::cluster cluster, const couchbase::transactions::transactions_config::built& config);
-    transactions(core::cluster cluster, const couchbase::transactions::transactions_config& config);
-
-    /**
      * @brief Destructor
      */
     ~transactions();
@@ -274,6 +267,12 @@ class transactions : public couchbase::transactions::transactions
     {
         return cluster_;
     }
+
+    /**
+     * @internal
+     */
+    transactions(core::cluster cluster, const couchbase::transactions::transactions_config::built& config);
+    transactions(core::cluster cluster, const couchbase::transactions::transactions_config& config);
 
   private:
     core::cluster cluster_;
