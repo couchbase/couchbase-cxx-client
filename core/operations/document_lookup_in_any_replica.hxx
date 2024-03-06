@@ -62,7 +62,7 @@ struct lookup_in_any_replica_request {
     template<typename Core, typename Handler>
     void execute(Core core, Handler handler)
     {
-        return core->open_bucket(
+        core->open_bucket(
           id.bucket(),
           [core, id = id, timeout = timeout, specs = specs, parent_span = parent_span, h = std::forward<Handler>(handler)](
             std::error_code ec) mutable {
