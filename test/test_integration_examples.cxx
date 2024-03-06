@@ -780,6 +780,13 @@ row: {"airline":{"callsign":"MILE-AIR","country":"United States","iata":"Q5","ic
 
 TEST_CASE("example: using fork() for scaling", "[integration]")
 {
+    {
+        test::utils::integration_test_guard integration;
+        if (!integration.cluster_version().supports_collections()) {
+            SKIP("cluster does not support collections");
+        }
+    }
+
     setbuf(stdout, nullptr); // disable buffering for output
     test::utils::init_logger();
 
