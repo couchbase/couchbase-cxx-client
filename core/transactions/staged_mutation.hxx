@@ -129,51 +129,62 @@ class staged_mutation_queue
     std::mutex mutex_;
     std::vector<staged_mutation> queue_;
 
-    static void validate_rollback_remove_or_replace_result(attempt_context_impl* ctx, result& res, const staged_mutation& item);
-    static void validate_rollback_insert_result(attempt_context_impl* ctx, result& res, const staged_mutation& item);
-    static void validate_commit_doc_result(attempt_context_impl* ctx, result& res, staged_mutation& item);
-    static void validate_remove_doc_result(attempt_context_impl* ctx, result& res, const staged_mutation& item);
+    using client_error_handler = utils::movable_function<void(const std::optional<client_error>&)>;
+
+    static void validate_rollback_remove_or_replace_result(attempt_context_impl* ctx,
+                                                           result& res,
+                                                           const staged_mutation& item,
+                                                           client_error_handler&& handler);
+    static void validate_rollback_insert_result(attempt_context_impl* ctx,
+                                                result& res,
+                                                const staged_mutation& item,
+                                                client_error_handler&& handler);
+    static void validate_commit_doc_result(attempt_context_impl* ctx, result& res, staged_mutation& item, client_error_handler&& handler);
+    static void validate_remove_doc_result(attempt_context_impl* ctx,
+                                           result& res,
+                                           const staged_mutation& item,
+                                           client_error_handler&& handler);
 
     void handle_commit_doc_error(const client_error& e,
                                  attempt_context_impl* ctx,
                                  staged_mutation& item,
-                                 async_constant_delay delay,
+                                 async_constant_delay& delay,
                                  bool ambiguity_resolution_mode,
                                  bool cas_zero_mode,
                                  utils::movable_function<void(std::exception_ptr)> callback);
     void handle_remove_doc_error(const client_error& e,
                                  attempt_context_impl* ctx,
                                  const staged_mutation& item,
-                                 async_constant_delay delay,
+                                 async_constant_delay& delay,
                                  utils::movable_function<void(std::exception_ptr)> callback);
     void handle_rollback_insert_error(const client_error& e,
                                       attempt_context_impl* ctx,
                                       const staged_mutation& item,
-                                      async_exp_delay delay,
+                                      async_exp_delay& delay,
                                       utils::movable_function<void(std::exception_ptr)> callback);
     void handle_rollback_remove_or_replace_error(const client_error& e,
                                                  attempt_context_impl* ctx,
                                                  const staged_mutation& item,
-                                                 async_exp_delay delay,
+                                                 async_exp_delay& delay,
                                                  utils::movable_function<void(std::exception_ptr)> callback);
 
     void commit_doc(attempt_context_impl* ctx,
                     staged_mutation& item,
-                    async_constant_delay delay,
+                    async_constant_delay& delay,
                     utils::movable_function<void(std::exception_ptr)> callback,
                     bool ambiguity_resolution_mode = false,
                     bool cas_zero_mode = false);
     void remove_doc(attempt_context_impl* ctx,
                     const staged_mutation& item,
-                    async_constant_delay delay,
+                    async_constant_delay& delay,
                     utils::movable_function<void(std::exception_ptr)> callback);
     void rollback_insert(attempt_context_impl* ctx,
                          const staged_mutation& item,
-                         async_exp_delay delay,
+                         async_exp_delay& delay,
                          utils::movable_function<void(std::exception_ptr)> callback);
     void rollback_remove_or_replace(attempt_context_impl* ctx,
                                     const staged_mutation& item,
-                                    async_exp_delay delay,
+                                    async_exp_delay& delay,
                                     utils::movable_function<void(std::exception_ptr)> callback);
 
   public:

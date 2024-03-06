@@ -20,16 +20,16 @@ namespace couchbase::core::transactions
 {
 namespace
 {
-inline std::optional<couchbase::core::transactions::error_class>
-noop1(const std::string&)
+inline void
+noop1(const std::string&, utils::movable_function<void(std::optional<error_class>)>&& handler)
 {
-    return {};
+    return handler({});
 }
 
-inline std::optional<couchbase::core::transactions::error_class>
-noop2()
+inline void
+noop2(utils::movable_function<void(std::optional<error_class>)>&& handler)
 {
-    return {};
+    return handler({});
 }
 } // namespace
 

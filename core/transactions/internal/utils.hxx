@@ -26,6 +26,7 @@
 #include <functional>
 #include <future>
 #include <limits>
+#include <optional>
 #include <random>
 #include <string>
 #include <thread>
@@ -78,6 +79,9 @@ validate_operation_result(result& res, bool ignore_subdoc_errors = true);
 
 result
 wrap_operation_future(std::future<result>& fut, bool ignore_subdoc_errors = true);
+
+std::optional<error_class>
+wait_for_hook(std::function<void(utils::movable_function<void(std::optional<error_class>)>)> hook);
 
 inline void
 wrap_collection_call(result& res, std::function<void(result&)> call);
@@ -326,7 +330,7 @@ struct async_exp_delay {
 
     void operator()(utils::movable_function<void(std::exception_ptr)> callback) const
     {
-        if (retries >= max_retries) {
+        if (retries++ >= max_retries) {
             callback(std::make_exception_ptr(retry_operation_retries_exhausted("retries exhausted")));
             return;
         }

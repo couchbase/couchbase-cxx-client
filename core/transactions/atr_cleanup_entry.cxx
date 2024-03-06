@@ -131,12 +131,13 @@ atr_cleanup_entry::check_atr_and_cleanup(transactions_cleanup_attempt* result)
         throw *err;
     }
     cleanup_docs(durability_level);
-    auto ec = cleanup_->config().cleanup_hooks->on_cleanup_docs_completed();
+    auto ec =
+      wait_for_hook([this](auto handler) { return cleanup_->config().cleanup_hooks->on_cleanup_docs_completed(std::move(handler)); });
     if (ec) {
         throw client_error(*ec, "on_cleanup_docs_completed hook threw error");
     }
     cleanup_entry(durability_level);
-    ec = cleanup_->config().cleanup_hooks->on_cleanup_completed();
+    ec = wait_for_hook([this](auto handler) { return cleanup_->config().cleanup_hooks->on_cleanup_completed(std::move(handler)); });
     if (ec) {
         throw client_error(*ec, "on_cleanup_completed hook threw error");
     }
@@ -246,7 +247,9 @@ atr_cleanup_entry::commit_docs(std::optional<std::vector<doc_record>> docs, dura
         do_per_doc(*docs, true, [&](transaction_get_result& doc, bool) {
             if (doc.links().has_staged_content()) {
                 auto content = doc.links().staged_content();
-                auto ec = cleanup_->config().cleanup_hooks->before_commit_doc(doc.id().key());
+                auto ec = wait_for_hook([this, key = doc.id().key()](auto handler) {
+                    return cleanup_->config().cleanup_hooks->before_commit_doc(key, std::move(handler));
+                });
                 if (ec) {
                     throw client_error(*ec, "before_commit_doc hook threw error");
                 }
@@ -288,7 +291,9 @@ atr_cleanup_entry::remove_docs(std::optional<std::vector<doc_record>> docs, dura
 {
     if (docs) {
         do_per_doc(*docs, true, [&](transaction_get_result& doc, bool is_deleted) {
-            auto ec = cleanup_->config().cleanup_hooks->before_remove_doc(doc.id().key());
+            auto ec = wait_for_hook([this, key = doc.id().key()](auto handler) mutable {
+                return cleanup_->config().cleanup_hooks->before_remove_doc(key, std::move(handler));
+            });
             if (ec) {
                 throw client_error(*ec, "before_remove_doc hook threw error");
             }
@@ -330,7 +335,9 @@ atr_cleanup_entry::remove_docs_staged_for_removal(std::optional<std::vector<doc_
     if (docs) {
         do_per_doc(*docs, true, [&](transaction_get_result& doc, bool) {
             if (doc.links().is_document_being_removed()) {
-                auto ec = cleanup_->config().cleanup_hooks->before_remove_doc_staged_for_removal(doc.id().key());
+                auto ec = wait_for_hook([this, key = doc.id().key()](auto handler) mutable {
+                    return cleanup_->config().cleanup_hooks->before_remove_doc_staged_for_removal(key, std::move(handler));
+                });
                 if (ec) {
                     throw client_error(*ec, "before_remove_doc_staged_for_removal hook threw error");
                 }
@@ -358,7 +365,9 @@ atr_cleanup_entry::remove_txn_links(std::optional<std::vector<doc_record>> docs,
 {
     if (docs) {
         do_per_doc(*docs, false, [&](transaction_get_result& doc, bool) {
-            auto ec = cleanup_->config().cleanup_hooks->before_remove_links(doc.id().key());
+            auto ec = wait_for_hook([this, key = doc.id().key()](auto handler) mutable {
+                return cleanup_->config().cleanup_hooks->before_remove_links(key, std::move(handler));
+            });
             if (ec) {
                 throw client_error(*ec, "before_remove_links hook threw error");
             }
@@ -385,7 +394,7 @@ void
 atr_cleanup_entry::cleanup_entry(durability_level dl)
 {
     try {
-        auto ec = cleanup_->config().cleanup_hooks->before_atr_remove();
+        auto ec = wait_for_hook([this](auto handler) { return cleanup_->config().cleanup_hooks->before_atr_remove(std::move(handler)); });
         if (ec) {
             throw client_error(*ec, "before_atr_remove hook threw error");
         }

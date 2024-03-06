@@ -16,6 +16,7 @@
 #pragma once
 
 #include "core/transactions/error_class.hxx"
+#include "core/utils/movable_function.hxx"
 
 #include <functional>
 #include <optional>
@@ -25,8 +26,9 @@ namespace couchbase::core::transactions
 {
 class attempt_context;
 
-using error_func1 = std::function<std::optional<error_class>(attempt_context*)>;
-using error_func2 = std::function<std::optional<error_class>(attempt_context*, const std::string&)>;
+using error_func1 = std::function<void(attempt_context*, core::utils::movable_function<void(std::optional<error_class>)>&&)>;
+using error_func2 =
+  std::function<void(attempt_context*, const std::string&, core::utils::movable_function<void(std::optional<error_class>)>&&)>;
 
 static const std::string STAGE_ROLLBACK = "rollback";
 static const std::string STAGE_GET = "get";
