@@ -194,7 +194,7 @@ struct lookup_in_all_replicas_request {
                     });
                 });
           });
-    };
+    }
 };
 
 template<>
