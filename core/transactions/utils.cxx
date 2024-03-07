@@ -92,6 +92,15 @@ wrap_operation_future(std::future<result>& fut, bool ignore_subdoc_errors)
     return res;
 }
 
+std::optional<error_class>
+wait_for_hook(std::function<void(utils::movable_function<void(std::optional<error_class>)>)> hook)
+{
+    auto hook_barrier = std::make_shared<std::promise<std::optional<error_class>>>();
+    auto hook_future = hook_barrier->get_future();
+    hook([hook_barrier](std::optional<error_class> ec) mutable { return hook_barrier->set_value(ec); });
+    return hook_future.get();
+}
+
 template<>
 bool
 is_error(const core::operations::mutate_in_response& resp)

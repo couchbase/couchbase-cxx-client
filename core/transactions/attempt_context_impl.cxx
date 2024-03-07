@@ -117,49 +117,53 @@ attempt_context_impl::get(const core::document_id& id, Callback&& cb)
     }
     cache_error_async(cb, [&]() mutable {
         check_if_done(cb);
-        do_get(
-          id,
-          std::nullopt,
-          [this, id, cb = std::move(cb)](
-            std::optional<error_class> ec, std::optional<std::string> err_message, std::optional<transaction_get_result> res) mutable {
-              if (!ec) {
-                  ec = hooks_.after_get_complete(this, id.key());
-              }
-              if (ec) {
-                  switch (*ec) {
-                      case FAIL_EXPIRY:
-                          return op_completed_with_error(std::move(cb),
-                                                         transaction_operation_failed(*ec, "transaction expired during get").expired());
-                      case FAIL_DOC_NOT_FOUND:
-                          return op_completed_with_error(
-                            std::move(cb),
-                            transaction_operation_failed(*ec, fmt::format("document not found {}", err_message.value_or("")))
-                              .cause(external_exception::DOCUMENT_NOT_FOUND_EXCEPTION));
-                      case FAIL_TRANSIENT:
-                          return op_completed_with_error(
-                            std::move(cb),
-                            transaction_operation_failed(*ec, fmt::format("transient failure in get {}", err_message.value_or("")))
-                              .retry());
-                      case FAIL_HARD:
-                          return op_completed_with_error(
-                            std::move(cb),
-                            transaction_operation_failed(*ec, fmt::format("fail hard in get {}", err_message.value_or(""))).no_rollback());
-                      default: {
-                          auto msg = fmt::format("got error \"{}\" while getting doc {}", err_message.value_or(""), id.key());
-                          return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_OTHER, msg));
-                      }
-                  }
-              } else {
-                  if (!res) {
-                      return op_completed_with_error(std::move(cb), transaction_operation_failed(*ec, "document not found"));
-                  }
-                  auto err = forward_compat::check(forward_compat_stage::GETS, res->links().forward_compat());
-                  if (err) {
-                      return op_completed_with_error(std::move(cb), *err);
-                  }
-                  return op_completed_with_callback(std::move(cb), res);
-              }
-          });
+        do_get(id,
+               std::nullopt,
+               [this, id, cb = std::move(cb)](
+                 std::optional<error_class> ec, std::optional<std::string> err_message, std::optional<transaction_get_result> res) mutable {
+                   auto handler = [this, id, err_message, res, cb = std::move(cb)](std::optional<error_class> ec) mutable {
+                       if (ec) {
+                           switch (*ec) {
+                               case FAIL_EXPIRY:
+                                   return op_completed_with_error(
+                                     std::move(cb), transaction_operation_failed(*ec, "transaction expired during get").expired());
+                               case FAIL_DOC_NOT_FOUND:
+                                   return op_completed_with_error(
+                                     std::move(cb),
+                                     transaction_operation_failed(*ec, fmt::format("document not found {}", err_message.value_or("")))
+                                       .cause(external_exception::DOCUMENT_NOT_FOUND_EXCEPTION));
+                               case FAIL_TRANSIENT:
+                                   return op_completed_with_error(
+                                     std::move(cb),
+                                     transaction_operation_failed(*ec, fmt::format("transient failure in get {}", err_message.value_or("")))
+                                       .retry());
+                               case FAIL_HARD:
+                                   return op_completed_with_error(
+                                     std::move(cb),
+                                     transaction_operation_failed(*ec, fmt::format("fail hard in get {}", err_message.value_or("")))
+                                       .no_rollback());
+                               default: {
+                                   auto msg = fmt::format("got error \"{}\" while getting doc {}", err_message.value_or(""), id.key());
+                                   return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_OTHER, msg));
+                               }
+                           }
+                       } else {
+                           if (!res) {
+                               return op_completed_with_error(std::move(cb), transaction_operation_failed(*ec, "document not found"));
+                           }
+                           auto err = forward_compat::check(forward_compat_stage::GETS, res->links().forward_compat());
+                           if (err) {
+                               return op_completed_with_error(std::move(cb), *err);
+                           }
+                           return op_completed_with_callback(std::move(cb), res);
+                       }
+                   };
+
+                   if (!ec) {
+                       return hooks_.after_get_complete(this, id.key(), std::move(handler));
+                   }
+                   return handler(ec);
+               });
     });
 }
 
@@ -190,51 +194,55 @@ attempt_context_impl::get_optional(const core::document_id& id, Callback&& cb)
                 return op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_OTHER, ec.message()));
             }
             check_if_done(cb);
-            do_get(id,
-                   std::nullopt,
-                   [this, id, cb = std::move(cb)](std::optional<error_class> ec,
-                                                  std::optional<std::string> err_message,
-                                                  std::optional<transaction_get_result> res) mutable {
-                       if (!ec) {
-                           ec = hooks_.after_get_complete(this, id.key());
-                       }
-                       if (ec) {
-                           switch (*ec) {
-                               case FAIL_EXPIRY:
-                                   return op_completed_with_error(
-                                     std::move(cb),
-                                     transaction_operation_failed(
-                                       *ec, fmt::format("transaction expired during get {}", err_message.value_or("")))
-                                       .expired());
-                               case FAIL_DOC_NOT_FOUND:
-                                   return op_completed_with_callback(std::move(cb), std::optional<transaction_get_result>());
-                               case FAIL_TRANSIENT:
-                                   return op_completed_with_error(
-                                     std::move(cb),
-                                     transaction_operation_failed(*ec, fmt::format("transient failure in get {}", err_message.value_or("")))
-                                       .retry());
-                               case FAIL_HARD:
-                                   return op_completed_with_error(
-                                     std::move(cb),
-                                     transaction_operation_failed(*ec, fmt::format("fail hard in get {}", err_message.value_or("")))
-                                       .no_rollback());
-                               default: {
-                                   return op_completed_with_error(
-                                     std::move(cb),
-                                     transaction_operation_failed(FAIL_OTHER,
-                                                                  fmt::format("error getting {} {}", id.key(), err_message.value_or(""))));
-                               }
-                           }
-                       } else {
-                           if (res) {
-                               auto err = forward_compat::check(forward_compat_stage::GETS, res->links().forward_compat());
-                               if (err) {
-                                   return op_completed_with_error(std::move(cb), *err);
-                               }
-                           }
-                           return op_completed_with_callback(std::move(cb), res);
-                       }
-                   });
+            do_get(
+              id,
+              std::nullopt,
+              [this, id, cb = std::move(cb)](
+                std::optional<error_class> ec, std::optional<std::string> err_message, std::optional<transaction_get_result> res) mutable {
+                  auto handler = [this, id, err_message, res, cb = std::move(cb)](std::optional<error_class> ec) mutable {
+                      if (ec) {
+                          switch (*ec) {
+                              case FAIL_EXPIRY:
+                                  return op_completed_with_error(
+                                    std::move(cb),
+                                    transaction_operation_failed(*ec,
+                                                                 fmt::format("transaction expired during get {}", err_message.value_or("")))
+                                      .expired());
+                              case FAIL_DOC_NOT_FOUND:
+                                  return op_completed_with_callback(std::move(cb), std::optional<transaction_get_result>());
+                              case FAIL_TRANSIENT:
+                                  return op_completed_with_error(
+                                    std::move(cb),
+                                    transaction_operation_failed(*ec, fmt::format("transient failure in get {}", err_message.value_or("")))
+                                      .retry());
+                              case FAIL_HARD:
+                                  return op_completed_with_error(
+                                    std::move(cb),
+                                    transaction_operation_failed(*ec, fmt::format("fail hard in get {}", err_message.value_or("")))
+                                      .no_rollback());
+                              default: {
+                                  return op_completed_with_error(
+                                    std::move(cb),
+                                    transaction_operation_failed(FAIL_OTHER,
+                                                                 fmt::format("error getting {} {}", id.key(), err_message.value_or(""))));
+                              }
+                          }
+                      } else {
+                          if (res) {
+                              auto err = forward_compat::check(forward_compat_stage::GETS, res->links().forward_compat());
+                              if (err) {
+                                  return op_completed_with_error(std::move(cb), *err);
+                              }
+                          }
+                          return op_completed_with_callback(std::move(cb), res);
+                      }
+                  };
+
+                  if (!ec) {
+                      return hooks_.after_get_complete(this, id.key(), std::move(handler));
+                  }
+                  return handler(ec);
+              });
         });
     });
 }
@@ -386,7 +394,8 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
                 return op_completed_with_error(std::move(cb), err);
         }
     };
-    auto ec = hooks_.before_staged_replace(this, document.id().key());
+    auto ec = wait_for_hook(
+      [this, key = document.id().key()](auto handler) mutable { return hooks_.before_staged_replace(this, key, std::move(handler)); });
     if (ec) {
         return error_handler(*ec, "before_staged_replace hook raised error", std::move(cb));
     }
@@ -394,21 +403,27 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
       this, "about to replace doc {} with cas {} in txn {}", document.id(), document.cas().value(), overall_.transaction_id());
     overall_.cluster_ref().execute(
       req,
-      [this, document = std::move(document), content, cb = std::move(cb), error_handler = std::move(error_handler)](
+      [this, document, content, cb = std::move(cb), error_handler = std::move(error_handler)](
         core::operations::mutate_in_response resp) mutable {
           if (auto ec2 = error_class_from_response(resp); ec2) {
               return error_handler(*ec2, resp.ctx.ec().message(), std::move(cb));
           }
-          auto err = hooks_.after_staged_replace_complete(this, document.id().key());
-          if (err) {
-              return error_handler(*err, "after_staged_replace_commit hook returned error", std::move(cb));
-          }
-          transaction_get_result out = document;
-          out.cas(resp.cas.value());
-          out.content(content);
-          CB_ATTEMPT_CTX_LOG_TRACE(this, "replace staged content, result {}", out);
-          staged_mutations_->add(staged_mutation(out, content, staged_mutation_type::REPLACE));
-          return op_completed_with_callback(std::move(cb), std::optional<transaction_get_result>(out));
+          return hooks_.after_staged_replace_complete(
+            this,
+            document.id().key(),
+            [this, document, content, error_handler = std::move(error_handler), cb = std::move(cb), resp = std::move(resp)](
+              auto ec) mutable {
+                if (ec) {
+                    return error_handler(*ec, "after_staged_replace_commit hook returned error", std::move(cb));
+                }
+
+                transaction_get_result out = document;
+                out.cas(resp.cas.value());
+                out.content(content);
+                CB_ATTEMPT_CTX_LOG_TRACE(this, "replace staged content, result {}", out);
+                staged_mutations_->add(staged_mutation(out, content, staged_mutation_type::REPLACE));
+                return op_completed_with_callback(std::move(cb), std::optional<transaction_get_result>(out));
+            });
       });
 }
 
@@ -523,47 +538,51 @@ attempt_context_impl::check_atr_entry_for_blocking_document(const transaction_ge
 {
     try {
         delay();
-        if (auto ec = hooks_.before_check_atr_entry_for_blocking_doc(this, doc.id().key())) {
-            return cb(transaction_operation_failed(FAIL_WRITE_WRITE_CONFLICT, "document is in another transaction").retry());
-        }
-        core::document_id atr_id(doc.links().atr_bucket_name().value(),
-                                 doc.links().atr_scope_name().value(),
-                                 doc.links().atr_collection_name().value(),
-                                 doc.links().atr_id().value());
-        active_transaction_record::get_atr(
-          cluster_ref(),
-          atr_id,
-          [this, delay = std::move(delay), cb = std::move(cb), doc = std::move(doc)](std::error_code err,
-                                                                                     std::optional<active_transaction_record> atr) mutable {
-              if (!err) {
-                  if (atr) {
-                      auto entries = atr->entries();
-                      auto it = std::find_if(entries.begin(), entries.end(), [&doc](const atr_entry& e) {
-                          return e.attempt_id() == doc.links().staged_attempt_id();
-                      });
-                      if (it != entries.end()) {
-                          auto fwd_err = forward_compat::check(forward_compat_stage::WWC_READING_ATR, it->forward_compat());
-                          if (fwd_err) {
-                              return cb(fwd_err);
-                          }
-                          switch (it->state()) {
-                              case attempt_state::COMPLETED:
-                              case attempt_state::ROLLED_BACK:
-                                  CB_ATTEMPT_CTX_LOG_DEBUG(
-                                    this, "existing atr entry can be ignored due to state {}", attempt_state_name(it->state()));
-                                  return cb(std::nullopt);
-                              default:
-                                  CB_ATTEMPT_CTX_LOG_DEBUG(
-                                    this, "existing atr entry found in state {}, retrying", attempt_state_name(it->state()));
-                          }
-                          return check_atr_entry_for_blocking_document(doc, delay, std::move(cb));
-                      }
-                  }
-                  CB_ATTEMPT_CTX_LOG_DEBUG(this, "no blocking atr entry");
-                  return cb(std::nullopt);
+        return hooks_.before_check_atr_entry_for_blocking_doc(
+          this, doc.id().key(), [this, delay = std::move(delay), cb = std::move(cb), doc = std::move(doc)](auto ec) mutable {
+              if (ec) {
+                  return cb(transaction_operation_failed(FAIL_WRITE_WRITE_CONFLICT, "document is in another transaction").retry());
               }
-              // if we are here, there is still a write-write conflict
-              return cb(transaction_operation_failed(FAIL_WRITE_WRITE_CONFLICT, "document is in another transaction").retry());
+
+              core::document_id atr_id(doc.links().atr_bucket_name().value(),
+                                       doc.links().atr_scope_name().value(),
+                                       doc.links().atr_collection_name().value(),
+                                       doc.links().atr_id().value());
+              return active_transaction_record::get_atr(
+                cluster_ref(),
+                atr_id,
+                [this, delay = std::move(delay), cb = std::move(cb), doc = std::move(doc)](
+                  std::error_code err, std::optional<active_transaction_record> atr) mutable {
+                    if (!err) {
+                        if (atr) {
+                            auto entries = atr->entries();
+                            auto it = std::find_if(entries.begin(), entries.end(), [&doc](const atr_entry& e) {
+                                return e.attempt_id() == doc.links().staged_attempt_id();
+                            });
+                            if (it != entries.end()) {
+                                auto fwd_err = forward_compat::check(forward_compat_stage::WWC_READING_ATR, it->forward_compat());
+                                if (fwd_err) {
+                                    return cb(fwd_err);
+                                }
+                                switch (it->state()) {
+                                    case attempt_state::COMPLETED:
+                                    case attempt_state::ROLLED_BACK:
+                                        CB_ATTEMPT_CTX_LOG_DEBUG(
+                                          this, "existing atr entry can be ignored due to state {}", attempt_state_name(it->state()));
+                                        return cb(std::nullopt);
+                                    default:
+                                        CB_ATTEMPT_CTX_LOG_DEBUG(
+                                          this, "existing atr entry found in state {}, retrying", attempt_state_name(it->state()));
+                                }
+                                return check_atr_entry_for_blocking_document(doc, delay, std::move(cb));
+                            }
+                        }
+                        CB_ATTEMPT_CTX_LOG_DEBUG(this, "no blocking atr entry");
+                        return cb(std::nullopt);
+                    }
+                    // if we are here, there is still a write-write conflict
+                    return cb(transaction_operation_failed(FAIL_WRITE_WRITE_CONFLICT, "document is in another transaction").retry());
+                });
           });
     } catch (const retry_operation_timeout&) {
         return cb(transaction_operation_failed(FAIL_WRITE_WRITE_CONFLICT, "document is in another transaction").retry());
@@ -620,7 +639,7 @@ attempt_context_impl::remove(const transaction_get_result& document, VoidCallbac
                     return;
                 }
             }
-            check_and_handle_blocking_transactions(
+            return check_and_handle_blocking_transactions(
               document,
               forward_compat_stage::WWC_REMOVING,
               [this, document = std::move(document), cb = std::move(cb), op_id, error_handler = std::move(error_handler)](
@@ -630,38 +649,57 @@ attempt_context_impl::remove(const transaction_get_result& document, VoidCallbac
                   }
                   auto tmp_doc =
                     document_id{ document.id().bucket(), document.id().scope(), document.id().collection(), document.id().key() };
-                  select_atr_if_needed_unlocked(
+                  return select_atr_if_needed_unlocked(
                     tmp_doc,
                     [document = std::move(document), cb = std::move(cb), this, op_id, error_handler = std::move(error_handler)](
                       std::optional<transaction_operation_failed> err2) mutable {
                         if (err2) {
                             return op_completed_with_error(std::move(cb), *err2);
                         }
-                        if (auto ec = hooks_.before_staged_remove(this, document.id().key())) {
-                            return error_handler(*ec, "before_staged_remove hook raised error", std::move(cb));
-                        }
-                        CB_ATTEMPT_CTX_LOG_TRACE(this, "about to remove doc {} with cas {}", document.id(), document.cas().value());
-                        auto req = create_staging_request(document.id(), &document, "remove", op_id);
-                        req.cas = document.cas();
-                        req.access_deleted = document.links().is_deleted();
-                        overall_.cluster_ref().execute(
-                          req,
-                          [this, document = std::move(document), cb = std::move(cb), error_handler = std::move(error_handler)](
-                            core::operations::mutate_in_response resp) mutable {
-                              auto ec = error_class_from_response(resp);
-                              if (!ec) {
-                                  ec = hooks_.after_staged_remove_complete(this, document.id().key());
+                        auto key = document.id().key();
+                        return hooks_.before_staged_remove(
+                          this,
+                          key,
+                          [document = std::move(document), cb = std::move(cb), this, op_id, error_handler = std::move(error_handler)](
+                            auto ec) mutable {
+                              if (ec) {
+                                  return error_handler(*ec, "before_staged_remove hook raised error", std::move(cb));
                               }
-                              if (!ec) {
-                                  CB_ATTEMPT_CTX_LOG_TRACE(
-                                    this, "removed doc {} CAS={}, rc={}", document.id(), resp.cas.value(), resp.ctx.ec().message());
-                                  // TODO: this copy...  can we do better?
-                                  transaction_get_result new_res = document;
-                                  new_res.cas(resp.cas.value());
-                                  staged_mutations_->add(staged_mutation(new_res, std::vector<std::byte>{}, staged_mutation_type::REMOVE));
-                                  return op_completed_with_callback(cb);
-                              }
-                              return error_handler(*ec, resp.ctx.ec().message(), std::move(cb));
+                              CB_ATTEMPT_CTX_LOG_TRACE(this, "about to remove doc {} with cas {}", document.id(), document.cas().value());
+                              auto req = create_staging_request(document.id(), &document, "remove", op_id);
+                              req.cas = document.cas();
+                              req.access_deleted = document.links().is_deleted();
+                              return overall_.cluster_ref().execute(
+                                req,
+                                [this, document = std::move(document), cb = std::move(cb), error_handler = std::move(error_handler)](
+                                  core::operations::mutate_in_response resp) mutable {
+                                    auto ec = error_class_from_response(resp);
+                                    if (ec) {
+                                        return error_handler(*ec, resp.ctx.ec().message(), std::move(cb));
+                                    }
+                                    auto key = document.id().key();
+                                    return hooks_.after_staged_remove_complete(
+                                      this,
+                                      key,
+                                      [this,
+                                       document = std::move(document),
+                                       cb = std::move(cb),
+                                       error_handler = std::move(error_handler),
+                                       resp = std::move(resp)](auto ec) mutable {
+                                          if (ec) {
+                                              return error_handler(*ec, resp.ctx.ec().message(), std::move(cb));
+                                          }
+
+                                          CB_ATTEMPT_CTX_LOG_TRACE(
+                                            this, "removed doc {} CAS={}, rc={}", document.id(), resp.cas.value(), resp.ctx.ec().message());
+                                          // TODO: this copy...  can we do better?
+                                          transaction_get_result new_res = document;
+                                          new_res.cas(resp.cas.value());
+                                          staged_mutations_->add(
+                                            staged_mutation(new_res, std::vector<std::byte>{}, staged_mutation_type::REMOVE));
+                                          return op_completed_with_callback(cb);
+                                      });
+                                });
                           });
                     });
               });
@@ -688,36 +726,41 @@ attempt_context_impl::remove_staged_insert(const core::document_id& id, VoidCall
     };
     CB_ATTEMPT_CTX_LOG_DEBUG(this, "removing staged insert {}", id);
 
-    if (auto err = hooks_.before_remove_staged_insert(this, id.key()); err) {
-        return error_handler(*err, "before_remove_staged_insert hook returned error", std::move(cb));
-    }
+    return hooks_.before_remove_staged_insert(
+      this, id.key(), [this, id = std::move(id), cb = std::move(cb), error_handler = std::move(error_handler)](auto ec) mutable {
+          if (ec) {
+              return error_handler(*ec, "before_remove_staged_insert hook returned error", std::move(cb));
+          }
+          core::operations::mutate_in_request req{ id };
+          req.specs =
+            couchbase::mutate_in_specs{
+                couchbase::mutate_in_specs::remove("txn").xattr(),
+            }
+              .specs();
+          wrap_durable_request(req, overall_.config());
+          req.access_deleted = true;
 
-    core::operations::mutate_in_request req{ id };
-    req.specs =
-      couchbase::mutate_in_specs{
-          couchbase::mutate_in_specs::remove("txn").xattr(),
-      }
-        .specs();
-    wrap_durable_request(req, overall_.config());
-    req.access_deleted = true;
-
-    overall_.cluster_ref().execute(req,
-                                   [this, id = std::move(id), cb = std::move(cb), error_handler = std::move(error_handler)](
-                                     core::operations::mutate_in_response resp) mutable {
-                                       auto ec = error_class_from_response(resp);
-                                       if (!ec) {
-
-                                           if (auto err = hooks_.after_remove_staged_insert(this, id.key()); err) {
-                                               error_handler(*err, "after_remove_staged_insert hook returned error", std::move(cb));
-                                               return;
-                                           }
-                                           staged_mutations_->remove_any(id);
-                                           op_completed_with_callback(std::move(cb));
-                                           return;
-                                       }
-                                       CB_ATTEMPT_CTX_LOG_DEBUG(this, "remove_staged_insert got error {}", *ec);
-                                       return error_handler(*ec, resp.ctx.ec().message(), std::move(cb));
-                                   });
+          return overall_.cluster_ref().execute(
+            req,
+            [this, id = std::move(id), cb = std::move(cb), error_handler = std::move(error_handler)](
+              core::operations::mutate_in_response resp) mutable {
+                auto ec = error_class_from_response(resp);
+                if (ec) {
+                    CB_ATTEMPT_CTX_LOG_DEBUG(this, "remove_staged_insert got error {}", *ec);
+                    return error_handler(*ec, resp.ctx.ec().message(), std::move(cb));
+                }
+                return hooks_.after_remove_staged_insert(
+                  this,
+                  id.key(),
+                  [this, id = std::move(id), cb = std::move(cb), error_handler = std::move(error_handler)](auto ec) mutable {
+                      if (ec) {
+                          return error_handler(*ec, "after_remove_staged_insert hook returned error", std::move(cb));
+                      }
+                      staged_mutations_->remove_any(id);
+                      return op_completed_with_callback(std::move(cb));
+                  });
+            });
+      });
 }
 
 void
@@ -1018,21 +1061,26 @@ attempt_context_impl::wrap_query(const std::string& statement,
         req.raw["txdata"] = core::utils::json::generate(txdata);
     }
     req.statement = statement;
-    if (auto ec = hooks_.before_query(this, statement)) {
-        auto err = std::make_exception_ptr(transaction_operation_failed(*ec, "before_query hook raised error"));
-        if (statement == BEGIN_WORK) {
-            return cb(std::make_exception_ptr(transaction_operation_failed(*ec, "before_query hook raised error").no_rollback()), {});
+    return hooks_.before_query(this, statement, [this, statement, req, cb = std::move(cb)](auto ec) mutable {
+        if (ec) {
+            auto err = std::make_exception_ptr(transaction_operation_failed(*ec, "before_query hook raised error"));
+            if (statement == BEGIN_WORK) {
+                return cb(std::make_exception_ptr(transaction_operation_failed(*ec, "before_query hook raised error").no_rollback()), {});
+            }
+            return cb(std::make_exception_ptr(transaction_operation_failed(*ec, "before_query hook raised error")), {});
         }
-        return cb(std::make_exception_ptr(transaction_operation_failed(*ec, "before_query hook raised error")), {});
-    }
-    CB_ATTEMPT_CTX_LOG_TRACE(this, "http request: {}", dump_request(req));
-    overall_.cluster_ref().execute(req, [this, cb = std::move(cb)](core::operations::query_response resp) mutable {
-        CB_ATTEMPT_CTX_LOG_TRACE(this, "response: {} status: {}", resp.ctx.http_body, resp.meta.status);
-        if (auto ec = hooks_.after_query(this, resp.ctx.statement)) {
-            auto err = std::make_exception_ptr(transaction_operation_failed(*ec, "after_query hook raised error"));
-            return cb(err, {});
-        }
-        cb(handle_query_error(resp), resp);
+
+        CB_ATTEMPT_CTX_LOG_TRACE(this, "http request: {}", dump_request(req));
+        return overall_.cluster_ref().execute(req, [this, cb = std::move(cb)](core::operations::query_response resp) mutable {
+            CB_ATTEMPT_CTX_LOG_TRACE(this, "response: {} status: {}", resp.ctx.http_body, resp.meta.status);
+            return hooks_.after_query(this, resp.ctx.statement, [this, resp = std::move(resp), cb = std::move(cb)](auto ec) mutable {
+                if (ec) {
+                    auto err = std::make_exception_ptr(transaction_operation_failed(*ec, "after_query hook raised error"));
+                    return cb(err, {});
+                }
+                return cb(handle_query_error(resp), resp);
+            });
+        });
     });
 }
 
@@ -1389,7 +1437,8 @@ attempt_context_impl::atr_commit(bool ambiguity_resolution_mode)
             if (ec) {
                 throw client_error(*ec, "atr_commit check for expiry threw error");
             }
-            if (!!(ec = hooks_.before_atr_commit(this))) {
+            ec = wait_for_hook([this](auto handler) mutable { return hooks_.before_atr_commit(this, std::move(handler)); });
+            if (ec) {
                 // for now, throw.  Later, if this is async, we will use error handler no doubt.
                 throw client_error(*ec, "before_atr_commit hook raised error");
             }
@@ -1400,7 +1449,7 @@ attempt_context_impl::atr_commit(bool ambiguity_resolution_mode)
             overall_.cluster_ref().execute(
               req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
             auto res = wrap_operation_future(f, false);
-            ec = hooks_.after_atr_commit(this);
+            ec = wait_for_hook([this](auto handler) mutable { return hooks_.after_atr_commit(this, std::move(handler)); });
             if (ec) {
                 throw client_error(*ec, "after_atr_commit hook raised error");
             }
@@ -1490,7 +1539,9 @@ attempt_context_impl::atr_commit_ambiguity_resolution()
         if (ec) {
             throw client_error(*ec, "atr_commit_ambiguity_resolution raised error");
         }
-        if (!!(ec = hooks_.before_atr_commit_ambiguity_resolution(this))) {
+        ec =
+          wait_for_hook([this](auto handler) mutable { return hooks_.before_atr_commit_ambiguity_resolution(this, std::move(handler)); });
+        if (ec) {
             throw client_error(*ec, "before_atr_commit_ambiguity_resolution hook threw error");
         }
         std::string prefix(ATR_FIELD_ATTEMPTS + "." + id() + ".");
@@ -1540,7 +1591,7 @@ attempt_context_impl::atr_complete()
 {
     try {
         result atr_res;
-        auto ec = hooks_.before_atr_complete(this);
+        auto ec = wait_for_hook([this](auto handler) mutable { return hooks_.before_atr_complete(this, std::move(handler)); });
         if (ec) {
             throw client_error(*ec, "before_atr_complete hook threw error");
         }
@@ -1562,7 +1613,7 @@ attempt_context_impl::atr_complete()
         overall_.cluster_ref().execute(
           req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
         wrap_operation_future(f);
-        ec = hooks_.after_atr_complete(this);
+        ec = wait_for_hook([this](auto handler) mutable { return hooks_.after_atr_complete(this, std::move(handler)); });
         if (ec) {
             throw client_error(*ec, "after_atr_complete hook threw error");
         }
@@ -1640,7 +1691,8 @@ attempt_context_impl::atr_abort()
         if (ec) {
             throw client_error(*ec, "atr_abort check for expiry threw error");
         }
-        if (!!(ec = hooks_.before_atr_aborted(this))) {
+        ec = wait_for_hook([this](auto handler) mutable { return hooks_.before_atr_aborted(this, std::move(handler)); });
+        if (ec) {
             throw client_error(*ec, "before_atr_aborted hook threw error");
         }
         std::string prefix(ATR_FIELD_ATTEMPTS + "." + id() + ".");
@@ -1663,7 +1715,8 @@ attempt_context_impl::atr_abort()
           req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
         wrap_operation_future(f);
         state(attempt_state::ABORTED);
-        ec = hooks_.after_atr_aborted(this);
+
+        ec = wait_for_hook([this](auto handler) mutable { return hooks_.after_atr_aborted(this, std::move(handler)); });
         if (ec) {
             throw client_error(*ec, "after_atr_aborted hook threw error");
         }
@@ -1704,7 +1757,9 @@ attempt_context_impl::atr_rollback_complete()
         if (ec) {
             throw client_error(*ec, "atr_rollback_complete raised error");
         }
-        if (!!(ec = hooks_.before_atr_rolled_back(this))) {
+
+        ec = wait_for_hook([this](auto handler) mutable { return hooks_.before_atr_rolled_back(this, std::move(handler)); });
+        if (ec) {
             throw client_error(*ec, "before_atr_rolled_back hook threw error");
         }
         std::string prefix(ATR_FIELD_ATTEMPTS + "." + id());
@@ -1721,7 +1776,7 @@ attempt_context_impl::atr_rollback_complete()
           req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
         wrap_operation_future(f);
         state(attempt_state::ROLLED_BACK);
-        ec = hooks_.after_atr_rolled_back(this);
+        ec = wait_for_hook([this](auto handler) mutable { return hooks_.after_atr_rolled_back(this, std::move(handler)); });
         if (ec) {
             throw client_error(*ec, "after_atr_rolled_back hook threw error");
         }
@@ -1928,58 +1983,78 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id, std::u
                           return fn(err);
                   }
               };
-            if (auto ec = hooks_.before_atr_pending(this); ec) {
-                return error_handler(*ec, "before_atr_pending hook raised error", id, std::forward<Handler>(fn));
-            }
-            CB_ATTEMPT_CTX_LOG_DEBUG(this, "updating atr {}", atr_id_.value());
-
-            std::chrono::nanoseconds remaining = overall_.remaining();
-            // This bounds the value to [0-timeout].  It should always be in this range, this is just to protect
-            // against the application clock changing.
-            long remaining_bounded_nanos =
-              std::max(std::min(remaining.count(), overall_.config().timeout.count()), static_cast<std::chrono::nanoseconds::rep>(0));
-            long remaining_bounded_msecs = remaining_bounded_nanos / 1'000'000;
-
-            core::operations::mutate_in_request req{ atr_id_.value() };
-
-            req.specs =
-              couchbase::mutate_in_specs{
-                  couchbase::mutate_in_specs::insert(prefix + ATR_FIELD_TRANSACTION_ID, overall_.transaction_id()).xattr().create_path(),
-                  couchbase::mutate_in_specs::insert(prefix + ATR_FIELD_STATUS, attempt_state_name(attempt_state::PENDING))
-                    .xattr()
-                    .create_path(),
-                  couchbase::mutate_in_specs::insert(prefix + ATR_FIELD_START_TIMESTAMP, subdoc::mutate_in_macro::cas)
-                    .xattr()
-                    .create_path(),
-                  couchbase::mutate_in_specs::insert(prefix + ATR_FIELD_EXPIRES_AFTER_MSECS, remaining_bounded_msecs).xattr().create_path(),
-                  // ExtStoreDurability
-                  couchbase::mutate_in_specs::insert(prefix + ATR_FIELD_DURABILITY_LEVEL,
-                                                     store_durability_level_to_string(overall_.config().level))
-                    .xattr()
-                    .create_path(),
-                  // subdoc::opcode::set_doc used in replace w/ empty path
-                  // ExtBinaryMetadata
-                  couchbase::mutate_in_specs::replace_raw({}, std::vector<std::byte>{ std::byte{ 0x00 } }),
-              }
-                .specs();
-            req.store_semantics = couchbase::store_semantics::upsert;
-
-            wrap_durable_request(req, overall_.config());
-            overall_.cluster_ref().execute(
-              req, [this, fn = std::forward<Handler>(fn), error_handler](core::operations::mutate_in_response resp) mutable {
-                  auto ec = error_class_from_response(resp);
-                  if (!ec) {
-                      ec = hooks_.after_atr_pending(this);
+            return hooks_.before_atr_pending(
+              this, [this, id, prefix, fn = std::forward<Handler>(fn), error_handler = std::move(error_handler)](auto ec) mutable {
+                  if (ec) {
+                      return error_handler(*ec, "before_atr_pending hook raised error", id, std::forward<Handler>(fn));
                   }
-                  if (!ec) {
-                      state(attempt_state::PENDING);
-                      CB_ATTEMPT_CTX_LOG_DEBUG(this, "set ATR {} to Pending, got CAS (start time) {}", atr_id_.value(), resp.cas.value());
-                      return fn(std::nullopt);
-                  }
-                  return error_handler(*ec,
-                                       resp.ctx.ec().message(),
-                                       { resp.ctx.bucket(), resp.ctx.scope(), resp.ctx.collection(), resp.ctx.id() },
-                                       std::forward<Handler>(fn));
+
+                  CB_ATTEMPT_CTX_LOG_DEBUG(this, "updating atr {}", atr_id_.value());
+
+                  std::chrono::nanoseconds remaining = overall_.remaining();
+                  // This bounds the value to [0-timeout].  It should always be in this range, this is just to protect
+                  // against the application clock changing.
+                  long remaining_bounded_nanos =
+                    std::max(std::min(remaining.count(), overall_.config().timeout.count()), static_cast<std::chrono::nanoseconds::rep>(0));
+                  long remaining_bounded_msecs = remaining_bounded_nanos / 1'000'000;
+
+                  core::operations::mutate_in_request req{ atr_id_.value() };
+
+                  req.specs =
+                    couchbase::mutate_in_specs{
+                        couchbase::mutate_in_specs::insert(prefix + ATR_FIELD_TRANSACTION_ID, overall_.transaction_id())
+                          .xattr()
+                          .create_path(),
+                        couchbase::mutate_in_specs::insert(prefix + ATR_FIELD_STATUS, attempt_state_name(attempt_state::PENDING))
+                          .xattr()
+                          .create_path(),
+                        couchbase::mutate_in_specs::insert(prefix + ATR_FIELD_START_TIMESTAMP, subdoc::mutate_in_macro::cas)
+                          .xattr()
+                          .create_path(),
+                        couchbase::mutate_in_specs::insert(prefix + ATR_FIELD_EXPIRES_AFTER_MSECS, remaining_bounded_msecs)
+                          .xattr()
+                          .create_path(),
+                        // ExtStoreDurability
+                        couchbase::mutate_in_specs::insert(prefix + ATR_FIELD_DURABILITY_LEVEL,
+                                                           store_durability_level_to_string(overall_.config().level))
+                          .xattr()
+                          .create_path(),
+                        // subdoc::opcode::set_doc used in replace w/ empty path
+                        // ExtBinaryMetadata
+                        couchbase::mutate_in_specs::replace_raw({}, std::vector<std::byte>{ std::byte{ 0x00 } }),
+                    }
+                      .specs();
+                  req.store_semantics = couchbase::store_semantics::upsert;
+
+                  wrap_durable_request(req, overall_.config());
+                  return overall_.cluster_ref().execute(
+                    req,
+                    [this, fn = std::forward<Handler>(fn), error_handler = std::move(error_handler)](
+                      core::operations::mutate_in_response resp) mutable {
+                        auto ec = error_class_from_response(resp);
+                        if (ec) {
+                            return error_handler(*ec,
+                                                 resp.ctx.ec().message(),
+                                                 { resp.ctx.bucket(), resp.ctx.scope(), resp.ctx.collection(), resp.ctx.id() },
+                                                 std::forward<Handler>(fn));
+                        }
+                        return hooks_.after_atr_pending(
+                          this,
+                          [this, fn = std::forward<Handler>(fn), error_handler = std::move(error_handler), resp = std::move(resp)](
+                            auto ec) mutable {
+                              if (ec) {
+                                  return error_handler(*ec,
+                                                       fmt::format("after_atr_pending returned hook raised {}", *ec),
+                                                       { resp.ctx.bucket(), resp.ctx.scope(), resp.ctx.collection(), resp.ctx.id() },
+                                                       std::forward<Handler>(fn));
+                              }
+
+                              state(attempt_state::PENDING);
+                              CB_ATTEMPT_CTX_LOG_DEBUG(
+                                this, "set ATR {} to Pending, got CAS (start time) {}", atr_id_.value(), resp.cas.value());
+                              return fn(std::nullopt);
+                          });
+                    });
               });
         }
     } catch (const std::exception& e) {
@@ -2034,113 +2109,123 @@ attempt_context_impl::do_get(const core::document_id& id, const std::optional<st
             return cb(FAIL_DOC_NOT_FOUND, msg, std::nullopt);
         }
 
-        if (auto ec = hooks_.before_doc_get(this, id.key()); ec) {
-            return cb(ec, "before_doc_get hook raised error", std::nullopt);
-        }
-
-        get_doc(
-          id,
-          [this, id, resolving_missing_atr_entry = std::move(resolving_missing_atr_entry), cb = std::move(cb)](
-            std::optional<error_class> ec, std::optional<std::string> err_message, std::optional<transaction_get_result> doc) mutable {
-              if (!ec && !doc) {
-                  // it just isn't there.
-                  return cb(std::nullopt, std::nullopt, std::nullopt);
+        return hooks_.before_doc_get(
+          this,
+          id.key(),
+          [this, id, resolving_missing_atr_entry = std::move(resolving_missing_atr_entry), cb = std::move(cb)](auto ec) mutable {
+              if (ec) {
+                  return cb(ec, "before_doc_get hook raised error", std::nullopt);
               }
-              if (!ec) {
-                  if (doc->links().is_document_in_transaction()) {
-                      CB_ATTEMPT_CTX_LOG_DEBUG(
-                        this, "doc {} in transaction, resolving_missing_atr_entry={}", *doc, resolving_missing_atr_entry.value_or("-"));
 
-                      if (resolving_missing_atr_entry.has_value() &&
-                          resolving_missing_atr_entry.value() == doc->links().staged_attempt_id()) {
-                          CB_ATTEMPT_CTX_LOG_DEBUG(this, "doc is in lost pending transaction");
+              return get_doc(
+                id,
+                [this, id, resolving_missing_atr_entry = std::move(resolving_missing_atr_entry), cb = std::move(cb)](
+                  std::optional<error_class> ec,
+                  std::optional<std::string> err_message,
+                  std::optional<transaction_get_result> doc) mutable {
+                    if (!ec && !doc) {
+                        // it just isn't there.
+                        return cb(std::nullopt, std::nullopt, std::nullopt);
+                    }
+                    if (!ec) {
+                        if (doc->links().is_document_in_transaction()) {
+                            CB_ATTEMPT_CTX_LOG_DEBUG(this,
+                                                     "doc {} in transaction, resolving_missing_atr_entry={}",
+                                                     *doc,
+                                                     resolving_missing_atr_entry.value_or("-"));
 
-                          if (doc->links().is_document_being_inserted()) {
-                              // this document is being inserted, so should not be visible yet
-                              return cb(std::nullopt, std::nullopt, std::nullopt);
-                          }
+                            if (resolving_missing_atr_entry.has_value() &&
+                                resolving_missing_atr_entry.value() == doc->links().staged_attempt_id()) {
+                                CB_ATTEMPT_CTX_LOG_DEBUG(this, "doc is in lost pending transaction");
 
-                          return cb(std::nullopt, std::nullopt, doc);
-                      }
-
-                      core::document_id doc_atr_id{ doc->links().atr_bucket_name().value(),
-                                                    doc->links().atr_scope_name().value(),
-                                                    doc->links().atr_collection_name().value(),
-                                                    doc->links().atr_id().value() };
-                      active_transaction_record::get_atr(
-                        cluster_ref(),
-                        doc_atr_id,
-                        [this, id, doc, cb = std::move(cb)](std::error_code ec2, std::optional<active_transaction_record> atr) mutable {
-                            if (!ec2 && atr) {
-                                active_transaction_record& atr_doc = atr.value();
-                                std::optional<atr_entry> entry;
-                                for (const auto& e : atr_doc.entries()) {
-                                    if (doc->links().staged_attempt_id().value() == e.attempt_id()) {
-                                        entry.emplace(e);
-                                        break;
-                                    }
-                                }
-                                bool ignore_doc = false;
-                                auto content = doc->content();
-                                if (entry) {
-                                    if (doc->links().staged_attempt_id() && entry->attempt_id() == this->id()) {
-                                        // Attempt is reading its own writes
-                                        // This is here as backup, it should be returned from the in-memory cache instead
-                                        content = doc->links().staged_content();
-                                    } else {
-                                        auto err = forward_compat::check(forward_compat_stage::GETS_READING_ATR, entry->forward_compat());
-                                        if (err) {
-                                            return cb(FAIL_OTHER, err->what(), std::nullopt);
-                                        }
-                                        switch (entry->state()) {
-                                            case attempt_state::COMPLETED:
-                                            case attempt_state::COMMITTED:
-                                                if (doc->links().is_document_being_removed()) {
-                                                    ignore_doc = true;
-                                                } else {
-                                                    content = doc->links().staged_content();
-                                                }
-                                                break;
-                                            default:
-                                                if (doc->links().is_document_being_inserted()) {
-                                                    // This document is being inserted, so should not be visible yet
-                                                    ignore_doc = true;
-                                                }
-                                                break;
-                                        }
-                                    }
-                                } else {
-                                    // failed to get the ATR entry
-                                    CB_ATTEMPT_CTX_LOG_DEBUG(this,
-                                                             "could not get ATR entry, checking again with {}",
-                                                             doc->links().staged_attempt_id().value_or("-"));
-                                    return do_get(id, doc->links().staged_attempt_id(), cb);
-                                }
-                                if (ignore_doc) {
+                                if (doc->links().is_document_being_inserted()) {
+                                    // this document is being inserted, so should not be visible yet
                                     return cb(std::nullopt, std::nullopt, std::nullopt);
                                 }
-                                return cb(std::nullopt, std::nullopt, transaction_get_result::create_from(*doc, content));
 
-                            } else {
-                                // failed to get the ATR
-                                CB_ATTEMPT_CTX_LOG_DEBUG(
-                                  this, "could not get ATR, checking again with {}", doc->links().staged_attempt_id().value_or("-"));
-                                return do_get(id, doc->links().staged_attempt_id(), cb);
+                                return cb(std::nullopt, std::nullopt, doc);
                             }
-                        });
-                  } else {
-                      if (doc->links().is_deleted()) {
-                          CB_ATTEMPT_CTX_LOG_DEBUG(this, "doc not in txn, and is_deleted, so not returning it.");
-                          // doc has been deleted, not in txn, so don't return it
-                          return cb(std::nullopt, std::nullopt, std::nullopt);
-                      }
-                      return cb(std::nullopt, std::nullopt, doc);
-                  }
-              } else {
-                  return cb(ec, err_message, std::nullopt);
-              }
-          });
 
+                            core::document_id doc_atr_id{ doc->links().atr_bucket_name().value(),
+                                                          doc->links().atr_scope_name().value(),
+                                                          doc->links().atr_collection_name().value(),
+                                                          doc->links().atr_id().value() };
+                            active_transaction_record::get_atr(
+                              cluster_ref(),
+                              doc_atr_id,
+                              [this, id, doc, cb = std::move(cb)](std::error_code ec2,
+                                                                  std::optional<active_transaction_record> atr) mutable {
+                                  if (!ec2 && atr) {
+                                      active_transaction_record& atr_doc = atr.value();
+                                      std::optional<atr_entry> entry;
+                                      for (const auto& e : atr_doc.entries()) {
+                                          if (doc->links().staged_attempt_id().value() == e.attempt_id()) {
+                                              entry.emplace(e);
+                                              break;
+                                          }
+                                      }
+                                      bool ignore_doc = false;
+                                      auto content = doc->content();
+                                      if (entry) {
+                                          if (doc->links().staged_attempt_id() && entry->attempt_id() == this->id()) {
+                                              // Attempt is reading its own writes
+                                              // This is here as backup, it should be returned from the in-memory cache instead
+                                              content = doc->links().staged_content();
+                                          } else {
+                                              auto err =
+                                                forward_compat::check(forward_compat_stage::GETS_READING_ATR, entry->forward_compat());
+                                              if (err) {
+                                                  return cb(FAIL_OTHER, err->what(), std::nullopt);
+                                              }
+                                              switch (entry->state()) {
+                                                  case attempt_state::COMPLETED:
+                                                  case attempt_state::COMMITTED:
+                                                      if (doc->links().is_document_being_removed()) {
+                                                          ignore_doc = true;
+                                                      } else {
+                                                          content = doc->links().staged_content();
+                                                      }
+                                                      break;
+                                                  default:
+                                                      if (doc->links().is_document_being_inserted()) {
+                                                          // This document is being inserted, so should not be visible yet
+                                                          ignore_doc = true;
+                                                      }
+                                                      break;
+                                              }
+                                          }
+                                      } else {
+                                          // failed to get the ATR entry
+                                          CB_ATTEMPT_CTX_LOG_DEBUG(this,
+                                                                   "could not get ATR entry, checking again with {}",
+                                                                   doc->links().staged_attempt_id().value_or("-"));
+                                          return do_get(id, doc->links().staged_attempt_id(), cb);
+                                      }
+                                      if (ignore_doc) {
+                                          return cb(std::nullopt, std::nullopt, std::nullopt);
+                                      }
+                                      return cb(std::nullopt, std::nullopt, transaction_get_result::create_from(*doc, content));
+
+                                  } else {
+                                      // failed to get the ATR
+                                      CB_ATTEMPT_CTX_LOG_DEBUG(
+                                        this, "could not get ATR, checking again with {}", doc->links().staged_attempt_id().value_or("-"));
+                                      return do_get(id, doc->links().staged_attempt_id(), cb);
+                                  }
+                              });
+                        } else {
+                            if (doc->links().is_deleted()) {
+                                CB_ATTEMPT_CTX_LOG_DEBUG(this, "doc not in txn, and is_deleted, so not returning it.");
+                                // doc has been deleted, not in txn, so don't return it
+                                return cb(std::nullopt, std::nullopt, std::nullopt);
+                            }
+                            return cb(std::nullopt, std::nullopt, doc);
+                        }
+                    } else {
+                        return cb(ec, err_message, std::nullopt);
+                    }
+                });
+          });
     } catch (const transaction_operation_failed&) {
         throw;
     } catch (const std::exception& ex) {
@@ -2250,88 +2335,96 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
                                                        fmt::format("failed getting doc in create_staged_insert with {}", err_message)));
                 }
             };
-            if (auto err = hooks_.before_get_doc_in_exists_during_staged_insert(this, id.key()); err) {
-                return error_handler(
-                  *err, fmt::format("before_get_doc_in_exists_during_staged_insert hook raised {}", *err), std::forward<Handler>(cb));
-            }
-            return get_doc(
-              id,
-              [this, id, content, op_id, cb = std::forward<Handler>(cb), error_handler, delay](
-                std::optional<error_class> ec3, std::optional<std::string> err_message, std::optional<transaction_get_result> doc) mutable {
-                  if (!ec3) {
-                      if (doc) {
-                          CB_ATTEMPT_CTX_LOG_DEBUG(this,
-                                                   "document {} exists, is_in_transaction {}, is_deleted {} ",
-                                                   doc->id(),
-                                                   doc->links().is_document_in_transaction(),
-                                                   doc->links().is_deleted());
-
-                          if (auto err = forward_compat::check(forward_compat_stage::WWC_INSERTING_GET, doc->links().forward_compat());
-                              err) {
-                              return op_completed_with_error(std::forward<Handler>(cb), *err);
-                          }
-                          if (!doc->links().is_document_in_transaction() && doc->links().is_deleted()) {
-                              // it is just a deleted doc, so we are ok.  Let's try again, but with the cas
-                              CB_ATTEMPT_CTX_LOG_DEBUG(
-                                this, "create staged insert found existing deleted doc, retrying with cas {}", doc->cas().value());
-                              delay();
-                              return create_staged_insert(id, content, doc->cas().value(), delay, op_id, std::forward<Handler>(cb));
-                          }
-                          if (!doc->links().is_document_in_transaction()) {
-                              // doc was inserted outside txn elsewhere
-                              CB_ATTEMPT_CTX_LOG_TRACE(this, "doc {} not in txn - was inserted outside txn", id);
-                              return op_completed_with_error(
-                                std::forward<Handler>(cb),
-                                document_exists({ couchbase::errc::transaction_op::document_exists_exception, key_value_error_context() }));
-                          }
-                          if (doc->links().staged_attempt_id() == this->id()) {
-                              if (doc->links().staged_operation_id() == op_id) {
-                                  // this is us dealing with resolving an ambiguity.  So, lets just update the staged_mutation with the
-                                  // correct cas and continue...
-                                  staged_mutations_->add(staged_mutation(*doc, content, staged_mutation_type::INSERT));
-                                  return op_completed_with_callback(std::forward<Handler>(cb), doc);
-                              }
-                              return op_completed_with_error(
-                                std::forward<Handler>(cb),
-                                transaction_operation_failed(FAIL_OTHER, "concurrent operations on a document are not allowed")
-                                  .cause(CONCURRENT_OPERATIONS_DETECTED_ON_SAME_DOCUMENT));
-                          }
-                          // CBD-3787 - Only a staged insert is ok to overwrite
-                          if (doc->links().op() && *doc->links().op() != "insert") {
-                              return op_completed_with_error(
-                                std::forward<Handler>(cb),
-                                transaction_operation_failed(FAIL_DOC_ALREADY_EXISTS, "doc exists, not a staged insert")
-                                  .cause(DOCUMENT_EXISTS_EXCEPTION));
-                          }
-                          check_and_handle_blocking_transactions(
-                            *doc,
-                            forward_compat_stage::WWC_INSERTING,
-                            [this, id, op_id, content, doc, cb = std::forward<Handler>(cb), delay](
-                              std::optional<transaction_operation_failed> err) mutable {
-                                if (err) {
-                                    return op_completed_with_error(std::move(cb), *err);
-                                }
-                                CB_ATTEMPT_CTX_LOG_DEBUG(
-                                  this, "doc ok to overwrite, retrying create_staged_insert with cas {}", doc->cas().value());
-                                delay();
-                                return create_staged_insert(id, content, doc->cas().value(), delay, op_id, std::forward<Handler>(cb));
-                            });
-                      } else {
-                          // no doc now, just retry entire txn
-                          CB_ATTEMPT_CTX_LOG_TRACE(this, "got {} from get_doc in exists during staged insert", *ec3);
-                          return op_completed_with_error(
-                            std::move(cb),
-                            transaction_operation_failed(FAIL_DOC_NOT_FOUND, "insert failed as the doc existed, but now seems to not exist")
-                              .retry());
-                      }
-                  } else {
-                      return error_handler(*ec3, *err_message, std::forward<Handler>(cb));
+            return hooks_.before_get_doc_in_exists_during_staged_insert(
+              this, id.key(), [this, id, content, op_id, cb = std::forward<Handler>(cb), error_handler, delay](auto ec) mutable {
+                  if (ec) {
+                      return error_handler(
+                        *ec, fmt::format("before_get_doc_in_exists_during_staged_insert hook raised {}", *ec), std::forward<Handler>(cb));
                   }
+                  return get_doc(
+                    id,
+                    [this, id, content, op_id, cb = std::forward<Handler>(cb), error_handler, delay](
+                      std::optional<error_class> ec3,
+                      std::optional<std::string> err_message,
+                      std::optional<transaction_get_result> doc) mutable {
+                        if (!ec3) {
+                            if (doc) {
+                                CB_ATTEMPT_CTX_LOG_DEBUG(this,
+                                                         "document {} exists, is_in_transaction {}, is_deleted {} ",
+                                                         doc->id(),
+                                                         doc->links().is_document_in_transaction(),
+                                                         doc->links().is_deleted());
+
+                                if (auto err =
+                                      forward_compat::check(forward_compat_stage::WWC_INSERTING_GET, doc->links().forward_compat());
+                                    err) {
+                                    return op_completed_with_error(std::forward<Handler>(cb), *err);
+                                }
+                                if (!doc->links().is_document_in_transaction() && doc->links().is_deleted()) {
+                                    // it is just a deleted doc, so we are ok.  Let's try again, but with the cas
+                                    CB_ATTEMPT_CTX_LOG_DEBUG(
+                                      this, "create staged insert found existing deleted doc, retrying with cas {}", doc->cas().value());
+                                    delay();
+                                    return create_staged_insert(id, content, doc->cas().value(), delay, op_id, std::forward<Handler>(cb));
+                                }
+                                if (!doc->links().is_document_in_transaction()) {
+                                    // doc was inserted outside txn elsewhere
+                                    CB_ATTEMPT_CTX_LOG_TRACE(this, "doc {} not in txn - was inserted outside txn", id);
+                                    return op_completed_with_error(
+                                      std::forward<Handler>(cb),
+                                      document_exists(
+                                        { couchbase::errc::transaction_op::document_exists_exception, key_value_error_context() }));
+                                }
+                                if (doc->links().staged_attempt_id() == this->id()) {
+                                    if (doc->links().staged_operation_id() == op_id) {
+                                        // this is us dealing with resolving an ambiguity.  So, lets just update the staged_mutation with
+                                        // the correct cas and continue...
+                                        staged_mutations_->add(staged_mutation(*doc, content, staged_mutation_type::INSERT));
+                                        return op_completed_with_callback(std::forward<Handler>(cb), doc);
+                                    }
+                                    return op_completed_with_error(
+                                      std::forward<Handler>(cb),
+                                      transaction_operation_failed(FAIL_OTHER, "concurrent operations on a document are not allowed")
+                                        .cause(CONCURRENT_OPERATIONS_DETECTED_ON_SAME_DOCUMENT));
+                                }
+                                // CBD-3787 - Only a staged insert is ok to overwrite
+                                if (doc->links().op() && *doc->links().op() != "insert") {
+                                    return op_completed_with_error(
+                                      std::forward<Handler>(cb),
+                                      transaction_operation_failed(FAIL_DOC_ALREADY_EXISTS, "doc exists, not a staged insert")
+                                        .cause(DOCUMENT_EXISTS_EXCEPTION));
+                                }
+                                check_and_handle_blocking_transactions(
+                                  *doc,
+                                  forward_compat_stage::WWC_INSERTING,
+                                  [this, id, op_id, content, doc, cb = std::forward<Handler>(cb), delay](
+                                    std::optional<transaction_operation_failed> err) mutable {
+                                      if (err) {
+                                          return op_completed_with_error(std::move(cb), *err);
+                                      }
+                                      CB_ATTEMPT_CTX_LOG_DEBUG(
+                                        this, "doc ok to overwrite, retrying create_staged_insert with cas {}", doc->cas().value());
+                                      delay();
+                                      return create_staged_insert(id, content, doc->cas().value(), delay, op_id, std::forward<Handler>(cb));
+                                  });
+                            } else {
+                                // no doc now, just retry entire txn
+                                CB_ATTEMPT_CTX_LOG_TRACE(this, "got {} from get_doc in exists during staged insert", *ec3);
+                                return op_completed_with_error(
+                                  std::move(cb),
+                                  transaction_operation_failed(FAIL_DOC_NOT_FOUND,
+                                                               "insert failed as the doc existed, but now seems to not exist")
+                                    .retry());
+                            }
+                        } else {
+                            return error_handler(*ec3, *err_message, std::forward<Handler>(cb));
+                        }
+                    });
               });
-            break;
         }
         default:
-            return op_completed_with_error(std::move(cb), transaction_operation_failed(ec, "failed in create_staged_insert").retry());
+            return op_completed_with_error(std::forward<Handler>(cb),
+                                           transaction_operation_failed(ec, "failed in create_staged_insert").retry());
     }
 }
 
@@ -2356,7 +2449,9 @@ attempt_context_impl::create_staged_insert(const core::document_id& id,
                                                   "create_staged_insert expired and not in overtime");
     }
 
-    if (auto ec = hooks_.before_staged_insert(this, id.key()); ec) {
+    auto ec =
+      wait_for_hook([this, key = id.key()](auto handler) mutable { return hooks_.before_staged_insert(this, key, std::move(handler)); });
+    if (ec) {
         return create_staged_insert_error_handler(
           id, content, cas, std::forward<Delay>(delay), op_id, std::forward<Handler>(cb), *ec, "before_staged_insert hook threw error");
     }
@@ -2371,43 +2466,43 @@ attempt_context_impl::create_staged_insert(const core::document_id& id,
       req,
       [this, id, content, cas, op_id, cb = std::forward<Handler>(cb), delay = std::forward<Delay>(delay)](
         core::operations::mutate_in_response resp) mutable {
-          auto ec = resp.ctx.ec() ? error_class_from_response(resp) : hooks_.after_staged_insert_complete(this, id.key());
-          if (ec) {
-              auto msg = (resp.ctx.ec() ? resp.ctx.ec().message() : "after_staged_insert hook threw error");
+          if (auto ec = error_class_from_response(resp); ec) {
               return create_staged_insert_error_handler(
-                id, content, cas, std::forward<Delay>(delay), op_id, std::forward<Handler>(cb), *ec, msg);
+                id, content, cas, std::forward<Delay>(delay), op_id, std::forward<Handler>(cb), *ec, resp.ctx.ec().message());
           }
-          if (!resp.ctx.ec()) {
-              CB_ATTEMPT_CTX_LOG_DEBUG(this, "inserted doc {} CAS={}, {}", id, resp.cas.value(), resp.ctx.ec().message());
+          return hooks_.after_staged_insert_complete(
+            this,
+            id.key(),
+            [this, id, content, cas, op_id, cb = std::forward<Handler>(cb), delay = std::forward<Delay>(delay), resp = std::move(resp)](
+              auto ec) mutable {
+                if (ec) {
+                    auto msg = (resp.ctx.ec() ? resp.ctx.ec().message() : "after_staged_insert hook threw error");
+                    return create_staged_insert_error_handler(
+                      id, content, cas, std::forward<Delay>(delay), op_id, std::forward<Handler>(cb), *ec, msg);
+                }
 
-              // TODO: clean this up (do most of this in transactions_document(...))
-              transaction_links links(atr_id_->key(),
-                                      id.bucket(),
-                                      id.scope(),
-                                      id.collection(),
-                                      overall_.transaction_id(),
-                                      this->id(),
-                                      op_id,
-                                      content,
-                                      std::nullopt,
-                                      std::nullopt,
-                                      std::nullopt,
-                                      std::nullopt,
-                                      std::string("insert"),
-                                      std::nullopt,
-                                      true);
-              transaction_get_result out(id, content, resp.cas.value(), links, std::nullopt);
-              staged_mutations_->add(staged_mutation(out, content, staged_mutation_type::INSERT));
-              return op_completed_with_callback(cb, std::optional<transaction_get_result>(out));
-          }
-          return create_staged_insert_error_handler(id,
-                                                    content,
-                                                    cas,
-                                                    std::forward<Delay>(delay),
-                                                    op_id,
-                                                    std::forward<Handler>(cb),
-                                                    error_class_from_response(resp).value(),
-                                                    resp.ctx.ec().message());
+                CB_ATTEMPT_CTX_LOG_DEBUG(this, "inserted doc {} CAS={}, {}", id, resp.cas.value(), resp.ctx.ec().message());
+
+                // TODO: clean this up (do most of this in transactions_document(...))
+                transaction_links links(atr_id_->key(),
+                                        id.bucket(),
+                                        id.scope(),
+                                        id.collection(),
+                                        overall_.transaction_id(),
+                                        this->id(),
+                                        op_id,
+                                        content,
+                                        std::nullopt,
+                                        std::nullopt,
+                                        std::nullopt,
+                                        std::nullopt,
+                                        std::string("insert"),
+                                        std::nullopt,
+                                        true);
+                transaction_get_result out(id, content, resp.cas.value(), links, std::nullopt);
+                staged_mutations_->add(staged_mutation(out, content, staged_mutation_type::INSERT));
+                return op_completed_with_callback(cb, std::optional<transaction_get_result>(out));
+            });
       });
 }
 

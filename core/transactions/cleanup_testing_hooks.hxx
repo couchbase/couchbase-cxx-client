@@ -16,6 +16,7 @@
 #pragma once
 
 #include "core/transactions/error_class.hxx"
+#include "core/utils/movable_function.hxx"
 
 #include <functional>
 #include <optional>
@@ -23,8 +24,8 @@
 
 namespace couchbase::core::transactions
 {
-using error_func3 = std::function<std::optional<error_class>(const std::string&)>;
-using error_func4 = std::function<std::optional<error_class>(void)>;
+using error_func3 = std::function<void(const std::string&, core::utils::movable_function<void(std::optional<error_class>)>&&)>;
+using error_func4 = std::function<void(core::utils::movable_function<void(std::optional<error_class>)>&&)>;
 
 /**
  * Hooks purely for testing purposes.  If you're an end-user looking at these for any reason, then please contact us first

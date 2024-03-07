@@ -126,3 +126,8 @@
  * Transaction's transaction_operation_failed has a public getter for its final_error
  */
 #define COUCHBASE_CXX_CLIENT_TRANSACTIONS_CAN_FETCH_TO_RAISE 1
+
+/**
+ * Hooks in the transactions core are asynchronous (they have a callback parameter)
+ */
+#define COUCHBASE_CXX_CLIENT_TRANSACTIONS_CORE_ASYNC_HOOKS

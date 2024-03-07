@@ -249,7 +249,9 @@ transactions_cleanup::create_client_record(const couchbase::transactions::transa
         wrap_durable_request(req, config_);
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
-        auto ec = config_.cleanup_hooks->client_record_before_create(keyspace.bucket);
+        auto ec = wait_for_hook([this, bucket = keyspace.bucket](auto handler) mutable {
+            return config_.cleanup_hooks->client_record_before_create(bucket, std::move(handler));
+        });
         if (ec) {
             throw client_error(*ec, "client_record_before_create hook raised error");
         }
@@ -285,7 +287,9 @@ transactions_cleanup::get_active_clients(const couchbase::transactions::transact
             .specs();
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
-        auto ec = config_.cleanup_hooks->client_record_before_get(keyspace.bucket);
+        auto ec = wait_for_hook([this, bucket = keyspace.bucket](auto handler) mutable {
+            return config_.cleanup_hooks->client_record_before_get(bucket, std::move(handler));
+        });
         if (ec) {
             throw client_error(*ec, "client_record_before_get hook raised error");
         }
@@ -363,7 +367,9 @@ transactions_cleanup::get_active_clients(const couchbase::transactions::transact
             mut_specs.push_back(couchbase::mutate_in_specs::remove(FIELD_CLIENTS + "." + details.expired_client_ids[idx]).xattr());
         }
         mutate_req.specs = mut_specs.specs();
-        ec = config_.cleanup_hooks->client_record_before_update(keyspace.bucket);
+        ec = wait_for_hook([this, bucket = keyspace.bucket](auto handler) mutable {
+            return config_.cleanup_hooks->client_record_before_update(bucket, std::move(handler));
+        });
         if (ec) {
             throw client_error(*ec, "client_record_before_update hook raised error");
         }
@@ -401,7 +407,9 @@ transactions_cleanup::remove_client_record_from_all_buckets(const std::string& u
               std::chrono::milliseconds(10), std::chrono::milliseconds(250), std::chrono::milliseconds(500), [this, keyspace, uuid]() {
                   try {
                       // proceed to remove the client uuid if it exists
-                      auto ec = config_.cleanup_hooks->client_record_before_remove_client(keyspace.bucket);
+                      auto ec = wait_for_hook([this, bucket = keyspace.bucket](auto handler) mutable {
+                          return config_.cleanup_hooks->client_record_before_remove_client(bucket, std::move(handler));
+                      });
                       if (ec) {
                           throw client_error(*ec, "client_record_before_remove_client hook raised error");
                       }
