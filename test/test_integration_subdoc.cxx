@@ -1548,7 +1548,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
         req.specs = specs.specs();
 
         auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE(resp.ctx.ec() == couchbase::errc::common::invalid_argument);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
         REQUIRE(resp.fields.empty());
     }
 
@@ -1588,7 +1588,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
                 specs.push_back(couchbase::lookup_in_specs::get("dictkey"));
             }
             auto [ctx, result] = collection.lookup_in_any_replica(key, specs).get();
-            REQUIRE(ctx.ec() == couchbase::errc::common::invalid_argument);
+            REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
             REQUIRE(result.cas().empty());
         }
 
