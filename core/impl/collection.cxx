@@ -621,9 +621,6 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                     if (!config.capabilities.supports_subdoc_read_replica()) {
                         ec = errc::common::feature_not_available;
                     }
-                    if (r->specs().size() > 16) {
-                        ec = errc::common::invalid_argument;
-                    }
                     if (ec) {
                         return h(core::make_subdocument_error_context(make_key_value_error_context(ec, r->id()), ec, {}, {}, false),
                                  lookup_in_replica_result{});

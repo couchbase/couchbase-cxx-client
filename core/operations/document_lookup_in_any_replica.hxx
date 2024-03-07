@@ -79,9 +79,6 @@ struct lookup_in_any_replica_request {
                                     if (!config.capabilities.supports_subdoc_read_replica()) {
                                         ec = errc::common::feature_not_available;
                                     }
-                                    if (specs.size() > 16) {
-                                        ec = errc::common::invalid_argument;
-                                    }
 
                                     if (ec) {
                                         std::optional<std::string> first_error_path{};
