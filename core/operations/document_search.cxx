@@ -133,10 +133,10 @@ search_request::encode_to(search_request::encoded_request_type& encoded, http_co
     encoded.method = "POST";
     body_str = utils::json::generate(body);
     encoded.body = body_str;
-    if (context.options.show_queries) {
-        CB_LOG_INFO("SEARCH: {}", utils::json::generate(body["query"]));
+    if (context.options.show_queries || (log_request.has_value() && log_request.value())) {
+        CB_LOG_INFO("SEARCH: {}", utils::json::generate(body));
     } else {
-        CB_LOG_DEBUG("SEARCH: {}", utils::json::generate(body["query"]));
+        CB_LOG_DEBUG("SEARCH: {}", utils::json::generate(body));
     }
     if (row_callback) {
         encoded.streaming.emplace(couchbase::core::io::streaming_settings{
@@ -165,6 +165,9 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
                 response.ctx.ec = errc::common::parsing_failure;
                 return response;
             }
+            if (log_response.has_value() && log_response.value()) {
+                CB_LOG_INFO("SEARCH RESPONSE: {}", utils::json::generate(payload));
+            }
             response.meta.metrics.took = std::chrono::nanoseconds(payload.at("took").get_unsigned());
             response.meta.metrics.max_score = payload.at("max_score").as<double>();
             response.meta.metrics.total_rows = payload.at("total_hits").get_unsigned();
@@ -187,106 +190,119 @@ search_request::make_response(error_context::search&& ctx, const encoded_respons
                 return response;
             }
 
-            if (const auto* rows = payload.find("hits"); rows != nullptr && rows->is_array()) {
-                for (const auto& entry : rows->get_array()) {
-                    search_response::search_row row{};
-                    row.index = entry.at("index").get_string();
-                    row.id = entry.at("id").get_string();
-                    row.score = entry.at("score").as<double>();
-                    if (const auto* locations_map = entry.find("locations"); locations_map != nullptr && locations_map->is_object()) {
-                        for (const auto& [field, terms] : locations_map->get_object()) {
-                            for (const auto& [term, locations] : terms.get_object()) {
-                                for (const auto& loc : locations.get_array()) {
-                                    search_response::search_location location{};
-                                    location.field = field;
-                                    location.term = term;
-                                    location.position = loc.at("pos").get_unsigned();
-                                    location.start_offset = loc.at("start").get_unsigned();
-                                    location.end_offset = loc.at("end").get_unsigned();
-                                    if (const auto* array_positions = loc.find("array_positions");
-                                        array_positions != nullptr && array_positions->is_array()) {
-                                        location.array_positions.emplace(array_positions->as<std::vector<std::uint64_t>>());
+            try {
+                if (const auto* rows = payload.find("hits"); rows != nullptr && rows->is_array()) {
+                    for (const auto& entry : rows->get_array()) {
+                        search_response::search_row row{};
+                        row.index = entry.optional<std::string>("index").value_or(std::string());
+                        row.id = entry.optional<std::string>("id").value_or(std::string());
+                        row.score = entry.optional<double>("score").value_or(0);
+                        if (const auto* locations_map = entry.find("locations"); locations_map != nullptr && locations_map->is_object()) {
+                            for (const auto& [field, terms] : locations_map->get_object()) {
+                                for (const auto& [term, locations] : terms.get_object()) {
+                                    for (const auto& loc : locations.get_array()) {
+                                        search_response::search_location location{};
+                                        location.field = field;
+                                        location.term = term;
+                                        location.position = loc.at("pos").get_unsigned();
+                                        location.start_offset = loc.at("start").get_unsigned();
+                                        location.end_offset = loc.at("end").get_unsigned();
+                                        if (const auto* array_positions = loc.find("array_positions");
+                                            array_positions != nullptr && array_positions->is_array()) {
+                                            location.array_positions.emplace(array_positions->as<std::vector<std::uint64_t>>());
+                                        }
+                                        row.locations.emplace_back(location);
                                     }
-                                    row.locations.emplace_back(location);
                                 }
                             }
                         }
-                    }
 
-                    if (const auto* fragments_map = entry.find("fragments"); fragments_map != nullptr && fragments_map->is_object()) {
-                        for (const auto& [field, fragments] : fragments_map->get_object()) {
-                            row.fragments.try_emplace(field, fragments.as<std::vector<std::string>>());
+                        if (const auto* fragments_map = entry.find("fragments"); fragments_map != nullptr && fragments_map->is_object()) {
+                            for (const auto& [field, fragments] : fragments_map->get_object()) {
+                                row.fragments.try_emplace(field, fragments.as<std::vector<std::string>>());
+                            }
                         }
+                        if (const auto* response_fields = entry.find("fields");
+                            response_fields != nullptr && response_fields->is_object()) {
+                            row.fields = utils::json::generate(*response_fields);
+                        }
+                        if (const auto* explanation = entry.find("explanation"); explanation != nullptr && explanation->is_object()) {
+                            row.explanation = utils::json::generate(*explanation);
+                        }
+                        response.rows.emplace_back(row);
                     }
-                    if (const auto* response_fields = entry.find("fields"); response_fields != nullptr && response_fields->is_object()) {
-                        row.fields = utils::json::generate(*response_fields);
-                    }
-                    if (const auto* explanation = entry.find("explanation"); explanation != nullptr && explanation->is_object()) {
-                        row.explanation = utils::json::generate(*explanation);
-                    }
-                    response.rows.emplace_back(row);
                 }
+            } catch (const std::out_of_range& e) {
+                CB_LOG_ERROR("Error parsing search results. Error: {}.", e.what());
+                response.ctx.ec = errc::common::parsing_failure;
+                return response;
             }
 
-            if (const auto* response_facets = payload.find("facets"); response_facets != nullptr && response_facets->is_object()) {
-                for (const auto& [name, object] : response_facets->get_object()) {
-                    search_response::search_facet facet;
-                    facet.name = name;
-                    facet.field = object.at("field").get_string();
-                    facet.total = object.at("total").get_unsigned();
-                    facet.missing = object.at("missing").get_unsigned();
-                    facet.other = object.at("other").get_unsigned();
+            try {
+                if (const auto* response_facets = payload.find("facets"); response_facets != nullptr && response_facets->is_object()) {
+                    for (const auto& [name, object] : response_facets->get_object()) {
+                        search_response::search_facet facet;
+                        facet.name = name;
+                        facet.field = object.at("field").get_string();
+                        facet.total = object.at("total").get_unsigned();
+                        facet.missing = object.at("missing").get_unsigned();
+                        facet.other = object.at("other").get_unsigned();
 
-                    if (const auto* date_ranges = object.find("date_ranges"); date_ranges != nullptr && date_ranges->is_array()) {
-                        for (const auto& date_range : date_ranges->get_array()) {
-                            search_response::search_facet::date_range_facet date_range_facet;
-                            date_range_facet.name = date_range.at("name").get_string();
-                            date_range_facet.count = date_range.at("count").get_unsigned();
-                            if (const auto* start = date_range.find("start"); start != nullptr && start->is_string()) {
-                                date_range_facet.start = start->get_string();
-                            }
-                            if (const auto* end = date_range.find("end"); end != nullptr && end->is_string()) {
-                                date_range_facet.end = end->get_string();
-                            }
-                            facet.date_ranges.emplace_back(date_range_facet);
-                        }
-                    }
-
-                    if (const auto& numeric_ranges = object.find("numeric_ranges");
-                        numeric_ranges != nullptr && numeric_ranges->is_array()) {
-                        for (const auto& numeric_range : numeric_ranges->get_array()) {
-                            search_response::search_facet::numeric_range_facet numeric_range_facet;
-                            numeric_range_facet.name = numeric_range.at("name").get_string();
-                            numeric_range_facet.count = numeric_range.at("count").get_unsigned();
-                            if (const auto* min = numeric_range.find("min"); min != nullptr) {
-                                if (min->is_double()) {
-                                    numeric_range_facet.min = min->as<double>();
-                                } else if (min->is_integer()) {
-                                    numeric_range_facet.min = min->get_unsigned();
+                        if (const auto* date_ranges = object.find("date_ranges"); date_ranges != nullptr && date_ranges->is_array()) {
+                            for (const auto& date_range : date_ranges->get_array()) {
+                                search_response::search_facet::date_range_facet date_range_facet;
+                                date_range_facet.name = date_range.at("name").get_string();
+                                date_range_facet.count = date_range.at("count").get_unsigned();
+                                if (const auto* start = date_range.find("start"); start != nullptr && start->is_string()) {
+                                    date_range_facet.start = start->get_string();
                                 }
-                            }
-                            if (const auto* max = numeric_range.find("max"); max != nullptr) {
-                                if (max->is_double()) {
-                                    numeric_range_facet.max = max->as<double>();
-                                } else if (max->is_integer()) {
-                                    numeric_range_facet.max = max->get_unsigned();
+                                if (const auto* end = date_range.find("end"); end != nullptr && end->is_string()) {
+                                    date_range_facet.end = end->get_string();
                                 }
+                                facet.date_ranges.emplace_back(date_range_facet);
                             }
-                            facet.numeric_ranges.emplace_back(numeric_range_facet);
                         }
-                    }
 
-                    if (const auto* terms = object.find("terms"); terms != nullptr && terms->is_array()) {
-                        for (const auto& term : terms->get_array()) {
-                            search_response::search_facet::term_facet term_facet;
-                            term_facet.term = term.at("term").get_string();
-                            term_facet.count = term.at("count").get_unsigned();
-                            facet.terms.emplace_back(term_facet);
+                        if (const auto& numeric_ranges = object.find("numeric_ranges");
+                            numeric_ranges != nullptr && numeric_ranges->is_array()) {
+                            for (const auto& numeric_range : numeric_ranges->get_array()) {
+                                search_response::search_facet::numeric_range_facet numeric_range_facet;
+                                numeric_range_facet.name = numeric_range.at("name").get_string();
+                                numeric_range_facet.count = numeric_range.at("count").get_unsigned();
+                                if (const auto* min = numeric_range.find("min"); min != nullptr) {
+                                    if (min->is_double()) {
+                                        numeric_range_facet.min = min->as<double>();
+                                    } else if (min->is_integer()) {
+                                        numeric_range_facet.min = min->get_unsigned();
+                                    }
+                                }
+                                if (const auto* max = numeric_range.find("max"); max != nullptr) {
+                                    if (max->is_double()) {
+                                        numeric_range_facet.max = max->as<double>();
+                                    } else if (max->is_integer()) {
+                                        numeric_range_facet.max = max->get_unsigned();
+                                    }
+                                }
+                                facet.numeric_ranges.emplace_back(numeric_range_facet);
+                            }
                         }
-                    }
 
-                    response.facets.emplace_back(facet);
+                        if (const auto* terms = object.find("terms"); terms != nullptr && terms->is_array()) {
+                            for (const auto& term : terms->get_array()) {
+                                search_response::search_facet::term_facet term_facet;
+                                term_facet.term = term.at("term").get_string();
+                                term_facet.count = term.at("count").get_unsigned();
+                                facet.terms.emplace_back(term_facet);
+                            }
+                        }
+
+                        response.facets.emplace_back(facet);
+                    }
                 }
+            } catch (const std::out_of_range& e) {
+                CB_LOG_ERROR("Error parsing search facets. Error: {}.", e.what());
+                response.ctx.ec = errc::common::parsing_failure;
+                return response;
             }
             return response;
         }

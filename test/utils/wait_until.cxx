@@ -159,7 +159,7 @@ wait_for_search_pindexes_ready(const couchbase::core::cluster& cluster, const st
 bool
 wait_until_indexed(const couchbase::core::cluster& cluster, const std::string& index_name, std::uint64_t expected_count)
 {
-    return test ::utils::wait_until(
+    return test::utils::wait_until(
       [cluster = std::move(cluster), &index_name, &expected_count]() {
           couchbase::core::operations::management::search_index_get_documents_count_request req{};
           req.index_name = index_name;
