@@ -210,6 +210,7 @@ class mcbp_session_impl
         std::shared_ptr<mcbp_session_impl> session_;
         sasl::ClientContext sasl_;
         std::atomic_bool stopped_{ false };
+        std::string last_error_message_;
 
       public:
         ~bootstrap_handler()
@@ -232,6 +233,16 @@ class mcbp_session_impl
                 return { "PLAIN" };
             }
             return { "SCRAM-SHA512", "SCRAM-SHA256", "SCRAM-SHA1" };
+        }
+
+        std::string last_error_message() &&
+        {
+            return std::move(last_error_message_);
+        }
+
+        [[nodiscard]] const std::string& last_error_message() const&
+        {
+            return last_error_message_;
         }
 
         explicit bootstrap_handler(std::shared_ptr<mcbp_session_impl> session)
@@ -322,21 +333,21 @@ class mcbp_session_impl
                         case key_value_status_code::rate_limited_max_connections:
                         case key_value_status_code::rate_limited_network_egress:
                         case key_value_status_code::rate_limited_network_ingress:
-                            CB_LOG_DEBUG(
-                              "{} unable to bootstrap MCBP session (bucket={}, opcode={}, status={}), the user has reached rate limit",
-                              session_->log_prefix_,
+                            last_error_message_ = fmt::format(
+                              "unable to bootstrap MCBP session (bucket={}, opcode={}, status={}), the user has reached rate limit",
                               session_->bucket_name_.value_or(""),
                               protocol::client_opcode(msg.header.opcode),
                               status);
+                            CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_error_message_);
                             return complete(errc::common::rate_limited);
 
                         case key_value_status_code::scope_size_limit_exceeded:
-                            CB_LOG_DEBUG(
-                              "{} unable to bootstrap MCBP session (bucket={}, opcode={}, status={}), the user has reached quota limit",
-                              session_->log_prefix_,
+                            last_error_message_ = fmt::format(
+                              "unable to bootstrap MCBP session (bucket={}, opcode={}, status={}), the user has reached quota limit",
                               session_->bucket_name_.value_or(""),
                               protocol::client_opcode(msg.header.opcode),
                               status);
+                            CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_error_message_);
                             return complete(errc::common::quota_limited);
 
                         default:
@@ -356,20 +367,18 @@ class mcbp_session_impl
                                     return auth_success();
                                 }
                             } else {
-                                CB_LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
-                                               session_->log_prefix_,
-                                               resp.error_message(),
-                                               resp.opaque());
+                                last_error_message_ = fmt::format(
+                                  "unexpected message status during bootstrap: {} (opaque={})", resp.error_message(), resp.opaque());
+                                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_error_message_);
                                 return complete(errc::network::handshake_failure);
                             }
                         } break;
                         case protocol::client_opcode::sasl_list_mechs: {
                             protocol::client_response<protocol::sasl_list_mechs_response_body> resp(std::move(msg));
                             if (resp.status() != key_value_status_code::success) {
-                                CB_LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
-                                               session_->log_prefix_,
-                                               resp.error_message(),
-                                               resp.opaque());
+                                last_error_message_ = fmt::format(
+                                  "unexpected message status during bootstrap: {} (opaque={})", resp.error_message(), resp.opaque());
+                                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_error_message_);
                                 return complete(errc::common::authentication_failure);
                             }
                         } break;
@@ -390,17 +399,17 @@ class mcbp_session_impl
                                     req.body().sasl_data(sasl_payload);
                                     session_->write_and_flush(req.data());
                                 } else {
-                                    CB_LOG_ERROR("{} unable to authenticate: (sasl_code={}, opaque={})",
-                                                 session_->log_prefix_,
-                                                 sasl_code,
-                                                 resp.opaque());
+                                    last_error_message_ =
+                                      fmt::format("unable to authenticate: (sasl_code={}, opaque={})", sasl_code, resp.opaque());
+                                    CB_LOG_ERROR("{} {}", session_->log_prefix_, last_error_message_);
                                     return complete(errc::common::authentication_failure);
                                 }
                             } else {
-                                CB_LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={})",
-                                               session_->log_prefix_,
-                                               resp.error_message(),
-                                               resp.opaque());
+                                last_error_message_ = fmt::format("{} unexpected message status during bootstrap: {} (opaque={})",
+                                                                  session_->log_prefix_,
+                                                                  resp.error_message(),
+                                                                  resp.opaque());
+                                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_error_message_);
                                 return complete(errc::common::authentication_failure);
                             }
                         } break;
@@ -409,6 +418,9 @@ class mcbp_session_impl
                             if (resp.status() == key_value_status_code::success) {
                                 return auth_success();
                             }
+                            last_error_message_ =
+                              fmt::format("unable to authenticate (opcode={}, status={}, opaque={})", opcode, resp.status(), resp.opaque());
+                            CB_LOG_ERROR("{} {}", session_->log_prefix_, last_error_message_);
                             return complete(errc::common::authentication_failure);
                         }
                         case protocol::client_opcode::get_error_map: {
@@ -416,11 +428,11 @@ class mcbp_session_impl
                             if (resp.status() == key_value_status_code::success) {
                                 session_->error_map_.emplace(resp.body().errmap());
                             } else {
-                                CB_LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
-                                               session_->log_prefix_,
-                                               resp.error_message(),
-                                               resp.opaque(),
-                                               spdlog::to_hex(resp.header()));
+                                last_error_message_ = fmt::format("unexpected message status during bootstrap: {} (opaque={}, {:n})",
+                                                                  resp.error_message(),
+                                                                  resp.opaque(),
+                                                                  spdlog::to_hex(resp.header()));
+                                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_error_message_);
                                 return complete(errc::network::protocol_error);
                             }
                         } break;
@@ -430,25 +442,25 @@ class mcbp_session_impl
                                 CB_LOG_DEBUG("{} selected bucket: {}", session_->log_prefix_, session_->bucket_name_.value_or(""));
                                 session_->bucket_selected_ = true;
                             } else if (resp.status() == key_value_status_code::not_found) {
-                                CB_LOG_DEBUG(
-                                  "{} kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
-                                  session_->log_prefix_,
-                                  opcode,
-                                  resp.status(),
-                                  resp.opaque());
+                                last_error_message_ =
+                                  fmt::format("kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
+                                              opcode,
+                                              resp.status(),
+                                              resp.opaque());
+                                CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_error_message_);
                                 return complete(errc::network::configuration_not_available);
                             } else if (resp.status() == key_value_status_code::no_access) {
-                                CB_LOG_DEBUG("{} unable to select bucket: {}, probably the bucket does not exist",
-                                             session_->log_prefix_,
-                                             session_->bucket_name_.value_or(""));
+                                last_error_message_ = fmt::format("unable to select bucket: {}, probably the bucket does not exist",
+                                                                  session_->bucket_name_.value_or(""));
+                                CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_error_message_);
                                 session_->bucket_selected_ = false;
                                 return complete(errc::common::bucket_not_found);
                             } else {
-                                CB_LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
-                                               session_->log_prefix_,
-                                               resp.error_message(),
-                                               resp.opaque(),
-                                               spdlog::to_hex(resp.header()));
+                                last_error_message_ = fmt::format("unexpected message status during bootstrap: {} (opaque={}, {:n})",
+                                                                  resp.error_message(),
+                                                                  resp.opaque(),
+                                                                  spdlog::to_hex(resp.header()));
+                                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_error_message_);
                                 return complete(errc::common::bucket_not_found);
                             }
                         } break;
@@ -470,12 +482,12 @@ class mcbp_session_impl
                                 session_->update_configuration(resp.body().config());
                                 complete({});
                             } else if (resp.status() == key_value_status_code::not_found) {
-                                CB_LOG_DEBUG(
-                                  "{} kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
-                                  session_->log_prefix_,
-                                  opcode,
-                                  resp.status(),
-                                  resp.opaque());
+                                last_error_message_ =
+                                  fmt::format("kv_engine node does not have configuration propagated yet (opcode={}, status={}, opaque={})",
+                                              opcode,
+                                              resp.status(),
+                                              resp.opaque());
+                                CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_error_message_);
                                 return complete(errc::network::configuration_not_available);
                             } else if (resp.status() == key_value_status_code::no_bucket && !session_->bucket_name_) {
                                 // bucket-less session, but the server wants bucket
@@ -486,16 +498,17 @@ class mcbp_session_impl
                                   session_->connection_endpoints_.remote_address, session_->connection_endpoints_.remote.port(), 0));
                                 complete({});
                             } else {
-                                CB_LOG_WARNING("{} unexpected message status during bootstrap: {} (opaque={}, {:n})",
-                                               session_->log_prefix_,
-                                               resp.error_message(),
-                                               resp.opaque(),
-                                               spdlog::to_hex(resp.header()));
+                                last_error_message_ = fmt::format("unexpected message status during bootstrap: {} (opaque={}, {:n})",
+                                                                  resp.error_message(),
+                                                                  resp.opaque(),
+                                                                  spdlog::to_hex(resp.header()));
+                                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_error_message_);
                                 return complete(errc::network::protocol_error);
                             }
                         } break;
                         default:
-                            CB_LOG_WARNING("{} unexpected message during bootstrap: {}", session_->log_prefix_, opcode);
+                            last_error_message_ = fmt::format("unexpected message during bootstrap: {}", opcode);
+                            CB_LOG_WARNING("{} {}", session_->log_prefix_, last_error_message_);
                             return complete(errc::network::protocol_error);
                     }
                     break;
@@ -796,6 +809,20 @@ class mcbp_session_impl
 
     void ping(std::shared_ptr<diag::ping_reporter> handler, std::optional<std::chrono::milliseconds> timeout)
     {
+        if (!bootstrapped_) {
+            handler->report({
+              service_type::key_value,
+              id_,
+              std::chrono::microseconds(0),
+              remote_address(),
+              local_address(),
+              diag::ping_state::error,
+              bucket_name_,
+              last_bootstrap_error_message_.has_value() ? last_bootstrap_error_message_.value()
+                                                        : "Bootstrap incomplete, cannot perform ping.",
+            });
+            return;
+        }
         protocol::client_request<protocol::mcbp_noop_request_body> req;
         req.opaque(next_opaque());
         write_and_subscribe(req.opaque(),
@@ -871,6 +898,9 @@ class mcbp_session_impl
             return;
         }
         bootstrapped_ = false;
+        if (bootstrap_handler_) {
+            last_bootstrap_error_message_ = std::move(bootstrap_handler_)->last_error_message();
+        }
         bootstrap_handler_ = nullptr;
         state_ = diag::endpoint_state::connecting;
         if (stream_->is_open()) {
@@ -1644,6 +1674,7 @@ class mcbp_session_impl
     std::optional<std::string> bucket_name_;
     mcbp_parser parser_;
     std::shared_ptr<bootstrap_handler> bootstrap_handler_{ nullptr };
+    std::optional<std::string> last_bootstrap_error_message_;
     std::shared_ptr<message_handler> handler_{ nullptr };
     utils::movable_function<void(std::error_code, const topology::configuration&)> bootstrap_callback_{};
     std::mutex command_handlers_mutex_{};
