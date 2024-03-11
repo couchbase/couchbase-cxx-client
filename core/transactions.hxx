@@ -18,9 +18,11 @@
 
 #include <couchbase/transactions.hxx>
 
-#include "couchbase/transactions/transaction_options.hxx"
-#include "couchbase/transactions/transaction_result.hxx"
-#include "couchbase/transactions/transactions_config.hxx"
+#include <couchbase/fork_event.hxx>
+#include <couchbase/transactions/transaction_options.hxx>
+#include <couchbase/transactions/transaction_result.hxx>
+#include <couchbase/transactions/transactions_config.hxx>
+
 #include "transactions/async_attempt_context.hxx"
 #include "transactions/attempt_context.hxx"
 #include "transactions/exceptions.hxx"
@@ -221,6 +223,8 @@ class transactions : public couchbase::transactions::transactions
     {
         ctx.rollback();
     }
+
+    void notify_fork(fork_event event);
 
     /**
      * @brief Shut down the transactions object

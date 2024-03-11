@@ -127,6 +127,8 @@ class transactions_cleanup
     const atr_cleanup_stats force_cleanup_atr(const core::document_id& atr_id, std::vector<transactions_cleanup_attempt>& results);
     const client_record_details get_active_clients(const couchbase::transactions::transaction_keyspace& keyspace, const std::string& uuid);
     void remove_client_record_from_all_buckets(const std::string& uuid);
+    void start();
+    void stop();
     void close();
 
   private:

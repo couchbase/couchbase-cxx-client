@@ -203,6 +203,16 @@ transactions::run(async_logic&& code, txn_complete_callback&& cb)
 }
 
 void
+transactions::notify_fork(fork_event event)
+{
+    if (event == fork_event::prepare) {
+        cleanup_->stop();
+    } else {
+        cleanup_->start();
+    }
+}
+
+void
 transactions::close()
 {
     CB_TXN_LOG_DEBUG("closing transactions");

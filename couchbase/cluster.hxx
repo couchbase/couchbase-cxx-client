@@ -23,6 +23,7 @@
 #include <couchbase/bucket_manager.hxx>
 #include <couchbase/cluster_options.hxx>
 #include <couchbase/diagnostics_options.hxx>
+#include <couchbase/fork_event.hxx>
 #include <couchbase/ping_options.hxx>
 #include <couchbase/query_index_manager.hxx>
 #include <couchbase/query_options.hxx>
@@ -94,6 +95,8 @@ class cluster
     cluster(cluster&& other) = default;
     auto operator=(const cluster& other) -> cluster& = default;
     auto operator=(cluster&& other) -> cluster& = default;
+
+    void notify_fork(fork_event event);
 
     void close() const;
 

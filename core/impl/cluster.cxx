@@ -234,6 +234,13 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
                              });
     }
 
+    void notify_fork(fork_event event)
+    {
+        if (transactions_) {
+            transactions_->notify_fork(event);
+        }
+    }
+
     void close(core::utils::movable_function<void()> handler)
     {
         if (transactions_) {
@@ -410,6 +417,15 @@ cluster::connect(asio::io_context& io,
             return handler(cluster, ec);
         });
     });
+}
+
+auto
+cluster::notify_fork(fork_event event) -> void
+{
+    if (!impl_) {
+        return;
+    }
+    return impl_->notify_fork(event);
 }
 
 auto

@@ -45,18 +45,8 @@ transactions_cleanup::transactions_cleanup(core::cluster cluster, const couchbas
   : cluster_(std::move(cluster))
   , config_(config)
   , client_uuid_(uid_generator::next())
-  , running_(config.cleanup_config.cleanup_client_attempts || config.cleanup_config.cleanup_lost_attempts)
 {
-    if (config.cleanup_config.cleanup_client_attempts) {
-        cleanup_thr_ = std::thread(std::bind(&transactions_cleanup::attempts_loop, this));
-    }
-    if (config_.metadata_collection) {
-        add_collection(
-          { config_.metadata_collection->bucket, config_.metadata_collection->scope, config_.metadata_collection->collection });
-    }
-    for (auto& k : config_.cleanup_config.collections) {
-        add_collection(k);
-    }
+    start();
 }
 
 static std::uint64_t
@@ -554,7 +544,23 @@ transactions_cleanup::add_collection(couchbase::transactions::transaction_keyspa
 }
 
 void
-transactions_cleanup::close()
+transactions_cleanup::start()
+{
+    running_ = config_.cleanup_config.cleanup_client_attempts || config_.cleanup_config.cleanup_lost_attempts;
+    if (config_.cleanup_config.cleanup_client_attempts) {
+        cleanup_thr_ = std::thread(std::bind(&transactions_cleanup::attempts_loop, this));
+    }
+    if (config_.metadata_collection) {
+        add_collection(
+          { config_.metadata_collection->bucket, config_.metadata_collection->scope, config_.metadata_collection->collection });
+    }
+    for (const auto& k : config_.cleanup_config.collections) {
+        add_collection(k);
+    }
+}
+
+void
+transactions_cleanup::stop()
 {
     {
         std::unique_lock<std::mutex> lock(mutex_);
@@ -571,6 +577,12 @@ transactions_cleanup::close()
             t.join();
         }
     }
+}
+
+void
+transactions_cleanup::close()
+{
+    stop();
     CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("all lost attempt cleanup threads closed");
     remove_client_record_from_all_buckets(client_uuid_);
 }
