@@ -155,6 +155,11 @@ struct search_request {
     std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
+    /**
+     * UNCOMMITTED: If set to true, will log the request to and/or the response from the search service.
+     */
+    std::optional<bool> log_request{ false };
+    std::optional<bool> log_response{ false };
 
     [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
 
