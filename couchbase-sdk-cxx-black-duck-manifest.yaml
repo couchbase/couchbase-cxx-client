@@ -2,7 +2,7 @@
 components:
   boringssl:
     bd-id: 1e303b15-b82b-4a4d-8cd6-a2048fb2c73d
-    versions: [ 20200921 ]
+    versions: [ 20240201 ]
   fmt:
     bd-id: eae20828-18b8-478f-83b3-4a058748a28b
     versions: [ 10.2.1 ]

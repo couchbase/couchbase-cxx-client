@@ -8,9 +8,9 @@ if(COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
     STATUS "COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL is set, assuming OpenSSL headers and symbols are available already"
   )
 elseif(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
-  # gRPC uses it since 2023-08-21: https://github.com/grpc/grpc/commit/650c2ea4928dc221747738ecbcf7db7f81dc7496
-  set(COUCHBASE_CXX_CLIENT_BORINGSSL_SHA "2ff4b968a7e0cfee66d9f151cb95635b43dc1d5b")
-  set(COUCHBASE_CXX_CLIENT_BORINGSSL_VERSION "202308211007")
+  # gRPC uses it since 2024-02-01: https://github.com/grpc/grpc/commit/1f979d2a8343ee9ee995aa0155c81e3abdb9d3a3
+  set(COUCHBASE_CXX_CLIENT_BORINGSSL_SHA "ae72a4514c7afd150596b0a80947f3ca9b8363b5")
+  set(COUCHBASE_CXX_CLIENT_BORINGSSL_VERSION "20240201")
   cpmaddpackage(
     NAME
     boringssl
