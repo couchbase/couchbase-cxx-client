@@ -286,13 +286,7 @@ couchbase::core::origin::origin(const couchbase::core::origin& other)
 couchbase::core::origin::origin(const origin& other, const topology::configuration& config)
   : origin(other)
 {
-    nodes_.clear();
-    for (const auto& node : config.nodes) {
-        if (auto port = options_.enable_tls ? node.services_tls.key_value : node.services_plain.key_value; port.has_value()) {
-            nodes_.emplace_back(node.hostname, std::to_string(port.value()));
-        }
-    }
-    next_node_ = nodes_.begin();
+    set_nodes_from_config(config);
 }
 
 couchbase::core::origin::origin(couchbase::core::cluster_credentials auth,
@@ -383,6 +377,27 @@ couchbase::core::origin::set_nodes(couchbase::core::origin::node_list nodes)
     nodes_ = std::move(nodes);
     next_node_ = nodes_.begin();
     exhausted_ = false;
+}
+void
+couchbase::core::origin::set_nodes_from_config(const topology::configuration& config)
+{
+    nodes_.clear();
+    if (options_.network == "default") {
+        for (const auto& node : config.nodes) {
+            if (auto port = options_.enable_tls ? node.services_tls.key_value : node.services_plain.key_value; port.has_value()) {
+                nodes_.emplace_back(node.hostname, std::to_string(port.value()));
+            }
+        }
+    } else {
+        for (const auto& node : config.nodes) {
+            auto port = node.port_or(options_.network, service_type::key_value, options_.enable_tls, 0);
+            if (port == 0) {
+                continue;
+            }
+            nodes_.emplace_back(std::make_pair(node.hostname_for(options_.network), std::to_string(port)));
+        }
+    }
+    next_node_ = nodes_.begin();
 }
 std::pair<std::string, std::string>
 couchbase::core::origin::next_address()
