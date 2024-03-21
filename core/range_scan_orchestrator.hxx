@@ -45,6 +45,8 @@ class scan_stream_manager
     virtual void stream_completed(std::int16_t node_id, std::uint16_t vbucket_id) = 0;
 };
 
+using scan_callback = utils::movable_function<void(std::error_code, scan_result result)>;
+
 class range_scan_orchestrator
 {
   public:
@@ -57,6 +59,7 @@ class range_scan_orchestrator
                             range_scan_orchestrator_options options);
 
     auto scan() -> tl::expected<scan_result, std::error_code>;
+    void scan(scan_callback&& cb);
 
   private:
     std::shared_ptr<range_scan_orchestrator_impl> impl_;

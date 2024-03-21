@@ -131,3 +131,9 @@
  * Hooks in the transactions core are asynchronous (they have a callback parameter)
  */
 #define COUCHBASE_CXX_CLIENT_TRANSACTIONS_CORE_ASYNC_HOOKS
+
+/**
+ * Range scan is accessible from the public API
+ * couchbase::collection::scan()
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_PUBLIC_RANGE_SCAN 1
