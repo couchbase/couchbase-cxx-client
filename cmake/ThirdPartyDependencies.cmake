@@ -16,13 +16,14 @@ function(declare_system_library target)
 endfunction()
 
 if(NOT TARGET fmt::fmt)
+  # https://github.com/fmtlib/fmt/releases
   cpmaddpackage(
     NAME
     fmt
     GIT_TAG
-    10.1.1
+    10.2.1
     VERSION
-    10.1.1
+    10.2.1
     GITHUB_REPOSITORY
     "fmtlib/fmt"
     OPTIONS
@@ -33,11 +34,12 @@ if(NOT TARGET fmt::fmt)
 endif()
 
 if(NOT TARGET spdlog::spdlog)
+  # https://github.com/gabime/spdlog/releases
   cpmaddpackage(
     NAME
     spdlog
     VERSION
-    1.12.0
+    1.13.0
     GITHUB_REPOSITORY
     "gabime/spdlog"
     OPTIONS
@@ -50,6 +52,7 @@ if(NOT TARGET spdlog::spdlog)
 endif()
 
 if(NOT TARGET Microsoft.GSL::GSL)
+  # https://github.com/microsoft/GSL/releases
   cpmaddpackage(
     NAME
     gsl
@@ -64,6 +67,7 @@ if(NOT TARGET Microsoft.GSL::GSL)
 endif()
 
 if(NOT TARGET hdr_histogram_static)
+  # https://github.com/HdrHistogram/HdrHistogram_c/releases
   cpmaddpackage(
     NAME
     hdr_histogram
@@ -83,13 +87,14 @@ if(NOT TARGET hdr_histogram_static)
 endif()
 
 if(NOT TARGET llhttp::llhttp)
+  # https://github.com/nodejs/llhttp/releases
   cpmaddpackage(
     NAME
     llhttp
     GIT_TAG
-    release/v9.1.3
+    release/v9.2.0
     VERSION
-    9.1.3
+    9.2.0
     GITHUB_REPOSITORY
     "nodejs/llhttp"
     OPTIONS
@@ -101,6 +106,7 @@ if(NOT TARGET llhttp::llhttp)
 endif()
 
 if(NOT TARGET snappy)
+  # https://github.com/google/snappy/releases
   cpmaddpackage(
     NAME
     snappy
@@ -125,6 +131,7 @@ if(NOT MSVC)
 endif()
 
 if(NOT TARGET taocpp::json)
+  # https://github.com/taocpp/json/releases
   cpmaddpackage(
     NAME
     json
@@ -147,13 +154,14 @@ if(NOT TARGET taocpp::json)
 endif()
 
 if(NOT TARGET asio::asio)
+  # https://github.com/chriskohlhoff/asio
   cpmaddpackage(
     NAME
     asio
     GIT_TAG
-    asio-1-28-1
+    asio-1-29-0
     VERSION
-    1.28.1
+    1.29.0
     GITHUB_REPOSITORY
     "chriskohlhoff/asio")
 endif()

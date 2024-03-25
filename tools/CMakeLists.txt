@@ -1,9 +1,10 @@
 if(NOT TARGET CLI11::CLI11)
+  # https://github.com/CLIUtils/CLI11/releases
   cpmaddpackage(
     NAME
     cli11
     VERSION
-    2.3.2
+    2.4.1
     GITHUB_REPOSITORY
     "cliutils/cli11"
     OPTIONS

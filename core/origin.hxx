@@ -70,6 +70,7 @@ struct origin {
     [[nodiscard]] std::vector<std::string> get_nodes() const;
 
     void set_nodes(node_list nodes);
+    void set_nodes_from_config(const topology::configuration& config);
 
     [[nodiscard]] std::pair<std::string, std::string> next_address();
 
