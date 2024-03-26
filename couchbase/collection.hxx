@@ -37,6 +37,9 @@
 #include <couchbase/query_options.hxx>
 #include <couchbase/remove_options.hxx>
 #include <couchbase/replace_options.hxx>
+#include <couchbase/scan_options.hxx>
+#include <couchbase/scan_result.hxx>
+#include <couchbase/scan_type.hxx>
 #include <couchbase/touch_options.hxx>
 #include <couchbase/unlock_options.hxx>
 #include <couchbase/upsert_options.hxx>
@@ -924,6 +927,39 @@ class collection
      */
     [[nodiscard]] auto exists(std::string document_id, const exists_options& options = {}) const
       -> std::future<std::pair<key_value_error_context, exists_result>>;
+
+    /**
+     * Performs a key-value scan operation on the collection.
+     *
+     * @param scan_type the type of the scan. Can be @ref range_scan, @ref prefix_scan or @ref sampling_scan
+     * @param options the options to customize
+     * @param handler callable that implements @ref scan_handler
+     *
+     * @note Use this API for low concurrency batch queries where latency is not critical as the system may have to scan
+     * a lot of documents to find the matching documents. For low latency range queries, it is recommended that you use
+     * SQL++ with the necessary indexes.
+     *
+     * @since 1.0.0
+     * @volatile
+     */
+    void scan(const scan_type& scan_type, const scan_options& options, scan_handler&& handler) const;
+
+    /**
+     * Performs a key-value scan operation on the collection.
+     *
+     * @param scan_type the type of the scan. Can be @ref range_scan, @ref prefix_scan or @ref sampling_scan
+     * @param options the options to customize
+     * @return future object that carries result of the operation
+     *
+     * @note Use this API for low concurrency batch queries where latency is not critical as the system may have to scan
+     * a lot of documents to find the matching documents. For low latency range queries, it is recommended that you use
+     * SQL++ with the necessary indexes.
+     *
+     * @since 1.0.0
+     * @volatile
+     */
+    [[nodiscard]] auto scan(const scan_type& scan_type, const scan_options& options = {}) const
+      -> std::future<std::pair<std::error_code, scan_result>>;
 
     [[nodiscard]] auto query_indexes() const -> collection_query_index_manager;
 

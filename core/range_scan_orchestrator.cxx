@@ -16,6 +16,7 @@
 #include "range_scan_orchestrator.hxx"
 
 #include "agent.hxx"
+#include "collections_options.hxx"
 #include "logger/logger.hxx"
 #include "range_scan_load_balancer.hxx"
 #include "range_scan_options.hxx"
@@ -355,58 +356,52 @@ class range_scan_orchestrator_impl
         }
     }
 
-    auto scan() -> tl::expected<scan_result, std::error_code>
+    void scan(scan_callback&& cb)
     {
         if (item_limit_ == 0 || concurrency_ <= 0) {
-            return tl::unexpected(errc::common::invalid_argument);
+            return cb(errc::common::invalid_argument, {});
         }
 
-        // Get the collection ID before starting any of the streams
-        {
-            auto barrier = std::make_shared<std::promise<tl::expected<get_collection_id_result, std::error_code>>>();
-            auto f = barrier->get_future();
-            get_collection_id_options const get_cid_options{ options_.retry_strategy, options_.timeout, options_.parent_span };
-            agent_.get_collection_id(scope_name_, collection_name_, get_cid_options, [barrier](auto result, auto ec) {
-                if (ec) {
-                    return barrier->set_value(tl::unexpected(ec));
-                }
-                barrier->set_value(result);
-            });
-            auto get_cid_res = f.get();
-            if (!get_cid_res.has_value()) {
-                return tl::unexpected(get_cid_res.error());
-            }
-            collection_id_ = get_cid_res->collection_id;
-        }
+        get_collection_id_options const get_cid_options{ options_.retry_strategy, options_.timeout, options_.parent_span };
+        agent_.get_collection_id(
+          scope_name_,
+          collection_name_,
+          get_cid_options,
+          [self = shared_from_this(), cb = std::move(cb)](auto get_cid_res, auto ec) mutable {
+              if (ec) {
+                  return cb(ec, {});
+              }
+              self->collection_id_ = get_cid_res.collection_id;
 
-        auto batch_time_limit = std::chrono::duration_cast<std::chrono::milliseconds>(0.9 * options_.timeout);
-        range_scan_continue_options const continue_options{
-            options_.batch_item_limit, options_.batch_byte_limit, batch_time_limit, options_.timeout, options_.retry_strategy,
-        };
+              auto batch_time_limit = std::chrono::duration_cast<std::chrono::milliseconds>(0.9 * self->options_.timeout);
+              range_scan_continue_options const continue_options{
+                  self->options_.batch_item_limit, self->options_.batch_byte_limit, batch_time_limit,
+                  self->options_.timeout,          self->options_.retry_strategy,
+              };
 
-        for (std::uint16_t vbucket = 0; vbucket < gsl::narrow_cast<std::uint16_t>(vbucket_map_.size()); ++vbucket) {
-            const range_scan_create_options create_options{
-                scope_name_,       {},
-                scan_type_,        options_.timeout,
-                collection_id_,    vbucket_to_snapshot_requirements_[vbucket],
-                options_.ids_only, options_.retry_strategy,
-            };
+              for (std::uint16_t vbucket = 0; vbucket < gsl::narrow_cast<std::uint16_t>(self->vbucket_map_.size()); ++vbucket) {
+                  const range_scan_create_options create_options{
+                      self->scope_name_,       {},
+                      self->scan_type_,        self->options_.timeout,
+                      self->collection_id_,    self->vbucket_to_snapshot_requirements_[vbucket],
+                      self->options_.ids_only, self->options_.retry_strategy,
+                  };
 
-            // Get the active node for the vbucket (values in vbucket map are the active node id followed by the ids of the replicas)
-            auto node_id = vbucket_map_[vbucket][0];
+                  // Get the active node for the vbucket (values in vbucket map are the active node id followed by the ids of the replicas)
+                  auto node_id = self->vbucket_map_[vbucket][0];
 
-            auto stream = std::make_shared<range_scan_stream>(io_,
-                                                              agent_,
-                                                              vbucket,
-                                                              node_id,
-                                                              create_options,
-                                                              continue_options,
-                                                              std::static_pointer_cast<scan_stream_manager>(shared_from_this()));
-            streams_[vbucket] = stream;
-        }
-        start_streams(concurrency_);
-
-        return scan_result(shared_from_this());
+                  auto stream = std::make_shared<range_scan_stream>(self->io_,
+                                                                    self->agent_,
+                                                                    vbucket,
+                                                                    node_id,
+                                                                    create_options,
+                                                                    continue_options,
+                                                                    std::static_pointer_cast<scan_stream_manager>(self));
+                  self->streams_[vbucket] = stream;
+              }
+              self->start_streams(self->concurrency_);
+              return cb({}, scan_result(self));
+          });
     }
 
     void cancel() override
@@ -596,6 +591,20 @@ range_scan_orchestrator::range_scan_orchestrator(asio::io_context& io,
 auto
 range_scan_orchestrator::scan() -> tl::expected<scan_result, std::error_code>
 {
-    return impl_->scan();
+    auto barrier = std::make_shared<std::promise<tl::expected<scan_result, std::error_code>>>();
+    auto f = barrier->get_future();
+    scan([barrier](auto ec, auto res) mutable {
+        if (ec) {
+            return barrier->set_value(tl::unexpected(ec));
+        }
+        barrier->set_value(res);
+    });
+    return f.get();
+}
+
+void
+range_scan_orchestrator::scan(couchbase::core::scan_callback&& cb)
+{
+    return impl_->scan(std::move(cb));
 }
 } // namespace couchbase::core

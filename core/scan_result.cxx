@@ -62,24 +62,35 @@ scan_result::scan_result(std::shared_ptr<range_scan_item_iterator> iterator)
 auto
 scan_result::next() const -> tl::expected<range_scan_item, std::error_code>
 {
-    return impl_->next();
+    if (impl_) {
+        return impl_->next();
+    }
+    return tl::unexpected{ errc::common::request_canceled };
 }
 
 void
 scan_result::next(utils::movable_function<void(range_scan_item, std::error_code)> callback) const
 {
-    return impl_->next(std::move(callback));
+    if (impl_) {
+        return impl_->next(std::move(callback));
+    }
+    callback({}, errc::common::request_canceled);
 }
 
 void
 scan_result::cancel()
 {
-    return impl_->cancel();
+    if (impl_) {
+        return impl_->cancel();
+    }
 }
 
 auto
 scan_result::is_cancelled() -> bool
 {
-    return impl_->is_cancelled();
+    if (impl_) {
+        return impl_->is_cancelled();
+    }
+    return true;
 }
 } // namespace couchbase::core

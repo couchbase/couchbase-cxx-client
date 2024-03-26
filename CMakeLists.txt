@@ -211,6 +211,8 @@ set(couchbase_cxx_client_FILES
     core/impl/vector_search.cxx
     core/impl/view_error_category.cxx
     core/impl/wildcard_query.cxx
+    core/impl/scan_result.cxx
+    core/impl/internal_scan_result.hxx
     core/io/dns_client.cxx
     core/io/dns_config.cxx
     core/io/http_parser.cxx

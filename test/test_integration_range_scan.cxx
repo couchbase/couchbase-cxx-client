@@ -24,9 +24,12 @@
 #include "core/topology/configuration.hxx"
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
+#include <couchbase/scan_type.hxx>
 
 #include <chrono>
+#include <utility>
 
 static auto
 populate_documents_for_range_scan(const couchbase::collection& collection,
@@ -1384,4 +1387,218 @@ TEST_CASE("integration: orchestrator prefix scan with concurrency 0 (invalid arg
     auto result = orchestrator.scan();
     REQUIRE(!result.has_value());
     REQUIRE(result.error() == couchbase::errc::common::invalid_argument);
+}
+
+TEST_CASE("integration: range scan public API feature not available", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (integration.has_bucket_capability("range_scan")) {
+        SKIP("cluster supports range scan");
+    }
+
+    auto collection = couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).default_collection();
+
+    auto [ec, res] = collection.scan(couchbase::prefix_scan{ "foo" }, {}).get();
+    REQUIRE(ec == couchbase::errc::common::feature_not_available);
+}
+
+std::vector<couchbase::scan_result_item>
+scan_and_store_results(const couchbase::collection& collection,
+                       const couchbase::scan_type& scan_type,
+                       const couchbase::scan_options& options)
+{
+    auto [ec, res] = collection.scan(scan_type, options).get();
+    REQUIRE_SUCCESS(ec);
+    std::vector<couchbase::scan_result_item> items{};
+    while (true) {
+        auto [iter_ec, item] = res.next().get();
+        REQUIRE_SUCCESS(iter_ec);
+        if (!item.has_value()) {
+            break;
+        }
+        items.push_back(item.value());
+    }
+    return items;
+}
+
+std::vector<couchbase::scan_result_item>
+scan_and_store_results_with_iterator(const couchbase::collection& collection,
+                                     const couchbase::scan_type& scan_type,
+                                     const couchbase::scan_options& options)
+{
+    auto [ec, res] = collection.scan(scan_type, options).get();
+    REQUIRE_SUCCESS(ec);
+    std::vector<couchbase::scan_result_item> items{};
+    for (auto [iter_ec, item] : res) {
+        REQUIRE_SUCCESS(iter_ec);
+        items.push_back(item);
+    }
+    return items;
+}
+
+[[maybe_unused]] static auto
+mutations_to_public_mutation_state(const std::map<std::string, couchbase::mutation_token>& mutations)
+{
+    couchbase::mutation_state state{};
+    std::vector<couchbase::mutation_token> tokens{};
+    for (const auto& [key, token] : mutations) {
+        couchbase::mutation_result mut_res{ {}, token };
+        state.add(mut_res);
+    }
+    return state;
+}
+
+static void
+next_item(couchbase::scan_result res, std::function<void(couchbase::scan_result_item)> validator, std::function<void()>&& callback)
+{
+    res.next([res, callback = std::move(callback), validator = std::move(validator)](
+               std::error_code ec, std::optional<couchbase::scan_result_item> item) mutable {
+        REQUIRE_SUCCESS(ec);
+        if (!item.has_value()) {
+            return callback();
+        }
+        validator(item.value());
+        return next_item(res, std::move(validator), std::move(callback));
+    });
+}
+
+TEST_CASE("integration: range scan public API", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (!integration.has_bucket_capability("range_scan")) {
+        SKIP("cluster does not support range scan");
+    }
+
+    auto collection = couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).default_collection();
+
+    auto prefix = "scan-public-api-";
+    auto ids = make_doc_ids(100, prefix);
+    auto value = make_binary_value(1);
+    auto mutations = populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
+
+    SECTION("prefix scan")
+    {
+        auto scan_type = couchbase::prefix_scan(prefix);
+        auto options = couchbase::scan_options().consistent_with(mutations_to_public_mutation_state(mutations)).concurrency(20);
+        auto [ec, res] = collection.scan(scan_type, options).get();
+        REQUIRE_SUCCESS(ec);
+        auto item_count = 0;
+        for (auto [iter_ec, item] : res) {
+            REQUIRE_SUCCESS(iter_ec);
+            item_count++;
+            REQUIRE(!item.id().empty());
+            auto content = item.content_as<couchbase::codec::binary, couchbase::codec::raw_binary_transcoder>();
+            REQUIRE(!item.id_only());
+            REQUIRE(content == value);
+            REQUIRE(item.cas().value() != 0);
+        }
+        REQUIRE(item_count == 100);
+    }
+
+    SECTION("range scan")
+    {
+        auto scan_type =
+          couchbase::range_scan(couchbase::scan_term("scan-public-api-1"), couchbase::scan_term("scan-public-api-2").exclusive(true));
+        auto options = couchbase::scan_options().consistent_with(mutations_to_public_mutation_state(mutations)).concurrency(20);
+        auto [ec, res] = collection.scan(scan_type, options).get();
+        REQUIRE_SUCCESS(ec);
+        auto item_count = 0;
+        for (auto [iter_ec, item] : res) {
+            REQUIRE_SUCCESS(iter_ec);
+            item_count++;
+            REQUIRE(!item.id().empty());
+            auto content = item.content_as<couchbase::codec::binary, couchbase::codec::raw_binary_transcoder>();
+            REQUIRE(!item.id_only());
+            REQUIRE(content == value);
+            REQUIRE(item.cas().value() != 0);
+        }
+        REQUIRE(item_count == 11);
+    }
+
+    SECTION("sampling scan")
+    {
+        auto scan_type = couchbase::sampling_scan(35);
+        auto options = couchbase::scan_options().consistent_with(mutations_to_public_mutation_state(mutations)).concurrency(20);
+        auto [ec, res] = collection.scan(scan_type, options).get();
+        REQUIRE_SUCCESS(ec);
+        auto item_count = 0;
+
+        for (auto [iter_ec, item] : res) {
+            REQUIRE_SUCCESS(iter_ec);
+            item_count++;
+            REQUIRE(!item.id().empty());
+            REQUIRE(!item.id_only());
+            // Not checking the content value as the sample might contain any documents from the collection
+            REQUIRE(item.cas().value() != 0);
+        }
+        REQUIRE(item_count <= 35);
+    }
+
+    SECTION("range scan with no results")
+    {
+        // Using a 'from' that is bigger than 'to'
+        auto scan_type =
+          couchbase::range_scan(couchbase::scan_term("scan-public-api-2"), couchbase::scan_term("scan-public-api-1").exclusive(true));
+        auto options = couchbase::scan_options().consistent_with(mutations_to_public_mutation_state(mutations)).concurrency(20);
+        auto [ec, res] = collection.scan(scan_type, options).get();
+        REQUIRE_SUCCESS(ec);
+        auto item_count = 0;
+        for (auto _item : res) {
+            // Should not be reached
+            REQUIRE(false);
+        }
+        REQUIRE(item_count == 0);
+    }
+
+    SECTION("prefix scan ids only")
+    {
+        auto scan_type = couchbase::prefix_scan(prefix);
+        auto options =
+          couchbase::scan_options().consistent_with(mutations_to_public_mutation_state(mutations)).concurrency(20).ids_only(true);
+        auto [ec, res] = collection.scan(scan_type, options).get();
+        REQUIRE_SUCCESS(ec);
+        auto item_count = 0;
+        for (auto [iter_ec, item] : res) {
+            REQUIRE_SUCCESS(iter_ec);
+            item_count++;
+            REQUIRE(!item.id().empty());
+            auto content = item.content_as<couchbase::codec::binary, couchbase::codec::raw_binary_transcoder>();
+            REQUIRE(item.id_only());
+            REQUIRE(content.empty());
+            REQUIRE(item.cas().value() == 0);
+        }
+        REQUIRE(item_count == 100);
+    }
+
+    SECTION("range scan async")
+    {
+        auto item_count = 0;
+        auto barrier = std::make_shared<std::promise<void>>();
+        auto callback = [barrier]() { barrier->set_value(); };
+
+        auto scan_type = couchbase::prefix_scan(prefix);
+        auto options = couchbase::scan_options().consistent_with(mutations_to_public_mutation_state(mutations)).concurrency(20);
+
+        collection.scan(
+          scan_type, options, [&item_count, callback = std::move(callback)](std::error_code ec, couchbase::scan_result res) mutable {
+              REQUIRE_SUCCESS(ec);
+              return next_item(
+                std::move(res),
+                [&item_count](const couchbase::scan_result_item& item) {
+                    item_count++;
+                    REQUIRE(!item.id().empty());
+                    auto content = item.content_as<couchbase::codec::binary, couchbase::codec::raw_binary_transcoder>();
+                    REQUIRE(!content.empty());
+                    REQUIRE(!item.id_only());
+                    REQUIRE(item.cas().value() != 0);
+                },
+                std::move(callback));
+          });
+
+        auto fut = barrier->get_future();
+        fut.get();
+        REQUIRE(item_count == 100);
+    }
 }

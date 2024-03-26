@@ -15,7 +15,9 @@
  *   limitations under the License.
  */
 
+#include "core/agent_group.hxx"
 #include "core/cluster.hxx"
+#include "core/logger/logger.hxx"
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
 #include "core/operations/document_exists.hxx"
@@ -33,9 +35,12 @@
 #include "core/operations/document_touch.hxx"
 #include "core/operations/document_unlock.hxx"
 #include "core/operations/document_upsert.hxx"
+#include "core/range_scan_options.hxx"
+#include "core/range_scan_orchestrator.hxx"
 #include "get_all_replicas.hxx"
 #include "get_any_replica.hxx"
 #include "get_replica.hxx"
+#include "internal_scan_result.hxx"
 #include "lookup_in_all_replicas.hxx"
 #include "lookup_in_any_replica.hxx"
 #include "lookup_in_replica.hxx"
@@ -1010,6 +1015,90 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
           });
     }
 
+    void scan(scan_type::built scan_type, scan_options::built options, scan_handler&& handler) const
+    {
+        core::range_scan_orchestrator_options orchestrator_opts{ options.ids_only };
+        if (!options.mutation_state.empty()) {
+            orchestrator_opts.consistent_with = core::mutation_state{ options.mutation_state };
+        }
+        if (options.batch_item_limit.has_value()) {
+            orchestrator_opts.batch_item_limit = options.batch_item_limit.value();
+        }
+        if (options.batch_byte_limit.has_value()) {
+            orchestrator_opts.batch_byte_limit = options.batch_byte_limit.value();
+        }
+        if (options.concurrency.has_value()) {
+            orchestrator_opts.concurrency = options.concurrency.value();
+        }
+        if (options.timeout.has_value()) {
+            orchestrator_opts.timeout = options.timeout.value();
+        }
+
+        std::variant<std::monostate, core::range_scan, core::prefix_scan, core::sampling_scan> core_scan_type{};
+        switch (scan_type.type) {
+            case scan_type::built::prefix_scan:
+                core_scan_type = core::prefix_scan{
+                    scan_type.prefix,
+                };
+                break;
+            case scan_type::built::range_scan:
+                core_scan_type = core::range_scan{
+                    (scan_type.from) ? std::make_optional(core::scan_term{ scan_type.from->term, scan_type.from->exclusive })
+                                     : std::nullopt,
+                    (scan_type.to) ? std::make_optional(core::scan_term{ scan_type.to->term, scan_type.to->exclusive }) : std::nullopt,
+                };
+                break;
+            case scan_type::built::sampling_scan:
+                core_scan_type = core::sampling_scan{
+                    scan_type.limit,
+                    scan_type.seed,
+                };
+                break;
+        }
+
+        return core_.open_bucket(
+          bucket_name_, [this, handler = std::move(handler), orchestrator_opts, core_scan_type](std::error_code ec) mutable {
+              if (ec) {
+                  return handler(ec, {});
+              }
+              return core_.with_bucket_configuration(
+                bucket_name_,
+                [this, handler = std::move(handler), orchestrator_opts, core_scan_type](
+                  std::error_code ec, const core::topology::configuration& config) mutable {
+                    if (ec) {
+                        return handler(ec, {});
+                    }
+                    if (!config.capabilities.supports_range_scan()) {
+                        return handler(errc::common::feature_not_available, {});
+                    }
+                    auto agent_group = core::agent_group(core_.io_context(), core::agent_group_config{ { core_ } });
+                    ec = agent_group.open_bucket(bucket_name_);
+                    if (ec) {
+                        return handler(ec, {});
+                    }
+                    auto agent = agent_group.get_agent(bucket_name_);
+                    if (!agent.has_value()) {
+                        return handler(agent.error(), {});
+                    }
+                    if (!config.vbmap.has_value() || config.vbmap->empty()) {
+                        CB_LOG_WARNING("Unable to get vbucket map for `{}` - cannot perform scan operation", bucket_name_);
+                        return handler(errc::common::request_canceled, {});
+                    }
+
+                    auto orchestrator = core::range_scan_orchestrator(
+                      core_.io_context(), agent.value(), config.vbmap.value(), scope_name_, name_, core_scan_type, orchestrator_opts);
+                    return orchestrator.scan([handler = std::move(handler)](auto ec, auto core_scan_result) mutable {
+                        if (ec) {
+                            return handler(ec, {});
+                        }
+                        auto internal_result = std::make_shared<internal_scan_result>(std::move(core_scan_result));
+                        scan_result result{ internal_result };
+                        return handler({}, result);
+                    });
+                });
+          });
+    }
+
   private:
     core::cluster core_;
     std::string bucket_name_;
@@ -1394,6 +1483,22 @@ collection::replace(std::string document_id, codec::encoded_value document, cons
     replace(std::move(document_id), std::move(document), options, [barrier](auto ctx, auto result) {
         barrier->set_value({ std::move(ctx), std::move(result) });
     });
+    return future;
+}
+
+void
+collection::scan(const couchbase::scan_type& scan_type, const couchbase::scan_options& options, couchbase::scan_handler&& handler) const
+{
+    return impl_->scan(scan_type.build(), options.build(), std::move(handler));
+}
+
+auto
+collection::scan(const couchbase::scan_type& scan_type, const couchbase::scan_options& options) const
+  -> std::future<std::pair<std::error_code, scan_result>>
+{
+    auto barrier = std::make_shared<std::promise<std::pair<std::error_code, scan_result>>>();
+    auto future = barrier->get_future();
+    scan(scan_type, options, [barrier](auto ec, auto result) { barrier->set_value({ ec, std::move(result) }); });
     return future;
 }
 } // namespace couchbase
