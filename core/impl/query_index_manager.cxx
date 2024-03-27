@@ -22,9 +22,9 @@
 #include "core/operations/management/query_index_drop.hxx"
 #include "core/operations/management/query_index_get_all.hxx"
 #include "internal_manager_error_context.hxx"
-#include "internal_operation_error_context.hxx"
 
 #include "core/logger/logger.hxx"
+#include "error_context_to_json.hxx"
 
 #include <couchbase/collection_query_index_manager.hxx>
 #include <couchbase/query_index_manager.hxx>
@@ -58,7 +58,7 @@ manager_error_context_to_error(const manager_error_context& ctx)
 {
     return { ctx.ec(),
              ctx.ec().message(),
-             operation_error_context{ internal_operation_error_context{ core::impl::manager_error_context_to_json(ctx) } } };
+             operation_error_context{ core::impl::manager_error_context_to_json(ctx)  } };
 }
 
 class watch_context : public std::enable_shared_from_this<watch_context>

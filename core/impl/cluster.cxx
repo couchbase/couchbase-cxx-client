@@ -22,7 +22,7 @@
 #include "core/transactions.hxx"
 #include "core/utils/connection_string.hxx"
 #include "diagnostics.hxx"
-#include "internal_operation_error_context.hxx"
+#include "error_context_to_json.hxx"
 #include "internal_search_error_context.hxx"
 #include "internal_search_meta_data.hxx"
 #include "internal_search_result.hxx"
@@ -156,7 +156,7 @@ query_error_context_to_error(const query_error_context& ctx)
 {
     return { ctx.ec(),
              ctx.ec().message(),
-             operation_error_context{ internal_operation_error_context{ core::impl::query_error_context_to_json(ctx) } } };
+             operation_error_context{ core::impl::query_error_context_to_json(ctx) } };
 }
 
 } // namespace

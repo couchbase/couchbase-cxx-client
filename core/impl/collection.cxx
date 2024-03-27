@@ -33,6 +33,7 @@
 #include "core/operations/document_touch.hxx"
 #include "core/operations/document_unlock.hxx"
 #include "core/operations/document_upsert.hxx"
+#include "error_context_to_json.hxx"
 #include "get_all_replicas.hxx"
 #include "get_any_replica.hxx"
 #include "get_replica.hxx"
@@ -45,8 +46,6 @@
 
 #include <memory>
 
-#include "internal_operation_error_context.hxx"
-
 namespace couchbase
 {
 namespace
@@ -57,7 +56,7 @@ key_value_error_context_to_error(const key_value_error_context& ctx)
 {
     return { ctx.ec(),
              ctx.ec().message(),
-             operation_error_context{ internal_operation_error_context{ core::impl::key_value_error_context_to_json(ctx) } } };
+             operation_error_context{ core::impl::key_value_error_context_to_json(ctx) } };
 }
 } // namespace
 

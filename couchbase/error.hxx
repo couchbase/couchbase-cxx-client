@@ -16,8 +16,6 @@ class error
         return ec_.value() != 0;
     }
 
-    error() = default;
-
     error(std::error_code ec, std::string message, operation_error_context ctx)
       : ec_{ ec }
       , message_{ std::move(message) }
@@ -61,7 +59,7 @@ class error
   private:
     std::error_code ec_{};
     std::string message_{};
-    operation_error_context ctx_{};
+    operation_error_context ctx_;
     std::optional<std::unique_ptr<error>> cause_{};
 };
 

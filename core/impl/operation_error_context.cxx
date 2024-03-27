@@ -15,38 +15,30 @@
  *   limitations under the License.
  */
 
-#include "internal_operation_error_context.hxx"
+#include "error_context_to_json.hxx"
+
+#include "tao/json/to_string.hpp"
 
 #include <couchbase/operation_error_context.hxx>
 
+#include <utility>
+
 namespace couchbase
 {
-operation_error_context::operation_error_context()
-  : internal_{ nullptr }
+operation_error_context::operation_error_context(core_json_context ctx)
+  : ctx_{std::move( ctx )}
 {
 }
-
-operation_error_context::operation_error_context(internal_operation_error_context ctx)
-  : internal_{ std::make_unique<internal_operation_error_context>(std::move(ctx)) }
-{
-}
-
-operation_error_context::operation_error_context(operation_error_context&& other) = default;
-
-operation_error_context&
-operation_error_context::operator=(operation_error_context&& other) = default;
-
-operation_error_context::~operation_error_context() = default;
 
 auto
-operation_error_context::to_json_pretty() const -> std::string
+operation_error_context::to_string() const -> std::string
 {
-    return internal_->to_json_pretty();
+    return tao::json::to_string(ctx_, 2);
 }
 
 auto
 operation_error_context::to_json() const -> std::string
 {
-    return internal_->to_json();
+    return tao::json::to_string(ctx_);
 }
 } // namespace couchbase

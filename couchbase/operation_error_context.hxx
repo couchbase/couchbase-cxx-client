@@ -19,28 +19,20 @@
 
 #include <string>
 
+using core_json_context = tao::json::value;
+
 namespace couchbase
 {
-#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-class internal_operation_error_context;
-#endif
-
 class operation_error_context
 {
   public:
-    operation_error_context();
-    explicit operation_error_context(internal_operation_error_context ctx);
-    operation_error_context(operation_error_context&& other);
-    operation_error_context& operator=(operation_error_context&& other);
-    operation_error_context(const operation_error_context& other) = delete;
-    operation_error_context& operator=(const operation_error_context& other) = delete;
-    ~operation_error_context();
+    explicit operation_error_context(core_json_context ctx);
 
-    [[nodiscard]] auto to_json_pretty() const -> std::string;
+    [[nodiscard]] auto to_string() const -> std::string;
 
     [[nodiscard]] auto to_json() const -> std::string;
 
   private:
-    std::unique_ptr<internal_operation_error_context> internal_;
+    core_json_context ctx_;
 };
 } // namespace couchbase

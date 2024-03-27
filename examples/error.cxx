@@ -61,7 +61,7 @@ main()
         // new couchbase::error returned with document_not_found
         auto [err1, doc_not_found_resp] = collection.get_with_error("does-not-exist").get();
         if (err1) { // Checks for err1.ec() != 0;
-            std::cout << err1.ec().message() << "\n" << err1.ctx().to_json_pretty() << "\n" << err1.ctx().to_json() << "\n";
+            std::cout << err1.ec().message() << "\n" << err1.ctx().to_string() << "\n" << err1.ctx().to_json() << "\n";
         }
 
         // shouldn't error
@@ -70,15 +70,15 @@ main()
 
         // Errors with bucket not found
         auto err3 = cluster.query_indexes().create_primary_index_with_error("does-not-exist", {}).get();
-        std::cout << err3.message() << "\n" << err3.ctx().to_json_pretty() << "\n" << err3.ctx().to_json() << "\n";
+        std::cout << err3.message() << "\n" << err3.ctx().to_string() << "\n" << err3.ctx().to_json() << "\n";
 
         // shouldn't error
         auto err4 = cluster.query_indexes().create_primary_index_with_error(bucket_name, {}).get();
-        std::cout << err4.message() << "\n" << err4.ctx().to_json_pretty() << "\n" << err4.ctx().to_json() << "\n";
+        std::cout << err4.message() << "\n" << err4.ctx().to_string() << "\n" << err4.ctx().to_json() << "\n";
 
         // shouldn't error
         auto [err6, query_resp2] = cluster.query_with_error(fmt::format("SELECT * FROM {}", bucket_name), {}).get();
-        std::cout << err6.message() << "\n" << err6.ctx().to_json_pretty() << "\n" << err6.ctx().to_json() << "\n";
+        std::cout << err6.message() << "\n" << err6.ctx().to_string() << "\n" << err6.ctx().to_json() << "\n";
     }
 
     cluster.close();
