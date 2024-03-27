@@ -17,6 +17,7 @@
 
 #include "eventing_drop_function.hxx"
 #include "core/utils/json.hxx"
+#include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
@@ -28,6 +29,11 @@ eventing_drop_function_request::encode_to(encoded_request_type& encoded, http_co
 {
     encoded.method = "DELETE";
     encoded.path = fmt::format("/api/v1/functions/{}", name);
+    if (bucket_name.has_value() && scope_name.has_value()) {
+        encoded.path += fmt::format("?bucket={}&scope={}",
+                                    utils::string_codec::v2::path_escape(bucket_name.value()),
+                                    utils::string_codec::v2::path_escape(scope_name.value()));
+    }
     return {};
 }
 

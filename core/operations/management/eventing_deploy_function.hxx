@@ -40,6 +40,9 @@ struct eventing_deploy_function_request {
 
     std::string name;
 
+    std::optional<std::string> bucket_name{};
+    std::optional<std::string> scope_name{};
+
     static const inline service_type type = service_type::eventing;
 
     std::optional<std::string> client_context_id{};

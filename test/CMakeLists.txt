@@ -1,7 +1,6 @@
 add_subdirectory(utils)
 
 integration_test(connect)
-integration_test(management)
 integration_test(crud)
 integration_test(query)
 integration_test(diagnostics)
@@ -17,6 +16,8 @@ integration_test(meter)
 integration_test(transcoders)
 integration_test(range_scan)
 integration_test(search)
+integration_test(management)
+integration_test(management_eventing)
 
 unit_test(connection_string)
 unit_test(utils)

@@ -206,6 +206,11 @@ struct traits<couchbase::core::management::eventing::function> {
             }
         }
 
+        if (const auto* function_scope = v.find("function_scope"); function_scope != nullptr && function_scope->is_object()) {
+            result.internal.bucket_name = function_scope->template optional<std::string>("bucket");
+            result.internal.scope_name = function_scope->template optional<std::string>("scope");
+        }
+
         return result;
     }
 };

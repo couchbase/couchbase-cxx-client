@@ -40,6 +40,8 @@ struct eventing_get_function_request {
     using error_context_type = error_context::http;
 
     std::string name;
+    std::optional<std::string> bucket_name{};
+    std::optional<std::string> scope_name{};
 
     static const inline service_type type = service_type::eventing;
 
