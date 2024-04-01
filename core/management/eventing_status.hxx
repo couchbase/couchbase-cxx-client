@@ -74,6 +74,11 @@ struct function_state {
     function_deployment_status deployment_status;
     function_processing_status processing_status;
     std::optional<bool> redeploy_required{};
+
+    struct {
+        std::optional<std::string> bucket_name{};
+        std::optional<std::string> scope_name{};
+    } internal{};
 };
 
 struct status {

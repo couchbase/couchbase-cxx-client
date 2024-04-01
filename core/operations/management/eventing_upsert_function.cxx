@@ -16,7 +16,9 @@
  */
 
 #include "eventing_upsert_function.hxx"
+
 #include "core/utils/json.hxx"
+#include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
 #include <tao/json/contrib/traits.hpp>
@@ -42,6 +44,11 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded, http_
     }
     if (function.function_instance_id) {
         body["function_instance_id"] = function.function_instance_id;
+    }
+
+    if (bucket_name.has_value() && scope_name.has_value()) {
+        tao::json::value function_scope{ { "bucket", bucket_name.value() }, { "scope", scope_name.value() } };
+        body["function_scope"] = function_scope;
     }
 
     tao::json::value depcfg{};
@@ -311,6 +318,11 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded, http_
     encoded.headers["content-type"] = "application/json";
     encoded.method = "POST";
     encoded.path = fmt::format("/api/v1/functions/{}", function.name);
+    if (bucket_name.has_value() && scope_name.has_value()) {
+        encoded.path += fmt::format("?bucket={}&scope={}",
+                                    utils::string_codec::v2::path_escape(bucket_name.value()),
+                                    utils::string_codec::v2::path_escape(scope_name.value()));
+    }
     encoded.body = utils::json::generate(body);
     return {};
 }

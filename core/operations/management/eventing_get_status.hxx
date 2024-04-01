@@ -41,6 +41,9 @@ struct eventing_get_status_request {
     using encoded_response_type = io::http_response;
     using error_context_type = error_context::http;
 
+    std::optional<std::string> bucket_name{};
+    std::optional<std::string> scope_name{};
+
     static const inline service_type type = service_type::eventing;
 
     std::optional<std::string> client_context_id{};

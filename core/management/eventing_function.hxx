@@ -184,5 +184,10 @@ struct function {
     std::vector<function_url_binding> url_bindings{};
     std::vector<function_constant_binding> constant_bindings{};
     function_settings settings{};
+
+    struct {
+        std::optional<std::string> bucket_name{};
+        std::optional<std::string> scope_name{};
+    } internal{};
 };
 } // namespace couchbase::core::management::eventing

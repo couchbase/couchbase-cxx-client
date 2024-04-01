@@ -16,6 +16,7 @@
  */
 
 #include "eventing_get_all_functions.hxx"
+#include "core/management/eventing_function.hxx"
 #include "core/management/eventing_function_json.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
@@ -55,7 +56,21 @@ eventing_get_all_functions_request::make_response(error_context::http&& ctx, con
         const auto& entries = payload.get_array();
         response.functions.reserve(entries.size());
         for (const auto& entry : entries) {
-            response.functions.emplace_back(entry.as<couchbase::core::management::eventing::function>());
+            bool include{};
+            auto function = entry.as<couchbase::core::management::eventing::function>();
+            if (bucket_name.has_value() && scope_name.has_value()) {
+                include = function.internal.bucket_name.has_value() && function.internal.scope_name.has_value() &&
+                          function.internal.bucket_name.value() == bucket_name.value() &&
+                          function.internal.scope_name.value() == scope_name.value();
+            } else {
+                include = (!function.internal.bucket_name.has_value() && !function.internal.scope_name.has_value()) ||
+                          (function.internal.bucket_name.has_value() && function.internal.scope_name.has_value() &&
+                           function.internal.bucket_name.value() == "*" && function.internal.scope_name.value() == "*");
+            }
+
+            if (include) {
+                response.functions.push_back(function);
+            }
         }
     }
     return response;

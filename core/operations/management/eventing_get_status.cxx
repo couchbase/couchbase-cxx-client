@@ -16,6 +16,7 @@
  */
 
 #include "eventing_get_status.hxx"
+#include "core/logger/logger.hxx"
 #include "core/management/eventing_status_json.hxx"
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
@@ -48,7 +49,24 @@ eventing_get_status_request::make_response(error_context::http&& ctx, const enco
             response.error.emplace(problem);
             return response;
         }
-        response.status = payload.as<couchbase::core::management::eventing::status>();
+        response.status = payload.as<core::management::eventing::status>();
+        std::vector<core::management::eventing::function_state> filtered_functions{};
+        for (const auto& function : response.status.functions) {
+            bool include{};
+            if (bucket_name.has_value() && scope_name.has_value()) {
+                include = function.internal.bucket_name.has_value() && function.internal.scope_name.has_value() &&
+                          function.internal.bucket_name.value() == bucket_name.value() &&
+                          function.internal.scope_name.value() == scope_name.value();
+            } else {
+                include = (!function.internal.bucket_name.has_value() && !function.internal.scope_name.has_value()) ||
+                          (function.internal.bucket_name.has_value() && function.internal.scope_name.has_value() &&
+                           function.internal.bucket_name.value() == "*" && function.internal.scope_name.value() == "*");
+            }
+            if (include) {
+                filtered_functions.push_back(function);
+            }
+        }
+        response.status.functions = std::move(filtered_functions);
     }
     return response;
 }

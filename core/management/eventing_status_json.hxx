@@ -67,6 +67,11 @@ struct traits<couchbase::core::management::eventing::status> {
                     function.status = couchbase::core::management::eventing::function_status::pausing;
                 }
 
+                if (const auto* function_scope = app.find("function_scope"); function_scope != nullptr && function_scope->is_object()) {
+                    function.internal.bucket_name = function_scope->template optional<std::string>("bucket");
+                    function.internal.scope_name = function_scope->template optional<std::string>("scope");
+                }
+
                 result.functions.emplace_back(function);
             }
         }
