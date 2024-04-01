@@ -113,10 +113,12 @@ serialize_range_scan_create_options(const range_scan_create_options& options)
 }
 
 auto
-parse_range_scan_keys(gsl::span<std::byte> data, range_scan_item_callback&& item_callback) -> std::error_code
+parse_range_scan_keys(gsl::span<std::byte> data,
+                      std::shared_ptr<mcbp::queue_request> request,
+                      range_scan_item_callback&& item_callback) -> std::error_code
 {
     do {
-        if (data.empty()) {
+        if (data.empty() || request->is_cancelled()) {
             return {};
         }
         auto [key_length, remaining] = utils::decode_unsigned_leb128<std::size_t>(data, core::utils::leb_128_no_throw{});
@@ -133,10 +135,12 @@ parse_range_scan_keys(gsl::span<std::byte> data, range_scan_item_callback&& item
 }
 
 auto
-parse_range_scan_documents(gsl::span<std::byte> data, range_scan_item_callback&& item_callback) -> std::error_code
+parse_range_scan_documents(gsl::span<std::byte> data,
+                           std::shared_ptr<mcbp::queue_request> request,
+                           range_scan_item_callback&& item_callback) -> std::error_code
 {
     do {
-        if (data.empty()) {
+        if (data.empty() || request->is_cancelled()) {
             return {};
         }
 
@@ -187,12 +191,15 @@ parse_range_scan_documents(gsl::span<std::byte> data, range_scan_item_callback&&
 }
 
 auto
-parse_range_scan_data(gsl::span<std::byte> payload, range_scan_item_callback&& items, bool keys_only) -> std::error_code
+parse_range_scan_data(gsl::span<std::byte> payload,
+                      std::shared_ptr<mcbp::queue_request> request,
+                      range_scan_item_callback&& items,
+                      bool keys_only) -> std::error_code
 {
     if (keys_only) {
-        return parse_range_scan_keys(payload, std::move(items));
+        return parse_range_scan_keys(payload, std::move(request), std::move(items));
     }
-    return parse_range_scan_documents(payload, std::move(items));
+    return parse_range_scan_documents(payload, std::move(request), std::move(items));
 }
 
 class crud_component_impl
@@ -265,15 +272,22 @@ class crud_component_impl
           [item_cb = std::move(item_callback), cb = std::move(callback), options](
             std::shared_ptr<mcbp::queue_response> response, std::shared_ptr<mcbp::queue_request> request, std::error_code error) mutable {
               if (error) {
+                  // in case or error code, the request will be automatically canceled
                   return cb({}, error);
               }
               if (response->extras_.size() != 4) {
-                  return cb({}, errc::network::protocol_error);
+                  if (request->internal_cancel()) {
+                      cb({}, errc::network::protocol_error);
+                  }
+                  return;
               }
               bool ids_only = mcbp::big_endian::read_uint32(response->extras_, 0) == 0;
 
-              if (auto ec = parse_range_scan_data(response->value_, std::move(item_cb), ids_only); ec) {
-                  return cb({}, ec);
+              if (auto ec = parse_range_scan_data(response->value_, request, std::move(item_cb), ids_only); ec) {
+                  if (request->internal_cancel()) {
+                      cb({}, ec);
+                  }
+                  return;
               }
 
               range_scan_continue_result res{
