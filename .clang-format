@@ -12,7 +12,10 @@ IndentWidth: 4
 ColumnLimit: 140
 AllowShortFunctionsOnASingleLine: None
 AllowShortBlocksOnASingleLine: Never
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: None
+AllowShortLoopsOnASingleLine: false
 AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
 BreakBeforeBraces: Linux
 FixNamespaceComments: true
-
