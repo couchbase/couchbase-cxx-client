@@ -60,7 +60,7 @@ struct query_options : public common_options<query_options> {
         std::optional<std::string> client_context_id;
         std::optional<query_scan_consistency> scan_consistency;
         std::vector<mutation_token> mutation_state;
-        const query_profile profile;
+        std::optional<query_profile> profile;
         std::vector<codec::binary> positional_parameters;
         std::map<std::string, codec::binary, std::less<>> named_parameters;
         std::map<std::string, codec::binary, std::less<>> raw;
@@ -555,7 +555,7 @@ struct query_options : public common_options<query_options> {
     std::optional<std::chrono::milliseconds> scan_wait_{};
     std::optional<query_scan_consistency> scan_consistency_{};
     std::vector<mutation_token> mutation_state_{};
-    query_profile profile_{ query_profile::off };
+    std::optional<query_profile> profile_{};
     std::vector<codec::binary> positional_parameters_{};
     std::map<std::string, codec::binary, std::less<>> raw_{};
     std::map<std::string, codec::binary, std::less<>> named_parameters_{};

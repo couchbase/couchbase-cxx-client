@@ -103,7 +103,7 @@ struct query_request {
     std::optional<std::string> client_context_id{};
     std::optional<std::chrono::milliseconds> timeout{};
 
-    query_profile profile{ query_profile::off };
+    std::optional<query_profile> profile{};
 
     std::map<std::string, couchbase::core::json_string, std::less<>> raw{};
     std::vector<couchbase::core::json_string> positional_parameters{};

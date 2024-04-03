@@ -71,8 +71,7 @@ Examples:
         add_flag("--disable-metrics", disable_metrics_, "Do not request metrics.");
         add_flag("--user-replica", use_replica_, "Allow using replica nodes for KV operations.");
         add_option("--profile", profile_, "Request the service to profile the query and return report.")
-          ->transform(CLI::IsMember(allowed_profile_modes))
-          ->default_val(fmt::format("{}", defaults.profile));
+          ->transform(CLI::IsMember(allowed_profile_modes));
         add_option("--bucket-name", bucket_name_, "Name of the bucket.");
         add_option("--scope-name", scope_name_, "Name of the scope.")->default_val(couchbase::scope::default_name);
         add_option("--client-context-id", client_context_id_, "Override client context ID for the query(-ies).");
@@ -141,14 +140,16 @@ Examples:
             fail(fmt::format("unexpected value '{}' for --scan-consistency", scan_consistency_));
         }
 
-        if (profile_ == "off") {
-            query_options.profile(couchbase::query_profile::off);
-        } else if (profile_ == "phases") {
-            query_options.profile(couchbase::query_profile::phases);
-        } else if (profile_ == "timings") {
-            query_options.profile(couchbase::query_profile::timings);
-        } else if (!profile_.empty()) {
-            fail(fmt::format("unexpected value '{}' for --scan-consistency", profile_));
+        if (profile_.has_value()) {
+            if (profile_.value() == "off") {
+                query_options.profile(couchbase::query_profile::off);
+            } else if (profile_.value() == "phases") {
+                query_options.profile(couchbase::query_profile::phases);
+            } else if (profile_.value() == "timings") {
+                query_options.profile(couchbase::query_profile::timings);
+            } else if (!profile_.value().empty()) {
+                fail(fmt::format("unexpected value '{}' for --profile", profile_.value()));
+            }
         }
 
         std::optional<scope_with_bucket> scope_id{};
@@ -437,7 +438,7 @@ Examples:
     bool read_only_{ false };
     bool preserve_expiry_{ false };
     bool disable_metrics_{ false };
-    std::string profile_{};
+    std::optional<std::string> profile_{};
     std::optional<bool> use_replica_;
     std::optional<std::uint64_t> maximum_parallelism_;
     std::optional<std::uint64_t> scan_cap_;
