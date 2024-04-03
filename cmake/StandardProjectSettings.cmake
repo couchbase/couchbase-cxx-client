@@ -38,7 +38,3 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT MINGW)
 else()
   message(STATUS "No colored compiler diagnostic set for '${CMAKE_CXX_COMPILER_ID}' compiler.")
 endif()
-
-if(MSVC)
-  add_definitions(/bigobj)
-endif()
