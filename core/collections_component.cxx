@@ -177,6 +177,7 @@ class collections_component_impl : public std::enable_shared_from_this<collectio
       : io_{ io }
       , dispatcher_(std::move(dispatcher))
       , max_queue_size_{ options.max_queue_size }
+      , default_retry_strategy_{ options.default_retry_strategy }
     {
     }
 
@@ -281,6 +282,7 @@ class collections_component_impl : public std::enable_shared_from_this<collectio
         req->scope_name_ = scope_name.empty() ? scope::default_name : std::move(scope_name);
         req->collection_name_ = collection_name.empty() ? collection::default_name : std::move(collection_name);
         req->value_ = utils::to_binary(fmt::format("{}.{}", req->scope_name_, req->collection_name_));
+        req->retry_strategy_ = options.retry_strategy ? options.retry_strategy : default_retry_strategy_;
 
         if (auto ec = dispatcher_.direct_dispatch(req); ec) {
             return tl::unexpected(ec);
@@ -324,6 +326,7 @@ class collections_component_impl : public std::enable_shared_from_this<collectio
     asio::io_context& io_;
     const dispatcher dispatcher_;
     const std::size_t max_queue_size_;
+    std::shared_ptr<retry_strategy> default_retry_strategy_;
     std::map<std::string, std::shared_ptr<collection_id_cache_entry_impl>, std::less<>> cache_{};
     mutable std::mutex cache_mutex_{};
 };
