@@ -76,15 +76,18 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
         }
         body["args"] = std::move(parameters);
     }
-    switch (profile) {
-        case couchbase::query_profile::phases:
-            body["profile"] = "phases";
-            break;
-        case couchbase::query_profile::timings:
-            body["profile"] = "timings";
-            break;
-        case couchbase::query_profile::off:
-            break;
+    if (profile.has_value()) {
+        switch (profile.value()) {
+            case couchbase::query_profile::phases:
+                body["profile"] = "phases";
+                break;
+            case couchbase::query_profile::timings:
+                body["profile"] = "timings";
+                break;
+            case couchbase::query_profile::off:
+                body["profile"] = "off";
+                break;
+        }
     }
     if (use_replica.has_value()) {
         if (context.config.capabilities.supports_read_from_replica()) {
