@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-Present Couchbase, Inc.
+ *   Copyright 2024. Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -15,35 +15,29 @@
  *   limitations under the License.
  */
 
-#pragma once
+#include <couchbase/error_context.hxx>
 
-#include <couchbase/base_error_context.hxx>
-#include <couchbase/transaction_op_error_context.hxx>
+#include <string>
+#include <utility>
+
+#include <tao/json/to_string.hpp>
 
 namespace couchbase
 {
-class transaction_error_context
+error_context::error_context(internal_error_context internal)
+  : internal_{ std::move(internal) }
 {
-  public:
-    transaction_error_context() = default;
-    transaction_error_context(std::error_code ec, std::error_code cause)
-      : ec_(ec)
-      , cause_(cause)
-    {
-    }
+}
 
-    [[nodiscard]] std::error_code ec() const
-    {
-        return ec_;
-    }
+auto
+error_context::to_string() const -> std::string
+{
+    return tao::json::to_string(internal_, 2);
+}
 
-    [[nodiscard]] std::error_code cause() const
-    {
-        return cause_;
-    }
-
-  private:
-    std::error_code ec_{};    // a transaction error_code
-    std::error_code cause_{}; // a transaction_op error_code
-};
+auto
+error_context::to_json() const -> std::string
+{
+    return tao::json::to_string(internal_);
+}
 } // namespace couchbase

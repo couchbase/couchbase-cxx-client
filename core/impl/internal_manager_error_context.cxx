@@ -16,7 +16,7 @@
  */
 
 #include "internal_manager_error_context.hxx"
-#include <couchbase/error_context.hxx>
+#include <couchbase/base_error_context.hxx>
 
 #include <optional>
 

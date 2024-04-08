@@ -17,8 +17,8 @@
 
 #pragma once
 
+#include <couchbase/base_error_context.hxx>
 #include <couchbase/cas.hxx>
-#include <couchbase/error_context.hxx>
 #include <couchbase/key_value_error_map_info.hxx>
 #include <couchbase/key_value_extended_error_info.hxx>
 #include <couchbase/key_value_status_code.hxx>
@@ -34,7 +34,7 @@ namespace couchbase
  * @since 1.0.0
  * @committed
  */
-class key_value_error_context : public error_context
+class key_value_error_context : public base_error_context
 {
   public:
     /**
@@ -82,7 +82,7 @@ class key_value_error_context : public error_context
                             couchbase::cas cas,
                             std::optional<key_value_error_map_info> error_map_info,
                             std::optional<key_value_extended_error_info> extended_error_info)
-      : error_context{ std::move(operation_id), ec, std::move(last_dispatched_to), std::move(last_dispatched_from), retry_attempts,
+      : base_error_context{ std::move(operation_id), ec, std::move(last_dispatched_to), std::move(last_dispatched_from), retry_attempts,
                        std::move(retry_reasons) }
       , id_{ std::move(id) }
       , bucket_{ std::move(bucket) }

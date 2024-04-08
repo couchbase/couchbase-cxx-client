@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/error_context.hxx>
+#include <couchbase/base_error_context.hxx>
 
 #include <cstdint>
 #include <memory>
@@ -34,7 +34,7 @@ class internal_search_error_context;
  * @since 1.0.0
  * @committed
  */
-class search_error_context : public error_context
+class search_error_context : public base_error_context
 {
   public:
     search_error_context();
