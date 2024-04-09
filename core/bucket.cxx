@@ -591,7 +591,19 @@ class bucket_impl
         bool sequence_changed = false;
         {
             std::scoped_lock lock(config_mutex_);
-            if (!config_) {
+            if (config.vbmap && config.vbmap->size() == 0) {
+                if (!config_) {
+                    CB_LOG_DEBUG("{} will not initialize configuration rev={} because config has an empty partition map",
+                                 log_prefix_,
+                                 config.rev_str());
+                } else {
+                    CB_LOG_DEBUG("{} will not update the configuration old={} -> new={}, because new config has an empty partition map",
+                                 log_prefix_,
+                                 config_->rev_str(),
+                                 config.rev_str());
+                }
+                return;
+            } else if (!config_) {
                 CB_LOG_DEBUG("{} initialize configuration rev={}", log_prefix_, config.rev_str());
             } else if (config.force) {
                 CB_LOG_DEBUG("{} forced to accept configuration rev={}", log_prefix_, config.rev_str());
