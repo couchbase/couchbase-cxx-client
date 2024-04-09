@@ -214,6 +214,9 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded, http_
             case couchbase::core::management::eventing::function_language_compatibility::version_6_6_2:
                 settings["language_compatibility"] = "6.6.2";
                 break;
+            case couchbase::core::management::eventing::function_language_compatibility::version_7_2_0:
+                settings["language_compatibility"] = "7.2.0";
+                break;
         }
     }
 
