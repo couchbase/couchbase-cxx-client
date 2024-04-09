@@ -1256,6 +1256,10 @@ class mcbp_session_impl
             return;
         }
         std::scoped_lock lock(config_mutex_);
+        if (config.vbmap && config.vbmap->size() == 0) {
+            CB_LOG_DEBUG("{} received a configuration with an empty vbucket map, ignoring", log_prefix_);
+            return;
+        }
         if (config_) {
             if (config_->vbmap && config.vbmap && config_->vbmap->size() != config.vbmap->size()) {
                 CB_LOG_DEBUG("{} received a configuration with a different number of vbuckets, ignoring", log_prefix_);
