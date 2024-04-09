@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2024. Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,25 +17,26 @@
 
 #pragma once
 
-#include <string>
+#include <core/error_context/analytics.hxx>
+#include <core/error_context/query.hxx>
+#include <core/error_context/search.hxx>
 
-#include <tao/json/value.hpp>
+#include <couchbase/error.hxx>
 
 namespace couchbase
 {
-using internal_error_context = tao::json::value;
+error
+make_error(const core::error_context::query& core_ctx);
 
-class error_context
-{
-  public:
-    error_context() = default;
-    explicit error_context(internal_error_context internal);
+error
+make_error(const core::error_context::search& core_ctx);
 
-    [[nodiscard]] auto to_string() const -> std::string;
-    [[nodiscard]] auto to_json() const -> std::string;
+error
+make_error(const core::error_context::analytics& core_ctx);
 
-  private:
-    internal_error_context internal_;
-};
+error
+make_error(const core::error_context::http& core_ctx);
 
+error
+make_error(core::error_context::http core_ctx, std::optional<std::error_code>);
 } // namespace couchbase

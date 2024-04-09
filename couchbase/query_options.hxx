@@ -24,6 +24,7 @@
 #include <couchbase/query_profile.hxx>
 #include <couchbase/query_result.hxx>
 #include <couchbase/query_scan_consistency.hxx>
+#include <couchbase/error.hxx>
 
 #include <chrono>
 #include <functional>
@@ -567,5 +568,5 @@ struct query_options : public common_options<query_options> {
  * @since 1.0.0
  * @uncommitted
  */
-using query_handler = std::function<void(couchbase::query_error_context, query_result)>;
+using query_handler = std::function<void(couchbase::error, query_result)>;
 } // namespace couchbase

@@ -21,7 +21,7 @@
 #include <couchbase/common_options.hxx>
 #include <couchbase/highlight_style.hxx>
 #include <couchbase/mutation_state.hxx>
-#include <couchbase/search_error_context.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/search_facet.hxx>
 #include <couchbase/search_result.hxx>
 #include <couchbase/search_scan_consistency.hxx>
@@ -505,5 +505,5 @@ struct search_options : public common_options<search_options> {
  * @since 1.0.0
  * @uncommitted
  */
-using search_handler = std::function<void(couchbase::search_error_context, search_result)>;
+using search_handler = std::function<void(couchbase::error, search_result)>;
 } // namespace couchbase

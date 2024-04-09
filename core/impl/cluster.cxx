@@ -22,6 +22,7 @@
 #include "core/transactions.hxx"
 #include "core/utils/connection_string.hxx"
 #include "diagnostics.hxx"
+#include "error.hxx"
 #include "internal_search_error_context.hxx"
 #include "internal_search_meta_data.hxx"
 #include "internal_search_result.hxx"
@@ -149,7 +150,6 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
     // connection string might override some user options
     return { auth, couchbase::core::utils::parse_connection_string(connection_string, user_options) };
 }
-
 } // namespace
 
 class cluster_impl : public std::enable_shared_from_this<cluster_impl>
@@ -185,14 +185,14 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
     {
         return core_.execute(
           core::impl::build_query_request(std::move(statement), {}, std::move(options)),
-          [handler = std::move(handler)](auto resp) { return handler(core::impl::build_context(resp), core::impl::build_result(resp)); });
+          [handler = std::move(handler)](auto resp) { return handler(make_error(resp.ctx), core::impl::build_result(resp)); });
     }
 
     void analytics_query(std::string statement, analytics_options::built options, analytics_handler&& handler) const
     {
         return core_.execute(
           core::impl::build_analytics_request(std::move(statement), std::move(options), {}, {}),
-          [handler = std::move(handler)](auto resp) { return handler(core::impl::build_context(resp), core::impl::build_result(resp)); });
+          [handler = std::move(handler)](auto resp) { return handler(make_error(resp.ctx), core::impl::build_result(resp)); });
     }
 
     void search_query(std::string index_name,
@@ -202,7 +202,7 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
     {
         return core_.execute(core::impl::build_search_request(std::move(index_name), query, options, {}, {}),
                              [handler = std::move(handler)](auto resp) mutable {
-                                 return handler(search_error_context{ internal_search_error_context{ resp } },
+                                 return handler(make_error(resp.ctx),
                                                 search_result{ internal_search_result{ resp } });
                              });
     }
@@ -229,7 +229,7 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
     {
         return core_.execute(core::impl::build_search_request(std::move(index_name), std::move(request), options, {}, {}),
                              [handler = std::move(handler)](auto resp) mutable {
-                                 return handler(search_error_context{ internal_search_error_context{ resp } },
+                                 return handler(make_error(resp.ctx),
                                                 search_result{ internal_search_result{ resp } });
                              });
     }
@@ -297,9 +297,9 @@ cluster::query(std::string statement, const query_options& options, query_handle
 }
 
 auto
-cluster::query(std::string statement, const query_options& options) const -> std::future<std::pair<query_error_context, query_result>>
+cluster::query(std::string statement, const query_options& options) const -> std::future<std::pair<error, query_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<query_error_context, query_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, query_result>>>();
     auto future = barrier->get_future();
     query(std::move(statement), options, [barrier](auto ctx, auto result) { barrier->set_value({ std::move(ctx), std::move(result) }); });
     return future;
@@ -313,34 +313,14 @@ cluster::analytics_query(std::string statement, const analytics_options& options
 
 auto
 cluster::analytics_query(std::string statement, const analytics_options& options) const
-  -> std::future<std::pair<analytics_error_context, analytics_result>>
+  -> std::future<std::pair<error, analytics_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<analytics_error_context, analytics_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, analytics_result>>>();
     auto future = barrier->get_future();
     analytics_query(std::move(statement), options, [barrier](auto ctx, auto result) {
         barrier->set_value({ std::move(ctx), std::move(result) });
     });
     return future;
-}
-
-void
-cluster::search_query(std::string index_name,
-                      const class search_query& query,
-                      const search_options& options,
-                      search_handler&& handler) const
-{
-    return impl_->search_query(std::move(index_name), query, options.build(), std::move(handler));
-}
-
-auto
-cluster::search_query(std::string index_name, const class search_query& query, const search_options& options) const
-  -> std::future<std::pair<search_error_context, search_result>>
-{
-    auto barrier = std::make_shared<std::promise<std::pair<search_error_context, search_result>>>();
-    search_query(std::move(index_name), query, options, [barrier](auto ctx, auto result) mutable {
-        barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
-    });
-    return barrier->get_future();
 }
 
 void
@@ -379,11 +359,11 @@ cluster::search(std::string index_name, search_request request, const search_opt
 
 auto
 cluster::search(std::string index_name, search_request request, const search_options& options) const
-  -> std::future<std::pair<search_error_context, search_result>>
+  -> std::future<std::pair<error, search_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<search_error_context, search_result>>>();
-    search(std::move(index_name), std::move(request), options, [barrier](auto ctx, auto result) mutable {
-        barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
+    auto barrier = std::make_shared<std::promise<std::pair<error, search_result>>>();
+    search(std::move(index_name), std::move(request), options, [barrier](auto error, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(error), std::move(result)));
     });
     return barrier->get_future();
 }

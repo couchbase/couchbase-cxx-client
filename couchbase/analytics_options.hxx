@@ -22,6 +22,7 @@
 #include <couchbase/analytics_scan_consistency.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/mutation_state.hxx>
 
 #include <chrono>
@@ -355,5 +356,5 @@ struct analytics_options : public common_options<analytics_options> {
  * @since 1.0.0
  * @uncommitted
  */
-using analytics_handler = std::function<void(couchbase::analytics_error_context, analytics_result)>;
+using analytics_handler = std::function<void(couchbase::error, analytics_result)>;
 } // namespace couchbase
