@@ -34,8 +34,13 @@ class error_context
     [[nodiscard]] auto to_string() const -> std::string;
     [[nodiscard]] auto to_json() const -> std::string;
 
+    template<typename T>
+    T as() const
+    {
+        return internal_.as<T>();
+    }
+
   private:
     internal_error_context internal_;
 };
-
 } // namespace couchbase

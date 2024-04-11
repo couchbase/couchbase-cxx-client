@@ -27,6 +27,8 @@
 #include <fmt/chrono.h>
 #include <spdlog/fmt/bin_to_hex.h>
 #include <tao/json.hpp>
+#include <core/error_context/analytics_json.hxx>
+
 
 #include <regex>
 
@@ -156,14 +158,14 @@ class analytics_app : public CLI::App
         }
 
         for (const auto& statement : queries_) {
-            auto [ctx, resp] =
+            auto [error, resp] =
               (scope ? do_analytics(scope.value(), statement, analytics_options) : do_analytics(cluster, statement, analytics_options))
                 .get();
 
             if (json_lines_) {
-                print_result_json_line(scope_id, statement, ctx, resp, analytics_options);
+                print_result_json_line(scope_id, statement, error.ctx().as<couchbase::core::error_context::analytics>(), resp, analytics_options);
             } else {
-                print_result(scope_id, statement, ctx, resp, analytics_options);
+                print_result(scope_id, statement, error.ctx().as<couchbase::core::error_context::analytics>(), resp, analytics_options);
             }
         }
 
@@ -178,14 +180,14 @@ class analytics_app : public CLI::App
   private:
     template<typename QueryEndpoint>
     auto do_analytics(QueryEndpoint& endpoint, std::string statement, const couchbase::analytics_options& options) const
-      -> std::future<std::pair<couchbase::analytics_error_context, couchbase::analytics_result>>
+      -> std::future<std::pair<couchbase::error, couchbase::analytics_result>>
     {
         return endpoint.analytics_query(std::move(statement), options);
     }
 
     void print_result_json_line(const std::optional<scope_with_bucket>& scope_id,
                                 const std::string& statement,
-                                const couchbase::analytics_error_context& ctx,
+                                const couchbase::core::error_context::analytics& ctx,
                                 const couchbase::analytics_result& resp,
                                 const couchbase::analytics_options& analytics_options) const
     {
@@ -200,25 +202,25 @@ class analytics_app : public CLI::App
             meta["bucket_name"] = scope_id->bucket_name;
             meta["scope_name"] = scope_id->scope_name;
         }
-        if (ctx.parameters()) {
+        if (ctx.parameters) {
             try {
-                auto json = tao::json::from_string(ctx.parameters().value());
+                auto json = tao::json::from_string(ctx.parameters.value());
                 json.erase("statement");
                 meta["options"] = json;
             } catch (const tao::pegtl::parse_error&) {
-                meta["options"] = ctx.parameters().value();
+                meta["options"] = ctx.parameters.value();
             }
         }
 
-        if (ctx.ec()) {
+        if (ctx.ec) {
             tao::json::value error = {
-                { "code", ctx.ec().value() },
-                { "message", ctx.ec().message() },
+                { "code", ctx.ec.value() },
+                { "message", ctx.ec.message() },
             };
             try {
-                error["body"] = tao::json::from_string(ctx.http_body());
+                error["body"] = tao::json::from_string(ctx.http_body);
             } catch (const tao::pegtl::parse_error&) {
-                error["text"] = ctx.http_body();
+                error["text"] = ctx.http_body;
             }
             line["error"] = error;
         } else {
@@ -268,7 +270,7 @@ class analytics_app : public CLI::App
 
     void print_result(const std::optional<scope_with_bucket>& scope_id,
                       const std::string& statement,
-                      const couchbase::analytics_error_context& ctx,
+                      const couchbase::core::error_context::analytics& ctx,
                       const couchbase::analytics_result& resp,
                       const couchbase::analytics_options& analytics_options) const
     {
@@ -281,28 +283,28 @@ class analytics_app : public CLI::App
         fmt::format_to(
           std::back_inserter(header), "{}statement: \"{}\"", header.size() == 0 ? "" : ", ", tao::json::internal::escape(statement));
 
-        if (ctx.parameters()) {
+        if (ctx.parameters) {
             try {
-                auto json = tao::json::from_string(ctx.parameters().value());
+                auto json = tao::json::from_string(ctx.parameters.value());
                 json.erase("statement");
                 fmt::format_to(std::back_inserter(header), ", options: {}", tao::json::to_string(json));
             } catch (const tao::pegtl::parse_error&) {
-                fmt::format_to(std::back_inserter(header), ", options: {}", ctx.parameters().value());
+                fmt::format_to(std::back_inserter(header), ", options: {}", ctx.parameters.value());
             }
         }
         fmt::print(stdout, "--- {}\n", std::string_view{ header.data(), header.size() });
 
-        if (ctx.ec()) {
+        if (ctx.ec) {
             fmt::print("ERROR. code: {}, message: {}, server: {} \"{}\"\n",
-                       ctx.ec().value(),
-                       ctx.ec().message(),
-                       ctx.first_error_code(),
-                       tao::json::internal::escape(ctx.first_error_message()));
-            if (!ctx.http_body().empty()) {
+                       ctx.ec.value(),
+                       ctx.ec.message(),
+                       ctx.first_error_code,
+                       tao::json::internal::escape(ctx.first_error_message));
+            if (!ctx.http_body.empty()) {
                 try {
-                    fmt::print("{}\n", tao::json::to_string(tao::json::from_string(ctx.http_body())));
+                    fmt::print("{}\n", tao::json::to_string(tao::json::from_string(ctx.http_body)));
                 } catch (const tao::pegtl::parse_error&) {
-                    fmt::print("{}\n", ctx.http_body());
+                    fmt::print("{}\n", ctx.http_body);
                 }
             }
         } else {

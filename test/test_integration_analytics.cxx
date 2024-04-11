@@ -30,6 +30,7 @@
 #include "core/operations/management/analytics.hxx"
 #include "core/operations/management/collection_create.hxx"
 #include "core/operations/management/collections.hxx"
+#include "core/error_context/analytics_json.hxx"
 
 TEST_CASE("integration: analytics query")
 {
@@ -350,14 +351,14 @@ TEST_CASE("integration: public API analytics query")
     SECTION("simple query")
     {
         couchbase::analytics_result resp{};
-        couchbase::analytics_error_context ctx{};
+        couchbase::error error{};
         CHECK(test::utils::wait_until([&]() {
-            std::tie(ctx, resp) =
+            std::tie(error, resp) =
               cluster.analytics_query(fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = "{}")", dataset_name, test_value))
                 .get();
-            return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
+            return !error && resp.meta_data().metrics().result_count() == 1;
         }));
-        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_SUCCESS(error.ec());
         REQUIRE_FALSE(resp.meta_data().request_id().empty());
         REQUIRE_FALSE(resp.meta_data().client_context_id().empty());
         REQUIRE(resp.meta_data().status() == couchbase::analytics_status::success);
@@ -369,15 +370,15 @@ TEST_CASE("integration: public API analytics query")
     SECTION("positional params")
     {
         couchbase::analytics_result resp{};
-        couchbase::analytics_error_context ctx{};
+        couchbase::error error{};
         CHECK(test::utils::wait_until([&]() {
-            std::tie(ctx, resp) = cluster
+            std::tie(error, resp) = cluster
                                     .analytics_query(fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = ?)", dataset_name),
                                                      couchbase::analytics_options{}.positional_parameters(test_value))
                                     .get();
-            return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
+            return !error && resp.meta_data().metrics().result_count() == 1;
         }));
-        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_SUCCESS(error.ec());
         auto rows = resp.rows_as_json();
         REQUIRE(rows.size() == 1);
         REQUIRE(rows[0] == document);
@@ -386,16 +387,16 @@ TEST_CASE("integration: public API analytics query")
     SECTION("named params")
     {
         couchbase::analytics_result resp{};
-        couchbase::analytics_error_context ctx{};
+        couchbase::error error{};
         CHECK(test::utils::wait_until([&]() {
-            std::tie(ctx, resp) =
+            std::tie(error, resp) =
               cluster
                 .analytics_query(fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = $testkey)", dataset_name),
                                  couchbase::analytics_options{}.named_parameters(std::pair{ "testkey", test_value }))
                 .get();
-            return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
+            return !error && resp.meta_data().metrics().result_count() == 1;
         }));
-        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_SUCCESS(error.ec());
         auto rows = resp.rows_as_json();
         REQUIRE(rows.size() == 1);
         REQUIRE(rows[0] == document);
@@ -404,17 +405,17 @@ TEST_CASE("integration: public API analytics query")
     SECTION("named params preformatted")
     {
         couchbase::analytics_result resp{};
-        couchbase::analytics_error_context ctx{};
+        couchbase::error error{};
         CHECK(test::utils::wait_until([&]() {
-            std::tie(ctx, resp) =
+            std::tie(error, resp) =
               cluster
                 .analytics_query(fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = $testkey)", dataset_name),
                                  couchbase::analytics_options{}.encoded_named_parameters(
                                    { { "testkey", couchbase::core::utils::json::generate_binary(test_value) } }))
                 .get();
-            return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
+            return !error && resp.meta_data().metrics().result_count() == 1;
         }));
-        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_SUCCESS(error.ec());
         auto rows = resp.rows_as_json();
         REQUIRE(rows.size() == 1);
         REQUIRE(rows[0] == document);
@@ -423,7 +424,7 @@ TEST_CASE("integration: public API analytics query")
     SECTION("raw")
     {
         couchbase::analytics_result resp{};
-        couchbase::analytics_error_context ctx{};
+        couchbase::error ctx{};
         CHECK(test::utils::wait_until([&]() {
             std::tie(ctx, resp) =
               cluster
@@ -441,7 +442,7 @@ TEST_CASE("integration: public API analytics query")
     SECTION("consistency")
     {
         couchbase::analytics_result resp{};
-        couchbase::analytics_error_context ctx{};
+        couchbase::error error{};
         CHECK(test::utils::wait_until([&]() {
             /*
              * In consistency test, always do fresh mutation
@@ -455,7 +456,7 @@ TEST_CASE("integration: public API analytics query")
                 REQUIRE_SUCCESS(ctx2.ec());
             }
 
-            std::tie(ctx, resp) =
+            std::tie(error, resp) =
               cluster
                 .analytics_query(fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = "{}")", dataset_name, test_value),
                                  couchbase::analytics_options{}.scan_consistency(couchbase::analytics_scan_consistency::request_plus))
@@ -464,10 +465,10 @@ TEST_CASE("integration: public API analytics query")
              *
              * "errors": [{"code": 23027, "msg": "Bucket default on link Default.Local is not connected"} ],
              */
-            return ctx.first_error_code() != 23027;
+            return error.ctx().as<couchbase::core::error_context::analytics>().first_error_code != 23027;
         }));
 
-        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_SUCCESS(error.ec());
         auto rows = resp.rows_as_json();
         REQUIRE(rows.size() == 1);
         REQUIRE(rows[0] == document);
@@ -551,7 +552,7 @@ TEST_CASE("integration: public API analytics scope query")
     }
 
     couchbase::analytics_result resp{};
-    couchbase::analytics_error_context ctx{};
+    couchbase::error ctx{};
     CHECK(test::utils::wait_until([&]() {
         std::tie(ctx, resp) =
           scope.analytics_query(fmt::format(R"(SELECT testkey FROM `{}` WHERE testkey = "{}")", collection_name, test_value)).get();

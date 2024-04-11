@@ -20,6 +20,7 @@
 #include <core/error_context/analytics.hxx>
 #include <core/error_context/query.hxx>
 #include <core/error_context/search.hxx>
+#include <core/error_context/http.hxx>
 
 #include <couchbase/error.hxx>
 
