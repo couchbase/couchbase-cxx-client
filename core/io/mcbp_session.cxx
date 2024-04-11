@@ -479,6 +479,15 @@ class mcbp_session_impl
                             }
                             protocol::client_response<protocol::get_cluster_config_response_body> resp(std::move(msg), info);
                             if (resp.status() == key_value_status_code::success) {
+                                // MB-60405 fixes this for 7.6.2, but for earlier versions we need to protect against using a
+                                // config that has an empty vbucket map.  Ideally we don't timeout if we retry here, but a timeout
+                                // would be more acceptable than a crash and if we do timeout, we have a clear indication of the
+                                // problem (i.e. it is a server bug and we cannot use a config w/ an empty vbucket map).
+                                if (resp.body().config().vbmap && resp.body().config().vbmap->size() == 0) {
+                                    CB_LOG_WARNING("{} received a configuration with an empty vbucket map, retrying",
+                                                   session_->log_prefix_);
+                                    return complete(errc::network::configuration_not_available);
+                                }
                                 session_->update_configuration(resp.body().config());
                                 complete({});
                             } else if (resp.status() == key_value_status_code::not_found) {
@@ -1256,6 +1265,10 @@ class mcbp_session_impl
             return;
         }
         std::scoped_lock lock(config_mutex_);
+        // MB-60405 fixes this for 7.6.2, but for earlier versions we need to protect against using a
+        // config that has an empty vbucket map.  We should be okay to ignore at this point b/c we should
+        // already have a config w/ a non-empty vbucket map (bootstrap will not complete successfully
+        // unless we have a config w/ a non-empty vbucket map).
         if (config.vbmap && config.vbmap->size() == 0) {
             CB_LOG_DEBUG("{} received a configuration with an empty vbucket map, ignoring", log_prefix_);
             return;
