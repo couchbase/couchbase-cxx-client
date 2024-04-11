@@ -568,5 +568,5 @@ struct query_options : public common_options<query_options> {
  * @since 1.0.0
  * @uncommitted
  */
-using query_handler = std::function<void(couchbase::error, query_result)>;
+using query_handler = std::function<void(error, query_result)>;
 } // namespace couchbase

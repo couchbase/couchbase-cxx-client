@@ -356,5 +356,5 @@ struct analytics_options : public common_options<analytics_options> {
  * @since 1.0.0
  * @uncommitted
  */
-using analytics_handler = std::function<void(couchbase::error, analytics_result)>;
+using analytics_handler = std::function<void(error, analytics_result)>;
 } // namespace couchbase

@@ -505,5 +505,5 @@ struct search_options : public common_options<search_options> {
  * @since 1.0.0
  * @uncommitted
  */
-using search_handler = std::function<void(couchbase::error, search_result)>;
+using search_handler = std::function<void(error, search_result)>;
 } // namespace couchbase

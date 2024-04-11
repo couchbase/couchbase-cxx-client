@@ -37,7 +37,4 @@ make_error(const core::error_context::analytics& core_ctx);
 
 error
 make_error(const core::error_context::http& core_ctx);
-
-error
-make_error(core::error_context::http core_ctx, std::optional<std::error_code>);
 } // namespace couchbase
