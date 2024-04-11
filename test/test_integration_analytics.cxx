@@ -17,6 +17,7 @@
 
 #include "test_helper_integration.hxx"
 
+#include "core/error_context/analytics_json.hxx"
 #include "core/operations/document_analytics.hxx"
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
@@ -30,7 +31,6 @@
 #include "core/operations/management/analytics.hxx"
 #include "core/operations/management/collection_create.hxx"
 #include "core/operations/management/collections.hxx"
-#include "core/error_context/analytics_json.hxx"
 
 TEST_CASE("integration: analytics query")
 {
@@ -373,9 +373,9 @@ TEST_CASE("integration: public API analytics query")
         couchbase::error error{};
         CHECK(test::utils::wait_until([&]() {
             std::tie(error, resp) = cluster
-                                    .analytics_query(fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = ?)", dataset_name),
-                                                     couchbase::analytics_options{}.positional_parameters(test_value))
-                                    .get();
+                                      .analytics_query(fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = ?)", dataset_name),
+                                                       couchbase::analytics_options{}.positional_parameters(test_value))
+                                      .get();
             return !error && resp.meta_data().metrics().result_count() == 1;
         }));
         REQUIRE_SUCCESS(error.ec());

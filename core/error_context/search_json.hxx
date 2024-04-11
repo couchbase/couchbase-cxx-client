@@ -70,10 +70,10 @@ struct traits<couchbase::core::error_context::search> {
         ctx.query = v.at("query").get_string();
         ctx.method = v.at("method").get_string();
         ctx.path = v.at("path").get_string();
-        ctx.http_status = v.at("http_status").get_unsigned();
+        ctx.http_status = static_cast<uint32_t>(v.at("http_status").get_unsigned());
         ctx.http_body = v.at("http_body").get_string();
         ctx.hostname = v.at("hostname").get_string();
-        ctx.port = v.at("port").get_unsigned();
+        ctx.port = static_cast<uint16_t>(v.at("port").get_unsigned());
         if (const auto& parameters = v.find("parameters"); parameters != nullptr && parameters->is_string()) {
             ctx.parameters = parameters->get_string();
         }
@@ -82,10 +82,12 @@ struct traits<couchbase::core::error_context::search> {
                 ctx.retry_reasons.insert(couchbase::retry_reason_to_enum(retry_reason.get_string()));
             }
         }
-        if (const auto& last_dispatched_from = v.find("last_dispatched_from"); last_dispatched_from != nullptr && last_dispatched_from->is_string()) {
+        if (const auto& last_dispatched_from = v.find("last_dispatched_from");
+            last_dispatched_from != nullptr && last_dispatched_from->is_string()) {
             ctx.last_dispatched_from = last_dispatched_from->get_string();
         }
-        if (const auto& last_dispatched_to = v.find("last_dispatched_to"); last_dispatched_to != nullptr && last_dispatched_to->is_string()) {
+        if (const auto& last_dispatched_to = v.find("last_dispatched_to");
+            last_dispatched_to != nullptr && last_dispatched_to->is_string()) {
             ctx.last_dispatched_to = last_dispatched_to->get_string();
         }
         return ctx;

@@ -81,41 +81,25 @@ error::operator bool() const
 error
 make_error(const core::error_context::query& core_ctx)
 {
-    return {
-        core_ctx.ec,
-          core_ctx.ec.message(),
-          couchbase::error_context{ internal_error_context(core_ctx) }
-    };
+    return { core_ctx.ec, core_ctx.ec.message(), couchbase::error_context{ internal_error_context(core_ctx) } };
 }
 
 error
 make_error(const core::error_context::search& core_ctx)
 {
-    return {
-        core_ctx.ec,
-        core_ctx.ec.message(),
-        couchbase::error_context{ internal_error_context(core_ctx) }
-    };
+    return { core_ctx.ec, core_ctx.ec.message(), couchbase::error_context{ internal_error_context(core_ctx) } };
 }
 
 error
 make_error(const core::error_context::analytics& core_ctx)
 {
-    return {
-        core_ctx.ec,
-        core_ctx.ec.message(),
-        couchbase::error_context{ internal_error_context(core_ctx) }
-    };
+    return { core_ctx.ec, core_ctx.ec.message(), couchbase::error_context{ internal_error_context(core_ctx) } };
 }
 
 error
 make_error(const core::error_context::http& core_ctx)
 {
-    return {
-        core_ctx.ec,
-        core_ctx.ec.message(),
-        couchbase::error_context{ internal_error_context(core_ctx) }
-    };
+    return { core_ctx.ec, core_ctx.ec.message(), couchbase::error_context{ internal_error_context(core_ctx) } };
 }
 
 error

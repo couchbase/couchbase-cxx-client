@@ -26,10 +26,10 @@
 #include <couchbase/fmt/query_status.hxx>
 
 #include <asio/io_context.hpp>
+#include <core/error_context/query_json.hxx>
 #include <fmt/chrono.h>
 #include <spdlog/fmt/bin_to_hex.h>
 #include <tao/json.hpp>
-#include <core/error_context/query_json.hxx>
 
 #include <regex>
 
@@ -197,7 +197,9 @@ Examples:
 
         asio::io_context io;
         auto guard = asio::make_work_guard(io);
-        std::thread io_thread([&io]() { io.run(); });
+        std::thread io_thread([&io]() {
+            io.run();
+        });
         const auto connection_string = common_options_.connection.connection_string;
 
         auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, cluster_options).get();

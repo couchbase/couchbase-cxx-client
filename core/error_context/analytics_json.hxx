@@ -85,7 +85,8 @@ struct traits<couchbase::core::error_context::analytics> {
         if (const auto& first_error_code = v.find("first_error_code"); first_error_code != nullptr && first_error_code->is_integer()) {
             ctx.first_error_code = first_error_code->get_unsigned();
         }
-        if (const auto& first_error_message = v.find("first_error_message"); first_error_message != nullptr && first_error_message->is_string()) {
+        if (const auto& first_error_message = v.find("first_error_message");
+            first_error_message != nullptr && first_error_message->is_string()) {
             ctx.first_error_message = first_error_message->get_string();
         }
         if (const auto& retry_reasons = v.find("retry_reasons"); retry_reasons != nullptr && retry_reasons->is_array()) {
@@ -93,10 +94,12 @@ struct traits<couchbase::core::error_context::analytics> {
                 ctx.retry_reasons.insert(couchbase::retry_reason_to_enum(retry_reason.get_string()));
             }
         }
-        if (const auto& last_dispatched_from = v.find("last_dispatched_from"); last_dispatched_from != nullptr && last_dispatched_from->is_string()) {
+        if (const auto& last_dispatched_from = v.find("last_dispatched_from");
+            last_dispatched_from != nullptr && last_dispatched_from->is_string()) {
             ctx.last_dispatched_from = last_dispatched_from->get_string();
         }
-        if (const auto& last_dispatched_to = v.find("last_dispatched_to"); last_dispatched_to != nullptr && last_dispatched_to->is_string()) {
+        if (const auto& last_dispatched_to = v.find("last_dispatched_to");
+            last_dispatched_to != nullptr && last_dispatched_to->is_string()) {
             ctx.last_dispatched_to = last_dispatched_to->get_string();
         }
         return ctx;

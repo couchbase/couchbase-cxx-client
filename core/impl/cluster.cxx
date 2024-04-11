@@ -183,16 +183,18 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
 
     void query(std::string statement, query_options::built options, query_handler&& handler) const
     {
-        return core_.execute(
-          core::impl::build_query_request(std::move(statement), {}, std::move(options)),
-          [handler = std::move(handler)](auto resp) { return handler(make_error(resp.ctx), core::impl::build_result(resp)); });
+        return core_.execute(core::impl::build_query_request(std::move(statement), {}, std::move(options)),
+                             [handler = std::move(handler)](auto resp) {
+                                 return handler(make_error(resp.ctx), core::impl::build_result(resp));
+                             });
     }
 
     void analytics_query(std::string statement, analytics_options::built options, analytics_handler&& handler) const
     {
-        return core_.execute(
-          core::impl::build_analytics_request(std::move(statement), std::move(options), {}, {}),
-          [handler = std::move(handler)](auto resp) { return handler(make_error(resp.ctx), core::impl::build_result(resp)); });
+        return core_.execute(core::impl::build_analytics_request(std::move(statement), std::move(options), {}, {}),
+                             [handler = std::move(handler)](auto resp) {
+                                 return handler(make_error(resp.ctx), core::impl::build_result(resp));
+                             });
     }
 
     void search_query(std::string index_name,
@@ -202,8 +204,7 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
     {
         return core_.execute(core::impl::build_search_request(std::move(index_name), query, options, {}, {}),
                              [handler = std::move(handler)](auto resp) mutable {
-                                 return handler(make_error(resp.ctx),
-                                                search_result{ internal_search_result{ resp } });
+                                 return handler(make_error(resp.ctx), search_result{ internal_search_result{ resp } });
                              });
     }
 
@@ -213,13 +214,16 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
                           {},
                           core::impl::to_core_service_types(options.service_types),
                           options.timeout,
-                          [handler = std::move(handler)](auto resp) mutable { return handler(core::impl::build_result(resp)); });
+                          [handler = std::move(handler)](auto resp) mutable {
+                              return handler(core::impl::build_result(resp));
+                          });
     };
 
     void diagnostics(const diagnostics_options::built& options, diagnostics_handler&& handler) const
     {
-        return core_.diagnostics(options.report_id,
-                                 [handler = std::move(handler)](auto resp) mutable { return handler(core::impl::build_result(resp)); });
+        return core_.diagnostics(options.report_id, [handler = std::move(handler)](auto resp) mutable {
+            return handler(core::impl::build_result(resp));
+        });
     }
 
     void search(std::string index_name,
@@ -229,8 +233,7 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
     {
         return core_.execute(core::impl::build_search_request(std::move(index_name), std::move(request), options, {}, {}),
                              [handler = std::move(handler)](auto resp) mutable {
-                                 return handler(make_error(resp.ctx),
-                                                search_result{ internal_search_result{ resp } });
+                                 return handler(make_error(resp.ctx), search_result{ internal_search_result{ resp } });
                              });
     }
 
@@ -301,7 +304,9 @@ cluster::query(std::string statement, const query_options& options) const -> std
 {
     auto barrier = std::make_shared<std::promise<std::pair<error, query_result>>>();
     auto future = barrier->get_future();
-    query(std::move(statement), options, [barrier](auto ctx, auto result) { barrier->set_value({ std::move(ctx), std::move(result) }); });
+    query(std::move(statement), options, [barrier](auto ctx, auto result) {
+        barrier->set_value({ std::move(ctx), std::move(result) });
+    });
     return future;
 }
 
@@ -312,8 +317,7 @@ cluster::analytics_query(std::string statement, const analytics_options& options
 }
 
 auto
-cluster::analytics_query(std::string statement, const analytics_options& options) const
-  -> std::future<std::pair<error, analytics_result>>
+cluster::analytics_query(std::string statement, const analytics_options& options) const -> std::future<std::pair<error, analytics_result>>
 {
     auto barrier = std::make_shared<std::promise<std::pair<error, analytics_result>>>();
     auto future = barrier->get_future();
@@ -333,7 +337,9 @@ auto
 cluster::ping(const couchbase::ping_options& options) const -> std::future<ping_result>
 {
     auto barrier = std::make_shared<std::promise<ping_result>>();
-    ping(options, [barrier](auto result) mutable { barrier->set_value(std::move(result)); });
+    ping(options, [barrier](auto result) mutable {
+        barrier->set_value(std::move(result));
+    });
     return barrier->get_future();
 }
 
@@ -347,7 +353,9 @@ auto
 cluster::diagnostics(const couchbase::diagnostics_options& options) const -> std::future<diagnostics_result>
 {
     auto barrier = std::make_shared<std::promise<diagnostics_result>>();
-    diagnostics(options, [barrier](auto result) mutable { barrier->set_value(std::move(result)); });
+    diagnostics(options, [barrier](auto result) mutable {
+        barrier->set_value(std::move(result));
+    });
     return barrier->get_future();
 }
 
@@ -373,7 +381,9 @@ cluster::connect(asio::io_context& io, const std::string& connection_string, con
   -> std::future<std::pair<cluster, std::error_code>>
 {
     auto barrier = std::make_shared<std::promise<std::pair<cluster, std::error_code>>>();
-    connect(io, connection_string, options, [barrier](auto c, auto ec) mutable { barrier->set_value({ std::move(c), ec }); });
+    connect(io, connection_string, options, [barrier](auto c, auto ec) mutable {
+        barrier->set_value({ std::move(c), ec });
+    });
     return barrier->get_future();
 }
 
@@ -392,7 +402,9 @@ cluster::connect(asio::io_context& io,
         auto cluster = couchbase::cluster(std::move(core));
         return cluster.impl_->initialize_transactions([cluster, handler = std::move(handler)](std::error_code ec) mutable {
             if (ec) {
-                return cluster.impl_->close([ec, handler = std::move(handler)]() mutable { return handler({}, ec); });
+                return cluster.impl_->close([ec, handler = std::move(handler)]() mutable {
+                    return handler({}, ec);
+                });
             }
             return handler(cluster, ec);
         });

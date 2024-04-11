@@ -24,11 +24,10 @@
 #include <couchbase/fmt/analytics_status.hxx>
 
 #include <asio/io_context.hpp>
+#include <core/error_context/analytics_json.hxx>
 #include <fmt/chrono.h>
 #include <spdlog/fmt/bin_to_hex.h>
 #include <tao/json.hpp>
-#include <core/error_context/analytics_json.hxx>
-
 
 #include <regex>
 
@@ -141,7 +140,9 @@ class analytics_app : public CLI::App
 
         asio::io_context io;
         auto guard = asio::make_work_guard(io);
-        std::thread io_thread([&io]() { io.run(); });
+        std::thread io_thread([&io]() {
+            io.run();
+        });
         const auto connection_string = common_options_.connection.connection_string;
 
         auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, cluster_options).get();
@@ -163,7 +164,8 @@ class analytics_app : public CLI::App
                 .get();
 
             if (json_lines_) {
-                print_result_json_line(scope_id, statement, error.ctx().as<couchbase::core::error_context::analytics>(), resp, analytics_options);
+                print_result_json_line(
+                  scope_id, statement, error.ctx().as<couchbase::core::error_context::analytics>(), resp, analytics_options);
             } else {
                 print_result(scope_id, statement, error.ctx().as<couchbase::core::error_context::analytics>(), resp, analytics_options);
             }

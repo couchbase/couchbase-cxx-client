@@ -19,9 +19,9 @@
 
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/highlight_style.hxx>
 #include <couchbase/mutation_state.hxx>
-#include <couchbase/error.hxx>
 #include <couchbase/search_facet.hxx>
 #include <couchbase/search_result.hxx>
 #include <couchbase/search_scan_consistency.hxx>

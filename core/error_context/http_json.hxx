@@ -66,16 +66,17 @@ struct traits<couchbase::core::error_context::http> {
         ctx.http_body = v.at("http_body").get_string();
         ctx.hostname = v.at("hostname").get_string();
         ctx.port = static_cast<uint16_t>(v.at("port").get_unsigned());
-
-                if (const auto& retry_reasons = v.find("retry_reasons"); retry_reasons != nullptr && retry_reasons->is_array()) {
-                    for (const auto& retry_reason : retry_reasons->get_array()) {
-                        ctx.retry_reasons.insert(couchbase::retry_reason_to_enum(retry_reason.get_string()));
-                    }
-                }
-        if (const auto& last_dispatched_from = v.find("last_dispatched_from"); last_dispatched_from != nullptr && last_dispatched_from->is_string()) {
+        if (const auto& retry_reasons = v.find("retry_reasons"); retry_reasons != nullptr && retry_reasons->is_array()) {
+            for (const auto& retry_reason : retry_reasons->get_array()) {
+                ctx.retry_reasons.insert(couchbase::retry_reason_to_enum(retry_reason.get_string()));
+            }
+        }
+        if (const auto& last_dispatched_from = v.find("last_dispatched_from");
+            last_dispatched_from != nullptr && last_dispatched_from->is_string()) {
             ctx.last_dispatched_from = last_dispatched_from->get_string();
         }
-        if (const auto& last_dispatched_to = v.find("last_dispatched_to"); last_dispatched_to != nullptr && last_dispatched_to->is_string()) {
+        if (const auto& last_dispatched_to = v.find("last_dispatched_to");
+            last_dispatched_to != nullptr && last_dispatched_to->is_string()) {
             ctx.last_dispatched_to = last_dispatched_to->get_string();
         }
         return ctx;

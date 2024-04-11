@@ -59,11 +59,11 @@ class base_error_context
      * @internal
      */
     base_error_context(std::string operation_id,
-                  std::error_code ec,
-                  std::optional<std::string> last_dispatched_to,
-                  std::optional<std::string> last_dispatched_from,
-                  std::size_t retry_attempts,
-                  std::set<retry_reason> retry_reasons)
+                       std::error_code ec,
+                       std::optional<std::string> last_dispatched_to,
+                       std::optional<std::string> last_dispatched_from,
+                       std::size_t retry_attempts,
+                       std::set<retry_reason> retry_reasons)
       : operation_id_{ std::move(operation_id) }
       , ec_{ ec }
       , last_dispatched_to_{ std::move(last_dispatched_to) }

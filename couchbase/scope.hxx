@@ -110,8 +110,7 @@ class scope
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto query(std::string statement, const query_options& options = {}) const
-      -> std::future<std::pair<error, query_result>>;
+    [[nodiscard]] auto query(std::string statement, const query_options& options = {}) const -> std::future<std::pair<error, query_result>>;
 
     /**
      * Performs a request against the full text search services.

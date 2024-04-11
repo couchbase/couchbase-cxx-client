@@ -101,7 +101,8 @@ enum class retry_reason {
     views_no_active_partition,
 };
 
-auto retry_reason_to_enum(const std::string& reason) -> couchbase::retry_reason;
+auto
+retry_reason_to_enum(const std::string& reason) -> couchbase::retry_reason;
 
 bool
 allows_non_idempotent_retry(retry_reason reason);
