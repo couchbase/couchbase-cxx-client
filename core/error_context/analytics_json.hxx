@@ -32,11 +32,6 @@ struct traits<couchbase::core::error_context::analytics> {
     template<template<typename...> class Traits>
     static void assign(tao::json::basic_value<Traits>& v, const couchbase::core::error_context::analytics& ctx)
     {
-        v["ec"] =
-          tao::json::value{
-              { "value", ctx.ec.value() },
-              { "message", ctx.ec.message() },
-          },
         v["retry_attempts"] = ctx.retry_attempts;
         v["client_context_id"] = ctx.client_context_id;
         v["statement"] = ctx.statement;
