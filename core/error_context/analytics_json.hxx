@@ -17,13 +17,14 @@
 
 #pragma once
 
+#include <core/impl/retry_reason.hxx>
 #include <core/error_context/analytics.hxx>
+
 #include <couchbase/error_codes.hxx>
+#include <couchbase/fmt/retry_reason.hxx>
 
 #include <tao/json/forward.hpp>
 #include <tao/json/value.hpp>
-
-#include <couchbase/fmt/retry_reason.hxx>
 
 namespace tao::json
 {
