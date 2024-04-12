@@ -360,6 +360,26 @@ cluster::diagnostics(const couchbase::diagnostics_options& options) const -> std
 }
 
 void
+cluster::search_query(std::string index_name,
+                      const class search_query& query,
+                      const search_options& options,
+                      search_handler&& handler) const
+{
+    return impl_->search_query(std::move(index_name), query, options.build(), std::move(handler));
+}
+
+auto
+cluster::search_query(std::string index_name, const class search_query& query, const search_options& options) const
+  -> std::future<std::pair<error, search_result>>
+{
+    auto barrier = std::make_shared<std::promise<std::pair<error, search_result>>>();
+    search_query(std::move(index_name), query, options, [barrier](auto ctx, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
+    });
+    return barrier->get_future();
+}
+
+void
 cluster::search(std::string index_name, search_request request, const search_options& options, search_handler&& handler) const
 {
     return impl_->search(std::move(index_name), std::move(request), options.build(), std::move(handler));
