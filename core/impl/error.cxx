@@ -78,6 +78,8 @@ error::operator bool() const
     return ec_.value() != 0;
 }
 
+namespace core::impl
+{
 error
 make_error(const core::error_context::query& core_ctx)
 {
@@ -101,4 +103,5 @@ make_error(const core::error_context::http& core_ctx)
 {
     return { core_ctx.ec, "", couchbase::error_context{ internal_error_context(core_ctx) } };
 }
+} // namespace core::impl
 } // namespace couchbase

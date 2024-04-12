@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2024. Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -70,7 +70,7 @@ struct traits<couchbase::core::error_context::http> {
         ctx.port = static_cast<uint16_t>(v.at("port").get_unsigned());
         if (const auto& retry_reasons = v.find("retry_reasons"); retry_reasons != nullptr && retry_reasons->is_array()) {
             for (const auto& retry_reason : retry_reasons->get_array()) {
-                ctx.retry_reasons.insert(couchbase::retry_reason_to_enum(retry_reason.get_string()));
+                ctx.retry_reasons.insert(couchbase::core::impl::retry_reason_to_enum(retry_reason.get_string()));
             }
         }
         if (const auto& last_dispatched_from = v.find("last_dispatched_from");

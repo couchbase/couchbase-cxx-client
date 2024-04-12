@@ -17,6 +17,8 @@
 
 #include <couchbase/retry_reason.hxx>
 
+#include <string>
+
 namespace couchbase
 {
 bool

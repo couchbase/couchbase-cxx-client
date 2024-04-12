@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2024. Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@
 
 #include <couchbase/error.hxx>
 
-namespace couchbase
+namespace couchbase::core::impl
 {
 error
 make_error(const core::error_context::query& core_ctx);
@@ -37,4 +37,4 @@ make_error(const core::error_context::analytics& core_ctx);
 
 error
 make_error(const core::error_context::http& core_ctx);
-} // namespace couchbase
+} // namespace couchbase::core::impl

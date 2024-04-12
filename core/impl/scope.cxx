@@ -67,7 +67,7 @@ class scope_impl
     {
         return core_.execute(core::impl::build_query_request(std::move(statement), query_context_, std::move(options)),
                              [handler = std::move(handler)](auto resp) {
-                                 return handler(make_error(resp.ctx), core::impl::build_result(resp));
+                                 return handler(core::impl::make_error(resp.ctx), core::impl::build_result(resp));
                              });
     }
 
@@ -75,7 +75,7 @@ class scope_impl
     {
         return core_.execute(core::impl::build_analytics_request(std::move(statement), std::move(options), bucket_name_, name_),
                              [handler = std::move(handler)](auto resp) mutable {
-                                 return handler(make_error(resp.ctx), core::impl::build_result(resp));
+                                 return handler(core::impl::make_error(resp.ctx), core::impl::build_result(resp));
                              });
     }
 
@@ -86,7 +86,7 @@ class scope_impl
     {
         return core_.execute(core::impl::build_search_request(std::move(index_name), query, options, bucket_name_, name_),
                              [handler = std::move(handler)](auto&& resp) mutable {
-                                 return handler(make_error(resp.ctx), search_result{ internal_search_result{ resp } });
+                                 return handler(core::impl::make_error(resp.ctx), search_result{ internal_search_result{ resp } });
                              });
     }
 
@@ -94,7 +94,7 @@ class scope_impl
     {
         return core_.execute(core::impl::build_search_request(std::move(index_name), std::move(request), options, bucket_name_, name_),
                              [handler = std::move(handler)](auto&& resp) mutable {
-                                 return handler(make_error(resp.ctx), search_result{ internal_search_result{ resp } });
+                                 return handler(core::impl::make_error(resp.ctx), search_result{ internal_search_result{ resp } });
                              });
     }
 
