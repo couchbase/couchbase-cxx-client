@@ -30,7 +30,6 @@ namespace tao::json
 {
 template<>
 struct traits<couchbase::core::error_context::query> {
-    TAO_JSON_DEFAULT_KEY("query");
     template<template<typename...> class Traits>
     static void assign(tao::json::basic_value<Traits>& v, const couchbase::core::error_context::query& ctx)
     {
