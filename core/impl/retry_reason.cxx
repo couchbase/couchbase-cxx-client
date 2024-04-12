@@ -84,6 +84,8 @@ always_retry(retry_reason reason)
     return false;
 }
 
+namespace core::impl
+{
 auto
 retry_reason_to_enum(const std::string& reason) -> couchbase::retry_reason
 {
@@ -152,4 +154,5 @@ retry_reason_to_enum(const std::string& reason) -> couchbase::retry_reason
     }
     return couchbase::retry_reason::unknown;
 }
+} // namespace core::impl
 } // namespace couchbase

@@ -21,8 +21,8 @@
 
 #include <string>
 
-namespace couchbase
+namespace couchbase::core::impl
 {
 auto
 retry_reason_to_enum(const std::string& reason) -> retry_reason;
-} // namespace couchbase
+} // namespace couchbase::core::impl
