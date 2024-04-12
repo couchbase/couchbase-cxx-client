@@ -476,11 +476,11 @@ TEST_CASE("integration: public API analytics query")
 
     SECTION("readonly")
     {
-        auto [ctx, resp] =
+        auto [error, resp] =
           cluster.analytics_query(fmt::format("DROP DATASET Default.`{}`", dataset_name), couchbase::analytics_options{}.readonly(true))
             .get();
 
-        REQUIRE(ctx.ec() == couchbase::errc::common::internal_server_failure);
+        REQUIRE(error.ec() == couchbase::errc::common::internal_server_failure);
         REQUIRE(resp.meta_data().status() == couchbase::analytics_status::fatal);
     }
 
@@ -530,11 +530,11 @@ TEST_CASE("integration: public API analytics scope query")
 
     CHECK(test::utils::wait_until(
       [&]() {
-          auto [ctx, resp] = cluster
+          auto [error, resp] = cluster
                                .analytics_query(fmt::format(
                                  "ALTER COLLECTION `{}`.`{}`.`{}` ENABLE ANALYTICS", integration.ctx.bucket, scope_name, collection_name))
                                .get();
-          return !ctx.ec();
+          return !error;
       },
       std::chrono::minutes{ 5 }));
 
@@ -552,13 +552,13 @@ TEST_CASE("integration: public API analytics scope query")
     }
 
     couchbase::analytics_result resp{};
-    couchbase::error ctx{};
+    couchbase::error error{};
     CHECK(test::utils::wait_until([&]() {
-        std::tie(ctx, resp) =
+        std::tie(error, resp) =
           scope.analytics_query(fmt::format(R"(SELECT testkey FROM `{}` WHERE testkey = "{}")", collection_name, test_value)).get();
-        return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
+        return !error && resp.meta_data().metrics().result_count() == 1;
     }));
-    REQUIRE_SUCCESS(ctx.ec());
+    REQUIRE_SUCCESS(error.ec());
     REQUIRE(resp.rows_as_json()[0] == document);
     REQUIRE_FALSE(resp.meta_data().request_id().empty());
     REQUIRE_FALSE(resp.meta_data().client_context_id().empty());

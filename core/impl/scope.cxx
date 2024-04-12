@@ -139,8 +139,8 @@ scope::query(std::string statement, const query_options& options) const -> std::
 {
     auto barrier = std::make_shared<std::promise<std::pair<error, query_result>>>();
     auto future = barrier->get_future();
-    query(std::move(statement), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    query(std::move(statement), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -156,8 +156,8 @@ scope::analytics_query(std::string statement, const analytics_options& options) 
 {
     auto barrier = std::make_shared<std::promise<std::pair<error, analytics_result>>>();
     auto future = barrier->get_future();
-    analytics_query(std::move(statement), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    analytics_query(std::move(statement), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -174,8 +174,8 @@ scope::search(std::string index_name, search_request request, const search_optio
 {
     auto barrier = std::make_shared<std::promise<std::pair<error, search_result>>>();
     auto future = barrier->get_future();
-    search(std::move(index_name), std::move(request), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    search(std::move(index_name), std::move(request), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }

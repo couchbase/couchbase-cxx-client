@@ -304,8 +304,8 @@ cluster::query(std::string statement, const query_options& options) const -> std
 {
     auto barrier = std::make_shared<std::promise<std::pair<error, query_result>>>();
     auto future = barrier->get_future();
-    query(std::move(statement), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    query(std::move(statement), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -321,8 +321,8 @@ cluster::analytics_query(std::string statement, const analytics_options& options
 {
     auto barrier = std::make_shared<std::promise<std::pair<error, analytics_result>>>();
     auto future = barrier->get_future();
-    analytics_query(std::move(statement), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    analytics_query(std::move(statement), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -373,8 +373,8 @@ cluster::search_query(std::string index_name, const class search_query& query, c
   -> std::future<std::pair<error, search_result>>
 {
     auto barrier = std::make_shared<std::promise<std::pair<error, search_result>>>();
-    search_query(std::move(index_name), query, options, [barrier](auto ctx, auto result) mutable {
-        barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
+    search_query(std::move(index_name), query, options, [barrier](auto err, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(err), std::move(result)));
     });
     return barrier->get_future();
 }
