@@ -424,16 +424,16 @@ TEST_CASE("integration: public API analytics query")
     SECTION("raw")
     {
         couchbase::analytics_result resp{};
-        couchbase::error ctx{};
+        couchbase::error error{};
         CHECK(test::utils::wait_until([&]() {
-            std::tie(ctx, resp) =
+            std::tie(error, resp) =
               cluster
                 .analytics_query(fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = $testkey)", dataset_name),
                                  couchbase::analytics_options{}.raw("$testkey", test_value))
                 .get();
-            return !ctx.ec() && resp.meta_data().metrics().result_count() == 1;
+            return !error && resp.meta_data().metrics().result_count() == 1;
         }));
-        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_SUCCESS(error.ec());
         auto rows = resp.rows_as_json();
         REQUIRE(rows.size() == 1);
         REQUIRE(rows[0] == document);
