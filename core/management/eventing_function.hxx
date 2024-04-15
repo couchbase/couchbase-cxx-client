@@ -44,6 +44,7 @@ enum class function_language_compatibility {
     version_6_0_0,
     version_6_5_0,
     version_6_6_2,
+    version_7_2_0,
 };
 
 enum class function_log_level {
