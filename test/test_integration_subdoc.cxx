@@ -784,18 +784,35 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
 
     SECTION("mismatched type and opcode")
     {
-        couchbase::core::operations::lookup_in_request req{ id };
-        req.specs =
-          couchbase::mutate_in_specs{
-              couchbase::mutate_in_specs::remove("array[0]"),
-              couchbase::mutate_in_specs::remove("array[0]"),
-          }
-            .specs();
-        auto resp = test::utils::execute(integration.cluster, req);
-        if (integration.cluster_version().is_mock()) {
-            REQUIRE(resp.ctx.ec() == couchbase::errc::common::unsupported_operation);
-        } else {
-            REQUIRE(resp.ctx.ec() == couchbase::errc::common::invalid_argument);
+        {
+            couchbase::core::operations::lookup_in_request req{ id };
+            req.specs =
+              couchbase::mutate_in_specs{
+                  couchbase::mutate_in_specs::remove("array[0]"),
+                  couchbase::mutate_in_specs::remove("array[0]"),
+              }
+                .specs();
+            auto resp = test::utils::execute(integration.cluster, req);
+            if (integration.cluster_version().is_mock()) {
+                REQUIRE(resp.ctx.ec() == couchbase::errc::common::unsupported_operation);
+            } else {
+                REQUIRE(resp.ctx.ec() == couchbase::errc::common::invalid_argument);
+            }
+        }
+        {
+            couchbase::core::operations::mutate_in_request req{ id };
+            req.specs =
+            couchbase::lookup_in_specs{
+                  couchbase::lookup_in_specs::get("foo"),
+                  couchbase::lookup_in_specs::get("foo")
+              }
+              .specs();
+            auto resp = test::utils::execute(integration.cluster, req);
+            if (integration.cluster_version().is_mock()) {
+                REQUIRE(resp.ctx.ec() == couchbase::errc::common::unsupported_operation);
+            } else {
+                REQUIRE(resp.ctx.ec() == couchbase::errc::common::invalid_argument);
+            }
         }
     }
 
