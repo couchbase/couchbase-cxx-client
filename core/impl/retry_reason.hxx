@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2024. Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,30 +17,12 @@
 
 #pragma once
 
+#include <couchbase/retry_reason.hxx>
+
 #include <string>
 
-#include <tao/json/value.hpp>
-
-namespace couchbase
+namespace couchbase::core::impl
 {
-using internal_error_context = tao::json::value;
-
-class error_context
-{
-  public:
-    error_context() = default;
-    explicit error_context(internal_error_context internal);
-
-    [[nodiscard]] auto to_string() const -> std::string;
-    [[nodiscard]] auto to_json() const -> std::string;
-
-    template<typename T>
-    T as() const
-    {
-        return internal_.as<T>();
-    }
-
-  private:
-    internal_error_context internal_;
-};
-} // namespace couchbase
+auto
+retry_reason_to_enum(const std::string& reason) -> retry_reason;
+} // namespace couchbase::core::impl

@@ -144,8 +144,9 @@ dump_stats(asio::steady_timer& timer, std::chrono::system_clock::time_point star
         const std::uint64_t current_total = total;
         const std::uint64_t current_errors = [] {
             std::scoped_lock lock(errors_mutex);
-            return std::accumulate(
-              errors.begin(), errors.end(), std::uint64_t{ 0 }, [](auto acc, const auto& pair) { return acc + pair.second; });
+            return std::accumulate(errors.begin(), errors.end(), std::uint64_t{ 0 }, [](auto acc, const auto& pair) {
+                return acc + pair.second;
+            });
         }();
         stats_window.push_back({
           now,
@@ -263,7 +264,9 @@ class pillowfight_app : public CLI::App
         std::vector<std::thread> io_pool{};
         io_pool.reserve(number_of_io_threads_);
         for (std::size_t i = 0; i < number_of_io_threads_; ++i) {
-            io_pool.emplace_back([&io]() { io.run(); });
+            io_pool.emplace_back([&io]() {
+                io.run();
+            });
         }
 
         hdr_init(/* minimum - 1 us*/ 1'000,
@@ -317,7 +320,9 @@ class pillowfight_app : public CLI::App
         std::vector<std::thread> worker_pool{};
         worker_pool.reserve(number_of_worker_threads_);
         for (std::size_t i = 0; i < number_of_worker_threads_; ++i) {
-            worker_pool.emplace_back([this, cluster = cluster, &keys = known_keys[i]]() { worker(cluster, keys); });
+            worker_pool.emplace_back([this, cluster = cluster, &keys = known_keys[i]]() {
+                worker(cluster, keys);
+            });
         }
         for (auto& thread : worker_pool) {
             thread.join();
@@ -392,8 +397,9 @@ class pillowfight_app : public CLI::App
         while (running.test_and_set() && !stopping) {
             std::list<std::pair<std::chrono::system_clock::time_point,
                                 std::variant<std::future<std::pair<couchbase::key_value_error_context, couchbase::mutation_result>>,
-                                             std::future<std::pair<couchbase::key_value_error_context, couchbase::get_result>>,
-                                             std::future<std::pair<couchbase::query_error_context, couchbase::query_result>>>>>
+                                             std::future<std::pair<couchbase::key_value_error_context, couchbase::get_result>>
+                                             // ,std::future<std::pair<couchbase::error, couchbase::query_result>> //TODO readd
+                                             >>>
               futures;
             for (std::size_t i = 0; i < key_value_batch_size_; ++i) {
                 auto opcode = (dist(gen) <= chance_of_get_) ? operation::get : operation::upsert;
@@ -426,11 +432,13 @@ class pillowfight_app : public CLI::App
                 }
             }
 
-            for (std::size_t i = 0; i < query_batch_size_; ++i) {
-                if (chance_of_query_ > 0 && dist(gen) <= chance_of_query_) {
-                    futures.emplace_back(std::chrono::system_clock::now(), cluster.query(query_statement, couchbase::query_options{}));
-                }
-            }
+            // TODO: readd
+            //            for (std::size_t i = 0; i < query_batch_size_; ++i) {
+            //                if (chance_of_query_ > 0 && dist(gen) <= chance_of_query_) {
+            //                    futures.emplace_back(std::chrono::system_clock::now(), cluster.query(query_statement,
+            //                    couchbase::query_options{}));
+            //                }
+            //            }
 
             for (auto&& [start, future] : futures) {
                 std::visit(

@@ -62,7 +62,9 @@ main(int argc, const char* argv[])
     // run IO context on separate thread
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
-    std::thread io_thread([&io]() { io.run(); });
+    std::thread io_thread([&io]() {
+        io.run();
+    });
 
     auto options = couchbase::cluster_options(username, password);
     // customize through the 'options'.
@@ -104,9 +106,9 @@ main(int argc, const char* argv[])
 
     { // [4] N1QL query
         auto inventory_scope = bucket.scope("inventory");
-        auto [ctx, query_result] = inventory_scope.query("SELECT * FROM airline WHERE id = 10").get();
-        if (ctx.ec()) {
-            fmt::print("unable to perform query: {}, ({}, {})\n", ctx.ec().message(), ctx.first_error_code(), ctx.first_error_message());
+        auto [error, query_result] = inventory_scope.query("SELECT * FROM airline WHERE id = 10").get();
+        if (error) {
+            fmt::print("unable to perform query: {}\n", error.ctx().to_string());
             return 1;
         }
         for (const auto& row : query_result.rows_as_json()) {
@@ -226,7 +228,9 @@ main(int argc, const char* argv[])
     // run IO context on separate thread
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
-    std::thread io_thread([&io]() { io.run(); });
+    std::thread io_thread([&io]() {
+        io.run();
+    });
 
     auto options = couchbase::cluster_options(username, password);
     // customize through the 'options'.
@@ -241,10 +245,11 @@ main(int argc, const char* argv[])
 
     {
         fmt::print("--- simple query\n");
-        auto [ctx, result] = cluster.search_query("travel-sample-index", couchbase::query_string_query("nice bar")).get();
+        auto [error, result] =
+          cluster.search("travel-sample-index", couchbase::search_request(couchbase::query_string_query("nice bar"))).get();
 
-        if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+        if (error.ec()) {
+            fmt::print("unable to perform search query: {}\n", error.ctx().to_string());
             return 1;
         }
         fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
@@ -255,14 +260,14 @@ main(int argc, const char* argv[])
 
     {
         fmt::print("--- simple query with fields\n");
-        auto [ctx, result] = cluster
-                               .search_query("travel-sample-index",
-                                             couchbase::query_string_query("nice bar"),
-                                             couchbase::search_options{}.fields({ "description" }))
-                               .get();
+        auto [error, result] = cluster
+                                 .search("travel-sample-index",
+                                         couchbase::search_request(couchbase::query_string_query("nice bar")),
+                                         couchbase::search_options{}.fields({ "description" }))
+                                 .get();
 
-        if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+        if (error) {
+            fmt::print("unable to perform search query: {}\n", error.ctx().to_string());
             return 1;
         }
         fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
@@ -274,13 +279,14 @@ main(int argc, const char* argv[])
 
     {
         fmt::print("--- simple query with limit\n");
-        auto [ctx, result] =
-          cluster
-            .search_query("travel-sample-index", couchbase::query_string_query("nice bar"), couchbase::search_options{}.skip(3).limit(4))
-            .get();
+        auto [error, result] = cluster
+                                 .search("travel-sample-index",
+                                         couchbase::search_request(couchbase::query_string_query("nice bar")),
+                                         couchbase::search_options{}.skip(3).limit(4))
+                                 .get();
 
-        if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+        if (error) {
+            fmt::print("unable to perform search query: {}\n", error.ctx().to_string());
             return 1;
         }
         fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
@@ -291,15 +297,15 @@ main(int argc, const char* argv[])
 
     {
         fmt::print("--- simple query with highlight\n");
-        auto [ctx, result] =
+        auto [error, result] =
           cluster
-            .search_query("travel-sample-index",
-                          couchbase::query_string_query("nice bar"),
-                          couchbase::search_options{}.highlight(couchbase::highlight_style::html, { "description", "title" }))
+            .search("travel-sample-index",
+                    couchbase::search_request(couchbase::query_string_query("nice bar")),
+                    couchbase::search_options{}.highlight(couchbase::highlight_style::html, { "description", "title" }))
             .get();
 
-        if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+        if (error) {
+            fmt::print("unable to perform search query: {}\n", error.ctx().to_string());
             return 1;
         }
         fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
@@ -316,14 +322,14 @@ main(int argc, const char* argv[])
 
     {
         fmt::print("--- simple query with collections\n");
-        auto [ctx, result] = cluster
-                               .search_query("travel-sample-index",
-                                             couchbase::query_string_query("west"),
-                                             couchbase::search_options{}.collections({ "airline" }))
-                               .get();
+        auto [error, result] = cluster
+                                 .search("travel-sample-index",
+                                         couchbase::search_request(couchbase::query_string_query("west")),
+                                         couchbase::search_options{}.collections({ "airline" }))
+                                 .get();
 
-        if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+        if (error) {
+            fmt::print("unable to perform search query: {}\n", error.ctx().to_string());
             return 1;
         }
         fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
@@ -365,13 +371,14 @@ main(int argc, const char* argv[])
             state.add(upsert_result);
         }
 
-        auto [ctx, result] =
-          cluster
-            .search_query("travel-sample-index", couchbase::query_string_query("bree"), couchbase::search_options{}.consistent_with(state))
-            .get();
+        auto [error, result] = cluster
+                                 .search("travel-sample-index",
+                                         couchbase::search_request(couchbase::query_string_query("bree")),
+                                         couchbase::search_options{}.consistent_with(state))
+                                 .get();
 
-        if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+        if (error) {
+            fmt::print("unable to perform search query: {}\n", error.ctx().to_string());
             return 1;
         }
         fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
@@ -382,16 +389,17 @@ main(int argc, const char* argv[])
 
     {
         fmt::print("--- complex query\n");
-        auto [ctx, result] = cluster
-                               .search_query("travel-sample-index",
-                                             couchbase::boolean_query()
-                                               .must(couchbase::match_query("honeymoon").field("reviews.content"),
-                                                     couchbase::numeric_range_query().field("reviews.ratings.Overall").min(4))
-                                               .must_not(couchbase::match_query("San Francisco").field("city")),
-                                             couchbase::search_options{}.collections({ "hotel" }).highlight())
-                               .get();
-        if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+        auto [error, result] =
+          cluster
+            .search("travel-sample-index",
+                    couchbase::search_request(couchbase::boolean_query()
+                                                .must(couchbase::match_query("honeymoon").field("reviews.content"),
+                                                      couchbase::numeric_range_query().field("reviews.ratings.Overall").min(4))
+                                                .must_not(couchbase::match_query("San Francisco").field("city"))),
+                    couchbase::search_options{}.collections({ "hotel" }).highlight())
+            .get();
+        if (error) {
+            fmt::print("unable to perform search query: {}\n", error.ctx().to_string());
             return 1;
         }
         fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
@@ -402,14 +410,14 @@ main(int argc, const char* argv[])
 
     {
         fmt::print("--- simple query with facets\n");
-        auto [ctx, result] =
+        auto [error, result] =
           cluster
-            .search_query("travel-sample-index",
-                          couchbase::query_string_query("honeymoon"),
-                          couchbase::search_options{}.collections({ "hotel" }).facet("by_country", couchbase::term_facet("country", 3)))
+            .search("travel-sample-index",
+                    couchbase::search_request(couchbase::query_string_query("honeymoon")),
+                    couchbase::search_options{}.collections({ "hotel" }).facet("by_country", couchbase::term_facet("country", 3)))
             .get();
-        if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+        if (error) {
+            fmt::print("unable to perform search query: {}\n", error.ctx().to_string());
             return 1;
         }
         fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
@@ -486,7 +494,9 @@ main(int argc, const char* argv[])
     // run IO context on separate thread
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
-    std::thread io_thread([&io]() { io.run(); });
+    std::thread io_thread([&io]() {
+        io.run();
+    });
 
     auto options = couchbase::cluster_options(username, password);
     // customize through the 'options'.
@@ -710,13 +720,9 @@ main(int argc, const char* argv[])
         }
         {
             auto inventory_scope = bucket.scope("inventory");
-            auto [ctx, query_result] = inventory_scope.query("SELECT * FROM airline WHERE id = 10").get();
-            if (ctx.ec()) {
-                fmt::print("PARENT(pid={}): unable to perform query: {}, ({}, {})\n",
-                           getpid(),
-                           ctx.ec().message(),
-                           ctx.first_error_code(),
-                           ctx.first_error_message());
+            auto [error, query_result] = inventory_scope.query("SELECT * FROM airline WHERE id = 10").get();
+            if (error) {
+                fmt::print("PARENT(pid={}): unable to perform query: {}\n", getpid(), error.ctx().to_string());
                 return 1;
             }
             for (const auto& row : query_result.rows_as_json()) {

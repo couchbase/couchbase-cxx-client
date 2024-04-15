@@ -17,6 +17,7 @@
 
 #include "analytics.hxx"
 #include "core/cluster.hxx"
+#include "error.hxx"
 #include "internal_search_error_context.hxx"
 #include "internal_search_meta_data.hxx"
 #include "internal_search_result.hxx"
@@ -64,16 +65,17 @@ class scope_impl
 
     void query(std::string statement, query_options::built options, query_handler&& handler) const
     {
-        return core_.execute(
-          core::impl::build_query_request(std::move(statement), query_context_, std::move(options)),
-          [handler = std::move(handler)](auto resp) { return handler(core::impl::build_context(resp), core::impl::build_result(resp)); });
+        return core_.execute(core::impl::build_query_request(std::move(statement), query_context_, std::move(options)),
+                             [handler = std::move(handler)](auto resp) {
+                                 return handler(core::impl::make_error(resp.ctx), core::impl::build_result(resp));
+                             });
     }
 
     void analytics_query(std::string statement, analytics_options::built options, analytics_handler&& handler) const
     {
         return core_.execute(core::impl::build_analytics_request(std::move(statement), std::move(options), bucket_name_, name_),
                              [handler = std::move(handler)](auto resp) mutable {
-                                 return handler(core::impl::build_context(resp), core::impl::build_result(resp));
+                                 return handler(core::impl::make_error(resp.ctx), core::impl::build_result(resp));
                              });
     }
 
@@ -84,8 +86,7 @@ class scope_impl
     {
         return core_.execute(core::impl::build_search_request(std::move(index_name), query, options, bucket_name_, name_),
                              [handler = std::move(handler)](auto&& resp) mutable {
-                                 return handler(search_error_context{ internal_search_error_context{ resp } },
-                                                search_result{ internal_search_result{ resp } });
+                                 return handler(core::impl::make_error(resp.ctx), search_result{ internal_search_result{ resp } });
                              });
     }
 
@@ -93,8 +94,7 @@ class scope_impl
     {
         return core_.execute(core::impl::build_search_request(std::move(index_name), std::move(request), options, bucket_name_, name_),
                              [handler = std::move(handler)](auto&& resp) mutable {
-                                 return handler(search_error_context{ internal_search_error_context{ resp } },
-                                                search_result{ internal_search_result{ resp } });
+                                 return handler(core::impl::make_error(resp.ctx), search_result{ internal_search_result{ resp } });
                              });
     }
 
@@ -135,11 +135,13 @@ scope::query(std::string statement, const query_options& options, query_handler&
 }
 
 auto
-scope::query(std::string statement, const query_options& options) const -> std::future<std::pair<query_error_context, query_result>>
+scope::query(std::string statement, const query_options& options) const -> std::future<std::pair<error, query_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<query_error_context, query_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, query_result>>>();
     auto future = barrier->get_future();
-    query(std::move(statement), options, [barrier](auto ctx, auto result) { barrier->set_value({ std::move(ctx), std::move(result) }); });
+    query(std::move(statement), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
+    });
     return future;
 }
 
@@ -150,13 +152,12 @@ scope::analytics_query(std::string statement, const analytics_options& options, 
 }
 
 auto
-scope::analytics_query(std::string statement, const analytics_options& options) const
-  -> std::future<std::pair<analytics_error_context, analytics_result>>
+scope::analytics_query(std::string statement, const analytics_options& options) const -> std::future<std::pair<error, analytics_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<analytics_error_context, analytics_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, analytics_result>>>();
     auto future = barrier->get_future();
-    analytics_query(std::move(statement), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    analytics_query(std::move(statement), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -169,12 +170,12 @@ scope::search(std::string index_name, search_request request, const search_optio
 
 auto
 scope::search(std::string index_name, search_request request, const search_options& options) const
-  -> std::future<std::pair<search_error_context, search_result>>
+  -> std::future<std::pair<error, search_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<search_error_context, search_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, search_result>>>();
     auto future = barrier->get_future();
-    search(std::move(index_name), std::move(request), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    search(std::move(index_name), std::move(request), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }

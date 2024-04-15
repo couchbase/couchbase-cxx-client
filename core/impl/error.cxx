@@ -15,12 +15,16 @@
  *   limitations under the License.
  */
 
-#include <couchbase/error_context.hxx>
 #include <couchbase/error.hxx>
+#include <couchbase/error_context.hxx>
+
+#include <core/error_context/analytics_json.hxx>
+#include <core/error_context/http_json.hxx>
+#include <core/error_context/query_json.hxx>
+#include <core/error_context/search_json.hxx>
 
 #include <memory>
 #include <optional>
-#include <string>
 #include <system_error>
 #include <utility>
 
@@ -73,4 +77,31 @@ error::operator bool() const
 {
     return ec_.value() != 0;
 }
+
+namespace core::impl
+{
+error
+make_error(const core::error_context::query& core_ctx)
+{
+    return { core_ctx.ec, "", couchbase::error_context{ internal_error_context(core_ctx) } };
+}
+
+error
+make_error(const core::error_context::search& core_ctx)
+{
+    return { core_ctx.ec, "", couchbase::error_context{ internal_error_context(core_ctx) } };
+}
+
+error
+make_error(const core::error_context::analytics& core_ctx)
+{
+    return { core_ctx.ec, "", couchbase::error_context{ internal_error_context(core_ctx) } };
+}
+
+error
+make_error(const core::error_context::http& core_ctx)
+{
+    return { core_ctx.ec, "", couchbase::error_context{ internal_error_context(core_ctx) } };
+}
+} // namespace core::impl
 } // namespace couchbase

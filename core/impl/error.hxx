@@ -17,30 +17,24 @@
 
 #pragma once
 
-#include <string>
+#include <core/error_context/analytics.hxx>
+#include <core/error_context/http.hxx>
+#include <core/error_context/query.hxx>
+#include <core/error_context/search.hxx>
 
-#include <tao/json/value.hpp>
+#include <couchbase/error.hxx>
 
-namespace couchbase
+namespace couchbase::core::impl
 {
-using internal_error_context = tao::json::value;
+error
+make_error(const core::error_context::query& core_ctx);
 
-class error_context
-{
-  public:
-    error_context() = default;
-    explicit error_context(internal_error_context internal);
+error
+make_error(const core::error_context::search& core_ctx);
 
-    [[nodiscard]] auto to_string() const -> std::string;
-    [[nodiscard]] auto to_json() const -> std::string;
+error
+make_error(const core::error_context::analytics& core_ctx);
 
-    template<typename T>
-    T as() const
-    {
-        return internal_.as<T>();
-    }
-
-  private:
-    internal_error_context internal_;
-};
-} // namespace couchbase
+error
+make_error(const core::error_context::http& core_ctx);
+} // namespace couchbase::core::impl
