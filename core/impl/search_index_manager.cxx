@@ -29,7 +29,6 @@
 #include "core/operations/management/search_index_upsert.hxx"
 #include "core/utils/json.hxx"
 
-#include <couchbase/error.hxx>
 #include <couchbase/scope_search_index_manager.hxx>
 #include <couchbase/search_index_manager.hxx>
 
