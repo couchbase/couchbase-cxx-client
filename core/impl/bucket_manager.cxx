@@ -26,6 +26,8 @@
 
 #include "core/impl/error.hxx"
 
+#include "core/impl/error.hxx"
+
 #include <couchbase/bucket_manager.hxx>
 
 #include <memory>
