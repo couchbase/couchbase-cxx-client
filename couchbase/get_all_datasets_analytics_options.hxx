@@ -61,6 +61,5 @@ class get_all_datasets_analytics_options : public common_options<get_all_dataset
  * @since 1.0.0
  * @uncommitted
  */
-using get_all_datasets_analytics_handler =
-  std::function<void(couchbase::manager_error_context, std::vector<management::analytics_dataset>)>;
+using get_all_datasets_analytics_handler = std::function<void(error, std::vector<management::analytics_dataset>)>;
 } // namespace couchbase

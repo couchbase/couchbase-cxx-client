@@ -23,6 +23,8 @@
 #include "core/operations/management/query_index_get_all.hxx"
 #include "internal_manager_error_context.hxx"
 
+#include "core/impl/error.hxx"
+
 #include "core/logger/logger.hxx"
 
 #include <couchbase/collection_query_index_manager.hxx>
@@ -37,21 +39,6 @@ namespace couchbase
 {
 namespace
 {
-template<typename Response>
-manager_error_context
-build_context(Response& resp)
-{
-    return manager_error_context{ internal_manager_error_context{ resp.ctx.ec,
-                                                                  resp.ctx.last_dispatched_to,
-                                                                  resp.ctx.last_dispatched_from,
-                                                                  resp.ctx.retry_attempts,
-                                                                  std::move(resp.ctx.retry_reasons),
-                                                                  std::move(resp.ctx.client_context_id),
-                                                                  resp.ctx.http_status,
-                                                                  std::move(resp.ctx.http_body),
-                                                                  std::move(resp.ctx.path) } };
-}
-
 class watch_context : public std::enable_shared_from_this<watch_context>
 {
 
@@ -117,15 +104,10 @@ class watch_context : public std::enable_shared_from_this<watch_context>
         watch_query_indexes_handler handler{};
         std::swap(handler, handler_);
         if (handler) {
-            handler({ manager_error_context(internal_manager_error_context{ ec.value_or(resp.ctx.ec),
-                                                                            resp.ctx.last_dispatched_to,
-                                                                            resp.ctx.last_dispatched_from,
-                                                                            resp.ctx.retry_attempts,
-                                                                            std::move(resp.ctx.retry_reasons),
-                                                                            std::move(resp.ctx.client_context_id),
-                                                                            resp.ctx.http_status,
-                                                                            std::move(resp.ctx.http_body),
-                                                                            std::move(resp.ctx.path) }) });
+            if (ec.has_value()) {
+                resp.ctx.ec = ec.value();
+            }
+            handler(core::impl::make_error(resp.ctx));
             timer_.cancel();
         }
     }
@@ -135,7 +117,7 @@ class watch_context : public std::enable_shared_from_this<watch_context>
         return timeout_ - std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time_);
     }
 
-    bool check(const couchbase::core::operations::management::query_index_get_all_response& resp)
+    bool check(couchbase::core::operations::management::query_index_get_all_response resp)
     {
         if (resp.ctx.ec == couchbase::errc::common::ambiguous_timeout) {
             return false;
@@ -153,8 +135,9 @@ class watch_context : public std::enable_shared_from_this<watch_context>
             complete &= (it != resp.indexes.end() && it->state == "online");
         }
         if (options_.watch_primary) {
-            const auto it = std::find_if(
-              resp.indexes.begin(), resp.indexes.end(), [&](const couchbase::management::query_index& index) { return index.is_primary; });
+            const auto it = std::find_if(resp.indexes.begin(), resp.indexes.end(), [&](const couchbase::management::query_index& index) {
+                return index.is_primary;
+            });
             complete &= it != resp.indexes.end() && it->state == "online";
         }
         return complete;
@@ -163,7 +146,9 @@ class watch_context : public std::enable_shared_from_this<watch_context>
     void poll()
     {
         timer_.expires_after(options_.polling_interval);
-        timer_.async_wait([ctx = shared_from_this()](asio::error_code) { ctx->execute(); });
+        timer_.async_wait([ctx = shared_from_this()](asio::error_code) {
+            ctx->execute();
+        });
     }
 
     couchbase::core::cluster core_;
@@ -206,9 +191,9 @@ class query_index_manager_impl : public std::enable_shared_from_this<query_index
           },
           [handler = std::move(handler)](core::operations::management::query_index_get_all_response resp) {
               if (resp.ctx.ec) {
-                  return handler(build_context(resp), {});
+                  return handler(core::impl::make_error(resp.ctx), {});
               }
-              handler(build_context(resp), resp.indexes);
+              handler(core::impl::make_error(resp.ctx), resp.indexes);
           });
     }
 
@@ -236,7 +221,9 @@ class query_index_manager_impl : public std::enable_shared_from_this<query_index
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) {
+              handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void create_primary_index(const std::string& bucket_name,
@@ -261,7 +248,9 @@ class query_index_manager_impl : public std::enable_shared_from_this<query_index
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) {
+              handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void drop_index(const std::string& bucket_name,
@@ -283,7 +272,9 @@ class query_index_manager_impl : public std::enable_shared_from_this<query_index
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) {
+              handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void drop_primary_index(const std::string& bucket_name,
@@ -304,7 +295,9 @@ class query_index_manager_impl : public std::enable_shared_from_this<query_index
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](core::operations::management::query_index_drop_response resp) { handler(build_context(resp)); });
+          [handler = std::move(handler)](core::operations::management::query_index_drop_response resp) {
+              handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void build_deferred_indexes(const std::string& bucket_name,
@@ -323,15 +316,17 @@ class query_index_manager_impl : public std::enable_shared_from_this<query_index
            timeout,
            handler = std::move(handler)](auto list_resp) mutable {
               if (list_resp.ctx.ec) {
-                  return handler(build_context(list_resp));
+                  return handler(core::impl::make_error(list_resp.ctx));
               }
               if (list_resp.index_names.empty()) {
-                  return handler(build_context(list_resp));
+                  return handler(core::impl::make_error(list_resp.ctx));
               }
               self->core_.execute(
                 core::operations::management::query_index_build_request{
                   std::move(bucket), scope, collection, {}, std::move(list_resp.index_names), {}, timeout },
-                [handler = std::move(handler)](auto build_resp) { return handler(build_context(build_resp)); });
+                [handler = std::move(handler)](auto build_resp) {
+                    return handler(core::impl::make_error(build_resp.ctx));
+                });
           });
     }
 
@@ -366,12 +361,12 @@ query_index_manager::get_all_indexes(std::string bucket_name,
 
 auto
 query_index_manager::get_all_indexes(std::string bucket_name, const get_all_query_indexes_options& options) const
-  -> std::future<std::pair<manager_error_context, std::vector<management::query_index>>>
+  -> std::future<std::pair<error, std::vector<management::query_index>>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, std::vector<management::query_index>>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, std::vector<management::query_index>>>>();
     auto future = barrier->get_future();
-    get_all_indexes(std::move(bucket_name), options, [barrier](auto ctx, auto resp) mutable {
-        barrier->set_value({ std::move(ctx), resp });
+    get_all_indexes(std::move(bucket_name), options, [barrier](auto err, auto resp) mutable {
+        barrier->set_value({ std::move(err), resp });
     });
     return future;
 }
@@ -390,12 +385,12 @@ auto
 query_index_manager::create_index(std::string bucket_name,
                                   std::string index_name,
                                   std::vector<std::string> fields,
-                                  const create_query_index_options& options) const -> std::future<manager_error_context>
+                                  const create_query_index_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    create_index(std::move(bucket_name), std::move(index_name), std::move(fields), options, [barrier](auto ctx) {
-        barrier->set_value(std::move(ctx));
+    create_index(std::move(bucket_name), std::move(index_name), std::move(fields), options, [barrier](auto err) {
+        barrier->set_value(std::move(err));
     });
     return future;
 }
@@ -410,11 +405,13 @@ query_index_manager::create_primary_index(std::string bucket_name,
 
 auto
 query_index_manager::create_primary_index(std::string bucket_name, const create_primary_query_index_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    create_primary_index(std::move(bucket_name), options, [barrier](auto ctx) { barrier->set_value(std::move(ctx)); });
+    create_primary_index(std::move(bucket_name), options, [barrier](auto err) {
+        barrier->set_value(std::move(err));
+    });
     return future;
 }
 
@@ -428,11 +425,13 @@ query_index_manager::drop_primary_index(std::string bucket_name,
 
 auto
 query_index_manager::drop_primary_index(std::string bucket_name, const drop_primary_query_index_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    drop_primary_index(std::move(bucket_name), options, [barrier](auto ctx) { barrier->set_value(std::move(ctx)); });
+    drop_primary_index(std::move(bucket_name), options, [barrier](auto err) {
+        barrier->set_value(std::move(err));
+    });
     return future;
 }
 
@@ -447,11 +446,13 @@ query_index_manager::drop_index(std::string bucket_name,
 
 auto
 query_index_manager::drop_index(std::string bucket_name, std::string index_name, const drop_query_index_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    drop_index(std::move(bucket_name), std::move(index_name), options, [barrier](auto ctx) { barrier->set_value(std::move(ctx)); });
+    drop_index(std::move(bucket_name), std::move(index_name), options, [barrier](auto err) {
+        barrier->set_value(std::move(err));
+    });
     return future;
 }
 
@@ -464,12 +465,13 @@ query_index_manager::build_deferred_indexes(std::string bucket_name,
 }
 
 auto
-query_index_manager::build_deferred_indexes(std::string bucket_name, const build_query_index_options& options) const
-  -> std::future<manager_error_context>
+query_index_manager::build_deferred_indexes(std::string bucket_name, const build_query_index_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    build_deferred_indexes(std::move(bucket_name), options, [barrier](auto ctx) { barrier->set_value(std::move(ctx)); });
+    build_deferred_indexes(std::move(bucket_name), options, [barrier](auto err) {
+        barrier->set_value(std::move(err));
+    });
     return future;
 }
 
@@ -485,11 +487,13 @@ query_index_manager::watch_indexes(std::string bucket_name,
 auto
 query_index_manager::watch_indexes(std::string bucket_name,
                                    std::vector<std::string> index_names,
-                                   const watch_query_indexes_options& options) const -> std::future<manager_error_context>
+                                   const watch_query_indexes_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    watch_indexes(std::move(bucket_name), std::move(index_names), options, [barrier](auto ctx) { barrier->set_value(std::move(ctx)); });
+    watch_indexes(std::move(bucket_name), std::move(index_names), options, [barrier](auto err) {
+        barrier->set_value(std::move(err));
+    });
     return future;
 }
 
@@ -512,11 +516,13 @@ collection_query_index_manager::get_all_indexes(const get_all_query_indexes_opti
 
 auto
 collection_query_index_manager::get_all_indexes(const get_all_query_indexes_options& options) const
-  -> std::future<std::pair<manager_error_context, std::vector<management::query_index>>>
+  -> std::future<std::pair<error, std::vector<management::query_index>>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, std::vector<management::query_index>>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, std::vector<management::query_index>>>>();
     auto future = barrier->get_future();
-    get_all_indexes(options, [barrier](auto ctx, auto resp) mutable { barrier->set_value({ std::move(ctx), resp }); });
+    get_all_indexes(options, [barrier](auto err, auto resp) mutable {
+        barrier->set_value({ std::move(err), resp });
+    });
     return future;
 }
 
@@ -533,45 +539,49 @@ collection_query_index_manager::create_index(std::string index_name,
 auto
 collection_query_index_manager::create_index(std::string index_name,
                                              std::vector<std::string> keys,
-                                             const create_query_index_options& options) const -> std::future<manager_error_context>
+                                             const create_query_index_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    create_index(std::move(index_name), std::move(keys), options, [barrier](auto ctx) { barrier->set_value(std::move(ctx)); });
+    create_index(std::move(index_name), std::move(keys), options, [barrier](auto err) {
+        barrier->set_value(std::move(err));
+    });
     return future;
 }
 
 void
 collection_query_index_manager::create_primary_index(const create_primary_query_index_options& options,
-                                                     create_query_index_handler&& handler) const
+                                                     create_primary_query_index_handler&& handler) const
 {
     return impl_->create_primary_index(bucket_name_, scope_name_, collection_name_, options.build(), std::move(handler));
 }
 
 auto
-collection_query_index_manager::create_primary_index(const create_primary_query_index_options& options) const
-  -> std::future<manager_error_context>
+collection_query_index_manager::create_primary_index(const create_primary_query_index_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    create_primary_index(options, [barrier](auto ctx) { barrier->set_value(std::move(ctx)); });
+    create_primary_index(options, [barrier](auto err) {
+        barrier->set_value(std::move(err));
+    });
     return future;
 }
 
 void
 collection_query_index_manager::drop_primary_index(const drop_primary_query_index_options& options,
-                                                   drop_query_index_handler&& handler) const
+                                                   drop_primary_query_index_handler&& handler) const
 {
     return impl_->drop_primary_index(bucket_name_, scope_name_, collection_name_, options.build(), std::move(handler));
 }
 
 auto
-collection_query_index_manager::drop_primary_index(const drop_primary_query_index_options& options) const
-  -> std::future<manager_error_context>
+collection_query_index_manager::drop_primary_index(const drop_primary_query_index_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    drop_primary_index(options, [barrier](auto ctx) { barrier->set_value(std::move(ctx)); });
+    drop_primary_index(options, [barrier](auto err) {
+        barrier->set_value(std::move(err));
+    });
     return future;
 }
 
@@ -584,12 +594,13 @@ collection_query_index_manager::drop_index(std::string index_name,
 }
 
 auto
-collection_query_index_manager::drop_index(std::string index_name, const drop_query_index_options& options) const
-  -> std::future<manager_error_context>
+collection_query_index_manager::drop_index(std::string index_name, const drop_query_index_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    drop_index(std::move(index_name), options, [barrier](auto ctx) { barrier->set_value(std::move(ctx)); });
+    drop_index(std::move(index_name), options, [barrier](auto err) {
+        barrier->set_value(std::move(err));
+    });
     return future;
 }
 
@@ -601,11 +612,13 @@ collection_query_index_manager::build_deferred_indexes(const build_query_index_o
 }
 
 auto
-collection_query_index_manager::build_deferred_indexes(const build_query_index_options& options) const -> std::future<manager_error_context>
+collection_query_index_manager::build_deferred_indexes(const build_query_index_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    build_deferred_indexes(options, [barrier](auto ctx) { barrier->set_value(std::move(ctx)); });
+    build_deferred_indexes(options, [barrier](auto err) {
+        barrier->set_value(std::move(err));
+    });
     return future;
 }
 
@@ -619,11 +632,13 @@ collection_query_index_manager::watch_indexes(std::vector<std::string> index_nam
 
 auto
 collection_query_index_manager::watch_indexes(std::vector<std::string> index_names, const watch_query_indexes_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    watch_indexes(std::move(index_names), options, [barrier](auto ctx) { barrier->set_value(std::move(ctx)); });
+    watch_indexes(std::move(index_names), options, [barrier](auto err) {
+        barrier->set_value(std::move(err));
+    });
     return future;
 }
 } // namespace couchbase

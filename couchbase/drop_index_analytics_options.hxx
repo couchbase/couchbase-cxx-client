@@ -99,5 +99,5 @@ class drop_index_analytics_options : public common_options<drop_index_analytics_
  * @since 1.0.0
  * @uncommitted
  */
-using drop_index_analytics_handler = std::function<void(couchbase::manager_error_context)>;
+using drop_index_analytics_handler = std::function<void(error)>;
 } // namespace couchbase

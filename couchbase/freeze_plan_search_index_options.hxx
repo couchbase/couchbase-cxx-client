@@ -39,5 +39,5 @@ struct freeze_plan_search_index_options : public common_options<freeze_plan_sear
   private:
 };
 
-using freeze_plan_search_index_handler = std::function<void(couchbase::manager_error_context)>;
+using freeze_plan_search_index_handler = std::function<void(error)>;
 } // namespace couchbase

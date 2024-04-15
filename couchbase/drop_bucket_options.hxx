@@ -37,5 +37,5 @@ struct drop_bucket_options : public common_options<drop_bucket_options> {
   private:
 };
 
-using drop_bucket_handler = std::function<void(couchbase::manager_error_context)>;
+using drop_bucket_handler = std::function<void(error)>;
 } // namespace couchbase

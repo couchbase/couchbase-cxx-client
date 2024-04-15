@@ -61,5 +61,5 @@ class get_all_indexes_analytics_options : public common_options<get_all_indexes_
  * @since 1.0.0
  * @uncommitted
  */
-using get_all_indexes_analytics_handler = std::function<void(couchbase::manager_error_context, std::vector<management::analytics_index>)>;
+using get_all_indexes_analytics_handler = std::function<void(error, std::vector<management::analytics_index>)>;
 } // namespace couchbase

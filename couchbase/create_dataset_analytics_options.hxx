@@ -116,5 +116,5 @@ class create_dataset_analytics_options : public common_options<create_dataset_an
  * @since 1.0.0
  * @uncommitted
  */
-using create_dataset_analytics_handler = std::function<void(couchbase::manager_error_context)>;
+using create_dataset_analytics_handler = std::function<void(error)>;
 } // namespace couchbase

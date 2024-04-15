@@ -62,6 +62,5 @@ class get_pending_mutations_analytics_options : public common_options<get_pendin
  * @since 1.0.0
  * @uncommitted
  */
-using get_pending_mutations_analytics_handler =
-  std::function<void(couchbase::manager_error_context, std::map<std::string, std::map<std::string, std::int64_t>>)>;
+using get_pending_mutations_analytics_handler = std::function<void(error, std::map<std::string, std::map<std::string, std::int64_t>>)>;
 } // namespace couchbase

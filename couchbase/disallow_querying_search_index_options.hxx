@@ -39,5 +39,5 @@ struct disallow_querying_search_index_options : public common_options<disallow_q
   private:
 };
 
-using disallow_querying_search_index_handler = std::function<void(couchbase::manager_error_context)>;
+using disallow_querying_search_index_handler = std::function<void(error)>;
 } // namespace couchbase

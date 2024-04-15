@@ -39,5 +39,5 @@ struct get_bucket_options : public common_options<get_bucket_options> {
   private:
 };
 
-using get_bucket_handler = std::function<void(couchbase::manager_error_context, couchbase::management::cluster::bucket_settings)>;
+using get_bucket_handler = std::function<void(error, management::cluster::bucket_settings)>;
 } // namespace couchbase

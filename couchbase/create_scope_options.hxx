@@ -37,5 +37,5 @@ struct create_scope_options : public common_options<create_scope_options> {
   private:
 };
 
-using create_scope_handler = std::function<void(couchbase::manager_error_context)>;
+using create_scope_handler = std::function<void(error)>;
 } // namespace couchbase

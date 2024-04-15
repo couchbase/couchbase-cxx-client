@@ -17,6 +17,7 @@
 
 #include "core/cluster.hxx"
 
+#include "core/impl/error.hxx"
 #include "core/operations/management/search_index_analyze_document.hxx"
 #include "core/operations/management/search_index_control_ingest.hxx"
 #include "core/operations/management/search_index_control_plan_freeze.hxx"
@@ -29,6 +30,7 @@
 #include "core/utils/json.hxx"
 #include "internal_manager_error_context.hxx"
 
+#include <couchbase/error.hxx>
 #include <couchbase/scope_search_index_manager.hxx>
 #include <couchbase/search_index_manager.hxx>
 
@@ -39,21 +41,6 @@ namespace couchbase
 {
 namespace
 {
-template<typename Response>
-manager_error_context
-build_context(Response& resp)
-{
-    return manager_error_context(internal_manager_error_context{ resp.ctx.ec,
-                                                                 resp.ctx.last_dispatched_to,
-                                                                 resp.ctx.last_dispatched_from,
-                                                                 resp.ctx.retry_attempts,
-                                                                 std::move(resp.ctx.retry_reasons),
-                                                                 std::move(resp.ctx.client_context_id),
-                                                                 resp.ctx.http_status,
-                                                                 std::move(resp.ctx.http_body),
-                                                                 std::move(resp.ctx.path) });
-}
-
 couchbase::management::search::index
 map_search_index(const couchbase::core::management::search::index& index)
 {
@@ -159,14 +146,17 @@ class search_index_manager_impl
     {
         core_.execute(
           core::operations::management::search_index_get_request{ std::move(index_name), bucket_name_, scope_name_, {}, options.timeout },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp), map_search_index(resp.index)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx), map_search_index(resp.index));
+          });
     }
 
     void get_all_indexes(const get_all_search_indexes_options::built& options, get_all_search_indexes_handler&& handler) const
     {
-        core_.execute(
-          core::operations::management::search_index_get_all_request{ bucket_name_, scope_name_, {}, options.timeout },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp), map_all_search_indexes(resp.indexes)); });
+        core_.execute(core::operations::management::search_index_get_all_request{ bucket_name_, scope_name_, {}, options.timeout },
+                      [handler = std::move(handler)](auto resp) mutable {
+                          return handler(core::impl::make_error(resp.ctx), map_all_search_indexes(resp.indexes));
+                      });
     }
 
     void upsert_index(const management::search::index& search_index,
@@ -176,14 +166,18 @@ class search_index_manager_impl
         core_.execute(
           core::operations::management::search_index_upsert_request{
             map_search_index(search_index), bucket_name_, scope_name_, {}, options.timeout },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void drop_index(std::string index_name, const drop_search_index_options::built& options, drop_search_index_handler&& handler) const
     {
         core_.execute(
           core::operations::management::search_index_drop_request{ std::move(index_name), bucket_name_, scope_name_, {}, options.timeout },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void get_indexed_documents_count(std::string index_name,
@@ -193,7 +187,9 @@ class search_index_manager_impl
         core_.execute(
           core::operations::management::search_index_get_documents_count_request{
             std::move(index_name), bucket_name_, scope_name_, {}, options.timeout },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp), resp.count); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx), resp.count);
+          });
     }
 
     void pause_ingest(std::string index_name,
@@ -203,7 +199,9 @@ class search_index_manager_impl
         core_.execute(
           core::operations::management::search_index_control_ingest_request{
             std::move(index_name), true, bucket_name_, scope_name_, {}, options.timeout },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void resume_ingest(std::string index_name,
@@ -213,7 +211,9 @@ class search_index_manager_impl
         core_.execute(
           core::operations::management::search_index_control_ingest_request{
             std::move(index_name), false, bucket_name_, scope_name_, {}, options.timeout },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void allow_querying(std::string index_name,
@@ -223,7 +223,9 @@ class search_index_manager_impl
         core_.execute(
           core::operations::management::search_index_control_query_request{
             std::move(index_name), true, bucket_name_, scope_name_, {}, options.timeout },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void disallow_querying(std::string index_name,
@@ -233,7 +235,9 @@ class search_index_manager_impl
         core_.execute(
           core::operations::management::search_index_control_query_request{
             std::move(index_name), false, bucket_name_, scope_name_, {}, options.timeout },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void freeze_plan(std::string index_name,
@@ -243,7 +247,9 @@ class search_index_manager_impl
         core_.execute(
           core::operations::management::search_index_control_plan_freeze_request{
             std::move(index_name), true, bucket_name_, scope_name_, {}, options.timeout },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void unfreeze_plan(std::string index_name,
@@ -253,7 +259,9 @@ class search_index_manager_impl
         core_.execute(
           core::operations::management::search_index_control_plan_freeze_request{
             std::move(index_name), false, bucket_name_, scope_name_, {}, options.timeout },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void analyze_document(std::string index_name,
@@ -264,7 +272,9 @@ class search_index_manager_impl
         core_.execute(
           core::operations::management::search_index_analyze_document_request{
             std::move(index_name), std::move(document), bucket_name_, scope_name_, {}, options.timeout },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp), convert_analysis(resp.analysis)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx), convert_analysis(resp.analysis));
+          });
     }
 
   private:
@@ -288,11 +298,11 @@ search_index_manager::get_index(std::string index_name,
 
 auto
 search_index_manager::get_index(std::string index_name, const couchbase::get_search_index_options& options) const
-  -> std::future<std::pair<manager_error_context, management::search::index>>
+  -> std::future<std::pair<error, management::search::index>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, management::search::index>>>();
-    get_index(std::move(index_name), options, [barrier](auto ctx, auto result) mutable {
-        barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
+    auto barrier = std::make_shared<std::promise<std::pair<error, management::search::index>>>();
+    get_index(std::move(index_name), options, [barrier](auto err, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(err), std::move(result)));
     });
     return barrier->get_future();
 }
@@ -306,11 +316,12 @@ search_index_manager::get_all_indexes(const couchbase::get_all_search_indexes_op
 
 auto
 search_index_manager::get_all_indexes(const couchbase::get_all_search_indexes_options& options) const
-  -> std::future<std::pair<manager_error_context, std::vector<management::search::index>>>
+  -> std::future<std::pair<error, std::vector<management::search::index>>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, std::vector<management::search::index>>>>();
-    get_all_indexes(options,
-                    [barrier](auto ctx, auto result) mutable { barrier->set_value(std::make_pair(std::move(ctx), std::move(result))); });
+    auto barrier = std::make_shared<std::promise<std::pair<error, std::vector<management::search::index>>>>();
+    get_all_indexes(options, [barrier](auto err, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(err), std::move(result)));
+    });
     return barrier->get_future();
 }
 
@@ -324,10 +335,12 @@ search_index_manager::upsert_index(const management::search::index& search_index
 
 auto
 search_index_manager::upsert_index(const management::search::index& search_index,
-                                   const couchbase::upsert_search_index_options& options) const -> std::future<manager_error_context>
+                                   const couchbase::upsert_search_index_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    upsert_index(search_index, options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    upsert_index(search_index, options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -340,11 +353,12 @@ search_index_manager::drop_index(std::string index_name,
 }
 
 auto
-search_index_manager::drop_index(std::string index_name, const couchbase::drop_search_index_options& options) const
-  -> std::future<manager_error_context>
+search_index_manager::drop_index(std::string index_name, const couchbase::drop_search_index_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    drop_index(std::move(index_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    drop_index(std::move(index_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -358,11 +372,11 @@ search_index_manager::get_indexed_documents_count(std::string index_name,
 
 auto
 search_index_manager::get_indexed_documents_count(std::string index_name, const get_indexed_search_index_options& options) const
-  -> std::future<std::pair<manager_error_context, std::uint64_t>>
+  -> std::future<std::pair<error, std::uint64_t>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, std::uint64_t>>>();
-    get_indexed_documents_count(std::move(index_name), options, [barrier](auto ctx, auto result) mutable {
-        barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
+    auto barrier = std::make_shared<std::promise<std::pair<error, std::uint64_t>>>();
+    get_indexed_documents_count(std::move(index_name), options, [barrier](auto err, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(err), std::move(result)));
     });
     return barrier->get_future();
 }
@@ -377,10 +391,12 @@ search_index_manager::pause_ingest(std::string index_name,
 
 auto
 search_index_manager::pause_ingest(std::string index_name, const couchbase::pause_ingest_search_index_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    pause_ingest(std::move(index_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    pause_ingest(std::move(index_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -394,10 +410,12 @@ search_index_manager::resume_ingest(std::string index_name,
 
 auto
 search_index_manager::resume_ingest(std::string index_name, const couchbase::resume_ingest_search_index_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    resume_ingest(std::move(index_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    resume_ingest(std::move(index_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -411,10 +429,12 @@ search_index_manager::allow_querying(std::string index_name,
 
 auto
 search_index_manager::allow_querying(std::string index_name, const couchbase::allow_querying_search_index_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    allow_querying(std::move(index_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    allow_querying(std::move(index_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -428,10 +448,12 @@ search_index_manager::disallow_querying(std::string index_name,
 
 auto
 search_index_manager::disallow_querying(std::string index_name, const couchbase::disallow_querying_search_index_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    disallow_querying(std::move(index_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    disallow_querying(std::move(index_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -445,10 +467,12 @@ search_index_manager::freeze_plan(std::string index_name,
 
 auto
 search_index_manager::freeze_plan(std::string index_name, const couchbase::freeze_plan_search_index_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    freeze_plan(std::move(index_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    freeze_plan(std::move(index_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -462,10 +486,12 @@ search_index_manager::unfreeze_plan(std::string index_name,
 
 auto
 search_index_manager::unfreeze_plan(std::string index_name, const couchbase::unfreeze_plan_search_index_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    unfreeze_plan(std::move(index_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    unfreeze_plan(std::move(index_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -482,11 +508,11 @@ auto
 search_index_manager::analyze_document(std::string index_name,
                                        std::string document,
                                        const couchbase::analyze_document_options& options) const
-  -> std::future<std::pair<manager_error_context, std::vector<std::string>>>
+  -> std::future<std::pair<error, std::vector<std::string>>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, std::vector<std::string>>>>();
-    analyze_document(std::move(index_name), std::move(document), options, [barrier](auto ctx, auto result) mutable {
-        barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
+    auto barrier = std::make_shared<std::promise<std::pair<error, std::vector<std::string>>>>();
+    analyze_document(std::move(index_name), std::move(document), options, [barrier](auto err, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(err), std::move(result)));
     });
     return barrier->get_future();
 }
@@ -506,11 +532,11 @@ scope_search_index_manager::get_index(std::string index_name,
 
 auto
 scope_search_index_manager::get_index(std::string index_name, const couchbase::get_search_index_options& options) const
-  -> std::future<std::pair<manager_error_context, management::search::index>>
+  -> std::future<std::pair<error, management::search::index>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, management::search::index>>>();
-    get_index(std::move(index_name), options, [barrier](auto ctx, auto result) mutable {
-        barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
+    auto barrier = std::make_shared<std::promise<std::pair<error, management::search::index>>>();
+    get_index(std::move(index_name), options, [barrier](auto err, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(err), std::move(result)));
     });
     return barrier->get_future();
 }
@@ -524,11 +550,12 @@ scope_search_index_manager::get_all_indexes(const couchbase::get_all_search_inde
 
 auto
 scope_search_index_manager::get_all_indexes(const couchbase::get_all_search_indexes_options& options) const
-  -> std::future<std::pair<manager_error_context, std::vector<management::search::index>>>
+  -> std::future<std::pair<error, std::vector<management::search::index>>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, std::vector<management::search::index>>>>();
-    get_all_indexes(options,
-                    [barrier](auto ctx, auto result) mutable { barrier->set_value(std::make_pair(std::move(ctx), std::move(result))); });
+    auto barrier = std::make_shared<std::promise<std::pair<error, std::vector<management::search::index>>>>();
+    get_all_indexes(options, [barrier](auto err, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(err), std::move(result)));
+    });
     return barrier->get_future();
 }
 
@@ -542,10 +569,12 @@ scope_search_index_manager::upsert_index(const management::search::index& search
 
 auto
 scope_search_index_manager::upsert_index(const management::search::index& search_index,
-                                         const couchbase::upsert_search_index_options& options) const -> std::future<manager_error_context>
+                                         const couchbase::upsert_search_index_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    upsert_index(search_index, options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    upsert_index(search_index, options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -559,10 +588,12 @@ scope_search_index_manager::drop_index(std::string index_name,
 
 auto
 scope_search_index_manager::drop_index(std::string index_name, const couchbase::drop_search_index_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    drop_index(std::move(index_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    drop_index(std::move(index_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -576,11 +607,11 @@ scope_search_index_manager::get_indexed_documents_count(std::string index_name,
 
 auto
 scope_search_index_manager::get_indexed_documents_count(std::string index_name, const get_indexed_search_index_options& options) const
-  -> std::future<std::pair<manager_error_context, std::uint64_t>>
+  -> std::future<std::pair<error, std::uint64_t>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, std::uint64_t>>>();
-    get_indexed_documents_count(std::move(index_name), options, [barrier](auto ctx, auto result) mutable {
-        barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
+    auto barrier = std::make_shared<std::promise<std::pair<error, std::uint64_t>>>();
+    get_indexed_documents_count(std::move(index_name), options, [barrier](auto err, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(err), std::move(result)));
     });
     return barrier->get_future();
 }
@@ -595,10 +626,12 @@ scope_search_index_manager::pause_ingest(std::string index_name,
 
 auto
 scope_search_index_manager::pause_ingest(std::string index_name, const couchbase::pause_ingest_search_index_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    pause_ingest(std::move(index_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    pause_ingest(std::move(index_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -612,10 +645,12 @@ scope_search_index_manager::resume_ingest(std::string index_name,
 
 auto
 scope_search_index_manager::resume_ingest(std::string index_name, const couchbase::resume_ingest_search_index_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    resume_ingest(std::move(index_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    resume_ingest(std::move(index_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -629,10 +664,12 @@ scope_search_index_manager::allow_querying(std::string index_name,
 
 auto
 scope_search_index_manager::allow_querying(std::string index_name, const couchbase::allow_querying_search_index_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    allow_querying(std::move(index_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    allow_querying(std::move(index_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -646,11 +683,12 @@ scope_search_index_manager::disallow_querying(std::string index_name,
 
 auto
 scope_search_index_manager::disallow_querying(std::string index_name,
-                                              const couchbase::disallow_querying_search_index_options& options) const
-  -> std::future<manager_error_context>
+                                              const couchbase::disallow_querying_search_index_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    disallow_querying(std::move(index_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    disallow_querying(std::move(index_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -664,10 +702,12 @@ scope_search_index_manager::freeze_plan(std::string index_name,
 
 auto
 scope_search_index_manager::freeze_plan(std::string index_name, const couchbase::freeze_plan_search_index_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    freeze_plan(std::move(index_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    freeze_plan(std::move(index_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -681,10 +721,12 @@ scope_search_index_manager::unfreeze_plan(std::string index_name,
 
 auto
 scope_search_index_manager::unfreeze_plan(std::string index_name, const couchbase::unfreeze_plan_search_index_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    unfreeze_plan(std::move(index_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    unfreeze_plan(std::move(index_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -701,11 +743,11 @@ auto
 scope_search_index_manager::analyze_document(std::string index_name,
                                              std::string document,
                                              const couchbase::analyze_document_options& options) const
-  -> std::future<std::pair<manager_error_context, std::vector<std::string>>>
+  -> std::future<std::pair<error, std::vector<std::string>>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, std::vector<std::string>>>>();
-    analyze_document(std::move(index_name), std::move(document), options, [barrier](auto ctx, auto result) mutable {
-        barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
+    auto barrier = std::make_shared<std::promise<std::pair<error, std::vector<std::string>>>>();
+    analyze_document(std::move(index_name), std::move(document), options, [barrier](auto err, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(err), std::move(result)));
     });
     return barrier->get_future();
 }

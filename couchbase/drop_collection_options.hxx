@@ -37,5 +37,5 @@ struct drop_collection_options : public common_options<drop_collection_options> 
   private:
 };
 
-using drop_collection_handler = std::function<void(couchbase::manager_error_context)>;
+using drop_collection_handler = std::function<void(error)>;
 } // namespace couchbase

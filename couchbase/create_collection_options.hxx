@@ -69,5 +69,5 @@ struct create_collection_settings {
     std::optional<bool> history{};
 };
 
-using create_collection_handler = std::function<void(couchbase::manager_error_context)>;
+using create_collection_handler = std::function<void(error)>;
 } // namespace couchbase

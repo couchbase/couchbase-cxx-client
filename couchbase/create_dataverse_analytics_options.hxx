@@ -81,5 +81,5 @@ class create_dataverse_analytics_options : public common_options<create_datavers
  * @uncommitted
  */
 
-using create_dataverse_analytics_handler = std::function<void(couchbase::manager_error_context)>;
+using create_dataverse_analytics_handler = std::function<void(error)>;
 } // namespace couchbase

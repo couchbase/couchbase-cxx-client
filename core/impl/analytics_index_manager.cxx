@@ -33,7 +33,8 @@
 #include "core/operations/management/analytics_link_drop.hxx"
 #include "core/operations/management/analytics_link_get_all.hxx"
 #include "core/operations/management/analytics_link_replace.hxx"
-#include "internal_manager_error_context.hxx"
+
+#include "core/impl/error.hxx"
 
 #include <couchbase/analytics_index_manager.hxx>
 #include <couchbase/management/analytics_link.hxx>
@@ -42,21 +43,6 @@ namespace couchbase
 {
 namespace
 {
-template<typename Response>
-manager_error_context
-build_context(Response& resp)
-{
-    return manager_error_context{ internal_manager_error_context{ resp.ctx.ec,
-                                                                  resp.ctx.last_dispatched_to,
-                                                                  resp.ctx.last_dispatched_from,
-                                                                  resp.ctx.retry_attempts,
-                                                                  std::move(resp.ctx.retry_reasons),
-                                                                  std::move(resp.ctx.client_context_id),
-                                                                  resp.ctx.http_status,
-                                                                  std::move(resp.ctx.http_body),
-                                                                  std::move(resp.ctx.path) } };
-}
-
 core::management::analytics::couchbase_remote_link
 to_core_couchbase_remote_link(const management::analytics_link& link)
 {
@@ -128,7 +114,7 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
           },
           [dataverse_name, handler = std::move(handler)](auto resp) {
               CB_LOG_DEBUG("Dataverse create for {} error code = {}", dataverse_name, resp.ctx.ec.value());
-              handler(build_context(resp));
+              handler(core::impl::make_error(resp.ctx));
           });
     }
 
@@ -143,7 +129,9 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) {
+              handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void create_dataset(const std::string& dataset_name,
@@ -161,7 +149,9 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
             options.timeout,
             options.ignore_if_exists,
           },
-          [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) {
+              handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void drop_dataset(const std::string& dataset_name,
@@ -176,7 +166,9 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) {
+              handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void get_all_datasets(const get_all_datasets_analytics_options::built& options, get_all_datasets_analytics_handler&& handler) const
@@ -188,7 +180,7 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
           },
           [handler = std::move(handler)](core::operations::management::analytics_dataset_get_all_response resp) {
               if (resp.ctx.ec) {
-                  return handler(build_context(resp), {});
+                  return handler(core::impl::make_error(resp.ctx), {});
               }
               std::vector<management::analytics_dataset> datasets{};
               datasets.reserve(resp.datasets.size());
@@ -200,7 +192,7 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
                     d.bucket_name,
                   });
               }
-              handler(build_context(resp), datasets);
+              handler(core::impl::make_error(resp.ctx), datasets);
           });
     }
 
@@ -220,7 +212,9 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) {
+              handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void drop_index(const std::string& index_name,
@@ -237,7 +231,9 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) {
+              handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void get_all_indexes(const get_all_indexes_analytics_options::built& options, get_all_indexes_analytics_handler&& handler) const
@@ -249,7 +245,7 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
           },
           [handler = std::move(handler)](core::operations::management::analytics_index_get_all_response resp) {
               if (resp.ctx.ec) {
-                  return handler(build_context(resp), {});
+                  return handler(core::impl::make_error(resp.ctx), {});
               }
               std::vector<management::analytics_index> indexes{};
               indexes.reserve(resp.indexes.size());
@@ -261,7 +257,7 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
                     idx.is_primary,
                   });
               }
-              handler(build_context(resp), indexes);
+              handler(core::impl::make_error(resp.ctx), indexes);
           });
     }
 
@@ -275,7 +271,9 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) {
+              handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void disconnect_link(const disconnect_link_analytics_options::built& options, disconnect_link_analytics_handler&& handler) const
@@ -287,7 +285,9 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) {
+              handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void get_pending_mutations(const get_pending_mutations_analytics_options::built& options,
@@ -300,7 +300,7 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
           },
           [handler = std::move(handler)](core::operations::management::analytics_get_pending_mutations_response resp) {
               if (resp.ctx.ec) {
-                  return handler(build_context(resp), {});
+                  return handler(core::impl::make_error(resp.ctx), {});
               }
               std::map<std::string, std::map<std::string, std::int64_t>> pending_mutations{};
               const std::string separator{ "." };
@@ -314,7 +314,7 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
                   }
                   pending_mutations.at(dataverse_name).insert({ dataset_name, mutation_count });
               }
-              handler(build_context(resp), pending_mutations);
+              handler(core::impl::make_error(resp.ctx), pending_mutations);
           });
     }
 
@@ -330,7 +330,9 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
                     {},
                     options.timeout,
                   },
-                  [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+                  [handler = std::move(handler)](auto resp) {
+                      handler(core::impl::make_error(resp.ctx));
+                  });
 
             case management::azure_external:
                 return core_.execute(
@@ -339,7 +341,9 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
                     {},
                     options.timeout,
                   },
-                  [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+                  [handler = std::move(handler)](auto resp) {
+                      handler(core::impl::make_error(resp.ctx));
+                  });
 
             case management::couchbase_remote:
                 return core_.execute(
@@ -348,7 +352,9 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
                     {},
                     options.timeout,
                   },
-                  [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+                  [handler = std::move(handler)](auto resp) {
+                      handler(core::impl::make_error(resp.ctx));
+                  });
         }
     }
 
@@ -364,7 +370,9 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
                     {},
                     options.timeout,
                   },
-                  [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+                  [handler = std::move(handler)](auto resp) {
+                      handler(core::impl::make_error(resp.ctx));
+                  });
 
             case management::azure_external:
                 return core_.execute(
@@ -373,7 +381,9 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
                     {},
                     options.timeout,
                   },
-                  [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+                  [handler = std::move(handler)](auto resp) {
+                      handler(core::impl::make_error(resp.ctx));
+                  });
 
             case management::couchbase_remote:
                 return core_.execute(
@@ -382,7 +392,9 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
                     {},
                     options.timeout,
                   },
-                  [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+                  [handler = std::move(handler)](auto resp) {
+                      handler(core::impl::make_error(resp.ctx));
+                  });
         }
     }
 
@@ -398,7 +410,9 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) { handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) {
+              handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void get_links(const get_links_analytics_options::built& options, get_links_analytics_handler&& handler) const
@@ -427,7 +441,7 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
         }
         return core_.execute(req, [handler = std::move(handler)](core::operations::management::analytics_link_get_all_response resp) {
             if (resp.ctx.ec) {
-                return handler(build_context(resp), {});
+                return handler(core::impl::make_error(resp.ctx), {});
             }
             std::vector<std::unique_ptr<management::analytics_link>> links{};
 
@@ -473,7 +487,7 @@ class analytics_index_manager_impl : public std::enable_shared_from_this<analyti
                 links.push_back(std::move(azure_link));
             }
 
-            handler(build_context(resp), std::move(links));
+            handler(core::impl::make_error(resp.ctx), std::move(links));
         });
     }
 
@@ -499,11 +513,13 @@ analytics_index_manager::create_dataverse(std::string dataverse_name,
 
 auto
 analytics_index_manager::create_dataverse(std::string dataverse_name, const create_dataverse_analytics_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    create_dataverse(std::move(dataverse_name), options, [barrier](auto ctx) mutable { barrier->set_value({ std::move(ctx) }); });
+    create_dataverse(std::move(dataverse_name), options, [barrier](auto err) mutable {
+        barrier->set_value({ std::move(err) });
+    });
     return future;
 }
 
@@ -517,11 +533,13 @@ analytics_index_manager::drop_dataverse(std::string dataverse_name,
 
 auto
 analytics_index_manager::drop_dataverse(std::string dataverse_name, const drop_dataverse_analytics_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    drop_dataverse(std::move(dataverse_name), options, [barrier](auto ctx) mutable { barrier->set_value({ std::move(ctx) }); });
+    drop_dataverse(std::move(dataverse_name), options, [barrier](auto err) mutable {
+        barrier->set_value({ std::move(err) });
+    });
     return future;
 }
 
@@ -537,12 +555,13 @@ analytics_index_manager::create_dataset(std::string dataset_name,
 auto
 analytics_index_manager::create_dataset(std::string dataset_name,
                                         std::string bucket_name,
-                                        const create_dataset_analytics_options& options) const -> std::future<manager_error_context>
+                                        const create_dataset_analytics_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    create_dataset(
-      std::move(dataset_name), std::move(bucket_name), options, [barrier](auto ctx) mutable { barrier->set_value({ std::move(ctx) }); });
+    create_dataset(std::move(dataset_name), std::move(bucket_name), options, [barrier](auto err) mutable {
+        barrier->set_value({ std::move(err) });
+    });
     return future;
 }
 
@@ -555,12 +574,13 @@ analytics_index_manager::drop_dataset(std::string dataset_name,
 }
 
 auto
-analytics_index_manager::drop_dataset(std::string dataset_name, const drop_dataset_analytics_options& options) const
-  -> std::future<manager_error_context>
+analytics_index_manager::drop_dataset(std::string dataset_name, const drop_dataset_analytics_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    drop_dataset(std::move(dataset_name), options, [barrier](auto ctx) mutable { barrier->set_value({ std::move(ctx) }); });
+    drop_dataset(std::move(dataset_name), options, [barrier](auto err) mutable {
+        barrier->set_value({ std::move(err) });
+    });
     return future;
 }
 
@@ -573,11 +593,13 @@ analytics_index_manager::get_all_datasets(const get_all_datasets_analytics_optio
 
 auto
 analytics_index_manager::get_all_datasets(const get_all_datasets_analytics_options& options) const
-  -> std::future<std::pair<manager_error_context, std::vector<management::analytics_dataset>>>
+  -> std::future<std::pair<error, std::vector<management::analytics_dataset>>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, std::vector<management::analytics_dataset>>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, std::vector<management::analytics_dataset>>>>();
     auto future = barrier->get_future();
-    get_all_datasets(options, [barrier](auto ctx, auto resp) mutable { barrier->set_value({ std::move(ctx), std::move(resp) }); });
+    get_all_datasets(options, [barrier](auto err, auto resp) mutable {
+        barrier->set_value({ std::move(err), std::move(resp) });
+    });
     return future;
 }
 
@@ -595,12 +617,12 @@ auto
 analytics_index_manager::create_index(std::string index_name,
                                       std::string dataset_name,
                                       std::map<std::string, std::string> fields,
-                                      const create_index_analytics_options& options) const -> std::future<manager_error_context>
+                                      const create_index_analytics_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    create_index(std::move(index_name), std::move(dataset_name), std::move(fields), options, [barrier](auto ctx) mutable {
-        barrier->set_value({ std::move(ctx) });
+    create_index(std::move(index_name), std::move(dataset_name), std::move(fields), options, [barrier](auto err) mutable {
+        barrier->set_value({ std::move(err) });
     });
     return future;
 }
@@ -616,12 +638,13 @@ analytics_index_manager::drop_index(std::string index_name,
 
 auto
 analytics_index_manager::drop_index(std::string index_name, std::string dataset_name, const drop_index_analytics_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    drop_index(
-      std::move(index_name), std::move(dataset_name), options, [barrier](auto ctx) mutable { barrier->set_value({ std::move(ctx) }); });
+    drop_index(std::move(index_name), std::move(dataset_name), options, [barrier](auto err) mutable {
+        barrier->set_value({ std::move(err) });
+    });
     return future;
 }
 
@@ -634,11 +657,13 @@ analytics_index_manager::get_all_indexes(const get_all_indexes_analytics_options
 
 auto
 analytics_index_manager::get_all_indexes(const get_all_indexes_analytics_options& options) const
-  -> std::future<std::pair<manager_error_context, std::vector<management::analytics_index>>>
+  -> std::future<std::pair<error, std::vector<management::analytics_index>>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, std::vector<management::analytics_index>>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, std::vector<management::analytics_index>>>>();
     auto future = barrier->get_future();
-    get_all_indexes(options, [barrier](auto ctx, auto resp) mutable { barrier->set_value({ std::move(ctx), std::move(resp) }); });
+    get_all_indexes(options, [barrier](auto err, auto resp) mutable {
+        barrier->set_value({ std::move(err), std::move(resp) });
+    });
     return future;
 }
 
@@ -649,11 +674,13 @@ analytics_index_manager::connect_link(const connect_link_analytics_options& opti
 }
 
 auto
-analytics_index_manager::connect_link(const connect_link_analytics_options& options) const -> std::future<manager_error_context>
+analytics_index_manager::connect_link(const connect_link_analytics_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    connect_link(options, [barrier](auto ctx) mutable { barrier->set_value({ std::move(ctx) }); });
+    connect_link(options, [barrier](auto err) mutable {
+        barrier->set_value({ std::move(err) });
+    });
     return future;
 }
 
@@ -665,11 +692,13 @@ analytics_index_manager::disconnect_link(const disconnect_link_analytics_options
 }
 
 auto
-analytics_index_manager::disconnect_link(const disconnect_link_analytics_options& options) const -> std::future<manager_error_context>
+analytics_index_manager::disconnect_link(const disconnect_link_analytics_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    disconnect_link(options, [barrier](auto ctx) mutable { barrier->set_value({ std::move(ctx) }); });
+    disconnect_link(options, [barrier](auto err) mutable {
+        barrier->set_value({ std::move(err) });
+    });
     return future;
 }
 
@@ -682,12 +711,14 @@ analytics_index_manager::get_pending_mutations(const get_pending_mutations_analy
 
 auto
 analytics_index_manager::get_pending_mutations(const get_pending_mutations_analytics_options& options) const
-  -> std::future<std::pair<couchbase::manager_error_context, std::map<std::string, std::map<std::string, std::int64_t>>>>
+  -> std::future<std::pair<couchbase::error, std::map<std::string, std::map<std::string, std::int64_t>>>>
 {
-    auto barrier = std::make_shared<
-      std::promise<std::pair<couchbase::manager_error_context, std::map<std::string, std::map<std::string, std::int64_t>>>>>();
+    auto barrier =
+      std::make_shared<std::promise<std::pair<couchbase::error, std::map<std::string, std::map<std::string, std::int64_t>>>>>();
     auto future = barrier->get_future();
-    get_pending_mutations(options, [barrier](auto ctx, auto resp) mutable { barrier->set_value({ std::move(ctx), std::move(resp) }); });
+    get_pending_mutations(options, [barrier](auto err, auto resp) mutable {
+        barrier->set_value({ std::move(err), std::move(resp) });
+    });
     return future;
 }
 
@@ -701,11 +732,13 @@ analytics_index_manager::create_link(const management::analytics_link& link,
 
 auto
 analytics_index_manager::create_link(const management::analytics_link& link, const create_link_analytics_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    create_link(link, options, [barrier](auto ctx) mutable { barrier->set_value({ std::move(ctx) }); });
+    create_link(link, options, [barrier](auto err) mutable {
+        barrier->set_value({ std::move(err) });
+    });
     return future;
 }
 
@@ -719,11 +752,13 @@ analytics_index_manager::replace_link(const management::analytics_link& link,
 
 auto
 analytics_index_manager::replace_link(const management::analytics_link& link, const replace_link_analytics_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    replace_link(link, options, [barrier](auto ctx) mutable { barrier->set_value({ std::move(ctx) }); });
+    replace_link(link, options, [barrier](auto err) mutable {
+        barrier->set_value({ std::move(err) });
+    });
     return future;
 }
 
@@ -738,12 +773,13 @@ analytics_index_manager::drop_link(std::string link_name,
 
 auto
 analytics_index_manager::drop_link(std::string link_name, std::string dataverse_name, const drop_link_analytics_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    drop_link(
-      std::move(link_name), std::move(dataverse_name), options, [barrier](auto ctx) mutable { barrier->set_value({ std::move(ctx) }); });
+    drop_link(std::move(link_name), std::move(dataverse_name), options, [barrier](auto err) mutable {
+        barrier->set_value({ std::move(err) });
+    });
     return future;
 }
 
@@ -755,12 +791,13 @@ analytics_index_manager::get_links(const get_links_analytics_options& options, g
 
 auto
 analytics_index_manager::get_links(const get_links_analytics_options& options) const
-  -> std::future<std::pair<manager_error_context, std::vector<std::unique_ptr<management::analytics_link>>>>
+  -> std::future<std::pair<error, std::vector<std::unique_ptr<management::analytics_link>>>>
 {
-    auto barrier =
-      std::make_shared<std::promise<std::pair<manager_error_context, std::vector<std::unique_ptr<management::analytics_link>>>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, std::vector<std::unique_ptr<management::analytics_link>>>>>();
     auto future = barrier->get_future();
-    get_links(options, [barrier](auto ctx, auto resp) mutable { barrier->set_value({ std::move(ctx), std::move(resp) }); });
+    get_links(options, [barrier](auto err, auto resp) mutable {
+        barrier->set_value({ std::move(err), std::move(resp) });
+    });
     return future;
 }
 

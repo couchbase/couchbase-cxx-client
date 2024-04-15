@@ -59,5 +59,5 @@ class create_link_analytics_options : public common_options<create_link_analytic
  * @since 1.0.0
  * @uncommitted
  */
-using create_link_analytics_handler = std::function<void(couchbase::manager_error_context)>;
+using create_link_analytics_handler = std::function<void(error)>;
 } // namespace couchbase

@@ -25,6 +25,8 @@
 #include "core/operations/management/bucket_update.hxx"
 #include "internal_manager_error_context.hxx"
 
+#include "core/impl/error.hxx"
+
 #include <couchbase/bucket_manager.hxx>
 
 #include <memory>
@@ -33,21 +35,6 @@ namespace couchbase
 {
 namespace
 {
-template<typename Response>
-manager_error_context
-build_context(Response& resp)
-{
-    return manager_error_context(internal_manager_error_context{ resp.ctx.ec,
-                                                                 resp.ctx.last_dispatched_to,
-                                                                 resp.ctx.last_dispatched_from,
-                                                                 resp.ctx.retry_attempts,
-                                                                 std::move(resp.ctx.retry_reasons),
-                                                                 std::move(resp.ctx.client_context_id),
-                                                                 resp.ctx.http_status,
-                                                                 std::move(resp.ctx.http_body),
-                                                                 std::move(resp.ctx.path) });
-}
-
 couchbase::management::cluster::bucket_settings
 map_bucket_settings(const couchbase::core::management::cluster::bucket_settings& bucket)
 {
@@ -264,7 +251,9 @@ class bucket_manager_impl
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp), map_bucket_settings(resp.bucket)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx), map_bucket_settings(resp.bucket));
+          });
     }
 
     void get_all_buckets(const get_all_buckets_options::built& options, get_all_buckets_handler&& handler) const
@@ -275,7 +264,7 @@ class bucket_manager_impl
             options.timeout,
           },
           [handler = std::move(handler)](auto resp) mutable {
-              return handler(build_context(resp), map_all_bucket_settings(resp.buckets));
+              return handler(core::impl::make_error(resp.ctx), map_all_bucket_settings(resp.buckets));
           });
     }
 
@@ -289,7 +278,9 @@ class bucket_manager_impl
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void update_bucket(const management::cluster::bucket_settings& bucket_settings,
@@ -302,7 +293,9 @@ class bucket_manager_impl
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void drop_bucket(std::string bucket_name, const drop_bucket_options::built& options, drop_bucket_handler&& handler) const
@@ -313,7 +306,9 @@ class bucket_manager_impl
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void flush_bucket(std::string bucket_name, const flush_bucket_options::built& options, flush_bucket_handler&& handler) const
@@ -324,7 +319,9 @@ class bucket_manager_impl
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
   private:
@@ -344,11 +341,11 @@ bucket_manager::get_bucket(std::string bucket_name, const get_bucket_options& op
 
 auto
 bucket_manager::get_bucket(std::string bucket_name, const get_bucket_options& options) const
-  -> std::future<std::pair<manager_error_context, management::cluster::bucket_settings>>
+  -> std::future<std::pair<error, management::cluster::bucket_settings>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, management::cluster::bucket_settings>>>();
-    get_bucket(std::move(bucket_name), options, [barrier](auto ctx, auto result) mutable {
-        barrier->set_value(std::make_pair(std::move(ctx), std::move(result)));
+    auto barrier = std::make_shared<std::promise<std::pair<error, management::cluster::bucket_settings>>>();
+    get_bucket(std::move(bucket_name), options, [barrier](auto err, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(err), std::move(result)));
     });
     return barrier->get_future();
 }
@@ -361,11 +358,12 @@ bucket_manager::get_all_buckets(const get_all_buckets_options& options, get_all_
 
 auto
 bucket_manager::get_all_buckets(const get_all_buckets_options& options) const
-  -> std::future<std::pair<manager_error_context, std::vector<management::cluster::bucket_settings>>>
+  -> std::future<std::pair<error, std::vector<management::cluster::bucket_settings>>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, std::vector<management::cluster::bucket_settings>>>>();
-    get_all_buckets(options,
-                    [barrier](auto ctx, auto result) mutable { barrier->set_value(std::make_pair(std::move(ctx), std::move(result))); });
+    auto barrier = std::make_shared<std::promise<std::pair<error, std::vector<management::cluster::bucket_settings>>>>();
+    get_all_buckets(options, [barrier](auto err, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(err), std::move(result)));
+    });
     return barrier->get_future();
 }
 
@@ -379,10 +377,12 @@ bucket_manager::create_bucket(const management::cluster::bucket_settings& bucket
 
 auto
 bucket_manager::create_bucket(const management::cluster::bucket_settings& bucket_settings, const create_bucket_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    create_bucket(bucket_settings, options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    create_bucket(bucket_settings, options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -396,10 +396,12 @@ bucket_manager::update_bucket(const management::cluster::bucket_settings& bucket
 
 auto
 bucket_manager::update_bucket(const management::cluster::bucket_settings& bucket_settings, const update_bucket_options& options) const
-  -> std::future<manager_error_context>
+  -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    update_bucket(bucket_settings, options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    update_bucket(bucket_settings, options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -410,10 +412,12 @@ bucket_manager::drop_bucket(std::string bucket_name, const drop_bucket_options& 
 }
 
 auto
-bucket_manager::drop_bucket(std::string bucket_name, const drop_bucket_options& options) const -> std::future<manager_error_context>
+bucket_manager::drop_bucket(std::string bucket_name, const drop_bucket_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    drop_bucket(std::move(bucket_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    drop_bucket(std::move(bucket_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -424,10 +428,12 @@ bucket_manager::flush_bucket(std::string bucket_name, const flush_bucket_options
 }
 
 auto
-bucket_manager::flush_bucket(std::string bucket_name, const flush_bucket_options& options) const -> std::future<manager_error_context>
+bucket_manager::flush_bucket(std::string bucket_name, const flush_bucket_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    flush_bucket(std::move(bucket_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    flush_bucket(std::move(bucket_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 } // namespace couchbase

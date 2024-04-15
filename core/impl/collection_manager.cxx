@@ -23,9 +23,13 @@
 #include "core/operations/management/scope_create.hxx"
 #include "core/operations/management/scope_drop.hxx"
 #include "core/operations/management/scope_get_all.hxx"
+
+#include "core/impl/error.hxx"
+
 #include "internal_manager_error_context.hxx"
 
 #include <couchbase/collection_manager.hxx>
+#include <couchbase/error.hxx>
 
 #include <memory>
 
@@ -33,21 +37,6 @@ namespace couchbase
 {
 namespace
 {
-template<typename Response>
-manager_error_context
-build_context(Response& resp)
-{
-    return manager_error_context(internal_manager_error_context{ resp.ctx.ec,
-                                                                 resp.ctx.last_dispatched_to,
-                                                                 resp.ctx.last_dispatched_from,
-                                                                 resp.ctx.retry_attempts,
-                                                                 std::move(resp.ctx.retry_reasons),
-                                                                 std::move(resp.ctx.client_context_id),
-                                                                 resp.ctx.http_status,
-                                                                 std::move(resp.ctx.http_body),
-                                                                 std::move(resp.ctx.path) });
-}
-
 management::bucket::collection_spec
 map_collection(std::string scope_name, const core::topology::collections_manifest::collection& collection)
 {
@@ -98,7 +87,9 @@ class collection_manager_impl
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void update_collection(std::string scope_name,
@@ -117,7 +108,9 @@ class collection_manager_impl
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void create_collection(std::string scope_name,
@@ -136,7 +129,9 @@ class collection_manager_impl
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void get_all_scopes(const get_all_scopes_options::built& options, get_all_scopes_handler&& handler) const
@@ -147,7 +142,9 @@ class collection_manager_impl
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp), map_scope_specs(resp.manifest)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx), map_scope_specs(resp.manifest));
+          });
     }
 
     void create_scope(std::string scope_name,
@@ -161,7 +158,9 @@ class collection_manager_impl
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
     void drop_scope(std::string scope_name,
@@ -175,7 +174,9 @@ class collection_manager_impl
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) mutable { return handler(build_context(resp)); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(resp.ctx));
+          });
     }
 
   private:
@@ -200,11 +201,12 @@ collection_manager::drop_collection(std::string scope_name,
 auto
 collection_manager::drop_collection(std::string scope_name,
                                     std::string collection_name,
-                                    const couchbase::drop_collection_options& options) const -> std::future<manager_error_context>
+                                    const couchbase::drop_collection_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    drop_collection(
-      std::move(scope_name), std::move(collection_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    drop_collection(std::move(scope_name), std::move(collection_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -222,11 +224,11 @@ auto
 collection_manager::update_collection(std::string scope_name,
                                       std::string collection_name,
                                       const couchbase::update_collection_settings& settings,
-                                      const couchbase::update_collection_options& options) const -> std::future<manager_error_context>
+                                      const couchbase::update_collection_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    update_collection(std::move(scope_name), std::move(collection_name), settings, options, [barrier](auto ctx) mutable {
-        barrier->set_value(std::move(ctx));
+    auto barrier = std::make_shared<std::promise<error>>();
+    update_collection(std::move(scope_name), std::move(collection_name), settings, options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
     });
     return barrier->get_future();
 }
@@ -245,11 +247,11 @@ auto
 collection_manager::create_collection(std::string scope_name,
                                       std::string collection_name,
                                       const couchbase::create_collection_settings& settings,
-                                      const couchbase::create_collection_options& options) const -> std::future<manager_error_context>
+                                      const couchbase::create_collection_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    create_collection(std::move(scope_name), std::move(collection_name), settings, options, [barrier](auto ctx) mutable {
-        barrier->set_value(std::move(ctx));
+    auto barrier = std::make_shared<std::promise<error>>();
+    create_collection(std::move(scope_name), std::move(collection_name), settings, options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
     });
     return barrier->get_future();
 }
@@ -262,11 +264,12 @@ collection_manager::get_all_scopes(const get_all_scopes_options& options, get_al
 
 auto
 collection_manager::get_all_scopes(const couchbase::get_all_scopes_options& options) const
-  -> std::future<std::pair<manager_error_context, std::vector<management::bucket::scope_spec>>>
+  -> std::future<std::pair<error, std::vector<management::bucket::scope_spec>>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<manager_error_context, std::vector<management::bucket::scope_spec>>>>();
-    get_all_scopes(options,
-                   [barrier](auto ctx, auto result) mutable { barrier->set_value(std::make_pair(std::move(ctx), std::move(result))); });
+    auto barrier = std::make_shared<std::promise<std::pair<error, std::vector<management::bucket::scope_spec>>>>();
+    get_all_scopes(options, [barrier](auto err, auto result) mutable {
+        barrier->set_value(std::make_pair(std::move(err), std::move(result)));
+    });
     return barrier->get_future();
 }
 
@@ -279,11 +282,12 @@ collection_manager::create_scope(std::string scope_name,
 }
 
 auto
-collection_manager::create_scope(std::string scope_name, const couchbase::create_scope_options& options) const
-  -> std::future<manager_error_context>
+collection_manager::create_scope(std::string scope_name, const couchbase::create_scope_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    create_scope(std::move(scope_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    create_scope(std::move(scope_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 
@@ -296,11 +300,12 @@ collection_manager::drop_scope(std::string scope_name,
 }
 
 auto
-collection_manager::drop_scope(std::string scope_name, const couchbase::drop_scope_options& options) const
-  -> std::future<manager_error_context>
+collection_manager::drop_scope(std::string scope_name, const couchbase::drop_scope_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<manager_error_context>>();
-    drop_scope(std::move(scope_name), options, [barrier](auto ctx) mutable { barrier->set_value(std::move(ctx)); });
+    auto barrier = std::make_shared<std::promise<error>>();
+    drop_scope(std::move(scope_name), options, [barrier](auto err) mutable {
+        barrier->set_value(std::move(err));
+    });
     return barrier->get_future();
 }
 } // namespace couchbase

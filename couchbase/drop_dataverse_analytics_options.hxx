@@ -80,5 +80,5 @@ class drop_dataverse_analytics_options : public common_options<drop_dataverse_an
  * @since 1.0.0
  * @uncommitted
  */
-using drop_dataverse_analytics_handler = std::function<void(couchbase::manager_error_context)>;
+using drop_dataverse_analytics_handler = std::function<void(error)>;
 } // namespace couchbase

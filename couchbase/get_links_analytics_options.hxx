@@ -116,6 +116,5 @@ class get_links_analytics_options : public common_options<get_links_analytics_op
  * @since 1.0.0
  * @uncommitted
  */
-using get_links_analytics_handler =
-  std::function<void(couchbase::manager_error_context, std::vector<std::unique_ptr<management::analytics_link>>)>;
+using get_links_analytics_handler = std::function<void(error, std::vector<std::unique_ptr<management::analytics_link>>)>;
 } // namespace couchbase

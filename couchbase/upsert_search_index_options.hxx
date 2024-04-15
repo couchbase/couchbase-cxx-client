@@ -37,5 +37,5 @@ struct upsert_search_index_options : public common_options<upsert_search_index_o
   private:
 };
 
-using upsert_search_index_handler = std::function<void(couchbase::manager_error_context)>;
+using upsert_search_index_handler = std::function<void(error)>;
 } // namespace couchbase

@@ -80,5 +80,5 @@ class watch_query_indexes_options : public common_options<watch_query_indexes_op
  * @uncommitted
  */
 
-using watch_query_indexes_handler = std::function<void(couchbase::manager_error_context)>;
+using watch_query_indexes_handler = std::function<void(error)>;
 } // namespace couchbase

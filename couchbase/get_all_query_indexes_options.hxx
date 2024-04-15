@@ -18,9 +18,9 @@
 #pragma once
 
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/management/query_index.hxx>
-#include <couchbase/manager_error_context.hxx>
 
 #include <functional>
 #include <memory>
@@ -64,5 +64,5 @@ class get_all_query_indexes_options : public common_options<get_all_query_indexe
  * @uncommitted
  */
 
-using get_all_query_indexes_handler = std::function<void(couchbase::manager_error_context, std::vector<management::query_index>)>;
+using get_all_query_indexes_handler = std::function<void(error, std::vector<management::query_index>)>;
 } // namespace couchbase

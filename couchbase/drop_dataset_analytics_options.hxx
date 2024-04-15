@@ -99,5 +99,5 @@ class drop_dataset_analytics_options : public common_options<drop_dataset_analyt
  * @since 1.0.0
  * @uncommitted
  */
-using drop_dataset_analytics_handler = std::function<void(couchbase::manager_error_context)>;
+using drop_dataset_analytics_handler = std::function<void(error)>;
 } // namespace couchbase
