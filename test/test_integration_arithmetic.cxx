@@ -93,33 +93,33 @@ TEST_CASE("integration: increment with public API", "[integration]")
     {
         {
             const auto ascii_zero = couchbase::core::utils::to_binary("0");
-            auto [ctx, resp] = collection.insert<couchbase::codec::raw_binary_transcoder>(id, ascii_zero, {}).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto [err, resp] = collection.insert<couchbase::codec::raw_binary_transcoder>(id, ascii_zero, {}).get();
+            REQUIRE_SUCCESS(err.ec());
             REQUIRE_FALSE(resp.cas().empty());
         }
 
         for (uint64_t expected = 2; expected <= 20; expected += 2) {
-            auto [ctx, resp] = collection.binary().increment(id, couchbase::increment_options{}.delta(2)).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto [err, resp] = collection.binary().increment(id, couchbase::increment_options{}.delta(2)).get();
+            REQUIRE_SUCCESS(err.ec());
             REQUIRE(resp.content() == expected);
         }
     }
 
     SECTION("initial value")
     {
-        auto [ctx, resp] = collection.binary().increment(id, couchbase::increment_options{}.delta(2).initial(10)).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, resp] = collection.binary().increment(id, couchbase::increment_options{}.delta(2).initial(10)).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE(resp.content() == 10);
     }
 
     if (integration.cluster_version().supports_enhanced_durability()) {
         SECTION("durability")
         {
-            auto [ctx, resp] =
+            auto [err, resp] =
               collection.binary()
                 .increment(id, couchbase::increment_options{}.initial(2).durability(couchbase::durability_level::persist_to_majority))
                 .get();
-            REQUIRE_SUCCESS(ctx.ec());
+            REQUIRE_SUCCESS(err.ec());
             REQUIRE(resp.content() == 2);
         }
     }
@@ -188,33 +188,33 @@ TEST_CASE("integration: decrement with public API", "[integration]")
     {
         {
             const auto ascii_twenty = couchbase::core::utils::to_binary("20");
-            auto [ctx, resp] = collection.insert<couchbase::codec::raw_binary_transcoder>(id, ascii_twenty, {}).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto [err, resp] = collection.insert<couchbase::codec::raw_binary_transcoder>(id, ascii_twenty, {}).get();
+            REQUIRE_SUCCESS(err.ec());
             REQUIRE_FALSE(resp.cas().empty());
         }
 
         for (uint64_t expected = 18; expected > 0; expected -= 2) {
-            auto [ctx, resp] = collection.binary().decrement(id, couchbase::decrement_options{}.delta(2)).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto [err, resp] = collection.binary().decrement(id, couchbase::decrement_options{}.delta(2)).get();
+            REQUIRE_SUCCESS(err.ec());
             REQUIRE(resp.content() == expected);
         }
     }
 
     SECTION("initial value")
     {
-        auto [ctx, resp] = collection.binary().decrement(id, couchbase::decrement_options{}.delta(2).initial(10)).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, resp] = collection.binary().decrement(id, couchbase::decrement_options{}.delta(2).initial(10)).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE(resp.content() == 10);
     }
 
     if (integration.cluster_version().supports_enhanced_durability()) {
         SECTION("durability")
         {
-            auto [ctx, resp] =
+            auto [err, resp] =
               collection.binary()
                 .decrement(id, couchbase::decrement_options{}.initial(2).durability(couchbase::durability_level::persist_to_majority))
                 .get();
-            REQUIRE_SUCCESS(ctx.ec());
+            REQUIRE_SUCCESS(err.ec());
             REQUIRE(resp.content() == 2);
         }
     }

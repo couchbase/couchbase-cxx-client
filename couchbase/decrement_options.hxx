@@ -139,5 +139,5 @@ struct decrement_options : public common_durability_options<decrement_options> {
  * @since 1.0.0
  * @uncommitted
  */
-using decrement_handler = std::function<void(couchbase::key_value_error_context, counter_result)>;
+using decrement_handler = std::function<void(error, counter_result)>;
 } // namespace couchbase

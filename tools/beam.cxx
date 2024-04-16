@@ -24,6 +24,7 @@
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/fmt/cas.hxx>
+#include <couchbase/fmt/error.hxx>
 #include <couchbase/fmt/retry_reason.hxx>
 
 #include <asio/io_context.hpp>
@@ -161,9 +162,9 @@ class beam_app : public CLI::App
         if (!use_upsert_) {
             // Populate the keys first
             for (const auto& id : ids) {
-                auto [ctx, resp] = collection.upsert(id, dummy_value).get();
-                if (ctx.ec()) {
-                    fail(fmt::format("Failed to store value for key {:?}: {}", id, ctx.ec().message()));
+                auto [err, resp] = collection.upsert(id, dummy_value).get();
+                if (err.ec()) {
+                    fail(fmt::format("Failed to store value for key {:?}: {}", id, err.ec().message()));
                 }
             }
         }
@@ -175,34 +176,21 @@ class beam_app : public CLI::App
 
         while (running.test_and_set()) {
             for (const auto& id : ids) {
-                couchbase::key_value_error_context ctx;
+                couchbase::error err;
                 if (use_upsert_) {
-                    auto [c, _] = collection.upsert(id, dummy_value).get();
-                    ctx = std::move(c);
+                    auto [e, _] = collection.upsert(id, dummy_value).get();
+                    err = std::move(e);
                 } else {
-                    auto [c, _] = collection.get(id, {}).get();
-                    ctx = std::move(c);
+                    auto [e, _] = collection.get(id, {}).get();
+                    err = std::move(e);
                 }
 
-                if (ctx.ec()) {
-                    fmt::print(stderr,
-                               "{} failed to {} value for key {:?}: {}, last_dispatched_to={:?}, retries={} ({})\n",
-                               timestamp(),
-                               use_upsert_ ? "upsert" : "get",
-                               id,
-                               ctx.ec().message(),
-                               ctx.last_dispatched_to().value_or("-"),
-                               ctx.retry_attempts(),
-                               fmt::join(ctx.retry_reasons(), ", "));
+                if (err.ec()) {
+                    fmt::print(
+                      stderr, "{} failed to {} value for key {:?}: {}, {}\n", timestamp(), use_upsert_ ? "upsert" : "get", id, err);
                     has_error = true;
                 } else if (has_error) {
-                    fmt::print(stderr,
-                               "{} success for key {:?}, last_dispatched_to={:?}, retries={} ({})\n",
-                               timestamp(),
-                               id,
-                               ctx.last_dispatched_to().value_or("-"),
-                               ctx.retry_attempts(),
-                               fmt::join(ctx.retry_reasons(), ", "));
+                    fmt::print(stderr, "{} success for key {:?}, {}\n", timestamp(), id, err);
                     has_error = false;
                 }
             }

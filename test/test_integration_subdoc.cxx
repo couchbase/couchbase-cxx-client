@@ -1307,8 +1307,8 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
             auto specs = couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("dictkey"),
                                                      couchbase::lookup_in_specs::exists("array"),
                                                      couchbase::lookup_in_specs::count("array") };
-            auto [ctx, result] = collection.lookup_in_all_replicas(key, specs).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto [err, result] = collection.lookup_in_all_replicas(key, specs).get();
+            REQUIRE_SUCCESS(err.ec());
             REQUIRE(result.size() == number_of_replicas + 1);
             auto responses_from_active = std::count_if(result.begin(), result.end(), [](const auto& r) { return !r.is_replica(); });
             REQUIRE(responses_from_active == 1);
@@ -1326,8 +1326,8 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
             auto specs = couchbase::lookup_in_specs{
                 couchbase::lookup_in_specs::get("non-exists"),
             };
-            auto [ctx, result] = collection.lookup_in_all_replicas("missing-key", specs).get();
-            REQUIRE(ctx.ec() == couchbase::errc::key_value::document_not_found);
+            auto [err, result] = collection.lookup_in_all_replicas("missing-key", specs).get();
+            REQUIRE(err.ec() == couchbase::errc::key_value::document_not_found);
             REQUIRE(result.empty());
         }
 
@@ -1336,8 +1336,8 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
             auto specs = couchbase::lookup_in_specs{
                 couchbase::lookup_in_specs::exists("non-exists"),
             };
-            auto [ctx, result] = collection.lookup_in_all_replicas(key, specs).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto [err, result] = collection.lookup_in_all_replicas(key, specs).get();
+            REQUIRE_SUCCESS(err.ec());
             for (auto& res : result) {
                 REQUIRE(!res.cas().empty());
                 REQUIRE(!res.exists(0));
@@ -1561,8 +1561,8 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
             auto specs = couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("dictkey"),
                                                      couchbase::lookup_in_specs::exists("array"),
                                                      couchbase::lookup_in_specs::count("array") };
-            auto [ctx, result] = collection.lookup_in_any_replica(key, specs).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto [err, result] = collection.lookup_in_any_replica(key, specs).get();
+            REQUIRE_SUCCESS(err.ec());
             REQUIRE(!result.cas().empty());
             REQUIRE("dictval" == result.content_as<std::string>(0));
             REQUIRE(result.exists("array"));
@@ -1575,8 +1575,8 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
             auto specs = couchbase::lookup_in_specs{
                 couchbase::lookup_in_specs::get("non-exists"),
             };
-            auto [ctx, result] = collection.lookup_in_any_replica("missing-key", specs).get();
-            REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+            auto [err, result] = collection.lookup_in_any_replica("missing-key", specs).get();
+            REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
             REQUIRE(result.cas().empty());
         }
 
@@ -1587,8 +1587,8 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
             for (int i = 0; i < 17; i++) {
                 specs.push_back(couchbase::lookup_in_specs::get("dictkey"));
             }
-            auto [ctx, result] = collection.lookup_in_any_replica(key, specs).get();
-            REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+            auto [err, result] = collection.lookup_in_any_replica(key, specs).get();
+            REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
             REQUIRE(result.cas().empty());
         }
 
@@ -1597,8 +1597,8 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
             auto specs = couchbase::lookup_in_specs{
                 couchbase::lookup_in_specs::exists("non-exists"),
             };
-            auto [ctx, result] = collection.lookup_in_any_replica(key, specs).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto [err, result] = collection.lookup_in_any_replica(key, specs).get();
+            REQUIRE_SUCCESS(err.ec());
             REQUIRE(!result.exists(0));
             REQUIRE(!result.content_as<bool>(0));
         }
@@ -1614,8 +1614,8 @@ TEST_CASE("integration: public API lookup in per-spec errors", "[integration]")
     auto key = test::utils::uniq_id("lookup_in_path_invalid");
     {
         auto value_json = couchbase::core::utils::json::parse(R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
-        auto [ctx, result] = collection.upsert(key, value_json).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, result] = collection.upsert(key, value_json).get();
+        REQUIRE_SUCCESS(err.ec());
     }
 
     SECTION("path invalid")
@@ -1623,7 +1623,9 @@ TEST_CASE("integration: public API lookup in per-spec errors", "[integration]")
         auto specs = couchbase::lookup_in_specs{
             couchbase::lookup_in_specs::get("..dictkey"),
         };
-        auto [ctx, result] = collection.lookup_in(key, specs).get();
+        auto [err, result] = collection.lookup_in(key, specs).get();
+        REQUIRE_SUCCESS(err.ec());
+
         std::error_code ec{};
         try {
             std::ignore = result.content_as<std::string>(0);
@@ -1646,7 +1648,8 @@ TEST_CASE("integration: public API lookup in per-spec errors", "[integration]")
         auto specs = couchbase::lookup_in_specs{
             couchbase::lookup_in_specs::count("dictkey"),
         };
-        auto [ctx, result] = collection.lookup_in(key, specs).get();
+        auto [err, result] = collection.lookup_in(key, specs).get();
+        REQUIRE_SUCCESS(err.ec());
 
         std::error_code ec{};
         try {
@@ -1670,7 +1673,8 @@ TEST_CASE("integration: public API lookup in per-spec errors", "[integration]")
         auto specs = couchbase::lookup_in_specs{
             couchbase::lookup_in_specs::get("dictkey2"),
         };
-        auto [ctx, result] = collection.lookup_in(key, specs).get();
+        auto [err, result] = collection.lookup_in(key, specs).get();
+        REQUIRE_SUCCESS(err.ec());
 
         std::error_code ec{};
         try {
@@ -1695,9 +1699,9 @@ TEST_CASE("integration: public API lookup in per-spec errors", "[integration]")
         auto specs = couchbase::lookup_in_specs{
             couchbase::lookup_in_specs::exists("dictkey2"),
         };
-        auto [ctx, result] = collection.lookup_in(key, specs).get();
+        auto [err, result] = collection.lookup_in(key, specs).get();
 
-        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE(!result.exists(0));
         REQUIRE(!result.content_as<bool>(0));
     }

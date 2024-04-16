@@ -71,8 +71,8 @@ main(int argc, const char* argv[])
     const tao::json::value content = { { "some", "content" } };
 
     for (const auto& id : { id_1, id_2, id_3 }) {
-        if (auto [ctx, res] = collection.upsert(id, content).get(); ctx.ec()) {
-            fmt::print(stderr, "upsert \"{}\" failed before starting transaction: {}\n", id, ctx.ec().message());
+        if (auto [err, res] = collection.upsert(id, content).get(); err.ec()) {
+            fmt::print(stderr, "upsert \"{}\" failed before starting transaction: {}\n", id, err.ec().message());
             return 1;
         }
     }

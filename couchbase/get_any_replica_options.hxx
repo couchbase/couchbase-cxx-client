@@ -18,8 +18,8 @@
 #pragma once
 
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/get_replica_result.hxx>
-#include <couchbase/key_value_error_context.hxx>
 
 #include <chrono>
 #include <functional>
@@ -66,5 +66,5 @@ struct get_any_replica_options : public common_options<get_any_replica_options> 
  * @since 1.0.0
  * @uncommitted
  */
-using get_any_replica_handler = std::function<void(key_value_error_context, get_replica_result)>;
+using get_any_replica_handler = std::function<void(error, get_replica_result)>;
 } // namespace couchbase

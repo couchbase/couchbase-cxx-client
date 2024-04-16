@@ -37,6 +37,7 @@
 #include "core/operations/document_upsert.hxx"
 #include "core/range_scan_options.hxx"
 #include "core/range_scan_orchestrator.hxx"
+#include "error.hxx"
 #include "get_all_replicas.hxx"
 #include "get_any_replica.hxx"
 #include "get_replica.hxx"
@@ -95,7 +96,8 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                 { options.retry_strategy },
               },
               [handler = std::move(handler)](auto resp) mutable {
-                  return handler(std::move(resp.ctx), get_result{ resp.cas, { std::move(resp.value), resp.flags }, {} });
+                  return handler(core::impl::make_error(std::move(resp.ctx)),
+                                 get_result{ resp.cas, { std::move(resp.value), resp.flags }, {} });
               });
         }
         return core_.execute(
@@ -115,7 +117,8 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
               if (resp.expiry && resp.expiry.value() > 0) {
                   expiry_time.emplace(std::chrono::seconds{ resp.expiry.value() });
               }
-              return handler(std::move(resp.ctx), get_result{ resp.cas, { std::move(resp.value), resp.flags }, expiry_time });
+              return handler(core::impl::make_error(std::move(resp.ctx)),
+                             get_result{ resp.cas, { std::move(resp.value), resp.flags }, expiry_time });
           });
     }
 
@@ -134,7 +137,8 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
             { options.retry_strategy },
           },
           [handler = std::move(handler)](auto resp) mutable {
-              return handler(std::move(resp.ctx), get_result{ resp.cas, { std::move(resp.value), resp.flags }, {} });
+              return handler(core::impl::make_error(std::move(resp.ctx)),
+                             get_result{ resp.cas, { std::move(resp.value), resp.flags }, {} });
           });
     }
 
@@ -149,7 +153,9 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
             options.timeout,
             { options.retry_strategy },
           },
-          [handler = std::move(handler)](auto resp) mutable { return handler(std::move(resp.ctx), result{ resp.cas }); });
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(std::move(resp.ctx)), result{ resp.cas });
+          });
     }
 
     void get_any_replica(std::string document_key,
@@ -163,7 +169,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
           [core = core_, r = std::move(request), h = std::move(handler)](std::error_code ec,
                                                                          const core::topology::configuration& config) mutable {
               if (ec) {
-                  return h(make_key_value_error_context(ec, r->id()), get_replica_result{});
+                  return h(core::impl::make_error(make_key_value_error_context(ec, r->id())), get_replica_result{});
               }
               struct replica_context {
                   replica_context(core::impl::movable_get_any_replica_handler&& handler, std::uint32_t expected_responses)
@@ -202,7 +208,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                           std::swap(local_handler, ctx->handler_);
                       }
                       if (local_handler) {
-                          return local_handler(std::move(resp.ctx),
+                          return local_handler(core::impl::make_error(std::move(resp.ctx)),
                                                get_replica_result{ resp.cas, true /* replica */, { std::move(resp.value), resp.flags } });
                       }
                   });
@@ -230,7 +236,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                       std::swap(local_handler, ctx->handler_);
                   }
                   if (local_handler) {
-                      return local_handler(std::move(resp.ctx),
+                      return local_handler(core::impl::make_error(std::move(resp.ctx)),
                                            get_replica_result{ resp.cas, false /* active */, { std::move(resp.value), resp.flags } });
                   }
               });
@@ -248,7 +254,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
           [core = core_, r = std::move(request), h = std::move(handler)](std::error_code ec,
                                                                          const core::topology::configuration& config) mutable {
               if (ec) {
-                  return h(make_key_value_error_context(ec, r->id()), get_all_replicas_result{});
+                  return h(core::impl::make_error(make_key_value_error_context(ec, r->id())), get_all_replicas_result{});
               }
               struct replica_context {
                   replica_context(core::impl::movable_get_all_replicas_handler handler, std::uint32_t expected_responses)
@@ -294,7 +300,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                           if (!ctx->result_.empty()) {
                               resp.ctx.override_ec({});
                           }
-                          return local_handler(std::move(resp.ctx), std::move(ctx->result_));
+                          return local_handler(core::impl::make_error(std::move(resp.ctx)), std::move(ctx->result_));
                       }
                   });
               }
@@ -327,7 +333,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                       if (!ctx->result_.empty()) {
                           resp.ctx.override_ec({});
                       }
-                      return local_handler(std::move(resp.ctx), std::move(ctx->result_));
+                      return local_handler(core::impl::make_error(std::move(resp.ctx)), std::move(ctx->result_));
                   }
               });
           });
@@ -354,9 +360,9 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
               },
               [handler = std::move(handler)](auto resp) mutable {
                   if (resp.ctx.ec()) {
-                      return handler(std::move(resp.ctx), mutation_result{});
+                      return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
                   }
-                  return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                  return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{ resp.cas, std::move(resp.token) });
               });
         }
 
@@ -366,7 +372,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
         return core_.execute(
           std::move(request), [core = core_, id = std::move(id), options, handler = std::move(handler)](auto&& resp) mutable {
               if (resp.ctx.ec()) {
-                  return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                  return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{ resp.cas, std::move(resp.token) });
               }
               auto token = resp.token;
               core::impl::initiate_observe_poll(core,
@@ -378,9 +384,10 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                                                 [resp, handler = std::move(handler)](std::error_code ec) mutable {
                                                     if (ec) {
                                                         resp.ctx.override_ec(ec);
-                                                        return handler(std::move(resp.ctx), mutation_result{});
+                                                        return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
                                                     }
-                                                    return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                                                    return handler(core::impl::make_error(std::move(resp.ctx)),
+                                                                   mutation_result{ resp.cas, std::move(resp.token) });
                                                 });
           });
     }
@@ -400,7 +407,8 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
             { options.retry_strategy },
           },
           [handler = std::move(handler)](auto&& resp) mutable {
-              return handler(std::move(resp.ctx), get_result{ resp.cas, { std::move(resp.value), resp.flags }, {} });
+              return handler(core::impl::make_error(std::move(resp.ctx)),
+                             get_result{ resp.cas, { std::move(resp.value), resp.flags }, {} });
           });
     }
 
@@ -415,7 +423,9 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
             options.timeout,
             { options.retry_strategy },
           },
-          [handler = std::move(handler)](auto&& resp) mutable { return handler(std::move(resp.ctx)); });
+          [handler = std::move(handler)](auto&& resp) mutable {
+              return handler(core::impl::make_error(std::move(resp.ctx)));
+          });
     }
 
     void exists(std::string document_key, exists_options::built options, exists_handler&& handler) const
@@ -429,7 +439,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
             { options.retry_strategy },
           },
           [handler = std::move(handler)](auto&& resp) mutable {
-              return handler(std::move(resp.ctx), exists_result{ resp.cas, resp.exists() });
+              return handler(core::impl::make_error(std::move(resp.ctx)), exists_result{ resp.cas, resp.exists() });
           });
     }
 
@@ -455,7 +465,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
           },
           [handler = std::move(handler)](auto resp) mutable {
               if (resp.ctx.ec()) {
-                  return handler(std::move(resp.ctx), lookup_in_result{});
+                  return handler(core::impl::make_error(std::move(resp.ctx)), lookup_in_result{});
               }
 
               std::vector<lookup_in_result::entry> entries{};
@@ -469,7 +479,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                     entry.ec,
                   });
               }
-              return handler(std::move(resp.ctx), lookup_in_result{ resp.cas, std::move(entries), resp.deleted });
+              return handler(core::impl::make_error(std::move(resp.ctx)), lookup_in_result{ resp.cas, std::move(entries), resp.deleted });
           });
     }
 
@@ -484,7 +494,8 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
           bucket_name_,
           [core = core_, bucket_name = bucket_name_, r = std::move(request), h = std::move(handler)](std::error_code ec) mutable {
               if (ec) {
-                  h(core::make_subdocument_error_context(make_key_value_error_context(ec, r->id()), ec, {}, {}, false),
+                  h(core::impl::make_error(
+                      core::make_subdocument_error_context(make_key_value_error_context(ec, r->id()), ec, {}, {}, false)),
                     lookup_in_all_replicas_result{});
                   return;
               }
@@ -497,7 +508,8 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                     }
 
                     if (ec) {
-                        return h(core::make_subdocument_error_context(make_key_value_error_context(ec, r->id()), ec, {}, {}, false),
+                        return h(core::impl::make_error(
+                                   core::make_subdocument_error_context(make_key_value_error_context(ec, r->id()), ec, {}, {}, false)),
                                  lookup_in_all_replicas_result{});
                     }
                     struct replica_context {
@@ -554,7 +566,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                                              if (!ctx->result_.empty()) {
                                                  resp.ctx.override_ec({});
                                              }
-                                             return local_handler(std::move(resp.ctx), std::move(ctx->result_));
+                                             return local_handler(core::impl::make_error(std::move(resp.ctx)), std::move(ctx->result_));
                                          }
                                      });
                     }
@@ -597,7 +609,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                             if (!ctx->result_.empty()) {
                                 resp.ctx.override_ec({});
                             }
-                            return local_handler(std::move(resp.ctx), std::move(ctx->result_));
+                            return local_handler(core::impl::make_error(std::move(resp.ctx)), std::move(ctx->result_));
                         }
                     });
                 });
@@ -615,7 +627,8 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
           bucket_name_,
           [core = core_, bucket_name = bucket_name_, r = std::move(request), h = std::move(handler)](std::error_code ec) mutable {
               if (ec) {
-                  h(core::make_subdocument_error_context(make_key_value_error_context(ec, r->id()), ec, {}, {}, false),
+                  h(core::impl::make_error(
+                      core::make_subdocument_error_context(make_key_value_error_context(ec, r->id()), ec, {}, {}, false)),
                     lookup_in_replica_result{});
                   return;
               }
@@ -627,7 +640,8 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                         ec = errc::common::feature_not_available;
                     }
                     if (ec) {
-                        return h(core::make_subdocument_error_context(make_key_value_error_context(ec, r->id()), ec, {}, {}, false),
+                        return h(core::impl::make_error(
+                                   core::make_subdocument_error_context(make_key_value_error_context(ec, r->id()), ec, {}, {}, false)),
                                  lookup_in_replica_result{});
                     }
                     struct replica_context {
@@ -679,7 +693,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                                                  entries.emplace_back(entry);
                                              }
                                              return local_handler(
-                                               std::move(resp.ctx),
+                                               core::impl::make_error(std::move(resp.ctx)),
                                                lookup_in_replica_result{ resp.cas, entries, resp.deleted, true /* replica */ });
                                          }
                                      });
@@ -718,7 +732,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                                 entry.ec = field.ec;
                                 entries.emplace_back(entry);
                             }
-                            return local_handler(std::move(resp.ctx),
+                            return local_handler(core::impl::make_error(std::move(resp.ctx)),
                                                  lookup_in_replica_result{ resp.cas, entries, resp.deleted, false /* active */ });
                         }
                     });
@@ -756,7 +770,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
               },
               [handler = std::move(handler)](auto resp) mutable {
                   if (resp.ctx.ec()) {
-                      return handler(std::move(resp.ctx), mutate_in_result{});
+                      return handler(core::impl::make_error(std::move(resp.ctx)), mutate_in_result{});
                   }
                   std::vector<mutate_in_result::entry> entries{};
                   entries.reserve(resp.fields.size());
@@ -767,7 +781,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                         entry.original_index,
                       });
                   }
-                  return handler(std::move(resp.ctx),
+                  return handler(core::impl::make_error(std::move(resp.ctx)),
                                  mutate_in_result{ resp.cas, std::move(resp.token), std::move(entries), resp.deleted });
               });
         }
@@ -790,7 +804,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
         return core_.execute(
           std::move(request), [core = core_, id = std::move(id), options, handler = std::move(handler)](auto&& resp) mutable {
               if (resp.ctx.ec()) {
-                  return handler(std::move(resp.ctx), mutate_in_result{});
+                  return handler(core::impl::make_error(std::move(resp.ctx)), mutate_in_result{});
               }
 
               auto token = resp.token;
@@ -804,7 +818,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                 [resp, handler = std::move(handler)](std::error_code ec) mutable {
                     if (ec) {
                         resp.ctx.override_ec(ec);
-                        return handler(std::move(resp.ctx), mutate_in_result{});
+                        return handler(core::impl::make_error(std::move(resp.ctx)), mutate_in_result{});
                     }
                     std::vector<mutate_in_result::entry> entries{};
                     entries.reserve(resp.fields.size());
@@ -815,7 +829,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                           entry.original_index,
                         });
                     }
-                    return handler(std::move(resp.ctx),
+                    return handler(core::impl::make_error(std::move(resp.ctx)),
                                    mutate_in_result{ resp.cas, std::move(resp.token), std::move(entries), resp.deleted });
                 });
           });
@@ -845,7 +859,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                 options.preserve_expiry,
               },
               [handler = std::move(handler)](auto resp) mutable {
-                  return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                  return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{ resp.cas, std::move(resp.token) });
               });
         }
 
@@ -864,7 +878,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
         return core_.execute(
           std::move(request), [core = core_, id = std::move(id), options, handler = std::move(handler)](auto resp) mutable {
               if (resp.ctx.ec()) {
-                  return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                  return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{ resp.cas, std::move(resp.token) });
               }
 
               auto token = resp.token;
@@ -877,9 +891,10 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                                                 [resp, handler = std::move(handler)](std::error_code ec) mutable {
                                                     if (ec) {
                                                         resp.ctx.override_ec(ec);
-                                                        return handler(std::move(resp.ctx), mutation_result{});
+                                                        return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
                                                     }
-                                                    return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                                                    return handler(core::impl::make_error(std::move(resp.ctx)),
+                                                                   mutation_result{ resp.cas, std::move(resp.token) });
                                                 });
           });
     }
@@ -908,9 +923,9 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
               },
               [handler = std::move(handler)](auto&& resp) mutable {
                   if (resp.ctx.ec()) {
-                      return handler(std::move(resp.ctx), mutation_result{});
+                      return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
                   }
-                  return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                  return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{ resp.cas, std::move(resp.token) });
               });
         }
 
@@ -928,7 +943,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
         return core_.execute(
           std::move(request), [core = core_, id = std::move(id), options, handler = std::move(handler)](auto resp) mutable {
               if (resp.ctx.ec()) {
-                  return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                  return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{ resp.cas, std::move(resp.token) });
               }
 
               auto token = resp.token;
@@ -941,9 +956,10 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                                                 [resp, handler = std::move(handler)](std::error_code ec) mutable {
                                                     if (ec) {
                                                         resp.ctx.override_ec(ec);
-                                                        return handler(std::move(resp.ctx), mutation_result{});
+                                                        return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
                                                     }
-                                                    return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                                                    return handler(core::impl::make_error(std::move(resp.ctx)),
+                                                                   mutation_result{ resp.cas, std::move(resp.token) });
                                                 });
           });
     }
@@ -973,9 +989,9 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
               },
               [handler = std::move(handler)](auto resp) mutable {
                   if (resp.ctx.ec()) {
-                      return handler(std::move(resp.ctx), mutation_result{});
+                      return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
                   }
-                  return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                  return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{ resp.cas, std::move(resp.token) });
               });
         }
 
@@ -995,7 +1011,7 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
         return core_.execute(
           std::move(request), [core = core_, id = std::move(id), options, handler = std::move(handler)](auto&& resp) mutable {
               if (resp.ctx.ec()) {
-                  return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                  return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{ resp.cas, std::move(resp.token) });
               }
 
               auto token = resp.token;
@@ -1008,9 +1024,10 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                                                 [resp, handler = std::move(handler)](std::error_code ec) mutable {
                                                     if (ec) {
                                                         resp.ctx.override_ec(ec);
-                                                        return handler(std::move(resp.ctx), mutation_result{});
+                                                        return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
                                                     }
-                                                    return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                                                    return handler(core::impl::make_error(std::move(resp.ctx)),
+                                                                   mutation_result{ resp.cas, std::move(resp.token) });
                                                 });
           });
     }
@@ -1059,37 +1076,40 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
         return core_.open_bucket(
           bucket_name_, [this, handler = std::move(handler), orchestrator_opts, core_scan_type](std::error_code ec) mutable {
               if (ec) {
-                  return handler(ec, {});
+                  return handler(error(ec), {});
               }
               return core_.with_bucket_configuration(
                 bucket_name_,
                 [this, handler = std::move(handler), orchestrator_opts, core_scan_type](
                   std::error_code ec, const core::topology::configuration& config) mutable {
                     if (ec) {
-                        return handler(ec, {});
+                        return handler(error(ec, "An error occurred when attempting to fetch the bucket configuration."), {});
                     }
                     if (!config.capabilities.supports_range_scan()) {
-                        return handler(errc::common::feature_not_available, {});
+                        return handler(error(errc::common::feature_not_available, "This bucket does not support range scan."), {});
                     }
                     auto agent_group = core::agent_group(core_.io_context(), core::agent_group_config{ { core_ } });
                     ec = agent_group.open_bucket(bucket_name_);
                     if (ec) {
-                        return handler(ec, {});
+                        return handler(error(ec, fmt::format("An error occurred while opening the `{}` bucket.", bucket_name_)), {});
                     }
                     auto agent = agent_group.get_agent(bucket_name_);
                     if (!agent.has_value()) {
-                        return handler(agent.error(), {});
+                        return handler(
+                          error(agent.error(),
+                                fmt::format("An error occurred while getting an operation agent for the `{}` bucket", bucket_name_)),
+                          {});
                     }
                     if (!config.vbmap.has_value() || config.vbmap->empty()) {
                         CB_LOG_WARNING("Unable to get vbucket map for `{}` - cannot perform scan operation", bucket_name_);
-                        return handler(errc::common::request_canceled, {});
+                        return handler(error(errc::common::request_canceled, "No vbucket map included with the bucket config"), {});
                     }
 
                     auto orchestrator = core::range_scan_orchestrator(
                       core_.io_context(), agent.value(), config.vbmap.value(), scope_name_, name_, core_scan_type, orchestrator_opts);
                     return orchestrator.scan([handler = std::move(handler)](auto ec, auto core_scan_result) mutable {
                         if (ec) {
-                            return handler(ec, {});
+                            return handler(error(ec, "Error while starting the range scan"), {});
                         }
                         auto internal_result = std::make_shared<internal_scan_result>(std::move(core_scan_result));
                         scan_result result{ internal_result };
@@ -1148,11 +1168,13 @@ collection::get(std::string document_id, const get_options& options, get_handler
 }
 
 auto
-collection::get(std::string document_id, const get_options& options) const -> std::future<std::pair<key_value_error_context, get_result>>
+collection::get(std::string document_id, const get_options& options) const -> std::future<std::pair<error, get_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, get_result>>>();
     auto future = barrier->get_future();
-    get(std::move(document_id), options, [barrier](auto ctx, auto result) { barrier->set_value({ std::move(ctx), std::move(result) }); });
+    get(std::move(document_id), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
+    });
     return future;
 }
 
@@ -1166,13 +1188,14 @@ collection::get_and_touch(std::string document_id,
 }
 
 auto
-collection::get_and_touch(std::string document_id, std::chrono::seconds duration, const get_and_touch_options& options) const
-  -> std::future<std::pair<key_value_error_context, get_result>>
+collection::get_and_touch(std::string document_id,
+                          std::chrono::seconds duration,
+                          const get_and_touch_options& options) const -> std::future<std::pair<error, get_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, get_result>>>();
     auto future = barrier->get_future();
-    get_and_touch(std::move(document_id), duration, options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    get_and_touch(std::move(document_id), duration, options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -1189,12 +1212,12 @@ collection::get_and_touch(std::string document_id,
 auto
 collection::get_and_touch(std::string document_id,
                           std::chrono::system_clock::time_point time_point,
-                          const get_and_touch_options& options) const -> std::future<std::pair<key_value_error_context, get_result>>
+                          const get_and_touch_options& options) const -> std::future<std::pair<error, get_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, get_result>>>();
     auto future = barrier->get_future();
-    get_and_touch(std::move(document_id), time_point, options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    get_and_touch(std::move(document_id), time_point, options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -1206,13 +1229,14 @@ collection::touch(std::string document_id, std::chrono::seconds duration, const 
 }
 
 auto
-collection::touch(std::string document_id, std::chrono::seconds duration, const touch_options& options) const
-  -> std::future<std::pair<key_value_error_context, result>>
+collection::touch(std::string document_id,
+                  std::chrono::seconds duration,
+                  const touch_options& options) const -> std::future<std::pair<error, result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, result>>>();
     auto future = barrier->get_future();
-    touch(std::move(document_id), duration, options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    touch(std::move(document_id), duration, options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -1227,13 +1251,14 @@ collection::touch(std::string document_id,
 }
 
 auto
-collection::touch(std::string document_id, std::chrono::system_clock::time_point time_point, const touch_options& options) const
-  -> std::future<std::pair<key_value_error_context, result>>
+collection::touch(std::string document_id,
+                  std::chrono::system_clock::time_point time_point,
+                  const touch_options& options) const -> std::future<std::pair<error, result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, result>>>();
     auto future = barrier->get_future();
-    touch(std::move(document_id), time_point, options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    touch(std::move(document_id), time_point, options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -1245,13 +1270,13 @@ collection::get_any_replica(std::string document_id, const get_any_replica_optio
 }
 
 auto
-collection::get_any_replica(std::string document_id, const get_any_replica_options& options) const
-  -> std::future<std::pair<key_value_error_context, get_replica_result>>
+collection::get_any_replica(std::string document_id,
+                            const get_any_replica_options& options) const -> std::future<std::pair<error, get_replica_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_replica_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, get_replica_result>>>();
     auto future = barrier->get_future();
-    get_any_replica(std::move(document_id), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    get_any_replica(std::move(document_id), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -1263,13 +1288,13 @@ collection::get_all_replicas(std::string document_id, const get_all_replicas_opt
 }
 
 auto
-collection::get_all_replicas(std::string document_id, const get_all_replicas_options& options) const
-  -> std::future<std::pair<key_value_error_context, get_all_replicas_result>>
+collection::get_all_replicas(std::string document_id,
+                             const get_all_replicas_options& options) const -> std::future<std::pair<error, get_all_replicas_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_all_replicas_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, get_all_replicas_result>>>();
     auto future = barrier->get_future();
-    get_all_replicas(std::move(document_id), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    get_all_replicas(std::move(document_id), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -1281,13 +1306,12 @@ collection::remove(std::string document_id, const remove_options& options, remov
 }
 
 auto
-collection::remove(std::string document_id, const remove_options& options) const
-  -> std::future<std::pair<key_value_error_context, mutation_result>>
+collection::remove(std::string document_id, const remove_options& options) const -> std::future<std::pair<error, mutation_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, mutation_result>>>();
     auto future = barrier->get_future();
-    remove(std::move(document_id), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    remove(std::move(document_id), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -1302,13 +1326,14 @@ collection::mutate_in(std::string document_id,
 }
 
 auto
-collection::mutate_in(std::string document_id, const mutate_in_specs& specs, const mutate_in_options& options) const
-  -> std::future<std::pair<subdocument_error_context, mutate_in_result>>
+collection::mutate_in(std::string document_id,
+                      const mutate_in_specs& specs,
+                      const mutate_in_options& options) const -> std::future<std::pair<error, mutate_in_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, mutate_in_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, mutate_in_result>>>();
     auto future = barrier->get_future();
-    mutate_in(std::move(document_id), specs, options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    mutate_in(std::move(document_id), specs, options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -1323,13 +1348,14 @@ collection::lookup_in(std::string document_id,
 }
 
 auto
-collection::lookup_in(std::string document_id, const lookup_in_specs& specs, const lookup_in_options& options) const
-  -> std::future<std::pair<subdocument_error_context, lookup_in_result>>
+collection::lookup_in(std::string document_id,
+                      const lookup_in_specs& specs,
+                      const lookup_in_options& options) const -> std::future<std::pair<error, lookup_in_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, lookup_in_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, lookup_in_result>>>();
     auto future = barrier->get_future();
-    lookup_in(std::move(document_id), specs, options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    lookup_in(std::move(document_id), specs, options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -1344,15 +1370,13 @@ collection::lookup_in_all_replicas(std::string document_id,
 }
 
 auto
-collection::lookup_in_all_replicas(std::string document_id,
-                                   const lookup_in_specs& specs,
-                                   const lookup_in_all_replicas_options& options) const
-  -> std::future<std::pair<subdocument_error_context, lookup_in_all_replicas_result>>
+collection::lookup_in_all_replicas(std::string document_id, const lookup_in_specs& specs, const lookup_in_all_replicas_options& options)
+  const -> std::future<std::pair<error, lookup_in_all_replicas_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, lookup_in_all_replicas_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, lookup_in_all_replicas_result>>>();
     auto future = barrier->get_future();
-    lookup_in_all_replicas(std::move(document_id), specs, options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    lookup_in_all_replicas(std::move(document_id), specs, options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -1368,12 +1392,12 @@ collection::lookup_in_any_replica(std::string document_id,
 
 auto
 collection::lookup_in_any_replica(std::string document_id, const lookup_in_specs& specs, const lookup_in_any_replica_options& options) const
-  -> std::future<std::pair<subdocument_error_context, lookup_in_replica_result>>
+  -> std::future<std::pair<error, lookup_in_replica_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<subdocument_error_context, lookup_in_replica_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, lookup_in_replica_result>>>();
     auto future = barrier->get_future();
-    lookup_in_any_replica(std::move(document_id), specs, options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    lookup_in_any_replica(std::move(document_id), specs, options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -1388,13 +1412,14 @@ collection::get_and_lock(std::string document_id,
 }
 
 auto
-collection::get_and_lock(std::string document_id, std::chrono::seconds lock_duration, const get_and_lock_options& options) const
-  -> std::future<std::pair<key_value_error_context, get_result>>
+collection::get_and_lock(std::string document_id,
+                         std::chrono::seconds lock_duration,
+                         const get_and_lock_options& options) const -> std::future<std::pair<error, get_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, get_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, get_result>>>();
     auto future = barrier->get_future();
-    get_and_lock(std::move(document_id), lock_duration, options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    get_and_lock(std::move(document_id), lock_duration, options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -1406,11 +1431,13 @@ collection::unlock(std::string document_id, couchbase::cas cas, const unlock_opt
 }
 
 auto
-collection::unlock(std::string document_id, couchbase::cas cas, const unlock_options& options) const -> std::future<key_value_error_context>
+collection::unlock(std::string document_id, couchbase::cas cas, const unlock_options& options) const -> std::future<error>
 {
-    auto barrier = std::make_shared<std::promise<key_value_error_context>>();
+    auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
-    unlock(std::move(document_id), cas, options, [barrier](auto ctx) { barrier->set_value({ std::move(ctx) }); });
+    unlock(std::move(document_id), cas, options, [barrier](auto err) {
+        barrier->set_value({ std::move(err) });
+    });
     return future;
 }
 
@@ -1421,13 +1448,12 @@ collection::exists(std::string document_id, const exists_options& options, exist
 }
 
 auto
-collection::exists(std::string document_id, const exists_options& options) const
-  -> std::future<std::pair<key_value_error_context, exists_result>>
+collection::exists(std::string document_id, const exists_options& options) const -> std::future<std::pair<error, exists_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, exists_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, exists_result>>>();
     auto future = barrier->get_future();
-    exists(std::move(document_id), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    exists(std::move(document_id), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -1439,13 +1465,14 @@ collection::upsert(std::string document_id, codec::encoded_value document, const
 }
 
 auto
-collection::upsert(std::string document_id, codec::encoded_value document, const upsert_options& options) const
-  -> std::future<std::pair<key_value_error_context, mutation_result>>
+collection::upsert(std::string document_id,
+                   codec::encoded_value document,
+                   const upsert_options& options) const -> std::future<std::pair<error, mutation_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, mutation_result>>>();
     auto future = barrier->get_future();
-    upsert(std::move(document_id), std::move(document), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    upsert(std::move(document_id), std::move(document), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -1457,13 +1484,14 @@ collection::insert(std::string document_id, codec::encoded_value document, const
 }
 
 auto
-collection::insert(std::string document_id, codec::encoded_value document, const insert_options& options) const
-  -> std::future<std::pair<key_value_error_context, mutation_result>>
+collection::insert(std::string document_id,
+                   codec::encoded_value document,
+                   const insert_options& options) const -> std::future<std::pair<error, mutation_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, mutation_result>>>();
     auto future = barrier->get_future();
-    insert(std::move(document_id), std::move(document), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    insert(std::move(document_id), std::move(document), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -1475,13 +1503,14 @@ collection::replace(std::string document_id, codec::encoded_value document, cons
 }
 
 auto
-collection::replace(std::string document_id, codec::encoded_value document, const replace_options& options) const
-  -> std::future<std::pair<key_value_error_context, mutation_result>>
+collection::replace(std::string document_id,
+                    codec::encoded_value document,
+                    const replace_options& options) const -> std::future<std::pair<error, mutation_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, mutation_result>>>();
     auto future = barrier->get_future();
-    replace(std::move(document_id), std::move(document), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    replace(std::move(document_id), std::move(document), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -1493,12 +1522,14 @@ collection::scan(const couchbase::scan_type& scan_type, const couchbase::scan_op
 }
 
 auto
-collection::scan(const couchbase::scan_type& scan_type, const couchbase::scan_options& options) const
-  -> std::future<std::pair<std::error_code, scan_result>>
+collection::scan(const couchbase::scan_type& scan_type,
+                 const couchbase::scan_options& options) const -> std::future<std::pair<error, scan_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<std::error_code, scan_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, scan_result>>>();
     auto future = barrier->get_future();
-    scan(scan_type, options, [barrier](auto ec, auto result) { barrier->set_value({ ec, std::move(result) }); });
+    scan(scan_type, options, [barrier](auto err, auto result) {
+        barrier->set_value({ err, std::move(result) });
+    });
     return future;
 }
 } // namespace couchbase

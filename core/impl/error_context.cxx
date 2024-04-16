@@ -30,14 +30,13 @@ error_context::error_context(internal_error_context internal)
 }
 
 auto
-error_context::to_string() const -> std::string
+error_context::to_json(error_context_json_format format) const -> std::string
 {
-    return tao::json::to_string(internal_, 2);
-}
-
-auto
-error_context::to_json() const -> std::string
-{
-    return tao::json::to_string(internal_);
+    switch (format) {
+        case error_context_json_format::compact:
+            return tao::json::to_string(internal_);
+        case error_context_json_format::pretty:
+            return tao::json::to_string(internal_, 2);
+    }
 }
 } // namespace couchbase

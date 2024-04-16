@@ -19,6 +19,7 @@
 
 #include <couchbase/append_options.hxx>
 #include <couchbase/decrement_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/increment_options.hxx>
 #include <couchbase/prepend_options.hxx>
 
@@ -109,8 +110,9 @@ class binary_collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto append(std::string document_id, std::vector<std::byte> data, const append_options& options) const
-      -> std::future<std::pair<key_value_error_context, mutation_result>>;
+    [[nodiscard]] auto append(std::string document_id,
+                              std::vector<std::byte> data,
+                              const append_options& options) const -> std::future<std::pair<error, mutation_result>>;
 
     /**
      * Prepends binary content to the document.
@@ -148,8 +150,9 @@ class binary_collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto prepend(std::string document_id, std::vector<std::byte> data, const prepend_options& options) const
-      -> std::future<std::pair<key_value_error_context, mutation_result>>;
+    [[nodiscard]] auto prepend(std::string document_id,
+                               std::vector<std::byte> data,
+                               const prepend_options& options) const -> std::future<std::pair<error, mutation_result>>;
 
     /**
      * Increments the counter document by one or the number defined in the options.
@@ -183,8 +186,8 @@ class binary_collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto increment(std::string document_id, const increment_options& options) const
-      -> std::future<std::pair<key_value_error_context, counter_result>>;
+    [[nodiscard]] auto increment(std::string document_id,
+                                 const increment_options& options) const -> std::future<std::pair<error, counter_result>>;
 
     /**
      * Decrements the counter document by one or the number defined in the options.
@@ -218,8 +221,8 @@ class binary_collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto decrement(std::string document_id, const decrement_options& options) const
-      -> std::future<std::pair<key_value_error_context, counter_result>>;
+    [[nodiscard]] auto decrement(std::string document_id,
+                                 const decrement_options& options) const -> std::future<std::pair<error, counter_result>>;
 
   private:
     friend class collection;

@@ -117,16 +117,16 @@ TEST_CASE("integration: legacy durability persist to active and replicate to one
     {
         profile fry{ "fry", "Philip J. Fry", 1974 };
         auto options = couchbase::upsert_options{}.durability(couchbase::persist_to::active, couchbase::replicate_to::one);
-        auto [ctx, result] = collection.upsert(key, fry, options).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, result] = collection.upsert(key, fry, options).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE_FALSE(result.cas().empty());
         REQUIRE(result.mutation_token().has_value());
         cas = result.cas();
     }
 
     {
-        auto [ctx, result] = collection.get(key, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, result] = collection.get(key, {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE(result.cas() == cas);
         auto fry = result.content_as<profile>();
         REQUIRE(fry.username == "fry");

@@ -30,7 +30,7 @@ class error
 {
   public:
     error() = default;
-    error(std::error_code ec, std::string message, error_context ctx);
+    error(std::error_code ec, std::string message = {}, error_context ctx = {});
     error(std::error_code ec, std::string message, error_context ctx, error cause);
 
     [[nodiscard]] auto ec() const -> std::error_code;
@@ -39,6 +39,7 @@ class error
     [[nodiscard]] auto cause() const -> std::optional<error>;
 
     explicit operator bool() const;
+    auto operator==(const error& other) const -> bool;
 
   private:
     std::error_code ec_{};

@@ -22,10 +22,10 @@
 #include <core/impl/subdoc/command.hxx>
 #include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/expiry.hxx>
 #include <couchbase/lookup_in_replica_result.hxx>
 #include <couchbase/store_semantics.hxx>
-#include <couchbase/subdocument_error_context.hxx>
 
 #include <chrono>
 #include <functional>
@@ -81,7 +81,7 @@ using lookup_in_all_replicas_result = std::vector<lookup_in_replica_result>;
  * @since 1.0.0
  * @uncommitted
  */
-using lookup_in_all_replicas_handler = std::function<void(couchbase::subdocument_error_context, lookup_in_all_replicas_result)>;
+using lookup_in_all_replicas_handler = std::function<void(error, lookup_in_all_replicas_result)>;
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace core
