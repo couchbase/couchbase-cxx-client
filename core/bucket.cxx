@@ -591,17 +591,23 @@ class bucket_impl
         bool sequence_changed = false;
         {
             std::scoped_lock lock(config_mutex_);
+            // MB-60405 fixes this for 7.6.2, but for earlier versions we need to protect against using a
+            // config that has an empty vbucket map.  Ideally we only run into this condition on initial
+            // bootstrap and that is handled in the session's update_config(), but just in case, only accept
+            // a config w/ a non-empty vbucket map.
             if (config.vbmap && config.vbmap->size() == 0) {
                 if (!config_) {
-                    CB_LOG_DEBUG("{} will not initialize configuration rev={} because config has an empty partition map",
-                                 log_prefix_,
-                                 config.rev_str());
+                    CB_LOG_WARNING("{} will not initialize configuration rev={} because config has an empty partition map",
+                                   log_prefix_,
+                                   config.rev_str());
                 } else {
-                    CB_LOG_DEBUG("{} will not update the configuration old={} -> new={}, because new config has an empty partition map",
-                                 log_prefix_,
-                                 config_->rev_str(),
-                                 config.rev_str());
+                    CB_LOG_WARNING("{} will not update the configuration old={} -> new={}, because new config has an empty partition map",
+                                   log_prefix_,
+                                   config_->rev_str(),
+                                   config.rev_str());
                 }
+                // this is to make sure we can get a correct config soon
+                poll_config(errc::network::configuration_not_available);
                 return;
             } else if (!config_) {
                 CB_LOG_DEBUG("{} initialize configuration rev={}", log_prefix_, config.rev_str());

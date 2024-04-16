@@ -4869,8 +4869,8 @@ TEST_CASE("integration: scope search index management analyze document public AP
 {
     test::utils::integration_test_guard integration;
 
-    if (!integration.cluster_version().supports_scope_search()) {
-        SKIP("cluster does not support scope search");
+    if (!integration.cluster_version().supports_scope_search_analyze()) {
+        SKIP("cluster does not support scoped analyze_document");
     }
 
     if (integration.cluster_version().is_capella()) {

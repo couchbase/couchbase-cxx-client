@@ -150,8 +150,9 @@ assert_single_lookup_all_replica_success(test::utils::integration_test_guard& in
     INFO(fmt::format("assert_single_lookup_all_replica_success(\"{}\", \"{}\")", id, req.specs[0].path_));
     REQUIRE_SUCCESS(response.ctx.ec());
     REQUIRE(response.entries.size() == integration.number_of_replicas() + 1);
-    auto responses_from_active =
-      std::count_if(response.entries.begin(), response.entries.end(), [](const auto& r) { return !r.is_replica; });
+    auto responses_from_active = std::count_if(response.entries.begin(), response.entries.end(), [](const auto& r) {
+        return !r.is_replica;
+    });
     REQUIRE(responses_from_active == 1);
     for (auto& resp : response.entries) {
         REQUIRE_FALSE(resp.cas.empty());
@@ -181,8 +182,9 @@ assert_single_lookup_all_replica_error(test::utils::integration_test_guard& inte
     INFO(fmt::format("assert_single_lookup_all_replica_error(\"{}\", \"{}\")", id, req.specs[0].path_));
     REQUIRE_SUCCESS(response.ctx.ec());
     REQUIRE(response.entries.size() == integration.number_of_replicas() + 1);
-    auto responses_from_active =
-      std::count_if(response.entries.begin(), response.entries.end(), [](const auto& r) { return !r.is_replica; });
+    auto responses_from_active = std::count_if(response.entries.begin(), response.entries.end(), [](const auto& r) {
+        return !r.is_replica;
+    });
     REQUIRE(responses_from_active == 1);
     for (auto& resp : response.entries) {
         REQUIRE_FALSE(resp.cas.empty());
@@ -784,18 +786,31 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
 
     SECTION("mismatched type and opcode")
     {
-        couchbase::core::operations::lookup_in_request req{ id };
-        req.specs =
-          couchbase::mutate_in_specs{
-              couchbase::mutate_in_specs::remove("array[0]"),
-              couchbase::mutate_in_specs::remove("array[0]"),
-          }
-            .specs();
-        auto resp = test::utils::execute(integration.cluster, req);
-        if (integration.cluster_version().is_mock()) {
-            REQUIRE(resp.ctx.ec() == couchbase::errc::common::unsupported_operation);
-        } else {
-            REQUIRE(resp.ctx.ec() == couchbase::errc::common::invalid_argument);
+        {
+            couchbase::core::operations::lookup_in_request req{ id };
+            req.specs =
+              couchbase::mutate_in_specs{
+                  couchbase::mutate_in_specs::remove("array[0]"),
+                  couchbase::mutate_in_specs::remove("array[0]"),
+              }
+                .specs();
+            auto resp = test::utils::execute(integration.cluster, req);
+            if (integration.cluster_version().is_mock()) {
+                REQUIRE(resp.ctx.ec() == couchbase::errc::common::unsupported_operation);
+            } else {
+                REQUIRE(resp.ctx.ec() == couchbase::errc::common::invalid_argument);
+            }
+        }
+        {
+            couchbase::core::operations::mutate_in_request req{ id };
+            req.specs =
+              couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("foo"), couchbase::lookup_in_specs::get("foo") }.specs();
+            auto resp = test::utils::execute(integration.cluster, req);
+            if (integration.cluster_version().is_mock()) {
+                REQUIRE(resp.ctx.ec() == couchbase::errc::common::unsupported_operation);
+            } else {
+                REQUIRE(resp.ctx.ec() == couchbase::errc::common::invalid_argument);
+            }
         }
     }
 
@@ -1310,7 +1325,9 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
             auto [ctx, result] = collection.lookup_in_all_replicas(key, specs).get();
             REQUIRE_SUCCESS(ctx.ec());
             REQUIRE(result.size() == number_of_replicas + 1);
-            auto responses_from_active = std::count_if(result.begin(), result.end(), [](const auto& r) { return !r.is_replica(); });
+            auto responses_from_active = std::count_if(result.begin(), result.end(), [](const auto& r) {
+                return !r.is_replica();
+            });
             REQUIRE(responses_from_active == 1);
             for (auto& res : result) {
                 REQUIRE(!res.cas().empty());
