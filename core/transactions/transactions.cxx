@@ -26,6 +26,9 @@
 #include "internal/transactions_cleanup.hxx"
 #include "internal/utils.hxx"
 
+#include "couchbase/error.hxx"
+#include "core/impl/error.hxx"
+
 #include <system_error>
 
 namespace couchbase::core::transactions
@@ -156,14 +159,15 @@ transactions::run(const couchbase::transactions::transaction_options& config, lo
     return wrap_run(*this, config, max_attempts_, std::move(code));
 }
 
-std::pair<couchbase::transaction_error_context, couchbase::transactions::transaction_result>
+std::pair<error, couchbase::transactions::transaction_result>
 transactions::run(couchbase::transactions::txn_logic&& code, const couchbase::transactions::transaction_options& config)
 {
     try {
         return { {}, wrap_run(*this, config, max_attempts_, std::move(code)) };
     } catch (const transaction_exception& e) {
-        // get transaction_error_context from e and return it in the transaction_result
-        return e.get_transaction_result();
+        // get error from e and return it in the transaction_result
+        auto [err_ctx, result] = e.get_transaction_result();
+        return std::make_pair(core::impl::make_error(err_ctx), result);
     }
 }
 
@@ -190,7 +194,7 @@ transactions::run(couchbase::transactions::async_txn_logic&& code,
             return cb({}, result);
         } catch (const transaction_exception& e) {
             auto [ctx, res] = e.get_transaction_result();
-            return cb(ctx, res);
+            return cb(core::impl::make_error(ctx), res);
         }
     }).detach();
 }

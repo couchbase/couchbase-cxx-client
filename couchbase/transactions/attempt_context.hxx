@@ -45,9 +45,9 @@ class attempt_context
      *
      * @param coll The collection which contains the document.
      * @param id The unique id of the document.
-     * @return The result of the operation, which is an @ref transaction_op_error_context and a @ref transaction_get_result.
+     * @return The result of the operation, which is an @ref error and a @ref transaction_get_result.
      */
-    virtual std::pair<transaction_op_error_context, transaction_get_result> get(const couchbase::collection& coll,
+    virtual std::pair<error, transaction_get_result> get(const couchbase::collection& coll,
                                                                                 const std::string& id) = 0;
 
     /**
@@ -60,10 +60,10 @@ class attempt_context
      * @param coll Collection in which to insert document.
      * @param id The unique id of the document.
      * @param content The content of the document.
-     * @return The result of the operation, which is an @ref transaction_op_error_context and a @ref transaction_get_result.
+     * @return The result of the operation, which is an @ref error and a @ref transaction_get_result.
      */
     template<typename Content>
-    std::pair<transaction_op_error_context, transaction_get_result> insert(const couchbase::collection& coll,
+    std::pair<error, transaction_get_result> insert(const couchbase::collection& coll,
                                                                            const std::string& id,
                                                                            const Content& content)
     {
@@ -83,10 +83,10 @@ class attempt_context
      * @tparam Content Type of the contents of the document.
      * @param doc Document whose content will be replaced.  This is gotten from a call to @ref attempt_context::get
      * @param content New content of the document.
-     * @return The result of the operation, which is an @ref transaction_op_error_context and a @ref transaction_get_result.
+     * @return The result of the operation, which is an @ref error and a @ref transaction_get_result.
      */
     template<typename Content>
-    std::pair<transaction_op_error_context, transaction_get_result> replace(const transaction_get_result& doc, const Content& content)
+    std::pair<error, transaction_get_result> replace(const transaction_get_result& doc, const Content& content)
     {
         if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
             return replace_raw(doc, content);
@@ -103,16 +103,16 @@ class attempt_context
      * @param doc The document to remove.
      * @return The result of the operation.
      */
-    virtual transaction_op_error_context remove(const transaction_get_result& doc) = 0;
+    virtual error remove(const transaction_get_result& doc) = 0;
 
     /**
      * Perform an unscoped query.
      *
      * @param statement The query statement.
      * @param options Options for the query.
-     * @return The result of the operation, with is an @ref transaction_op_error_context and a @ref transaction_query_result.
+     * @return The result of the operation, with is an @ref error and a @ref transaction_query_result.
      */
-    std::pair<transaction_op_error_context, transaction_query_result> query(const std::string& statement,
+    std::pair<error, transaction_query_result> query(const std::string& statement,
                                                                             const transaction_query_options& options = {});
 
     /**
@@ -121,9 +121,9 @@ class attempt_context
      * @param scope Scope for the query.
      * @param statement The query statement.
      * @param opts Options for the query.
-     * @return The result of the operation, with is an @ref transaction_op_error_context and a @ref transaction_query_result.
+     * @return The result of the operation, with is an @ref error and a @ref transaction_query_result.
      */
-    std::pair<transaction_op_error_context, transaction_query_result> query(const scope& scope,
+    std::pair<error, transaction_query_result> query(const scope& scope,
                                                                             const std::string& statement,
                                                                             const transaction_query_options& opts = {});
 
@@ -131,14 +131,14 @@ class attempt_context
 
   protected:
     /** @private */
-    virtual std::pair<transaction_op_error_context, transaction_get_result> replace_raw(const transaction_get_result& doc,
+    virtual std::pair<error, transaction_get_result> replace_raw(const transaction_get_result& doc,
                                                                                         std::vector<std::byte> content) = 0;
     /** @private */
-    virtual std::pair<transaction_op_error_context, transaction_get_result> insert_raw(const couchbase::collection& coll,
+    virtual std::pair<error, transaction_get_result> insert_raw(const couchbase::collection& coll,
                                                                                        const std::string& id,
                                                                                        std::vector<std::byte> content) = 0;
     /** @private */
-    virtual std::pair<transaction_op_error_context, transaction_query_result> do_public_query(const std::string& statement,
+    virtual std::pair<error, transaction_query_result> do_public_query(const std::string& statement,
                                                                                               const transaction_query_options& options,
                                                                                               std::optional<std::string> query_context) = 0;
 };

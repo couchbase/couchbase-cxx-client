@@ -22,10 +22,12 @@
 #include "core/error_context/http_json.hxx"
 #include "core/error_context/key_value_json.hxx"
 #include "core/error_context/query_json.hxx"
+#include <core/error_context/query_public_json.hxx>
 #include "core/error_context/search_json.hxx"
 #include "core/error_context/subdocument_json.hxx"
 #include "error.hxx"
 
+#include "couchbase/transaction_error_context.hxx"
 #include <memory>
 #include <optional>
 #include <system_error>
@@ -93,6 +95,13 @@ error
 make_error(const core::error_context::query& core_ctx)
 {
     return { core_ctx.ec, "", couchbase::error_context{ internal_error_context(core_ctx) } };
+}
+
+error
+make_error(const query_error_context& core_ctx)
+{
+    tao::json::value ctx(core_ctx);
+    return { core_ctx.ec(), {}, couchbase::error_context(ctx) };
 }
 
 error

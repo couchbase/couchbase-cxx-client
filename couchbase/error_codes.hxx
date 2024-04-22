@@ -1112,6 +1112,10 @@ enum class transaction_op {
     rollback_not_permitted = 1319,
     transaction_already_aborted = 1320,
     transaction_already_committed = 1321,
+    /**
+     * Special code for internal use
+     */
+    transaction_operation_failed = 1399,
 };
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN

@@ -1127,22 +1127,22 @@ attempt_context_impl::do_core_query(const std::string& statement,
     return f.get();
 }
 
-std::pair<couchbase::transaction_op_error_context, couchbase::transactions::transaction_query_result>
+std::pair<couchbase::error, couchbase::transactions::transaction_query_result>
 attempt_context_impl::do_public_query(const std::string& statement,
                                       const couchbase::transactions::transaction_query_options& opts,
                                       std::optional<std::string> query_context)
 {
     try {
         auto result = do_core_query(statement, opts, query_context);
-        return core::impl::build_transaction_query_result(result);
+        auto [ctx, res] = core::impl::build_transaction_query_result(result);
+        return std::make_pair(core::impl::make_error(ctx), res);
     } catch (const transaction_operation_failed& e) {
-        return { e.get_error_ctx(), {} };
+        return { core::impl::make_error(e.get_error_ctx()), {} };
     } catch (const op_exception& qe) {
-        return { qe.ctx(), {} };
+        return { core::impl::make_error(qe.ctx()), {} };
     } catch (...) {
         // should not be necessary, but just in case...
-        transaction_op_error_context ctx(couchbase::errc::transaction_op::unknown);
-        return { ctx, {} };
+        return { { couchbase::errc::transaction_op::unknown } , {} };
     }
 }
 

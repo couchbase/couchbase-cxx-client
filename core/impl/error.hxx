@@ -20,6 +20,9 @@
 #include <couchbase/error.hxx>
 #include <couchbase/key_value_error_context.hxx>
 #include <couchbase/subdocument_error_context.hxx>
+#include <couchbase/query_error_context.hxx>
+#include <couchbase/transaction_error_context.hxx>
+#include <couchbase/transaction_op_error_context.hxx>
 
 #include "core/error_context/analytics.hxx"
 #include "core/error_context/http.hxx"
@@ -45,4 +48,13 @@ make_error(const couchbase::key_value_error_context& core_ctx);
 
 error
 make_error(const couchbase::subdocument_error_context& core_ctx);
+
+error
+make_error(const couchbase::query_error_context& core_ctx);
+
+error
+make_error(const couchbase::transaction_error_context& core_ctx);
+
+error
+make_error(const couchbase::transaction_op_error_context& core_ctx);
 } // namespace couchbase::core::impl

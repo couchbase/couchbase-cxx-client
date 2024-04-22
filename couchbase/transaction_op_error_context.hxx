@@ -64,13 +64,13 @@ class transaction_op_error_context
      *
      * @return the error_context associated with the underlying cause of this error.
      */
-    [[nodiscard]] std::variant<key_value_error_context, query_error_context> cause() const
+    [[nodiscard]] std::variant<std::monostate, key_value_error_context, query_error_context> cause() const
     {
         return cause_;
     }
 
   private:
     std::error_code ec_{}; // a transaction_op error_code
-    std::variant<key_value_error_context, query_error_context> cause_{};
+    std::variant<std::monostate, key_value_error_context, query_error_context> cause_{};
 };
 } // namespace couchbase
