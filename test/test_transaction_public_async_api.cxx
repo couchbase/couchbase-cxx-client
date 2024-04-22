@@ -314,7 +314,9 @@ TEST_CASE("transactions public async API: can set transaction options", "[transa
               // all this to change the cas...
               couchbase::core::transactions::transaction_get_result temp_doc(doc);
               temp_doc.cas(100);
-              ctx.remove(temp_doc.to_public_result(), [](const couchbase::error& remove_err) { CHECK(remove_err.ec()); });
+              ctx.remove(temp_doc.to_public_result(), [](const couchbase::error& remove_err) {
+                  CHECK(remove_err.ec());
+              });
           });
       },
       [&begin, &cfg, barrier](auto e, auto res) {

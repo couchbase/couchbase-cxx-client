@@ -134,12 +134,11 @@ class GameServer
         return experience / 100;
     }
 
-    std::future<std::pair<couchbase::error, transaction_result>> player_hits_monster(
-      int damage,
-      const couchbase::collection& collection,
-      const std::string& player_id,
-      const std::string& monster_id,
-      std::atomic<bool>& exists)
+    std::future<std::pair<couchbase::error, transaction_result>> player_hits_monster(int damage,
+                                                                                     const couchbase::collection& collection,
+                                                                                     const std::string& player_id,
+                                                                                     const std::string& monster_id,
+                                                                                     std::atomic<bool>& exists)
     {
         auto barrier = std::make_shared<std::promise<std::pair<couchbase::error, transaction_result>>>();
         auto f = barrier->get_future();

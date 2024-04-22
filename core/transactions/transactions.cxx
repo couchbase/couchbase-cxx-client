@@ -26,8 +26,8 @@
 #include "internal/transactions_cleanup.hxx"
 #include "internal/utils.hxx"
 
-#include "couchbase/error.hxx"
 #include "core/impl/error.hxx"
+#include "couchbase/error.hxx"
 
 #include <system_error>
 

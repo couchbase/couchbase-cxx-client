@@ -1142,7 +1142,7 @@ attempt_context_impl::do_public_query(const std::string& statement,
         return { core::impl::make_error(qe.ctx()), {} };
     } catch (...) {
         // should not be necessary, but just in case...
-        return { { couchbase::errc::transaction_op::unknown } , {} };
+        return { { couchbase::errc::transaction_op::unknown }, {} };
     }
 }
 

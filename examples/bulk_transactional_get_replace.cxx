@@ -145,8 +145,7 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
     {
         std::map<std::string, std::size_t> errors;
 
-        using transaction_promise =
-          std::promise<std::pair<couchbase::error, couchbase::transactions::transaction_result>>;
+        using transaction_promise = std::promise<std::pair<couchbase::error, couchbase::transactions::transaction_result>>;
         std::vector<transaction_promise> results;
         results.resize(arguments.number_of_transactions);
 
@@ -200,7 +199,8 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
         for (auto& promise : results) {
             auto [err, result] = promise.get_future().get();
             if (err.ec()) {
-                transactions_errors[fmt::format("error={}, cause={}", err.ec().message(), err.cause().has_value() ? err.cause().value().ec().message() : "")]++;
+                transactions_errors[fmt::format(
+                  "error={}, cause={}", err.ec().message(), err.cause().has_value() ? err.cause().value().ec().message() : "")]++;
             }
         }
         auto exec_end = std::chrono::system_clock::now();

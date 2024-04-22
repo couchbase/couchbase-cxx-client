@@ -116,12 +116,14 @@ class attempt_expired : public client_error
  * derived from this.  The transaction logic then consumes them to decide to
  * retry, or rollback the transaction.
  */
-class transaction_operation_failed : public std::runtime_error, public couchbase::error
+class transaction_operation_failed
+  : public std::runtime_error
+  , public couchbase::error
 {
   public:
     explicit transaction_operation_failed(error_class ec, const std::string& what)
       : std::runtime_error(what)
-      , couchbase::error( errc::transaction_op::transaction_operation_failed )
+      , couchbase::error(errc::transaction_op::transaction_operation_failed)
       , ec_(ec)
       , retry_(false)
       , rollback_(true)
@@ -131,7 +133,7 @@ class transaction_operation_failed : public std::runtime_error, public couchbase
     }
     explicit transaction_operation_failed(const client_error& client_err)
       : std::runtime_error(client_err.what())
-      , couchbase::error( errc::transaction_op::transaction_operation_failed )
+      , couchbase::error(errc::transaction_op::transaction_operation_failed)
       , ec_(client_err.ec())
       , retry_(false)
       , rollback_(true)

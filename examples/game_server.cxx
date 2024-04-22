@@ -190,7 +190,8 @@ class GameServer
             }
         });
         if (err.ec()) {
-            std::cout << "txn error during player_hits_monster: " << err.ec().message() << ", " << (err.cause().has_value() ? err.cause().value().ec().message() : "") << std::endl;
+            std::cout << "txn error during player_hits_monster: " << err.ec().message() << ", "
+                      << (err.cause().has_value() ? err.cause().value().ec().message() : "") << std::endl;
         }
     }
 };

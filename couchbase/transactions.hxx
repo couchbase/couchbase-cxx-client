@@ -52,8 +52,7 @@ class transactions
      * @param cfg if passed in, these options override the defaults, or those set in the {@link cluster_options}.
      * @return an {@link transaction_error_context}, and a {@link transaction_result} representing the results of the transaction.
      */
-    virtual std::pair<error, transaction_result> run(txn_logic&& logic,
-                                                                         const transaction_options& cfg = transaction_options()) = 0;
+    virtual std::pair<error, transaction_result> run(txn_logic&& logic, const transaction_options& cfg = transaction_options()) = 0;
     /**
      * Run an asynchronous transaction.
      *
