@@ -18,6 +18,7 @@
 #include "test_helper_integration.hxx"
 
 #include "utils/move_only_context.hxx"
+#include "utils/wait_until.hxx"
 
 #include "core/operations/document_analytics.hxx"
 #include "core/operations/document_append.hxx"
@@ -216,6 +217,8 @@ TEST_CASE("integration: read only with no results", "[integration]")
     if (!integration.cluster_version().supports_gcccp()) {
         test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
     }
+
+    REQUIRE(test::utils::create_primary_index(integration.cluster, integration.ctx.bucket));
 
     {
         couchbase::core::operations::query_request req{ fmt::format("SELECT * FROM `{}` LIMIT 0", integration.ctx.bucket) };
@@ -510,6 +513,9 @@ TEST_CASE("integration: prepared query", "[integration]")
     }
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+    REQUIRE(test::utils::create_primary_index(integration.cluster, integration.ctx.bucket));
+
     auto key = test::utils::uniq_id("foo");
     tao::json::value value = {
         { "a", 1.0 },

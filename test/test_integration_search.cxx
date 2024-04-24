@@ -64,40 +64,20 @@ TEST_CASE("integration: search query")
         }
     }
 
-    std::string index_name = test::utils::uniq_id("beer-search-index");
-
-    {
-        auto params = test::utils::read_test_data("search_beers_index_params.json");
-
-        couchbase::core::management::search::index index{};
-        index.name = index_name;
-        index.params_json = params;
-        index.type = "fulltext-index";
-        index.source_name = integration.ctx.bucket;
-        index.source_type = "couchbase";
-        if (integration.cluster_version().requires_search_replicas()) {
-            index.plan_params_json = couchbase::core::utils::json::generate({
-              { "indexPartitions", 1 },
-              { "numReplicas", 1 },
-            });
-        }
-        couchbase::core::operations::management::search_index_upsert_request req{};
-        req.index = index;
-
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE((!resp.ctx.ec || resp.ctx.ec == couchbase::errc::common::index_exists));
-        if (index_name != resp.name) {
-            CB_LOG_INFO("update index name \"{}\" -> \"{}\"", index_name, resp.name);
-        }
-        index_name = resp.name;
-    }
+    std::uint64_t beer_sample_doc_count = 5;
+    bool completed{};
+    std::string index_name{};
+    std::tie(completed, index_name) = test::utils::create_search_index(integration,
+                                                                       integration.ctx.bucket,
+                                                                       test::utils::uniq_id("beer-search-index"),
+                                                                       "search_beers_index_params.json",
+                                                                       beer_sample_doc_count);
+    REQUIRE(completed);
 
     couchbase::core::json_string simple_query(R"({"query": "description:belgian"})");
 
-    std::uint64_t beer_sample_doc_count = 5;
     // Wait until expected documents are indexed
     {
-        REQUIRE(test::utils::wait_until_indexed(integration.cluster, index_name, beer_sample_doc_count));
         auto ok = test::utils::wait_until(
           [&]() {
               couchbase::core::operations::search_request req{};
@@ -466,6 +446,7 @@ TEST_CASE("integration: search query consistency", "[integration]")
             req.index_name = index_name;
             req.query = query_json;
             req.mutation_state.emplace_back(token);
+            req.timeout = std::chrono::minutes{ 5 };
             auto resp = test::utils::execute(integration.cluster, req);
             if (resp.ctx.ec == couchbase::errc::search::consistency_mismatch) {
                 // FIXME(MB-55920): ignore "err: bleve: pindex_consistency mismatched partition"

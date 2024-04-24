@@ -39,6 +39,7 @@ struct test_context {
     std::optional<std::uint16_t> dns_port{};
     std::size_t number_of_io_threads{ 1 };
     std::string other_bucket{ "secBucket" };
+    bool use_wan_development_profile{ false };
 
     [[nodiscard]] couchbase::core::cluster_credentials build_auth() const;
 

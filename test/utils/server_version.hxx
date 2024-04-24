@@ -91,6 +91,11 @@ struct server_version {
         return is_cheshire_cat() || is_neo();
     }
 
+    [[nodiscard]] bool supports_queries_in_transactions() const
+    {
+        return is_neo();
+    }
+
     [[nodiscard]] bool supports_collections() const
     {
         return (is_mad_hatter() && developer_preview) || is_cheshire_cat() || is_neo();
