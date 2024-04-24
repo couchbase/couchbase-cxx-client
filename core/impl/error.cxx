@@ -18,10 +18,13 @@
 #include <couchbase/error.hxx>
 #include <couchbase/error_context.hxx>
 
-#include <core/error_context/analytics_json.hxx>
-#include <core/error_context/http_json.hxx>
-#include <core/error_context/query_json.hxx>
-#include <core/error_context/search_json.hxx>
+#include "core/error_context/analytics_json.hxx"
+#include "core/error_context/http_json.hxx"
+#include "core/error_context/key_value_json.hxx"
+#include "core/error_context/query_json.hxx"
+#include "core/error_context/search_json.hxx"
+#include "core/error_context/subdocument_json.hxx"
+#include "error.hxx"
 
 #include <memory>
 #include <optional>
@@ -78,6 +81,12 @@ error::operator bool() const
     return ec_.value() != 0;
 }
 
+auto
+error::operator==(const couchbase::error& other) const -> bool
+{
+    return ec() == other.ec() && message() == other.message();
+}
+
 namespace core::impl
 {
 error
@@ -102,6 +111,20 @@ error
 make_error(const core::error_context::http& core_ctx)
 {
     return { core_ctx.ec, "", couchbase::error_context{ internal_error_context(core_ctx) } };
+}
+
+error
+make_error(const couchbase::key_value_error_context& core_ctx)
+{
+    tao::json::value ctx(core_ctx);
+    return { core_ctx.ec(), "", couchbase::error_context(ctx) };
+}
+
+error
+make_error(const couchbase::subdocument_error_context& core_ctx)
+{
+    tao::json::value ctx(core_ctx);
+    return { core_ctx.ec(), "", couchbase::error_context(ctx) };
 }
 } // namespace core::impl
 } // namespace couchbase

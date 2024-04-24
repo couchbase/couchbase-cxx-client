@@ -19,9 +19,9 @@
 
 #include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/exists_result.hxx>
 #include <couchbase/expiry.hxx>
-#include <couchbase/key_value_error_context.hxx>
 
 #include <chrono>
 #include <functional>
@@ -70,5 +70,5 @@ struct exists_options : public common_options<exists_options> {
  * @since 1.0.0
  * @uncommitted
  */
-using exists_handler = std::function<void(couchbase::key_value_error_context, exists_result)>;
+using exists_handler = std::function<void(error, exists_result)>;
 } // namespace couchbase

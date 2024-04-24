@@ -129,7 +129,7 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
     // Transactions do not have upsert operation, so we need to ensure that the documents do not exist in the collection.
     fmt::print("Removing {} IDs in collection \"{}.{}\"\n", document_ids.size(), arguments.scope_name, arguments.collection_name);
     {
-        using remove_result = std::future<std::pair<couchbase::key_value_error_context, couchbase::mutation_result>>;
+        using remove_result = std::future<std::pair<couchbase::error, couchbase::mutation_result>>;
 
         std::map<std::string, std::size_t> errors;
         std::vector<remove_result> results;
@@ -140,9 +140,9 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
             results.emplace_back(collection.remove(document_ids[i], {}));
         }
         for (std::size_t i = 0; i < arguments.number_of_operations; ++i) {
-            auto [ctx, result] = results[i].get();
-            if (ctx.ec()) {
-                errors[ctx.ec().message()]++;
+            auto [err, result] = results[i].get();
+            if (err.ec()) {
+                errors[err.ec().message()]++;
             }
         }
         auto cleanup_end = std::chrono::system_clock::now();
@@ -174,9 +174,9 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
         auto [err, result] = transactions->run(
           [&collection, &document_ids, &document, &arguments, &errors](couchbase::transactions::attempt_context& attempt) {
               for (std::size_t i = 0; i < arguments.number_of_operations; ++i) {
-                  auto [ctx, res] = attempt.insert(collection, document_ids[i], document);
-                  if (ctx.ec()) {
-                      errors[ctx.ec().message()]++;
+                  auto [err, res] = attempt.insert(collection, document_ids[i], document);
+                  if (err.ec()) {
+                      errors[err.ec().message()]++;
                   }
                   fmt::print("\rexecute insert: {}", i);
                   fflush(stdout);
@@ -215,9 +215,9 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
         auto [err, result] =
           transactions->run([&collection, &document_ids, &arguments, &errors](couchbase::transactions::attempt_context& attempt) {
               for (std::size_t i = 0; i < arguments.number_of_operations; ++i) {
-                  auto [ctx, res] = attempt.get(collection, document_ids[i]);
-                  if (ctx.ec()) {
-                      errors[ctx.ec().message()]++;
+                  auto [err, res] = attempt.get(collection, document_ids[i]);
+                  if (err.ec()) {
+                      errors[err.ec().message()]++;
                   }
                   fmt::print("\rexecute get: {}", i);
                   fflush(stdout);
@@ -279,7 +279,7 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
     // Transactions do not have upsert operation, so we need to ensure that the documents do not exist in the collection.
     fmt::print("Removing {} IDs in collection \"{}.{}\"\n", document_ids.size(), arguments.scope_name, arguments.collection_name);
     {
-        using remove_result = std::future<std::pair<couchbase::key_value_error_context, couchbase::mutation_result>>;
+        using remove_result = std::future<std::pair<couchbase::error, couchbase::mutation_result>>;
 
         std::map<std::string, std::size_t> errors;
         std::vector<remove_result> results;
@@ -290,9 +290,9 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
             results.emplace_back(collection.remove(document_ids[i], {}));
         }
         for (std::size_t i = 0; i < arguments.number_of_operations; ++i) {
-            auto [ctx, result] = results[i].get();
-            if (ctx.ec()) {
-                errors[ctx.ec().message()]++;
+            auto [err, result] = results[i].get();
+            if (err.ec()) {
+                errors[err.ec().message()]++;
             }
         }
         auto cleanup_end = std::chrono::system_clock::now();

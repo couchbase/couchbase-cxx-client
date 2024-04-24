@@ -55,8 +55,8 @@ main()
             { "b", 2.0 },
         };
 
-        auto [ctx, resp] = collection.upsert(document_id, basic_doc, {}).get();
-        std::cout << "ec: " << ctx.ec().message() << ", id: " << document_id << ", CAS: " << resp.cas().value() << "\n";
+        auto [err, resp] = collection.upsert(document_id, basic_doc, {}).get();
+        std::cout << "ec: " << err.ec().message() << ", id: " << document_id << ", CAS: " << resp.cas().value() << "\n";
     }
 
     cluster.close();

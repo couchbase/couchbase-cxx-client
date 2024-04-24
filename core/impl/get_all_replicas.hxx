@@ -66,7 +66,7 @@ class get_all_replicas_request
     std::optional<std::chrono::milliseconds> timeout_{};
 };
 
-using movable_get_all_replicas_handler = utils::movable_function<void(couchbase::key_value_error_context, get_all_replicas_result)>;
+using movable_get_all_replicas_handler = utils::movable_function<void(error, get_all_replicas_result)>;
 
 void
 initiate_get_all_replicas_operation(std::shared_ptr<cluster> core,

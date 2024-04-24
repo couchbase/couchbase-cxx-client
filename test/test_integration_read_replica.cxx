@@ -101,8 +101,8 @@ TEST_CASE("integration: get any replica", "[integration]")
     {
         auto collection =
           couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
-        auto [ctx, result] = collection.get_any_replica(key, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, result] = collection.get_any_replica(key, {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE(result.content_as<smuggling_transcoder>().first == basic_doc_json);
     }
 }
@@ -143,8 +143,8 @@ TEST_CASE("integration: get all replicas", "[integration]")
     {
         auto collection =
           couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
-        auto [ctx, result] = collection.get_all_replicas(key, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, result] = collection.get_all_replicas(key, {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE(result.size() == number_of_replicas + 1);
         auto responses_from_active = std::count_if(result.begin(), result.end(), [](const auto& r) { return !r.is_replica(); });
         REQUIRE(responses_from_active == 1);
@@ -173,8 +173,8 @@ TEST_CASE("integration: get all replicas with missing key", "[integration]")
     {
         auto collection =
           couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
-        auto [ctx, result] = collection.get_all_replicas(key, {}).get();
-        REQUIRE(ctx.ec() == couchbase::errc::key_value::document_not_found);
+        auto [err, result] = collection.get_all_replicas(key, {}).get();
+        REQUIRE(err.ec() == couchbase::errc::key_value::document_not_found);
         REQUIRE(result.empty());
     }
 }
@@ -198,8 +198,8 @@ TEST_CASE("integration: get any replica with missing key", "[integration]")
     {
         auto collection =
           couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
-        auto [ctx, result] = collection.get_any_replica(key, {}).get();
-        REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+        auto [err, result] = collection.get_any_replica(key, {}).get();
+        REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
     }
 }
 

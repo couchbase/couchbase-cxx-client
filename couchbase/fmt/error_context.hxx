@@ -17,38 +17,27 @@
 
 #pragma once
 
-#include <string>
+#include <couchbase/error_context.hxx>
 
-#include <tao/json/value.hpp>
+#include <fmt/core.h>
 
-namespace couchbase
-{
-using internal_error_context = tao::json::value;
-
-enum class error_context_json_format {
-    compact = 0,
-    pretty,
-};
-
-class error_context
-{
-  public:
-    error_context() = default;
-    explicit error_context(internal_error_context internal);
-
-    [[nodiscard]] auto to_json(error_context_json_format format = error_context_json_format::compact) const -> std::string;
-
-    template<typename T>
-    T as() const
+/**
+ * Helper for fmtlib to format @ref couchbase::error_context objects.
+ *
+ * @since 1.0.0
+ * @uncommitted
+ */
+template<>
+struct fmt::formatter<couchbase::error_context> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
     {
-        if constexpr (std::is_same_v<T, internal_error_context>) {
-            return internal_;
-        } else {
-            return internal_.as<T>();
-        }
+        return ctx.begin();
     }
 
-  private:
-    internal_error_context internal_;
+    template<typename FormatContext>
+    auto format(const couchbase::error_context& err_ctx, FormatContext& ctx) const
+    {
+        return format_to(ctx.out(), err_ctx.to_json());
+    }
 };
-} // namespace couchbase

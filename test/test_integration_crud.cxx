@@ -827,8 +827,8 @@ TEST_CASE("integration: extract core from public API cluster", "[integration]")
                             .scope(couchbase::scope::default_name)
                             .collection(couchbase::collection::default_name);
 
-        auto [ctx, resp] = collection.insert(id, basic_doc, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, resp] = collection.insert(id, basic_doc, {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE_FALSE(resp.cas().empty());
     }
 
@@ -856,16 +856,16 @@ TEST_CASE("integration: pessimistic locking with public API", "[integration]")
     couchbase::cas cas{};
 
     {
-        auto [ctx, resp] = collection.insert(id, basic_doc, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, resp] = collection.insert(id, basic_doc, {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE_FALSE(resp.cas().empty());
         cas = resp.cas();
     }
 
     // lock and record CAS of the locked document
     {
-        auto [ctx, resp] = collection.get_and_lock(id, lock_time, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, resp] = collection.get_and_lock(id, lock_time, {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(cas != resp.cas());
         cas = resp.cas();
@@ -873,8 +873,8 @@ TEST_CASE("integration: pessimistic locking with public API", "[integration]")
 
     // real CAS is masked now and not visible by regular GET
     {
-        auto [ctx, resp] = collection.get(id, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, resp] = collection.get(id, {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE_FALSE(resp.cas().empty());
         REQUIRE(cas != resp.cas());
     }
@@ -886,51 +886,53 @@ TEST_CASE("integration: pessimistic locking with public API", "[integration]")
             integration.ctx.deployment == test::utils::deployment_type::elixir) {
             options.timeout(std::chrono::seconds{ 2 });
         }
-        auto [ctx, resp] = collection.get_and_lock(id, lock_time, options).get();
-        REQUIRE(ctx.ec() == couchbase::errc::common::ambiguous_timeout);
-        REQUIRE(ctx.retried_because_of(couchbase::retry_reason::key_value_locked));
+        auto [err, resp] = collection.get_and_lock(id, lock_time, options).get();
+        REQUIRE(err.ec() == couchbase::errc::common::ambiguous_timeout);
+        auto retry_reasons = err.ctx().as<tao::json::value>().at("retry_reasons").get_array();
+        REQUIRE(retry_reasons.at(0).get_string() == "kv_locked");
     }
 
     // but unlock operation is not retried in this case, because it would never have succeeded
     {
         auto wrong_cas = couchbase::cas{ cas.value() - 1 };
-        auto ctx = collection.unlock(id, wrong_cas, {}).get();
-        REQUIRE(ctx.ec() == couchbase::errc::common::cas_mismatch);
-        REQUIRE_FALSE(ctx.retried_because_of(couchbase::retry_reason::key_value_locked));
+        auto err = collection.unlock(id, wrong_cas, {}).get();
+        REQUIRE(err.ec() == couchbase::errc::common::cas_mismatch);
+        auto retry_reasons = err.ctx().as<tao::json::value>().at("retry_reasons").get_array();
+        REQUIRE(retry_reasons.empty());
     }
 
     // and yet mutating the locked key is allowed with known cas
     {
-        auto [ctx, resp] = collection.replace(id, basic_doc, couchbase::replace_options{}.cas(cas)).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, resp] = collection.replace(id, basic_doc, couchbase::replace_options{}.cas(cas)).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE_FALSE(resp.cas().empty());
     }
 
     {
-        auto [ctx, resp] = collection.get_and_lock(id, lock_time, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, resp] = collection.get_and_lock(id, lock_time, {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE_FALSE(resp.cas().empty());
         cas = resp.cas();
     }
 
     // to unlock key without mutation, unlock might be used
     {
-        auto ctx = collection.unlock(id, cas, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto err = collection.unlock(id, cas, {}).get();
+        REQUIRE_SUCCESS(err.ec());
     }
 
     if (integration.cluster_version().supports_document_not_locked_status()) {
         // if unlock is performer again, a document_not_locked error code should be returned
         {
-            auto ctx = collection.unlock(id, cas, {}).get();
-            REQUIRE(ctx.ec() == couchbase::errc::key_value::document_not_locked);
+            auto err = collection.unlock(id, cas, {}).get();
+            REQUIRE(err.ec() == couchbase::errc::key_value::document_not_locked);
         }
     }
 
     // now the key is not locked
     {
-        auto [ctx, resp] = collection.upsert(id, basic_doc, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, resp] = collection.upsert(id, basic_doc, {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE_FALSE(resp.cas().empty());
     }
 }
@@ -948,33 +950,33 @@ TEST_CASE("integration: exists with public API", "[integration]")
     auto id = test::utils::uniq_id("exists");
 
     {
-        auto [ctx, resp] = collection.exists(id, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, resp] = collection.exists(id, {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE_FALSE(resp.exists());
         REQUIRE(resp.cas().empty());
     }
 
     {
-        auto [ctx, resp] = collection.insert(id, basic_doc, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, resp] = collection.insert(id, basic_doc, {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE_FALSE(resp.cas().empty());
     }
 
     {
-        auto [ctx, resp] = collection.exists(id, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, resp] = collection.exists(id, {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE(resp.exists());
         REQUIRE_FALSE(resp.cas().empty());
     }
 
     {
-        auto [ctx, resp] = collection.remove(id, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, resp] = collection.remove(id, {}).get();
+        REQUIRE_SUCCESS(err.ec());
     }
 
     {
-        auto [ctx, resp] = collection.exists(id, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, resp] = collection.exists(id, {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE_FALSE(resp.exists());
     }
 }
@@ -996,13 +998,13 @@ TEST_CASE("integration: get with expiry with public API", "[integration]")
     SECTION("no expiry set on the document")
     {
         {
-            auto [ctx, resp] = collection.insert(id, basic_doc, {}).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto [err, resp] = collection.insert(id, basic_doc, {}).get();
+            REQUIRE_SUCCESS(err.ec());
         }
 
         {
-            auto [ctx, resp] = collection.get(id, get_options).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto [err, resp] = collection.get(id, get_options).get();
+            REQUIRE_SUCCESS(err.ec());
             REQUIRE_FALSE(resp.expiry_time().has_value());
         }
     }
@@ -1012,13 +1014,13 @@ TEST_CASE("integration: get with expiry with public API", "[integration]")
         auto the_expiry = std::chrono::system_clock::from_time_t(1878422400);
         auto insert_options = couchbase::insert_options{}.expiry(the_expiry);
         {
-            auto [ctx, resp] = collection.insert(id, basic_doc, insert_options).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto [err, resp] = collection.insert(id, basic_doc, insert_options).get();
+            REQUIRE_SUCCESS(err.ec());
         }
 
         {
-            auto [ctx, resp] = collection.get(id, get_options).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto [err, resp] = collection.get(id, get_options).get();
+            REQUIRE_SUCCESS(err.ec());
             REQUIRE(resp.expiry_time().has_value());
             REQUIRE(resp.expiry_time().value() == the_expiry);
         }

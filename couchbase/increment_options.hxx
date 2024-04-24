@@ -19,8 +19,8 @@
 
 #include <couchbase/common_durability_options.hxx>
 #include <couchbase/counter_result.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/expiry.hxx>
-#include <couchbase/key_value_error_context.hxx>
 
 #include <chrono>
 #include <functional>
@@ -139,5 +139,5 @@ struct increment_options : public common_durability_options<increment_options> {
  * @since 1.0.0
  * @uncommitted
  */
-using increment_handler = std::function<void(couchbase::key_value_error_context, counter_result)>;
+using increment_handler = std::function<void(error, counter_result)>;
 } // namespace couchbase

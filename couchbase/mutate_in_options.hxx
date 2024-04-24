@@ -21,10 +21,10 @@
 
 #include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/common_durability_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/expiry.hxx>
 #include <couchbase/mutate_in_result.hxx>
 #include <couchbase/store_semantics.hxx>
-#include <couchbase/subdocument_error_context.hxx>
 
 #include <chrono>
 #include <functional>
@@ -205,5 +205,5 @@ struct mutate_in_options : public common_durability_options<mutate_in_options> {
  * @since 1.0.0
  * @uncommitted
  */
-using mutate_in_handler = std::function<void(couchbase::subdocument_error_context, mutate_in_result)>;
+using mutate_in_handler = std::function<void(error, mutate_in_result)>;
 } // namespace couchbase

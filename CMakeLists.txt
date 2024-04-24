@@ -217,7 +217,6 @@ set(couchbase_cxx_client_FILES
     core/impl/view_error_category.cxx
     core/impl/wildcard_query.cxx
     core/impl/scan_result.cxx
-    core/impl/internal_scan_result.hxx
     core/io/dns_client.cxx
     core/io/dns_config.cxx
     core/io/http_parser.cxx
@@ -407,7 +406,8 @@ set(couchbase_cxx_client_FILES
     core/utils/mutation_token.cxx
     core/utils/split_string.cxx
     core/utils/url_codec.cxx
-    core/view_query_options.cxx)
+    core/view_query_options.cxx
+)
 
 if(COUCHBASE_CXX_CLIENT_BUILD_SHARED)
   add_library(couchbase_cxx_client SHARED ${couchbase_cxx_client_FILES})

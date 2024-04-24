@@ -241,15 +241,15 @@ main()
 
     // upsert a player document
     {
-        auto [ctx, resp] = collection.upsert(player_id, player_data, {}).get();
-        if (!ctx.ec()) {
+        auto [err, resp] = collection.upsert(player_id, player_data, {}).get();
+        if (!err) {
             std::cout << "Upserted sample player document: " << player_id << "with cas:" << resp.cas().value() << std::endl;
         }
     }
     // upsert a monster document
     {
-        auto [ctx, resp] = collection.upsert(monster_id, monster_data, {}).get();
-        if (!ctx.ec()) {
+        auto [err, resp] = collection.upsert(monster_id, monster_data, {}).get();
+        if (!err) {
             std::cout << "Upserted sample monster document: " << monster_id << "with cas:" << resp.cas().value() << std::endl;
         }
     }

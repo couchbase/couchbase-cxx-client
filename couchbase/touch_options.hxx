@@ -18,7 +18,7 @@
 #pragma once
 
 #include <couchbase/common_options.hxx>
-#include <couchbase/key_value_error_context.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/result.hxx>
 
 #include <chrono>
@@ -66,5 +66,5 @@ struct touch_options : public common_options<touch_options> {
  * @since 1.0.0
  * @uncommitted
  */
-using touch_handler = std::function<void(couchbase::key_value_error_context, result)>;
+using touch_handler = std::function<void(error, result)>;
 } // namespace couchbase

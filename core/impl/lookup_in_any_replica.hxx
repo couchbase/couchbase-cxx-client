@@ -61,5 +61,5 @@ class lookup_in_any_replica_request
     std::optional<std::chrono::milliseconds> timeout_{};
 };
 
-using movable_lookup_in_any_replica_handler = utils::movable_function<void(couchbase::subdocument_error_context, lookup_in_replica_result)>;
+using movable_lookup_in_any_replica_handler = utils::movable_function<void(error, lookup_in_replica_result)>;
 } // namespace couchbase::core::impl

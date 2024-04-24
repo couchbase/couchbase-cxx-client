@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <couchbase/error.hxx>
 #include <couchbase/scan_result_item.hxx>
 
 #include <future>
@@ -37,7 +38,7 @@ class internal_scan_result;
  * @since 1.0.0
  * @volatile
  */
-using scan_item_handler = std::function<void(std::error_code, std::optional<scan_result_item>)>;
+using scan_item_handler = std::function<void(error, std::optional<scan_result_item>)>;
 
 class scan_result
 {
@@ -78,7 +79,7 @@ class scan_result
      * @since 1.0.0
      * @volatile
      */
-    auto next() const -> std::future<std::pair<std::error_code, std::optional<scan_result_item>>>;
+    auto next() const -> std::future<std::pair<error, std::optional<scan_result_item>>>;
 
     /**
      * Cancels the scan.
@@ -99,11 +100,11 @@ class scan_result
       public:
         auto operator==(const iterator& other) const -> bool;
         auto operator!=(const iterator& other) const -> bool;
-        auto operator*() -> std::pair<std::error_code, scan_result_item>;
+        auto operator*() -> std::pair<error, scan_result_item>;
         auto operator++() -> iterator&;
 
         explicit iterator(std::shared_ptr<internal_scan_result> internal);
-        explicit iterator(std::pair<std::error_code, scan_result_item> item);
+        explicit iterator(std::pair<error, scan_result_item> item);
 
         using difference_type = std::ptrdiff_t;
         using value_type = scan_result_item;
@@ -115,7 +116,7 @@ class scan_result
         void fetch_item();
 
         std::shared_ptr<internal_scan_result> internal_{};
-        std::pair<std::error_code, scan_result_item> item_{};
+        std::pair<error, scan_result_item> item_{};
     };
 
     /**

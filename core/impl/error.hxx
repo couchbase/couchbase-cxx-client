@@ -17,12 +17,14 @@
 
 #pragma once
 
-#include <core/error_context/analytics.hxx>
-#include <core/error_context/http.hxx>
-#include <core/error_context/query.hxx>
-#include <core/error_context/search.hxx>
-
 #include <couchbase/error.hxx>
+#include <couchbase/key_value_error_context.hxx>
+#include <couchbase/subdocument_error_context.hxx>
+
+#include "core/error_context/analytics.hxx"
+#include "core/error_context/http.hxx"
+#include "core/error_context/query.hxx"
+#include "core/error_context/search.hxx"
 
 namespace couchbase::core::impl
 {
@@ -37,4 +39,10 @@ make_error(const core::error_context::analytics& core_ctx);
 
 error
 make_error(const core::error_context::http& core_ctx);
+
+error
+make_error(const couchbase::key_value_error_context& core_ctx);
+
+error
+make_error(const couchbase::subdocument_error_context& core_ctx);
 } // namespace couchbase::core::impl

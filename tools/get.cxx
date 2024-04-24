@@ -22,6 +22,7 @@
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
 #include <couchbase/fmt/cas.hxx>
+#include <couchbase/fmt/error.hxx>
 
 #include <asio/io_context.hpp>
 #include <fmt/chrono.h>
@@ -103,11 +104,11 @@ class get_app : public CLI::App
 
             auto collection = cluster.bucket(bucket_name).scope(scope_name).collection(collection_name);
 
-            auto [ctx, resp] = collection.get(document_id, get_options).get();
+            auto [err, resp] = collection.get(document_id, get_options).get();
             if (json_lines_) {
-                print_result_json_line(bucket_name, scope_name, collection_name, document_id, ctx, resp);
+                print_result_json_line(bucket_name, scope_name, collection_name, document_id, err, resp);
             } else {
-                print_result(bucket_name, scope_name, collection_name, document_id, ctx, resp);
+                print_result(bucket_name, scope_name, collection_name, document_id, err, resp);
             }
         }
 
@@ -124,7 +125,7 @@ class get_app : public CLI::App
                                 const std::string& scope_name,
                                 const std::string& collection_name,
                                 const std::string& document_id,
-                                const couchbase::key_value_error_context& ctx,
+                                const couchbase::error& err,
                                 const couchbase::get_result& resp) const
     {
         tao::json::value line = tao::json::empty_object;
@@ -134,16 +135,8 @@ class get_app : public CLI::App
             { "collection_name", collection_name },
             { "document_id", document_id },
         };
-        if (ctx.ec()) {
-            tao::json::value error = {
-                { "code", ctx.ec().value() },
-                { "message", ctx.ec().message() },
-            };
-            if (auto ext = ctx.extended_error_info(); ext.has_value()) {
-                error["ref"] = ext->reference();
-                error["ctx"] = ext->context();
-            }
-            line["error"] = error;
+        if (err.ec()) {
+            line["error"] = fmt::format("{}", err);
         } else {
             auto [value, flags] = resp.content_as<passthrough_transcoder>();
             meta["cas"] = fmt::format("0x{}", resp.cas());
@@ -166,20 +159,16 @@ class get_app : public CLI::App
                       const std::string& scope_name,
                       const std::string& collection_name,
                       const std::string& document_id,
-                      const couchbase::key_value_error_context& ctx,
+                      const couchbase::error& err,
                       const couchbase::get_result& resp) const
     {
         const std::string prefix =
           fmt::format("bucket: {}, collection: {}.{}, id: {}", bucket_name, scope_name, collection_name, document_id);
         (void)fflush(stderr);
-        if (ctx.ec()) {
-            if (auto ext = ctx.extended_error_info(); ext.has_value()) {
-                fmt::print(stderr, "{}, error: {} (ref: {}, ctx: {})\n", prefix, ctx.ec().message(), ext->reference(), ext->context());
-            } else {
-                fmt::print(stderr, "{}, error: {}\n", prefix, ctx.ec().message());
-            }
+        if (err.ec()) {
+            fmt::print(stderr, "{}, error: {}\n", prefix, err.ec().message());
             if (verbose_) {
-                fmt::print(stderr, "{}\n", ctx.to_json());
+                fmt::print(stderr, "{}\n", err.ctx().to_json());
             }
         } else {
             auto [value, flags] = resp.content_as<passthrough_transcoder>();
