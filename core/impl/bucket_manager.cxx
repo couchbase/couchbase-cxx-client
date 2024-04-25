@@ -23,7 +23,6 @@
 #include "core/operations/management/bucket_get.hxx"
 #include "core/operations/management/bucket_get_all.hxx"
 #include "core/operations/management/bucket_update.hxx"
-#include "internal_manager_error_context.hxx"
 
 #include "core/impl/error.hxx"
 

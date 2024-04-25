@@ -19,7 +19,6 @@
 
 #include <couchbase/common_options.hxx>
 #include <couchbase/error_codes.hxx>
-#include <couchbase/manager_error_context.hxx>
 
 #include <optional>
 #include <string>

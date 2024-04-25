@@ -34,7 +34,6 @@
 #include <couchbase/management/analytics_dataset.hxx>
 #include <couchbase/management/analytics_index.hxx>
 #include <couchbase/management/analytics_link.hxx>
-#include <couchbase/manager_error_context.hxx>
 #include <couchbase/replace_link_analytics_options.hxx>
 
 #include <future>

@@ -21,7 +21,6 @@
 #include "core/operations/management/query_index_create.hxx"
 #include "core/operations/management/query_index_drop.hxx"
 #include "core/operations/management/query_index_get_all.hxx"
-#include "internal_manager_error_context.hxx"
 
 #include "core/impl/error.hxx"
 

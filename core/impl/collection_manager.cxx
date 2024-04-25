@@ -25,8 +25,6 @@
 #include "core/operations/management/scope_get_all.hxx"
 
 #include "core/impl/error.hxx"
-#include "internal_manager_error_context.hxx"
-
 #include <couchbase/collection_manager.hxx>
 
 #include <memory>

@@ -20,7 +20,6 @@
 #include <couchbase/common_options.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/management/analytics_index.hxx>
-#include <couchbase/manager_error_context.hxx>
 
 #include <functional>
 #include <vector>
