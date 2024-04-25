@@ -116,7 +116,7 @@ class watch_context : public std::enable_shared_from_this<watch_context>
         return timeout_ - std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time_);
     }
 
-    bool check(couchbase::core::operations::management::query_index_get_all_response resp)
+    bool check(couchbase::core::operations::management::query_index_get_all_response& resp)
     {
         if (resp.ctx.ec == couchbase::errc::common::ambiguous_timeout) {
             return false;
