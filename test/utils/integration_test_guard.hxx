@@ -28,6 +28,8 @@
 #include <couchbase/cluster.hxx>
 
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace test::utils
 {
@@ -56,6 +58,9 @@ class integration_test_guard
     {
         return load_bucket_info(ctx.bucket).number_of_nodes;
     }
+
+    auto server_groups() -> std::vector<std::string>;
+    auto generate_key_not_in_server_group(const std::string& group_name) -> std::string;
 
     std::size_t number_of_nodes(const std::string& bucket_name)
     {

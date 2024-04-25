@@ -19,6 +19,8 @@
 
 #include "core/error_context/key_value.hxx"
 #include "core/impl/get_replica.hxx"
+#include "core/impl/replica_utils.hxx"
+#include "core/logger/logger.hxx"
 #include "core/operations/document_get.hxx"
 #include "core/operations/operation_traits.hxx"
 #include "core/utils/movable_function.hxx"
@@ -48,91 +50,108 @@ struct get_all_replicas_request {
 
     core::document_id id;
     std::optional<std::chrono::milliseconds> timeout{};
+    couchbase::read_preference read_preference{ couchbase::read_preference::no_preference };
 
     template<typename Core, typename Handler>
     void execute(Core core, Handler handler)
     {
         core->with_bucket_configuration(
           id.bucket(),
-          [core, id = id, timeout = timeout, h = std::forward<Handler>(handler)](std::error_code ec,
-                                                                                 const topology::configuration& config) mutable {
+          [core, id = id, timeout = timeout, read_preference = read_preference, h = std::forward<Handler>(handler)](
+            std::error_code ec, const topology::configuration& config) mutable {
               if (ec) {
                   return h(response_type{ make_key_value_error_context(ec, id) });
               }
+              const auto [e, origin] = core->origin();
+              if (e) {
+                  return h(response_type{ make_key_value_error_context(e, id) });
+              }
+
+              auto nodes = impl::effective_nodes(id, config, read_preference, origin.options().server_group);
+              if (nodes.empty()) {
+                  CB_LOG_DEBUG("Unable to retrieve replicas for \"{}\", server_group={}, number_of_replicas={}",
+                               id,
+                               origin.options().server_group,
+                               config.num_replicas.value_or(0));
+                  return h(response_type{ make_key_value_error_context(errc::key_value::document_irretrievable, id) });
+              }
+
               using handler_type = utils::movable_function<void(response_type)>;
 
               struct replica_context {
-                  replica_context(handler_type handler, std::uint32_t expected_responses)
+                  replica_context(handler_type handler, std::size_t expected_responses)
                     : handler_(std::move(handler))
                     , expected_responses_(expected_responses)
                   {
                   }
 
                   handler_type handler_;
-                  std::uint32_t expected_responses_;
+                  std::size_t expected_responses_;
                   bool done_{ false };
                   std::mutex mutex_{};
                   std::vector<get_all_replicas_response::entry> result_{};
               };
-              auto ctx = std::make_shared<replica_context>(std::move(h), config.num_replicas.value_or(0U) + 1U);
+              auto ctx = std::make_shared<replica_context>(std::move(h), nodes.size());
 
-              for (std::size_t idx = 1U; idx <= config.num_replicas.value_or(0U); ++idx) {
-                  document_id replica_id{ id };
-                  replica_id.node_index(idx);
-                  core->execute(impl::get_replica_request{ std::move(replica_id), timeout }, [ctx](impl::get_replica_response&& resp) {
-                      handler_type local_handler{};
-                      {
-                          std::scoped_lock lock(ctx->mutex_);
-                          if (ctx->done_) {
-                              return;
-                          }
-                          --ctx->expected_responses_;
-                          if (resp.ctx.ec()) {
-                              if (ctx->expected_responses_ > 0) {
-                                  // just ignore the response
+              for (const auto& node : nodes) {
+                  if (node.is_replica) {
+                      document_id replica_id{ id };
+                      replica_id.node_index(node.index);
+                      core->execute(impl::get_replica_request{ std::move(replica_id), timeout }, [ctx](auto&& resp) {
+                          handler_type local_handler{};
+                          {
+                              std::scoped_lock lock(ctx->mutex_);
+                              if (ctx->done_) {
                                   return;
                               }
-                          } else {
-                              ctx->result_.emplace_back(
-                                get_all_replicas_response::entry{ std::move(resp.value), resp.cas, resp.flags, true /* replica */ });
+                              --ctx->expected_responses_;
+                              if (resp.ctx.ec()) {
+                                  if (ctx->expected_responses_ > 0) {
+                                      // just ignore the response
+                                      return;
+                                  }
+                              } else {
+                                  ctx->result_.emplace_back(
+                                    get_all_replicas_response::entry{ std::move(resp.value), resp.cas, resp.flags, true /* replica */ });
+                              }
+                              if (ctx->expected_responses_ == 0) {
+                                  ctx->done_ = true;
+                                  std::swap(local_handler, ctx->handler_);
+                              }
                           }
-                          if (ctx->expected_responses_ == 0) {
-                              ctx->done_ = true;
-                              std::swap(local_handler, ctx->handler_);
+                          if (local_handler) {
+                              return local_handler({ std::move(resp.ctx), std::move(ctx->result_) });
                           }
-                      }
-                      if (local_handler) {
-                          return local_handler({ std::move(resp.ctx), std::move(ctx->result_) });
-                      }
-                  });
+                      });
+                  } else {
+                      core->execute(get_request{ document_id{ id }, {}, {}, timeout }, [ctx](auto&& resp) {
+                          handler_type local_handler{};
+                          {
+                              std::scoped_lock lock(ctx->mutex_);
+                              if (ctx->done_) {
+                                  return;
+                              }
+                              --ctx->expected_responses_;
+                              if (resp.ctx.ec()) {
+                                  if (ctx->expected_responses_ > 0) {
+                                      // just ignore the response
+                                      return;
+                                  }
+                              } else {
+                                  ctx->result_.emplace_back(
+                                    get_all_replicas_response::entry{ std::move(resp.value), resp.cas, resp.flags, false /* active */ });
+                              }
+                              if (ctx->expected_responses_ == 0) {
+                                  ctx->done_ = true;
+                                  std::swap(local_handler, ctx->handler_);
+                              }
+                          }
+                          if (local_handler) {
+                              return local_handler({ std::move(resp.ctx), std::move(ctx->result_) });
+                          }
+                      });
+                  }
               }
-
-              core->execute(get_request{ document_id{ id }, {}, {}, timeout }, [ctx](get_response&& resp) {
-                  handler_type local_handler{};
-                  {
-                      std::scoped_lock lock(ctx->mutex_);
-                      if (ctx->done_) {
-                          return;
-                      }
-                      --ctx->expected_responses_;
-                      if (resp.ctx.ec()) {
-                          if (ctx->expected_responses_ > 0) {
-                              // just ignore the response
-                              return;
-                          }
-                      } else {
-                          ctx->result_.emplace_back(
-                            get_all_replicas_response::entry{ std::move(resp.value), resp.cas, resp.flags, false /* replica */ });
-                      }
-                      if (ctx->expected_responses_ == 0) {
-                          ctx->done_ = true;
-                          std::swap(local_handler, ctx->handler_);
-                      }
-                  }
-                  if (local_handler) {
-                      return local_handler({ std::move(resp.ctx), std::move(ctx->result_) });
-                  }
-              });
           });
     }
 };

@@ -60,6 +60,7 @@ struct configuration {
         port_map services_plain{};
         port_map services_tls{};
         std::map<std::string, alternate_address> alt{};
+        std::string server_group{};
 
         bool operator!=(const node& other) const
         {
@@ -117,16 +118,13 @@ struct configuration {
                                 const std::string& hostname,
                                 const std::string& port) const;
 
-    std::pair<std::uint16_t, std::optional<std::size_t>> map_key(const std::string& key, std::size_t index);
-    std::pair<std::uint16_t, std::optional<std::size_t>> map_key(const std::vector<std::byte>& key, std::size_t index);
+    std::pair<std::uint16_t, std::optional<std::size_t>> map_key(const std::string& key, std::size_t index) const;
+    std::pair<std::uint16_t, std::optional<std::size_t>> map_key(const std::vector<std::byte>& key, std::size_t index) const;
 
-    std::optional<std::size_t> server_by_vbucket(std::uint16_t vbucket, std::size_t index);
+    std::optional<std::size_t> server_by_vbucket(std::uint16_t vbucket, std::size_t index) const;
 };
 
 using endpoint = std::pair<std::string, std::string>;
-
-configuration
-parse_configuration(std::string_view input, endpoint source);
 
 configuration
 make_blank_configuration(const std::string& hostname, std::uint16_t plain_port, std::uint16_t tls_port);

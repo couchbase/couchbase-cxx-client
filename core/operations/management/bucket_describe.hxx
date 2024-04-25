@@ -26,6 +26,26 @@
 
 namespace couchbase::core::operations::management
 {
+struct server_node_address {
+    std::string hostname{};
+    std::uint16_t kv_plain{};
+    std::uint16_t kv_tls{};
+};
+
+struct server_node {
+    std::string server_group_name{};
+    std::size_t server_index{};
+    server_node_address default_network{};
+    server_node_address external_network{};
+    std::set<std::uint16_t> active_vbuckets{};
+    std::set<std::uint16_t> replica_vbuckets{};
+};
+
+struct server_group {
+    std::string name{};
+    std::vector<server_node> nodes{};
+};
+
 struct bucket_describe_response {
     struct bucket_info {
         std::string name{};
@@ -33,9 +53,12 @@ struct bucket_describe_response {
         std::size_t number_of_nodes{ 0 };
         std::size_t number_of_replicas{ 0 };
         std::vector<std::string> bucket_capabilities{};
+        std::map<std::string, server_group> server_groups{};
+
         couchbase::core::management::cluster::bucket_storage_backend storage_backend{
             couchbase::core::management::cluster::bucket_storage_backend::unknown
         };
+        std::string config_json{};
 
         [[nodiscard]] auto has_capability(const std::string& capability) const -> bool;
     };

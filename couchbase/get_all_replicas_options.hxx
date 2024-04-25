@@ -20,6 +20,7 @@
 #include <couchbase/common_options.hxx>
 #include <couchbase/get_replica_result.hxx>
 #include <couchbase/key_value_error_context.hxx>
+#include <couchbase/read_preference.hxx>
 
 #include <chrono>
 #include <functional>
@@ -43,7 +44,25 @@ struct get_all_replicas_options : public common_options<get_all_replicas_options
      * @internal
      */
     struct built : public common_options<get_all_replicas_options>::built {
+        couchbase::read_preference read_preference;
     };
+
+    /**
+     * Choose how the replica nodes will be selected. By default it has no
+     * preference and will select all replicas available. But it is possible to
+     * prioritize or restrict to only nodes in local server group.
+     *
+     * @param preference
+     * @return this options builder for chaining purposes.
+     *
+     * @since 1.0.0
+     * @volatile
+     */
+    auto read_preference(read_preference preference) -> get_all_replicas_options&
+    {
+        read_preference_ = preference;
+        return self();
+    }
 
     /**
      * Validates options and returns them as an immutable value.
@@ -57,8 +76,16 @@ struct get_all_replicas_options : public common_options<get_all_replicas_options
      */
     [[nodiscard]] auto build() const -> built
     {
-        return { build_common_options() };
+        return {
+            build_common_options(),
+            read_preference_,
+        };
     }
+
+  private:
+    enum read_preference read_preference_ {
+        read_preference::no_preference
+    };
 };
 
 /**

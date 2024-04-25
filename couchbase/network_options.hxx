@@ -78,8 +78,15 @@ class network_options
         return *this;
     }
 
+    auto preferred_server_group(std::string server_group) -> network_options&
+    {
+        server_group_ = std::move(server_group);
+        return *this;
+    }
+
     struct built {
         std::string network;
+        std::string server_group;
         bool enable_tcp_keep_alive;
         couchbase::ip_protocol ip_protocol;
         std::chrono::milliseconds tcp_keep_alive_interval;
@@ -92,6 +99,7 @@ class network_options
     {
         return {
             network_,
+            server_group_,
             enable_tcp_keep_alive_,
             ip_protocol_,
             tcp_keep_alive_interval_,
@@ -103,6 +111,7 @@ class network_options
 
   private:
     std::string network_{ "auto" };
+    std::string server_group_{};
     bool enable_tcp_keep_alive_{ true };
     ip_protocol ip_protocol_{ ip_protocol::any };
     std::chrono::milliseconds tcp_keep_alive_interval_{ default_tcp_keep_alive_interval };
