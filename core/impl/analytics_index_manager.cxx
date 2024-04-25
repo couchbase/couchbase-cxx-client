@@ -711,10 +711,10 @@ analytics_index_manager::get_pending_mutations(const get_pending_mutations_analy
 
 auto
 analytics_index_manager::get_pending_mutations(const get_pending_mutations_analytics_options& options) const
-  -> std::future<std::pair<couchbase::error, std::map<std::string, std::map<std::string, std::int64_t>>>>
+  -> std::future<std::pair<error, std::map<std::string, std::map<std::string, std::int64_t>>>>
 {
     auto barrier =
-      std::make_shared<std::promise<std::pair<couchbase::error, std::map<std::string, std::map<std::string, std::int64_t>>>>>();
+      std::make_shared<std::promise<std::pair<error, std::map<std::string, std::map<std::string, std::int64_t>>>>>();
     auto future = barrier->get_future();
     get_pending_mutations(options, [barrier](auto err, auto resp) mutable {
         barrier->set_value({ std::move(err), std::move(resp) });

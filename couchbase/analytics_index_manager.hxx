@@ -341,7 +341,7 @@ class analytics_index_manager
      * @committed
      */
     [[nodiscard]] auto get_pending_mutations(const get_pending_mutations_analytics_options& options) const
-      -> std::future<std::pair<couchbase::error, std::map<std::string, std::map<std::string, std::int64_t>>>>;
+      -> std::future<std::pair<error, std::map<std::string, std::map<std::string, std::int64_t>>>>;
 
     /**
      * Creates a new analytics remote link.
