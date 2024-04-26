@@ -117,8 +117,9 @@ class attempt_context_impl
       const couchbase::transactions::transaction_get_result& doc,
       std::vector<std::byte> content) override
     {
-        return wrap_call_for_public_api(
-          [this, doc, &content]() -> transaction_get_result { return replace_raw(transaction_get_result(doc), content); });
+        return wrap_call_for_public_api([this, doc, &content]() -> transaction_get_result {
+            return replace_raw(transaction_get_result(doc), content);
+        });
     }
 
     void replace_raw(couchbase::transactions::transaction_get_result doc,
@@ -373,7 +374,9 @@ class attempt_context_impl
     void remove(const transaction_get_result& document) override;
     couchbase::error remove(const couchbase::transactions::transaction_get_result& doc) override
     {
-        return wrap_void_call_for_public_api([this, doc]() { remove(transaction_get_result(doc)); });
+        return wrap_void_call_for_public_api([this, doc]() {
+            remove(transaction_get_result(doc));
+        });
     }
     void remove(const transaction_get_result& document, VoidCallback&& cb) override;
     void remove(couchbase::transactions::transaction_get_result doc, couchbase::transactions::async_err_handler&& handler) override
@@ -627,7 +630,9 @@ class attempt_context_impl
             CB_LOG_DEBUG("ensure_open_bucket called with empty bucket_name");
             return handler(couchbase::errc::common::bucket_not_found);
         }
-        cluster_ref().open_bucket(bucket_name, [handler = std::move(handler)](std::error_code ec) { handler(ec); });
+        cluster_ref().open_bucket(bucket_name, [handler = std::move(handler)](std::error_code ec) {
+            handler(ec);
+        });
     }
 };
 

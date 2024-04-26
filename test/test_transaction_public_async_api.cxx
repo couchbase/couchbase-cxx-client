@@ -74,7 +74,9 @@ TEST_CASE("transactions public async API: can get fail as expected", "[transacti
     auto f = barrier->get_future();
     c.transactions()->run(
       [id, coll](couchbase::transactions::async_attempt_context& ctx) {
-          ctx.get(coll, id, [id](auto e, auto) { CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found_exception); });
+          ctx.get(coll, id, [id](auto e, auto) {
+              CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found_exception);
+          });
       },
       [barrier](auto e, auto res) {
           CHECK_FALSE(e.ec());
@@ -101,7 +103,9 @@ TEST_CASE("transactions public async API: can async remove", "[transactions]")
       [coll, id](couchbase::transactions::async_attempt_context& ctx) {
           ctx.get(coll, id, [&ctx](auto e, auto res) {
               CHECK_FALSE(e.ec());
-              ctx.remove(res, [](auto remove_err) { CHECK_FALSE(remove_err.ec()); });
+              ctx.remove(res, [](auto remove_err) {
+                  CHECK_FALSE(remove_err.ec());
+              });
           });
       },
       [barrier](auto e, auto res) {
@@ -132,7 +136,9 @@ TEST_CASE("transactions public async API: async remove with bad cas fails as exp
               // all this to change the cas...
               couchbase::core::transactions::transaction_get_result temp_doc(res);
               temp_doc.cas(100);
-              ctx.remove(temp_doc.to_public_result(), [](auto remove_err) { CHECK(remove_err.ec()); });
+              ctx.remove(temp_doc.to_public_result(), [](auto remove_err) {
+                  CHECK(remove_err.ec());
+              });
           });
       },
       [barrier](auto e, auto res) {
@@ -157,7 +163,9 @@ TEST_CASE("transactions public async API: can async insert", "[transactions]")
     auto f = barrier->get_future();
     c.transactions()->run(
       [id, coll](couchbase::transactions::async_attempt_context& ctx) {
-          ctx.insert(coll, id, async_content, [coll, id](auto e, auto) { CHECK_FALSE(e.ec()); });
+          ctx.insert(coll, id, async_content, [coll, id](auto e, auto) {
+              CHECK_FALSE(e.ec());
+          });
       },
       [barrier](auto e, auto res) {
           CHECK_FALSE(res.transaction_id.empty());
@@ -247,7 +255,9 @@ TEST_CASE("transactions public async API: async replace fails as expected with b
               // all this to change the cas...
               couchbase::core::transactions::transaction_get_result temp_doc(res);
               temp_doc.cas(100);
-              ctx.replace(temp_doc.to_public_result(), new_content, [](auto replace_e, auto) { CHECK(replace_e.ec()); });
+              ctx.replace(temp_doc.to_public_result(), new_content, [](auto replace_e, auto) {
+                  CHECK(replace_e.ec());
+              });
           });
       },
       [barrier](auto e, auto tx_result) {
@@ -351,7 +361,9 @@ TEST_CASE("transactions public async API: can do mutating query", "[transactions
     c.transactions()->run(
       [id, test_ctx = integration.ctx](couchbase::transactions::async_attempt_context& ctx) {
           ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES("{}", {}))", test_ctx.bucket, id, async_content_json),
-                    [](auto e, auto) { CHECK_FALSE(e.ec()); });
+                    [](auto e, auto) {
+                        CHECK_FALSE(e.ec());
+                    });
       },
       [barrier](auto e, auto res) {
           CHECK_FALSE(e.ec());
@@ -382,7 +394,8 @@ TEST_CASE("transactions public async API: some query errors rollback", "[transac
                     [id, &ctx, &test_ctx](auto e, auto) {
                         CHECK_FALSE(e.ec());
                         ctx.query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES("{}", {}))", test_ctx.bucket, id, async_content_json),
-                                  [](auto, auto) {});
+                                  [](auto, auto) {
+                                  });
                     });
       },
       [barrier](auto e, auto res) {

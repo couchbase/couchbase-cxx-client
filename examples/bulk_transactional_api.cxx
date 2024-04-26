@@ -464,7 +464,9 @@ main()
 
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
-    std::thread io_thread([&io]() { io.run(); });
+    std::thread io_thread([&io]() {
+        io.run();
+    });
 
     auto options = couchbase::cluster_options(arguments.username, arguments.password);
     options.apply_profile("wan_development");

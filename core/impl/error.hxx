@@ -19,8 +19,8 @@
 
 #include <couchbase/error.hxx>
 #include <couchbase/key_value_error_context.hxx>
-#include <couchbase/subdocument_error_context.hxx>
 #include <couchbase/query_error_context.hxx>
+#include <couchbase/subdocument_error_context.hxx>
 #include <couchbase/transaction_error_context.hxx>
 #include <couchbase/transaction_op_error_context.hxx>
 

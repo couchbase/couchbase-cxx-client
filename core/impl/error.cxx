@@ -17,17 +17,17 @@
 
 #include <couchbase/error.hxx>
 #include <couchbase/error_context.hxx>
+#include <couchbase/transaction_error_context.hxx>
 
-#include <core/error_context/analytics_json.hxx>
-#include <core/error_context/http_json.hxx>
-#include <core/error_context/key_value_json.hxx>
-#include <core/error_context/query_json.hxx>
-#include <core/error_context/query_public_json.hxx>
-#include <core/error_context/search_json.hxx>
+#include "core/error_context/analytics_json.hxx"
+#include "core/error_context/http_json.hxx"
+#include "core/error_context/key_value_json.hxx"
+#include "core/error_context/query_json.hxx"
+#include "core/error_context/query_public_json.hxx"
+#include "core/error_context/search_json.hxx"
 #include "core/error_context/subdocument_json.hxx"
 #include "error.hxx"
 
-#include "couchbase/transaction_error_context.hxx"
 #include <memory>
 #include <optional>
 #include <system_error>
@@ -139,17 +139,17 @@ make_error(const couchbase::subdocument_error_context& core_ctx)
 error
 make_error(const couchbase::transaction_error_context& ctx)
 {
-    return {ctx.ec(), "", {}, { ctx.cause() }};
+    return { ctx.ec(), "", {}, { ctx.cause() } };
 }
 
 error
 make_error(const couchbase::transaction_op_error_context& ctx)
 {
     if (std::holds_alternative<key_value_error_context>(ctx.cause())) {
-        return {ctx.ec(), "", {}, make_error(std::get<key_value_error_context>(ctx.cause())) };
+        return { ctx.ec(), "", {}, make_error(std::get<key_value_error_context>(ctx.cause())) };
     }
     if (std::holds_alternative<query_error_context>(ctx.cause())) {
-        return {ctx.ec(), "", {}, make_error(std::get<query_error_context>(ctx.cause())) };
+        return { ctx.ec(), "", {}, make_error(std::get<query_error_context>(ctx.cause())) };
     }
     return ctx.ec();
 }

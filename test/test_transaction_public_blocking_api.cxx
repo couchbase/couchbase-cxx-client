@@ -53,7 +53,9 @@ with_new_cluster(test::utils::integration_test_guard& integration, std::function
     // make new virginal public cluster
 
     asio::io_context io;
-    std::thread io_thread([&io]() { io.run(); });
+    std::thread io_thread([&io]() {
+        io.run();
+    });
     auto options = couchbase::cluster_options(integration.ctx.username, integration.ctx.password);
     auto [cluster, ec] = couchbase::cluster::connect(io, integration.ctx.connection_string, options).get();
     CHECK_FALSE(ec);

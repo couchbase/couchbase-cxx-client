@@ -49,7 +49,9 @@ main(int argc, const char* argv[])
     // run IO context on separate thread
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
-    std::thread io_thread([&io]() { io.run(); });
+    std::thread io_thread([&io]() {
+        io.run();
+    });
 
     auto options = couchbase::cluster_options(username, password);
     // customize through the 'options'.

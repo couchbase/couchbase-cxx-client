@@ -88,7 +88,9 @@ std::future<std::pair<std::error_code, std::shared_ptr<transactions>>>
 transactions::create(core::cluster cluster, const couchbase::transactions::transactions_config::built& config)
 {
     auto barrier = std::make_shared<std::promise<std::pair<std::error_code, std::shared_ptr<transactions>>>>();
-    create(std::move(cluster), config, [barrier](auto ec, auto txns) mutable { barrier->set_value({ ec, txns }); });
+    create(std::move(cluster), config, [barrier](auto ec, auto txns) mutable {
+        barrier->set_value({ ec, txns });
+    });
     return barrier->get_future();
 }
 
