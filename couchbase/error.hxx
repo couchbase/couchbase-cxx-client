@@ -33,6 +33,8 @@ class error
     error(std::error_code ec, std::string message = {}, error_context ctx = {});
     error(std::error_code ec, std::string message, error_context ctx, error cause);
 
+    virtual ~error() = default;
+
     [[nodiscard]] auto ec() const -> std::error_code;
     [[nodiscard]] auto message() const -> const std::string&;
     [[nodiscard]] auto ctx() const -> const error_context&;
