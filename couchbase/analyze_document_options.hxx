@@ -40,5 +40,5 @@ struct analyze_document_options : public common_options<analyze_document_options
   private:
 };
 
-using analyze_document_handler = std::function<void(couchbase::manager_error_context, std::vector<std::string>)>;
+using analyze_document_handler = std::function<void(error, std::vector<std::string>)>;
 } // namespace couchbase

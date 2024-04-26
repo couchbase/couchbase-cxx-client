@@ -19,7 +19,6 @@
 
 #include <couchbase/common_options.hxx>
 #include <couchbase/error_codes.hxx>
-#include <couchbase/manager_error_context.hxx>
 
 #include <optional>
 #include <string>
@@ -80,5 +79,5 @@ class watch_query_indexes_options : public common_options<watch_query_indexes_op
  * @uncommitted
  */
 
-using watch_query_indexes_handler = std::function<void(couchbase::manager_error_context)>;
+using watch_query_indexes_handler = std::function<void(error)>;
 } // namespace couchbase

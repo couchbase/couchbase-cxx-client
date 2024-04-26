@@ -39,5 +39,5 @@ struct unfreeze_plan_search_index_options : public common_options<unfreeze_plan_
   private:
 };
 
-using unfreeze_plan_search_index_handler = std::function<void(couchbase::manager_error_context)>;
+using unfreeze_plan_search_index_handler = std::function<void(error)>;
 } // namespace couchbase

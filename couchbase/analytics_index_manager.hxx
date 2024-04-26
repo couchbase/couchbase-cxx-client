@@ -34,7 +34,6 @@
 #include <couchbase/management/analytics_dataset.hxx>
 #include <couchbase/management/analytics_index.hxx>
 #include <couchbase/management/analytics_link.hxx>
-#include <couchbase/manager_error_context.hxx>
 #include <couchbase/replace_link_analytics_options.hxx>
 
 #include <future>
@@ -79,7 +78,7 @@ class analytics_index_manager
      * @committed
      */
     [[nodiscard]] auto create_dataverse(std::string dataverse_name, const create_dataverse_analytics_options& options) const
-      -> std::future<manager_error_context>;
+      -> std::future<error>;
 
     /**
      * Drops (deletes) a dataverse.
@@ -106,7 +105,7 @@ class analytics_index_manager
      * @committed
      */
     [[nodiscard]] auto drop_dataverse(std::string dataverse_name, const drop_dataverse_analytics_options& options) const
-      -> std::future<manager_error_context>;
+      -> std::future<error>;
 
     /**
      * Creates a new dataset (analytics collection).
@@ -137,7 +136,7 @@ class analytics_index_manager
      */
     [[nodiscard]] auto create_dataset(std::string dataset_name,
                                       std::string bucket_name,
-                                      const create_dataset_analytics_options& options) const -> std::future<manager_error_context>;
+                                      const create_dataset_analytics_options& options) const -> std::future<error>;
 
     /**
      * Drops (deletes) a dataset.
@@ -163,8 +162,7 @@ class analytics_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto drop_dataset(std::string dataset_name, const drop_dataset_analytics_options& options) const
-      -> std::future<manager_error_context>;
+    [[nodiscard]] auto drop_dataset(std::string dataset_name, const drop_dataset_analytics_options& options) const -> std::future<error>;
 
     /**
      * Fetches all datasets (analytics collections) from the analytics service.
@@ -187,7 +185,7 @@ class analytics_index_manager
      * @committed
      */
     [[nodiscard]] auto get_all_datasets(const get_all_datasets_analytics_options& options) const
-      -> std::future<std::pair<manager_error_context, std::vector<management::analytics_dataset>>>;
+      -> std::future<std::pair<error, std::vector<management::analytics_dataset>>>;
 
     /**
      * Creates a new analytics index.
@@ -222,7 +220,7 @@ class analytics_index_manager
     [[nodiscard]] auto create_index(std::string index_name,
                                     std::string dataset_name,
                                     std::map<std::string, std::string> fields,
-                                    const create_index_analytics_options& options) const -> std::future<manager_error_context>;
+                                    const create_index_analytics_options& options) const -> std::future<error>;
 
     /**
      * Drops (removes) an analytics index.
@@ -252,7 +250,7 @@ class analytics_index_manager
      * @committed
      */
     [[nodiscard]] auto drop_index(std::string index_name, std::string dataset_name, const drop_index_analytics_options& options) const
-      -> std::future<manager_error_context>;
+      -> std::future<error>;
 
     /**
      * Fetches all analytics indexes.
@@ -275,7 +273,7 @@ class analytics_index_manager
      * @committed
      */
     [[nodiscard]] auto get_all_indexes(const get_all_indexes_analytics_options& options) const
-      -> std::future<std::pair<manager_error_context, std::vector<management::analytics_index>>>;
+      -> std::future<std::pair<error, std::vector<management::analytics_index>>>;
 
     /**
      * Connects a not yet connected link.
@@ -297,7 +295,7 @@ class analytics_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto connect_link(const connect_link_analytics_options& options) const -> std::future<manager_error_context>;
+    [[nodiscard]] auto connect_link(const connect_link_analytics_options& options) const -> std::future<error>;
 
     /**
      * Disconnects a currently connected link.
@@ -319,7 +317,7 @@ class analytics_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto disconnect_link(const disconnect_link_analytics_options& options) const -> std::future<manager_error_context>;
+    [[nodiscard]] auto disconnect_link(const disconnect_link_analytics_options& options) const -> std::future<error>;
 
     /**
      * Returns the pending mutations for different dataverses.
@@ -343,7 +341,7 @@ class analytics_index_manager
      * @committed
      */
     [[nodiscard]] auto get_pending_mutations(const get_pending_mutations_analytics_options& options) const
-      -> std::future<std::pair<couchbase::manager_error_context, std::map<std::string, std::map<std::string, std::int64_t>>>>;
+      -> std::future<std::pair<error, std::map<std::string, std::map<std::string, std::int64_t>>>>;
 
     /**
      * Creates a new analytics remote link.
@@ -370,7 +368,7 @@ class analytics_index_manager
      * @committed
      */
     [[nodiscard]] auto create_link(const management::analytics_link& link, const create_link_analytics_options& options) const
-      -> std::future<manager_error_context>;
+      -> std::future<error>;
 
     /**
      * Replaces an existing analytics remote link.
@@ -397,7 +395,7 @@ class analytics_index_manager
      * @committed
      */
     [[nodiscard]] auto replace_link(const management::analytics_link& link, const replace_link_analytics_options& options) const
-      -> std::future<manager_error_context>;
+      -> std::future<error>;
 
     /**
      * Drops an existing analytics remote link.
@@ -427,7 +425,7 @@ class analytics_index_manager
      * @committed
      */
     [[nodiscard]] auto drop_link(std::string link_name, std::string dataverse_name, const drop_link_analytics_options& options) const
-      -> std::future<manager_error_context>;
+      -> std::future<error>;
 
     /**
      * Fetches the existing analytics remote links.
@@ -450,7 +448,7 @@ class analytics_index_manager
      * @committed
      */
     [[nodiscard]] auto get_links(const get_links_analytics_options& options) const
-      -> std::future<std::pair<manager_error_context, std::vector<std::unique_ptr<management::analytics_link>>>>;
+      -> std::future<std::pair<error, std::vector<std::unique_ptr<management::analytics_link>>>>;
 
   private:
     friend class cluster;

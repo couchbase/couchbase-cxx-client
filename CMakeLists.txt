@@ -138,7 +138,6 @@ set(couchbase_cxx_client_FILES
     core/impl/geo_polygon_query.cxx
     core/impl/get_replica.cxx
     core/impl/internal_date_range_facet_result.cxx
-    core/impl/internal_manager_error_context.cxx
     core/impl/internal_numeric_range_facet_result.cxx
     core/impl/internal_search_error_context.cxx
     core/impl/internal_search_meta_data.cxx
@@ -150,7 +149,6 @@ set(couchbase_cxx_client_FILES
     core/impl/key_value_error_context.cxx
     core/impl/lookup_in_replica.cxx
     core/impl/management_error_category.cxx
-    core/impl/manager_error_context.cxx
     core/impl/match_all_query.cxx
     core/impl/match_none_query.cxx
     core/impl/match_phrase_query.cxx

@@ -63,7 +63,7 @@ class scope_search_index_manager
     void get_index(std::string index_name, const get_search_index_options& options, get_search_index_handler&& handler) const;
 
     [[nodiscard]] auto get_index(std::string index_name, const get_search_index_options& options = {}) const
-      -> std::future<std::pair<manager_error_context, management::search::index>>;
+      -> std::future<std::pair<error, management::search::index>>;
 
     /**
      * Fetches all scope-level indexes from the server
@@ -77,7 +77,7 @@ class scope_search_index_manager
     void get_all_indexes(const get_all_search_indexes_options& options, get_all_search_indexes_handler&& handler) const;
 
     [[nodiscard]] auto get_all_indexes(const get_all_search_indexes_options& options = {}) const
-      -> std::future<std::pair<manager_error_context, std::vector<management::search::index>>>;
+      -> std::future<std::pair<error, std::vector<management::search::index>>>;
 
     /**
      * Creates, or updates a scope-level index
@@ -94,7 +94,7 @@ class scope_search_index_manager
                       upsert_search_index_handler&& handler) const;
 
     [[nodiscard]] auto upsert_index(const management::search::index& search_index, const upsert_search_index_options& options = {}) const
-      -> std::future<manager_error_context>;
+      -> std::future<error>;
 
     /**
      * Drops a scope-level index
@@ -108,8 +108,7 @@ class scope_search_index_manager
      */
     void drop_index(std::string index_name, const drop_search_index_options& options, drop_search_index_handler&& handler) const;
 
-    [[nodiscard]] auto drop_index(std::string index_name, const drop_search_index_options& options = {}) const
-      -> std::future<manager_error_context>;
+    [[nodiscard]] auto drop_index(std::string index_name, const drop_search_index_options& options = {}) const -> std::future<error>;
 
     /**
      * Retrieves the number of documents that have been indexed for a scope-level index
@@ -126,7 +125,7 @@ class scope_search_index_manager
                                      get_indexed_search_index_handler&& handler) const;
 
     [[nodiscard]] auto get_indexed_documents_count(std::string index_name, const get_indexed_search_index_options& options = {}) const
-      -> std::future<std::pair<manager_error_context, std::uint64_t>>;
+      -> std::future<std::pair<error, std::uint64_t>>;
 
     /**
      * Pauses updates and maintenance for a scope-level index.
@@ -143,7 +142,7 @@ class scope_search_index_manager
                       pause_ingest_search_index_handler&& handler) const;
 
     [[nodiscard]] auto pause_ingest(std::string index_name, const pause_ingest_search_index_options& options = {}) const
-      -> std::future<manager_error_context>;
+      -> std::future<error>;
 
     /**
      * Resumes updates and maintenance for a scope-level index.
@@ -160,7 +159,7 @@ class scope_search_index_manager
                        resume_ingest_search_index_handler&& handler) const;
 
     [[nodiscard]] auto resume_ingest(std::string index_name, const resume_ingest_search_index_options& options = {}) const
-      -> std::future<manager_error_context>;
+      -> std::future<error>;
 
     /**
      * Allows querying against a scope-level index
@@ -177,7 +176,7 @@ class scope_search_index_manager
                         allow_querying_search_index_handler&& handler) const;
 
     [[nodiscard]] auto allow_querying(std::string index_name, const allow_querying_search_index_options& options = {}) const
-      -> std::future<manager_error_context>;
+      -> std::future<error>;
 
     /**
      * Disallows querying against a scope-level index
@@ -194,7 +193,7 @@ class scope_search_index_manager
                            disallow_querying_search_index_handler&& handler) const;
 
     [[nodiscard]] auto disallow_querying(std::string index_name, const disallow_querying_search_index_options& options = {}) const
-      -> std::future<manager_error_context>;
+      -> std::future<error>;
 
     /**
      * Freeze the assignment of scope-level index partitions to nodes.
@@ -211,7 +210,7 @@ class scope_search_index_manager
                      freeze_plan_search_index_handler&& handler) const;
 
     [[nodiscard]] auto freeze_plan(std::string index_name, const freeze_plan_search_index_options& options = {}) const
-      -> std::future<manager_error_context>;
+      -> std::future<error>;
 
     /**
      * Unfreeze the assignment of scope-level index partitions to nodes.
@@ -228,7 +227,7 @@ class scope_search_index_manager
                        unfreeze_plan_search_index_handler&& handler) const;
 
     [[nodiscard]] auto unfreeze_plan(std::string index_name, const unfreeze_plan_search_index_options& options = {}) const
-      -> std::future<manager_error_context>;
+      -> std::future<error>;
 
     /**
      * Allows to see how a document is analyzed against a specific scope-level index.
@@ -254,7 +253,7 @@ class scope_search_index_manager
 
     template<typename Document>
     [[nodiscard]] auto analyze_document(std::string index_name, Document document, const analyze_document_options& options = {}) const
-      -> std::future<std::pair<manager_error_context, std::vector<std::string>>>
+      -> std::future<std::pair<error, std::vector<std::string>>>
     {
         auto encoded = couchbase::codec::default_json_transcoder::encode(document); // Encode as JSON and convert to string
         auto decoded = std::string{ reinterpret_cast<const char*>(encoded.data.data()), encoded.data.size() };
@@ -279,7 +278,7 @@ class scope_search_index_manager
                           analyze_document_handler&& handler) const;
 
     [[nodiscard]] auto analyze_document(std::string index_name, std::string document, const analyze_document_options& options) const
-      -> std::future<std::pair<manager_error_context, std::vector<std::string>>>;
+      -> std::future<std::pair<error, std::vector<std::string>>>;
 
   private:
     friend class scope;

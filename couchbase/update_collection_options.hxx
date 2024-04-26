@@ -18,7 +18,6 @@
 #pragma once
 
 #include <couchbase/common_options.hxx>
-#include <couchbase/manager_error_context.hxx>
 
 #include <cstdint>
 #include <memory>
@@ -69,5 +68,5 @@ struct update_collection_settings {
     std::optional<bool> history{};
 };
 
-using update_collection_handler = std::function<void(couchbase::manager_error_context)>;
+using update_collection_handler = std::function<void(error)>;
 } // namespace couchbase

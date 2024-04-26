@@ -39,6 +39,5 @@ struct get_all_buckets_options : public common_options<get_all_buckets_options> 
   private:
 };
 
-using get_all_buckets_handler =
-  std::function<void(couchbase::manager_error_context, std::vector<couchbase::management::cluster::bucket_settings>)>;
+using get_all_buckets_handler = std::function<void(error, std::vector<management::cluster::bucket_settings>)>;
 } // namespace couchbase

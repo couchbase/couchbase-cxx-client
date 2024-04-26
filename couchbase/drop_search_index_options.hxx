@@ -39,5 +39,5 @@ struct drop_search_index_options : public common_options<drop_search_index_optio
   private:
 };
 
-using drop_search_index_handler = std::function<void(couchbase::manager_error_context)>;
+using drop_search_index_handler = std::function<void(error)>;
 } // namespace couchbase

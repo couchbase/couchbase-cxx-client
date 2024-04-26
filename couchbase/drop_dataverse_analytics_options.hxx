@@ -19,7 +19,6 @@
 
 #include <couchbase/common_options.hxx>
 #include <couchbase/error_codes.hxx>
-#include <couchbase/manager_error_context.hxx>
 
 #include <functional>
 
@@ -80,5 +79,5 @@ class drop_dataverse_analytics_options : public common_options<drop_dataverse_an
  * @since 1.0.0
  * @uncommitted
  */
-using drop_dataverse_analytics_handler = std::function<void(couchbase::manager_error_context)>;
+using drop_dataverse_analytics_handler = std::function<void(error)>;
 } // namespace couchbase

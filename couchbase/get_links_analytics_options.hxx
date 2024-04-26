@@ -20,7 +20,6 @@
 #include <couchbase/common_options.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/management/analytics_link.hxx>
-#include <couchbase/manager_error_context.hxx>
 
 #include <functional>
 #include <memory>
@@ -116,6 +115,5 @@ class get_links_analytics_options : public common_options<get_links_analytics_op
  * @since 1.0.0
  * @uncommitted
  */
-using get_links_analytics_handler =
-  std::function<void(couchbase::manager_error_context, std::vector<std::unique_ptr<management::analytics_link>>)>;
+using get_links_analytics_handler = std::function<void(error, std::vector<std::unique_ptr<management::analytics_link>>)>;
 } // namespace couchbase

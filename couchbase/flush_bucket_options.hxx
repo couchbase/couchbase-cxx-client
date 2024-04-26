@@ -37,5 +37,5 @@ struct flush_bucket_options : public common_options<flush_bucket_options> {
   private:
 };
 
-using flush_bucket_handler = std::function<void(couchbase::manager_error_context)>;
+using flush_bucket_handler = std::function<void(error)>;
 } // namespace couchbase

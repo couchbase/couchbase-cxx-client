@@ -57,7 +57,7 @@ class collection_manager
     void get_all_scopes(const get_all_scopes_options& options, get_all_scopes_handler&& handler) const;
 
     [[nodiscard]] auto get_all_scopes(const get_all_scopes_options& options = {}) const
-      -> std::future<std::pair<manager_error_context, std::vector<management::bucket::scope_spec>>>;
+      -> std::future<std::pair<error, std::vector<management::bucket::scope_spec>>>;
 
     /**
      * Creates a new collection
@@ -79,7 +79,7 @@ class collection_manager
     [[nodiscard]] auto create_collection(std::string scope_name,
                                          std::string collection_name,
                                          const create_collection_settings& settings = {},
-                                         const create_collection_options& options = {}) const -> std::future<manager_error_context>;
+                                         const create_collection_options& options = {}) const -> std::future<error>;
     /**
      * Updates an existing collection
      *
@@ -100,7 +100,7 @@ class collection_manager
     [[nodiscard]] auto update_collection(std::string scope_name,
                                          std::string collection_name,
                                          const update_collection_settings& settings,
-                                         const update_collection_options& options = {}) const -> std::future<manager_error_context>;
+                                         const update_collection_options& options = {}) const -> std::future<error>;
 
     /**
      * Drops a collection
@@ -119,7 +119,7 @@ class collection_manager
 
     [[nodiscard]] auto drop_collection(std::string scope_name,
                                        std::string collection_name,
-                                       const drop_collection_options& options = {}) const -> std::future<manager_error_context>;
+                                       const drop_collection_options& options = {}) const -> std::future<error>;
 
     /**
      * Creates a scope on the bucket
@@ -132,8 +132,7 @@ class collection_manager
      */
     void create_scope(std::string scope_name, const create_scope_options& options, create_scope_handler&& handler) const;
 
-    [[nodiscard]] auto create_scope(std::string scope_name, const create_scope_options& options = {}) const
-      -> std::future<manager_error_context>;
+    [[nodiscard]] auto create_scope(std::string scope_name, const create_scope_options& options = {}) const -> std::future<error>;
 
     /**
      * Drops a scope on the bucket
@@ -146,8 +145,7 @@ class collection_manager
      */
     void drop_scope(std::string scope_name, const drop_scope_options& options, drop_scope_handler&& handler) const;
 
-    [[nodiscard]] auto drop_scope(std::string scope_name, const drop_scope_options& options = {}) const
-      -> std::future<manager_error_context>;
+    [[nodiscard]] auto drop_scope(std::string scope_name, const drop_scope_options& options = {}) const -> std::future<error>;
 
   private:
     friend class bucket;

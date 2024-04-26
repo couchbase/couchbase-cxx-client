@@ -18,7 +18,6 @@
 #pragma once
 
 #include <couchbase/common_options.hxx>
-#include <couchbase/manager_error_context.hxx>
 
 #include <functional>
 #include <memory>
@@ -40,5 +39,5 @@ struct allow_querying_search_index_options : public common_options<allow_queryin
   private:
 };
 
-using allow_querying_search_index_handler = std::function<void(couchbase::manager_error_context)>;
+using allow_querying_search_index_handler = std::function<void(error)>;
 } // namespace couchbase

@@ -40,5 +40,5 @@ struct get_search_index_options : public common_options<get_search_index_options
   private:
 };
 
-using get_search_index_handler = std::function<void(couchbase::manager_error_context, couchbase::management::search::index)>;
+using get_search_index_handler = std::function<void(error, management::search::index)>;
 } // namespace couchbase
