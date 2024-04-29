@@ -169,7 +169,7 @@ TEST_CASE("transactions public blocking API: can insert", "[transactions]")
     REQUIRE(final_doc.content_as<tao::json::value>() == content);
 }
 
-TEST_CASE("transactions public blocking API: insert has error as expected when doc already exists", "[transactions]")
+TEST_CASE("transactions public blocking API: insert has error when doc already exists", "[transactions]")
 {
 
     test::utils::integration_test_guard integration;
@@ -231,7 +231,6 @@ TEST_CASE("transactions public blocking API: can replace", "[transactions]")
 
 TEST_CASE("transactions public blocking API: replace fails as expected with bad cas", "[transactions]")
 {
-
     test::utils::integration_test_guard integration;
 
     auto id = test::utils::uniq_id("txn");
@@ -394,6 +393,10 @@ TEST_CASE("transactions public blocking API: can do simple query", "[transaction
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto id = test::utils::uniq_id("txn");
     auto c = integration.public_cluster();
     auto coll = c.bucket(integration.ctx.bucket).default_collection();
@@ -414,6 +417,10 @@ TEST_CASE("transactions public blocking API: can do simple query", "[transaction
 TEST_CASE("transactions public blocking API: can do simple mutating query", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
 
     auto id = test::utils::uniq_id("txn");
     auto c = integration.public_cluster();
@@ -437,6 +444,10 @@ TEST_CASE("transactions public blocking API: can do simple mutating query", "[tr
 TEST_CASE("transactions public blocking API: some query errors don't force rollback", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
 
     auto id = test::utils::uniq_id("txn");
     auto c = integration.public_cluster();
@@ -462,6 +473,10 @@ TEST_CASE("transactions public blocking API: some query errors don't force rollb
 TEST_CASE("transactions public blocking API: some query errors do rollback", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
 
     auto id = test::utils::uniq_id("txn");
     auto id2 = test::utils::uniq_id("txn");
@@ -492,6 +507,10 @@ TEST_CASE("transactions public blocking API: some query errors are seen immediat
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto c = integration.public_cluster();
     auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
@@ -512,6 +531,10 @@ TEST_CASE("transactions public blocking API: can query from a scope", "[transact
     const std::string new_scope_name("newscope");
     const std::string new_coll_name("newcoll");
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
 
     auto id = test::utils::uniq_id("txn");
     auto c = integration.public_cluster();

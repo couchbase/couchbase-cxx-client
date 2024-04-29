@@ -15,6 +15,7 @@
  *   limitations under the License.
  */
 
+#include "couchbase/configuration_profiles_registry.hxx"
 #include "test_helper_integration.hxx"
 
 #include "core/operations/management/query_index_build.hxx"
@@ -32,6 +33,8 @@
 #include <couchbase/term_facet.hxx>
 
 #include <tao/json.hpp>
+
+#include <fmt/chrono.h>
 
 #ifndef _WIN32
 #include <sys/wait.h>
@@ -210,6 +213,17 @@ namespace example_search
 
 #include <tao/json.hpp>
 
+#include <fmt/chrono.h>
+
+class github_actions_configuration_profile : public couchbase::configuration_profile
+{
+  public:
+    void apply(couchbase::cluster_options& options) override
+    {
+        options.timeouts().search_timeout(std::chrono::minutes(5)).management_timeout(std::chrono::minutes(5));
+    }
+};
+
 int
 main(int argc, const char* argv[])
 {
@@ -231,7 +245,9 @@ main(int argc, const char* argv[])
     auto options = couchbase::cluster_options(username, password);
     // customize through the 'options'.
     // For example, optimize timeouts for WAN
-    options.apply_profile("wan_development");
+    couchbase::configuration_profiles_registry::register_profile("github_actions",
+                                                                 std::make_shared<github_actions_configuration_profile>());
+    options.apply_profile("github_actions");
 
     auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
     if (ec) {
@@ -365,16 +381,28 @@ main(int argc, const char* argv[])
             state.add(upsert_result);
         }
 
+        auto start = std::chrono::system_clock::now();
         auto [ctx, result] =
           cluster
             .search_query("travel-sample-index", couchbase::query_string_query("bree"), couchbase::search_options{}.consistent_with(state))
             .get();
+        auto stop = std::chrono::system_clock::now();
 
         if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+            fmt::print("unable to perform search query: {}, time: {} or {}, status: {}, error: {}\n",
+                       ctx.ec().message(),
+                       std::chrono::duration_cast<std::chrono::milliseconds>(stop - start),
+                       std::chrono::duration_cast<std::chrono::seconds>(stop - start),
+                       ctx.status(),
+                       ctx.error());
             return 1;
         }
-        fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
+        fmt::print("{} hits, total: {}, time: {} or {} (server reported {})\n",
+                   result.rows().size(),
+                   result.meta_data().metrics().total_rows(),
+                   std::chrono::duration_cast<std::chrono::milliseconds>(stop - start),
+                   std::chrono::duration_cast<std::chrono::seconds>(stop - start),
+                   result.meta_data().metrics().took());
         for (const auto& row : result.rows()) {
             fmt::print("id: {}, score: {}\n", row.id(), row.score());
         }
@@ -445,13 +473,21 @@ row: {"airline":{"callsign":"MILE-AIR","country":"United States","iata":"Q5","ic
 
 TEST_CASE("example: search", "[integration]")
 {
-    test::utils::integration_test_guard integration;
+    {
+        test::utils::integration_test_guard integration;
 
-    if (integration.cluster_version().is_capella()) {
-        SKIP("Capella does not allow to use REST API to load sample buckets");
-    }
-    if (!integration.cluster_version().supports_collections()) {
-        SKIP("cluster does not support collections");
+        if (integration.cluster_version().is_capella()) {
+            SKIP("Capella does not allow to use REST API to load sample buckets");
+        }
+        if (!integration.cluster_version().supports_collections()) {
+            SKIP("cluster does not support collections");
+        }
+
+        test::utils::create_search_index(integration,
+                                         "travel-sample",
+                                         "travel-sample-index",
+                                         integration.cluster_version().is_mad_hatter() ? "travel_sample_index_params_v6.json"
+                                                                                       : "travel_sample_index_params.json");
     }
 
     const auto env = test::utils::test_context::load_from_environment();
@@ -463,6 +499,11 @@ TEST_CASE("example: search", "[integration]")
     };
 
     REQUIRE(example_search::main(4, argv) == 0);
+
+    {
+        test::utils::integration_test_guard integration;
+        test::utils::drop_search_index(integration, "travel-sample-index");
+    }
 }
 
 namespace example_buckets
@@ -523,9 +564,10 @@ main(int argc, const char* argv[])
             fmt::print("--- bucket has been successfully created\n");
         }
     }
+    fmt::print("--- wait for couple of seconds (in highly distributed deployment, bucket creation might take few moments)\n");
+    std::this_thread::sleep_for(std::chrono::seconds{ 2 });
     {
-        fmt::print("--- get bucket\n");
-        auto [ctx, bucket] = manager.get_bucket(bucket_name).get();
+        auto [ctx, bucket] = manager.get_bucket(test_bucket_name).get();
         if (ctx.ec()) {
             fmt::print("unable to get the bucket: {}\n", ctx.ec().message());
             return 1;

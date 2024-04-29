@@ -28,6 +28,7 @@
 #include "core/utils/movable_function.hxx"
 #include "core/utils/url_codec.hxx"
 
+#include <couchbase/build_config.hxx>
 #include <couchbase/build_version.hxx>
 
 #include <couchbase/error_codes.hxx>

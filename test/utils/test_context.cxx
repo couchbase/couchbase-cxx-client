@@ -100,6 +100,19 @@ test_context::load_from_environment()
         }
     }
 
+    if (auto var = spdlog::details::os::getenv("TEST_USE_WAN_DEVELOPMENT_PROFILE"); !var.empty()) {
+        if (var == "true" || var == "yes" || var == "1") {
+            ctx.use_wan_development_profile = true;
+        } else if (var == "false" || var == "no" || var == "0") {
+            ctx.use_wan_development_profile = false;
+        }
+    }
+
+    // Always use WAN profile for Capella or Elixir setups
+    if (ctx.deployment == deployment_type::capella || ctx.deployment == test::utils::deployment_type::elixir) {
+        ctx.use_wan_development_profile = true;
+    }
+
     return ctx;
 }
 

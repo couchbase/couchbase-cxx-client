@@ -427,6 +427,10 @@ TEST_CASE("transactions: can do query", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
     auto txns = integration.transactions();
 
@@ -462,6 +466,10 @@ TEST_CASE("transactions: can do query", "[transactions]")
 TEST_CASE("transactions: can see some query errors but no transactions failed", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
 
     auto cluster = integration.cluster;
     auto txns = integration.transactions();

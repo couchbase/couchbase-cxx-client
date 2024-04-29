@@ -19,32 +19,6 @@
 #include "core/operations/management/eventing.hxx"
 #include "test_helper_integration.hxx"
 
-static couchbase::core::operations::management::eventing_get_function_response
-wait_for_function_created(test::utils::integration_test_guard& integration,
-                          const std::string& function_name,
-                          const std::optional<std::string>& bucket_name,
-                          const std::optional<std::string>& scope_name)
-{
-    couchbase::core::operations::management::eventing_get_function_response resp{};
-    test::utils::wait_until([&integration, &resp, function_name, bucket_name, scope_name]() {
-        couchbase::core::operations::management::eventing_get_function_request req{ function_name, bucket_name, scope_name };
-        resp = test::utils::execute(integration.cluster, req);
-        if (resp.ctx.ec) {
-            return false;
-        }
-        // The function scope sometimes takes longer to be set correctly (especially for the admin scope).
-        if (bucket_name.has_value() && scope_name.has_value()) {
-            return resp.function.internal.bucket_name.has_value() && resp.function.internal.scope_name.has_value() &&
-                   resp.function.internal.bucket_name.value() == bucket_name.value() &&
-                   resp.function.internal.scope_name.value() == scope_name.value();
-        }
-        return (!resp.function.internal.bucket_name.has_value() && !resp.function.internal.scope_name.has_value()) ||
-               (resp.function.internal.bucket_name.has_value() && resp.function.internal.scope_name.has_value() &&
-                resp.function.internal.bucket_name.value() == "*" && resp.function.internal.scope_name.value() == "*");
-    });
-    return resp;
-}
-
 static couchbase::core::operations::management::bucket_get_response
 wait_for_bucket_created(test::utils::integration_test_guard& integration, const std::string& bucket_name)
 {
@@ -132,6 +106,11 @@ function OnDelete(meta, options) {
 }
 )";
 
+    INFO(fmt::format("function_name: {}\nbucket_name: {}\nscope_name: {}",
+                     function_name,
+                     bucket_name.value_or("(not specified)"),
+                     scope_name.value_or("(not specified)")));
+
     {
         couchbase::core::operations::management::eventing_upsert_function_request req{};
         req.bucket_name = bucket_name;
@@ -151,7 +130,13 @@ function OnDelete(meta, options) {
     }
 
     {
-        auto resp = wait_for_function_created(integration, function_name, bucket_name, scope_name);
+        REQUIRE(test::utils::wait_for_function_created(integration.cluster, function_name, bucket_name, scope_name));
+        auto resp = test::utils::execute(integration.cluster,
+                                         couchbase::core::operations::management::eventing_get_function_request{
+                                           function_name,
+                                           bucket_name,
+                                           scope_name,
+                                         });
         REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
@@ -159,8 +144,9 @@ function OnDelete(meta, options) {
         couchbase::core::operations::management::eventing_get_all_functions_request req{ bucket_name, scope_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
-        auto function = std::find_if(
-          resp.functions.begin(), resp.functions.end(), [&function_name](const auto& fun) { return function_name == fun.name; });
+        auto function = std::find_if(resp.functions.begin(), resp.functions.end(), [&function_name](const auto& fun) {
+            return function_name == fun.name;
+        });
         REQUIRE(function != resp.functions.end());
         REQUIRE(function->code == source_code);
         REQUIRE(function->source_keyspace.bucket == integration.ctx.bucket);
@@ -260,6 +246,19 @@ function OnDelete(meta, options) {
         couchbase::core::operations::management::eventing_drop_function_request req{ function_name, bucket_name, scope_name };
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
+    }
+
+    {
+        auto function_not_found = test::utils::wait_until([&]() {
+            auto resp = test::utils::execute(integration.cluster,
+                                             couchbase::core::operations::management::eventing_get_function_request{
+                                               function_name,
+                                               bucket_name,
+                                               scope_name,
+                                             });
+            return resp.ctx.ec == couchbase::errc::management::eventing_function_not_found;
+        });
+        REQUIRE(function_not_found);
     }
 
     {
@@ -369,7 +368,11 @@ function OnDelete(meta, options) {
         }
 
         {
-            auto resp = wait_for_function_created(integration, admin_function_name, {}, {});
+            REQUIRE(test::utils::wait_for_function_created(integration.cluster, admin_function_name));
+            auto resp = test::utils::execute(integration.cluster,
+                                             couchbase::core::operations::management::eventing_get_function_request{
+                                               admin_function_name,
+                                             });
             REQUIRE_SUCCESS(resp.ctx.ec);
         }
 
@@ -394,7 +397,10 @@ function OnDelete(meta, options) {
         }
 
         {
-            auto resp = wait_for_function_created(integration, scoped_function_name, integration.ctx.bucket, "_default");
+            REQUIRE(test::utils::wait_for_function_created(integration.cluster, scoped_function_name, integration.ctx.bucket, "_default"));
+            auto resp = test::utils::execute(integration.cluster,
+                                             couchbase::core::operations::management::eventing_get_function_request{
+                                               scoped_function_name, integration.ctx.bucket, "_default" });
             REQUIRE_SUCCESS(resp.ctx.ec);
         }
 
@@ -449,17 +455,19 @@ function OnDelete(meta, options) {
 
             // The scoped function should be in the results of a scoped get_status
             {
-                auto function = std::find_if(resp.status.functions.begin(),
-                                             resp.status.functions.end(),
-                                             [&scoped_function_name](const auto& fun) { return scoped_function_name == fun.name; });
+                auto function =
+                  std::find_if(resp.status.functions.begin(), resp.status.functions.end(), [&scoped_function_name](const auto& fun) {
+                      return scoped_function_name == fun.name;
+                  });
                 REQUIRE(function != resp.status.functions.end());
             }
 
             // The admin function should not be in the results of a scoped get_status
             {
-                auto function = std::find_if(resp.status.functions.begin(),
-                                             resp.status.functions.end(),
-                                             [&admin_function_name](const auto& fun) { return admin_function_name == fun.name; });
+                auto function =
+                  std::find_if(resp.status.functions.begin(), resp.status.functions.end(), [&admin_function_name](const auto& fun) {
+                      return admin_function_name == fun.name;
+                  });
                 REQUIRE(function == resp.status.functions.end());
             }
         }
@@ -471,17 +479,19 @@ function OnDelete(meta, options) {
 
             // The scoped function should not be in the results of a non-scoped get_status
             {
-                auto function = std::find_if(resp.status.functions.begin(),
-                                             resp.status.functions.end(),
-                                             [&scoped_function_name](const auto& fun) { return scoped_function_name == fun.name; });
+                auto function =
+                  std::find_if(resp.status.functions.begin(), resp.status.functions.end(), [&scoped_function_name](const auto& fun) {
+                      return scoped_function_name == fun.name;
+                  });
                 REQUIRE(function == resp.status.functions.end());
             }
 
             // The admin function should be in the results of a non-scoped get_status
             {
-                auto function = std::find_if(resp.status.functions.begin(),
-                                             resp.status.functions.end(),
-                                             [&admin_function_name](const auto& fun) { return admin_function_name == fun.name; });
+                auto function =
+                  std::find_if(resp.status.functions.begin(), resp.status.functions.end(), [&admin_function_name](const auto& fun) {
+                      return admin_function_name == fun.name;
+                  });
                 REQUIRE(function != resp.status.functions.end());
             }
         }

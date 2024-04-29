@@ -64,7 +64,7 @@ bool
 wait_until_collection_manifest_propagated(const couchbase::core::cluster& cluster,
                                           const std::string& bucket_name,
                                           std::uint64_t current_manifest_uid,
-                                          std::size_t successful_rounds = 4,
+                                          std::size_t successful_rounds = 7,
                                           std::chrono::seconds total_timeout = std::chrono::minutes{ 5 });
 bool
 wait_until_user_present(const couchbase::core::cluster& cluster, const std::string& username);
@@ -76,5 +76,36 @@ bool
 wait_for_search_pindexes_ready(const couchbase::core::cluster& cluster, const std::string& bucket_name, const std::string& index_name);
 
 bool
+wait_for_function_created(const couchbase::core::cluster& cluster,
+                          const std::string& function_name,
+                          const std::optional<std::string>& bucket_name = {},
+                          const std::optional<std::string>& scope_name = {},
+                          std::size_t successful_rounds = 4,
+                          std::chrono::seconds total_timeout = std::chrono::seconds{ 120 });
+
+bool
 wait_until_indexed(const couchbase::core::cluster& cluster, const std::string& index_name, std::uint64_t expected_count);
+
+bool
+create_primary_index(const couchbase::core::cluster& cluster, const std::string& bucket_name);
+
+class integration_test_guard;
+/**
+ *
+ * @param integration cluster object
+ * @param bucket_name name of the bucket
+ * @param index_name name of the search index
+ * @param index_params_file_name the filename with index parameters in JSON format
+ * @param expected_number_of_documents_indexed consider job done when this number of the document has been indexed
+ * @return pair of boolean value (success if true), and name of the index created (service might rename index)
+ */
+std::pair<bool, std::string>
+create_search_index(integration_test_guard& integration,
+                    const std::string& bucket_name,
+                    const std::string& index_name,
+                    const std::string& index_params_file_name,
+                    std::size_t expected_number_of_documents_indexed = 800);
+
+bool
+drop_search_index(integration_test_guard& integration, const std::string& index_name);
 } // namespace test::utils

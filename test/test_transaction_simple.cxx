@@ -153,7 +153,7 @@ TEST_CASE("transactions: can use custom metadata collections per transactions", 
         REQUIRE_SUCCESS(resp.ctx.ec());
     }
     couchbase::transactions::transaction_options cfg;
-    cfg.metadata_collection(couchbase::transactions::transaction_keyspace("secBucket"));
+    cfg.metadata_collection(couchbase::transactions::transaction_keyspace(integration.ctx.other_bucket));
     txn->run(cfg, [id](attempt_context& ctx) {
         auto doc = ctx.get(id);
         auto new_content = doc.content<tao::json::value>();
@@ -178,7 +178,7 @@ TEST_CASE("transactions: can use custom metadata collections", "[transactions]")
     test::utils::integration_test_guard integration;
     auto cluster = integration.cluster;
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
-    auto cfg = get_conf().metadata_collection(couchbase::transactions::transaction_keyspace("secBucket"));
+    auto cfg = get_conf().metadata_collection(couchbase::transactions::transaction_keyspace(integration.ctx.other_bucket));
     auto [ec, txn] = couchbase::core::transactions::transactions::create(cluster, cfg).get();
     REQUIRE_SUCCESS(ec);
 
@@ -265,10 +265,10 @@ TEST_CASE("transactions: non existent collection in custom metadata collections"
 {
     test::utils::integration_test_guard integration;
     auto cluster = integration.cluster;
-    auto cfg =
-      get_conf()
-        .metadata_collection(couchbase::transactions::transaction_keyspace{ "secBucket", couchbase::scope::default_name, "i_dont_exist" })
-        .cleanup_config(couchbase::transactions::transactions_cleanup_config().cleanup_lost_attempts(true));
+    auto cfg = get_conf()
+                 .metadata_collection(couchbase::transactions::transaction_keyspace{
+                   integration.ctx.other_bucket, couchbase::scope::default_name, "i_dont_exist" })
+                 .cleanup_config(couchbase::transactions::transactions_cleanup_config().cleanup_lost_attempts(true));
     cfg.timeout(std::chrono::seconds(2));
     auto [ec, txn] = couchbase::core::transactions::transactions::create(cluster, cfg).get();
     REQUIRE_SUCCESS(ec);
@@ -350,6 +350,11 @@ TEST_CASE("transactions: quoted std::strings end up with 2 quotes (that's bad)",
 TEST_CASE("transactions: query error can be handled", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
     auto txn = integration.transactions();
     txn->run([](attempt_context& ctx) {
@@ -363,6 +368,11 @@ TEST_CASE("transactions: query error can be handled", "[transactions]")
 TEST_CASE("transactions: unhandled query error fails transaction", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
     auto txn = integration.transactions();
     REQUIRE_THROWS_AS(
@@ -378,6 +388,11 @@ TEST_CASE("transactions: unhandled query error fails transaction", "[transaction
 TEST_CASE("transactions: query mode get optional", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
 
     auto txn = integration.transactions();
@@ -548,6 +563,11 @@ TEST_CASE("transactions: can rollback replace", "[transactions]")
 TEST_CASE("transactions: can have trivial query in transaction", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
 
     auto txn = integration.transactions();
@@ -571,6 +591,11 @@ TEST_CASE("transactions: can have trivial query in transaction", "[transactions]
 TEST_CASE("transactions: can modify doc in query", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
 
     auto txn = integration.transactions();
@@ -633,6 +658,11 @@ TEST_CASE("transactions: can rollback", "[transactions]")
 TEST_CASE("transactions: query updates insert", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
 
     auto txn = integration.transactions();
@@ -655,6 +685,11 @@ TEST_CASE("transactions: query updates insert", "[transactions]")
 TEST_CASE("transactions: can KV get", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
 
     auto txn = integration.transactions();
@@ -679,6 +714,11 @@ TEST_CASE("transactions: can KV get", "[transactions]")
 TEST_CASE("transactions: can KV insert", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
 
     auto txn = integration.transactions();
@@ -701,6 +741,10 @@ TEST_CASE("transactions: can KV insert", "[transactions]")
 TEST_CASE("transactions: can rollback KV insert", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
 
     auto txn = integration.transactions();
@@ -726,6 +770,11 @@ TEST_CASE("transactions: can rollback KV insert", "[transactions]")
 TEST_CASE("transactions: can KV replace", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
 
     auto txn = integration.transactions();
@@ -759,6 +808,10 @@ TEST_CASE("transactions: can KV replace", "[transactions]")
 TEST_CASE("transactions: can rollback KV replace", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
 
     auto txn = integration.transactions();
@@ -797,6 +850,11 @@ TEST_CASE("transactions: can rollback KV replace", "[transactions]")
 TEST_CASE("transactions: can KV remove", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
 
     auto txn = integration.transactions();
@@ -825,6 +883,10 @@ TEST_CASE("transactions: can KV remove", "[transactions]")
 TEST_CASE("transactions: can rollback KV remove", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
 
     auto txn = integration.transactions();
@@ -859,6 +921,10 @@ TEST_CASE("transactions: can rollback KV remove", "[transactions]")
 TEST_CASE("transactions: can rollback retry bad KV replace", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
 
     auto txn = integration.transactions();
@@ -947,6 +1013,13 @@ TEST_CASE("transactions: get after query behaves same as before a query", "[tran
 TEST_CASE("transactions: get_optional after query behaves same as before a query", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
+    REQUIRE(test::utils::create_primary_index(integration.cluster, integration.ctx.bucket));
+
     auto cluster = integration.cluster;
     auto txn = integration.transactions();
     couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
@@ -955,9 +1028,17 @@ TEST_CASE("transactions: get_optional after query behaves same as before a query
         ctx.get_optional(id);
     }));
 }
+
 TEST_CASE("transactions: sergey example", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
+    REQUIRE(test::utils::create_primary_index(integration.cluster, integration.ctx.bucket));
+
     auto cluster = integration.cluster;
     auto txn = integration.transactions();
     couchbase::core::document_id id_to_remove{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn") };
