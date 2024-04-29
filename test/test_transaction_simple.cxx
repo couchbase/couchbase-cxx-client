@@ -741,6 +741,10 @@ TEST_CASE("transactions: can KV insert", "[transactions]")
 TEST_CASE("transactions: can rollback KV insert", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
 
     auto txn = integration.transactions();
@@ -804,6 +808,10 @@ TEST_CASE("transactions: can KV replace", "[transactions]")
 TEST_CASE("transactions: can rollback KV replace", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
 
     auto txn = integration.transactions();
@@ -875,6 +883,10 @@ TEST_CASE("transactions: can KV remove", "[transactions]")
 TEST_CASE("transactions: can rollback KV remove", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
 
     auto txn = integration.transactions();
@@ -909,6 +921,10 @@ TEST_CASE("transactions: can rollback KV remove", "[transactions]")
 TEST_CASE("transactions: can rollback retry bad KV replace", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto cluster = integration.cluster;
 
     auto txn = integration.transactions();
