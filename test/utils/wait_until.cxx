@@ -107,11 +107,11 @@ wait_until_cluster_connected(const std::string& username, const std::string& pas
         asio::io_context io;
         auto guard = asio::make_work_guard(io);
         std::thread io_thread([&io]() { io.run(); });
-        auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, cluster_options).get();
+        auto [ec, cluster] = couchbase::cluster::connect(io, connection_string, cluster_options).get();
         cluster.close();
         guard.reset();
         io_thread.join();
-        return ec.value() == 0;
+        return ec.ec().value() == 0;
     });
     if (connected) {
         std::this_thread::sleep_for(std::chrono::seconds(1));

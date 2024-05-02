@@ -341,9 +341,9 @@ main()
 
     auto options = couchbase::cluster_options(arguments.username, arguments.password);
     options.apply_profile("wan_development");
-    auto [cluster, ec] = couchbase::cluster::connect(io, arguments.connection_string, options).get();
-    if (ec) {
-        fmt::print("Unable to connect to cluster at \"{}\", error: {}\n", arguments.connection_string, ec.message());
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, arguments.connection_string, options).get();
+    if (connect_err) {
+        fmt::print("Unable to connect to cluster at \"{}\", error: {}\n", arguments.connection_string, connect_err.message());
     } else {
         auto collection = cluster.bucket(arguments.bucket_name).scope(arguments.scope_name).collection(arguments.collection_name);
 

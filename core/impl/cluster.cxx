@@ -215,14 +215,14 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
                           core::impl::to_core_service_types(options.service_types),
                           options.timeout,
                           [handler = std::move(handler)](auto resp) mutable {
-                              return handler(core::impl::build_result(resp));
+                              return handler({}, core::impl::build_result(resp));
                           });
     };
 
     void diagnostics(const diagnostics_options::built& options, diagnostics_handler&& handler) const
     {
         return core_.diagnostics(options.report_id, [handler = std::move(handler)](auto resp) mutable {
-            return handler(core::impl::build_result(resp));
+            return handler({}, core::impl::build_result(resp));
         });
     }
 
@@ -334,11 +334,11 @@ cluster::ping(const couchbase::ping_options& options, couchbase::ping_handler&& 
 }
 
 auto
-cluster::ping(const couchbase::ping_options& options) const -> std::future<ping_result>
+cluster::ping(const couchbase::ping_options& options) const -> std::future<std::pair<error, ping_result>>
 {
-    auto barrier = std::make_shared<std::promise<ping_result>>();
-    ping(options, [barrier](auto result) mutable {
-        barrier->set_value(std::move(result));
+    auto barrier = std::make_shared<std::promise<std::pair<error, ping_result>>>();
+    ping(options, [barrier](auto err, auto result) mutable {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return barrier->get_future();
 }
@@ -350,11 +350,11 @@ cluster::diagnostics(const couchbase::diagnostics_options& options, couchbase::d
 }
 
 auto
-cluster::diagnostics(const couchbase::diagnostics_options& options) const -> std::future<diagnostics_result>
+cluster::diagnostics(const couchbase::diagnostics_options& options) const -> std::future<std::pair<error, diagnostics_result>>
 {
-    auto barrier = std::make_shared<std::promise<diagnostics_result>>();
-    diagnostics(options, [barrier](auto result) mutable {
-        barrier->set_value(std::move(result));
+    auto barrier = std::make_shared<std::promise<std::pair<error, diagnostics_result>>>();
+    diagnostics(options, [barrier](auto err, auto result) mutable {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return barrier->get_future();
 }
@@ -398,11 +398,11 @@ cluster::search(std::string index_name, search_request request, const search_opt
 
 auto
 cluster::connect(asio::io_context& io, const std::string& connection_string, const cluster_options& options)
-  -> std::future<std::pair<cluster, std::error_code>>
+  -> std::future<std::pair<error, cluster>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<cluster, std::error_code>>>();
-    connect(io, connection_string, options, [barrier](auto c, auto ec) mutable {
-        barrier->set_value({ std::move(c), ec });
+    auto barrier = std::make_shared<std::promise<std::pair<error, cluster>>>();
+    connect(io, connection_string, options, [barrier](auto err, auto c) mutable {
+        barrier->set_value({ std::move(err), std::move(c) });
     });
     return barrier->get_future();
 }
@@ -417,16 +417,16 @@ cluster::connect(asio::io_context& io,
     auto origin = options_to_origin(connection_string, options);
     return core.open(origin, [core, handler = std::move(handler)](std::error_code ec) mutable {
         if (ec) {
-            return handler({}, ec);
+            return handler(ec, {});
         }
         auto cluster = couchbase::cluster(std::move(core));
         return cluster.impl_->initialize_transactions([cluster, handler = std::move(handler)](std::error_code ec) mutable {
             if (ec) {
                 return cluster.impl_->close([ec, handler = std::move(handler)]() mutable {
-                    return handler({}, ec);
+                    return handler(ec, {});
                 });
             }
-            return handler(cluster, ec);
+            return handler(ec, cluster);
         });
     });
 }

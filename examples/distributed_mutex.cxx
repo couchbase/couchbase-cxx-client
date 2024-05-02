@@ -162,7 +162,7 @@ main()
 
     auto options = couchbase::cluster_options(username, password);
     options.apply_profile("wan_development");
-    auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
     auto collection = cluster.bucket(bucket_name).scope(scope_name).collection(collection_name);
 
     // Obtain thread_id for simplicity. Could be pid_id, if it was more portable.

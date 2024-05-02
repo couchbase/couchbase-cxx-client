@@ -84,12 +84,12 @@ class beam_app : public CLI::App
         std::thread io_thread([&io]() { io.run(); });
         const auto connection_string = common_options_.connection.connection_string;
 
-        auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, cluster_options).get();
-        if (ec) {
+        auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, cluster_options).get();
+        if (connect_err) {
             guard.reset();
             io_thread.join();
 
-            fail(fmt::format("Failed to connect to the cluster at {:?}: {}", connection_string, ec.message()));
+            fail(fmt::format("Failed to connect to the cluster at {:?}: {}", connection_string, connect_err.message()));
         }
 
         auto core = couchbase::core::get_core_cluster(cluster);

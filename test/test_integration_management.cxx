@@ -2035,7 +2035,7 @@ TEST_CASE("integration: user management", "[integration]")
                 new_user.roles = {
                     couchbase::core::management::rbac::role{ "admin" },
                 };
-                auto [cluster, ec] = couchbase::cluster::connect(io, integration.ctx.connection_string, options_original).get();
+                auto [err, cluster] = couchbase::cluster::connect(io, integration.ctx.connection_string, options_original).get();
                 couchbase::core::operations::management::user_upsert_request upsertReq{};
                 upsertReq.user = new_user;
                 auto upsertResp = test::utils::execute(couchbase::extract_core_cluster(cluster), upsertReq);
@@ -2053,7 +2053,7 @@ TEST_CASE("integration: user management", "[integration]")
                 std::thread io_thread([&io]() {
                     io.run();
                 });
-                auto [cluster_new, ec_new] = couchbase::cluster::connect(io, integration.ctx.connection_string, options_outdated).get();
+                auto [ec_new, cluster_new] = couchbase::cluster::connect(io, integration.ctx.connection_string, options_outdated).get();
                 couchbase::core::operations::management::change_password_request changePasswordReq{};
                 changePasswordReq.newPassword = "newPassword";
                 auto changePasswordResp = test::utils::execute(couchbase::extract_core_cluster(cluster_new), changePasswordReq);
@@ -2071,13 +2071,13 @@ TEST_CASE("integration: user management", "[integration]")
                 std::thread io_thread([&io]() {
                     io.run();
                 });
-                auto [cluster_fail, ec_fail] = couchbase::cluster::connect(io, integration.ctx.connection_string, options_outdated).get();
-                REQUIRE(ec_fail == couchbase::errc::common::authentication_failure);
+                auto [err_fail, cluster_fail] = couchbase::cluster::connect(io, integration.ctx.connection_string, options_outdated).get();
+                REQUIRE(err_fail.ec() == couchbase::errc::common::authentication_failure);
 
                 // Make connection with new credentials, should succeed
-                auto [cluster_success, ec_success] =
+                auto [err_success, cluster_success] =
                   couchbase::cluster::connect(io, integration.ctx.connection_string, options_updated).get();
-                REQUIRE_SUCCESS(ec_success);
+                REQUIRE_SUCCESS(err_success);
                 cluster_success.close();
                 guard.reset();
                 io_thread.join();

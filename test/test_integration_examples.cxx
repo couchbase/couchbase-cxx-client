@@ -73,9 +73,9 @@ main(int argc, const char* argv[])
     options.apply_profile("wan_development");
 
     // [1] connect to cluster using the given connection string and the options
-    auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
-    if (ec) {
-        fmt::print("unable to connect to the cluster: {}\n", ec.message());
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+    if (connect_err) {
+        fmt::print("unable to connect to the cluster: {}\n", connect_err.message());
         return 1;
     }
 
@@ -240,9 +240,9 @@ main(int argc, const char* argv[])
     // For example, optimize timeouts for WAN
     options.apply_profile("wan_development");
 
-    auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
-    if (ec) {
-        fmt::print("unable to connect to the cluster: {}\n", ec.message());
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+    if (connect_err) {
+        fmt::print("unable to connect to the cluster: {}\n", connect_err.message());
         return 1;
     }
 
@@ -507,9 +507,9 @@ main(int argc, const char* argv[])
     // For example, optimize timeouts for WAN
     options.apply_profile("wan_development");
 
-    auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
-    if (ec) {
-        fmt::print("unable to connect to the cluster: {}\n", ec.message());
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+    if (connect_err) {
+        fmt::print("unable to connect to the cluster: {}\n", connect_err.message());
         return 1;
     }
     auto manager = cluster.buckets();
@@ -525,12 +525,12 @@ main(int argc, const char* argv[])
     bucket_settings.conflict_resolution_type = couchbase::management::cluster::bucket_conflict_resolution::sequence_number;
     {
         fmt::print("--- create bucket\n");
-        auto ctx = manager.create_bucket(bucket_settings).get();
-        if (ctx.ec()) {
-            if (ctx.ec() == couchbase::errc::common::invalid_argument) {
+        auto err = manager.create_bucket(bucket_settings).get();
+        if (err) {
+            if (err.ec() == couchbase::errc::common::invalid_argument) {
                 fmt::print("bucket already exists\n");
             } else {
-                fmt::print("unable to create the bucket: {}\n", ctx.ec().message());
+                fmt::print("unable to create the bucket: {}\n", err.ec().message());
                 return 1;
             }
         } else {
@@ -645,9 +645,9 @@ main(int argc, const char* argv[])
     auto options = couchbase::cluster_options(username, password);
     options.apply_profile("wan_development");
 
-    auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
-    if (ec) {
-        fmt::print("PARENT(pid={}): sunable to connect to the cluster: {}\n", getpid(), ec.message());
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+    if (connect_err) {
+        fmt::print("PARENT(pid={}): sunable to connect to the cluster: {}\n", getpid(), connect_err.message());
         return 1;
     }
 

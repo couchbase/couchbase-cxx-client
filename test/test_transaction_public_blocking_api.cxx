@@ -57,10 +57,10 @@ with_new_cluster(test::utils::integration_test_guard& integration, std::function
         io.run();
     });
     auto options = couchbase::cluster_options(integration.ctx.username, integration.ctx.password);
-    auto [cluster, ec] = couchbase::cluster::connect(io, integration.ctx.connection_string, options).get();
-    CHECK_FALSE(ec);
+    auto [err, cluster] = couchbase::cluster::connect(io, integration.ctx.connection_string, options).get();
+    CHECK_FALSE(err);
     try {
-        if (!ec) {
+        if (!err) {
             fn(cluster);
         }
     } catch (...) {

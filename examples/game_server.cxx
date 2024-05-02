@@ -226,9 +226,9 @@ main()
     options.transactions().cleanup_config().cleanup_client_attempts(true);
     options.transactions().timeout(std::chrono::milliseconds(100));
 
-    auto [cluster, ec] = couchbase::cluster::connect(io, "couchbase://localhost", options).get();
-    if (ec) {
-        std::cout << "Error opening cluster: " << ec.message() << std::endl;
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, "couchbase://localhost", options).get();
+    if (connect_err) {
+        std::cout << "Error opening cluster: " << connect_err.message() << std::endl;
         return -1;
     }
 
