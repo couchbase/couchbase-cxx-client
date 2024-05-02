@@ -503,6 +503,8 @@ TEST_CASE("transactions public blocking API: some query errors are seen immediat
       [](couchbase::transactions::attempt_context& ctx) {
           auto [e, res] = ctx.query("I am not a valid n1ql query");
           CHECK(e.ec());
+          CHECK(e.cause().has_value());
+          CHECK(e.cause().value().ec() == couchbase::errc::common::parsing_failure);
       },
       couchbase::transactions::transaction_options().timeout(std::chrono::seconds(10)));
     CHECK_FALSE(tx_err.ec());

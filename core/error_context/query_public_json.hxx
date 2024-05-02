@@ -30,21 +30,17 @@ struct traits<couchbase::query_error_context> {
     template<template<typename...> class Traits>
     static void assign(tao::json::basic_value<Traits>& v, const couchbase::query_error_context& ctx)
     {
+        std::vector<tao::json::basic_value<Traits>> reasons{};
+        for (couchbase::retry_reason r : ctx.retry_reasons()) {
+            reasons.emplace_back(fmt::format("{}", r));
+        }
+        v["retry_attempts"] = ctx.retry_attempts();
+        v["retry_reasons"] = reasons;
         if (ctx.last_dispatched_to()) {
             v["last_dispatched_to"] = ctx.last_dispatched_to().value();
         }
         if (ctx.last_dispatched_from()) {
             v["last_dispatched_from"] = ctx.last_dispatched_from().value();
-        }
-        if (ctx.retry_attempts()) {
-            v["retry_attempts"] = ctx.retry_attempts();
-        }
-        if (!ctx.retry_reasons().empty()) {
-            std::vector<tao::json::basic_value<Traits>> reasons{};
-            for (couchbase::retry_reason r : ctx.retry_reasons()) {
-                reasons.emplace_back(fmt::format("{}", r));
-            }
-            v["retry_reasons"] = reasons;
         }
         if (!ctx.operation_id().empty()) {
             v["operation_id"] = ctx.operation_id();
