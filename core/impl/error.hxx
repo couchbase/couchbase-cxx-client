@@ -24,10 +24,13 @@
 #include <couchbase/transaction_error_context.hxx>
 #include <couchbase/transaction_op_error_context.hxx>
 
+#include <couchbase/transactions/transaction_operation_failed.hxx>
+
 #include "core/error_context/analytics.hxx"
 #include "core/error_context/http.hxx"
 #include "core/error_context/query.hxx"
 #include "core/error_context/search.hxx"
+#include "core/transactions/internal/exceptions_internal.hxx"
 
 namespace couchbase::core::impl
 {
@@ -57,4 +60,9 @@ make_error(const couchbase::transaction_error_context& core_ctx);
 
 error
 make_error(const couchbase::transaction_op_error_context& core_ctx);
+
+const couchbase::transactions::transaction_operation_failed&
+make_tof(const couchbase::core::transactions::transaction_operation_failed& core_tof);
+
+
 } // namespace couchbase::core::impl

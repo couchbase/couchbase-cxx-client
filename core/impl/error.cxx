@@ -153,5 +153,66 @@ make_error(const couchbase::transaction_op_error_context& ctx)
     }
     return ctx.ec();
 }
+
+couchbase::transactions::final_error
+map_final_error(const couchbase::core::transactions::final_error& final_err)
+{
+    switch (final_err) {
+        case couchbase::core::transactions::final_error::FAILED_POST_COMMIT:
+            return couchbase::transactions::final_error::FAILED_POST_COMMIT;
+        case couchbase::core::transactions::final_error::FAILED:
+            return couchbase::transactions::final_error::FAILED;
+        case couchbase::core::transactions::final_error::AMBIGUOUS:
+            return couchbase::transactions::final_error::AMBIGUOUS;
+        case couchbase::core::transactions::final_error::EXPIRED:
+            return couchbase::transactions::final_error::EXPIRED;
+    }
+}
+
+couchbase::transactions::error_class
+map_error_class(const couchbase::core::transactions::error_class& error_class)
+{
+    switch (error_class) {
+        case couchbase::core::transactions::error_class::FAIL_HARD:
+            return couchbase::transactions::error_class::FAIL_HARD;
+        case couchbase::core::transactions::error_class::FAIL_OTHER:
+            return couchbase::transactions::error_class::FAIL_OTHER;
+        case couchbase::core::transactions::error_class::FAIL_TRANSIENT:
+            return couchbase::transactions::error_class::FAIL_TRANSIENT;
+        case couchbase::core::transactions::error_class::FAIL_AMBIGUOUS:
+            return couchbase::transactions::error_class::FAIL_AMBIGUOUS;
+        case couchbase::core::transactions::error_class::FAIL_DOC_ALREADY_EXISTS:
+            return couchbase::transactions::error_class::FAIL_DOC_ALREADY_EXISTS;
+        case couchbase::core::transactions::error_class::FAIL_DOC_NOT_FOUND:
+            return couchbase::transactions::error_class::FAIL_DOC_NOT_FOUND;
+        case couchbase::core::transactions::error_class::FAIL_PATH_NOT_FOUND:
+            return couchbase::transactions::error_class::FAIL_PATH_NOT_FOUND;
+        case couchbase::core::transactions::error_class::FAIL_CAS_MISMATCH:
+            return couchbase::transactions::error_class::FAIL_CAS_MISMATCH;
+        case couchbase::core::transactions::error_class::FAIL_WRITE_WRITE_CONFLICT:
+            return couchbase::transactions::error_class::FAIL_WRITE_WRITE_CONFLICT;
+        case couchbase::core::transactions::error_class::FAIL_ATR_FULL:
+            return couchbase::transactions::error_class::FAIL_ATR_FULL;
+        case couchbase::core::transactions::error_class::FAIL_PATH_ALREADY_EXISTS:
+            return couchbase::transactions::error_class::FAIL_PATH_ALREADY_EXISTS;
+        case couchbase::core::transactions::error_class::FAIL_EXPIRY:
+            return couchbase::transactions::error_class::FAIL_EXPIRY;
+    }
+}
+
+const couchbase::transactions::transaction_operation_failed&
+make_tof(const couchbase::core::transactions::transaction_operation_failed& core_tof)
+{
+
+    static couchbase::transactions::transaction_operation_failed tof{ map_error_class(core_tof.ec()),
+                                                               core_tof.what(),
+                                                               core_tof.should_retry(),
+                                                               core_tof.should_rollback(),
+                                                               map_final_error(core_tof.to_raise()),
+                                                               error(errc::make_error_code(
+                                                                 transaction_op_errc_from_external_exception(core_tof.cause()))) };
+    return tof;
+}
+
 } // namespace core::impl
 } // namespace couchbase

@@ -118,12 +118,10 @@ class attempt_expired : public client_error
  */
 class transaction_operation_failed
   : public std::runtime_error
-  , public couchbase::error
 {
   public:
     explicit transaction_operation_failed(error_class ec, const std::string& what)
       : std::runtime_error(what)
-      , couchbase::error(errc::transaction_op::transaction_operation_failed)
       , ec_(ec)
       , retry_(false)
       , rollback_(true)
@@ -133,7 +131,6 @@ class transaction_operation_failed
     }
     explicit transaction_operation_failed(const client_error& client_err)
       : std::runtime_error(client_err.what())
-      , couchbase::error(errc::transaction_op::transaction_operation_failed)
       , ec_(client_err.ec())
       , retry_(false)
       , rollback_(true)
@@ -227,6 +224,11 @@ class transaction_operation_failed
     bool should_retry() const
     {
         return retry_;
+    }
+
+    error_class ec() const
+    {
+        return ec_;
     }
 
     external_exception cause() const

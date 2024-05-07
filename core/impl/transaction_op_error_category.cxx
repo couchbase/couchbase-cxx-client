@@ -74,7 +74,7 @@ struct transaction_op_error_category : std::error_category {
                 return "transaction already aborted (1320)";
             case errc::transaction_op::transaction_already_committed:
                 return "transaction already committed (1321)";
-            case errc::transaction_op::transaction_operation_failed:
+            case errc::transaction_op::transaction_op_failed:
                 return "transaction operation failed (1399)";
         }
         return "FIXME: unknown error code (recompile with newer library): couchbase.transaction_op." + std::to_string(ev);

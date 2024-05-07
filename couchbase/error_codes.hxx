@@ -1115,7 +1115,7 @@ enum class transaction_op {
     /**
      * Special code for internal use
      */
-    transaction_operation_failed = 1399,
+    transaction_op_failed = 1399,
 };
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
