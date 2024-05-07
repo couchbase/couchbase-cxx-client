@@ -23,7 +23,12 @@
 namespace couchbase::transactions
 {
 
-enum final_error { FAILED, EXPIRED, FAILED_POST_COMMIT, AMBIGUOUS };
+enum final_error {
+    FAILED,
+    EXPIRED,
+    FAILED_POST_COMMIT,
+    AMBIGUOUS
+};
 
 enum error_class {
     FAIL_HARD = 0,
@@ -51,11 +56,11 @@ class transaction_operation_failed : public error
 {
   public:
     transaction_operation_failed(error_class err_class,
-                                          const std::string& message,
-                                          bool retry,
-                                          bool rollback,
-                                          final_error to_raise,
-                                          const error& cause)
+                                 const std::string& message,
+                                 bool retry,
+                                 bool rollback,
+                                 final_error to_raise,
+                                 const error& cause)
       : error(couchbase::errc::transaction_op::transaction_op_failed, message, {}, cause)
       , error_class_(err_class)
       , retry_(retry)

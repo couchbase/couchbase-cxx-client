@@ -68,7 +68,12 @@ class retry_operation_retries_exhausted : public std::runtime_error
 external_exception
 external_exception_from_error_class(error_class ec);
 
-enum final_error { FAILED, EXPIRED, FAILED_POST_COMMIT, AMBIGUOUS };
+enum final_error {
+    FAILED,
+    EXPIRED,
+    FAILED_POST_COMMIT,
+    AMBIGUOUS
+};
 
 error_class
 error_class_from_result(const result& res);
@@ -116,8 +121,7 @@ class attempt_expired : public client_error
  * derived from this.  The transaction logic then consumes them to decide to
  * retry, or rollback the transaction.
  */
-class transaction_operation_failed
-  : public std::runtime_error
+class transaction_operation_failed : public std::runtime_error
 {
   public:
     explicit transaction_operation_failed(error_class ec, const std::string& what)
@@ -152,8 +156,9 @@ class transaction_operation_failed
         // just retain the first.
         assert(errors.size() > 0);
         // start with first error that isn't previous_operation_failed
-        auto error_to_throw = *(std::find_if(
-          errors.begin(), errors.end(), [](auto& err) { return err.cause() != external_exception::PREVIOUS_OPERATION_FAILED; }));
+        auto error_to_throw = *(std::find_if(errors.begin(), errors.end(), [](auto& err) {
+            return err.cause() != external_exception::PREVIOUS_OPERATION_FAILED;
+        }));
         for (auto& ex : errors) {
             if (ex.cause() == external_exception::PREVIOUS_OPERATION_FAILED) {
                 continue;

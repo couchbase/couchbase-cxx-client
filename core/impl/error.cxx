@@ -205,12 +205,12 @@ make_tof(const couchbase::core::transactions::transaction_operation_failed& core
 {
 
     static couchbase::transactions::transaction_operation_failed tof{ map_error_class(core_tof.ec()),
-                                                               core_tof.what(),
-                                                               core_tof.should_retry(),
-                                                               core_tof.should_rollback(),
-                                                               map_final_error(core_tof.to_raise()),
-                                                               error(errc::make_error_code(
-                                                                 transaction_op_errc_from_external_exception(core_tof.cause()))) };
+                                                                      core_tof.what(),
+                                                                      core_tof.should_retry(),
+                                                                      core_tof.should_rollback(),
+                                                                      map_final_error(core_tof.to_raise()),
+                                                                      error(errc::make_error_code(
+                                                                        transaction_op_errc_from_external_exception(core_tof.cause()))) };
     return tof;
 }
 

@@ -591,9 +591,10 @@ class attempt_context_impl
         }
     }
 
-    void wrap_callback_for_async_public_api(std::exception_ptr err,
-                                            std::optional<transaction_get_result> res,
-                                            std::function<void(const couchbase::error&, couchbase::transactions::transaction_get_result)>&& cb)
+    void wrap_callback_for_async_public_api(
+      std::exception_ptr err,
+      std::optional<transaction_get_result> res,
+      std::function<void(const couchbase::error&, couchbase::transactions::transaction_get_result)>&& cb)
     {
         if (res) {
             return cb({}, res->to_public_result());
