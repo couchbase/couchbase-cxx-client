@@ -40,6 +40,13 @@ enum error_class {
     FAIL_EXPIRY
 };
 
+/**
+ * This operation (such as a replace, get or insert) either failed or ambiguously succeeded.
+ *
+ * The details of the failure are opaque, as the application is not expected to take action on this failure.
+ *
+ * @internal All methods on this class are for internal use only.
+ */
 class transaction_operation_failed : public error
 {
   public:
