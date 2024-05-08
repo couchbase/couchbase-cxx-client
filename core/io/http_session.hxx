@@ -349,13 +349,16 @@ class http_session : public std::enable_shared_from_this<http_session>
             if (ec == asio::error::operation_aborted) {
                 return;
             }
+            CB_LOG_DEBUG("{} idle timeout expired, stopping session: \"{}:{}\"", self->info_.log_prefix(), self->hostname_, self->service_);
             self->stop();
         });
     }
 
-    void reset_idle()
+    bool reset_idle()
     {
-        idle_timer_.cancel();
+        // Return true if cancel() is successful. Since the idle_timer_ has a single pending
+        // wait per session, we know the timer has already expired if cancel() returns 0.
+        return idle_timer_.cancel() != 0;
     }
 
   private:
