@@ -35,6 +35,7 @@ class error_context
   public:
     error_context() = default;
     explicit error_context(internal_error_context internal);
+    error_context(internal_error_context internal, internal_error_context internal_metadata);
 
     [[nodiscard]] auto to_json(error_context_json_format format = error_context_json_format::compact) const -> std::string;
 
@@ -48,7 +49,13 @@ class error_context
         }
     }
 
+    /**
+     * @internal
+     */
+    [[nodiscard]] auto internal_metadata(error_context_json_format format = error_context_json_format::compact) const -> std::string;
+
   private:
     internal_error_context internal_;
+    internal_error_context internal_metadata_;
 };
 } // namespace couchbase

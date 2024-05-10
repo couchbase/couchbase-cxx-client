@@ -414,3 +414,33 @@ struct fmt::formatter<couchbase::core::transactions::error_class> {
         return format_to(ctx.out(), "{}", name);
     }
 };
+
+template<>
+struct fmt::formatter<couchbase::core::transactions::final_error> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(couchbase::core::transactions::final_error to_raise, FormatContext& ctx) const
+    {
+        string_view name = "UNKNOWN FINAL ERROR";
+        switch (to_raise) {
+            case couchbase::core::transactions::FAILED:
+                name = "FAILED";
+                break;
+            case couchbase::core::transactions::EXPIRED:
+                name = "EXPIRED";
+                break;
+            case couchbase::core::transactions::FAILED_POST_COMMIT:
+                name = "FAILED_POST_COMMIT";
+                break;
+            case couchbase::core::transactions::AMBIGUOUS:
+                name = "AMBIGUOUS";
+                break;
+        }
+        return format_to(ctx.out(), "{}", name);
+    }
+};

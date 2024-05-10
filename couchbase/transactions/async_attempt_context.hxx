@@ -26,9 +26,9 @@ class scope;
 
 namespace transactions
 {
-using async_result_handler = std::function<void(const error&, transaction_get_result)>;
-using async_query_handler = std::function<void(const error&, transaction_query_result)>;
-using async_err_handler = std::function<void(const error&)>;
+using async_result_handler = std::function<void(error, transaction_get_result)>;
+using async_query_handler = std::function<void(error, transaction_query_result)>;
+using async_err_handler = std::function<void(error)>;
 
 /**
  * The async_attempt_context is used for all asynchronous transaction operations

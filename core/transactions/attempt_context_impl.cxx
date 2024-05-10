@@ -1140,7 +1140,7 @@ attempt_context_impl::do_public_query(const std::string& statement,
         auto [ctx, res] = core::impl::build_transaction_query_result(result);
         return std::make_pair(core::impl::make_error(ctx), res);
     } catch (const transaction_operation_failed& e) {
-        return { core::impl::make_tof(e), {} };
+        return { core::impl::make_error(e), {} };
     } catch (const op_exception& qe) {
         return { core::impl::make_error(qe.ctx()), {} };
     } catch (...) {

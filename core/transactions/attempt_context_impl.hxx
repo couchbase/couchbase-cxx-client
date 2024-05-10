@@ -413,7 +413,7 @@ class attempt_context_impl
                       try {
                           std::rethrow_exception(err);
                       } catch (const transaction_operation_failed& e) {
-                          return handler(core::impl::make_tof(e), {});
+                          return handler(core::impl::make_error(e), {});
                       } catch (const op_exception& ex) {
                           return handler(core::impl::make_error(ex.ctx()), {});
                       } catch (...) {
@@ -567,7 +567,7 @@ class attempt_context_impl
         try {
             return { {}, handler().to_public_result() };
         } catch (const transaction_operation_failed& e) {
-            return { core::impl::make_tof(e), {} };
+            return { core::impl::make_error(e), {} };
         } catch (const op_exception& ex) {
             return { core::impl::make_error(ex.ctx()), {} };
         } catch (...) {
@@ -576,14 +576,14 @@ class attempt_context_impl
         }
     }
 
-    const couchbase::error& wrap_void_call_for_public_api(std::function<void()>&& handler)
+    couchbase::error wrap_void_call_for_public_api(std::function<void()>&& handler)
     {
         try {
             handler();
             static error err;
             return err;
         } catch (const transaction_operation_failed& e) {
-            return core::impl::make_tof(e);
+            return core::impl::make_error(e);
         } catch (...) {
             // the handler should catch everything else, but just in case...
             static error err(errc::transaction_op::unknown);
@@ -591,10 +591,9 @@ class attempt_context_impl
         }
     }
 
-    void wrap_callback_for_async_public_api(
-      std::exception_ptr err,
-      std::optional<transaction_get_result> res,
-      std::function<void(const couchbase::error&, couchbase::transactions::transaction_get_result)>&& cb)
+    void wrap_callback_for_async_public_api(std::exception_ptr err,
+                                            std::optional<transaction_get_result> res,
+                                            std::function<void(couchbase::error, couchbase::transactions::transaction_get_result)>&& cb)
     {
         if (res) {
             return cb({}, res->to_public_result());
@@ -605,7 +604,7 @@ class attempt_context_impl
             } catch (const op_exception& e) {
                 return cb(core::impl::make_error(e.ctx()), {});
             } catch (const transaction_operation_failed& e) {
-                return cb(core::impl::make_tof(e), {});
+                return cb(core::impl::make_error(e), {});
             } catch (...) {
                 return cb({ errc::transaction_op::unknown }, {});
             }
@@ -613,13 +612,13 @@ class attempt_context_impl
         return cb({ errc::transaction_op::unknown }, {});
     }
 
-    void wrap_err_callback_for_async_api(std::exception_ptr err, std::function<void(const couchbase::error&)>&& cb)
+    void wrap_err_callback_for_async_api(std::exception_ptr err, std::function<void(couchbase::error)>&& cb)
     {
         if (err) {
             try {
                 std::rethrow_exception(err);
             } catch (const transaction_operation_failed& e) {
-                return cb(core::impl::make_tof(e));
+                return cb(core::impl::make_error(e));
             } catch (...) {
                 return cb({ errc::transaction_op::unknown });
             }

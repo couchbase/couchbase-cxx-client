@@ -61,6 +61,6 @@ make_error(const couchbase::transaction_error_context& core_ctx);
 error
 make_error(const couchbase::transaction_op_error_context& core_ctx);
 
-const couchbase::transactions::transaction_operation_failed&
-make_tof(const couchbase::core::transactions::transaction_operation_failed& core_tof);
+error
+make_error(const couchbase::core::transactions::transaction_operation_failed& core_tof);
 } // namespace couchbase::core::impl
