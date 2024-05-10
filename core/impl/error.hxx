@@ -24,8 +24,6 @@
 #include <couchbase/transaction_error_context.hxx>
 #include <couchbase/transaction_op_error_context.hxx>
 
-#include <couchbase/transactions/transaction_operation_failed.hxx>
-
 #include "core/error_context/analytics.hxx"
 #include "core/error_context/http.hxx"
 #include "core/error_context/query.hxx"
