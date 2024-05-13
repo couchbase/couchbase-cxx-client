@@ -580,14 +580,12 @@ class attempt_context_impl
     {
         try {
             handler();
-            static error err;
-            return err;
+            return {};
         } catch (const transaction_operation_failed& e) {
             return core::impl::make_error(e);
         } catch (...) {
             // the handler should catch everything else, but just in case...
-            static error err(errc::transaction_op::unknown);
-            return err;
+            return { errc::transaction_op::unknown };
         }
     }
 

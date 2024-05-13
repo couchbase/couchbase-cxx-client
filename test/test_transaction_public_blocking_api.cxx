@@ -327,8 +327,8 @@ TEST_CASE("transactions public blocking API: remove fails as expected with missi
           CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found_exception);
           // the doc is 'blank', so trying to use it results in failure
           auto err = ctx.remove(doc);
-          CHECK(err.ec());
-          CHECK(err.ec() == couchbase::errc::transaction_op::unknown);
+          CHECK(err.cause().has_value());
+          CHECK(err.cause().value().ec() == couchbase::errc::transaction_op::unknown);
       },
       txn_opts());
     CHECK_FALSE(result.transaction_id.empty());
