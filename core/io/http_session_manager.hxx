@@ -204,32 +204,42 @@ class http_session_manager
         std::scoped_lock lock(sessions_mutex_);
         idle_sessions_[type].remove_if([](const auto& s) { return !s; });
         busy_sessions_[type].remove_if([](const auto& s) { return !s; });
-        if (idle_sessions_[type].empty()) {
+        std::shared_ptr<http_session> session{};
+        while (!idle_sessions_[type].empty()) {
+            if (preferred_node.empty()) {
+                session = idle_sessions_[type].front();
+                idle_sessions_[type].pop_front();
+                if (session->reset_idle()) {
+                    break;
+                }
+            } else {
+                auto ptr = std::find_if(idle_sessions_[type].begin(), idle_sessions_[type].end(), [preferred_node](const auto& s) {
+                    return s->remote_address() == preferred_node;
+                });
+                if (ptr != idle_sessions_[type].end()) {
+                    session = *ptr;
+                    idle_sessions_[type].erase(ptr);
+                    if (session->reset_idle()) {
+                        break;
+                    }
+                } else {
+                    auto [hostname, port] = split_host_port(preferred_node);
+                    session = bootstrap_session(type, credentials, hostname, port);
+                    break;
+                }
+            }
+            CB_LOG_TRACE("{} Idle timer has expired for \"{}:{}\".  Attempting to select another session.",
+                         session->log_prefix(),
+                         session->hostname(),
+                         session->port());
+            session.reset();
+        }
+        if (!session) {
             auto [hostname, port] = preferred_node.empty() ? next_node(type) : lookup_node(type, preferred_node);
             if (port == 0) {
                 return { errc::common::service_not_available, nullptr };
             }
-            auto session = bootstrap_session(type, credentials, hostname, port);
-            busy_sessions_[type].push_back(session);
-            return { {}, session };
-        }
-        std::shared_ptr<http_session> session{};
-        if (preferred_node.empty()) {
-            session = idle_sessions_[type].front();
-            idle_sessions_[type].pop_front();
-            session->reset_idle();
-        } else {
-            auto ptr = std::find_if(idle_sessions_[type].begin(), idle_sessions_[type].end(), [preferred_node](const auto& s) {
-                return s->remote_address() == preferred_node;
-            });
-            if (ptr != idle_sessions_[type].end()) {
-                session = *ptr;
-                idle_sessions_[type].erase(ptr);
-                session->reset_idle();
-            } else {
-                auto [hostname, port] = split_host_port(preferred_node);
-                session = bootstrap_session(type, credentials, hostname, port);
-            }
+            session = bootstrap_session(type, credentials, hostname, port);
         }
         busy_sessions_[type].push_back(session);
         return { {}, session };
