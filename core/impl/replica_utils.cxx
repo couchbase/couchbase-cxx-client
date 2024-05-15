@@ -49,18 +49,16 @@ effective_nodes(const document_id& id,
     }
 
     switch (preference) {
-        case read_preference::local_only:
-            return local_nodes;
-
         case read_preference::no_preference:
             return available_nodes;
 
-        case read_preference::local_first:
+        case read_preference::selected_server_group:
+            return local_nodes;
+
+        case read_preference::selected_server_group_or_all_available:
             if (local_nodes.empty()) {
                 return available_nodes;
             }
-            // TODO: in phase-two, SDK should also attempt to fallback to all
-            // available nodes in case the local nodes do return response.
             return local_nodes;
     }
     return available_nodes;

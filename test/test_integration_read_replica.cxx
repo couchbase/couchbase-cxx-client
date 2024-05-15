@@ -351,7 +351,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on balanced cluster",
     }
 
     {
-        couchbase::core::operations::get_all_replicas_request req{ id, {}, couchbase::read_preference::local_only };
+        couchbase::core::operations::get_all_replicas_request req{ id, {}, couchbase::read_preference::selected_server_group };
         auto resp = test::utils::execute(cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.entries.size() <= number_of_replicas + 1);
@@ -366,7 +366,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on balanced cluster",
     }
 
     {
-        couchbase::core::operations::get_any_replica_request req{ id, {}, couchbase::read_preference::local_only };
+        couchbase::core::operations::get_any_replica_request req{ id, {}, couchbase::read_preference::selected_server_group };
         auto resp = test::utils::execute(cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE_FALSE(resp.value.empty());
@@ -387,7 +387,11 @@ TEST_CASE("integration: low-level zone-aware read replicas on balanced cluster",
 
     {
         couchbase::core::operations::lookup_in_any_replica_request req{
-            id, couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") }.specs(), {}, {}, couchbase::read_preference::local_only,
+            id,
+            couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") }.specs(),
+            {},
+            {},
+            couchbase::read_preference::selected_server_group,
         };
         auto resp = test::utils::execute(cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
@@ -410,7 +414,11 @@ TEST_CASE("integration: low-level zone-aware read replicas on balanced cluster",
 
     {
         couchbase::core::operations::lookup_in_all_replicas_request req{
-            id, couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") }.specs(), {}, {}, couchbase::read_preference::local_only,
+            id,
+            couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") }.specs(),
+            {},
+            {},
+            couchbase::read_preference::selected_server_group,
         };
         auto resp = test::utils::execute(cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
@@ -486,7 +494,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on unbalanced cluster
     }
 
     {
-        couchbase::core::operations::get_all_replicas_request req{ id, {}, couchbase::read_preference::local_only };
+        couchbase::core::operations::get_all_replicas_request req{ id, {}, couchbase::read_preference::selected_server_group };
         auto resp = test::utils::execute(cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
     }
@@ -499,7 +507,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on unbalanced cluster
     }
 
     {
-        couchbase::core::operations::get_any_replica_request req{ id, {}, couchbase::read_preference::local_only };
+        couchbase::core::operations::get_any_replica_request req{ id, {}, couchbase::read_preference::selected_server_group };
         auto resp = test::utils::execute(cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
     }
@@ -519,7 +527,11 @@ TEST_CASE("integration: low-level zone-aware read replicas on unbalanced cluster
 
     {
         couchbase::core::operations::lookup_in_any_replica_request req{
-            id, couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") }.specs(), {}, {}, couchbase::read_preference::local_only,
+            id,
+            couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") }.specs(),
+            {},
+            {},
+            couchbase::read_preference::selected_server_group,
         };
         auto resp = test::utils::execute(cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
@@ -540,7 +552,11 @@ TEST_CASE("integration: low-level zone-aware read replicas on unbalanced cluster
 
     {
         couchbase::core::operations::lookup_in_all_replicas_request req{
-            id, couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") }.specs(), {}, {}, couchbase::read_preference::local_only,
+            id,
+            couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") }.specs(),
+            {},
+            {},
+            couchbase::read_preference::selected_server_group,
         };
         auto resp = test::utils::execute(cluster, req);
         REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
@@ -616,7 +632,9 @@ TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integra
     }
     {
         auto [ctx, result] =
-          collection.get_any_replica(id.key(), couchbase::get_any_replica_options{}.read_preference(couchbase::read_preference::local_only))
+          collection
+            .get_any_replica(id.key(),
+                             couchbase::get_any_replica_options{}.read_preference(couchbase::read_preference::selected_server_group))
             .get();
         REQUIRE_SUCCESS(ctx.ec());
     }
@@ -628,7 +646,8 @@ TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integra
     {
         auto [ctx, result] =
           collection
-            .get_all_replicas(id.key(), couchbase::get_all_replicas_options{}.read_preference(couchbase::read_preference::local_only))
+            .get_all_replicas(id.key(),
+                              couchbase::get_all_replicas_options{}.read_preference(couchbase::read_preference::selected_server_group))
             .get();
         REQUIRE_SUCCESS(ctx.ec());
         REQUIRE(result.size() <= number_of_replicas + 1);
@@ -645,14 +664,14 @@ TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integra
         REQUIRE_SUCCESS(ctx.ec());
     }
     {
-        auto [ctx, result] =
-          collection
-            .lookup_in_any_replica(id.key(),
-                                   couchbase::lookup_in_specs{
-                                     couchbase::lookup_in_specs::get("a"),
-                                   },
-                                   couchbase::lookup_in_any_replica_options{}.read_preference(couchbase::read_preference::local_only))
-            .get();
+        auto [ctx, result] = collection
+                               .lookup_in_any_replica(id.key(),
+                                                      couchbase::lookup_in_specs{
+                                                        couchbase::lookup_in_specs::get("a"),
+                                                      },
+                                                      couchbase::lookup_in_any_replica_options{}.read_preference(
+                                                        couchbase::read_preference::selected_server_group))
+                               .get();
         REQUIRE_SUCCESS(ctx.ec());
     }
     {
@@ -665,14 +684,14 @@ TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integra
         REQUIRE_SUCCESS(ctx.ec());
     }
     {
-        auto [ctx, result] =
-          collection
-            .lookup_in_all_replicas(id.key(),
-                                    couchbase::lookup_in_specs{
-                                      couchbase::lookup_in_specs::get("a"),
-                                    },
-                                    couchbase::lookup_in_all_replicas_options{}.read_preference(couchbase::read_preference::local_only))
-            .get();
+        auto [ctx, result] = collection
+                               .lookup_in_all_replicas(id.key(),
+                                                       couchbase::lookup_in_specs{
+                                                         couchbase::lookup_in_specs::get("a"),
+                                                       },
+                                                       couchbase::lookup_in_all_replicas_options{}.read_preference(
+                                                         couchbase::read_preference::selected_server_group))
+                               .get();
         REQUIRE_SUCCESS(ctx.ec());
         REQUIRE(result.size() <= number_of_replicas + 1);
     }
@@ -755,7 +774,9 @@ TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integ
     }
     {
         auto [ctx, result] =
-          collection.get_any_replica(id.key(), couchbase::get_any_replica_options{}.read_preference(couchbase::read_preference::local_only))
+          collection
+            .get_any_replica(id.key(),
+                             couchbase::get_any_replica_options{}.read_preference(couchbase::read_preference::selected_server_group))
             .get();
         REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
     }
@@ -767,7 +788,8 @@ TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integ
     {
         auto [ctx, result] =
           collection
-            .get_all_replicas(id.key(), couchbase::get_all_replicas_options{}.read_preference(couchbase::read_preference::local_only))
+            .get_all_replicas(id.key(),
+                              couchbase::get_all_replicas_options{}.read_preference(couchbase::read_preference::selected_server_group))
             .get();
         REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
     }
@@ -783,14 +805,14 @@ TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integ
         REQUIRE_SUCCESS(ctx.ec());
     }
     {
-        auto [ctx, result] =
-          collection
-            .lookup_in_any_replica(id.key(),
-                                   couchbase::lookup_in_specs{
-                                     couchbase::lookup_in_specs::get("a"),
-                                   },
-                                   couchbase::lookup_in_any_replica_options{}.read_preference(couchbase::read_preference::local_only))
-            .get();
+        auto [ctx, result] = collection
+                               .lookup_in_any_replica(id.key(),
+                                                      couchbase::lookup_in_specs{
+                                                        couchbase::lookup_in_specs::get("a"),
+                                                      },
+                                                      couchbase::lookup_in_any_replica_options{}.read_preference(
+                                                        couchbase::read_preference::selected_server_group))
+                               .get();
         REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
     }
     {
@@ -803,14 +825,14 @@ TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integ
         REQUIRE_SUCCESS(ctx.ec());
     }
     {
-        auto [ctx, result] =
-          collection
-            .lookup_in_all_replicas(id.key(),
-                                    couchbase::lookup_in_specs{
-                                      couchbase::lookup_in_specs::get("a"),
-                                    },
-                                    couchbase::lookup_in_all_replicas_options{}.read_preference(couchbase::read_preference::local_only))
-            .get();
+        auto [ctx, result] = collection
+                               .lookup_in_all_replicas(id.key(),
+                                                       couchbase::lookup_in_specs{
+                                                         couchbase::lookup_in_specs::get("a"),
+                                                       },
+                                                       couchbase::lookup_in_all_replicas_options{}.read_preference(
+                                                         couchbase::read_preference::selected_server_group))
+                               .get();
         REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
     }
 

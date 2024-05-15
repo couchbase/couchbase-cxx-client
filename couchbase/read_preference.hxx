@@ -21,7 +21,7 @@ namespace couchbase
 {
 enum class read_preference {
     no_preference,
-    local_only,
-    local_first,
+    selected_server_group,
+    selected_server_group_or_all_available,
 };
 } // namespace couchbase
