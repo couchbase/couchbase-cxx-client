@@ -191,7 +191,9 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
                    std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start).count(),
                    std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count() / arguments.number_of_operations);
         if (err.ec()) {
-            fmt::print("\tTransaction completed with error {}, cause={}\n", err.ec().message(), err.cause().message());
+            fmt::print("\tTransaction completed with error {}, cause={}\n",
+                       err.ec().message(),
+                       err.cause().has_value() ? err.cause().value().ec().message() : "");
             if (err.ec() == couchbase::errc::transaction::expired) {
                 fmt::print("\tINFO: Try to increase CB_TRANSACTION_TIMEOUT, current value is {} seconds\n", arguments.transaction_timeout);
             }
@@ -232,7 +234,9 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
                    std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start).count(),
                    std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count() / arguments.number_of_operations);
         if (err.ec()) {
-            fmt::print("\tTransaction completed with error {}, cause={}\n", err.ec().message(), err.cause().message());
+            fmt::print("\tTransaction completed with error {}, cause={}\n",
+                       err.ec().message(),
+                       err.cause().has_value() ? err.cause().value().ec().message() : "");
             if (err.ec() == couchbase::errc::transaction::expired) {
                 fmt::print("\tINFO: Try to increase CB_TRANSACTION_TIMEOUT, current value is {} seconds\n", arguments.transaction_timeout);
             }
@@ -320,8 +324,7 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
     {
         std::map<std::string, std::size_t> errors;
 
-        auto tx_promise =
-          std::make_shared<std::promise<std::pair<couchbase::transaction_error_context, couchbase::transactions::transaction_result>>>();
+        auto tx_promise = std::make_shared<std::promise<std::pair<couchbase::error, couchbase::transactions::transaction_result>>>();
         auto tx_future = tx_promise->get_future();
 
         auto schedule_start = std::chrono::system_clock::now();
@@ -357,7 +360,9 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
                    std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start).count(),
                    std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count() / arguments.number_of_operations);
         if (err.ec()) {
-            fmt::print("\tTransaction completed with error {}, cause={}\n", err.ec().message(), err.cause().message());
+            fmt::print("\tTransaction completed with error {}, cause={}\n",
+                       err.ec().message(),
+                       err.cause().has_value() ? err.cause().value().ec().message() : "");
             if (err.ec() == couchbase::errc::transaction::expired) {
                 fmt::print("\tINFO: Try to increase CB_TRANSACTION_TIMEOUT, current value is {} seconds\n", arguments.transaction_timeout);
             }
@@ -377,8 +382,7 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
     {
         std::map<std::string, std::size_t> errors;
 
-        auto tx_promise =
-          std::make_shared<std::promise<std::pair<couchbase::transaction_error_context, couchbase::transactions::transaction_result>>>();
+        auto tx_promise = std::make_shared<std::promise<std::pair<couchbase::error, couchbase::transactions::transaction_result>>>();
         auto tx_future = tx_promise->get_future();
 
         auto schedule_start = std::chrono::system_clock::now();
@@ -414,7 +418,9 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
                    std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start).count(),
                    std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count() / arguments.number_of_operations);
         if (err.ec()) {
-            fmt::print("\tTransaction completed with error {}, cause={}\n", err.ec().message(), err.cause().message());
+            fmt::print("\tTransaction completed with error {}, cause={}\n",
+                       err.ec().message(),
+                       err.cause().has_value() ? err.cause().value().ec().message() : "");
             if (err.ec() == couchbase::errc::transaction::expired) {
                 fmt::print("\tINFO: Try to increase CB_TRANSACTION_TIMEOUT, current value is {} seconds\n", arguments.transaction_timeout);
             }
@@ -458,7 +464,9 @@ main()
 
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
-    std::thread io_thread([&io]() { io.run(); });
+    std::thread io_thread([&io]() {
+        io.run();
+    });
 
     auto options = couchbase::cluster_options(arguments.username, arguments.password);
     options.apply_profile("wan_development");

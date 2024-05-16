@@ -49,7 +49,9 @@ main(int argc, const char* argv[])
     // run IO context on separate thread
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
-    std::thread io_thread([&io]() { io.run(); });
+    std::thread io_thread([&io]() {
+        io.run();
+    });
 
     auto options = couchbase::cluster_options(username, password);
     // customize through the 'options'.
@@ -94,7 +96,10 @@ main(int argc, const char* argv[])
           });
         // [3.5] check the overall status of the transaction
         if (tx_err.ec()) {
-            fmt::print(stderr, "error in transaction {}, cause: {}\n", tx_err.ec().message(), tx_err.cause().message());
+            fmt::print(stderr,
+                       "error in transaction {}, cause: {}\n",
+                       tx_err.ec().message(),
+                       tx_err.cause().has_value() ? tx_err.cause().value().ec().message() : "");
             retval = 1;
         } else {
             fmt::print("transaction {} completed successfully\n", tx_res.transaction_id);

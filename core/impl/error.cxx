@@ -17,11 +17,14 @@
 
 #include <couchbase/error.hxx>
 #include <couchbase/error_context.hxx>
+#include <couchbase/transaction_error_context.hxx>
 
 #include "core/error_context/analytics_json.hxx"
 #include "core/error_context/http_json.hxx"
+#include "core/error_context/internal_tof_metadata_json.hxx"
 #include "core/error_context/key_value_json.hxx"
 #include "core/error_context/query_json.hxx"
+#include "core/error_context/query_public_json.hxx"
 #include "core/error_context/search_json.hxx"
 #include "core/error_context/subdocument_json.hxx"
 #include "error.hxx"
@@ -96,6 +99,13 @@ make_error(const core::error_context::query& core_ctx)
 }
 
 error
+make_error(const query_error_context& core_ctx)
+{
+    tao::json::value ctx(core_ctx);
+    return { core_ctx.ec(), {}, couchbase::error_context(ctx) };
+}
+
+error
 make_error(const core::error_context::search& core_ctx)
 {
     return { core_ctx.ec, "", couchbase::error_context{ internal_error_context(core_ctx) } };
@@ -125,6 +135,34 @@ make_error(const couchbase::subdocument_error_context& core_ctx)
 {
     tao::json::value ctx(core_ctx);
     return { core_ctx.ec(), "", couchbase::error_context(ctx) };
+}
+
+error
+make_error(const couchbase::transaction_error_context& ctx)
+{
+    return { ctx.ec(), "", {}, { ctx.cause() } };
+}
+
+error
+make_error(const couchbase::transaction_op_error_context& ctx)
+{
+    if (std::holds_alternative<key_value_error_context>(ctx.cause())) {
+        return { ctx.ec(), "", {}, make_error(std::get<key_value_error_context>(ctx.cause())) };
+    }
+    if (std::holds_alternative<query_error_context>(ctx.cause())) {
+        return { ctx.ec(), "", {}, make_error(std::get<query_error_context>(ctx.cause())) };
+    }
+    return ctx.ec();
+}
+
+couchbase::error
+make_error(const couchbase::core::transactions::transaction_operation_failed& core_tof)
+{
+
+    return { couchbase::errc::transaction_op::transaction_op_failed,
+             "",
+             couchbase::error_context({}, internal_error_context(core_tof)),
+             error(errc::make_error_code(transaction_op_errc_from_external_exception(core_tof.cause()))) };
 }
 } // namespace core::impl
 } // namespace couchbase

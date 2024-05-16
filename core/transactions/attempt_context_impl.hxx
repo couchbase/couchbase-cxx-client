@@ -28,6 +28,7 @@
 #include "async_attempt_context.hxx"
 #include "attempt_context.hxx"
 #include "attempt_state.hxx"
+#include "core/impl/error.hxx"
 #include "internal/atr_cleanup_entry.hxx"
 #include "internal/exceptions_internal.hxx"
 #include "internal/transaction_context.hxx"
@@ -87,8 +88,9 @@ class attempt_context_impl
     // transaction_context needs access to the two functions below
     friend class transaction_context;
 
-    std::pair<couchbase::transaction_op_error_context, couchbase::transactions::transaction_get_result>
-    insert_raw(const couchbase::collection& coll, const std::string& id, std::vector<std::byte> content) override
+    std::pair<couchbase::error, couchbase::transactions::transaction_get_result> insert_raw(const couchbase::collection& coll,
+                                                                                            const std::string& id,
+                                                                                            std::vector<std::byte> content) override
     {
         return wrap_call_for_public_api([this, coll, &id, &content]() -> transaction_get_result {
             return insert_raw({ coll.bucket_name(), coll.scope_name(), coll.name(), id }, content);
@@ -111,12 +113,13 @@ class attempt_context_impl
 
     transaction_get_result replace_raw(const transaction_get_result& document, const std::vector<std::byte>& content) override;
 
-    std::pair<couchbase::transaction_op_error_context, couchbase::transactions::transaction_get_result> replace_raw(
+    std::pair<couchbase::error, couchbase::transactions::transaction_get_result> replace_raw(
       const couchbase::transactions::transaction_get_result& doc,
       std::vector<std::byte> content) override
     {
-        return wrap_call_for_public_api(
-          [this, doc, &content]() -> transaction_get_result { return replace_raw(transaction_get_result(doc), content); });
+        return wrap_call_for_public_api([this, doc, &content]() -> transaction_get_result {
+            return replace_raw(transaction_get_result(doc), content);
+        });
     }
 
     void replace_raw(couchbase::transactions::transaction_get_result doc,
@@ -338,9 +341,8 @@ class attempt_context_impl
     ~attempt_context_impl() override;
 
     transaction_get_result get(const core::document_id& id) override;
-    std::pair<couchbase::transaction_op_error_context, couchbase::transactions::transaction_get_result> get(
-      const couchbase::collection& coll,
-      const std::string& id) override
+    std::pair<couchbase::error, couchbase::transactions::transaction_get_result> get(const couchbase::collection& coll,
+                                                                                     const std::string& id) override
     {
         auto [ctx, res] = wrap_call_for_public_api([this, coll, id]() mutable -> transaction_get_result {
             auto ret = get_optional({ coll.bucket_name(), coll.scope_name(), coll.name(), id });
@@ -350,7 +352,7 @@ class attempt_context_impl
             return {};
         });
         if (!ctx.ec() && res.cas().empty()) {
-            return { transaction_op_error_context{ errc::transaction_op::document_not_found_exception }, res };
+            return { { errc::transaction_op::document_not_found_exception }, res };
         }
         return { ctx, res };
     }
@@ -359,7 +361,7 @@ class attempt_context_impl
         get_optional({ coll.bucket_name(), coll.scope_name(), coll.name(), std::move(id) },
                      [this, handler = std::move(handler)](std::exception_ptr err, std::optional<transaction_get_result> res) mutable {
                          if (!res) {
-                             return handler(transaction_op_error_context{ errc::transaction_op::document_not_found_exception }, {});
+                             return handler({ errc::transaction_op::document_not_found_exception }, {});
                          }
                          return wrap_callback_for_async_public_api(err, res, std::move(handler));
                      });
@@ -370,9 +372,11 @@ class attempt_context_impl
     void get_optional(const core::document_id& id, Callback&& cb) override;
 
     void remove(const transaction_get_result& document) override;
-    couchbase::transaction_op_error_context remove(const couchbase::transactions::transaction_get_result& doc) override
+    couchbase::error remove(const couchbase::transactions::transaction_get_result& doc) override
     {
-        return wrap_void_call_for_public_api([this, doc]() { remove(transaction_get_result(doc)); });
+        return wrap_void_call_for_public_api([this, doc]() {
+            remove(transaction_get_result(doc));
+        });
     }
     void remove(const transaction_get_result& document, VoidCallback&& cb) override;
     void remove(couchbase::transactions::transaction_get_result doc, couchbase::transactions::async_err_handler&& handler) override
@@ -386,7 +390,7 @@ class attempt_context_impl
                                                    const couchbase::transactions::transaction_query_options& options,
                                                    std::optional<std::string> query_context) override;
 
-    std::pair<couchbase::transaction_op_error_context, couchbase::transactions::transaction_query_result> do_public_query(
+    std::pair<couchbase::error, couchbase::transactions::transaction_query_result> do_public_query(
       const std::string& statement,
       const couchbase::transactions::transaction_query_options& opts,
       std::optional<std::string> query_context) override;
@@ -409,16 +413,16 @@ class attempt_context_impl
                       try {
                           std::rethrow_exception(err);
                       } catch (const transaction_operation_failed& e) {
-                          return handler(e.get_error_ctx(), {});
+                          return handler(core::impl::make_error(e), {});
                       } catch (const op_exception& ex) {
-                          return handler(ex.ctx(), {});
+                          return handler(core::impl::make_error(ex.ctx()), {});
                       } catch (...) {
                           // just in case...
-                          return handler(transaction_op_error_context(couchbase::errc::transaction_op::unknown), {});
+                          return handler({ couchbase::errc::transaction_op::unknown }, {});
                       }
                   }
                   auto [ctx, res] = core::impl::build_transaction_query_result(*resp);
-                  handler(ctx, res);
+                  handler(core::impl::make_error(ctx), res);
               });
     }
 
@@ -557,38 +561,37 @@ class attempt_context_impl
                                             error_class ec,
                                             const std::string& message);
 
-    std::pair<couchbase::transaction_op_error_context, couchbase::transactions::transaction_get_result> wrap_call_for_public_api(
+    std::pair<couchbase::error, couchbase::transactions::transaction_get_result> wrap_call_for_public_api(
       std::function<transaction_get_result()>&& handler)
     {
         try {
             return { {}, handler().to_public_result() };
         } catch (const transaction_operation_failed& e) {
-            return { e.get_error_ctx(), {} };
+            return { core::impl::make_error(e), {} };
         } catch (const op_exception& ex) {
-            return { ex.ctx(), {} };
+            return { core::impl::make_error(ex.ctx()), {} };
         } catch (...) {
             // the handler should catch everything else, but just in case...
-            return { transaction_op_error_context(errc::transaction_op::unknown), {} };
+            return { { errc::transaction_op::unknown }, {} };
         }
     }
 
-    couchbase::transaction_op_error_context wrap_void_call_for_public_api(std::function<void()>&& handler)
+    couchbase::error wrap_void_call_for_public_api(std::function<void()>&& handler)
     {
         try {
             handler();
             return {};
         } catch (const transaction_operation_failed& e) {
-            return e.get_error_ctx();
+            return core::impl::make_error(e);
         } catch (...) {
             // the handler should catch everything else, but just in case...
-            return transaction_op_error_context(errc::transaction_op::unknown);
+            return { errc::transaction_op::unknown };
         }
     }
 
-    void wrap_callback_for_async_public_api(
-      std::exception_ptr err,
-      std::optional<transaction_get_result> res,
-      std::function<void(couchbase::transaction_op_error_context, couchbase::transactions::transaction_get_result)>&& cb)
+    void wrap_callback_for_async_public_api(std::exception_ptr err,
+                                            std::optional<transaction_get_result> res,
+                                            std::function<void(couchbase::error, couchbase::transactions::transaction_get_result)>&& cb)
     {
         if (res) {
             return cb({}, res->to_public_result());
@@ -597,23 +600,23 @@ class attempt_context_impl
             try {
                 std::rethrow_exception(err);
             } catch (const op_exception& e) {
-                return cb(e.ctx(), {});
+                return cb(core::impl::make_error(e.ctx()), {});
             } catch (const transaction_operation_failed& e) {
-                return cb(e.get_error_ctx(), {});
+                return cb(core::impl::make_error(e), {});
             } catch (...) {
-                return cb(transaction_op_error_context(errc::transaction_op::unknown), {});
+                return cb({ errc::transaction_op::unknown }, {});
             }
         }
-        return cb(transaction_op_error_context(errc::transaction_op::unknown), {});
+        return cb({ errc::transaction_op::unknown }, {});
     }
 
-    void wrap_err_callback_for_async_api(std::exception_ptr err, std::function<void(couchbase::transaction_op_error_context)>&& cb)
+    void wrap_err_callback_for_async_api(std::exception_ptr err, std::function<void(couchbase::error)>&& cb)
     {
         if (err) {
             try {
                 std::rethrow_exception(err);
             } catch (const transaction_operation_failed& e) {
-                return cb(e.get_error_ctx());
+                return cb(core::impl::make_error(e));
             } catch (...) {
                 return cb({ errc::transaction_op::unknown });
             }
@@ -627,7 +630,9 @@ class attempt_context_impl
             CB_LOG_DEBUG("ensure_open_bucket called with empty bucket_name");
             return handler(couchbase::errc::common::bucket_not_found);
         }
-        cluster_ref().open_bucket(bucket_name, [handler = std::move(handler)](std::error_code ec) { handler(ec); });
+        cluster_ref().open_bucket(bucket_name, [handler = std::move(handler)](std::error_code ec) {
+            handler(ec);
+        });
     }
 };
 

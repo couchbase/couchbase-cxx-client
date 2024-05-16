@@ -17,6 +17,7 @@
 #include "attempt_context_impl.hxx"
 
 #include "core/cluster.hxx"
+#include "core/impl/error.hxx"
 #include "core/meta/version.hxx"
 #include "core/transactions.hxx"
 
@@ -25,6 +26,8 @@
 #include "internal/transaction_context.hxx"
 #include "internal/transactions_cleanup.hxx"
 #include "internal/utils.hxx"
+
+#include <couchbase/error.hxx>
 
 #include <system_error>
 
@@ -85,7 +88,9 @@ std::future<std::pair<std::error_code, std::shared_ptr<transactions>>>
 transactions::create(core::cluster cluster, const couchbase::transactions::transactions_config::built& config)
 {
     auto barrier = std::make_shared<std::promise<std::pair<std::error_code, std::shared_ptr<transactions>>>>();
-    create(std::move(cluster), config, [barrier](auto ec, auto txns) mutable { barrier->set_value({ ec, txns }); });
+    create(std::move(cluster), config, [barrier](auto ec, auto txns) mutable {
+        barrier->set_value({ ec, txns });
+    });
     return barrier->get_future();
 }
 
@@ -156,14 +161,15 @@ transactions::run(const couchbase::transactions::transaction_options& config, lo
     return wrap_run(*this, config, max_attempts_, std::move(code));
 }
 
-std::pair<couchbase::transaction_error_context, couchbase::transactions::transaction_result>
+std::pair<error, couchbase::transactions::transaction_result>
 transactions::run(couchbase::transactions::txn_logic&& code, const couchbase::transactions::transaction_options& config)
 {
     try {
         return { {}, wrap_run(*this, config, max_attempts_, std::move(code)) };
     } catch (const transaction_exception& e) {
-        // get transaction_error_context from e and return it in the transaction_result
-        return e.get_transaction_result();
+        // get error from e and return it in the transaction_result
+        auto [err_ctx, result] = e.get_transaction_result();
+        return std::make_pair(core::impl::make_error(err_ctx), result);
     }
 }
 
@@ -190,7 +196,7 @@ transactions::run(couchbase::transactions::async_txn_logic&& code,
             return cb({}, result);
         } catch (const transaction_exception& e) {
             auto [ctx, res] = e.get_transaction_result();
-            return cb(ctx, res);
+            return cb(core::impl::make_error(ctx), res);
         }
     }).detach();
 }

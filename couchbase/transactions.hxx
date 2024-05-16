@@ -28,7 +28,7 @@ namespace couchbase::transactions
 {
 using txn_logic = std::function<void(attempt_context&)>;
 using async_txn_logic = std::function<void(async_attempt_context&)>;
-using async_txn_complete_logic = std::function<void(couchbase::transaction_error_context, transaction_result)>;
+using async_txn_complete_logic = std::function<void(error, transaction_result)>;
 
 /**
  * The transactions object is used to initiate a transaction.
@@ -52,8 +52,7 @@ class transactions
      * @param cfg if passed in, these options override the defaults, or those set in the {@link cluster_options}.
      * @return an {@link transaction_error_context}, and a {@link transaction_result} representing the results of the transaction.
      */
-    virtual std::pair<transaction_error_context, transaction_result> run(txn_logic&& logic,
-                                                                         const transaction_options& cfg = transaction_options()) = 0;
+    virtual std::pair<error, transaction_result> run(txn_logic&& logic, const transaction_options& cfg = transaction_options()) = 0;
     /**
      * Run an asynchronous transaction.
      *
