@@ -35,6 +35,11 @@ error_context::error_context(couchbase::internal_error_context internal, couchba
 {
 }
 
+error_context::operator bool() const
+{
+    return internal_.operator bool();
+}
+
 auto
 error_context::to_json(error_context_json_format format) const -> std::string
 {
