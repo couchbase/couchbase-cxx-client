@@ -17,6 +17,7 @@
 #include "attempt_context_impl.hxx"
 
 #include "core/cluster.hxx"
+#include "core/impl/error.hxx"
 #include "core/meta/version.hxx"
 #include "core/transactions.hxx"
 
@@ -26,8 +27,7 @@
 #include "internal/transactions_cleanup.hxx"
 #include "internal/utils.hxx"
 
-#include "core/impl/error.hxx"
-#include "couchbase/error.hxx"
+#include <couchbase/error.hxx>
 
 #include <system_error>
 
