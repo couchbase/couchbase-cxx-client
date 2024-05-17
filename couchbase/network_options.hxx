@@ -78,6 +78,22 @@ class network_options
         return *this;
     }
 
+    /**
+     * Select server group to use for replica APIs.
+     *
+     * For some use-cases it might be necessary to restrict list of the nodes,
+     * that are used in replica read APIs to single server group to optimize
+     * network costs.
+     *
+     * @see read_preference
+     *
+     * @see collection::get_all_replicas
+     * @see collection::get_any_replica
+     * @see collection::lookup_in_all_replicas
+     * @see collection::lookup_in_any_replica
+     *
+     * @see https://docs.couchbase.com/server/current/manage/manage-groups/manage-groups.html
+     */
     auto preferred_server_group(std::string server_group) -> network_options&
     {
         server_group_ = std::move(server_group);
