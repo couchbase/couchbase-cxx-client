@@ -22,6 +22,7 @@
 #include <core/logger/logger.hxx>
 #include <couchbase/cluster.hxx>
 #include <couchbase/fmt/analytics_status.hxx>
+#include <couchbase/fmt/error.hxx>
 
 #include <asio/io_context.hpp>
 #include <core/error_context/analytics_json.hxx>
@@ -150,7 +151,7 @@ class analytics_app : public CLI::App
             guard.reset();
             io_thread.join();
 
-            fail(fmt::format("Failed to connect to the cluster at \"{}\": {}", connection_string, connect_err.message()));
+            fail(fmt::format("Failed to connect to the cluster at \"{}\": {}", connection_string, connect_err));
         }
 
         std::optional<couchbase::scope> scope{};

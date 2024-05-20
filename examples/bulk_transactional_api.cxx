@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/fmt/error.hxx>
 #include <couchbase/transactions.hxx>
 
 #include <asio.hpp>
@@ -473,7 +474,7 @@ main()
     options.transactions().timeout(arguments.transaction_timeout);
     auto [connect_err, cluster] = couchbase::cluster::connect(io, arguments.connection_string, options).get();
     if (connect_err) {
-        fmt::print("Unable to connect to cluster at \"{}\", error: {}\n", arguments.connection_string, connect_err.message());
+        fmt::print("Unable to connect to cluster at \"{}\", error: {}\n", arguments.connection_string, connect_err);
     } else {
         auto transactions = cluster.transactions();
         auto collection = cluster.bucket(arguments.bucket_name).scope(arguments.scope_name).collection(arguments.collection_name);

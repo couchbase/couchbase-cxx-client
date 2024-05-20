@@ -17,6 +17,7 @@
 
 #include <core/logger/logger.hxx>
 #include <couchbase/cluster.hxx>
+#include <couchbase/fmt/error.hxx>
 
 #include <asio/io_context.hpp>
 #include <spdlog/spdlog.h>
@@ -228,7 +229,7 @@ main()
 
     auto [connect_err, cluster] = couchbase::cluster::connect(io, "couchbase://localhost", options).get();
     if (connect_err) {
-        std::cout << "Error opening cluster: " << connect_err.message() << std::endl;
+        std::cout << "Error opening cluster: " << fmt::format("{}", connect_err) << std::endl;
         return -1;
     }
 

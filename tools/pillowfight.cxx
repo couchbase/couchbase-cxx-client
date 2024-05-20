@@ -25,6 +25,7 @@
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
 #include <couchbase/fmt/cas.hxx>
+#include <couchbase/fmt/error.hxx>
 
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
@@ -282,7 +283,7 @@ class pillowfight_app : public CLI::App
             for (auto& thread : io_pool) {
                 thread.join();
             }
-            fail(fmt::format("Failed to connect to the cluster at \"{}\": {}", connection_string, connect_err.message()));
+            fail(fmt::format("Failed to connect to the cluster at \"{}\": {}", connection_string, connect_err));
         }
 
         std::vector<std::vector<std::string>> known_keys(number_of_worker_threads_);

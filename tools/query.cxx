@@ -207,7 +207,7 @@ Examples:
             guard.reset();
             io_thread.join();
 
-            fail(fmt::format("Failed to connect to the cluster at \"{}\": {}", connection_string, connect_err.message()));
+            fail(fmt::format("Failed to connect to the cluster at \"{}\": {}", connection_string, connect_err));
         }
 
         std::optional<couchbase::scope> scope{};

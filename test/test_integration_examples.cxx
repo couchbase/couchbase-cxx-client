@@ -75,7 +75,7 @@ main(int argc, const char* argv[])
     // [1] connect to cluster using the given connection string and the options
     auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
     if (connect_err) {
-        fmt::print("unable to connect to the cluster: {}\n", connect_err.message());
+        fmt::print("unable to connect to the cluster: {}\n", connect_err);
         return 1;
     }
 
@@ -242,7 +242,7 @@ main(int argc, const char* argv[])
 
     auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
     if (connect_err) {
-        fmt::print("unable to connect to the cluster: {}\n", connect_err.message());
+        fmt::print("unable to connect to the cluster: {}\n", connect_err);
         return 1;
     }
 
@@ -509,7 +509,7 @@ main(int argc, const char* argv[])
 
     auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
     if (connect_err) {
-        fmt::print("unable to connect to the cluster: {}\n", connect_err.message());
+        fmt::print("unable to connect to the cluster: {}\n", connect_err);
         return 1;
     }
     auto manager = cluster.buckets();
@@ -647,7 +647,7 @@ main(int argc, const char* argv[])
 
     auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
     if (connect_err) {
-        fmt::print("PARENT(pid={}): sunable to connect to the cluster: {}\n", getpid(), connect_err.message());
+        fmt::print("PARENT(pid={}): sunable to connect to the cluster: {}\n", getpid(), connect_err);
         return 1;
     }
 
