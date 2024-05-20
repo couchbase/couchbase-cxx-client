@@ -220,7 +220,7 @@ configuration::index_for_this_node() const
 }
 
 std::optional<std::size_t>
-configuration::server_by_vbucket(std::uint16_t vbucket, std::size_t index)
+configuration::server_by_vbucket(std::uint16_t vbucket, std::size_t index) const
 {
     if (!vbmap.has_value() || vbucket >= vbmap->size()) {
         return {};
@@ -232,7 +232,7 @@ configuration::server_by_vbucket(std::uint16_t vbucket, std::size_t index)
 }
 
 std::pair<std::uint16_t, std::optional<std::size_t>>
-configuration::map_key(const std::string& key, std::size_t index)
+configuration::map_key(const std::string& key, std::size_t index) const
 {
     if (!vbmap.has_value()) {
         return { 0, {} };
@@ -243,7 +243,7 @@ configuration::map_key(const std::string& key, std::size_t index)
 }
 
 std::pair<std::uint16_t, std::optional<std::size_t>>
-configuration::map_key(const std::vector<std::byte>& key, std::size_t index)
+configuration::map_key(const std::vector<std::byte>& key, std::size_t index) const
 {
     if (!vbmap.has_value()) {
         return { 0, {} };

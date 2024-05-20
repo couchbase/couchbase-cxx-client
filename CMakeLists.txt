@@ -168,6 +168,7 @@ set(couchbase_cxx_client_FILES
     core/impl/query_index_manager.cxx
     core/impl/query_string_query.cxx
     core/impl/regexp_query.cxx
+    core/impl/replica_utils.cxx
     core/impl/retry_action.cxx
     core/impl/retry_reason.cxx
     core/impl/scope.cxx

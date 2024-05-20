@@ -24,6 +24,7 @@
 #include <couchbase/common_options.hxx>
 #include <couchbase/expiry.hxx>
 #include <couchbase/lookup_in_replica_result.hxx>
+#include <couchbase/read_preference.hxx>
 #include <couchbase/store_semantics.hxx>
 #include <couchbase/subdocument_error_context.hxx>
 
@@ -49,7 +50,25 @@ struct lookup_in_any_replica_options : common_options<lookup_in_any_replica_opti
      * @internal
      */
     struct built : public common_options<lookup_in_any_replica_options>::built {
+        couchbase::read_preference read_preference;
     };
+
+    /**
+     * Choose how the replica nodes will be selected. By default it has no
+     * preference and will select any available replica, but it is possible to
+     * prioritize or restrict to only nodes in local server group.
+     *
+     * @param preference
+     * @return this options builder for chaining purposes.
+     *
+     * @since 1.0.0
+     * @volatile
+     */
+    auto read_preference(read_preference preference) -> lookup_in_any_replica_options&
+    {
+        read_preference_ = preference;
+        return self();
+    }
 
     /**
      * Validates options and returns them as an immutable value.
@@ -63,8 +82,16 @@ struct lookup_in_any_replica_options : common_options<lookup_in_any_replica_opti
      */
     [[nodiscard]] auto build() const -> built
     {
-        return { build_common_options() };
+        return {
+            build_common_options(),
+            read_preference_,
+        };
     }
+
+  private:
+    enum read_preference read_preference_ {
+        read_preference::no_preference
+    };
 };
 
 /**

@@ -99,6 +99,7 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
     user_options.user_agent_extra = opts.behavior.user_agent_extra;
     user_options.network = opts.behavior.network;
 
+    user_options.server_group = opts.network.server_group;
     user_options.enable_tcp_keep_alive = opts.network.enable_tcp_keep_alive;
     user_options.tcp_keep_alive_interval = opts.network.tcp_keep_alive_interval;
     user_options.config_poll_interval = opts.network.config_poll_interval;
@@ -120,6 +121,7 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
             user_options.use_ip_protocol = core::io::ip_protocol::force_ipv6;
             break;
     }
+    user_options.server_group = opts.network.server_group;
 
     user_options.enable_compression = opts.compression.enabled;
 

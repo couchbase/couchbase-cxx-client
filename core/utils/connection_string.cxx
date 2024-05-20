@@ -162,7 +162,9 @@ struct action<mode> {
     static void apply(const ActionInput& in, connection_string& /* cs */, connection_string::node& cur_node)
     {
         std::string mode = in.string();
-        std::transform(mode.begin(), mode.end(), mode.begin(), [](unsigned char c) { return std::tolower(c); });
+        std::transform(mode.begin(), mode.end(), mode.begin(), [](unsigned char c) {
+            return std::tolower(c);
+        });
         if (mode == "mcd" || mode == "gcccp" || mode == "cccp") {
             cur_node.mode = connection_string::bootstrap_mode::gcccp;
         } else if (mode == "http") {
@@ -430,6 +432,8 @@ extract_options(connection_string& connstr)
              * Whether to dump every new configuration on TRACE level
              */
             parse_option(connstr.options.dump_configuration, name, value, connstr.warnings);
+        } else if (name == "server_group") {
+            parse_option(connstr.options.server_group, name, value, connstr.warnings);
         } else {
             connstr.warnings.push_back(fmt::format(R"(unknown parameter "{}" in connection string (value "{}"))", name, value));
         }
