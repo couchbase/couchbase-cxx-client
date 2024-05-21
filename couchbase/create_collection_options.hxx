@@ -61,7 +61,7 @@ struct create_collection_settings {
      * The maximum expiry, in seconds, for documents in this collection. Values greater than or equal to -1 are valid.
      * Value of 0 sets max_expiry to the bucket-level setting and value of -1 to set it as no-expiry.
      */
-    std::int32_t max_expiry{ 0 };
+    std::optional<std::int32_t> max_expiry{};
 
     /**
      * Whether history retention should be enabled. If unset, the bucket-level setting is used.
