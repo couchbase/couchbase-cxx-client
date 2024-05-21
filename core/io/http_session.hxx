@@ -123,7 +123,7 @@ class http_session : public std::enable_shared_from_this<http_session>
       , ctx_(ctx)
       , resolver_(ctx_)
       , stream_(std::make_unique<plain_stream_impl>(ctx_))
-      , deadline_timer_(stream_->get_executor())
+      , connect_deadline_timer_(stream_->get_executor())
       , idle_timer_(stream_->get_executor())
       , credentials_(credentials)
       , hostname_(hostname)
@@ -148,7 +148,7 @@ class http_session : public std::enable_shared_from_this<http_session>
       , ctx_(ctx)
       , resolver_(ctx_)
       , stream_(std::make_unique<tls_stream_impl>(ctx_, tls))
-      , deadline_timer_(ctx_)
+      , connect_deadline_timer_(ctx_)
       , idle_timer_(ctx_)
       , credentials_(credentials)
       , hostname_(hostname)
@@ -262,7 +262,7 @@ class http_session : public std::enable_shared_from_this<http_session>
         state_ = diag::endpoint_state::disconnecting;
         stream_->close([](std::error_code) {
         });
-        deadline_timer_.cancel();
+        connect_deadline_timer_.cancel();
         idle_timer_.cancel();
 
         cancel_current_response(errc::common::request_canceled);
@@ -309,7 +309,9 @@ class http_session : public std::enable_shared_from_this<http_session>
         if (stopped_) {
             return;
         }
-        asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() { self->do_write(); }));
+        asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() {
+            self->do_write();
+        }));
     }
 
     template<typename Handler>
@@ -383,7 +385,6 @@ class http_session : public std::enable_shared_from_this<http_session>
         endpoints_ = endpoints;
         CB_LOG_TRACE("{} resolved \"{}:{}\" to {} endpoint(s)", info_.log_prefix(), hostname_, service_, endpoints_.size());
         do_connect(endpoints_.begin());
-        deadline_timer_.async_wait(std::bind(&http_session::check_deadline, shared_from_this(), std::placeholders::_1));
     }
 
     void do_connect(asio::ip::tcp::resolver::results_type::iterator it)
@@ -399,7 +400,15 @@ class http_session : public std::enable_shared_from_this<http_session>
                          hostname_,
                          service_,
                          http_ctx_.options.connect_timeout.count());
-            deadline_timer_.expires_after(http_ctx_.options.connect_timeout);
+            connect_deadline_timer_.async_wait([self = shared_from_this()](std::error_code ec) {
+                if (ec == asio::error::operation_aborted || self->stopped_) {
+                    return;
+                }
+                self->cancel_current_response(couchbase::errc::common::unambiguous_timeout);
+                self->stream_->close([](std::error_code) {
+                });
+            });
+            connect_deadline_timer_.expires_after(http_ctx_.options.connect_timeout);
             stream_->async_connect(it->endpoint(), std::bind(&http_session::on_connect, shared_from_this(), std::placeholders::_1, it));
         } else {
             CB_LOG_ERROR("{} no more endpoints left to connect, \"{}:{}\" is not reachable", info_.log_prefix(), hostname_, service_);
@@ -433,24 +442,9 @@ class http_session : public std::enable_shared_from_this<http_session>
                 std::scoped_lock lock(info_mutex_);
                 info_ = http_session_info(client_id_, id_, stream_->local_endpoint(), it->endpoint());
             }
-            deadline_timer_.cancel();
+            connect_deadline_timer_.cancel();
             flush();
         }
-    }
-
-    void check_deadline(std::error_code ec)
-    {
-        if (ec == asio::error::operation_aborted || stopped_) {
-            return;
-        }
-        if (deadline_timer_.expiry() <= asio::steady_timer::clock_type::now()) {
-            cancel_current_response(couchbase::errc::common::ambiguous_timeout);
-            stream_->close([](std::error_code) {
-            });
-            deadline_timer_.cancel();
-            return;
-        }
-        deadline_timer_.async_wait(std::bind(&http_session::check_deadline, shared_from_this(), std::placeholders::_1));
     }
 
     void do_read()
@@ -563,7 +557,7 @@ class http_session : public std::enable_shared_from_this<http_session>
     asio::io_context& ctx_;
     asio::ip::tcp::resolver resolver_;
     std::unique_ptr<stream_impl> stream_;
-    asio::steady_timer deadline_timer_;
+    asio::steady_timer connect_deadline_timer_;
     asio::steady_timer idle_timer_;
 
     cluster_credentials credentials_;
