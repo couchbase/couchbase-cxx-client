@@ -134,8 +134,8 @@ class query_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto create_primary_index(std::string bucket_name, const create_primary_query_index_options& options) const
-      -> std::future<error>;
+    [[nodiscard]] auto create_primary_index(std::string bucket_name,
+                                            const create_primary_query_index_options& options) const -> std::future<error>;
 
     /**
      * Drop primary index on a bucket.
@@ -161,8 +161,8 @@ class query_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto drop_primary_index(std::string bucket_name, const drop_primary_query_index_options& options) const
-      -> std::future<error>;
+    [[nodiscard]] auto drop_primary_index(std::string bucket_name,
+                                          const drop_primary_query_index_options& options) const -> std::future<error>;
 
     /**
      * Drop specified query index.
@@ -191,8 +191,9 @@ class query_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto drop_index(std::string bucket_name, std::string index_name, const drop_query_index_options& options) const
-      -> std::future<error>;
+    [[nodiscard]] auto drop_index(std::string bucket_name,
+                                  std::string index_name,
+                                  const drop_query_index_options& options) const -> std::future<error>;
 
     /**
      * Builds all currently deferred indexes.
@@ -222,8 +223,8 @@ class query_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto build_deferred_indexes(std::string bucket_name, const build_query_index_options& options) const
-      -> std::future<error>;
+    [[nodiscard]] auto build_deferred_indexes(std::string bucket_name,
+                                              const build_query_index_options& options) const -> std::future<error>;
 
     /**
      * Polls the state of a set of indexes, until they all are online.

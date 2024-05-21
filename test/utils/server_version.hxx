@@ -91,6 +91,11 @@ struct server_version {
         return is_cheshire_cat() || is_neo();
     }
 
+    [[nodiscard]] bool supports_queries_in_transactions() const
+    {
+        return is_neo();
+    }
+
     [[nodiscard]] bool supports_collections() const
     {
         return (is_mad_hatter() && developer_preview) || is_cheshire_cat() || is_neo();
@@ -184,6 +189,12 @@ struct server_version {
     [[nodiscard]] bool supports_scope_search() const
     {
         return (major == 7 && minor >= 6) || major > 7;
+    }
+
+    [[nodiscard]] bool supports_scope_search_analyze() const
+    {
+        // Scoped endpoint for analyze_document added in 7.6.2 (MB-60643)
+        return (major == 7 && minor == 6 && micro >= 2) || (major == 7 && minor > 6) || major > 7;
     }
 
     [[nodiscard]] bool is_enterprise() const

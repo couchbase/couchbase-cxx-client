@@ -15,7 +15,9 @@
  *   limitations under the License.
  */
 
+#include "couchbase/error_codes.hxx"
 #include "test_helper_integration.hxx"
+#include "utils/integration_shortcuts.hxx"
 #include "utils/move_only_context.hxx"
 
 #include "core/operations/document_append.hxx"
@@ -29,9 +31,17 @@
 #include "core/operations/document_remove.hxx"
 #include "core/operations/document_replace.hxx"
 #include "core/operations/document_upsert.hxx"
+#include "core/utils/connection_string.hxx"
 
 #include <couchbase/cluster.hxx>
+
+#include <couchbase/certificate_authenticator.hxx>
+#include <couchbase/get_all_replicas_options.hxx>
 #include <couchbase/get_any_replica_options.hxx>
+#include <couchbase/lookup_in_all_replicas_options.hxx>
+#include <couchbase/lookup_in_any_replica_options.hxx>
+#include <couchbase/password_authenticator.hxx>
+#include <couchbase/read_preference.hxx>
 
 static const tao::json::value basic_doc = {
     { "a", 1.0 },
@@ -146,7 +156,9 @@ TEST_CASE("integration: get all replicas", "[integration]")
         auto [err, result] = collection.get_all_replicas(key, {}).get();
         REQUIRE_SUCCESS(err.ec());
         REQUIRE(result.size() == number_of_replicas + 1);
-        auto responses_from_active = std::count_if(result.begin(), result.end(), [](const auto& r) { return !r.is_replica(); });
+        auto responses_from_active = std::count_if(result.begin(), result.end(), [](const auto& r) {
+            return !r.is_replica();
+        });
         REQUIRE(responses_from_active == 1);
     }
 }
@@ -275,7 +287,556 @@ TEST_CASE("integration: get all replicas low-level version", "[integration]")
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec());
         REQUIRE(resp.entries.size() == number_of_replicas + 1);
-        auto responses_from_active = std::count_if(resp.entries.begin(), resp.entries.end(), [](const auto& r) { return !r.replica; });
+        auto responses_from_active = std::count_if(resp.entries.begin(), resp.entries.end(), [](const auto& r) {
+            return !r.replica;
+        });
         REQUIRE(responses_from_active == 1);
     }
+}
+
+TEST_CASE("integration: low-level zone-aware read replicas on balanced cluster", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (integration.cluster_version().is_mock()) {
+        SKIP("GOCAVES does not support server groups");
+    }
+
+    const auto number_of_replicas = integration.number_of_replicas();
+    if (number_of_replicas == 0) {
+        SKIP("bucket has zero replicas");
+    }
+    if (integration.number_of_nodes() <= number_of_replicas) {
+        SKIP(fmt::format(
+          "number of nodes ({}) is less or equal to number of replicas ({})", integration.number_of_nodes(), number_of_replicas));
+    }
+
+    const auto server_groups = integration.server_groups();
+    if (server_groups.size() != 2) {
+        SKIP(fmt::format("This test expects exactly 2 server groups and at least one replica, "
+                         "but found {} server groups",
+                         integration.server_groups().size()));
+    }
+
+    asio::io_context io{};
+    couchbase::core::cluster cluster(io);
+    auto io_thread = std::thread([&io]() {
+        io.run();
+    });
+
+    auto connection_string = couchbase::core::utils::parse_connection_string(integration.ctx.connection_string);
+    connection_string.options.server_group = server_groups.front();
+
+    auto origin = couchbase::core::origin(integration.ctx.build_auth(), connection_string);
+    test::utils::open_cluster(cluster, origin);
+    test::utils::open_bucket(cluster, integration.ctx.bucket);
+
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo") };
+    {
+        const tao::json::value value = {
+            { "a", 1.0 },
+            { "b", 2.0 },
+        };
+        couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::json::generate_binary(value) };
+        req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
+    {
+        couchbase::core::operations::get_all_replicas_request req{ id, {}, couchbase::read_preference::no_preference };
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.entries.size() == number_of_replicas + 1);
+    }
+
+    {
+        couchbase::core::operations::get_all_replicas_request req{ id, {}, couchbase::read_preference::selected_server_group };
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.entries.size() <= number_of_replicas + 1);
+        REQUIRE(resp.entries.size() > 0);
+    }
+
+    {
+        couchbase::core::operations::get_any_replica_request req{ id, {}, couchbase::read_preference::no_preference };
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE_FALSE(resp.value.empty());
+    }
+
+    {
+        couchbase::core::operations::get_any_replica_request req{ id, {}, couchbase::read_preference::selected_server_group };
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE_FALSE(resp.value.empty());
+    }
+
+    {
+        couchbase::core::operations::lookup_in_any_replica_request req{
+            id,
+            couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") }.specs(),
+            {},
+            {},
+            couchbase::read_preference::no_preference,
+        };
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE_FALSE(resp.fields.empty());
+    }
+
+    {
+        couchbase::core::operations::lookup_in_any_replica_request req{
+            id,
+            couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") }.specs(),
+            {},
+            {},
+            couchbase::read_preference::selected_server_group,
+        };
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE_FALSE(resp.fields.empty());
+    }
+
+    {
+        couchbase::core::operations::lookup_in_all_replicas_request req{
+            id,
+            couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") }.specs(),
+            {},
+            {},
+            couchbase::read_preference::no_preference,
+        };
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.entries.size() <= number_of_replicas + 1);
+        REQUIRE(resp.entries.size() > 0);
+    }
+
+    {
+        couchbase::core::operations::lookup_in_all_replicas_request req{
+            id,
+            couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") }.specs(),
+            {},
+            {},
+            couchbase::read_preference::selected_server_group,
+        };
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.entries.size() <= number_of_replicas + 1);
+        REQUIRE(resp.entries.size() > 0);
+    }
+
+    test::utils::close_cluster(cluster);
+    io_thread.join();
+}
+
+TEST_CASE("integration: low-level zone-aware read replicas on unbalanced cluster", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (integration.cluster_version().is_mock()) {
+        SKIP("GOCAVES does not support server groups");
+    }
+
+    const auto number_of_replicas = integration.number_of_replicas();
+    if (number_of_replicas == 0) {
+        SKIP("bucket has zero replicas");
+    }
+    if (integration.number_of_nodes() <= number_of_replicas) {
+        SKIP(fmt::format(
+          "number of nodes ({}) is less or equal to number of replicas ({})", integration.number_of_nodes(), number_of_replicas));
+    }
+
+    const auto server_groups = integration.server_groups();
+    if (server_groups.size() < 3 || number_of_replicas > 1) {
+        SKIP(fmt::format("{} server groups and {} replicas does not meet expected requirements of unbalanced cluster. "
+                         "The number of replicas + 1 has to be less than number of the groups",
+                         integration.server_groups().size(),
+                         number_of_replicas));
+    }
+
+    // Now we need to craft key, for which both active and replica vbuckets
+    // are not bound to selected server group.
+    const auto& selected_server_group = server_groups.front();
+    const auto selected_key = integration.generate_key_not_in_server_group(selected_server_group);
+    INFO(fmt::format("server group: \"{}\"\nkey: \"{}\"", selected_server_group, selected_key));
+
+    asio::io_context io{};
+    couchbase::core::cluster cluster(io);
+    auto io_thread = std::thread([&io]() {
+        io.run();
+    });
+
+    auto connection_string = couchbase::core::utils::parse_connection_string(integration.ctx.connection_string);
+    connection_string.options.server_group = selected_server_group;
+
+    auto origin = couchbase::core::origin(integration.ctx.build_auth(), connection_string);
+    test::utils::open_cluster(cluster, origin);
+    test::utils::open_bucket(cluster, integration.ctx.bucket);
+
+    couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", selected_key };
+    {
+        const tao::json::value value = {
+            { "a", 1.0 },
+            { "b", 2.0 },
+        };
+        couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::json::generate_binary(value) };
+        req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
+    {
+        couchbase::core::operations::get_all_replicas_request req{ id, {}, couchbase::read_preference::no_preference };
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.entries.size() == number_of_replicas + 1);
+    }
+
+    {
+        couchbase::core::operations::get_all_replicas_request req{ id, {}, couchbase::read_preference::selected_server_group };
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+    }
+
+    {
+        couchbase::core::operations::get_any_replica_request req{ id, {}, couchbase::read_preference::no_preference };
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE_FALSE(resp.value.empty());
+    }
+
+    {
+        couchbase::core::operations::get_any_replica_request req{ id, {}, couchbase::read_preference::selected_server_group };
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+    }
+
+    {
+        couchbase::core::operations::lookup_in_any_replica_request req{
+            id,
+            couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") }.specs(),
+            {},
+            {},
+            couchbase::read_preference::no_preference,
+        };
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE_FALSE(resp.fields.empty());
+    }
+
+    {
+        couchbase::core::operations::lookup_in_any_replica_request req{
+            id,
+            couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") }.specs(),
+            {},
+            {},
+            couchbase::read_preference::selected_server_group,
+        };
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+    }
+
+    {
+        couchbase::core::operations::lookup_in_all_replicas_request req{
+            id,
+            couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") }.specs(),
+            {},
+            {},
+            couchbase::read_preference::no_preference,
+        };
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+        REQUIRE(resp.entries.size() == number_of_replicas + 1);
+    }
+
+    {
+        couchbase::core::operations::lookup_in_all_replicas_request req{
+            id,
+            couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") }.specs(),
+            {},
+            {},
+            couchbase::read_preference::selected_server_group,
+        };
+        auto resp = test::utils::execute(cluster, req);
+        REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+    }
+
+    test::utils::close_cluster(cluster);
+    io_thread.join();
+}
+
+TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (integration.cluster_version().is_mock()) {
+        SKIP("GOCAVES does not support server groups");
+    }
+
+    const auto number_of_replicas = integration.number_of_replicas();
+    if (number_of_replicas == 0) {
+        SKIP("bucket has zero replicas");
+    }
+    if (integration.number_of_nodes() <= number_of_replicas) {
+        SKIP(fmt::format(
+          "number of nodes ({}) is less or equal to number of replicas ({})", integration.number_of_nodes(), number_of_replicas));
+    }
+
+    const auto server_groups = integration.server_groups();
+    if (server_groups.size() != 2) {
+        SKIP(fmt::format("This test expects exactly 2 server groups and at least one replica, "
+                         "but found {} server groups",
+                         integration.server_groups().size()));
+    }
+
+    couchbase::core::document_id id{
+        integration.ctx.bucket,
+        couchbase::scope::default_name,
+        couchbase::collection::default_name,
+        test::utils::uniq_id("foo"),
+    };
+    {
+        const tao::json::value value = {
+            { "a", 1.0 },
+            { "b", 2.0 },
+        };
+        couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::json::generate_binary(value) };
+        req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
+    asio::io_context io{};
+    auto guard = asio::make_work_guard(io);
+    auto io_thread = std::thread([&io]() {
+        io.run();
+    });
+
+    auto connection_string = couchbase::core::utils::parse_connection_string(integration.ctx.connection_string);
+    connection_string.options.server_group = server_groups.front();
+
+    auto cluster_options =
+      integration.ctx.certificate_path.empty()
+        ? couchbase::cluster_options(couchbase::password_authenticator(integration.ctx.username, integration.ctx.password))
+        : couchbase::cluster_options(
+            couchbase::certificate_authenticator(integration.ctx.certificate_path, integration.ctx.certificate_path));
+    cluster_options.network().preferred_server_group(server_groups.front());
+    auto [error, cluster] = couchbase::cluster::connect(io, integration.ctx.connection_string, cluster_options).get();
+    REQUIRE_SUCCESS(error.ec());
+
+    auto collection = cluster.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    {
+        auto [err, result] = collection.get_any_replica(id.key(), {}).get();
+        REQUIRE_SUCCESS(err.ec());
+    }
+    {
+        auto [err, result] =
+          collection
+            .get_any_replica(id.key(),
+                             couchbase::get_any_replica_options{}.read_preference(couchbase::read_preference::selected_server_group))
+            .get();
+        REQUIRE_SUCCESS(err.ec());
+    }
+    {
+        auto [err, result] = collection.get_all_replicas(id.key(), {}).get();
+        REQUIRE_SUCCESS(err.ec());
+        REQUIRE(result.size() == number_of_replicas + 1);
+    }
+    {
+        auto [err, result] =
+          collection
+            .get_all_replicas(id.key(),
+                              couchbase::get_all_replicas_options{}.read_preference(couchbase::read_preference::selected_server_group))
+            .get();
+        REQUIRE_SUCCESS(err.ec());
+        REQUIRE(result.size() <= number_of_replicas + 1);
+    }
+
+    {
+        auto [err, result] = collection
+                               .lookup_in_any_replica(id.key(),
+                                                      couchbase::lookup_in_specs{
+                                                        couchbase::lookup_in_specs::get("a"),
+                                                      },
+                                                      {})
+                               .get();
+        REQUIRE_SUCCESS(err.ec());
+    }
+    {
+        auto [err, result] = collection
+                               .lookup_in_any_replica(id.key(),
+                                                      couchbase::lookup_in_specs{
+                                                        couchbase::lookup_in_specs::get("a"),
+                                                      },
+                                                      couchbase::lookup_in_any_replica_options{}.read_preference(
+                                                        couchbase::read_preference::selected_server_group))
+                               .get();
+        REQUIRE_SUCCESS(err.ec());
+    }
+    {
+        auto [err, result] = collection
+                               .lookup_in_all_replicas(id.key(),
+                                                       couchbase::lookup_in_specs{
+                                                         couchbase::lookup_in_specs::get("a"),
+                                                       })
+                               .get();
+        REQUIRE_SUCCESS(err.ec());
+    }
+    {
+        auto [err, result] = collection
+                               .lookup_in_all_replicas(id.key(),
+                                                       couchbase::lookup_in_specs{
+                                                         couchbase::lookup_in_specs::get("a"),
+                                                       },
+                                                       couchbase::lookup_in_all_replicas_options{}.read_preference(
+                                                         couchbase::read_preference::selected_server_group))
+                               .get();
+        REQUIRE_SUCCESS(err.ec());
+        REQUIRE(result.size() <= number_of_replicas + 1);
+    }
+
+    cluster.close();
+    guard.reset();
+    io_thread.join();
+}
+
+TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integration]")
+{
+    test::utils::integration_test_guard integration;
+
+    if (integration.cluster_version().is_mock()) {
+        SKIP("GOCAVES does not support server groups");
+    }
+
+    const auto number_of_replicas = integration.number_of_replicas();
+    if (number_of_replicas == 0) {
+        SKIP("bucket has zero replicas");
+    }
+    if (integration.number_of_nodes() <= number_of_replicas) {
+        SKIP(fmt::format(
+          "number of nodes ({}) is less or equal to number of replicas ({})", integration.number_of_nodes(), number_of_replicas));
+    }
+
+    const auto server_groups = integration.server_groups();
+    if (server_groups.size() < 3 || number_of_replicas > 1) {
+        SKIP(fmt::format("{} server groups and {} replicas does not meet expected requirements of unbalanced cluster. "
+                         "The number of replicas + 1 has to be less than number of the groups",
+                         integration.server_groups().size(),
+                         number_of_replicas));
+    }
+
+    // Now we need to craft key, for which both active and replica vbuckets
+    // are not bound to selected server group.
+    const auto& selected_server_group = server_groups.front();
+    const auto selected_key = integration.generate_key_not_in_server_group(selected_server_group);
+    INFO(fmt::format("server group: \"{}\"\nkey: \"{}\"", selected_server_group, selected_key));
+
+    couchbase::core::document_id id{
+        integration.ctx.bucket,
+        couchbase::scope::default_name,
+        couchbase::collection::default_name,
+        selected_key,
+    };
+    {
+        const tao::json::value value = {
+            { "a", 1.0 },
+            { "b", 2.0 },
+        };
+        couchbase::core::operations::upsert_request req{
+            id,
+            couchbase::core::utils::json::generate_binary(value),
+        };
+        req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+
+    asio::io_context io{};
+    auto guard = asio::make_work_guard(io);
+    auto io_thread = std::thread([&io]() {
+        io.run();
+    });
+
+    auto cluster_options =
+      integration.ctx.certificate_path.empty()
+        ? couchbase::cluster_options(couchbase::password_authenticator(integration.ctx.username, integration.ctx.password))
+        : couchbase::cluster_options(
+            couchbase::certificate_authenticator(integration.ctx.certificate_path, integration.ctx.certificate_path));
+    cluster_options.network().preferred_server_group(selected_server_group);
+    auto [error, cluster] = couchbase::cluster::connect(io, integration.ctx.connection_string, cluster_options).get();
+    REQUIRE_SUCCESS(error.ec());
+
+    auto collection = cluster.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
+    {
+        auto [err, result] = collection.get_any_replica(id.key(), {}).get();
+        REQUIRE_SUCCESS(err.ec());
+    }
+    {
+        auto [err, result] =
+          collection
+            .get_any_replica(id.key(),
+                             couchbase::get_any_replica_options{}.read_preference(couchbase::read_preference::selected_server_group))
+            .get();
+        REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
+    }
+    {
+        auto [err, result] = collection.get_all_replicas(id.key(), {}).get();
+        REQUIRE_SUCCESS(err.ec());
+        REQUIRE(result.size() == number_of_replicas + 1);
+    }
+    {
+        auto [err, result] =
+          collection
+            .get_all_replicas(id.key(),
+                              couchbase::get_all_replicas_options{}.read_preference(couchbase::read_preference::selected_server_group))
+            .get();
+        REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
+    }
+
+    {
+        auto [err, result] = collection
+                               .lookup_in_any_replica(id.key(),
+                                                      couchbase::lookup_in_specs{
+                                                        couchbase::lookup_in_specs::get("a"),
+                                                      },
+                                                      {})
+                               .get();
+        REQUIRE_SUCCESS(err.ec());
+    }
+    {
+        auto [err, result] = collection
+                               .lookup_in_any_replica(id.key(),
+                                                      couchbase::lookup_in_specs{
+                                                        couchbase::lookup_in_specs::get("a"),
+                                                      },
+                                                      couchbase::lookup_in_any_replica_options{}.read_preference(
+                                                        couchbase::read_preference::selected_server_group))
+                               .get();
+        REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
+    }
+    {
+        auto [err, result] = collection
+                               .lookup_in_all_replicas(id.key(),
+                                                       couchbase::lookup_in_specs{
+                                                         couchbase::lookup_in_specs::get("a"),
+                                                       })
+                               .get();
+        REQUIRE_SUCCESS(err.ec());
+    }
+    {
+        auto [err, result] = collection
+                               .lookup_in_all_replicas(id.key(),
+                                                       couchbase::lookup_in_specs{
+                                                         couchbase::lookup_in_specs::get("a"),
+                                                       },
+                                                       couchbase::lookup_in_all_replicas_options{}.read_preference(
+                                                         couchbase::read_preference::selected_server_group))
+                               .get();
+        REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
+    }
+
+    cluster.close();
+    guard.reset();
+    io_thread.join();
 }

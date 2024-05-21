@@ -102,8 +102,9 @@ class collection_query_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto create_index(std::string index_name, std::vector<std::string> keys, const create_query_index_options& options) const
-      -> std::future<error>;
+    [[nodiscard]] auto create_index(std::string index_name,
+                                    std::vector<std::string> keys,
+                                    const create_query_index_options& options) const -> std::future<error>;
 
     /**
      * Create a primary index on the collection.
@@ -223,8 +224,8 @@ class collection_query_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto watch_indexes(std::vector<std::string> index_names, const watch_query_indexes_options& options) const
-      -> std::future<error>;
+    [[nodiscard]] auto watch_indexes(std::vector<std::string> index_names,
+                                     const watch_query_indexes_options& options) const -> std::future<error>;
 
   private:
     friend class collection;

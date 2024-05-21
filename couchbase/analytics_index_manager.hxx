@@ -77,8 +77,8 @@ class analytics_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto create_dataverse(std::string dataverse_name, const create_dataverse_analytics_options& options) const
-      -> std::future<error>;
+    [[nodiscard]] auto create_dataverse(std::string dataverse_name,
+                                        const create_dataverse_analytics_options& options) const -> std::future<error>;
 
     /**
      * Drops (deletes) a dataverse.
@@ -104,8 +104,8 @@ class analytics_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto drop_dataverse(std::string dataverse_name, const drop_dataverse_analytics_options& options) const
-      -> std::future<error>;
+    [[nodiscard]] auto drop_dataverse(std::string dataverse_name,
+                                      const drop_dataverse_analytics_options& options) const -> std::future<error>;
 
     /**
      * Creates a new dataset (analytics collection).
@@ -249,8 +249,9 @@ class analytics_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto drop_index(std::string index_name, std::string dataset_name, const drop_index_analytics_options& options) const
-      -> std::future<error>;
+    [[nodiscard]] auto drop_index(std::string index_name,
+                                  std::string dataset_name,
+                                  const drop_index_analytics_options& options) const -> std::future<error>;
 
     /**
      * Fetches all analytics indexes.
@@ -367,8 +368,8 @@ class analytics_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto create_link(const management::analytics_link& link, const create_link_analytics_options& options) const
-      -> std::future<error>;
+    [[nodiscard]] auto create_link(const management::analytics_link& link,
+                                   const create_link_analytics_options& options) const -> std::future<error>;
 
     /**
      * Replaces an existing analytics remote link.
@@ -394,8 +395,8 @@ class analytics_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto replace_link(const management::analytics_link& link, const replace_link_analytics_options& options) const
-      -> std::future<error>;
+    [[nodiscard]] auto replace_link(const management::analytics_link& link,
+                                    const replace_link_analytics_options& options) const -> std::future<error>;
 
     /**
      * Drops an existing analytics remote link.
@@ -424,8 +425,9 @@ class analytics_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto drop_link(std::string link_name, std::string dataverse_name, const drop_link_analytics_options& options) const
-      -> std::future<error>;
+    [[nodiscard]] auto drop_link(std::string link_name,
+                                 std::string dataverse_name,
+                                 const drop_link_analytics_options& options) const -> std::future<error>;
 
     /**
      * Fetches the existing analytics remote links.

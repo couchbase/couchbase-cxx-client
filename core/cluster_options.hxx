@@ -85,6 +85,7 @@ struct cluster_options {
     std::size_t max_http_connections{ 0 };
     std::chrono::milliseconds idle_http_connection_timeout = timeout_defaults::idle_http_connection_timeout;
     std::string user_agent_extra{};
+    std::string server_group{};
     couchbase::transactions::transactions_config::built transactions{};
 
     bool dump_configuration{ false };

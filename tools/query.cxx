@@ -16,17 +16,19 @@
  */
 
 #include "query.hxx"
-#include "core/utils/binary.hxx"
 #include "utils.hxx"
 
+#include "core/error_context/query.hxx"
+#include "core/error_context/query_json.hxx"
 #include "core/logger/logger.hxx"
+#include "core/utils/binary.hxx"
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/fmt/error.hxx>
 #include <couchbase/fmt/query_profile.hxx>
 #include <couchbase/fmt/query_status.hxx>
 
 #include <asio/io_context.hpp>
-#include <core/error_context/query_json.hxx>
 #include <fmt/chrono.h>
 #include <spdlog/fmt/bin_to_hex.h>
 #include <tao/json.hpp>
@@ -236,8 +238,9 @@ Examples:
 
   private:
     template<typename QueryEndpoint>
-    auto do_query(QueryEndpoint& endpoint, std::string statement, const couchbase::query_options& options) const
-      -> std::future<std::pair<couchbase::error, couchbase::query_result>>
+    auto do_query(QueryEndpoint& endpoint,
+                  std::string statement,
+                  const couchbase::query_options& options) const -> std::future<std::pair<couchbase::error, couchbase::query_result>>
     {
         return endpoint.query(std::move(statement), options);
     }

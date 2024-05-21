@@ -100,6 +100,7 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
     user_options.user_agent_extra = opts.behavior.user_agent_extra;
     user_options.network = opts.behavior.network;
 
+    user_options.server_group = opts.network.server_group;
     user_options.enable_tcp_keep_alive = opts.network.enable_tcp_keep_alive;
     user_options.tcp_keep_alive_interval = opts.network.tcp_keep_alive_interval;
     user_options.config_poll_interval = opts.network.config_poll_interval;
@@ -121,6 +122,7 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
             user_options.use_ip_protocol = core::io::ip_protocol::force_ipv6;
             break;
     }
+    user_options.server_group = opts.network.server_group;
 
     user_options.enable_compression = opts.compression.enabled;
 
@@ -369,8 +371,9 @@ cluster::search_query(std::string index_name,
 }
 
 auto
-cluster::search_query(std::string index_name, const class search_query& query, const search_options& options) const
-  -> std::future<std::pair<error, search_result>>
+cluster::search_query(std::string index_name,
+                      const class search_query& query,
+                      const search_options& options) const -> std::future<std::pair<error, search_result>>
 {
     auto barrier = std::make_shared<std::promise<std::pair<error, search_result>>>();
     search_query(std::move(index_name), query, options, [barrier](auto err, auto result) mutable {
@@ -386,8 +389,9 @@ cluster::search(std::string index_name, search_request request, const search_opt
 }
 
 auto
-cluster::search(std::string index_name, search_request request, const search_options& options) const
-  -> std::future<std::pair<error, search_result>>
+cluster::search(std::string index_name,
+                search_request request,
+                const search_options& options) const -> std::future<std::pair<error, search_result>>
 {
     auto barrier = std::make_shared<std::promise<std::pair<error, search_result>>>();
     search(std::move(index_name), std::move(request), options, [barrier](auto error, auto result) mutable {
@@ -397,8 +401,9 @@ cluster::search(std::string index_name, search_request request, const search_opt
 }
 
 auto
-cluster::connect(asio::io_context& io, const std::string& connection_string, const cluster_options& options)
-  -> std::future<std::pair<error, cluster>>
+cluster::connect(asio::io_context& io,
+                 const std::string& connection_string,
+                 const cluster_options& options) -> std::future<std::pair<error, cluster>>
 {
     auto barrier = std::make_shared<std::promise<std::pair<error, cluster>>>();
     connect(io, connection_string, options, [barrier](auto err, auto c) mutable {

@@ -349,8 +349,11 @@ TEST_CASE("transactions public async API: can set transaction options", "[transa
 
 TEST_CASE("transactions public async API: can do mutating query", "[transactions]")
 {
-
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
 
     auto id = test::utils::uniq_id("txn");
     auto c = integration.public_cluster();
@@ -378,6 +381,10 @@ TEST_CASE("transactions public async API: can do mutating query", "[transactions
 TEST_CASE("transactions public async API: some query errors rollback", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
 
     auto id = test::utils::uniq_id("txn");
     auto id2 = test::utils::uniq_id("txn");

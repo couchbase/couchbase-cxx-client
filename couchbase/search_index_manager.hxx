@@ -94,8 +94,8 @@ class search_index_manager
                       const upsert_search_index_options& options,
                       upsert_search_index_handler&& handler) const;
 
-    [[nodiscard]] auto upsert_index(const management::search::index& search_index, const upsert_search_index_options& options = {}) const
-      -> std::future<error>;
+    [[nodiscard]] auto upsert_index(const management::search::index& search_index,
+                                    const upsert_search_index_options& options = {}) const -> std::future<error>;
 
     /**
      * Drops an index
@@ -142,8 +142,8 @@ class search_index_manager
                       const pause_ingest_search_index_options& options,
                       pause_ingest_search_index_handler&& handler) const;
 
-    [[nodiscard]] auto pause_ingest(std::string index_name, const pause_ingest_search_index_options& options = {}) const
-      -> std::future<error>;
+    [[nodiscard]] auto pause_ingest(std::string index_name,
+                                    const pause_ingest_search_index_options& options = {}) const -> std::future<error>;
 
     /**
      * Resumes updates and maintenance for an index.
@@ -159,8 +159,8 @@ class search_index_manager
                        const resume_ingest_search_index_options& options,
                        resume_ingest_search_index_handler&& handler) const;
 
-    [[nodiscard]] auto resume_ingest(std::string index_name, const resume_ingest_search_index_options& options = {}) const
-      -> std::future<error>;
+    [[nodiscard]] auto resume_ingest(std::string index_name,
+                                     const resume_ingest_search_index_options& options = {}) const -> std::future<error>;
 
     /**
      * Allows querying against an index
@@ -176,8 +176,8 @@ class search_index_manager
                         const allow_querying_search_index_options& options,
                         allow_querying_search_index_handler&& handler) const;
 
-    [[nodiscard]] auto allow_querying(std::string index_name, const allow_querying_search_index_options& options = {}) const
-      -> std::future<error>;
+    [[nodiscard]] auto allow_querying(std::string index_name,
+                                      const allow_querying_search_index_options& options = {}) const -> std::future<error>;
 
     /**
      * Disallows querying against an index
@@ -193,8 +193,8 @@ class search_index_manager
                            const disallow_querying_search_index_options& options,
                            disallow_querying_search_index_handler&& handler) const;
 
-    [[nodiscard]] auto disallow_querying(std::string index_name, const disallow_querying_search_index_options& options = {}) const
-      -> std::future<error>;
+    [[nodiscard]] auto disallow_querying(std::string index_name,
+                                         const disallow_querying_search_index_options& options = {}) const -> std::future<error>;
 
     /**
      * Freeze the assignment of index partitions to nodes.
@@ -210,8 +210,8 @@ class search_index_manager
                      const freeze_plan_search_index_options& options,
                      freeze_plan_search_index_handler&& handler) const;
 
-    [[nodiscard]] auto freeze_plan(std::string index_name, const freeze_plan_search_index_options& options = {}) const
-      -> std::future<error>;
+    [[nodiscard]] auto freeze_plan(std::string index_name,
+                                   const freeze_plan_search_index_options& options = {}) const -> std::future<error>;
 
     /**
      * Unfreeze the assignment of index partitions to nodes.
@@ -227,8 +227,8 @@ class search_index_manager
                        const unfreeze_plan_search_index_options& options,
                        unfreeze_plan_search_index_handler&& handler) const;
 
-    [[nodiscard]] auto unfreeze_plan(std::string index_name, const unfreeze_plan_search_index_options& options = {}) const
-      -> std::future<error>;
+    [[nodiscard]] auto unfreeze_plan(std::string index_name,
+                                     const unfreeze_plan_search_index_options& options = {}) const -> std::future<error>;
 
     /**
      * Allows to see how a document is analyzed against a specific index.

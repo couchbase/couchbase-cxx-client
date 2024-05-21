@@ -169,8 +169,9 @@ scope::search(std::string index_name, search_request request, const search_optio
 }
 
 auto
-scope::search(std::string index_name, search_request request, const search_options& options) const
-  -> std::future<std::pair<error, search_result>>
+scope::search(std::string index_name,
+              search_request request,
+              const search_options& options) const -> std::future<std::pair<error, search_result>>
 {
     auto barrier = std::make_shared<std::promise<std::pair<error, search_result>>>();
     auto future = barrier->get_future();

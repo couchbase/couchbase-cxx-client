@@ -49,7 +49,9 @@ class bucket_impl : public std::enable_shared_from_this<bucket_impl>
                           name_,
                           core::impl::to_core_service_types(options.service_types),
                           options.timeout,
-                          [handler = std::move(handler)](auto resp) mutable { return handler({}, core::impl::build_result(resp)); });
+                          [handler = std::move(handler)](auto resp) mutable {
+                              return handler({}, core::impl::build_result(resp));
+                          });
     }
 
   private:

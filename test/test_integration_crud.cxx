@@ -249,8 +249,7 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
     {
         couchbase::core::operations::get_and_lock_request req{ id };
         req.lock_time = lock_time;
-        if (integration.ctx.deployment == test::utils::deployment_type::capella ||
-            integration.ctx.deployment == test::utils::deployment_type::elixir) {
+        if (integration.ctx.use_wan_development_profile) {
             req.timeout = std::chrono::seconds{ 2 };
         }
         auto resp = test::utils::execute(integration.cluster, req);
@@ -672,9 +671,13 @@ TEST_CASE("integration: multi-threaded open/close bucket", "[integration]")
     threads.reserve(number_of_threads);
 
     for (auto i = 0; i < number_of_threads; ++i) {
-        threads.emplace_back([&integration]() { test::utils::open_bucket(integration.cluster, integration.ctx.bucket); });
+        threads.emplace_back([&integration]() {
+            test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+        });
     }
-    std::for_each(threads.begin(), threads.end(), [](auto& thread) { thread.join(); });
+    std::for_each(threads.begin(), threads.end(), [](auto& thread) {
+        thread.join();
+    });
 
     threads.clear();
 
@@ -691,16 +694,22 @@ TEST_CASE("integration: multi-threaded open/close bucket", "[integration]")
         });
     }
 
-    std::for_each(threads.begin(), threads.end(), [](auto& thread) { thread.join(); });
+    std::for_each(threads.begin(), threads.end(), [](auto& thread) {
+        thread.join();
+    });
 
     threads.clear();
 
     for (auto i = 0; i < number_of_threads; ++i) {
-        auto close_bucket = [&integration]() { test::utils::close_bucket(integration.cluster, integration.ctx.bucket); };
+        auto close_bucket = [&integration]() {
+            test::utils::close_bucket(integration.cluster, integration.ctx.bucket);
+        };
         std::thread closer(std::move(close_bucket));
         threads.emplace_back(std::move(closer));
     }
-    std::for_each(threads.begin(), threads.end(), [](auto& thread) { thread.join(); });
+    std::for_each(threads.begin(), threads.end(), [](auto& thread) {
+        thread.join();
+    });
 }
 
 TEST_CASE("integration: open bucket that does not exist", "[integration]")
@@ -715,7 +724,9 @@ TEST_CASE("integration: open bucket that does not exist", "[integration]")
 
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();
-    integration.cluster.open_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
+    integration.cluster.open_bucket(bucket_name, [barrier](std::error_code ec) mutable {
+        barrier->set_value(ec);
+    });
     auto rc = f.get();
     REQUIRE(rc == couchbase::errc::common::bucket_not_found);
 }
@@ -882,8 +893,7 @@ TEST_CASE("integration: pessimistic locking with public API", "[integration]")
     // it is not allowed to lock the same key twice
     {
         couchbase::get_and_lock_options options{};
-        if (integration.ctx.deployment == test::utils::deployment_type::capella ||
-            integration.ctx.deployment == test::utils::deployment_type::elixir) {
+        if (integration.ctx.use_wan_development_profile) {
             options.timeout(std::chrono::seconds{ 2 });
         }
         auto [err, resp] = collection.get_and_lock(id, lock_time, options).get();

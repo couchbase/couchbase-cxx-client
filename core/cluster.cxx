@@ -232,7 +232,9 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
                   return self->dns_srv_tracker_->get_srv_nodes([self, hostname = std::move(hostname), handler = std::move(handler)](
                                                                  origin::node_list nodes, std::error_code ec) mutable {
                       if (ec) {
-                          return self->close([ec, handler = std::move(handler)]() mutable { handler(ec); });
+                          return self->close([ec, handler = std::move(handler)]() mutable {
+                              handler(ec);
+                          });
                       }
                       if (!nodes.empty()) {
                           self->origin_.set_nodes(std::move(nodes));
@@ -510,7 +512,9 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
                     tls_.load_verify_file(origin_.options().trust_certificate, ec);
                     if (ec) {
                         CB_LOG_ERROR("[{}]: unable to load verify file \"{}\": {}", id_, origin_.options().trust_certificate, ec.message());
-                        return close([ec, handler = std::move(handler)]() mutable { return handler(ec); });
+                        return close([ec, handler = std::move(handler)]() mutable {
+                            return handler(ec);
+                        });
                     }
                 }
             }
@@ -520,13 +524,17 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
                 tls_.use_certificate_chain_file(origin_.certificate_path(), ec);
                 if (ec) {
                     CB_LOG_ERROR("[{}]: unable to load certificate chain \"{}\": {}", id_, origin_.certificate_path(), ec.message());
-                    return close([ec, handler = std::move(handler)]() mutable { return handler(ec); });
+                    return close([ec, handler = std::move(handler)]() mutable {
+                        return handler(ec);
+                    });
                 }
                 CB_LOG_DEBUG(R"([{}]: use TLS private key: "{}")", id_, origin_.key_path());
                 tls_.use_private_key_file(origin_.key_path(), asio::ssl::context::file_format::pem, ec);
                 if (ec) {
                     CB_LOG_ERROR("[{}]: unable to load private key \"{}\": {}", id_, origin_.key_path(), ec.message());
-                    return close([ec, handler = std::move(handler)]() mutable { return handler(ec); });
+                    return close([ec, handler = std::move(handler)]() mutable {
+                        return handler(ec);
+                    });
                 }
             }
             session_ = io::mcbp_session(id_, ctx_, tls_, origin_, dns_srv_tracker_);
@@ -559,7 +567,9 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
                   });
               }
               if (ec) {
-                  return self->close([ec, handler = std::move(handler)]() mutable { handler(ec); });
+                  return self->close([ec, handler = std::move(handler)]() mutable {
+                      handler(ec);
+                  });
               }
               handler(ec);
           });
@@ -616,7 +626,9 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
                       if (cluster->session_) {
                           cluster->session_->ping(collector->build_reporter(), timeout);
                       }
-                      cluster->for_each_bucket([&collector, &timeout](auto bucket) { bucket->ping(collector, timeout); });
+                      cluster->for_each_bucket([&collector, &timeout](auto bucket) {
+                          bucket->ping(collector, timeout);
+                      });
                   }
                   cluster->session_manager_->ping(services, timeout, collector, cluster->origin_.credentials());
               }
@@ -636,7 +648,9 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
             if (self->session_) {
                 res.services[service_type::key_value].emplace_back(self->session_->diag_info());
             }
-            self->for_each_bucket([&res](const auto& bucket) { bucket->export_diag_info(res); });
+            self->for_each_bucket([&res](const auto& bucket) {
+                bucket->export_diag_info(res);
+            });
             self->session_manager_->export_diag_info(res);
             handler(std::move(res));
         }));
@@ -653,7 +667,9 @@ class cluster_impl : public std::enable_shared_from_this<cluster_impl>
                 self->session_->stop(retry_reason::do_not_retry);
                 self->session_.reset();
             }
-            self->for_each_bucket([](auto bucket) { bucket->close(); });
+            self->for_each_bucket([](auto bucket) {
+                bucket->close();
+            });
             self->session_manager_->close();
             handler();
             self->work_.reset();
@@ -853,7 +869,13 @@ void
 cluster::execute(operations::get_all_replicas_request request,
                  utils::movable_function<void(operations::get_all_replicas_response)>&& handler) const
 {
-    return request.execute(impl_, std::move(handler));
+    auto bucket_name = request.id.bucket();
+    return open_bucket(bucket_name, [impl = impl_, request = std::move(request), handler = std::move(handler)](auto ec) mutable {
+        if (ec) {
+            return handler(operations::get_all_replicas_response{ make_key_value_error_context(ec, request.id) });
+        }
+        return request.execute(impl, std::move(handler));
+    });
 }
 
 void
@@ -873,7 +895,13 @@ void
 cluster::execute(operations::get_any_replica_request request,
                  utils::movable_function<void(operations::get_any_replica_response)>&& handler) const
 {
-    return request.execute(impl_, std::move(handler));
+    auto bucket_name = request.id.bucket();
+    return open_bucket(bucket_name, [impl = impl_, request = std::move(request), handler = std::move(handler)](auto ec) mutable {
+        if (ec) {
+            return handler(operations::get_any_replica_response{ make_key_value_error_context(ec, request.id) });
+        }
+        return request.execute(impl, std::move(handler));
+    });
 }
 
 void

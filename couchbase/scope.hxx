@@ -150,8 +150,9 @@ class scope
      * @since 1.0.0
      * @volatile
      */
-    [[nodiscard]] auto search(std::string index_name, search_request request, const search_options& options = {}) const
-      -> std::future<std::pair<error, search_result>>;
+    [[nodiscard]] auto search(std::string index_name,
+                              search_request request,
+                              const search_options& options = {}) const -> std::future<std::pair<error, search_result>>;
 
     /**
      * Performs a query against the analytics services.
@@ -182,8 +183,8 @@ class scope
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto analytics_query(std::string statement, const analytics_options& options = {}) const
-      -> std::future<std::pair<error, analytics_result>>;
+    [[nodiscard]] auto analytics_query(std::string statement,
+                                       const analytics_options& options = {}) const -> std::future<std::pair<error, analytics_result>>;
 
     /**
      * Provides access to search index management services at the scope level

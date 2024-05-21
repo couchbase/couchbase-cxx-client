@@ -339,8 +339,8 @@ bucket_manager::get_bucket(std::string bucket_name, const get_bucket_options& op
 }
 
 auto
-bucket_manager::get_bucket(std::string bucket_name, const get_bucket_options& options) const
-  -> std::future<std::pair<error, management::cluster::bucket_settings>>
+bucket_manager::get_bucket(std::string bucket_name,
+                           const get_bucket_options& options) const -> std::future<std::pair<error, management::cluster::bucket_settings>>
 {
     auto barrier = std::make_shared<std::promise<std::pair<error, management::cluster::bucket_settings>>>();
     get_bucket(std::move(bucket_name), options, [barrier](auto err, auto result) mutable {
@@ -375,8 +375,8 @@ bucket_manager::create_bucket(const management::cluster::bucket_settings& bucket
 }
 
 auto
-bucket_manager::create_bucket(const management::cluster::bucket_settings& bucket_settings, const create_bucket_options& options) const
-  -> std::future<error>
+bucket_manager::create_bucket(const management::cluster::bucket_settings& bucket_settings,
+                              const create_bucket_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     create_bucket(bucket_settings, options, [barrier](auto err) mutable {
@@ -394,8 +394,8 @@ bucket_manager::update_bucket(const management::cluster::bucket_settings& bucket
 }
 
 auto
-bucket_manager::update_bucket(const management::cluster::bucket_settings& bucket_settings, const update_bucket_options& options) const
-  -> std::future<error>
+bucket_manager::update_bucket(const management::cluster::bucket_settings& bucket_settings,
+                              const update_bucket_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     update_bucket(bucket_settings, options, [barrier](auto err) mutable {

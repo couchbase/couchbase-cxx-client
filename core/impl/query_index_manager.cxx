@@ -403,8 +403,8 @@ query_index_manager::create_primary_index(std::string bucket_name,
 }
 
 auto
-query_index_manager::create_primary_index(std::string bucket_name, const create_primary_query_index_options& options) const
-  -> std::future<error>
+query_index_manager::create_primary_index(std::string bucket_name,
+                                          const create_primary_query_index_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
@@ -423,8 +423,8 @@ query_index_manager::drop_primary_index(std::string bucket_name,
 }
 
 auto
-query_index_manager::drop_primary_index(std::string bucket_name, const drop_primary_query_index_options& options) const
-  -> std::future<error>
+query_index_manager::drop_primary_index(std::string bucket_name,
+                                        const drop_primary_query_index_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
@@ -444,8 +444,9 @@ query_index_manager::drop_index(std::string bucket_name,
 }
 
 auto
-query_index_manager::drop_index(std::string bucket_name, std::string index_name, const drop_query_index_options& options) const
-  -> std::future<error>
+query_index_manager::drop_index(std::string bucket_name,
+                                std::string index_name,
+                                const drop_query_index_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
@@ -630,8 +631,8 @@ collection_query_index_manager::watch_indexes(std::vector<std::string> index_nam
 }
 
 auto
-collection_query_index_manager::watch_indexes(std::vector<std::string> index_names, const watch_query_indexes_options& options) const
-  -> std::future<error>
+collection_query_index_manager::watch_indexes(std::vector<std::string> index_names,
+                                              const watch_query_indexes_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();

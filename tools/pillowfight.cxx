@@ -454,9 +454,7 @@ class pillowfight_app : public CLI::App
                           if (verbose) {
                               fmt::print(stderr, "\r\033[K{}\n", err.ctx().to_json());
                           }
-                      } else if constexpr (std::is_same_v<
-                                             T,
-                                             std::future<std::pair<couchbase::error, couchbase::mutation_result>>>) {
+                      } else if constexpr (std::is_same_v<T, std::future<std::pair<couchbase::error, couchbase::mutation_result>>>) {
                           auto ctx = err.ctx().template as<tao::json::value>();
                           known_keys.emplace_back(ctx["id"].get_string());
                       }

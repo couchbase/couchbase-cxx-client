@@ -19,10 +19,13 @@
 
 #include "core/logger/logger.hxx"
 #include "core/operations/management/freeform.hxx"
+#include "core/protocol/cmd_get_cluster_config.hxx"
 #include "core/transactions.hxx"
 #include "core/utils/connection_string.hxx"
+#include "core/utils/join_strings.hxx"
 #include "core/utils/json.hxx"
 #include "logger.hxx"
+#include "test_data.hxx"
 
 namespace test::utils
 {
@@ -66,7 +69,7 @@ build_origin(const test_context& ctx,
         ctx.dns_nameserver.value_or(couchbase::core::io::dns::dns_config::default_nameserver),
         ctx.dns_port.value_or(couchbase::core::io::dns::dns_config::default_port),
     };
-    if (ctx.deployment == deployment_type::capella || ctx.deployment == test::utils::deployment_type::elixir) {
+    if (ctx.use_wan_development_profile) {
         origin.options().apply_profile("wan_development");
     }
     return origin;
@@ -232,6 +235,55 @@ integration_test_guard::cluster_version()
         return ctx.version;
     }
     return parsed_version;
+}
+
+auto
+integration_test_guard::server_groups() -> std::vector<std::string>
+{
+    auto bucket_info = load_bucket_info(ctx.bucket);
+    std::vector<std::string> groups;
+    for (const auto& [name, _] : bucket_info.server_groups) {
+        groups.emplace_back(name);
+    }
+    return groups;
+}
+
+auto
+integration_test_guard::generate_key_not_in_server_group(const std::string& group_name) -> std::string
+{
+    auto bucket_info = load_bucket_info(ctx.bucket);
+
+    if (bucket_info.server_groups.count(group_name) == 0) {
+        auto message = fmt::format("group {} does not exist on the server", group_name);
+        throw std::runtime_error(message.c_str());
+    }
+
+    auto group = bucket_info.server_groups[group_name];
+
+    std::set<std::uint16_t> local_vbuckets;
+    for (const auto& node : group.nodes) {
+        for (const auto& vbucket : node.active_vbuckets) {
+            local_vbuckets.insert(vbucket);
+        }
+        for (const auto& vbucket : node.replica_vbuckets) {
+            local_vbuckets.insert(vbucket);
+        }
+    }
+    const auto config = couchbase::core::protocol::parse_config(bucket_info.config_json, "127.0.0.1", 11210);
+    if (local_vbuckets.size() >= config.vbmap->size()) {
+        auto message = fmt::format("group {} covers all vbuckets, unable to generate key that is not in server group", group_name);
+        throw std::runtime_error(message.c_str());
+    }
+
+    for (;;) {
+        auto id = uniq_id(group_name);
+        for (std::size_t idx = 0; idx < config.num_replicas.value_or(0) + 1; ++idx) {
+            auto [vbid, server] = config.map_key(id, idx);
+            if (server && local_vbuckets.count(vbid) == 0) {
+                return id;
+            }
+        }
+    }
 }
 
 } // namespace test::utils

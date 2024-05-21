@@ -20,7 +20,6 @@
 #include <couchbase/get_any_replica_options.hxx>
 
 #include "core/document_id.hxx"
-#include "core/error_context/key_value.hxx"
 #include "core/utils/movable_function.hxx"
 
 namespace couchbase::core::impl

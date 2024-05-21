@@ -95,16 +95,22 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
             if (ec == asio::error::operation_aborted) {
                 return;
             }
-            self->cancel();
+            if constexpr (io::http_traits::supports_readonly_v<Request>) {
+                if (self->request.readonly) {
+                    self->cancel(errc::common::unambiguous_timeout);
+                    return;
+                }
+            }
+            self->cancel(errc::common::ambiguous_timeout);
         });
     }
 
-    void cancel()
+    void cancel(std::error_code ec)
     {
+        invoke_handler(ec, {});
         if (session_) {
             session_->stop();
         }
-        invoke_handler(errc::common::unambiguous_timeout, {});
     }
 
     void invoke_handler(std::error_code ec, io::http_response&& msg)
@@ -113,10 +119,9 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
             span_->end();
             span_ = nullptr;
         }
-        if (handler_) {
-            handler_(ec, std::move(msg));
+        if (auto handler = std::move(handler_); handler) {
+            handler(ec, std::move(msg));
         }
-        handler_ = nullptr;
         retry_backoff.cancel();
         deadline.cancel();
     }
@@ -166,10 +171,11 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
               }
               self->deadline.cancel();
               self->finish_dispatch(self->session_->remote_address(), self->session_->local_address());
-              CB_LOG_TRACE(R"({} HTTP response: {}, client_context_id="{}", status={}, body={})",
+              CB_LOG_TRACE(R"({} HTTP response: {}, client_context_id="{}", ec={}, status={}, body={})",
                            self->session_->log_prefix(),
                            self->request.type,
                            self->client_context_id_,
+                           ec.message(),
                            msg.status_code,
                            msg.status_code == 200 ? "[hidden]" : msg.body.data());
               if (auto parser_ec = msg.body.ec(); !ec && parser_ec) {

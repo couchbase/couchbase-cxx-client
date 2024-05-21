@@ -17,21 +17,21 @@
 
 #include <couchbase/error_context.hxx>
 
+#include <tao/json/to_string.hpp>
+
 #include <string>
 #include <utility>
-
-#include <tao/json/to_string.hpp>
 
 namespace couchbase
 {
 error_context::error_context(internal_error_context internal)
-  : internal_{ std::move(internal) }
+  : internal_(std::move(internal))
 {
 }
 
 error_context::error_context(couchbase::internal_error_context internal, couchbase::internal_error_context internal_metadata)
-  : internal_{ std::move(internal) }
-  , internal_metadata_{ std::move(internal_metadata) }
+  : internal_(std::move(internal))
+  , internal_metadata_(std::move(internal_metadata))
 {
 }
 
@@ -49,6 +49,7 @@ error_context::to_json(error_context_json_format format) const -> std::string
         case error_context_json_format::pretty:
             return tao::json::to_string(internal_, 2);
     }
+    return "{}";
 }
 
 auto
@@ -60,5 +61,6 @@ error_context::internal_metadata(couchbase::error_context_json_format format) co
         case error_context_json_format::pretty:
             return tao::json::to_string(internal_metadata_, 2);
     }
+    return "{}";
 }
 } // namespace couchbase

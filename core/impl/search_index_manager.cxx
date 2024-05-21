@@ -388,8 +388,8 @@ search_index_manager::pause_ingest(std::string index_name,
 }
 
 auto
-search_index_manager::pause_ingest(std::string index_name, const couchbase::pause_ingest_search_index_options& options) const
-  -> std::future<error>
+search_index_manager::pause_ingest(std::string index_name,
+                                   const couchbase::pause_ingest_search_index_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     pause_ingest(std::move(index_name), options, [barrier](auto err) mutable {
@@ -407,8 +407,8 @@ search_index_manager::resume_ingest(std::string index_name,
 }
 
 auto
-search_index_manager::resume_ingest(std::string index_name, const couchbase::resume_ingest_search_index_options& options) const
-  -> std::future<error>
+search_index_manager::resume_ingest(std::string index_name,
+                                    const couchbase::resume_ingest_search_index_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     resume_ingest(std::move(index_name), options, [barrier](auto err) mutable {
@@ -426,8 +426,8 @@ search_index_manager::allow_querying(std::string index_name,
 }
 
 auto
-search_index_manager::allow_querying(std::string index_name, const couchbase::allow_querying_search_index_options& options) const
-  -> std::future<error>
+search_index_manager::allow_querying(std::string index_name,
+                                     const couchbase::allow_querying_search_index_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     allow_querying(std::move(index_name), options, [barrier](auto err) mutable {
@@ -445,8 +445,8 @@ search_index_manager::disallow_querying(std::string index_name,
 }
 
 auto
-search_index_manager::disallow_querying(std::string index_name, const couchbase::disallow_querying_search_index_options& options) const
-  -> std::future<error>
+search_index_manager::disallow_querying(std::string index_name,
+                                        const couchbase::disallow_querying_search_index_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     disallow_querying(std::move(index_name), options, [barrier](auto err) mutable {
@@ -464,8 +464,8 @@ search_index_manager::freeze_plan(std::string index_name,
 }
 
 auto
-search_index_manager::freeze_plan(std::string index_name, const couchbase::freeze_plan_search_index_options& options) const
-  -> std::future<error>
+search_index_manager::freeze_plan(std::string index_name,
+                                  const couchbase::freeze_plan_search_index_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     freeze_plan(std::move(index_name), options, [barrier](auto err) mutable {
@@ -483,8 +483,8 @@ search_index_manager::unfreeze_plan(std::string index_name,
 }
 
 auto
-search_index_manager::unfreeze_plan(std::string index_name, const couchbase::unfreeze_plan_search_index_options& options) const
-  -> std::future<error>
+search_index_manager::unfreeze_plan(std::string index_name,
+                                    const couchbase::unfreeze_plan_search_index_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     unfreeze_plan(std::move(index_name), options, [barrier](auto err) mutable {
@@ -503,10 +503,8 @@ search_index_manager::analyze_document(std::string index_name,
 }
 
 auto
-search_index_manager::analyze_document(std::string index_name,
-                                       std::string document,
-                                       const couchbase::analyze_document_options& options) const
-  -> std::future<std::pair<error, std::vector<std::string>>>
+search_index_manager::analyze_document(std::string index_name, std::string document, const couchbase::analyze_document_options& options)
+  const -> std::future<std::pair<error, std::vector<std::string>>>
 {
     auto barrier = std::make_shared<std::promise<std::pair<error, std::vector<std::string>>>>();
     analyze_document(std::move(index_name), std::move(document), options, [barrier](auto err, auto result) mutable {
@@ -585,8 +583,8 @@ scope_search_index_manager::drop_index(std::string index_name,
 }
 
 auto
-scope_search_index_manager::drop_index(std::string index_name, const couchbase::drop_search_index_options& options) const
-  -> std::future<error>
+scope_search_index_manager::drop_index(std::string index_name,
+                                       const couchbase::drop_search_index_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     drop_index(std::move(index_name), options, [barrier](auto err) mutable {
@@ -623,8 +621,8 @@ scope_search_index_manager::pause_ingest(std::string index_name,
 }
 
 auto
-scope_search_index_manager::pause_ingest(std::string index_name, const couchbase::pause_ingest_search_index_options& options) const
-  -> std::future<error>
+scope_search_index_manager::pause_ingest(std::string index_name,
+                                         const couchbase::pause_ingest_search_index_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     pause_ingest(std::move(index_name), options, [barrier](auto err) mutable {
@@ -642,8 +640,8 @@ scope_search_index_manager::resume_ingest(std::string index_name,
 }
 
 auto
-scope_search_index_manager::resume_ingest(std::string index_name, const couchbase::resume_ingest_search_index_options& options) const
-  -> std::future<error>
+scope_search_index_manager::resume_ingest(std::string index_name,
+                                          const couchbase::resume_ingest_search_index_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     resume_ingest(std::move(index_name), options, [barrier](auto err) mutable {
@@ -661,8 +659,8 @@ scope_search_index_manager::allow_querying(std::string index_name,
 }
 
 auto
-scope_search_index_manager::allow_querying(std::string index_name, const couchbase::allow_querying_search_index_options& options) const
-  -> std::future<error>
+scope_search_index_manager::allow_querying(std::string index_name,
+                                           const couchbase::allow_querying_search_index_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     allow_querying(std::move(index_name), options, [barrier](auto err) mutable {
@@ -699,8 +697,8 @@ scope_search_index_manager::freeze_plan(std::string index_name,
 }
 
 auto
-scope_search_index_manager::freeze_plan(std::string index_name, const couchbase::freeze_plan_search_index_options& options) const
-  -> std::future<error>
+scope_search_index_manager::freeze_plan(std::string index_name,
+                                        const couchbase::freeze_plan_search_index_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     freeze_plan(std::move(index_name), options, [barrier](auto err) mutable {
@@ -718,8 +716,8 @@ scope_search_index_manager::unfreeze_plan(std::string index_name,
 }
 
 auto
-scope_search_index_manager::unfreeze_plan(std::string index_name, const couchbase::unfreeze_plan_search_index_options& options) const
-  -> std::future<error>
+scope_search_index_manager::unfreeze_plan(std::string index_name,
+                                          const couchbase::unfreeze_plan_search_index_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     unfreeze_plan(std::move(index_name), options, [barrier](auto err) mutable {

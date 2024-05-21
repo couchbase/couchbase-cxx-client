@@ -22,12 +22,16 @@
 #include "core/operations/document_decrement.hxx"
 #include "core/operations/document_exists.hxx"
 #include "core/operations/document_get.hxx"
+#include "core/operations/document_get_all_replicas.hxx"
 #include "core/operations/document_get_and_lock.hxx"
 #include "core/operations/document_get_and_touch.hxx"
+#include "core/operations/document_get_any_replica.hxx"
 #include "core/operations/document_get_projected.hxx"
 #include "core/operations/document_increment.hxx"
 #include "core/operations/document_insert.hxx"
 #include "core/operations/document_lookup_in.hxx"
+#include "core/operations/document_lookup_in_all_replicas.hxx"
+#include "core/operations/document_lookup_in_any_replica.hxx"
 #include "core/operations/document_mutate_in.hxx"
 #include "core/operations/document_prepend.hxx"
 #include "core/operations/document_remove.hxx"
@@ -162,84 +166,19 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                          const get_any_replica_options::built& options,
                          core::impl::movable_get_any_replica_handler&& handler) const
     {
-        auto request =
-          std::make_shared<core::impl::get_any_replica_request>(bucket_name_, scope_name_, name_, std::move(document_key), options.timeout);
-        core_.with_bucket_configuration(
-          bucket_name_,
-          [core = core_, r = std::move(request), h = std::move(handler)](std::error_code ec,
-                                                                         const core::topology::configuration& config) mutable {
-              if (ec) {
-                  return h(core::impl::make_error(make_key_value_error_context(ec, r->id())), get_replica_result{});
-              }
-              struct replica_context {
-                  replica_context(core::impl::movable_get_any_replica_handler&& handler, std::uint32_t expected_responses)
-                    : handler_(std::move(handler))
-                    , expected_responses_(expected_responses)
-                  {
-                  }
-
-                  core::impl::movable_get_any_replica_handler handler_;
-                  std::uint32_t expected_responses_;
-                  bool done_{ false };
-                  std::mutex mutex_{};
-              };
-              auto ctx = std::make_shared<replica_context>(std::move(h), config.num_replicas.value_or(0U) + 1U);
-
-              for (std::size_t idx = 1U; idx <= config.num_replicas.value_or(0U); ++idx) {
-                  core::document_id replica_id{ r->id() };
-                  replica_id.node_index(idx);
-                  core.execute(core::impl::get_replica_request{ std::move(replica_id), r->timeout() }, [ctx](auto&& resp) {
-                      core::impl::movable_get_any_replica_handler local_handler;
-                      {
-                          const std::scoped_lock lock(ctx->mutex_);
-                          if (ctx->done_) {
-                              return;
-                          }
-                          --ctx->expected_responses_;
-                          if (resp.ctx.ec()) {
-                              if (ctx->expected_responses_ > 0) {
-                                  // just ignore the response
-                                  return;
-                              }
-                              // consider document irretrievable and give up
-                              resp.ctx.override_ec(errc::key_value::document_irretrievable);
-                          }
-                          ctx->done_ = true;
-                          std::swap(local_handler, ctx->handler_);
-                      }
-                      if (local_handler) {
-                          return local_handler(core::impl::make_error(std::move(resp.ctx)),
-                                               get_replica_result{ resp.cas, true /* replica */, { std::move(resp.value), resp.flags } });
-                      }
-                  });
-              }
-
-              core::operations::get_request active{ core::document_id{ r->id() } };
-              active.timeout = r->timeout();
-              core.execute(active, [ctx](auto resp) {
-                  core::impl::movable_get_any_replica_handler local_handler{};
-                  {
-                      const std::scoped_lock lock(ctx->mutex_);
-                      if (ctx->done_) {
-                          return;
-                      }
-                      --ctx->expected_responses_;
-                      if (resp.ctx.ec()) {
-                          if (ctx->expected_responses_ > 0) {
-                              // just ignore the response
-                              return;
-                          }
-                          // consider document irretrievable and give up
-                          resp.ctx.override_ec(errc::key_value::document_irretrievable);
-                      }
-                      ctx->done_ = true;
-                      std::swap(local_handler, ctx->handler_);
-                  }
-                  if (local_handler) {
-                      return local_handler(core::impl::make_error(std::move(resp.ctx)),
-                                           get_replica_result{ resp.cas, false /* active */, { std::move(resp.value), resp.flags } });
-                  }
-              });
+        return core_.execute(
+          core::operations::get_any_replica_request{
+            core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
+            options.timeout,
+            options.read_preference,
+          },
+          [handler = std::move(handler)](auto resp) mutable {
+              return handler(core::impl::make_error(std::move(resp.ctx)),
+                             get_replica_result{
+                               resp.cas,
+                               resp.replica,
+                               { std::move(resp.value), resp.flags },
+                             });
           });
     }
 
@@ -247,95 +186,22 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                           const get_all_replicas_options::built& options,
                           core::impl::movable_get_all_replicas_handler&& handler) const
     {
-        auto request = std::make_shared<core::impl::get_all_replicas_request>(
-          bucket_name_, scope_name_, name_, std::move(document_key), options.timeout);
-        core_.with_bucket_configuration(
-          bucket_name_,
-          [core = core_, r = std::move(request), h = std::move(handler)](std::error_code ec,
-                                                                         const core::topology::configuration& config) mutable {
-              if (ec) {
-                  return h(core::impl::make_error(make_key_value_error_context(ec, r->id())), get_all_replicas_result{});
-              }
-              struct replica_context {
-                  replica_context(core::impl::movable_get_all_replicas_handler handler, std::uint32_t expected_responses)
-                    : handler_(std::move(handler))
-                    , expected_responses_(expected_responses)
-                  {
-                  }
-
-                  core::impl::movable_get_all_replicas_handler handler_;
-                  std::uint32_t expected_responses_;
-                  bool done_{ false };
-                  std::mutex mutex_{};
-                  get_all_replicas_result result_{};
-              };
-              auto ctx = std::make_shared<replica_context>(std::move(h), config.num_replicas.value_or(0U) + 1U);
-
-              for (std::size_t idx = 1U; idx <= config.num_replicas.value_or(0U); ++idx) {
-                  core::document_id replica_id{ r->id() };
-                  replica_id.node_index(idx);
-                  core.execute(core::impl::get_replica_request{ std::move(replica_id), r->timeout() }, [ctx](auto resp) {
-                      core::impl::movable_get_all_replicas_handler local_handler{};
-                      {
-                          const std::scoped_lock lock(ctx->mutex_);
-                          if (ctx->done_) {
-                              return;
-                          }
-                          --ctx->expected_responses_;
-                          if (resp.ctx.ec()) {
-                              if (ctx->expected_responses_ > 0) {
-                                  // just ignore the response
-                                  return;
-                              }
-                          } else {
-                              ctx->result_.emplace_back(
-                                get_replica_result{ resp.cas, true /* replica */, { std::move(resp.value), resp.flags } });
-                          }
-                          if (ctx->expected_responses_ == 0) {
-                              ctx->done_ = true;
-                              std::swap(local_handler, ctx->handler_);
-                          }
-                      }
-                      if (local_handler) {
-                          if (!ctx->result_.empty()) {
-                              resp.ctx.override_ec({});
-                          }
-                          return local_handler(core::impl::make_error(std::move(resp.ctx)), std::move(ctx->result_));
-                      }
+        return core_.execute(
+          core::operations::get_all_replicas_request{
+            core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
+            options.timeout,
+            options.read_preference,
+          },
+          [handler = std::move(handler)](auto resp) mutable {
+              get_all_replicas_result result{};
+              for (auto& entry : resp.entries) {
+                  result.emplace_back(get_replica_result{
+                    entry.cas,
+                    entry.replica,
+                    { std::move(entry.value), entry.flags },
                   });
               }
-
-              core::operations::get_request active{ core::document_id{ r->id() } };
-              active.timeout = r->timeout();
-              core.execute(active, [ctx](auto resp) {
-                  core::impl::movable_get_all_replicas_handler local_handler{};
-                  {
-                      const std::scoped_lock lock(ctx->mutex_);
-                      if (ctx->done_) {
-                          return;
-                      }
-                      --ctx->expected_responses_;
-                      if (resp.ctx.ec()) {
-                          if (ctx->expected_responses_ > 0) {
-                              // just ignore the response
-                              return;
-                          }
-                      } else {
-                          ctx->result_.emplace_back(
-                            get_replica_result{ resp.cas, false /* active */, { std::move(resp.value), resp.flags } });
-                      }
-                      if (ctx->expected_responses_ == 0) {
-                          ctx->done_ = true;
-                          std::swap(local_handler, ctx->handler_);
-                      }
-                  }
-                  if (local_handler) {
-                      if (!ctx->result_.empty()) {
-                          resp.ctx.override_ec({});
-                      }
-                      return local_handler(core::impl::make_error(std::move(resp.ctx)), std::move(ctx->result_));
-                  }
-              });
+              return handler(core::impl::make_error(std::move(resp.ctx)), std::move(result));
           });
     }
 
@@ -488,257 +354,68 @@ class collection_impl : public std::enable_shared_from_this<collection_impl>
                                 const lookup_in_all_replicas_options::built& options,
                                 lookup_in_all_replicas_handler&& handler) const
     {
-        auto request = std::make_shared<couchbase::core::impl::lookup_in_all_replicas_request>(
-          bucket_name_, scope_name_, name_, std::move(document_key), specs, options.timeout);
-        core_.open_bucket(
-          bucket_name_,
-          [core = core_, bucket_name = bucket_name_, r = std::move(request), h = std::move(handler)](std::error_code ec) mutable {
-              if (ec) {
-                  h(core::impl::make_error(
-                      core::make_subdocument_error_context(make_key_value_error_context(ec, r->id()), ec, {}, {}, false)),
-                    lookup_in_all_replicas_result{});
-                  return;
+        return core_.execute(
+          core::operations::lookup_in_all_replicas_request{
+            core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
+            specs,
+            options.timeout,
+            {},
+            options.read_preference,
+          },
+          [handler = std::move(handler)](auto resp) mutable {
+              lookup_in_all_replicas_result result{};
+              for (auto& res : resp.entries) {
+                  std::vector<lookup_in_result::entry> entries;
+                  entries.reserve(res.fields.size());
+                  for (auto& field : res.fields) {
+                      entries.emplace_back(lookup_in_result::entry{
+                        std::move(field.path),
+                        std::move(field.value),
+                        field.original_index,
+                        field.exists,
+                        field.ec,
+                      });
+                  }
+                  result.emplace_back(lookup_in_replica_result{
+                    res.cas,
+                    std::move(entries),
+                    res.deleted,
+                    res.is_replica,
+                  });
               }
-
-              return core.with_bucket_configuration(
-                bucket_name,
-                [core = core, r = std::move(r), h = std::move(h)](std::error_code ec, const core::topology::configuration& config) mutable {
-                    if (!config.capabilities.supports_subdoc_read_replica()) {
-                        ec = errc::common::feature_not_available;
-                    }
-
-                    if (ec) {
-                        return h(core::impl::make_error(
-                                   core::make_subdocument_error_context(make_key_value_error_context(ec, r->id()), ec, {}, {}, false)),
-                                 lookup_in_all_replicas_result{});
-                    }
-                    struct replica_context {
-                        replica_context(core::impl::movable_lookup_in_all_replicas_handler handler, std::uint32_t expected_responses)
-                          : handler_(std::move(handler))
-                          , expected_responses_(expected_responses)
-                        {
-                        }
-
-                        core::impl::movable_lookup_in_all_replicas_handler handler_;
-                        std::uint32_t expected_responses_;
-                        bool done_{ false };
-                        std::mutex mutex_{};
-                        lookup_in_all_replicas_result result_{};
-                    };
-                    auto ctx = std::make_shared<replica_context>(std::move(h), config.num_replicas.value_or(0U) + 1U);
-
-                    for (std::size_t idx = 1U; idx <= config.num_replicas.value_or(0U); ++idx) {
-                        core::document_id replica_id{ r->id() };
-                        replica_id.node_index(idx);
-                        core.execute(core::impl::lookup_in_replica_request{ std::move(replica_id), r->specs(), r->timeout() },
-                                     [ctx](core::impl::lookup_in_replica_response&& resp) {
-                                         core::impl::movable_lookup_in_all_replicas_handler local_handler{};
-                                         {
-                                             const std::scoped_lock lock(ctx->mutex_);
-                                             if (ctx->done_) {
-                                                 return;
-                                             }
-                                             --ctx->expected_responses_;
-                                             if (resp.ctx.ec()) {
-                                                 if (ctx->expected_responses_ > 0) {
-                                                     // just ignore the response
-                                                     return;
-                                                 }
-                                             } else {
-                                                 std::vector<lookup_in_replica_result::entry> entries{};
-                                                 for (const auto& field : resp.fields) {
-                                                     lookup_in_replica_result::entry lookup_in_entry{};
-                                                     lookup_in_entry.path = field.path;
-                                                     lookup_in_entry.value = field.value;
-                                                     lookup_in_entry.exists = field.exists;
-                                                     lookup_in_entry.original_index = field.original_index;
-                                                     lookup_in_entry.ec = field.ec;
-                                                     entries.emplace_back(lookup_in_entry);
-                                                 }
-                                                 ctx->result_.emplace_back(resp.cas, entries, resp.deleted, true /* replica */);
-                                             }
-                                             if (ctx->expected_responses_ == 0) {
-                                                 ctx->done_ = true;
-                                                 std::swap(local_handler, ctx->handler_);
-                                             }
-                                         }
-                                         if (local_handler) {
-                                             if (!ctx->result_.empty()) {
-                                                 resp.ctx.override_ec({});
-                                             }
-                                             return local_handler(core::impl::make_error(std::move(resp.ctx)), std::move(ctx->result_));
-                                         }
-                                     });
-                    }
-
-                    core::operations::lookup_in_request active{ core::document_id{ r->id() } };
-                    active.specs = r->specs();
-                    active.timeout = r->timeout();
-                    core.execute(active, [ctx](core::operations::lookup_in_response&& resp) {
-                        core::impl::movable_lookup_in_all_replicas_handler local_handler{};
-                        {
-                            const std::scoped_lock lock(ctx->mutex_);
-                            if (ctx->done_) {
-                                return;
-                            }
-                            --ctx->expected_responses_;
-                            if (resp.ctx.ec()) {
-                                if (ctx->expected_responses_ > 0) {
-                                    // just ignore the response
-                                    return;
-                                }
-                            } else {
-                                std::vector<lookup_in_replica_result::entry> entries{};
-                                for (const auto& field : resp.fields) {
-                                    lookup_in_replica_result::entry lookup_in_entry{};
-                                    lookup_in_entry.path = field.path;
-                                    lookup_in_entry.value = field.value;
-                                    lookup_in_entry.exists = field.exists;
-                                    lookup_in_entry.original_index = field.original_index;
-                                    lookup_in_entry.ec = field.ec;
-                                    entries.emplace_back(lookup_in_entry);
-                                }
-                                ctx->result_.emplace_back(resp.cas, entries, resp.deleted, false /* active */);
-                            }
-                            if (ctx->expected_responses_ == 0) {
-                                ctx->done_ = true;
-                                std::swap(local_handler, ctx->handler_);
-                            }
-                        }
-                        if (local_handler) {
-                            if (!ctx->result_.empty()) {
-                                resp.ctx.override_ec({});
-                            }
-                            return local_handler(core::impl::make_error(std::move(resp.ctx)), std::move(ctx->result_));
-                        }
-                    });
-                });
+              return handler(core::impl::make_error(std::move(resp.ctx)), result);
           });
-    };
+    }
 
     void lookup_in_any_replica(std::string document_key,
                                const std::vector<core::impl::subdoc::command>& specs,
                                const lookup_in_any_replica_options::built& options,
                                lookup_in_any_replica_handler&& handler) const
     {
-        auto request = std::make_shared<couchbase::core::impl::lookup_in_any_replica_request>(
-          bucket_name_, scope_name_, name_, std::move(document_key), specs, options.timeout);
-        core_.open_bucket(
-          bucket_name_,
-          [core = core_, bucket_name = bucket_name_, r = std::move(request), h = std::move(handler)](std::error_code ec) mutable {
-              if (ec) {
-                  h(core::impl::make_error(
-                      core::make_subdocument_error_context(make_key_value_error_context(ec, r->id()), ec, {}, {}, false)),
-                    lookup_in_replica_result{});
-                  return;
+        return core_.execute(
+          core::operations::lookup_in_any_replica_request{
+            core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
+            specs,
+            options.timeout,
+            {},
+            options.read_preference,
+          },
+          [handler = std::move(handler)](auto resp) mutable {
+              std::vector<lookup_in_result::entry> entries;
+              for (auto& field : resp.fields) {
+                  entries.emplace_back(lookup_in_result::entry{
+                    std::move(field.path),
+                    std::move(field.value),
+                    field.original_index,
+                    field.exists,
+                    field.ec,
+                  });
               }
-
-              return core.with_bucket_configuration(
-                bucket_name,
-                [core = core, r = std::move(r), h = std::move(h)](std::error_code ec, const core::topology::configuration& config) mutable {
-                    if (!config.capabilities.supports_subdoc_read_replica()) {
-                        ec = errc::common::feature_not_available;
-                    }
-                    if (ec) {
-                        return h(core::impl::make_error(
-                                   core::make_subdocument_error_context(make_key_value_error_context(ec, r->id()), ec, {}, {}, false)),
-                                 lookup_in_replica_result{});
-                    }
-                    struct replica_context {
-                        replica_context(core::impl::movable_lookup_in_any_replica_handler handler, std::uint32_t expected_responses)
-                          : handler_(std::move(handler))
-                          , expected_responses_(expected_responses)
-                        {
-                        }
-
-                        core::impl::movable_lookup_in_any_replica_handler handler_;
-                        std::uint32_t expected_responses_;
-                        bool done_{ false };
-                        std::mutex mutex_{};
-                    };
-                    auto ctx = std::make_shared<replica_context>(std::move(h), config.num_replicas.value_or(0U) + 1U);
-
-                    for (std::size_t idx = 1U; idx <= config.num_replicas.value_or(0U); ++idx) {
-                        core::document_id replica_id{ r->id() };
-                        replica_id.node_index(idx);
-                        core.execute(core::impl::lookup_in_replica_request{ std::move(replica_id), r->specs(), r->timeout() },
-                                     [ctx](core::impl::lookup_in_replica_response&& resp) {
-                                         core::impl::movable_lookup_in_any_replica_handler local_handler;
-                                         {
-                                             const std::scoped_lock lock(ctx->mutex_);
-                                             if (ctx->done_) {
-                                                 return;
-                                             }
-                                             --ctx->expected_responses_;
-                                             if (resp.ctx.ec()) {
-                                                 if (ctx->expected_responses_ > 0) {
-                                                     // just ignore the response
-                                                     return;
-                                                 }
-                                                 // consider document irretrievable and give up
-                                                 resp.ctx.override_ec(errc::key_value::document_irretrievable);
-                                             }
-                                             ctx->done_ = true;
-                                             std::swap(local_handler, ctx->handler_);
-                                         }
-                                         if (local_handler) {
-                                             std::vector<lookup_in_replica_result::entry> entries;
-                                             for (const auto& field : resp.fields) {
-                                                 lookup_in_replica_result::entry entry{};
-                                                 entry.path = field.path;
-                                                 entry.original_index = field.original_index;
-                                                 entry.exists = field.exists;
-                                                 entry.value = field.value;
-                                                 entry.ec = field.ec;
-                                                 entries.emplace_back(entry);
-                                             }
-                                             return local_handler(
-                                               core::impl::make_error(std::move(resp.ctx)),
-                                               lookup_in_replica_result{ resp.cas, entries, resp.deleted, true /* replica */ });
-                                         }
-                                     });
-                    }
-
-                    core::operations::lookup_in_request active{ core::document_id{ r->id() } };
-                    active.specs = r->specs();
-                    active.timeout = r->timeout();
-                    core.execute(active, [ctx](core::operations::lookup_in_response&& resp) {
-                        core::impl::movable_lookup_in_any_replica_handler local_handler{};
-                        {
-                            const std::scoped_lock lock(ctx->mutex_);
-                            if (ctx->done_) {
-                                return;
-                            }
-                            --ctx->expected_responses_;
-                            if (resp.ctx.ec()) {
-                                if (ctx->expected_responses_ > 0) {
-                                    // just ignore the response
-                                    return;
-                                }
-                                // consider document irretrievable and give up
-                                resp.ctx.override_ec(errc::key_value::document_irretrievable);
-                            }
-                            ctx->done_ = true;
-                            std::swap(local_handler, ctx->handler_);
-                        }
-                        if (local_handler) {
-                            std::vector<lookup_in_replica_result::entry> entries;
-                            for (const auto& field : resp.fields) {
-                                lookup_in_replica_result::entry entry{};
-                                entry.path = field.path;
-                                entry.original_index = field.original_index;
-                                entry.exists = field.exists;
-                                entry.value = field.value;
-                                entry.ec = field.ec;
-                                entries.emplace_back(entry);
-                            }
-                            return local_handler(core::impl::make_error(std::move(resp.ctx)),
-                                                 lookup_in_replica_result{ resp.cas, entries, resp.deleted, false /* active */ });
-                        }
-                    });
-                });
+              entries.reserve(resp.fields.size());
+              return handler(core::impl::make_error(std::move(resp.ctx)),
+                             lookup_in_replica_result{ resp.cas, std::move(entries), resp.deleted, resp.is_replica });
           });
-    };
+    }
 
     void mutate_in(std::string document_key,
                    const std::vector<core::impl::subdoc::command>& specs,

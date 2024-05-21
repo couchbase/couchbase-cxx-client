@@ -19,6 +19,8 @@
 
 #include <string>
 
+#include <tao/json.hpp>
+#include <tao/json/contrib/traits.hpp>
 #include <tao/json/value.hpp>
 
 namespace couchbase

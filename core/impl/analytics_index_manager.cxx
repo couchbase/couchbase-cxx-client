@@ -512,8 +512,8 @@ analytics_index_manager::create_dataverse(std::string dataverse_name,
 }
 
 auto
-analytics_index_manager::create_dataverse(std::string dataverse_name, const create_dataverse_analytics_options& options) const
-  -> std::future<error>
+analytics_index_manager::create_dataverse(std::string dataverse_name,
+                                          const create_dataverse_analytics_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
@@ -532,8 +532,8 @@ analytics_index_manager::drop_dataverse(std::string dataverse_name,
 }
 
 auto
-analytics_index_manager::drop_dataverse(std::string dataverse_name, const drop_dataverse_analytics_options& options) const
-  -> std::future<error>
+analytics_index_manager::drop_dataverse(std::string dataverse_name,
+                                        const drop_dataverse_analytics_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
@@ -637,8 +637,9 @@ analytics_index_manager::drop_index(std::string index_name,
 }
 
 auto
-analytics_index_manager::drop_index(std::string index_name, std::string dataset_name, const drop_index_analytics_options& options) const
-  -> std::future<error>
+analytics_index_manager::drop_index(std::string index_name,
+                                    std::string dataset_name,
+                                    const drop_index_analytics_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
@@ -713,8 +714,7 @@ auto
 analytics_index_manager::get_pending_mutations(const get_pending_mutations_analytics_options& options) const
   -> std::future<std::pair<error, std::map<std::string, std::map<std::string, std::int64_t>>>>
 {
-    auto barrier =
-      std::make_shared<std::promise<std::pair<error, std::map<std::string, std::map<std::string, std::int64_t>>>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, std::map<std::string, std::map<std::string, std::int64_t>>>>>();
     auto future = barrier->get_future();
     get_pending_mutations(options, [barrier](auto err, auto resp) mutable {
         barrier->set_value({ std::move(err), std::move(resp) });
@@ -731,8 +731,8 @@ analytics_index_manager::create_link(const management::analytics_link& link,
 }
 
 auto
-analytics_index_manager::create_link(const management::analytics_link& link, const create_link_analytics_options& options) const
-  -> std::future<error>
+analytics_index_manager::create_link(const management::analytics_link& link,
+                                     const create_link_analytics_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
@@ -751,8 +751,8 @@ analytics_index_manager::replace_link(const management::analytics_link& link,
 }
 
 auto
-analytics_index_manager::replace_link(const management::analytics_link& link, const replace_link_analytics_options& options) const
-  -> std::future<error>
+analytics_index_manager::replace_link(const management::analytics_link& link,
+                                      const replace_link_analytics_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();
@@ -772,8 +772,9 @@ analytics_index_manager::drop_link(std::string link_name,
 }
 
 auto
-analytics_index_manager::drop_link(std::string link_name, std::string dataverse_name, const drop_link_analytics_options& options) const
-  -> std::future<error>
+analytics_index_manager::drop_link(std::string link_name,
+                                   std::string dataverse_name,
+                                   const drop_link_analytics_options& options) const -> std::future<error>
 {
     auto barrier = std::make_shared<std::promise<error>>();
     auto future = barrier->get_future();

@@ -78,8 +78,31 @@ class network_options
         return *this;
     }
 
+    /**
+     * Select server group to use for replica APIs.
+     *
+     * For some use-cases it might be necessary to restrict list of the nodes,
+     * that are used in replica read APIs to single server group to optimize
+     * network costs.
+     *
+     * @see read_preference
+     *
+     * @see collection::get_all_replicas
+     * @see collection::get_any_replica
+     * @see collection::lookup_in_all_replicas
+     * @see collection::lookup_in_any_replica
+     *
+     * @see https://docs.couchbase.com/server/current/manage/manage-groups/manage-groups.html
+     */
+    auto preferred_server_group(std::string server_group) -> network_options&
+    {
+        server_group_ = std::move(server_group);
+        return *this;
+    }
+
     struct built {
         std::string network;
+        std::string server_group;
         bool enable_tcp_keep_alive;
         couchbase::ip_protocol ip_protocol;
         std::chrono::milliseconds tcp_keep_alive_interval;
@@ -92,6 +115,7 @@ class network_options
     {
         return {
             network_,
+            server_group_,
             enable_tcp_keep_alive_,
             ip_protocol_,
             tcp_keep_alive_interval_,
@@ -103,6 +127,7 @@ class network_options
 
   private:
     std::string network_{ "auto" };
+    std::string server_group_{};
     bool enable_tcp_keep_alive_{ true };
     ip_protocol ip_protocol_{ ip_protocol::any };
     std::chrono::milliseconds tcp_keep_alive_interval_{ default_tcp_keep_alive_interval };

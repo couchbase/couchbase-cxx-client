@@ -35,4 +35,11 @@ struct supports_parent_span : public std::false_type {
 template<typename T>
 inline constexpr bool supports_parent_span_v = supports_parent_span<T>::value;
 
+template<typename T>
+struct supports_readonly : public std::false_type {
+};
+
+template<typename T>
+inline constexpr bool supports_readonly_v = supports_readonly<T>::value;
+
 } // namespace couchbase::core::io::http_traits

@@ -91,7 +91,7 @@ TEST_CASE("transactions: can't get from unopened bucket", "[transactions]")
     test::utils::integration_test_guard integration;
 
     auto txn = integration.transactions();
-    couchbase::core::document_id bad_id{ "secBucket", "_default", "default", test::utils::uniq_id("txns") };
+    couchbase::core::document_id bad_id{ integration.ctx.other_bucket, "_default", "default", test::utils::uniq_id("txns") };
     auto cb_called = std::make_shared<std::atomic<bool>>(false);
     auto barrier = std::make_shared<std::promise<void>>();
     auto f = barrier->get_future();
@@ -441,6 +441,10 @@ TEST_CASE("transactions: async query", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -481,6 +485,10 @@ TEST_CASE("transactions: async query", "[transactions]")
 TEST_CASE("transactions: multiple racing queries", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
 
     auto txn = integration.transactions();
 
@@ -534,6 +542,10 @@ TEST_CASE("transactions: rollback async query", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -576,8 +588,11 @@ TEST_CASE("transactions: rollback async query", "[transactions]")
 
 TEST_CASE("transactions: async KV get", "[transactions]")
 {
-
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
 
     auto txn = integration.transactions();
 
@@ -626,6 +641,10 @@ TEST_CASE("transactions: rollback async KV get", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -673,6 +692,10 @@ TEST_CASE("transactions: async KV insert", "[transactions]")
 {
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -709,6 +732,10 @@ TEST_CASE("transactions: async KV insert", "[transactions]")
 TEST_CASE("transactions: rollback async KV insert", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
 
     auto txn = integration.transactions();
 
@@ -747,6 +774,10 @@ TEST_CASE("transactions: rollback async KV insert", "[transactions]")
 TEST_CASE("transactions: async KV replace", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
 
     auto txn = integration.transactions();
 
@@ -805,6 +836,10 @@ TEST_CASE("transactions: async KV replace", "[transactions]")
 TEST_CASE("transactions: rollback async KV replace", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
 
     auto txn = integration.transactions();
 
@@ -865,6 +900,10 @@ TEST_CASE("transactions: async KV remove", "[transactions]")
 
     test::utils::integration_test_guard integration;
 
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
+
     auto txn = integration.transactions();
 
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -917,6 +956,10 @@ TEST_CASE("transactions: async KV remove", "[transactions]")
 TEST_CASE("transactions: rollback async KV remove", "[transactions]")
 {
     test::utils::integration_test_guard integration;
+
+    if (!integration.cluster_version().supports_queries_in_transactions()) {
+        SKIP("the server does not support queries inside transactions");
+    }
 
     auto txn = integration.transactions();
 

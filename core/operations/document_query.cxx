@@ -400,14 +400,15 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
                             response.ctx.ec = errc::query::index_failure;
                         } else if (response.ctx.first_error_code >= 4000 && response.ctx.first_error_code < 5000) {
                             response.ctx.ec = errc::query::planning_failure;
-                        } else {
-                            auto common_ec =
-                              management::extract_common_query_error_code(response.ctx.first_error_code, response.ctx.first_error_message);
-                            if (common_ec) {
-                                response.ctx.ec = common_ec.value();
-                            }
                         }
                         break;
+                }
+                if (!response.ctx.ec) {
+                    auto common_ec =
+                      management::extract_common_query_error_code(response.ctx.first_error_code, response.ctx.first_error_message);
+                    if (common_ec) {
+                        response.ctx.ec = common_ec.value();
+                    }
                 }
             }
             if (!response.ctx.ec) {

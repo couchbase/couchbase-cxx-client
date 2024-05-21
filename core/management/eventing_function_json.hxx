@@ -175,6 +175,9 @@ struct traits<couchbase::core::management::eventing::function> {
                 } else if (language_compatibility_string == "6.6.2") {
                     result.settings.language_compatibility =
                       couchbase::core::management::eventing::function_language_compatibility::version_6_6_2;
+                } else if (language_compatibility_string == "7.2.0") {
+                    result.settings.language_compatibility =
+                      couchbase::core::management::eventing::function_language_compatibility::version_7_2_0;
                 }
             }
 

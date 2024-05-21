@@ -531,9 +531,9 @@ TEST_CASE("integration: public API analytics scope query")
     CHECK(test::utils::wait_until(
       [&]() {
           auto [error, resp] = cluster
-                               .analytics_query(fmt::format(
-                                 "ALTER COLLECTION `{}`.`{}`.`{}` ENABLE ANALYTICS", integration.ctx.bucket, scope_name, collection_name))
-                               .get();
+                                 .analytics_query(fmt::format(
+                                   "ALTER COLLECTION `{}`.`{}`.`{}` ENABLE ANALYTICS", integration.ctx.bucket, scope_name, collection_name))
+                                 .get();
           return !error;
       },
       std::chrono::minutes{ 5 }));

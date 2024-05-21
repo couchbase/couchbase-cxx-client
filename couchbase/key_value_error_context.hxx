@@ -83,7 +83,7 @@ class key_value_error_context : public base_error_context
                             std::optional<key_value_error_map_info> error_map_info,
                             std::optional<key_value_extended_error_info> extended_error_info)
       : base_error_context{ std::move(operation_id), ec, std::move(last_dispatched_to), std::move(last_dispatched_from), retry_attempts,
-                       std::move(retry_reasons) }
+                            std::move(retry_reasons) }
       , id_{ std::move(id) }
       , bucket_{ std::move(bucket) }
       , scope_{ std::move(scope) }
