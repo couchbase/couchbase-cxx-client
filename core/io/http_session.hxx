@@ -245,6 +245,14 @@ class http_session : public std::enable_shared_from_this<http_session>
         on_stop_handler_ = std::move(handler);
     }
 
+    void cancel_current_response(std::error_code ec)
+    {
+        std::scoped_lock lock(current_response_mutex_);
+        if (auto ctx = std::move(current_response_); ctx.handler) {
+            ctx.handler(ec, std::move(ctx.parser.response));
+        }
+    }
+
     void stop()
     {
         if (stopped_) {
@@ -252,17 +260,12 @@ class http_session : public std::enable_shared_from_this<http_session>
         }
         stopped_ = true;
         state_ = diag::endpoint_state::disconnecting;
-        stream_->close([](std::error_code) {});
+        stream_->close([](std::error_code) {
+        });
         deadline_timer_.cancel();
         idle_timer_.cancel();
 
-        {
-            std::scoped_lock lock(current_response_mutex_);
-            auto ctx = std::move(current_response_);
-            if (ctx.handler) {
-                ctx.handler(errc::common::ambiguous_timeout, {});
-            }
-        }
+        cancel_current_response(errc::common::request_canceled);
 
         if (auto handler = std::move(on_stop_handler_); handler) {
             handler();
@@ -441,7 +444,9 @@ class http_session : public std::enable_shared_from_this<http_session>
             return;
         }
         if (deadline_timer_.expiry() <= asio::steady_timer::clock_type::now()) {
-            stream_->close([](std::error_code) {});
+            cancel_current_response(couchbase::errc::common::ambiguous_timeout);
+            stream_->close([](std::error_code) {
+            });
             deadline_timer_.cancel();
             return;
         }
@@ -484,6 +489,7 @@ class http_session : public std::enable_shared_from_this<http_session>
                   res = self->current_response_.parser.feed(reinterpret_cast<const char*>(self->input_buffer_.data()), bytes_transferred);
               }
               if (res.failure) {
+                  CB_LOG_ERROR("{} Parsing error while reading from the socket: {}", self->info_.log_prefix(), res.error);
                   return self->stop();
               }
               if (res.complete) {
