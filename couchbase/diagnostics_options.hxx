@@ -71,5 +71,5 @@ struct diagnostics_options : public common_options<diagnostics_options> {
     std::optional<std::string> report_id_{};
 };
 
-using diagnostics_handler = std::function<void(diagnostics_result)>;
+using diagnostics_handler = std::function<void(error, diagnostics_result)>;
 } // namespace couchbase

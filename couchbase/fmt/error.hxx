@@ -39,8 +39,14 @@ struct fmt::formatter<couchbase::error> {
     auto format(const couchbase::error& err, FormatContext& ctx) const
     {
         if (err.message().empty()) {
-            return format_to(ctx.out(), "{} | {}", err.ec().message(), err.ctx().to_json());
+            if (err.ctx()) {
+                return format_to(ctx.out(), "{} | {}", err.ec().message(), err.ctx().to_json());
+            }
+            return format_to(ctx.out(), "{}", err.ec().message());
         }
-        return format_to(ctx.out(), "{} - {} | {}", err.ec().message(), err.message(), err.ctx().to_json());
+        if (err.ctx()) {
+            return format_to(ctx.out(), "{} - {} | {}", err.ec().message(), err.message(), err.ctx().to_json());
+        }
+        return format_to(ctx.out(), "{} - {}", err.ec().message(), err.message());
     }
 };

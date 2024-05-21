@@ -37,6 +37,8 @@ class error_context
     explicit error_context(internal_error_context internal);
     error_context(internal_error_context internal, internal_error_context internal_metadata);
 
+    explicit operator bool() const;
+
     [[nodiscard]] auto to_json(error_context_json_format format = error_context_json_format::compact) const -> std::string;
 
     template<typename T>

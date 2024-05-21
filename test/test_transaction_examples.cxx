@@ -19,6 +19,7 @@
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/fmt/cas.hxx>
+#include <couchbase/fmt/error.hxx>
 #include <couchbase/transactions/attempt_context.hxx>
 
 #include <tao/json.hpp>
@@ -59,9 +60,9 @@ main(int argc, const char* argv[])
     options.apply_profile("wan_development");
 
     // [1] connect to cluster using the given connection string and the options
-    auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
-    if (ec) {
-        fmt::print("unable to connect to the cluster: {}\n", ec.message());
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+    if (connect_err) {
+        fmt::print("unable to connect to the cluster: {}\n", connect_err);
         return 1;
     }
 

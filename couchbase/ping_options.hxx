@@ -89,5 +89,5 @@ struct ping_options : public common_options<ping_options> {
     std::set<service_type> service_types_{};
 };
 
-using ping_handler = std::function<void(ping_result)>;
+using ping_handler = std::function<void(error, ping_result)>;
 } // namespace couchbase

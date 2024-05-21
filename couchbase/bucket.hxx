@@ -101,7 +101,7 @@ class bucket
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto ping(const ping_options& options = {}) const -> std::future<ping_result>;
+    [[nodiscard]] auto ping(const ping_options& options = {}) const -> std::future<std::pair<error, ping_result>>;
 
     /**
      * Provides access to the collection management services.

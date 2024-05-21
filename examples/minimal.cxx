@@ -18,6 +18,7 @@
 #include "core/logger/logger.hxx"
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/fmt/error.hxx>
 
 #include <asio.hpp>
 
@@ -43,9 +44,9 @@ main()
 
     auto options = couchbase::cluster_options(username, password);
     options.apply_profile("wan_development");
-    auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
-    if (ec) {
-        std::cout << "Unable to connect to the cluster. ec: " << ec.message() << "\n";
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+    if (connect_err) {
+        std::cout << "Unable to connect to the cluster. ec: " << fmt::format("{}", connect_err) << "\n";
     } else {
         auto collection = cluster.bucket(bucket_name).scope(scope_name).collection(collection_name);
 
