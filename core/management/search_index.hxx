@@ -33,6 +33,7 @@ struct index {
     std::string source_params_json;
 
     std::string plan_params_json;
-};
 
+    [[nodiscard]] auto is_vector_index() const -> bool;
+};
 } // namespace couchbase::core::management::search
