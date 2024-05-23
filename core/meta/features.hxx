@@ -137,3 +137,8 @@
  * couchbase::collection::scan()
  */
 #define COUCHBASE_CXX_CLIENT_HAS_PUBLIC_RANGE_SCAN 1
+
+/**
+ * Public API operations return couchbase::error
+ */
+#define COUCHBASE_CXX_CLIENT_USES_COUCHBASE_ERROR
