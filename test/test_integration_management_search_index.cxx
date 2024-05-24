@@ -321,30 +321,30 @@ TEST_CASE("integration: search index management public API", "[integration]")
             index.name = index_name;
             index.source_name = integration.ctx.bucket;
 
-            auto ctx = c.search_indexes().upsert_index(index).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto err = c.search_indexes().upsert_index(index).get();
+            REQUIRE_SUCCESS(err.ec());
         }
         {
             couchbase::management::search::index index;
             index.name = index_name;
             index.source_name = integration.ctx.bucket;
 
-            auto ctx = c.search_indexes().upsert_index(index).get();
-            REQUIRE(ctx.ec() == couchbase::errc::common::index_exists);
+            auto err = c.search_indexes().upsert_index(index).get();
+            REQUIRE(err.ec() == couchbase::errc::common::index_exists);
         }
         {
-            auto [ctx, index] = c.search_indexes().get_index(index_name).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto [err, index] = c.search_indexes().get_index(index_name).get();
+            REQUIRE_SUCCESS(err.ec());
             REQUIRE(index.name == index_name);
             REQUIRE(index.type == "fulltext-index");
         }
         {
-            auto [ctx, index] = c.search_indexes().get_index("missing-index").get();
-            REQUIRE(ctx.ec() == couchbase::errc::common::index_not_found);
+            auto [err, index] = c.search_indexes().get_index("missing-index").get();
+            REQUIRE(err.ec() == couchbase::errc::common::index_not_found);
         }
         {
-            auto [ctx, indexes] = c.search_indexes().get_all_indexes().get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto [err, indexes] = c.search_indexes().get_all_indexes().get();
+            REQUIRE_SUCCESS(err.ec());
             REQUIRE_FALSE(indexes.empty());
             REQUIRE(1 == std::count_if(indexes.begin(), indexes.end(), [&index_name](const auto& i) {
                         return i.name == index_name;
@@ -357,44 +357,44 @@ TEST_CASE("integration: search index management public API", "[integration]")
         index.name = index_name;
         index.source_name = integration.ctx.bucket;
 
-        auto upsert_ctx = c.search_indexes().upsert_index(index).get();
-        REQUIRE_SUCCESS(upsert_ctx.ec());
+        auto upsert_err = c.search_indexes().upsert_index(index).get();
+        REQUIRE_SUCCESS(upsert_err.ec());
         SECTION("ingest control")
         {
             {
-                auto ctx = c.search_indexes().pause_ingest(index_name).get();
-                REQUIRE_SUCCESS(ctx.ec());
+                auto err = c.search_indexes().pause_ingest(index_name).get();
+                REQUIRE_SUCCESS(err.ec());
             }
             {
-                auto ctx = c.search_indexes().resume_ingest(index_name).get();
-                REQUIRE_SUCCESS(ctx.ec());
+                auto err = c.search_indexes().resume_ingest(index_name).get();
+                REQUIRE_SUCCESS(err.ec());
             }
         }
         SECTION("query control")
         {
             {
-                auto ctx = c.search_indexes().allow_querying(index_name).get();
-                REQUIRE_SUCCESS(ctx.ec());
+                auto err = c.search_indexes().allow_querying(index_name).get();
+                REQUIRE_SUCCESS(err.ec());
             }
             {
-                auto ctx = c.search_indexes().disallow_querying(index_name).get();
-                REQUIRE_SUCCESS(ctx.ec());
+                auto err = c.search_indexes().disallow_querying(index_name).get();
+                REQUIRE_SUCCESS(err.ec());
             }
         }
         SECTION("partition control")
         {
             {
-                auto ctx = c.search_indexes().freeze_plan(index_name).get();
-                REQUIRE_SUCCESS(ctx.ec());
+                auto err = c.search_indexes().freeze_plan(index_name).get();
+                REQUIRE_SUCCESS(err.ec());
             }
             {
-                auto ctx = c.search_indexes().unfreeze_plan(index_name).get();
-                REQUIRE_SUCCESS(ctx.ec());
+                auto err = c.search_indexes().unfreeze_plan(index_name).get();
+                REQUIRE_SUCCESS(err.ec());
             }
         }
     }
-    auto ctx = c.search_indexes().drop_index(index_name).get();
-    REQUIRE_SUCCESS(ctx.ec());
+    auto err = c.search_indexes().drop_index(index_name).get();
+    REQUIRE_SUCCESS(err.ec());
 }
 
 TEST_CASE("integration: search index management analyze document", "[integration]")
@@ -465,14 +465,14 @@ TEST_CASE("integration: search index management analyze document public API", "[
             couchbase::management::search::index index;
             index.name = index_name;
             index.source_name = integration.ctx.bucket;
-            auto ctx = c.search_indexes().upsert_index(index).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto err = c.search_indexes().upsert_index(index).get();
+            REQUIRE_SUCCESS(err.ec());
         }
         REQUIRE(test::utils::wait_for_search_pindexes_ready(integration.cluster, integration.ctx.bucket, index_name));
 
-        couchbase::manager_error_context ctx;
+        couchbase::error err;
         std::string analysis;
-        std::pair<couchbase::manager_error_context, std::vector<std::string>> result;
+        std::pair<couchbase::error, std::vector<std::string>> result;
         bool operation_completed = test::utils::wait_until([&c, &index_name, &result]() {
             tao::json::value basic_doc = {
                 { "name", "hello world" },
@@ -484,8 +484,8 @@ TEST_CASE("integration: search index management analyze document public API", "[
         REQUIRE_SUCCESS(result.first.ec());
         REQUIRE_FALSE(result.second.empty());
 
-        auto drop_ctx = c.search_indexes().drop_index(index_name).get();
-        REQUIRE_SUCCESS(drop_ctx.ec());
+        auto drop_err = c.search_indexes().drop_index(index_name).get();
+        REQUIRE_SUCCESS(drop_err.ec());
     }
 }
 
@@ -512,30 +512,30 @@ TEST_CASE("integration: scope search index management public API", "[integration
             index.name = index_name;
             index.source_name = integration.ctx.bucket;
 
-            auto ctx = manager.upsert_index(index).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto err = manager.upsert_index(index).get();
+            REQUIRE_SUCCESS(err.ec());
         }
         {
             couchbase::management::search::index index;
             index.name = index_name;
             index.source_name = integration.ctx.bucket;
 
-            auto ctx = manager.upsert_index(index).get();
-            REQUIRE(ctx.ec() == couchbase::errc::common::index_exists);
+            auto err = manager.upsert_index(index).get();
+            REQUIRE(err.ec() == couchbase::errc::common::index_exists);
         }
         {
-            auto [ctx, index] = manager.get_index(index_name).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto [err, index] = manager.get_index(index_name).get();
+            REQUIRE_SUCCESS(err.ec());
             REQUIRE(index.name == index_name);
             REQUIRE(index.type == "fulltext-index");
         }
         {
-            auto [ctx, index] = manager.get_index("missing-index").get();
-            REQUIRE(ctx.ec() == couchbase::errc::common::index_not_found);
+            auto [err, index] = manager.get_index("missing-index").get();
+            REQUIRE(err.ec() == couchbase::errc::common::index_not_found);
         }
         {
-            auto [ctx, indexes] = manager.get_all_indexes().get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto [err, indexes] = manager.get_all_indexes().get();
+            REQUIRE_SUCCESS(err.ec());
             REQUIRE_FALSE(indexes.empty());
             REQUIRE(1 == std::count_if(indexes.begin(), indexes.end(), [&index_name](const auto& i) {
                         return i.name == index_name;
@@ -549,44 +549,44 @@ TEST_CASE("integration: scope search index management public API", "[integration
         index.name = index_name;
         index.source_name = integration.ctx.bucket;
 
-        auto upsert_ctx = manager.upsert_index(index).get();
-        REQUIRE_SUCCESS(upsert_ctx.ec());
+        auto upsert_err = manager.upsert_index(index).get();
+        REQUIRE_SUCCESS(upsert_err.ec());
         SECTION("ingest control")
         {
             {
-                auto ctx = manager.pause_ingest(index_name).get();
-                REQUIRE_SUCCESS(ctx.ec());
+                auto err = manager.pause_ingest(index_name).get();
+                REQUIRE_SUCCESS(err.ec());
             }
             {
-                auto ctx = manager.resume_ingest(index_name).get();
-                REQUIRE_SUCCESS(ctx.ec());
+                auto err = manager.resume_ingest(index_name).get();
+                REQUIRE_SUCCESS(err.ec());
             }
         }
         SECTION("query control")
         {
             {
-                auto ctx = manager.allow_querying(index_name).get();
-                REQUIRE_SUCCESS(ctx.ec());
+                auto err = manager.allow_querying(index_name).get();
+                REQUIRE_SUCCESS(err.ec());
             }
             {
-                auto ctx = manager.disallow_querying(index_name).get();
-                REQUIRE_SUCCESS(ctx.ec());
+                auto err = manager.disallow_querying(index_name).get();
+                REQUIRE_SUCCESS(err.ec());
             }
         }
         SECTION("partition control")
         {
             {
-                auto ctx = manager.freeze_plan(index_name).get();
-                REQUIRE_SUCCESS(ctx.ec());
+                auto err = manager.freeze_plan(index_name).get();
+                REQUIRE_SUCCESS(err.ec());
             }
             {
-                auto ctx = manager.unfreeze_plan(index_name).get();
-                REQUIRE_SUCCESS(ctx.ec());
+                auto err = manager.unfreeze_plan(index_name).get();
+                REQUIRE_SUCCESS(err.ec());
             }
         }
     }
-    auto ctx = manager.drop_index(index_name).get();
-    REQUIRE_SUCCESS(ctx.ec());
+    auto err = manager.drop_index(index_name).get();
+    REQUIRE_SUCCESS(err.ec());
 }
 
 TEST_CASE("integration: scope search index management analyze document public API", "[integration]")
@@ -609,14 +609,14 @@ TEST_CASE("integration: scope search index management analyze document public AP
             couchbase::management::search::index index;
             index.name = index_name;
             index.source_name = integration.ctx.bucket;
-            auto ctx = manager.upsert_index(index).get();
-            REQUIRE_SUCCESS(ctx.ec());
+            auto err = manager.upsert_index(index).get();
+            REQUIRE_SUCCESS(err.ec());
         }
         REQUIRE(test::utils::wait_for_search_pindexes_ready(integration.cluster, integration.ctx.bucket, index_name));
 
-        couchbase::manager_error_context ctx;
+        couchbase::error err;
         std::string analysis;
-        std::pair<couchbase::manager_error_context, std::vector<std::string>> result;
+        std::pair<couchbase::error, std::vector<std::string>> result;
         bool operation_completed = test::utils::wait_until([&manager, &index_name, &result]() {
             tao::json::value basic_doc = {
                 { "name", "hello world" },
@@ -625,12 +625,12 @@ TEST_CASE("integration: scope search index management analyze document public AP
             return result.first.ec() != couchbase::errc::common::internal_server_failure;
         });
         REQUIRE(operation_completed);
-        INFO(result.first.content());
+        INFO(result.first.ctx().to_json());
         REQUIRE_SUCCESS(result.first.ec());
         REQUIRE_FALSE(result.second.empty());
 
-        auto drop_ctx = manager.drop_index(index_name).get();
-        REQUIRE_SUCCESS(drop_ctx.ec());
+        auto drop_err = manager.drop_index(index_name).get();
+        REQUIRE_SUCCESS(drop_err.ec());
     }
 }
 
@@ -648,8 +648,8 @@ TEST_CASE("integration: scope search returns feature not available", "[integrati
         couchbase::management::search::index index;
         index.name = index_name;
         index.source_name = integration.ctx.bucket;
-        auto ctx = manager.upsert_index(index).get();
-        REQUIRE(ctx.ec() == couchbase::errc::common::feature_not_available);
+        auto err = manager.upsert_index(index).get();
+        REQUIRE(err.ec() == couchbase::errc::common::feature_not_available);
     }
 }
 
