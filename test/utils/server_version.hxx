@@ -191,6 +191,11 @@ struct server_version {
         return (major == 7 && minor >= 6) || major > 7;
     }
 
+    [[nodiscard]] bool supports_vector_search() const
+    {
+        return (major == 7 && minor >= 6) || major > 7;
+    }
+
     [[nodiscard]] bool supports_scope_search_analyze() const
     {
         // Scoped endpoint for analyze_document added in 7.6.2 (MB-60643)
