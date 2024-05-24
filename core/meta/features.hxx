@@ -56,6 +56,16 @@
 #define COUCHBASE_CXX_CLIENT_CORE_HAS_SUBDOC_READ_REPLICA 1
 
 /**
+ * The library could be configured to use preferred server group for replica API
+ * couchbase::network_options::preferred_server_group()
+ * couchbase::get_all_replicas_options::read_preference()
+ * couchbase::get_any_replica_options::read_preference()
+ * couchbase::lookup_in_all_replicas_options::read_preference()
+ * couchbase::lookup_in_any_replica_options::read_preference()
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_ZONE_AWARE_REPLICA_READS 1
+
+/**
  * Collection management is accessible from the public API
  * couchbase::bucket::collections() support
  */

@@ -226,6 +226,7 @@ set(couchbase_cxx_client_FILES
     core/management/analytics_link_azure_blob_external.cxx
     core/management/analytics_link_couchbase_remote.cxx
     core/management/analytics_link_s3_external.cxx
+    core/management/search_index.cxx
     core/mcbp/big_endian.cxx
     core/mcbp/buffer_writer.cxx
     core/mcbp/codec.cxx

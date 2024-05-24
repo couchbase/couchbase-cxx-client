@@ -115,13 +115,13 @@ class ping_collector_impl
 };
 
 template<typename Request>
-constexpr bool
+bool
 is_feature_supported(const Request& /* request */, const configuration_capabilities& /* capabilities */)
 {
     return true;
 }
 
-constexpr bool
+bool
 is_feature_supported(const operations::search_request& request, const configuration_capabilities& capabilities)
 {
     if (request.scope_name && !capabilities.supports_scoped_search_indexes()) {
@@ -131,6 +131,15 @@ is_feature_supported(const operations::search_request& request, const configurat
         return false;
     }
 
+    return true;
+}
+
+bool
+is_feature_supported(const operations::management::search_index_upsert_request& request, const configuration_capabilities& capabilities)
+{
+    if (request.index.is_vector_index() && !capabilities.supports_vector_search()) {
+        return false;
+    }
     return true;
 }
 
