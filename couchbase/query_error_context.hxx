@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/error_context.hxx>
+#include <couchbase/base_error_context.hxx>
 
 #include <cstdint>
 #include <optional>
@@ -30,7 +30,7 @@ namespace couchbase
  * @since 1.0.0
  * @committed
  */
-class query_error_context : public error_context
+class query_error_context : public base_error_context
 {
   public:
     /**
@@ -57,7 +57,7 @@ class query_error_context : public error_context
                         std::string http_body,
                         std::string hostname,
                         std::uint16_t port)
-      : error_context{ {}, ec, std::move(last_dispatched_to), std::move(last_dispatched_from), retry_attempts, std::move(retry_reasons) }
+      : base_error_context{ {}, ec, std::move(last_dispatched_to), std::move(last_dispatched_from), retry_attempts, std::move(retry_reasons) }
       , first_error_code_{ first_error_code }
       , first_error_message_{ std::move(first_error_message) }
       , client_context_id_{ std::move(client_context_id) }

@@ -128,6 +128,8 @@ set(couchbase_cxx_client_FILES
     core/impl/disjunction_query.cxx
     core/impl/dns_srv_tracker.cxx
     core/impl/doc_id_query.cxx
+    core/impl/error_context.cxx
+    core/impl/error.cxx
     core/impl/expiry.cxx
     core/impl/fail_fast_retry_strategy.cxx
     core/impl/field_level_encryption_error_category.cxx
@@ -136,7 +138,6 @@ set(couchbase_cxx_client_FILES
     core/impl/geo_polygon_query.cxx
     core/impl/get_replica.cxx
     core/impl/internal_date_range_facet_result.cxx
-    core/impl/internal_manager_error_context.cxx
     core/impl/internal_numeric_range_facet_result.cxx
     core/impl/internal_search_error_context.cxx
     core/impl/internal_search_meta_data.cxx
@@ -148,7 +149,6 @@ set(couchbase_cxx_client_FILES
     core/impl/key_value_error_context.cxx
     core/impl/lookup_in_replica.cxx
     core/impl/management_error_category.cxx
-    core/impl/manager_error_context.cxx
     core/impl/match_all_query.cxx
     core/impl/match_none_query.cxx
     core/impl/match_phrase_query.cxx
@@ -216,7 +216,6 @@ set(couchbase_cxx_client_FILES
     core/impl/view_error_category.cxx
     core/impl/wildcard_query.cxx
     core/impl/scan_result.cxx
-    core/impl/internal_scan_result.hxx
     core/io/dns_client.cxx
     core/io/dns_config.cxx
     core/io/http_parser.cxx
@@ -407,7 +406,8 @@ set(couchbase_cxx_client_FILES
     core/utils/mutation_token.cxx
     core/utils/split_string.cxx
     core/utils/url_codec.cxx
-    core/view_query_options.cxx)
+    core/view_query_options.cxx
+)
 
 if(COUCHBASE_CXX_CLIENT_BUILD_SHARED)
   add_library(couchbase_cxx_client SHARED ${couchbase_cxx_client_FILES})

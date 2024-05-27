@@ -17,6 +17,7 @@
 
 #include <core/logger/logger.hxx>
 #include <couchbase/cluster.hxx>
+#include <couchbase/fmt/error.hxx>
 
 #include <asio/io_context.hpp>
 #include <spdlog/spdlog.h>
@@ -190,7 +191,8 @@ class GameServer
             }
         });
         if (err.ec()) {
-            std::cout << "txn error during player_hits_monster: " << err.ec().message() << ", " << err.cause().message() << std::endl;
+            std::cout << "txn error during player_hits_monster: " << err.ec().message() << ", "
+                      << (err.cause().has_value() ? err.cause().value().ec().message() : "") << std::endl;
         }
     }
 };
@@ -225,9 +227,9 @@ main()
     options.transactions().cleanup_config().cleanup_client_attempts(true);
     options.transactions().timeout(std::chrono::milliseconds(100));
 
-    auto [cluster, ec] = couchbase::cluster::connect(io, "couchbase://localhost", options).get();
-    if (ec) {
-        std::cout << "Error opening cluster: " << ec.message() << std::endl;
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, "couchbase://localhost", options).get();
+    if (connect_err) {
+        std::cout << "Error opening cluster: " << fmt::format("{}", connect_err) << std::endl;
         return -1;
     }
 
@@ -241,15 +243,15 @@ main()
 
     // upsert a player document
     {
-        auto [ctx, resp] = collection.upsert(player_id, player_data, {}).get();
-        if (!ctx.ec()) {
+        auto [err, resp] = collection.upsert(player_id, player_data, {}).get();
+        if (!err) {
             std::cout << "Upserted sample player document: " << player_id << "with cas:" << resp.cas().value() << std::endl;
         }
     }
     // upsert a monster document
     {
-        auto [ctx, resp] = collection.upsert(monster_id, monster_data, {}).get();
-        if (!ctx.ec()) {
+        auto [err, resp] = collection.upsert(monster_id, monster_data, {}).get();
+        if (!err) {
             std::cout << "Upserted sample monster document: " << monster_id << "with cas:" << resp.cas().value() << std::endl;
         }
     }

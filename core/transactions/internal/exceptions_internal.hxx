@@ -68,7 +68,12 @@ class retry_operation_retries_exhausted : public std::runtime_error
 external_exception
 external_exception_from_error_class(error_class ec);
 
-enum final_error { FAILED, EXPIRED, FAILED_POST_COMMIT, AMBIGUOUS };
+enum final_error {
+    FAILED,
+    EXPIRED,
+    FAILED_POST_COMMIT,
+    AMBIGUOUS
+};
 
 error_class
 error_class_from_result(const result& res);
@@ -151,8 +156,9 @@ class transaction_operation_failed : public std::runtime_error
         // just retain the first.
         assert(errors.size() > 0);
         // start with first error that isn't previous_operation_failed
-        auto error_to_throw = *(std::find_if(
-          errors.begin(), errors.end(), [](auto& err) { return err.cause() != external_exception::PREVIOUS_OPERATION_FAILED; }));
+        auto error_to_throw = *(std::find_if(errors.begin(), errors.end(), [](auto& err) {
+            return err.cause() != external_exception::PREVIOUS_OPERATION_FAILED;
+        }));
         for (auto& ex : errors) {
             if (ex.cause() == external_exception::PREVIOUS_OPERATION_FAILED) {
                 continue;
@@ -223,6 +229,11 @@ class transaction_operation_failed : public std::runtime_error
     bool should_retry() const
     {
         return retry_;
+    }
+
+    error_class ec() const
+    {
+        return ec_;
     }
 
     external_exception cause() const
@@ -398,6 +409,36 @@ struct fmt::formatter<couchbase::core::transactions::error_class> {
                 break;
             case couchbase::core::transactions::FAIL_EXPIRY:
                 name = "FAIL_EXPIRY";
+                break;
+        }
+        return format_to(ctx.out(), "{}", name);
+    }
+};
+
+template<>
+struct fmt::formatter<couchbase::core::transactions::final_error> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(couchbase::core::transactions::final_error to_raise, FormatContext& ctx) const
+    {
+        string_view name = "UNKNOWN FINAL ERROR";
+        switch (to_raise) {
+            case couchbase::core::transactions::FAILED:
+                name = "FAILED";
+                break;
+            case couchbase::core::transactions::EXPIRED:
+                name = "EXPIRED";
+                break;
+            case couchbase::core::transactions::FAILED_POST_COMMIT:
+                name = "FAILED_POST_COMMIT";
+                break;
+            case couchbase::core::transactions::AMBIGUOUS:
+                name = "AMBIGUOUS";
                 break;
         }
         return format_to(ctx.out(), "{}", name);

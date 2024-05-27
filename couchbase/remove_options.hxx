@@ -19,8 +19,8 @@
 
 #include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/common_durability_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/expiry.hxx>
-#include <couchbase/key_value_error_context.hxx>
 #include <couchbase/mutation_result.hxx>
 
 #include <chrono>
@@ -96,5 +96,5 @@ struct remove_options : public common_durability_options<remove_options> {
  * @since 1.0.0
  * @uncommitted
  */
-using remove_handler = std::function<void(couchbase::key_value_error_context, mutation_result)>;
+using remove_handler = std::function<void(error, mutation_result)>;
 } // namespace couchbase

@@ -37,5 +37,5 @@ struct drop_scope_options : public common_options<drop_scope_options> {
   private:
 };
 
-using drop_scope_handler = std::function<void(couchbase::manager_error_context)>;
+using drop_scope_handler = std::function<void(error)>;
 } // namespace couchbase

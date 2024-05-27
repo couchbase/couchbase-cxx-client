@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/error_context.hxx>
+#include <couchbase/base_error_context.hxx>
 #include <couchbase/transaction_op_error_context.hxx>
 
 namespace couchbase

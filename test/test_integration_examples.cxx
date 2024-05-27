@@ -26,6 +26,7 @@
 #include <couchbase/boolean_query.hxx>
 #include <couchbase/cluster.hxx>
 #include <couchbase/fmt/cas.hxx>
+#include <couchbase/fmt/error.hxx>
 #include <couchbase/fmt/mutation_token.hxx>
 #include <couchbase/match_query.hxx>
 #include <couchbase/numeric_range_query.hxx>
@@ -65,7 +66,9 @@ main(int argc, const char* argv[])
     // run IO context on separate thread
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
-    std::thread io_thread([&io]() { io.run(); });
+    std::thread io_thread([&io]() {
+        io.run();
+    });
 
     auto options = couchbase::cluster_options(username, password);
     // customize through the 'options'.
@@ -73,9 +76,9 @@ main(int argc, const char* argv[])
     options.apply_profile("wan_development");
 
     // [1] connect to cluster using the given connection string and the options
-    auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
-    if (ec) {
-        fmt::print("unable to connect to the cluster: {}\n", ec.message());
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+    if (connect_err) {
+        fmt::print("unable to connect to the cluster: {}\n", connect_err);
         return 1;
     }
 
@@ -87,29 +90,31 @@ main(int argc, const char* argv[])
     auto collection = scope.collection("users");
 
     { // [2] upsert document
-        auto [ctx, upsert_result] = collection.upsert("my-document", tao::json::value{ { "name", "mike" } }).get();
-        if (ctx.ec()) {
-            fmt::print("unable to upsert the document \"{}\": {}\n", ctx.id(), ctx.ec().message());
+        std::string doc_id = "my-document";
+        auto [err, upsert_result] = collection.upsert(doc_id, tao::json::value{ { "name", "mike" } }).get();
+        if (err.ec()) {
+            fmt::print("unable to upsert the document \"{}\": {}\n", doc_id, err);
             return 1;
         }
-        fmt::print("saved document \"{}\", cas={}, token={}\n", ctx.id(), upsert_result.cas(), upsert_result.mutation_token().value());
+        fmt::print("saved document \"{}\", cas={}, token={}\n", doc_id, upsert_result.cas(), upsert_result.mutation_token().value());
     }
 
     { // [3] get document
-        auto [ctx, get_result] = collection.get("my-document").get();
-        if (ctx.ec()) {
-            fmt::print("unable to get the document \"{}\": {}\n", ctx.id(), ctx.ec().message());
+        std::string doc_id = "my-document";
+        auto [err, get_result] = collection.get(doc_id).get();
+        if (err.ec()) {
+            fmt::print("unable to get the document \"{}\": {}\n", doc_id, err);
             return 1;
         }
         auto name = get_result.content_as<tao::json::value>()["name"].get_string();
-        fmt::print("retrieved document \"{}\", name=\"{}\"\n", ctx.id(), name);
+        fmt::print("retrieved document \"{}\", name=\"{}\"\n", doc_id, name);
     }
 
     { // [4] N1QL query
         auto inventory_scope = bucket.scope("inventory");
-        auto [ctx, query_result] = inventory_scope.query("SELECT * FROM airline WHERE id = 10").get();
-        if (ctx.ec()) {
-            fmt::print("unable to perform query: {}, ({}, {})\n", ctx.ec().message(), ctx.first_error_code(), ctx.first_error_message());
+        auto [error, query_result] = inventory_scope.query("SELECT * FROM airline WHERE id = 10").get();
+        if (error) {
+            fmt::print("unable to perform query: {}\n", error.ctx().to_json());
             return 1;
         }
         for (const auto& row : query_result.rows_as_json()) {
@@ -240,7 +245,9 @@ main(int argc, const char* argv[])
     // run IO context on separate thread
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
-    std::thread io_thread([&io]() { io.run(); });
+    std::thread io_thread([&io]() {
+        io.run();
+    });
 
     auto options = couchbase::cluster_options(username, password);
     // customize through the 'options'.
@@ -249,18 +256,19 @@ main(int argc, const char* argv[])
                                                                  std::make_shared<github_actions_configuration_profile>());
     options.apply_profile("github_actions");
 
-    auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
-    if (ec) {
-        fmt::print("unable to connect to the cluster: {}\n", ec.message());
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+    if (connect_err) {
+        fmt::print("unable to connect to the cluster: {}\n", connect_err);
         return 1;
     }
 
     {
         fmt::print("--- simple query\n");
-        auto [ctx, result] = cluster.search_query("travel-sample-index", couchbase::query_string_query("nice bar")).get();
+        auto [error, result] =
+          cluster.search("travel-sample-index", couchbase::search_request(couchbase::query_string_query("nice bar"))).get();
 
-        if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+        if (error.ec()) {
+            fmt::print("unable to perform search query: {}\n", error.ctx().to_json());
             return 1;
         }
         fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
@@ -271,14 +279,14 @@ main(int argc, const char* argv[])
 
     {
         fmt::print("--- simple query with fields\n");
-        auto [ctx, result] = cluster
-                               .search_query("travel-sample-index",
-                                             couchbase::query_string_query("nice bar"),
-                                             couchbase::search_options{}.fields({ "description" }))
-                               .get();
+        auto [error, result] = cluster
+                                 .search("travel-sample-index",
+                                         couchbase::search_request(couchbase::query_string_query("nice bar")),
+                                         couchbase::search_options{}.fields({ "description" }))
+                                 .get();
 
-        if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+        if (error) {
+            fmt::print("unable to perform search query: {}\n", error.ctx().to_json());
             return 1;
         }
         fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
@@ -290,13 +298,14 @@ main(int argc, const char* argv[])
 
     {
         fmt::print("--- simple query with limit\n");
-        auto [ctx, result] =
-          cluster
-            .search_query("travel-sample-index", couchbase::query_string_query("nice bar"), couchbase::search_options{}.skip(3).limit(4))
-            .get();
+        auto [error, result] = cluster
+                                 .search("travel-sample-index",
+                                         couchbase::search_request(couchbase::query_string_query("nice bar")),
+                                         couchbase::search_options{}.skip(3).limit(4))
+                                 .get();
 
-        if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+        if (error) {
+            fmt::print("unable to perform search query: {}\n", error.ctx().to_json());
             return 1;
         }
         fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
@@ -307,15 +316,15 @@ main(int argc, const char* argv[])
 
     {
         fmt::print("--- simple query with highlight\n");
-        auto [ctx, result] =
+        auto [error, result] =
           cluster
-            .search_query("travel-sample-index",
-                          couchbase::query_string_query("nice bar"),
-                          couchbase::search_options{}.highlight(couchbase::highlight_style::html, { "description", "title" }))
+            .search("travel-sample-index",
+                    couchbase::search_request(couchbase::query_string_query("nice bar")),
+                    couchbase::search_options{}.highlight(couchbase::highlight_style::html, { "description", "title" }))
             .get();
 
-        if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+        if (error) {
+            fmt::print("unable to perform search query: {}\n", error.ctx().to_json());
             return 1;
         }
         fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
@@ -332,14 +341,14 @@ main(int argc, const char* argv[])
 
     {
         fmt::print("--- simple query with collections\n");
-        auto [ctx, result] = cluster
-                               .search_query("travel-sample-index",
-                                             couchbase::query_string_query("west"),
-                                             couchbase::search_options{}.collections({ "airline" }))
-                               .get();
+        auto [error, result] = cluster
+                                 .search("travel-sample-index",
+                                         couchbase::search_request(couchbase::query_string_query("west")),
+                                         couchbase::search_options{}.collections({ "airline" }))
+                                 .get();
 
-        if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+        if (error) {
+            fmt::print("unable to perform search query: {}\n", error.ctx().to_json());
             return 1;
         }
         fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
@@ -357,10 +366,11 @@ main(int argc, const char* argv[])
         couchbase::mutation_state state;
 
         {
-            auto [ctx, upsert_result] =
+            std::string doc_id = "prancing-pony";
+            auto [err, upsert_result] =
               collection
                 .upsert(
-                  "prancing-pony",
+                  doc_id,
                   tao::json::value{
                     { "title", "The Prancing Pony" },
                     { "type", "hotel" },
@@ -370,31 +380,32 @@ main(int argc, const char* argv[])
                       "wings that ran back towards the elevated ground of the hill, such that in the rear the second floor was at ground "
                       "level. " } })
                 .get();
-            if (ctx.ec()) {
-                fmt::print("unable to upsert the document \"{}\": {}\n", ctx.id(), ctx.ec().message());
+            if (err.ec()) {
+                fmt::print("unable to upsert the document \"{}\": {}\n", doc_id, err);
                 return 1;
             }
             fmt::print("saved document \"{}\", cas={}, token={}\n",
-                       ctx.id(),
+                       doc_id,
                        upsert_result.cas(),
                        upsert_result.mutation_token().value_or(couchbase::mutation_token{}));
             state.add(upsert_result);
         }
 
         auto start = std::chrono::system_clock::now();
-        auto [ctx, result] =
-          cluster
-            .search_query("travel-sample-index", couchbase::query_string_query("bree"), couchbase::search_options{}.consistent_with(state))
-            .get();
+        auto [error, result] = cluster
+                                 .search("travel-sample-index",
+                                         couchbase::search_request(couchbase::query_string_query("bree")),
+                                         couchbase::search_options{}.consistent_with(state))
+                                 .get();
         auto stop = std::chrono::system_clock::now();
 
-        if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, time: {} or {}, status: {}, error: {}\n",
-                       ctx.ec().message(),
+        if (error) {
+            fmt::print("unable to perform search query: {} ({}), time: {} or {}, context: {}\n",
+                       error.ec().message(),
+                       error.message(),
                        std::chrono::duration_cast<std::chrono::milliseconds>(stop - start),
                        std::chrono::duration_cast<std::chrono::seconds>(stop - start),
-                       ctx.status(),
-                       ctx.error());
+                       error.ctx().to_json());
             return 1;
         }
         fmt::print("{} hits, total: {}, time: {} or {} (server reported {})\n",
@@ -410,16 +421,17 @@ main(int argc, const char* argv[])
 
     {
         fmt::print("--- complex query\n");
-        auto [ctx, result] = cluster
-                               .search_query("travel-sample-index",
-                                             couchbase::boolean_query()
-                                               .must(couchbase::match_query("honeymoon").field("reviews.content"),
-                                                     couchbase::numeric_range_query().field("reviews.ratings.Overall").min(4))
-                                               .must_not(couchbase::match_query("San Francisco").field("city")),
-                                             couchbase::search_options{}.collections({ "hotel" }).highlight())
-                               .get();
-        if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+        auto [error, result] =
+          cluster
+            .search("travel-sample-index",
+                    couchbase::search_request(couchbase::boolean_query()
+                                                .must(couchbase::match_query("honeymoon").field("reviews.content"),
+                                                      couchbase::numeric_range_query().field("reviews.ratings.Overall").min(4))
+                                                .must_not(couchbase::match_query("San Francisco").field("city"))),
+                    couchbase::search_options{}.collections({ "hotel" }).highlight())
+            .get();
+        if (error) {
+            fmt::print("unable to perform search query: {}\n", error.ctx().to_json());
             return 1;
         }
         fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
@@ -430,14 +442,14 @@ main(int argc, const char* argv[])
 
     {
         fmt::print("--- simple query with facets\n");
-        auto [ctx, result] =
+        auto [error, result] =
           cluster
-            .search_query("travel-sample-index",
-                          couchbase::query_string_query("honeymoon"),
-                          couchbase::search_options{}.collections({ "hotel" }).facet("by_country", couchbase::term_facet("country", 3)))
+            .search("travel-sample-index",
+                    couchbase::search_request(couchbase::query_string_query("honeymoon")),
+                    couchbase::search_options{}.collections({ "hotel" }).facet("by_country", couchbase::term_facet("country", 3)))
             .get();
-        if (ctx.ec()) {
-            fmt::print("unable to perform search query: {}, ({}, {})\n", ctx.ec().message(), ctx.status(), ctx.error());
+        if (error) {
+            fmt::print("unable to perform search query: {}\n", error.ctx().to_json());
             return 1;
         }
         fmt::print("{} hits, total: {}\n", result.rows().size(), result.meta_data().metrics().total_rows());
@@ -527,16 +539,18 @@ main(int argc, const char* argv[])
     // run IO context on separate thread
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
-    std::thread io_thread([&io]() { io.run(); });
+    std::thread io_thread([&io]() {
+        io.run();
+    });
 
     auto options = couchbase::cluster_options(username, password);
     // customize through the 'options'.
     // For example, optimize timeouts for WAN
     options.apply_profile("wan_development");
 
-    auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
-    if (ec) {
-        fmt::print("unable to connect to the cluster: {}\n", ec.message());
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+    if (connect_err) {
+        fmt::print("unable to connect to the cluster: {}\n", connect_err);
         return 1;
     }
     auto manager = cluster.buckets();
@@ -552,12 +566,12 @@ main(int argc, const char* argv[])
     bucket_settings.conflict_resolution_type = couchbase::management::cluster::bucket_conflict_resolution::sequence_number;
     {
         fmt::print("--- create bucket\n");
-        auto ctx = manager.create_bucket(bucket_settings).get();
-        if (ctx.ec()) {
-            if (ctx.ec() == couchbase::errc::common::invalid_argument) {
+        auto err = manager.create_bucket(bucket_settings).get();
+        if (err) {
+            if (err.ec() == couchbase::errc::common::invalid_argument) {
                 fmt::print("bucket already exists\n");
             } else {
-                fmt::print("unable to create the bucket: {}\n", ctx.ec().message());
+                fmt::print("unable to create the bucket: {}\n", err.ec().message());
                 return 1;
             }
         } else {
@@ -673,9 +687,9 @@ main(int argc, const char* argv[])
     auto options = couchbase::cluster_options(username, password);
     options.apply_profile("wan_development");
 
-    auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
-    if (ec) {
-        fmt::print("PARENT(pid={}): sunable to connect to the cluster: {}\n", getpid(), ec.message());
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+    if (connect_err) {
+        fmt::print("PARENT(pid={}): sunable to connect to the cluster: {}\n", getpid(), connect_err);
         return 1;
     }
 
@@ -704,27 +718,29 @@ main(int argc, const char* argv[])
 
         {
             fmt::print("CHILD(pid={}): upsert into collection\n", getpid());
-            auto [ctx, upsert_result] = collection.upsert("child-document", tao::json::value{ { "name", "mike" } }).get();
-            if (ctx.ec()) {
-                fmt::print("CHILD(pid={}): unable to upsert the document \"{}\": {}\n", getpid(), ctx.id(), ctx.ec().message());
+            std::string doc_id = "child-document";
+            auto [err, upsert_result] = collection.upsert(doc_id, tao::json::value{ { "name", "mike" } }).get();
+            if (err.ec()) {
+                fmt::print("CHILD(pid={}): unable to upsert the document \"{}\": {}\n", getpid(), doc_id, err);
                 return 1;
             }
             fmt::print("CHILD(pid={}): saved document \"{}\", cas={}, token={}\n",
                        getpid(),
-                       ctx.id(),
+                       doc_id,
                        upsert_result.cas(),
                        upsert_result.mutation_token().value());
         }
 
         {
             fmt::print("CHILD(pid={}): get from collection\n", getpid());
-            auto [ctx, get_result] = collection.get("parent-document").get();
-            if (ctx.ec()) {
-                fmt::print("CHILD(pid={}): unable to get the document \"{}\": {}\n", getpid(), ctx.id(), ctx.ec().message());
+            std::string doc_id = "parent-document";
+            auto [err, get_result] = collection.get(doc_id).get();
+            if (err.ec()) {
+                fmt::print("CHILD(pid={}): unable to get the document \"{}\": {}\n", getpid(), doc_id, err);
                 return 1;
             }
             auto name = get_result.content_as<tao::json::value>()["name"].get_string();
-            fmt::print("CHILD(pid={}): retrieved document \"{}\", name=\"{}\"\n", getpid(), ctx.id(), name);
+            fmt::print("CHILD(pid={}): retrieved document \"{}\", name=\"{}\"\n", getpid(), doc_id, name);
         }
 
         child_guard.reset();
@@ -743,22 +759,19 @@ main(int argc, const char* argv[])
 
         {
             auto collection = bucket.scope("tenant_agent_00").collection("users");
-            auto [ctx, upsert_result] = collection.upsert("parent-document", tao::json::value{ { "name", "mike" } }).get();
-            if (ctx.ec()) {
-                fmt::print("unable to upsert the document \"{}\": {}\n", ctx.id(), ctx.ec().message());
+            std::string doc_id = "tenant_agent_00";
+            auto [err, upsert_result] = collection.upsert(doc_id, tao::json::value{ { "name", "mike" } }).get();
+            if (err.ec()) {
+                fmt::print("unable to upsert the document \"{}\": {}\n", doc_id, err);
                 return 1;
             }
-            fmt::print("saved document \"{}\", cas={}, token={}\n", ctx.id(), upsert_result.cas(), upsert_result.mutation_token().value());
+            fmt::print("saved document \"{}\", cas={}, token={}\n", doc_id, upsert_result.cas(), upsert_result.mutation_token().value());
         }
         {
             auto inventory_scope = bucket.scope("inventory");
-            auto [ctx, query_result] = inventory_scope.query("SELECT * FROM airline WHERE id = 10").get();
-            if (ctx.ec()) {
-                fmt::print("PARENT(pid={}): unable to perform query: {}, ({}, {})\n",
-                           getpid(),
-                           ctx.ec().message(),
-                           ctx.first_error_code(),
-                           ctx.first_error_message());
+            auto [error, query_result] = inventory_scope.query("SELECT * FROM airline WHERE id = 10").get();
+            if (error) {
+                fmt::print("PARENT(pid={}): unable to perform query: {}\n", getpid(), error.ctx().to_json());
                 return 1;
             }
             for (const auto& row : query_result.rows_as_json()) {

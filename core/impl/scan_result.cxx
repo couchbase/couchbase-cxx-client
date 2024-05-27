@@ -63,7 +63,7 @@ internal_scan_result::next(scan_item_handler&& handler)
             return handler({}, {});
         }
         if (ec) {
-            return handler(ec, {});
+            return handler(error(ec, "Error getting the next scan result item."), {});
         }
         handler({}, to_scan_result_item(std::move(item)));
     });
@@ -92,10 +92,12 @@ scan_result::next(couchbase::scan_item_handler&& handler) const
 }
 
 auto
-scan_result::next() const -> std::future<std::pair<std::error_code, std::optional<scan_result_item>>>
+scan_result::next() const -> std::future<std::pair<error, std::optional<scan_result_item>>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<std::error_code, std::optional<scan_result_item>>>>();
-    internal_->next([barrier](auto ec, auto item) mutable { barrier->set_value({ ec, item }); });
+    auto barrier = std::make_shared<std::promise<std::pair<error, std::optional<scan_result_item>>>>();
+    internal_->next([barrier](auto err, auto item) mutable {
+        barrier->set_value({ err, item });
+    });
     return barrier->get_future();
 }
 
@@ -116,7 +118,7 @@ scan_result::begin() -> scan_result::iterator
 auto
 scan_result::end() -> scan_result::iterator
 {
-    return scan_result::iterator({ errc::key_value::range_scan_completed, {} });
+    return scan_result::iterator({ error(errc::key_value::range_scan_completed), {} });
 }
 
 scan_result::iterator::iterator(std::shared_ptr<internal_scan_result> internal)
@@ -125,7 +127,7 @@ scan_result::iterator::iterator(std::shared_ptr<internal_scan_result> internal)
     fetch_item();
 }
 
-scan_result::iterator::iterator(std::pair<std::error_code, scan_result_item> item)
+scan_result::iterator::iterator(std::pair<error, scan_result_item> item)
   : item_{ std::move(item) }
 {
 }
@@ -133,13 +135,13 @@ scan_result::iterator::iterator(std::pair<std::error_code, scan_result_item> ite
 void
 scan_result::iterator::fetch_item()
 {
-    auto barrier = std::make_shared<std::promise<std::pair<std::error_code, scan_result_item>>>();
-    internal_->next([barrier](std::error_code ec, std::optional<scan_result_item> item) mutable {
-        if (ec) {
-            return barrier->set_value({ ec, {} });
+    auto barrier = std::make_shared<std::promise<std::pair<error, scan_result_item>>>();
+    internal_->next([barrier](error err, std::optional<scan_result_item> item) mutable {
+        if (err) {
+            return barrier->set_value({ err, {} });
         }
         if (!item.has_value()) {
-            return barrier->set_value({ errc::key_value::range_scan_completed, {} });
+            return barrier->set_value({ error(errc::key_value::range_scan_completed), {} });
         }
         barrier->set_value({ {}, item.value() });
     });
@@ -148,7 +150,7 @@ scan_result::iterator::fetch_item()
 }
 
 auto
-scan_result::iterator::operator*() -> std::pair<std::error_code, scan_result_item>
+scan_result::iterator::operator*() -> std::pair<error, scan_result_item>
 {
     return item_;
 }

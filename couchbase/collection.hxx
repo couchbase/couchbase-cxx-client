@@ -20,6 +20,7 @@
 #include <couchbase/binary_collection.hxx>
 #include <couchbase/codec/default_json_transcoder.hxx>
 #include <couchbase/collection_query_index_manager.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/exists_options.hxx>
 #include <couchbase/expiry.hxx>
 #include <couchbase/get_all_replicas_options.hxx>
@@ -146,8 +147,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto get(std::string document_id, const get_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, get_result>>;
+    [[nodiscard]] auto get(std::string document_id, const get_options& options = {}) const -> std::future<std::pair<error, get_result>>;
 
     /**
      * Fetches a full document and resets its expiration time to the value provided.
@@ -186,8 +186,7 @@ class collection
      */
     [[nodiscard]] auto get_and_touch(std::string document_id,
                                      std::chrono::seconds duration,
-                                     const get_and_touch_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, get_result>>;
+                                     const get_and_touch_options& options = {}) const -> std::future<std::pair<error, get_result>>;
 
     /**
      * Fetches a full document and resets its expiration time to the absolute value provided.
@@ -226,8 +225,7 @@ class collection
      */
     [[nodiscard]] auto get_and_touch(std::string document_id,
                                      std::chrono::system_clock::time_point time_point,
-                                     const get_and_touch_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, get_result>>;
+                                     const get_and_touch_options& options = {}) const -> std::future<std::pair<error, get_result>>;
 
     /**
      * Updates the expiration a document given an id, without modifying or returning its value.
@@ -261,8 +259,9 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto touch(std::string document_id, std::chrono::seconds duration, const touch_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, result>>;
+    [[nodiscard]] auto touch(std::string document_id,
+                             std::chrono::seconds duration,
+                             const touch_options& options = {}) const -> std::future<std::pair<error, result>>;
 
     /**
      * Updates the expiration a document given an id, without modifying or returning its value.
@@ -301,7 +300,7 @@ class collection
      */
     [[nodiscard]] auto touch(std::string document_id,
                              std::chrono::system_clock::time_point time_point,
-                             const touch_options& options = {}) const -> std::future<std::pair<key_value_error_context, result>>;
+                             const touch_options& options = {}) const -> std::future<std::pair<error, result>>;
 
     /**
      * Reads all available replicas, and returns the first found.
@@ -340,7 +339,7 @@ class collection
      * @committed
      */
     [[nodiscard]] auto get_any_replica(std::string document_id, const get_any_replica_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, get_replica_result>>;
+      -> std::future<std::pair<error, get_replica_result>>;
 
     /**
      * Reads from all available replicas and the active node and returns the results as a vector.
@@ -377,7 +376,7 @@ class collection
      * @committed
      */
     [[nodiscard]] auto get_all_replicas(std::string document_id, const get_all_replicas_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, get_all_replicas_result>>;
+      -> std::future<std::pair<error, get_all_replicas_result>>;
 
     /**
      * Upserts an encoded body of the document which might or might not exist yet, with custom options.
@@ -432,8 +431,9 @@ class collection
      * @since 1.0.0
      * @uncommitted
      */
-    [[nodiscard]] auto upsert(std::string document_id, codec::encoded_value document, const upsert_options& options) const
-      -> std::future<std::pair<key_value_error_context, mutation_result>>;
+    [[nodiscard]] auto upsert(std::string document_id,
+                              codec::encoded_value document,
+                              const upsert_options& options) const -> std::future<std::pair<error, mutation_result>>;
 
     /**
      * Upserts a full document which might or might not exist yet with custom options.
@@ -453,8 +453,9 @@ class collection
      * @committed
      */
     template<typename Transcoder = codec::default_json_transcoder, typename Document>
-    [[nodiscard]] auto upsert(std::string document_id, const Document& document, const upsert_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, mutation_result>>
+    [[nodiscard]] auto upsert(std::string document_id,
+                              const Document& document,
+                              const upsert_options& options = {}) const -> std::future<std::pair<error, mutation_result>>
     {
         return upsert(std::move(document_id), Transcoder::encode(document), options);
     }
@@ -515,8 +516,9 @@ class collection
      * @since 1.0.0
      * @uncommitted
      */
-    [[nodiscard]] auto insert(std::string document_id, codec::encoded_value document, const insert_options& options) const
-      -> std::future<std::pair<key_value_error_context, mutation_result>>;
+    [[nodiscard]] auto insert(std::string document_id,
+                              codec::encoded_value document,
+                              const insert_options& options) const -> std::future<std::pair<error, mutation_result>>;
 
     /**
      * Inserts a full document which does not exist yet with custom options.
@@ -539,8 +541,9 @@ class collection
     template<typename Transcoder = codec::default_json_transcoder,
              typename Document,
              std::enable_if_t<!std::is_same_v<codec::encoded_value, Document>, bool> = true>
-    [[nodiscard]] auto insert(std::string document_id, const Document& document, const insert_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, mutation_result>>
+    [[nodiscard]] auto insert(std::string document_id,
+                              const Document& document,
+                              const insert_options& options = {}) const -> std::future<std::pair<error, mutation_result>>
     {
         return insert(std::move(document_id), Transcoder::encode(document), options);
     }
@@ -602,8 +605,9 @@ class collection
      * @since 1.0.0
      * @uncommitted
      */
-    [[nodiscard]] auto replace(std::string document_id, codec::encoded_value document, const replace_options& options) const
-      -> std::future<std::pair<key_value_error_context, mutation_result>>;
+    [[nodiscard]] auto replace(std::string document_id,
+                               codec::encoded_value document,
+                               const replace_options& options) const -> std::future<std::pair<error, mutation_result>>;
 
     /**
      * Replaces a full document which already exists.
@@ -627,8 +631,9 @@ class collection
     template<typename Transcoder = codec::default_json_transcoder,
              typename Document,
              std::enable_if_t<!std::is_same_v<codec::encoded_value, Document>, bool> = true>
-    [[nodiscard]] auto replace(std::string document_id, const Document& document, const replace_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, mutation_result>>
+    [[nodiscard]] auto replace(std::string document_id,
+                               const Document& document,
+                               const replace_options& options = {}) const -> std::future<std::pair<error, mutation_result>>
     {
         return replace(std::move(document_id), Transcoder::encode(document), options);
     }
@@ -665,8 +670,8 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto remove(std::string document_id, const remove_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, mutation_result>>;
+    [[nodiscard]] auto remove(std::string document_id,
+                              const remove_options& options = {}) const -> std::future<std::pair<error, mutation_result>>;
 
     /**
      * Performs mutations to document fragments
@@ -707,8 +712,9 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto mutate_in(std::string document_id, const mutate_in_specs& specs, const mutate_in_options& options = {}) const
-      -> std::future<std::pair<subdocument_error_context, mutate_in_result>>;
+    [[nodiscard]] auto mutate_in(std::string document_id,
+                                 const mutate_in_specs& specs,
+                                 const mutate_in_options& options = {}) const -> std::future<std::pair<error, mutate_in_result>>;
 
     /**
      * Performs lookups to document fragments with default options.
@@ -745,8 +751,9 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto lookup_in(std::string document_id, const lookup_in_specs& specs, const lookup_in_options& options = {}) const
-      -> std::future<std::pair<subdocument_error_context, lookup_in_result>>;
+    [[nodiscard]] auto lookup_in(std::string document_id,
+                                 const lookup_in_specs& specs,
+                                 const lookup_in_options& options = {}) const -> std::future<std::pair<error, lookup_in_result>>;
 
     /**
      * Performs lookups to document fragments with default options from all replicas and the active node and returns the result as a vector.
@@ -786,7 +793,7 @@ class collection
     [[nodiscard]] auto lookup_in_all_replicas(std::string document_id,
                                               const lookup_in_specs& specs,
                                               const lookup_in_all_replicas_options& options = {}) const
-      -> std::future<std::pair<subdocument_error_context, lookup_in_all_replicas_result>>;
+      -> std::future<std::pair<error, lookup_in_all_replicas_result>>;
 
     /**
      * Performs lookups to document fragments with default options from all replicas and returns the first found.
@@ -826,7 +833,7 @@ class collection
     [[nodiscard]] auto lookup_in_any_replica(std::string document_id,
                                              const lookup_in_specs& specs,
                                              const lookup_in_any_replica_options& options = {}) const
-      -> std::future<std::pair<subdocument_error_context, lookup_in_replica_result>>;
+      -> std::future<std::pair<error, lookup_in_replica_result>>;
 
     /**
      * Gets a document for a given id and places a pessimistic lock on it for mutations
@@ -857,8 +864,7 @@ class collection
      */
     [[nodiscard]] auto get_and_lock(std::string document_id,
                                     std::chrono::seconds lock_duration,
-                                    const get_and_lock_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, get_result>>;
+                                    const get_and_lock_options& options = {}) const -> std::future<std::pair<error, get_result>>;
 
     /**
      * Unlocks a document if it has been locked previously, with default options.
@@ -894,8 +900,7 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto unlock(std::string document_id, couchbase::cas cas, const unlock_options& options = {}) const
-      -> std::future<key_value_error_context>;
+    [[nodiscard]] auto unlock(std::string document_id, couchbase::cas cas, const unlock_options& options = {}) const -> std::future<error>;
 
     /**
      * Checks if the document exists on the server.
@@ -925,8 +930,8 @@ class collection
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto exists(std::string document_id, const exists_options& options = {}) const
-      -> std::future<std::pair<key_value_error_context, exists_result>>;
+    [[nodiscard]] auto exists(std::string document_id,
+                              const exists_options& options = {}) const -> std::future<std::pair<error, exists_result>>;
 
     /**
      * Performs a key-value scan operation on the collection.
@@ -958,8 +963,8 @@ class collection
      * @since 1.0.0
      * @volatile
      */
-    [[nodiscard]] auto scan(const scan_type& scan_type, const scan_options& options = {}) const
-      -> std::future<std::pair<std::error_code, scan_result>>;
+    [[nodiscard]] auto scan(const scan_type& scan_type,
+                            const scan_options& options = {}) const -> std::future<std::pair<error, scan_result>>;
 
     [[nodiscard]] auto query_indexes() const -> collection_query_index_manager;
 

@@ -53,12 +53,14 @@ with_new_cluster(test::utils::integration_test_guard& integration, std::function
     // make new virginal public cluster
 
     asio::io_context io;
-    std::thread io_thread([&io]() { io.run(); });
+    std::thread io_thread([&io]() {
+        io.run();
+    });
     auto options = couchbase::cluster_options(integration.ctx.username, integration.ctx.password);
-    auto [cluster, ec] = couchbase::cluster::connect(io, integration.ctx.connection_string, options).get();
-    CHECK_FALSE(ec);
+    auto [err, cluster] = couchbase::cluster::connect(io, integration.ctx.connection_string, options).get();
+    CHECK_FALSE(err);
     try {
-        if (!ec) {
+        if (!err) {
             fn(cluster);
         }
     } catch (...) {
@@ -324,14 +326,15 @@ TEST_CASE("transactions public blocking API: remove fails as expected with missi
           CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found_exception);
           // the doc is 'blank', so trying to use it results in failure
           auto err = ctx.remove(doc);
-          CHECK(err.ec());
-          CHECK(err.ec() == couchbase::errc::transaction_op::unknown);
+          CHECK(err.cause().has_value());
+          CHECK(err.cause().value().ec() == couchbase::errc::transaction_op::unknown);
       },
       txn_opts());
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
     CHECK(tx_err.ec() == couchbase::errc::transaction::failed);
-    CHECK(tx_err.cause() == couchbase::errc::transaction_op::unknown);
+    CHECK(tx_err.cause().has_value());
+    CHECK(tx_err.cause().value().ec() == couchbase::errc::transaction_op::unknown);
 }
 
 TEST_CASE("transactions public blocking API: uncaught exception in lambda will rollback without retry", "[transactions]")
@@ -352,7 +355,8 @@ TEST_CASE("transactions public blocking API: uncaught exception in lambda will r
     CHECK_FALSE(result.transaction_id.empty());
     CHECK_FALSE(result.unstaging_complete);
     CHECK(tx_err.ec() == couchbase::errc::transaction::failed);
-    CHECK(tx_err.cause() == couchbase::errc::transaction_op::unknown);
+    CHECK(tx_err.cause().has_value());
+    CHECK(tx_err.cause().value().ec() == couchbase::errc::transaction_op::unknown);
 }
 
 TEST_CASE("transactions public blocking API: can pass per-transaction configs", "[transactions]")
@@ -518,7 +522,8 @@ TEST_CASE("transactions public blocking API: some query errors are seen immediat
       [](couchbase::transactions::attempt_context& ctx) {
           auto [e, res] = ctx.query("I am not a valid n1ql query");
           CHECK(e.ec());
-          CHECK(std::holds_alternative<couchbase::query_error_context>(e.cause()));
+          CHECK(e.cause().has_value());
+          CHECK(e.cause().value().ec() == couchbase::errc::common::parsing_failure);
       },
       couchbase::transactions::transaction_options().timeout(std::chrono::seconds(10)));
     CHECK_FALSE(tx_err.ec());

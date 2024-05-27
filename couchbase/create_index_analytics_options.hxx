@@ -19,7 +19,6 @@
 
 #include <couchbase/common_options.hxx>
 #include <couchbase/error_codes.hxx>
-#include <couchbase/manager_error_context.hxx>
 
 #include <functional>
 #include <optional>
@@ -99,5 +98,5 @@ class create_index_analytics_options : public common_options<create_index_analyt
  * @since 1.0.0
  * @uncommitted
  */
-using create_index_analytics_handler = std::function<void(couchbase::manager_error_context)>;
+using create_index_analytics_handler = std::function<void(error)>;
 } // namespace couchbase

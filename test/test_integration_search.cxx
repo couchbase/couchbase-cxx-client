@@ -634,7 +634,7 @@ TEST_CASE("integration: scope search returns feature not available", "[integrati
     couchbase::cluster c(integration.cluster);
 
     auto search_request = couchbase::search_request(couchbase::match_none_query{});
-    auto [ctx, result] = c.bucket(integration.ctx.bucket).default_scope().search("does-not-exist", search_request).get();
+    auto [error, result] = c.bucket(integration.ctx.bucket).default_scope().search("does-not-exist", search_request).get();
 
-    REQUIRE(ctx.ec() == couchbase::errc::common::feature_not_available);
+    REQUIRE(error.ec() == couchbase::errc::common::feature_not_available);
 }

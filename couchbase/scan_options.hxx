@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/mutation_state.hxx>
 #include <couchbase/mutation_token.hxx>
 #include <couchbase/scan_result.hxx>
@@ -159,5 +160,5 @@ struct scan_options : public common_options<scan_options> {
  * @since 1.0.0
  * @volatile
  */
-using scan_handler = std::function<void(std::error_code, scan_result)>;
+using scan_handler = std::function<void(error, scan_result)>;
 } // namespace couchbase

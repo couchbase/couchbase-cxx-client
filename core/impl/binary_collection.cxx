@@ -18,6 +18,7 @@
 #include <couchbase/binary_collection.hxx>
 
 #include "core/cluster.hxx"
+#include "core/impl/error.hxx"
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
 #include "core/operations/document_increment.hxx"
@@ -80,9 +81,9 @@ class binary_collection_impl : public std::enable_shared_from_this<binary_collec
               },
               [handler = std::move(handler)](auto&& resp) mutable {
                   if (resp.ctx.ec()) {
-                      return handler(std::move(resp.ctx), mutation_result{});
+                      return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
                   }
-                  return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                  return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{ resp.cas, std::move(resp.token) });
               });
         }
 
@@ -92,7 +93,7 @@ class binary_collection_impl : public std::enable_shared_from_this<binary_collec
         return core_.execute(
           std::move(request), [core = core_, id = std::move(id), options, handler = std::move(handler)](auto&& resp) mutable {
               if (resp.ctx.ec()) {
-                  return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                  return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{ resp.cas, std::move(resp.token) });
               }
 
               auto token = resp.token;
@@ -105,9 +106,10 @@ class binary_collection_impl : public std::enable_shared_from_this<binary_collec
                                                 [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
                                                     if (ec) {
                                                         resp.ctx.override_ec(ec);
-                                                        return handler(std::move(resp.ctx), mutation_result{});
+                                                        return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
                                                     }
-                                                    return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                                                    return handler(core::impl::make_error(std::move(resp.ctx)),
+                                                                   mutation_result{ resp.cas, std::move(resp.token) });
                                                 });
           });
     }
@@ -133,9 +135,9 @@ class binary_collection_impl : public std::enable_shared_from_this<binary_collec
               },
               [handler = std::move(handler)](auto&& resp) mutable {
                   if (resp.ctx.ec()) {
-                      return handler(std::move(resp.ctx), mutation_result{});
+                      return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
                   }
-                  return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                  return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{ resp.cas, std::move(resp.token) });
               });
         }
 
@@ -145,7 +147,7 @@ class binary_collection_impl : public std::enable_shared_from_this<binary_collec
         return core_.execute(
           std::move(request), [core = core_, id = std::move(id), options, handler = std::move(handler)](auto&& resp) mutable {
               if (resp.ctx.ec()) {
-                  return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                  return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{ resp.cas, std::move(resp.token) });
               }
 
               auto token = resp.token;
@@ -158,9 +160,10 @@ class binary_collection_impl : public std::enable_shared_from_this<binary_collec
                                                 [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
                                                     if (ec) {
                                                         resp.ctx.override_ec(ec);
-                                                        return handler(std::move(resp.ctx), mutation_result{});
+                                                        return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
                                                     }
-                                                    return handler(std::move(resp.ctx), mutation_result{ resp.cas, std::move(resp.token) });
+                                                    return handler(core::impl::make_error(std::move(resp.ctx)),
+                                                                   mutation_result{ resp.cas, std::move(resp.token) });
                                                 });
           });
     }
@@ -188,9 +191,10 @@ class binary_collection_impl : public std::enable_shared_from_this<binary_collec
               },
               [handler = std::move(handler)](auto&& resp) mutable {
                   if (resp.ctx.ec()) {
-                      return handler(std::move(resp.ctx), counter_result{});
+                      return handler(core::impl::make_error(std::move(resp.ctx)), counter_result{});
                   }
-                  return handler(std::move(resp.ctx), counter_result{ resp.cas, std::move(resp.token), resp.content });
+                  return handler(core::impl::make_error(std::move(resp.ctx)),
+                                 counter_result{ resp.cas, std::move(resp.token), resp.content });
               });
         }
 
@@ -208,7 +212,8 @@ class binary_collection_impl : public std::enable_shared_from_this<binary_collec
         return core_.execute(std::move(request),
                              [core = core_, id = std::move(id), options, handler = std::move(handler)](auto&& resp) mutable {
                                  if (resp.ctx.ec()) {
-                                     return handler(std::move(resp.ctx), counter_result{ resp.cas, std::move(resp.token), resp.content });
+                                     return handler(core::impl::make_error(std::move(resp.ctx)),
+                                                    counter_result{ resp.cas, std::move(resp.token), resp.content });
                                  }
 
                                  auto token = resp.token;
@@ -222,9 +227,10 @@ class binary_collection_impl : public std::enable_shared_from_this<binary_collec
                                    [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
                                        if (ec) {
                                            resp.ctx.override_ec(ec);
-                                           return handler(std::move(resp.ctx), counter_result{});
+                                           return handler(core::impl::make_error(std::move(resp.ctx)), counter_result{});
                                        }
-                                       return handler(std::move(resp.ctx), counter_result{ resp.cas, std::move(resp.token), resp.content });
+                                       return handler(core::impl::make_error(std::move(resp.ctx)),
+                                                      counter_result{ resp.cas, std::move(resp.token), resp.content });
                                    });
                              });
     }
@@ -252,9 +258,10 @@ class binary_collection_impl : public std::enable_shared_from_this<binary_collec
               },
               [handler = std::move(handler)](auto&& resp) mutable {
                   if (resp.ctx.ec()) {
-                      return handler(std::move(resp.ctx), counter_result{});
+                      return handler(core::impl::make_error(std::move(resp.ctx)), counter_result{});
                   }
-                  return handler(std::move(resp.ctx), counter_result{ resp.cas, std::move(resp.token), resp.content });
+                  return handler(core::impl::make_error(std::move(resp.ctx)),
+                                 counter_result{ resp.cas, std::move(resp.token), resp.content });
               });
         }
 
@@ -272,7 +279,8 @@ class binary_collection_impl : public std::enable_shared_from_this<binary_collec
         return core_.execute(std::move(request),
                              [core = core_, id = std::move(id), options, handler = std::move(handler)](auto&& resp) mutable {
                                  if (resp.ctx.ec()) {
-                                     return handler(std::move(resp.ctx), counter_result{ resp.cas, std::move(resp.token), resp.content });
+                                     return handler(core::impl::make_error(std::move(resp.ctx)),
+                                                    counter_result{ resp.cas, std::move(resp.token), resp.content });
                                  }
 
                                  auto token = resp.token;
@@ -286,9 +294,10 @@ class binary_collection_impl : public std::enable_shared_from_this<binary_collec
                                    [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
                                        if (ec) {
                                            resp.ctx.override_ec(ec);
-                                           return handler(std::move(resp.ctx), counter_result{});
+                                           return handler(core::impl::make_error(std::move(resp.ctx)), counter_result{});
                                        }
-                                       return handler(std::move(resp.ctx), counter_result{ resp.cas, std::move(resp.token), resp.content });
+                                       return handler(core::impl::make_error(std::move(resp.ctx)),
+                                                      counter_result{ resp.cas, std::move(resp.token), resp.content });
                                    });
                              });
     }
@@ -333,13 +342,14 @@ binary_collection::append(std::string document_id,
 }
 
 auto
-binary_collection::append(std::string document_id, std::vector<std::byte> data, const append_options& options) const
-  -> std::future<std::pair<key_value_error_context, mutation_result>>
+binary_collection::append(std::string document_id,
+                          std::vector<std::byte> data,
+                          const append_options& options) const -> std::future<std::pair<error, mutation_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, mutation_result>>>();
     auto future = barrier->get_future();
-    append(std::move(document_id), std::move(data), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    append(std::move(document_id), std::move(data), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -354,13 +364,14 @@ binary_collection::prepend(std::string document_id,
 }
 
 auto
-binary_collection::prepend(std::string document_id, std::vector<std::byte> data, const prepend_options& options) const
-  -> std::future<std::pair<key_value_error_context, mutation_result>>
+binary_collection::prepend(std::string document_id,
+                           std::vector<std::byte> data,
+                           const prepend_options& options) const -> std::future<std::pair<error, mutation_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, mutation_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, mutation_result>>>();
     auto future = barrier->get_future();
-    prepend(std::move(document_id), std::move(data), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    prepend(std::move(document_id), std::move(data), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -372,13 +383,13 @@ binary_collection::increment(std::string document_id, const increment_options& o
 }
 
 auto
-binary_collection::increment(std::string document_id, const increment_options& options) const
-  -> std::future<std::pair<key_value_error_context, counter_result>>
+binary_collection::increment(std::string document_id,
+                             const increment_options& options) const -> std::future<std::pair<error, counter_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, counter_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, counter_result>>>();
     auto future = barrier->get_future();
-    increment(std::move(document_id), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    increment(std::move(document_id), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }
@@ -390,13 +401,13 @@ binary_collection::decrement(std::string document_id, const decrement_options& o
 }
 
 auto
-binary_collection::decrement(std::string document_id, const decrement_options& options) const
-  -> std::future<std::pair<key_value_error_context, counter_result>>
+binary_collection::decrement(std::string document_id,
+                             const decrement_options& options) const -> std::future<std::pair<error, counter_result>>
 {
-    auto barrier = std::make_shared<std::promise<std::pair<key_value_error_context, counter_result>>>();
+    auto barrier = std::make_shared<std::promise<std::pair<error, counter_result>>>();
     auto future = barrier->get_future();
-    decrement(std::move(document_id), options, [barrier](auto ctx, auto result) {
-        barrier->set_value({ std::move(ctx), std::move(result) });
+    decrement(std::move(document_id), options, [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
     });
     return future;
 }

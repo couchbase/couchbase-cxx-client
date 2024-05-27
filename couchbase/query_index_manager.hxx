@@ -73,7 +73,7 @@ class query_index_manager
      * @committed
      */
     [[nodiscard]] auto get_all_indexes(std::string bucket_name, const get_all_query_indexes_options& options) const
-      -> std::future<std::pair<manager_error_context, std::vector<management::query_index>>>;
+      -> std::future<std::pair<error, std::vector<management::query_index>>>;
 
     /**
      * Create an index on a bucket.
@@ -108,7 +108,7 @@ class query_index_manager
     [[nodiscard]] auto create_index(std::string bucket_name,
                                     std::string index_name,
                                     std::vector<std::string> keys,
-                                    const create_query_index_options& options) const -> std::future<manager_error_context>;
+                                    const create_query_index_options& options) const -> std::future<error>;
 
     /**
      * Create a primary index on a bucket.
@@ -122,7 +122,7 @@ class query_index_manager
      */
     void create_primary_index(std::string bucket_name,
                               const create_primary_query_index_options& options,
-                              create_query_index_handler&& handler) const;
+                              create_primary_query_index_handler&& handler) const;
 
     /**
      * Create a primary index on a bucket.
@@ -134,8 +134,8 @@ class query_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto create_primary_index(std::string bucket_name, const create_primary_query_index_options& options) const
-      -> std::future<manager_error_context>;
+    [[nodiscard]] auto create_primary_index(std::string bucket_name,
+                                            const create_primary_query_index_options& options) const -> std::future<error>;
 
     /**
      * Drop primary index on a bucket.
@@ -149,7 +149,7 @@ class query_index_manager
      */
     void drop_primary_index(std::string bucket_name,
                             const drop_primary_query_index_options& options,
-                            drop_query_index_handler&& handler) const;
+                            drop_primary_query_index_handler&& handler) const;
 
     /**
      * Drop primary index on a bucket.
@@ -161,8 +161,8 @@ class query_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto drop_primary_index(std::string bucket_name, const drop_primary_query_index_options& options) const
-      -> std::future<manager_error_context>;
+    [[nodiscard]] auto drop_primary_index(std::string bucket_name,
+                                          const drop_primary_query_index_options& options) const -> std::future<error>;
 
     /**
      * Drop specified query index.
@@ -191,8 +191,9 @@ class query_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto drop_index(std::string bucket_name, std::string index_name, const drop_query_index_options& options) const
-      -> std::future<manager_error_context>;
+    [[nodiscard]] auto drop_index(std::string bucket_name,
+                                  std::string index_name,
+                                  const drop_query_index_options& options) const -> std::future<error>;
 
     /**
      * Builds all currently deferred indexes.
@@ -222,8 +223,8 @@ class query_index_manager
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto build_deferred_indexes(std::string bucket_name, const build_query_index_options& options) const
-      -> std::future<manager_error_context>;
+    [[nodiscard]] auto build_deferred_indexes(std::string bucket_name,
+                                              const build_query_index_options& options) const -> std::future<error>;
 
     /**
      * Polls the state of a set of indexes, until they all are online.
@@ -254,7 +255,7 @@ class query_index_manager
      */
     [[nodiscard]] auto watch_indexes(std::string bucket_name,
                                      std::vector<std::string> index_names,
-                                     const watch_query_indexes_options& options) const -> std::future<manager_error_context>;
+                                     const watch_query_indexes_options& options) const -> std::future<error>;
 
   private:
     friend class cluster;

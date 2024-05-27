@@ -87,8 +87,9 @@ class cluster
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] static auto connect(asio::io_context& io, const std::string& connection_string, const cluster_options& options)
-      -> std::future<std::pair<cluster, std::error_code>>;
+    [[nodiscard]] static auto connect(asio::io_context& io,
+                                      const std::string& connection_string,
+                                      const cluster_options& options) -> std::future<std::pair<error, cluster>>;
 
     cluster() = default;
     cluster(const cluster& other) = default;
@@ -157,8 +158,7 @@ class cluster
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto query(std::string statement, const query_options& options) const
-      -> std::future<std::pair<query_error_context, query_result>>;
+    [[nodiscard]] auto query(std::string statement, const query_options& options) const -> std::future<std::pair<error, query_result>>;
 
     /**
      * Performs a query against the full text search services.
@@ -200,8 +200,9 @@ class cluster
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto search_query(std::string index_name, const class search_query& query, const search_options& options = {}) const
-      -> std::future<std::pair<search_error_context, search_result>>;
+    [[nodiscard]] auto search_query(std::string index_name,
+                                    const class search_query& query,
+                                    const search_options& options = {}) const -> std::future<std::pair<error, search_result>>;
 
     /**
      * Performs a request against the full text search services.
@@ -241,8 +242,9 @@ class cluster
      * @since 1.0.0
      * @volatile
      */
-    [[nodiscard]] auto search(std::string index_name, search_request request, const search_options& options = {}) const
-      -> std::future<std::pair<search_error_context, search_result>>;
+    [[nodiscard]] auto search(std::string index_name,
+                              search_request request,
+                              const search_options& options = {}) const -> std::future<std::pair<error, search_result>>;
 
     /**
      * Performs a query against the analytics services.
@@ -273,8 +275,8 @@ class cluster
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto analytics_query(std::string statement, const analytics_options& options = {}) const
-      -> std::future<std::pair<analytics_error_context, analytics_result>>;
+    [[nodiscard]] auto analytics_query(std::string statement,
+                                       const analytics_options& options = {}) const -> std::future<std::pair<error, analytics_result>>;
 
     /**
      * Performs application-level ping requests against services in the Couchbase cluster.
@@ -302,7 +304,7 @@ class cluster
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto ping(const ping_options& options = {}) const -> std::future<ping_result>;
+    [[nodiscard]] auto ping(const ping_options& options = {}) const -> std::future<std::pair<error, ping_result>>;
 
     /**
      * Assembles a diagnostics report on the current state of the cluster from the SDK's point of view.
@@ -334,7 +336,7 @@ class cluster
      * @since 1.0.0
      * @committed
      */
-    [[nodiscard]] auto diagnostics(const diagnostics_options& options = {}) const -> std::future<diagnostics_result>;
+    [[nodiscard]] auto diagnostics(const diagnostics_options& options = {}) const -> std::future<std::pair<error, diagnostics_result>>;
 
     /**
      * Provides access to the N1QL index management services.

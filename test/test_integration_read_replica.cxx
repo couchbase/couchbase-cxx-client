@@ -111,8 +111,8 @@ TEST_CASE("integration: get any replica", "[integration]")
     {
         auto collection =
           couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
-        auto [ctx, result] = collection.get_any_replica(key, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, result] = collection.get_any_replica(key, {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE(result.content_as<smuggling_transcoder>().first == basic_doc_json);
     }
 }
@@ -153,8 +153,8 @@ TEST_CASE("integration: get all replicas", "[integration]")
     {
         auto collection =
           couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
-        auto [ctx, result] = collection.get_all_replicas(key, {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, result] = collection.get_all_replicas(key, {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE(result.size() == number_of_replicas + 1);
         auto responses_from_active = std::count_if(result.begin(), result.end(), [](const auto& r) {
             return !r.is_replica();
@@ -185,8 +185,8 @@ TEST_CASE("integration: get all replicas with missing key", "[integration]")
     {
         auto collection =
           couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
-        auto [ctx, result] = collection.get_all_replicas(key, {}).get();
-        REQUIRE(ctx.ec() == couchbase::errc::key_value::document_not_found);
+        auto [err, result] = collection.get_all_replicas(key, {}).get();
+        REQUIRE(err.ec() == couchbase::errc::key_value::document_not_found);
         REQUIRE(result.empty());
     }
 }
@@ -210,8 +210,8 @@ TEST_CASE("integration: get any replica with missing key", "[integration]")
     {
         auto collection =
           couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
-        auto [ctx, result] = collection.get_any_replica(key, {}).get();
-        REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+        auto [err, result] = collection.get_any_replica(key, {}).get();
+        REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
     }
 }
 
@@ -622,49 +622,49 @@ TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integra
         : couchbase::cluster_options(
             couchbase::certificate_authenticator(integration.ctx.certificate_path, integration.ctx.certificate_path));
     cluster_options.network().preferred_server_group(server_groups.front());
-    auto [cluster, ec] = couchbase::cluster::connect(io, integration.ctx.connection_string, cluster_options).get();
-    REQUIRE_SUCCESS(ec);
+    auto [error, cluster] = couchbase::cluster::connect(io, integration.ctx.connection_string, cluster_options).get();
+    REQUIRE_SUCCESS(error.ec());
 
     auto collection = cluster.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     {
-        auto [ctx, result] = collection.get_any_replica(id.key(), {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, result] = collection.get_any_replica(id.key(), {}).get();
+        REQUIRE_SUCCESS(err.ec());
     }
     {
-        auto [ctx, result] =
+        auto [err, result] =
           collection
             .get_any_replica(id.key(),
                              couchbase::get_any_replica_options{}.read_preference(couchbase::read_preference::selected_server_group))
             .get();
-        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_SUCCESS(err.ec());
     }
     {
-        auto [ctx, result] = collection.get_all_replicas(id.key(), {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, result] = collection.get_all_replicas(id.key(), {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE(result.size() == number_of_replicas + 1);
     }
     {
-        auto [ctx, result] =
+        auto [err, result] =
           collection
             .get_all_replicas(id.key(),
                               couchbase::get_all_replicas_options{}.read_preference(couchbase::read_preference::selected_server_group))
             .get();
-        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE(result.size() <= number_of_replicas + 1);
     }
 
     {
-        auto [ctx, result] = collection
+        auto [err, result] = collection
                                .lookup_in_any_replica(id.key(),
                                                       couchbase::lookup_in_specs{
                                                         couchbase::lookup_in_specs::get("a"),
                                                       },
                                                       {})
                                .get();
-        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_SUCCESS(err.ec());
     }
     {
-        auto [ctx, result] = collection
+        auto [err, result] = collection
                                .lookup_in_any_replica(id.key(),
                                                       couchbase::lookup_in_specs{
                                                         couchbase::lookup_in_specs::get("a"),
@@ -672,19 +672,19 @@ TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integra
                                                       couchbase::lookup_in_any_replica_options{}.read_preference(
                                                         couchbase::read_preference::selected_server_group))
                                .get();
-        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_SUCCESS(err.ec());
     }
     {
-        auto [ctx, result] = collection
+        auto [err, result] = collection
                                .lookup_in_all_replicas(id.key(),
                                                        couchbase::lookup_in_specs{
                                                          couchbase::lookup_in_specs::get("a"),
                                                        })
                                .get();
-        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_SUCCESS(err.ec());
     }
     {
-        auto [ctx, result] = collection
+        auto [err, result] = collection
                                .lookup_in_all_replicas(id.key(),
                                                        couchbase::lookup_in_specs{
                                                          couchbase::lookup_in_specs::get("a"),
@@ -692,7 +692,7 @@ TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integra
                                                        couchbase::lookup_in_all_replicas_options{}.read_preference(
                                                          couchbase::read_preference::selected_server_group))
                                .get();
-        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE(result.size() <= number_of_replicas + 1);
     }
 
@@ -764,48 +764,48 @@ TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integ
         : couchbase::cluster_options(
             couchbase::certificate_authenticator(integration.ctx.certificate_path, integration.ctx.certificate_path));
     cluster_options.network().preferred_server_group(selected_server_group);
-    auto [cluster, ec] = couchbase::cluster::connect(io, integration.ctx.connection_string, cluster_options).get();
-    REQUIRE_SUCCESS(ec);
+    auto [error, cluster] = couchbase::cluster::connect(io, integration.ctx.connection_string, cluster_options).get();
+    REQUIRE_SUCCESS(error.ec());
 
     auto collection = cluster.bucket(id.bucket()).scope(id.scope()).collection(id.collection());
     {
-        auto [ctx, result] = collection.get_any_replica(id.key(), {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, result] = collection.get_any_replica(id.key(), {}).get();
+        REQUIRE_SUCCESS(err.ec());
     }
     {
-        auto [ctx, result] =
+        auto [err, result] =
           collection
             .get_any_replica(id.key(),
                              couchbase::get_any_replica_options{}.read_preference(couchbase::read_preference::selected_server_group))
             .get();
-        REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+        REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
     }
     {
-        auto [ctx, result] = collection.get_all_replicas(id.key(), {}).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, result] = collection.get_all_replicas(id.key(), {}).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE(result.size() == number_of_replicas + 1);
     }
     {
-        auto [ctx, result] =
+        auto [err, result] =
           collection
             .get_all_replicas(id.key(),
                               couchbase::get_all_replicas_options{}.read_preference(couchbase::read_preference::selected_server_group))
             .get();
-        REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+        REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
     }
 
     {
-        auto [ctx, result] = collection
+        auto [err, result] = collection
                                .lookup_in_any_replica(id.key(),
                                                       couchbase::lookup_in_specs{
                                                         couchbase::lookup_in_specs::get("a"),
                                                       },
                                                       {})
                                .get();
-        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_SUCCESS(err.ec());
     }
     {
-        auto [ctx, result] = collection
+        auto [err, result] = collection
                                .lookup_in_any_replica(id.key(),
                                                       couchbase::lookup_in_specs{
                                                         couchbase::lookup_in_specs::get("a"),
@@ -813,19 +813,19 @@ TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integ
                                                       couchbase::lookup_in_any_replica_options{}.read_preference(
                                                         couchbase::read_preference::selected_server_group))
                                .get();
-        REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+        REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
     }
     {
-        auto [ctx, result] = collection
+        auto [err, result] = collection
                                .lookup_in_all_replicas(id.key(),
                                                        couchbase::lookup_in_specs{
                                                          couchbase::lookup_in_specs::get("a"),
                                                        })
                                .get();
-        REQUIRE_SUCCESS(ctx.ec());
+        REQUIRE_SUCCESS(err.ec());
     }
     {
-        auto [ctx, result] = collection
+        auto [err, result] = collection
                                .lookup_in_all_replicas(id.key(),
                                                        couchbase::lookup_in_specs{
                                                          couchbase::lookup_in_specs::get("a"),
@@ -833,7 +833,7 @@ TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integ
                                                        couchbase::lookup_in_all_replicas_options{}.read_preference(
                                                          couchbase::read_preference::selected_server_group))
                                .get();
-        REQUIRE(ctx.ec() == couchbase::errc::key_value::document_irretrievable);
+        REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
     }
 
     cluster.close();

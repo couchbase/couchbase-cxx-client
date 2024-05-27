@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/fmt/error.hxx>
 #include <couchbase/transactions.hxx>
 
 #include <asio.hpp>
@@ -145,8 +146,7 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
     {
         std::map<std::string, std::size_t> errors;
 
-        using transaction_promise =
-          std::promise<std::pair<couchbase::transaction_error_context, couchbase::transactions::transaction_result>>;
+        using transaction_promise = std::promise<std::pair<couchbase::error, couchbase::transactions::transaction_result>>;
         std::vector<transaction_promise> results;
         results.resize(arguments.number_of_transactions);
 
@@ -200,7 +200,8 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
         for (auto& promise : results) {
             auto [err, result] = promise.get_future().get();
             if (err.ec()) {
-                transactions_errors[fmt::format("error={}, cause={}", err.ec().message(), err.cause().message())]++;
+                transactions_errors[fmt::format(
+                  "error={}, cause={}", err.ec().message(), err.cause().has_value() ? err.cause().value().ec().message() : "")]++;
             }
         }
         auto exec_end = std::chrono::system_clock::now();
@@ -258,14 +259,16 @@ main()
 
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
-    std::thread io_thread([&io]() { io.run(); });
+    std::thread io_thread([&io]() {
+        io.run();
+    });
 
     auto options = couchbase::cluster_options(arguments.username, arguments.password);
     options.apply_profile("wan_development");
     options.transactions().timeout(arguments.transaction_timeout);
-    auto [cluster, ec] = couchbase::cluster::connect(io, arguments.connection_string, options).get();
-    if (ec) {
-        fmt::print("Unable to connect to cluster at \"{}\", error: {}\n", arguments.connection_string, ec.message());
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, arguments.connection_string, options).get();
+    if (connect_err) {
+        fmt::print("Unable to connect to cluster at \"{}\", error: {}\n", arguments.connection_string, connect_err);
     } else {
         auto transactions = cluster.transactions();
         auto collection = cluster.bucket(arguments.bucket_name).scope(arguments.scope_name).collection(arguments.collection_name);

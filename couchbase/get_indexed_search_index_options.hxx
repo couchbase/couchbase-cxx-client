@@ -39,5 +39,5 @@ struct get_indexed_search_index_options : public common_options<get_indexed_sear
   private:
 };
 
-using get_indexed_search_index_handler = std::function<void(couchbase::manager_error_context, std::uint64_t)>;
+using get_indexed_search_index_handler = std::function<void(error, std::uint64_t)>;
 } // namespace couchbase

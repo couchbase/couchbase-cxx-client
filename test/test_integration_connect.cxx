@@ -191,9 +191,9 @@ TEST_CASE("integration: connecting with a custom transactions metadata collectio
       "_default",
     });
 
-    auto [cluster, ec] = couchbase::cluster::connect(io, ctx.connection_string, opts).get();
+    auto [err, cluster] = couchbase::cluster::connect(io, ctx.connection_string, opts).get();
 
-    REQUIRE(ec == couchbase::errc::common::bucket_not_found);
+    REQUIRE(err.ec() == couchbase::errc::common::bucket_not_found);
 
     guard.reset();
     io_thread.join();

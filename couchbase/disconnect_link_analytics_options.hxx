@@ -19,7 +19,6 @@
 
 #include <couchbase/common_options.hxx>
 #include <couchbase/error_codes.hxx>
-#include <couchbase/manager_error_context.hxx>
 
 #include <functional>
 #include <optional>
@@ -101,5 +100,5 @@ class disconnect_link_analytics_options : public common_options<disconnect_link_
  * @since 1.0.0
  * @uncommitted
  */
-using disconnect_link_analytics_handler = std::function<void(couchbase::manager_error_context)>;
+using disconnect_link_analytics_handler = std::function<void(error)>;
 } // namespace couchbase

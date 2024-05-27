@@ -18,8 +18,8 @@
 #pragma once
 
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/error_codes.hxx>
-#include <couchbase/manager_error_context.hxx>
 
 #include <functional>
 #include <optional>
@@ -112,5 +112,5 @@ class connect_link_analytics_options : public common_options<connect_link_analyt
  * @since 1.0.0
  * @uncommitted
  */
-using connect_link_analytics_handler = std::function<void(couchbase::manager_error_context)>;
+using connect_link_analytics_handler = std::function<void(error)>;
 } // namespace couchbase

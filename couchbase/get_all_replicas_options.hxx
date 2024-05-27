@@ -18,8 +18,8 @@
 #pragma once
 
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/get_replica_result.hxx>
-#include <couchbase/key_value_error_context.hxx>
 #include <couchbase/read_preference.hxx>
 
 #include <chrono>
@@ -102,5 +102,5 @@ using get_all_replicas_result = std::vector<get_replica_result>;
  * @since 1.0.0
  * @uncommitted
  */
-using get_all_replicas_handler = std::function<void(couchbase::key_value_error_context, get_all_replicas_result)>;
+using get_all_replicas_handler = std::function<void(error, get_all_replicas_result)>;
 } // namespace couchbase

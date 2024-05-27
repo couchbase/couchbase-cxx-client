@@ -58,7 +58,7 @@ class bucket_manager
     void get_bucket(std::string bucket_name, const get_bucket_options& options, get_bucket_handler&& handler) const;
 
     [[nodiscard]] auto get_bucket(std::string bucket_name, const get_bucket_options& options = {}) const
-      -> std::future<std::pair<manager_error_context, management::cluster::bucket_settings>>;
+      -> std::future<std::pair<error, management::cluster::bucket_settings>>;
 
     /**
      * Get all buckets on the cluster
@@ -72,7 +72,7 @@ class bucket_manager
     void get_all_buckets(const get_all_buckets_options& options, get_all_buckets_handler&& handler) const;
 
     [[nodiscard]] auto get_all_buckets(const get_all_buckets_options& options = {}) const
-      -> std::future<std::pair<manager_error_context, std::vector<management::cluster::bucket_settings>>>;
+      -> std::future<std::pair<error, std::vector<management::cluster::bucket_settings>>>;
 
     /**
      * Create a bucket on the cluster
@@ -86,7 +86,7 @@ class bucket_manager
                        create_bucket_handler&& handler) const;
 
     [[nodiscard]] auto create_bucket(const management::cluster::bucket_settings& bucket_settings,
-                                     const create_bucket_options& options = {}) const -> std::future<manager_error_context>;
+                                     const create_bucket_options& options = {}) const -> std::future<error>;
 
     /**
      * Update an existing bucket
@@ -100,7 +100,7 @@ class bucket_manager
                        update_bucket_handler&& handler) const;
 
     [[nodiscard]] auto update_bucket(const management::cluster::bucket_settings& bucket_settings,
-                                     const update_bucket_options& options = {}) const -> std::future<manager_error_context>;
+                                     const update_bucket_options& options = {}) const -> std::future<error>;
 
     /**
      * Drop an existing bucket
@@ -111,8 +111,7 @@ class bucket_manager
      */
     void drop_bucket(std::string bucket_name, const drop_bucket_options& options, drop_bucket_handler&& handler) const;
 
-    [[nodiscard]] auto drop_bucket(std::string bucket_name, const drop_bucket_options& options = {}) const
-      -> std::future<manager_error_context>;
+    [[nodiscard]] auto drop_bucket(std::string bucket_name, const drop_bucket_options& options = {}) const -> std::future<error>;
 
     /**
      * Flush an existing bucket
@@ -123,8 +122,7 @@ class bucket_manager
      */
     void flush_bucket(std::string bucket_name, const flush_bucket_options& options, flush_bucket_handler&& handler) const;
 
-    [[nodiscard]] auto flush_bucket(std::string bucket_name, const flush_bucket_options& options = {}) const
-      -> std::future<manager_error_context>;
+    [[nodiscard]] auto flush_bucket(std::string bucket_name, const flush_bucket_options& options = {}) const -> std::future<error>;
 
   private:
     friend class cluster;

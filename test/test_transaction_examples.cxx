@@ -19,6 +19,7 @@
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/fmt/cas.hxx>
+#include <couchbase/fmt/error.hxx>
 #include <couchbase/transactions/attempt_context.hxx>
 
 #include <tao/json.hpp>
@@ -49,7 +50,9 @@ main(int argc, const char* argv[])
     // run IO context on separate thread
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
-    std::thread io_thread([&io]() { io.run(); });
+    std::thread io_thread([&io]() {
+        io.run();
+    });
 
     auto options = couchbase::cluster_options(username, password);
     // customize through the 'options'.
@@ -57,9 +60,9 @@ main(int argc, const char* argv[])
     options.apply_profile("wan_development");
 
     // [1] connect to cluster using the given connection string and the options
-    auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, options).get();
-    if (ec) {
-        fmt::print("unable to connect to the cluster: {}\n", ec.message());
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+    if (connect_err) {
+        fmt::print("unable to connect to the cluster: {}\n", connect_err);
         return 1;
     }
 
@@ -71,8 +74,8 @@ main(int argc, const char* argv[])
     const tao::json::value content = { { "some", "content" } };
 
     for (const auto& id : { id_1, id_2, id_3 }) {
-        if (auto [ctx, res] = collection.upsert(id, content).get(); ctx.ec()) {
-            fmt::print(stderr, "upsert \"{}\" failed before starting transaction: {}\n", id, ctx.ec().message());
+        if (auto [err, res] = collection.upsert(id, content).get(); err.ec()) {
+            fmt::print(stderr, "upsert \"{}\" failed before starting transaction: {}\n", id, err.ec().message());
             return 1;
         }
     }
@@ -94,7 +97,10 @@ main(int argc, const char* argv[])
           });
         // [3.5] check the overall status of the transaction
         if (tx_err.ec()) {
-            fmt::print(stderr, "error in transaction {}, cause: {}\n", tx_err.ec().message(), tx_err.cause().message());
+            fmt::print(stderr,
+                       "error in transaction {}, cause: {}\n",
+                       tx_err.ec().message(),
+                       tx_err.cause().has_value() ? tx_err.cause().value().ec().message() : "");
             retval = 1;
         } else {
             fmt::print("transaction {} completed successfully\n", tx_res.transaction_id);

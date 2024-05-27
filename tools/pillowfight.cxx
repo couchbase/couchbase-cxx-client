@@ -25,6 +25,7 @@
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
 #include <couchbase/fmt/cas.hxx>
+#include <couchbase/fmt/error.hxx>
 
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
@@ -276,13 +277,13 @@ class pillowfight_app : public CLI::App
 
         const auto connection_string = common_options_.connection.connection_string;
 
-        auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, cluster_options).get();
-        if (ec) {
+        auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, cluster_options).get();
+        if (connect_err) {
             guard.reset();
             for (auto& thread : io_pool) {
                 thread.join();
             }
-            fail(fmt::format("Failed to connect to the cluster at \"{}\": {}", connection_string, ec.message()));
+            fail(fmt::format("Failed to connect to the cluster at \"{}\": {}", connection_string, connect_err));
         }
 
         std::vector<std::vector<std::string>> known_keys(number_of_worker_threads_);
@@ -391,9 +392,9 @@ class pillowfight_app : public CLI::App
         bool stopping{ false };
         while (running.test_and_set() && !stopping) {
             std::list<std::pair<std::chrono::system_clock::time_point,
-                                std::variant<std::future<std::pair<couchbase::key_value_error_context, couchbase::mutation_result>>,
-                                             std::future<std::pair<couchbase::key_value_error_context, couchbase::get_result>>,
-                                             std::future<std::pair<couchbase::query_error_context, couchbase::query_result>>>>>
+                                std::variant<std::future<std::pair<couchbase::error, couchbase::mutation_result>>,
+                                             std::future<std::pair<couchbase::error, couchbase::get_result>>,
+                                             std::future<std::pair<couchbase::error, couchbase::query_result>>>>>
               futures;
             for (std::size_t i = 0; i < key_value_batch_size_; ++i) {
                 auto opcode = (dist(gen) <= chance_of_get_) ? operation::get : operation::upsert;
@@ -444,19 +445,18 @@ class pillowfight_app : public CLI::App
                               return;
                           }
                       }
-                      auto [ctx, resp] = f.get();
+                      auto [err, resp] = f.get();
                       hdr_record_value_atomic(histogram, (std::chrono::system_clock::now() - start).count());
                       ++total;
-                      if (ctx.ec()) {
+                      if (err.ec()) {
                           const std::scoped_lock lock(errors_mutex);
-                          ++errors[ctx.ec()];
+                          ++errors[err.ec()];
                           if (verbose) {
-                              fmt::print(stderr, "\r\033[K{}\n", ctx.to_json());
+                              fmt::print(stderr, "\r\033[K{}\n", err.ctx().to_json());
                           }
-                      } else if constexpr (std::is_same_v<
-                                             T,
-                                             std::future<std::pair<couchbase::key_value_error_context, couchbase::mutation_result>>>) {
-                          known_keys.emplace_back(ctx.id());
+                      } else if constexpr (std::is_same_v<T, std::future<std::pair<couchbase::error, couchbase::mutation_result>>>) {
+                          auto ctx = err.ctx().template as<tao::json::value>();
+                          known_keys.emplace_back(ctx["id"].get_string());
                       }
                   },
                   std::move(future));
@@ -498,7 +498,7 @@ class pillowfight_app : public CLI::App
 
                 auto batch_size = std::min(keys_left, std::max(key_value_batch_size_, minimum_batch_size));
 
-                std::vector<std::future<std::pair<couchbase::key_value_error_context, couchbase::mutation_result>>> futures;
+                std::vector<std::future<std::pair<couchbase::error, couchbase::mutation_result>>> futures;
                 futures.reserve(batch_size);
                 for (std::size_t k = 0; k < batch_size; ++k) {
                     const std::string document_id = uniq_id("id");

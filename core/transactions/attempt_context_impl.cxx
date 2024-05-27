@@ -394,8 +394,9 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
                 return op_completed_with_error(std::move(cb), err);
         }
     };
-    auto ec = wait_for_hook(
-      [this, key = document.id().key()](auto handler) mutable { return hooks_.before_staged_replace(this, key, std::move(handler)); });
+    auto ec = wait_for_hook([this, key = document.id().key()](auto handler) mutable {
+        return hooks_.before_staged_replace(this, key, std::move(handler));
+    });
     if (ec) {
         return error_handler(*ec, "before_staged_replace hook raised error", std::move(cb));
     }
@@ -1107,7 +1108,9 @@ attempt_context_impl::query(const std::string& statement,
                                    return do_query(statement, options, query_context, std::move(cb));
                                });
           },
-          [this, statement, options, query_context, cb]() mutable { return do_query(statement, options, query_context, std::move(cb)); });
+          [this, statement, options, query_context, cb]() mutable {
+              return do_query(statement, options, query_context, std::move(cb));
+          });
     });
 }
 
@@ -1127,22 +1130,22 @@ attempt_context_impl::do_core_query(const std::string& statement,
     return f.get();
 }
 
-std::pair<couchbase::transaction_op_error_context, couchbase::transactions::transaction_query_result>
+std::pair<couchbase::error, couchbase::transactions::transaction_query_result>
 attempt_context_impl::do_public_query(const std::string& statement,
                                       const couchbase::transactions::transaction_query_options& opts,
                                       std::optional<std::string> query_context)
 {
     try {
         auto result = do_core_query(statement, opts, query_context);
-        return core::impl::build_transaction_query_result(result);
+        auto [ctx, res] = core::impl::build_transaction_query_result(result);
+        return std::make_pair(core::impl::make_error(ctx), res);
     } catch (const transaction_operation_failed& e) {
-        return { e.get_error_ctx(), {} };
+        return { core::impl::make_error(e), {} };
     } catch (const op_exception& qe) {
-        return { qe.ctx(), {} };
+        return { core::impl::make_error(qe.ctx()), {} };
     } catch (...) {
         // should not be necessary, but just in case...
-        transaction_op_error_context ctx(couchbase::errc::transaction_op::unknown);
-        return { ctx, {} };
+        return { { couchbase::errc::transaction_op::unknown }, {} };
     }
 }
 
@@ -1437,7 +1440,9 @@ attempt_context_impl::atr_commit(bool ambiguity_resolution_mode)
             if (ec) {
                 throw client_error(*ec, "atr_commit check for expiry threw error");
             }
-            ec = wait_for_hook([this](auto handler) mutable { return hooks_.before_atr_commit(this, std::move(handler)); });
+            ec = wait_for_hook([this](auto handler) mutable {
+                return hooks_.before_atr_commit(this, std::move(handler));
+            });
             if (ec) {
                 // for now, throw.  Later, if this is async, we will use error handler no doubt.
                 throw client_error(*ec, "before_atr_commit hook raised error");
@@ -1446,10 +1451,13 @@ attempt_context_impl::atr_commit(bool ambiguity_resolution_mode)
             auto barrier = std::make_shared<std::promise<result>>();
             auto f = barrier->get_future();
             CB_ATTEMPT_CTX_LOG_TRACE(this, "updating atr {}, setting to {}", req.id, attempt_state_name(attempt_state::COMMITTED));
-            overall_.cluster_ref().execute(
-              req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
+            overall_.cluster_ref().execute(req, [barrier](core::operations::mutate_in_response resp) {
+                barrier->set_value(result::create_from_subdoc_response(resp));
+            });
             auto res = wrap_operation_future(f, false);
-            ec = wait_for_hook([this](auto handler) mutable { return hooks_.after_atr_commit(this, std::move(handler)); });
+            ec = wait_for_hook([this](auto handler) mutable {
+                return hooks_.after_atr_commit(this, std::move(handler));
+            });
             if (ec) {
                 throw client_error(*ec, "after_atr_commit hook raised error");
             }
@@ -1479,7 +1487,9 @@ attempt_context_impl::atr_commit(bool ambiguity_resolution_mode)
 
                 case FAIL_PATH_ALREADY_EXISTS:
                     // Need retry_op as atr_commit_ambiguity_resolution can throw retry_operation
-                    return retry_op<void>([&]() { return atr_commit_ambiguity_resolution(); });
+                    return retry_op<void>([&]() {
+                        return atr_commit_ambiguity_resolution();
+                    });
                 case FAIL_HARD: {
                     auto out = transaction_operation_failed(ec, e.what()).no_rollback();
                     if (ambiguity_resolution_mode) {
@@ -1539,8 +1549,9 @@ attempt_context_impl::atr_commit_ambiguity_resolution()
         if (ec) {
             throw client_error(*ec, "atr_commit_ambiguity_resolution raised error");
         }
-        ec =
-          wait_for_hook([this](auto handler) mutable { return hooks_.before_atr_commit_ambiguity_resolution(this, std::move(handler)); });
+        ec = wait_for_hook([this](auto handler) mutable {
+            return hooks_.before_atr_commit_ambiguity_resolution(this, std::move(handler));
+        });
         if (ec) {
             throw client_error(*ec, "before_atr_commit_ambiguity_resolution hook threw error");
         }
@@ -1549,8 +1560,9 @@ attempt_context_impl::atr_commit_ambiguity_resolution()
         req.specs = lookup_in_specs{ lookup_in_specs::get(prefix + ATR_FIELD_STATUS).xattr() }.specs();
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
-        overall_.cluster_ref().execute(
-          req, [barrier](core::operations::lookup_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
+        overall_.cluster_ref().execute(req, [barrier](core::operations::lookup_in_response resp) {
+            barrier->set_value(result::create_from_subdoc_response(resp));
+        });
         auto res = wrap_operation_future(f);
         auto atr_status_raw = res.values[0].content_as<std::string>();
         CB_ATTEMPT_CTX_LOG_DEBUG(this, "atr_commit_ambiguity_resolution read atr state {}", atr_status_raw);
@@ -1591,7 +1603,9 @@ attempt_context_impl::atr_complete()
 {
     try {
         result atr_res;
-        auto ec = wait_for_hook([this](auto handler) mutable { return hooks_.before_atr_complete(this, std::move(handler)); });
+        auto ec = wait_for_hook([this](auto handler) mutable {
+            return hooks_.before_atr_complete(this, std::move(handler));
+        });
         if (ec) {
             throw client_error(*ec, "before_atr_complete hook threw error");
         }
@@ -1610,10 +1624,13 @@ attempt_context_impl::atr_complete()
         wrap_durable_request(req, overall_.config());
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
-        overall_.cluster_ref().execute(
-          req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
+        overall_.cluster_ref().execute(req, [barrier](core::operations::mutate_in_response resp) {
+            barrier->set_value(result::create_from_subdoc_response(resp));
+        });
         wrap_operation_future(f);
-        ec = wait_for_hook([this](auto handler) mutable { return hooks_.after_atr_complete(this, std::move(handler)); });
+        ec = wait_for_hook([this](auto handler) mutable {
+            return hooks_.after_atr_complete(this, std::move(handler));
+        });
         if (ec) {
             throw client_error(*ec, "after_atr_complete hook threw error");
         }
@@ -1667,7 +1684,9 @@ attempt_context_impl::commit()
             throw transaction_operation_failed(FAIL_EXPIRY, "transaction expired").expired();
         }
         if (atr_id_ && !atr_id_->key().empty() && !is_done_) {
-            retry_op_exp<void>([&]() { atr_commit(false); });
+            retry_op_exp<void>([&]() {
+                atr_commit(false);
+            });
             staged_mutations_->commit(this);
             atr_complete();
             is_done_ = true;
@@ -1691,7 +1710,9 @@ attempt_context_impl::atr_abort()
         if (ec) {
             throw client_error(*ec, "atr_abort check for expiry threw error");
         }
-        ec = wait_for_hook([this](auto handler) mutable { return hooks_.before_atr_aborted(this, std::move(handler)); });
+        ec = wait_for_hook([this](auto handler) mutable {
+            return hooks_.before_atr_aborted(this, std::move(handler));
+        });
         if (ec) {
             throw client_error(*ec, "before_atr_aborted hook threw error");
         }
@@ -1711,12 +1732,15 @@ attempt_context_impl::atr_abort()
         wrap_durable_request(req, overall_.config());
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
-        overall_.cluster_ref().execute(
-          req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
+        overall_.cluster_ref().execute(req, [barrier](core::operations::mutate_in_response resp) {
+            barrier->set_value(result::create_from_subdoc_response(resp));
+        });
         wrap_operation_future(f);
         state(attempt_state::ABORTED);
 
-        ec = wait_for_hook([this](auto handler) mutable { return hooks_.after_atr_aborted(this, std::move(handler)); });
+        ec = wait_for_hook([this](auto handler) mutable {
+            return hooks_.after_atr_aborted(this, std::move(handler));
+        });
         if (ec) {
             throw client_error(*ec, "after_atr_aborted hook threw error");
         }
@@ -1758,7 +1782,9 @@ attempt_context_impl::atr_rollback_complete()
             throw client_error(*ec, "atr_rollback_complete raised error");
         }
 
-        ec = wait_for_hook([this](auto handler) mutable { return hooks_.before_atr_rolled_back(this, std::move(handler)); });
+        ec = wait_for_hook([this](auto handler) mutable {
+            return hooks_.before_atr_rolled_back(this, std::move(handler));
+        });
         if (ec) {
             throw client_error(*ec, "before_atr_rolled_back hook threw error");
         }
@@ -1772,11 +1798,14 @@ attempt_context_impl::atr_rollback_complete()
         wrap_durable_request(req, overall_.config());
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
-        overall_.cluster_ref().execute(
-          req, [barrier](core::operations::mutate_in_response resp) { barrier->set_value(result::create_from_subdoc_response(resp)); });
+        overall_.cluster_ref().execute(req, [barrier](core::operations::mutate_in_response resp) {
+            barrier->set_value(result::create_from_subdoc_response(resp));
+        });
         wrap_operation_future(f);
         state(attempt_state::ROLLED_BACK);
-        ec = wait_for_hook([this](auto handler) mutable { return hooks_.after_atr_rolled_back(this, std::move(handler)); });
+        ec = wait_for_hook([this](auto handler) mutable {
+            return hooks_.after_atr_rolled_back(this, std::move(handler));
+        });
         if (ec) {
             throw client_error(*ec, "after_atr_rolled_back hook threw error");
         }
@@ -1865,13 +1894,17 @@ attempt_context_impl::rollback()
     }
     try {
         // (1) atr_abort
-        retry_op_exp<void>([&]() { atr_abort(); });
+        retry_op_exp<void>([&]() {
+            atr_abort();
+        });
         // (2) rollback staged mutations
         staged_mutations_->rollback(this);
         CB_ATTEMPT_CTX_LOG_DEBUG(this, "rollback completed unstaging docs");
 
         // (3) atr_rollback
-        retry_op_exp<void>([&]() { atr_rollback_complete(); });
+        retry_op_exp<void>([&]() {
+            atr_rollback_complete();
+        });
     } catch (const client_error& e) {
         error_class ec = e.ec();
         CB_ATTEMPT_CTX_LOG_ERROR(this, "rollback transaction {}, attempt {} fail with error {}", transaction_id(), id(), e.what());
@@ -2449,8 +2482,9 @@ attempt_context_impl::create_staged_insert(const core::document_id& id,
                                                   "create_staged_insert expired and not in overtime");
     }
 
-    auto ec =
-      wait_for_hook([this, key = id.key()](auto handler) mutable { return hooks_.before_staged_insert(this, key, std::move(handler)); });
+    auto ec = wait_for_hook([this, key = id.key()](auto handler) mutable {
+        return hooks_.before_staged_insert(this, key, std::move(handler));
+    });
     if (ec) {
         return create_staged_insert_error_handler(
           id, content, cas, std::forward<Delay>(delay), op_id, std::forward<Handler>(cb), *ec, "before_staged_insert hook threw error");

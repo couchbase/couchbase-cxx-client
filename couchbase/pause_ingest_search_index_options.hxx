@@ -39,5 +39,5 @@ struct pause_ingest_search_index_options : public common_options<pause_ingest_se
   private:
 };
 
-using pause_ingest_search_index_handler = std::function<void(couchbase::manager_error_context)>;
+using pause_ingest_search_index_handler = std::function<void(error)>;
 } // namespace couchbase

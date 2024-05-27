@@ -39,5 +39,5 @@ struct resume_ingest_search_index_options : public common_options<resume_ingest_
   private:
 };
 
-using resume_ingest_search_index_handler = std::function<void(couchbase::manager_error_context)>;
+using resume_ingest_search_index_handler = std::function<void(error)>;
 } // namespace couchbase

@@ -19,8 +19,8 @@
 
 #include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/expiry.hxx>
-#include <couchbase/key_value_error_context.hxx>
 
 #include <chrono>
 #include <functional>
@@ -69,5 +69,5 @@ struct unlock_options : public common_options<unlock_options> {
  * @since 1.0.0
  * @uncommitted
  */
-using unlock_handler = std::function<void(couchbase::key_value_error_context)>;
+using unlock_handler = std::function<void(error)>;
 } // namespace couchbase

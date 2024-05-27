@@ -44,8 +44,8 @@ populate_documents_for_range_scan(const couchbase::collection& collection,
 
     std::map<std::string, couchbase::mutation_token> mutations;
     for (const auto& id : ids) {
-        auto [ctx, resp] = collection.upsert<couchbase::codec::raw_binary_transcoder>(id, value, options).get();
-        REQUIRE_SUCCESS(ctx.ec());
+        auto [err, resp] = collection.upsert<couchbase::codec::raw_binary_transcoder>(id, value, options).get();
+        REQUIRE_SUCCESS(err.ec());
         REQUIRE(resp.mutation_token().has_value());
         mutations[id] = resp.mutation_token().value();
     }
@@ -1399,8 +1399,8 @@ TEST_CASE("integration: range scan public API feature not available", "[integrat
 
     auto collection = couchbase::cluster(integration.cluster).bucket(integration.ctx.bucket).default_collection();
 
-    auto [ec, res] = collection.scan(couchbase::prefix_scan{ "foo" }, {}).get();
-    REQUIRE(ec == couchbase::errc::common::feature_not_available);
+    auto [err, res] = collection.scan(couchbase::prefix_scan{ "foo" }, {}).get();
+    REQUIRE(err.ec() == couchbase::errc::common::feature_not_available);
 }
 
 std::vector<couchbase::scan_result_item>
@@ -1408,12 +1408,12 @@ scan_and_store_results(const couchbase::collection& collection,
                        const couchbase::scan_type& scan_type,
                        const couchbase::scan_options& options)
 {
-    auto [ec, res] = collection.scan(scan_type, options).get();
-    REQUIRE_SUCCESS(ec);
+    auto [err, res] = collection.scan(scan_type, options).get();
+    REQUIRE_SUCCESS(err.ec());
     std::vector<couchbase::scan_result_item> items{};
     while (true) {
-        auto [iter_ec, item] = res.next().get();
-        REQUIRE_SUCCESS(iter_ec);
+        auto [iter_err, item] = res.next().get();
+        REQUIRE_SUCCESS(iter_err.ec());
         if (!item.has_value()) {
             break;
         }
@@ -1427,11 +1427,11 @@ scan_and_store_results_with_iterator(const couchbase::collection& collection,
                                      const couchbase::scan_type& scan_type,
                                      const couchbase::scan_options& options)
 {
-    auto [ec, res] = collection.scan(scan_type, options).get();
-    REQUIRE_SUCCESS(ec);
+    auto [err, res] = collection.scan(scan_type, options).get();
+    REQUIRE_SUCCESS(err.ec());
     std::vector<couchbase::scan_result_item> items{};
-    for (auto [iter_ec, item] : res) {
-        REQUIRE_SUCCESS(iter_ec);
+    for (auto [iter_err, item] : res) {
+        REQUIRE_SUCCESS(iter_err.ec());
         items.push_back(item);
     }
     return items;
@@ -1453,8 +1453,8 @@ static void
 next_item(couchbase::scan_result res, std::function<void(couchbase::scan_result_item)> validator, std::function<void()>&& callback)
 {
     res.next([res, callback = std::move(callback), validator = std::move(validator)](
-               std::error_code ec, std::optional<couchbase::scan_result_item> item) mutable {
-        REQUIRE_SUCCESS(ec);
+               couchbase::error err, std::optional<couchbase::scan_result_item> item) mutable {
+        REQUIRE_SUCCESS(err.ec());
         if (!item.has_value()) {
             return callback();
         }
@@ -1482,11 +1482,11 @@ TEST_CASE("integration: range scan public API", "[integration]")
     {
         auto scan_type = couchbase::prefix_scan(prefix);
         auto options = couchbase::scan_options().consistent_with(mutations_to_public_mutation_state(mutations)).concurrency(20);
-        auto [ec, res] = collection.scan(scan_type, options).get();
-        REQUIRE_SUCCESS(ec);
+        auto [err, res] = collection.scan(scan_type, options).get();
+        REQUIRE_SUCCESS(err.ec());
         auto item_count = 0;
-        for (auto [iter_ec, item] : res) {
-            REQUIRE_SUCCESS(iter_ec);
+        for (auto [iter_err, item] : res) {
+            REQUIRE_SUCCESS(iter_err.ec());
             item_count++;
             REQUIRE(!item.id().empty());
             auto content = item.content_as<couchbase::codec::binary, couchbase::codec::raw_binary_transcoder>();
@@ -1502,11 +1502,11 @@ TEST_CASE("integration: range scan public API", "[integration]")
         auto scan_type =
           couchbase::range_scan(couchbase::scan_term("scan-public-api-1"), couchbase::scan_term("scan-public-api-2").exclusive(true));
         auto options = couchbase::scan_options().consistent_with(mutations_to_public_mutation_state(mutations)).concurrency(20);
-        auto [ec, res] = collection.scan(scan_type, options).get();
-        REQUIRE_SUCCESS(ec);
+        auto [err, res] = collection.scan(scan_type, options).get();
+        REQUIRE_SUCCESS(err.ec());
         auto item_count = 0;
-        for (auto [iter_ec, item] : res) {
-            REQUIRE_SUCCESS(iter_ec);
+        for (auto [iter_err, item] : res) {
+            REQUIRE_SUCCESS(iter_err.ec());
             item_count++;
             REQUIRE(!item.id().empty());
             auto content = item.content_as<couchbase::codec::binary, couchbase::codec::raw_binary_transcoder>();
@@ -1521,12 +1521,12 @@ TEST_CASE("integration: range scan public API", "[integration]")
     {
         auto scan_type = couchbase::sampling_scan(35);
         auto options = couchbase::scan_options().consistent_with(mutations_to_public_mutation_state(mutations)).concurrency(20);
-        auto [ec, res] = collection.scan(scan_type, options).get();
-        REQUIRE_SUCCESS(ec);
+        auto [err, res] = collection.scan(scan_type, options).get();
+        REQUIRE_SUCCESS(err.ec());
         auto item_count = 0;
 
-        for (auto [iter_ec, item] : res) {
-            REQUIRE_SUCCESS(iter_ec);
+        for (auto [iter_err, item] : res) {
+            REQUIRE_SUCCESS(iter_err.ec());
             item_count++;
             REQUIRE(!item.id().empty());
             REQUIRE(!item.id_only());
@@ -1542,8 +1542,8 @@ TEST_CASE("integration: range scan public API", "[integration]")
         auto scan_type =
           couchbase::range_scan(couchbase::scan_term("scan-public-api-2"), couchbase::scan_term("scan-public-api-1").exclusive(true));
         auto options = couchbase::scan_options().consistent_with(mutations_to_public_mutation_state(mutations)).concurrency(20);
-        auto [ec, res] = collection.scan(scan_type, options).get();
-        REQUIRE_SUCCESS(ec);
+        auto [err, res] = collection.scan(scan_type, options).get();
+        REQUIRE_SUCCESS(err.ec());
         auto item_count = 0;
         for (auto _item : res) {
             // Should not be reached
@@ -1557,11 +1557,11 @@ TEST_CASE("integration: range scan public API", "[integration]")
         auto scan_type = couchbase::prefix_scan(prefix);
         auto options =
           couchbase::scan_options().consistent_with(mutations_to_public_mutation_state(mutations)).concurrency(20).ids_only(true);
-        auto [ec, res] = collection.scan(scan_type, options).get();
-        REQUIRE_SUCCESS(ec);
+        auto [err, res] = collection.scan(scan_type, options).get();
+        REQUIRE_SUCCESS(err.ec());
         auto item_count = 0;
-        for (auto [iter_ec, item] : res) {
-            REQUIRE_SUCCESS(iter_ec);
+        for (auto [iter_err, item] : res) {
+            REQUIRE_SUCCESS(iter_err.ec());
             item_count++;
             REQUIRE(!item.id().empty());
             auto content = item.content_as<couchbase::codec::binary, couchbase::codec::raw_binary_transcoder>();
@@ -1582,8 +1582,8 @@ TEST_CASE("integration: range scan public API", "[integration]")
         auto options = couchbase::scan_options().consistent_with(mutations_to_public_mutation_state(mutations)).concurrency(20);
 
         collection.scan(
-          scan_type, options, [&item_count, callback = std::move(callback)](std::error_code ec, couchbase::scan_result res) mutable {
-              REQUIRE_SUCCESS(ec);
+          scan_type, options, [&item_count, callback = std::move(callback)](couchbase::error err, couchbase::scan_result res) mutable {
+              REQUIRE_SUCCESS(err.ec());
               return next_item(
                 std::move(res),
                 [&item_count](const couchbase::scan_result_item& item) {

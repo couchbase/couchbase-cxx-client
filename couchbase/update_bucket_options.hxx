@@ -37,5 +37,5 @@ struct update_bucket_options : public common_options<update_bucket_options> {
   private:
 };
 
-using update_bucket_handler = std::function<void(couchbase::manager_error_context)>;
+using update_bucket_handler = std::function<void(error)>;
 } // namespace couchbase

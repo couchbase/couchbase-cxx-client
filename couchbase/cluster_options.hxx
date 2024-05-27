@@ -22,6 +22,7 @@
 #include <couchbase/compression_options.hxx>
 #include <couchbase/configuration_profiles_registry.hxx>
 #include <couchbase/dns_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/metrics_options.hxx>
 #include <couchbase/network_options.hxx>
 #include <couchbase/password_authenticator.hxx>
@@ -312,5 +313,5 @@ class cluster;
  * @since 1.0.0
  * @uncommitted
  */
-using cluster_connect_handler = std::function<void(cluster, std::error_code)>;
+using cluster_connect_handler = std::function<void(error, cluster)>;
 } // namespace couchbase

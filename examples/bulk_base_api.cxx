@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/fmt/error.hxx>
 
 #include <asio.hpp>
 #include <fmt/format.h>
@@ -123,9 +124,9 @@ run_workload_sequential(const couchbase::collection& collection, const program_a
 
         auto exec_start = std::chrono::system_clock::now();
         for (std::size_t i = 0; i < arguments.number_of_operations; ++i) {
-            auto [ctx, result] = collection.upsert(document_ids[i], document, {}).get();
-            if (ctx.ec()) {
-                errors[ctx.ec().message()]++;
+            auto [err, result] = collection.upsert(document_ids[i], document, {}).get();
+            if (err.ec()) {
+                errors[err.ec().message()]++;
             }
             fmt::print("\rexecute upsert: {}", i);
             fflush(stdout);
@@ -153,9 +154,9 @@ run_workload_sequential(const couchbase::collection& collection, const program_a
 
         auto exec_start = std::chrono::system_clock::now();
         for (std::size_t i = 0; i < arguments.number_of_operations; ++i) {
-            auto [ctx, result] = collection.get(document_ids[i], {}).get();
-            if (ctx.ec()) {
-                errors[ctx.ec().message()]++;
+            auto [err, result] = collection.get(document_ids[i], {}).get();
+            if (err.ec()) {
+                errors[err.ec().message()]++;
             }
             fmt::print("\rexecute get: {}", i);
             fflush(stdout);
@@ -208,7 +209,7 @@ run_workload_bulk(const couchbase::collection& collection, const program_argumen
     auto start = std::chrono::system_clock::now();
 
     {
-        using upsert_result = std::future<std::pair<couchbase::key_value_error_context, couchbase::mutation_result>>;
+        using upsert_result = std::future<std::pair<couchbase::error, couchbase::mutation_result>>;
 
         std::map<std::string, std::size_t> errors;
         std::vector<upsert_result> results;
@@ -229,9 +230,9 @@ run_workload_bulk(const couchbase::collection& collection, const program_argumen
 
         auto completion_start = std::chrono::system_clock::now();
         for (std::size_t i = 0; i < arguments.number_of_operations; ++i) {
-            auto [ctx, result] = results[i].get();
-            if (ctx.ec()) {
-                errors[ctx.ec().message()]++;
+            auto [err, result] = results[i].get();
+            if (err.ec()) {
+                errors[err.ec().message()]++;
             }
             fmt::print("\rcomplete upsert: {}", i);
         }
@@ -260,7 +261,7 @@ run_workload_bulk(const couchbase::collection& collection, const program_argumen
         }
     }
     {
-        using get_result = std::future<std::pair<couchbase::key_value_error_context, couchbase::get_result>>;
+        using get_result = std::future<std::pair<couchbase::error, couchbase::get_result>>;
 
         std::map<std::string, std::size_t> errors;
         std::vector<get_result> results;
@@ -280,9 +281,9 @@ run_workload_bulk(const couchbase::collection& collection, const program_argumen
 
         auto completion_start = std::chrono::system_clock::now();
         for (std::size_t i = 0; i < arguments.number_of_operations; ++i) {
-            auto [ctx, result] = results[i].get();
-            if (ctx.ec()) {
-                errors[ctx.ec().message()]++;
+            auto [err, result] = results[i].get();
+            if (err.ec()) {
+                errors[err.ec().message()]++;
             }
             fmt::print("\rcompleted get: {}", i);
             fflush(stdout);
@@ -341,9 +342,9 @@ main()
 
     auto options = couchbase::cluster_options(arguments.username, arguments.password);
     options.apply_profile("wan_development");
-    auto [cluster, ec] = couchbase::cluster::connect(io, arguments.connection_string, options).get();
-    if (ec) {
-        fmt::print("Unable to connect to cluster at \"{}\", error: {}\n", arguments.connection_string, ec.message());
+    auto [connect_err, cluster] = couchbase::cluster::connect(io, arguments.connection_string, options).get();
+    if (connect_err) {
+        fmt::print("Unable to connect to cluster at \"{}\", error: {}\n", arguments.connection_string, connect_err);
     } else {
         auto collection = cluster.bucket(arguments.bucket_name).scope(arguments.scope_name).collection(arguments.collection_name);
 

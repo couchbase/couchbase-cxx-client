@@ -16,12 +16,15 @@
  */
 
 #include "query.hxx"
-#include "core/utils/binary.hxx"
 #include "utils.hxx"
 
+#include "core/error_context/query.hxx"
+#include "core/error_context/query_json.hxx"
 #include "core/logger/logger.hxx"
+#include "core/utils/binary.hxx"
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/fmt/error.hxx>
 #include <couchbase/fmt/query_profile.hxx>
 #include <couchbase/fmt/query_status.hxx>
 
@@ -196,15 +199,17 @@ Examples:
 
         asio::io_context io;
         auto guard = asio::make_work_guard(io);
-        std::thread io_thread([&io]() { io.run(); });
+        std::thread io_thread([&io]() {
+            io.run();
+        });
         const auto connection_string = common_options_.connection.connection_string;
 
-        auto [cluster, ec] = couchbase::cluster::connect(io, connection_string, cluster_options).get();
-        if (ec) {
+        auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, cluster_options).get();
+        if (connect_err) {
             guard.reset();
             io_thread.join();
 
-            fail(fmt::format("Failed to connect to the cluster at \"{}\": {}", connection_string, ec.message()));
+            fail(fmt::format("Failed to connect to the cluster at \"{}\": {}", connection_string, connect_err));
         }
 
         std::optional<couchbase::scope> scope{};
@@ -213,13 +218,13 @@ Examples:
         }
 
         for (const auto& statement : queries_) {
-            auto [ctx, resp] =
+            auto [error, resp] =
               (scope ? do_query(scope.value(), statement, query_options) : do_query(cluster, statement, query_options)).get();
 
             if (json_lines_) {
-                print_result_json_line(scope_id, statement, ctx, resp, query_options);
+                print_result_json_line(scope_id, statement, error.ctx().as<couchbase::core::error_context::query>(), resp, query_options);
             } else {
-                print_result(scope_id, statement, ctx, resp, query_options);
+                print_result(scope_id, statement, error.ctx().as<couchbase::core::error_context::query>(), resp, query_options);
             }
         }
 
@@ -233,15 +238,16 @@ Examples:
 
   private:
     template<typename QueryEndpoint>
-    auto do_query(QueryEndpoint& endpoint, std::string statement, const couchbase::query_options& options) const
-      -> std::future<std::pair<couchbase::query_error_context, couchbase::query_result>>
+    auto do_query(QueryEndpoint& endpoint,
+                  std::string statement,
+                  const couchbase::query_options& options) const -> std::future<std::pair<couchbase::error, couchbase::query_result>>
     {
         return endpoint.query(std::move(statement), options);
     }
 
     void print_result_json_line(const std::optional<scope_with_bucket>& scope_id,
                                 const std::string& statement,
-                                const couchbase::query_error_context& ctx,
+                                const couchbase::core::error_context::query& ctx,
                                 const couchbase::query_result& resp,
                                 const couchbase::query_options& query_options) const
     {
@@ -256,25 +262,25 @@ Examples:
             meta["bucket_name"] = scope_id->bucket_name;
             meta["scope_name"] = scope_id->scope_name;
         }
-        if (ctx.parameters()) {
+        if (ctx.parameters) {
             try {
-                auto json = tao::json::from_string(ctx.parameters().value());
+                auto json = tao::json::from_string(ctx.parameters.value());
                 json.erase("statement");
                 meta["options"] = json;
             } catch (const tao::pegtl::parse_error&) {
-                meta["options"] = ctx.parameters().value();
+                meta["options"] = ctx.parameters.value();
             }
         }
 
-        if (ctx.ec()) {
+        if (ctx.ec) {
             tao::json::value error = {
-                { "code", ctx.ec().value() },
-                { "message", ctx.ec().message() },
+                { "code", ctx.ec.value() },
+                { "message", ctx.ec.message() },
             };
             try {
-                error["body"] = tao::json::from_string(ctx.http_body());
+                error["body"] = tao::json::from_string(ctx.http_body);
             } catch (const tao::pegtl::parse_error&) {
-                error["text"] = ctx.http_body();
+                error["text"] = ctx.http_body;
             }
             line["error"] = error;
         } else {
@@ -341,7 +347,7 @@ Examples:
 
     void print_result(const std::optional<scope_with_bucket>& scope_id,
                       const std::string& statement,
-                      const couchbase::query_error_context& ctx,
+                      const couchbase::core::error_context::query& ctx,
                       const couchbase::query_result& resp,
                       const couchbase::query_options& query_options) const
     {
@@ -354,28 +360,28 @@ Examples:
         fmt::format_to(
           std::back_inserter(header), "{}statement: \"{}\"", header.size() == 0 ? "" : ", ", tao::json::internal::escape(statement));
 
-        if (ctx.parameters()) {
+        if (ctx.parameters) {
             try {
-                auto json = tao::json::from_string(ctx.parameters().value());
+                auto json = tao::json::from_string(ctx.parameters.value());
                 json.erase("statement");
                 fmt::format_to(std::back_inserter(header), ", options: {}", tao::json::to_string(json));
             } catch (const tao::pegtl::parse_error&) {
-                fmt::format_to(std::back_inserter(header), ", options: {}", ctx.parameters().value());
+                fmt::format_to(std::back_inserter(header), ", options: {}", ctx.parameters.value());
             }
         }
         fmt::print(stdout, "--- {}\n", std::string_view{ header.data(), header.size() });
 
-        if (ctx.ec()) {
+        if (ctx.ec) {
             fmt::print("ERROR. code: {}, message: {}, server: {} \"{}\"\n",
-                       ctx.ec().value(),
-                       ctx.ec().message(),
-                       ctx.first_error_code(),
-                       tao::json::internal::escape(ctx.first_error_message()));
-            if (!ctx.http_body().empty()) {
+                       ctx.ec.value(),
+                       ctx.ec.message(),
+                       ctx.first_error_code,
+                       tao::json::internal::escape(ctx.first_error_message));
+            if (!ctx.http_body.empty()) {
                 try {
-                    fmt::print("{}\n", tao::json::to_string(tao::json::from_string(ctx.http_body())));
+                    fmt::print("{}\n", tao::json::to_string(tao::json::from_string(ctx.http_body)));
                 } catch (const tao::pegtl::parse_error&) {
-                    fmt::print("{}\n", ctx.http_body());
+                    fmt::print("{}\n", ctx.http_body);
                 }
             }
         } else {

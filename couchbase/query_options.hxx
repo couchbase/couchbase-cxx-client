@@ -19,6 +19,7 @@
 
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/mutation_state.hxx>
 #include <couchbase/query_error_context.hxx>
 #include <couchbase/query_profile.hxx>
@@ -567,5 +568,5 @@ struct query_options : public common_options<query_options> {
  * @since 1.0.0
  * @uncommitted
  */
-using query_handler = std::function<void(couchbase::query_error_context, query_result)>;
+using query_handler = std::function<void(error, query_result)>;
 } // namespace couchbase
