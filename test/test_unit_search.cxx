@@ -491,3 +491,24 @@ auto query = couchbase::vector_query("foo", std::vector<double>{ 0.352, 0.6238, 
 }
 )"_json);
 }
+
+TEST_CASE("unit: base64 vector query", "[unit]")
+{
+    // clang-format off
+//! [base64-vector-query]
+std::string base64_encoded_query = "RWFzdGVyIGVnZyE=";
+auto query = couchbase::vector_query("foo", base64_encoded_query).boost(0.5).num_candidates(4);
+//! [base64-vector-query]
+    // clang-format on
+    const auto encoded = query.encode();
+    REQUIRE_FALSE(encoded.ec);
+
+    REQUIRE(encoded.query == R"(
+{
+    "boost": 0.5,
+    "field": "foo",
+    "k": 4,
+    "vector_base64": "RWFzdGVyIGVnZyE="
+}
+)"_json);
+}
