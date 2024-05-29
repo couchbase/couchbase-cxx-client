@@ -23,7 +23,7 @@ namespace couchbase
 {
 /**
  * @since 1.0.0
- * @volatile
+ * @uncommitted
  */
 class vector_query
 {
@@ -35,7 +35,7 @@ class vector_query
      * @param vector_query the vector query to run. Cannot be empty.
      *
      * @since 1.0.0
-     * @volatile
+     * @uncommitted
      */
     vector_query(std::string vector_field_name, std::vector<double> vector_query)
       : vector_field_name_{ std::move(vector_field_name) }
@@ -53,7 +53,7 @@ class vector_query
      * @param base64_vector_query the base64 encoded vector query to run. Cannot be empty.
      *
      * @since 1.0.0
-     * @volatile
+     * @uncommitted
      */
     vector_query(std::string vector_field_name, std::string base64_vector_query)
       : vector_field_name_{ std::move(vector_field_name) }
@@ -72,7 +72,7 @@ class vector_query
      * @return this vector_query for chaining purposes
      *
      * @since 1.0.0
-     * @volatile
+     * @uncommitted
      */
     auto num_candidates(std::uint32_t num_candidates) -> vector_query&
     {
@@ -92,7 +92,7 @@ class vector_query
      * @return this vector_query for chaining purposes.
      *
      * @since 1.0.0
-     * @volatile
+     * @uncommitted
      */
     auto boost(double boost) -> vector_query&
     {

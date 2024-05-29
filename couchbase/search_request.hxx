@@ -50,7 +50,7 @@ class search_request
      * @param search_query the query to run
      *
      * @since 1.0.0
-     * @volatile
+     * @uncommitted
      */
     explicit search_request(const couchbase::search_query& search_query);
 
@@ -60,7 +60,7 @@ class search_request
      * @param vector_search the vector_search to run
      *
      * @since 1.0.0
-     * @volatile
+     * @uncommitted
      */
     explicit search_request(const couchbase::vector_search& vector_search);
 
@@ -73,7 +73,7 @@ class search_request
      * @return this search_request for chaining purposes.
      *
      * @since 1.0.0
-     * @volatile
+     * @uncommitted
      */
     auto search_query(const couchbase::search_query& search_query) -> search_request&;
 
@@ -86,7 +86,7 @@ class search_request
      * @return this search_request for chaining purposes.
      *
      * @since 1.0.0
-     * @volatile
+     * @uncommitted
      */
     auto vector_search(const couchbase::vector_search& vector_search) -> search_request&;
 
