@@ -153,8 +153,12 @@ class http_session_manager
                     session->start();
                     session->on_stop([type, id = session->id(), self = this->shared_from_this()]() {
                         std::scoped_lock lock(self->sessions_mutex_);
-                        self->busy_sessions_[type].remove_if([&id](const auto& s) { return !s || s->id() == id; });
-                        self->idle_sessions_[type].remove_if([&id](const auto& s) { return !s || s->id() == id; });
+                        self->busy_sessions_[type].remove_if([&id](const auto& s) {
+                            return !s || s->id() == id;
+                        });
+                        self->idle_sessions_[type].remove_if([&id](const auto& s) {
+                            return !s || s->id() == id;
+                        });
                     });
                     {
                         std::scoped_lock lock(sessions_mutex_);
@@ -202,8 +206,12 @@ class http_session_manager
                                                                         const std::string& preferred_node)
     {
         std::scoped_lock lock(sessions_mutex_);
-        idle_sessions_[type].remove_if([](const auto& s) { return !s; });
-        busy_sessions_[type].remove_if([](const auto& s) { return !s; });
+        idle_sessions_[type].remove_if([](const auto& s) {
+            return !s;
+        });
+        busy_sessions_[type].remove_if([](const auto& s) {
+            return !s;
+        });
         std::shared_ptr<http_session> session{};
         while (!idle_sessions_[type].empty()) {
             if (preferred_node.empty()) {
@@ -251,7 +259,9 @@ class http_session_manager
             std::scoped_lock lock(config_mutex_);
             if (!session->keep_alive() ||
                 !config_.has_node(options_.network, session->type(), options_.enable_tls, session->hostname(), session->port())) {
-                return asio::post(session->get_executor(), [session]() { session->stop(); });
+                return asio::post(session->get_executor(), [session]() {
+                    session->stop();
+                });
             }
         }
         if (!session->is_stopped()) {
@@ -259,7 +269,9 @@ class http_session_manager
             CB_LOG_DEBUG("{} put HTTP session back to idle connections", session->log_prefix());
             std::scoped_lock lock(sessions_mutex_);
             idle_sessions_[type].push_back(session);
-            busy_sessions_[type].remove_if([id = session->id()](const auto& s) -> bool { return !s || s->id() == id; });
+            busy_sessions_[type].remove_if([id = session->id()](const auto& s) -> bool {
+                return !s || s->id() == id;
+            });
         }
     }
 
@@ -349,8 +361,12 @@ class http_session_manager
 
         session->on_stop([type, id = session->id(), self = this->shared_from_this()]() {
             std::scoped_lock inner_lock(self->sessions_mutex_);
-            self->busy_sessions_[type].remove_if([&id](const auto& s) { return !s || s->id() == id; });
-            self->idle_sessions_[type].remove_if([&id](const auto& s) { return !s || s->id() == id; });
+            self->busy_sessions_[type].remove_if([&id](const auto& s) {
+                return !s || s->id() == id;
+            });
+            self->idle_sessions_[type].remove_if([&id](const auto& s) {
+                return !s || s->id() == id;
+            });
         });
         return session;
     }
@@ -388,7 +404,7 @@ class http_session_manager
         std::scoped_lock lock(config_mutex_);
         auto [hostname, port] = split_host_port(preferred_node);
         if (std::none_of(config_.nodes.begin(), config_.nodes.end(), [this, type, &h = hostname, &p = port](const auto& node) {
-                return node.hostname == h && node.port_or(options_.network, type, options_.enable_tls, 0) == p;
+                return node.hostname_for(options_.network) == h && node.port_or(options_.network, type, options_.enable_tls, 0) == p;
             })) {
             return { "", static_cast<std::uint16_t>(0U) };
         }
