@@ -31,11 +31,16 @@ vector_query::encode() const -> encoded_search_query
     }
     built.query["field"] = vector_field_name_;
 
-    tao::json::value vector_values = tao::json::empty_array;
-    for (const auto value : vector_query_) {
-        vector_values.push_back(value);
+    if (vector_query_.has_value()) {
+        tao::json::value vector_values = tao::json::empty_array;
+        for (const auto value : vector_query_.value()) {
+            vector_values.push_back(value);
+        }
+        built.query["vector"] = vector_values;
+    } else {
+        built.query["vector_base64"] = base64_vector_query_.value();
     }
-    built.query["vector"] = vector_values;
+
     built.query["k"] = num_candidates_;
     return built;
 }
