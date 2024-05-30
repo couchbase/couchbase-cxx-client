@@ -152,3 +152,8 @@
  * Public API operations return couchbase::error
  */
 #define COUCHBASE_CXX_CLIENT_USES_COUCHBASE_ERROR
+
+/**
+ * Support for base64 encoded vector types in the public API
+ */
+#define COUCHBASE_CXX_CLIENT_SUPPORTS_BASE64_VECTOR_TYPES
