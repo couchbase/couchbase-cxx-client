@@ -490,6 +490,11 @@ class bucket_impl
         std::optional<io::mcbp_session> session{};
         {
             std::scoped_lock lock(sessions_mutex_);
+            if (sessions_.empty()) {
+                CB_LOG_WARNING(
+                  R"({} unable to find connected session (sessions_ is empty), retry in {})", log_prefix_, heartbeat_interval_);
+                return;
+            }
 
             std::size_t start = heartbeat_next_index_.fetch_add(1);
             std::size_t i = start;
