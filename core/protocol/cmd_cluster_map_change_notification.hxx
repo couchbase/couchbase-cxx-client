@@ -34,6 +34,7 @@ class cluster_map_change_notification_request_body
     std::uint32_t protocol_revision_{};
     std::string bucket_{};
     std::optional<topology::configuration> config_{};
+    std::optional<std::string_view> config_text_;
 
   public:
     [[nodiscard]] std::uint32_t protocol_revision() const
@@ -49,6 +50,11 @@ class cluster_map_change_notification_request_body
     [[nodiscard]] std::optional<topology::configuration> config()
     {
         return config_;
+    }
+
+    [[nodiscard]] const std::optional<std::string_view>& config_text() const
+    {
+        return config_text_;
     }
 
     bool parse(const header_buffer& header, const std::vector<std::byte>& body, const cmd_info& info);
