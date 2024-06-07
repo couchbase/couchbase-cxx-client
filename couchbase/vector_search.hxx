@@ -44,10 +44,13 @@ class vector_search
       : vector_queries_{ std::move(vector_queries) }
       , options_{ options.build() }
     {
+        if (vector_queries_.empty()) {
+            throw std::invalid_argument("At least one vector query must be specified");
+        }
     }
 
     /**
-     * Will execute a singe vector_query, using default options
+     * Will execute a single vector_query, using default options
      *
      * @param query the query to be run
      *
