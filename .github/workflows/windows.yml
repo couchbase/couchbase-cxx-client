@@ -29,6 +29,7 @@ jobs:
         timeout-minutes: 80
         env:
           CB_CACHE_OPTION: sccache
-          CB_CMAKE_BUILD_TYPE: Release
+          # CB_CMAKE_BUILD_TYPE: Release
+          CB_CMAKE_BUILD_TYPE: RelWithDebInfo
           CB_NUMBER_OF_JOBS: 2
         run: ruby ./bin/build-tests.rb

@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 #  Copyright 2020-2021 Couchbase, Inc.
 #
@@ -16,6 +17,7 @@
 
 require "fileutils"
 require "rbconfig"
+require "English"
 
 def which(name, extra_location = [])
   ENV.fetch("PATH", "")
@@ -28,8 +30,11 @@ end
 
 def run(*args)
   args = args.compact.map(&:to_s)
-  STDERR.puts args.join(" ")
-  system(*args) || abort("#{args.join(" ")}\ncommand returned non-zero status: #{$?.inspect}")
+  warn args.join(" ")
+  ok = system(*args)
+  status = $CHILD_STATUS
+  yield(*args) if block_given?
+  abort("#{args.join(' ')}\ncommand returned non-zero status: #{status.inspect}") unless ok
 end
 
 PROJECT_ROOT = Dir.pwd
@@ -45,14 +50,12 @@ unless CB_SANITIZER.empty?
   CB_DEFAULT_CXX = CB_CLANGXX
 end
 
-
-cmake_extra_location = [ 
+cmake_extra_location = [
   'C:\Program Files\CMake\bin',
   'C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
   'C:\Program Files\Microsoft Visual Studio\2019\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
 ]
 CB_CMAKE = ENV.fetch("CB_CMAKE", which("cmake", cmake_extra_location))
-
 
 CB_CC = ENV.fetch("CB_CC", which(CB_DEFAULT_CC))
 CB_CXX = ENV.fetch("CB_CXX", which(CB_DEFAULT_CXX))
@@ -122,8 +125,16 @@ end
 if RUBY_PLATFORM =~ /mswin|mingw/
   cbc = Dir["#{BUILD_DIR}/**/cbc.exe"].first
   if File.exist?(cbc)
-    run("#{cbc}", "version", "--json")
+    rerun_with_cdb = lambda do |*args|
+      # https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/gflags-overview
+      # gflags = 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\gflags.exe'
+      cdb = 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe'
+      run(cdb, "-o", "-g", "-c", "~* kp;q", *args) if File.exist?(cdb)
+    end
+    run(cbc, "version", &rerun_with_cdb)
+    run(cbc, "version", "--json", &rerun_with_cdb)
   end
 else
+  run("#{BUILD_DIR}/tools/cbc", "version")
   run("#{BUILD_DIR}/tools/cbc", "version", "--json")
 end
