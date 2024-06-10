@@ -43,7 +43,6 @@ unstaging_state::wait_until_unstage_possible()
             abort_ = true;
         }
     }
-    lock.unlock();
     return !abort_;
 }
 
