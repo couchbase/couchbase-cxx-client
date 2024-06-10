@@ -32,7 +32,7 @@ class get_and_touch_response_body
     static const inline client_opcode opcode = client_opcode::get_and_touch;
 
   private:
-    std::uint32_t flags_;
+    std::uint32_t flags_{};
     std::vector<std::byte> value_;
 
   public:

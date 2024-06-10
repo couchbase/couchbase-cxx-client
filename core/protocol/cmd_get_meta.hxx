@@ -33,11 +33,11 @@ class get_meta_response_body
     static const inline client_opcode opcode = client_opcode::get_meta;
 
   private:
-    std::uint32_t deleted_;
-    std::uint32_t flags_;
-    std::uint32_t expiry_;
-    std::uint64_t sequence_number_;
-    std::uint8_t datatype_;
+    std::uint32_t deleted_{};
+    std::uint32_t flags_{};
+    std::uint32_t expiry_{};
+    std::uint64_t sequence_number_{};
+    std::uint8_t datatype_{};
 
   public:
     [[nodiscard]] bool is_deleted() const
