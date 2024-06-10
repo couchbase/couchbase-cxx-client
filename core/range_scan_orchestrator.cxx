@@ -568,7 +568,7 @@ class range_scan_orchestrator_impl
     std::atomic_uint16_t active_stream_count_{ 0 };
     std::uint16_t concurrency_{ 1 };
     std::size_t item_limit_{ std::numeric_limits<std::size_t>::max() };
-    bool cancelled_{ false };
+    std::atomic<bool> cancelled_{ false };
 };
 
 range_scan_orchestrator::range_scan_orchestrator(asio::io_context& io,
