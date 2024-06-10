@@ -38,11 +38,17 @@ class get_cluster_config_response_body
 
   private:
     topology::configuration config_{};
+    std::optional<std::string_view> config_text_;
 
   public:
     [[nodiscard]] topology::configuration&& config()
     {
         return std::move(config_);
+    }
+
+    [[nodiscard]] const std::optional<std::string_view>& config_text() const
+    {
+        return config_text_;
     }
 
     bool parse(key_value_status_code status,

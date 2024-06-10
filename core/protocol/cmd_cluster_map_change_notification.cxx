@@ -47,6 +47,7 @@ cluster_map_change_notification_request_body::parse(const header_buffer& header,
     if (body.size() > static_cast<std::size_t>(offset)) {
         std::string_view config_text{ data_ptr + offset, body.size() - static_cast<std::size_t>(offset) };
         config_ = parse_config(config_text, info.endpoint_address, info.endpoint_port);
+        config_text_.emplace(config_text);
     }
     return true;
 }

@@ -467,17 +467,16 @@ class mcbp_session_impl
                         case protocol::client_opcode::get_cluster_config: {
                             protocol::cmd_info info{ session_->connection_endpoints_.remote_address,
                                                      session_->connection_endpoints_.remote.port() };
-                            if (session_->origin_.options().dump_configuration) {
-                                std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()), msg.body.size() };
+                            protocol::client_response<protocol::get_cluster_config_response_body> resp(std::move(msg), info);
+                            if (session_->origin_.options().dump_configuration && resp.body().config_text().has_value()) {
                                 CB_LOG_TRACE(
                                   "{} configuration from get_cluster_config request (bootstrap, size={}, endpoint=\"{}:{}\"), {}",
                                   session_->log_prefix_,
-                                  config_text.size(),
+                                  resp.body().config_text().value().size(),
                                   info.endpoint_address,
                                   info.endpoint_port,
-                                  config_text);
+                                  resp.body().config_text().value());
                             }
-                            protocol::client_response<protocol::get_cluster_config_response_body> resp(std::move(msg), info);
                             if (resp.status() == key_value_status_code::success) {
                                 // MB-60405 fixes this for 7.6.2, but for earlier versions we need to protect against using a
                                 // config that has an empty vbucket map.  Ideally we don't timeout if we retry here, but a timeout
@@ -526,17 +525,16 @@ class mcbp_session_impl
                     switch (static_cast<protocol::server_opcode>(msg.header.opcode)) {
                         case protocol::server_opcode::cluster_map_change_notification: {
                             protocol::cmd_info info{ session_->bootstrap_hostname_, session_->bootstrap_port_number_ };
-                            if (session_->origin_.options().dump_configuration) {
-                                std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()), msg.body.size() };
+                            protocol::server_request<protocol::cluster_map_change_notification_request_body> req(std::move(msg), info);
+                            if (session_->origin_.options().dump_configuration && req.body().config_text().has_value()) {
                                 CB_LOG_TRACE(
                                   "{} configuration from cluster_map_change_notification request (size={}, endpoint=\"{}:{}\"), {}",
                                   session_->log_prefix_,
-                                  config_text.size(),
+                                  req.body().config_text().value().size(),
                                   info.endpoint_address,
                                   info.endpoint_port,
-                                  config_text);
+                                  req.body().config_text().value());
                             }
-                            protocol::server_request<protocol::cluster_map_change_notification_request_body> req(std::move(msg), info);
                             std::optional<topology::configuration> config = req.body().config();
                             if (session_ && config.has_value()) {
                                 if ((!config->bucket.has_value() && req.body().bucket().empty()) ||
@@ -608,16 +606,15 @@ class mcbp_session_impl
                     switch (auto opcode = static_cast<protocol::client_opcode>(msg.header.opcode)) {
                         case protocol::client_opcode::get_cluster_config: {
                             protocol::cmd_info info{ session_->bootstrap_hostname_, session_->bootstrap_port_number_ };
-                            if (session_->origin_.options().dump_configuration) {
-                                std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()), msg.body.size() };
+                            protocol::client_response<protocol::get_cluster_config_response_body> resp(std::move(msg), info);
+                            if (session_->origin_.options().dump_configuration && resp.body().config_text().has_value()) {
                                 CB_LOG_TRACE("{} configuration from get_cluster_config response (size={}, endpoint=\"{}:{}\"), {}",
                                              session_->log_prefix_,
-                                             config_text.size(),
+                                             resp.body().config_text().value().size(),
                                              info.endpoint_address,
                                              info.endpoint_port,
-                                             config_text);
+                                             resp.body().config_text().value());
                             }
-                            protocol::client_response<protocol::get_cluster_config_response_body> resp(std::move(msg), info);
                             if (resp.status() == key_value_status_code::success) {
                                 if (session_) {
                                     session_->update_configuration(resp.body().config());
@@ -687,17 +684,16 @@ class mcbp_session_impl
                     switch (static_cast<protocol::server_opcode>(msg.header.opcode)) {
                         case protocol::server_opcode::cluster_map_change_notification: {
                             protocol::cmd_info info{ session_->bootstrap_hostname_, session_->bootstrap_port_number_ };
-                            if (session_->origin_.options().dump_configuration) {
-                                std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()), msg.body.size() };
+                            protocol::server_request<protocol::cluster_map_change_notification_request_body> req(std::move(msg), info);
+                            if (session_->origin_.options().dump_configuration && req.body().config_text().has_value()) {
                                 CB_LOG_TRACE(
                                   "{} configuration from cluster_map_change_notification request (size={}, endpoint=\"{}:{}\"), {}",
                                   session_->log_prefix_,
-                                  config_text.size(),
+                                  req.body().config_text().value().size(),
                                   info.endpoint_address,
                                   info.endpoint_port,
-                                  config_text);
+                                  req.body().config_text().value());
                             }
-                            protocol::server_request<protocol::cluster_map_change_notification_request_body> req(std::move(msg), info);
                             std::optional<topology::configuration> config = req.body().config();
                             if (session_ && config.has_value()) {
                                 if ((!config->bucket.has_value() && req.body().bucket().empty()) ||
