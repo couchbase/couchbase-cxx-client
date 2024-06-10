@@ -31,8 +31,8 @@ class get_collection_id_response_body
     static const inline client_opcode opcode = client_opcode::get_collection_id;
 
   private:
-    std::uint64_t manifest_uid_;
-    std::uint32_t collection_uid_;
+    std::uint64_t manifest_uid_{};
+    std::uint32_t collection_uid_{};
 
   public:
     [[nodiscard]] std::uint64_t manifest_uid() const
