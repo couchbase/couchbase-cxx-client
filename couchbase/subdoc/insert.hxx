@@ -70,6 +70,21 @@ public:
     return *this;
   }
 
+  /**
+   * Sets whether the value should be treated as a binary.
+   *
+   * @param value new value for the option
+   * @return this, for chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto binary(bool value = true) -> insert&
+  {
+    binary_ = value;
+    return *this;
+  }
+
 private:
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
   friend couchbase::mutate_in_specs;
@@ -102,6 +117,7 @@ private:
   bool xattr_{ false };
   bool expand_macro_{ false };
   bool create_path_{ false };
+  bool binary_{ false };
 };
 } // namespace subdoc
 } // namespace couchbase

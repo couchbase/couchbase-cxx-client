@@ -35,7 +35,7 @@ enum class error_context_json_format {
 class error_context
 {
 public:
-  error_context() = default;
+  error_context();
   explicit error_context(internal_error_context internal);
   error_context(internal_error_context internal, internal_error_context internal_metadata);
 

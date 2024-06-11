@@ -15,6 +15,7 @@
  */
 
 #include "transaction_get_result.hxx"
+#include "couchbase/codec/codec_flags.hxx"
 #include "result.hxx"
 
 namespace couchbase::core::transactions
@@ -23,209 +24,175 @@ auto
 transaction_get_result::create_from(const core::operations::lookup_in_response& resp)
   -> transaction_get_result
 {
-  std::optional<std::string> atr_id;
-  std::optional<std::string> transaction_id;
-  std::optional<std::string> attempt_id;
-  std::optional<std::string> operation_id;
-  std::optional<std::vector<std::byte>> staged_content;
-  std::optional<std::string> atr_bucket_name;
-  std::optional<std::string> atr_scope_name;
-  std::optional<std::string> atr_collection_name;
-  std::optional<tao::json::value> forward_compat;
-
-  // read from xattrs.txn.restore
-  std::optional<std::string> cas_pre_txn;
-  std::optional<std::string> revid_pre_txn;
-  std::optional<std::uint32_t> exptime_pre_txn;
-  std::optional<std::string> crc32_of_staging;
-
-  // read from $document
-  std::optional<std::string> cas_from_doc;
-  std::optional<std::string> revid_from_doc;
-  std::optional<std::uint32_t> exptime_from_doc;
-  std::optional<std::string> crc32_from_doc;
-
-  std::optional<std::string> op;
-  std::vector<std::byte> content;
-
+  // "txn.id"
+  std::optional<std::string> transaction_id{};
+  std::optional<std::string> attempt_id{};
+  std::optional<std::string> operation_id{};
   if (resp.fields[0].status == key_value_status_code::success) {
-    atr_id = codec::tao_json_serializer::deserialize<std::string>(resp.fields[0].value);
+    auto id = codec::tao_json_serializer::deserialize<tao::json::value>(resp.fields[0].value);
+    transaction_id = id.optional<std::string>("txn");
+    attempt_id = id.optional<std::string>("atmpt");
+    operation_id = id.optional<std::string>("op");
   }
+
+  // "txn.atr"
+  std::optional<std::string> atr_id{};
+  std::optional<std::string> atr_bucket_name{};
+  std::optional<std::string> atr_scope_name{};
+  std::optional<std::string> atr_collection_name{};
   if (resp.fields[1].status == key_value_status_code::success) {
-    transaction_id = codec::tao_json_serializer::deserialize<std::string>(resp.fields[1].value);
+    auto atr = codec::tao_json_serializer::deserialize<tao::json::value>(resp.fields[1].value);
+    atr_id = atr.optional<std::string>("id");
+    atr_bucket_name = atr.optional<std::string>("bkt");
+    atr_scope_name = atr.optional<std::string>("scp");
+    atr_collection_name = atr.optional<std::string>("coll");
   }
+
+  // "txn.op.type"
+  std::optional<std::string> op{};
   if (resp.fields[2].status == key_value_status_code::success) {
-    attempt_id = codec::tao_json_serializer::deserialize<std::string>(resp.fields[2].value);
+    op = codec::tao_json_serializer::deserialize<std::string>(resp.fields[2].value);
   }
+
+  // "txn.op.stgd"
+  std::optional<codec::encoded_value> staged_content_json{};
   if (resp.fields[3].status == key_value_status_code::success) {
-    operation_id = codec::tao_json_serializer::deserialize<std::string>(resp.fields[3].value);
+    staged_content_json = {
+      resp.fields[3].value,
+      codec::codec_flags::json_common_flags,
+    };
   }
+
+  // "txn.op.crc32"
+  std::optional<std::string> crc32_of_staging{};
   if (resp.fields[4].status == key_value_status_code::success) {
-    staged_content = resp.fields[4].value;
+    crc32_of_staging = codec::tao_json_serializer::deserialize<std::string>(resp.fields[4].value);
   }
+
+  // "txn.restore"
+  std::optional<std::string> cas_pre_txn{};
+  std::optional<std::string> revid_pre_txn{};
+  std::optional<std::uint32_t> exptime_pre_txn{};
   if (resp.fields[5].status == key_value_status_code::success) {
-    atr_bucket_name = codec::tao_json_serializer::deserialize<std::string>(resp.fields[5].value);
+    auto restore = codec::tao_json_serializer::deserialize<tao::json::value>(resp.fields[5].value);
+    cas_pre_txn = restore.optional<std::string>("CAS");
+    // only present in 6.5+
+    revid_pre_txn = restore.optional<std::string>("revid");
+    exptime_pre_txn = restore.optional<std::uint32_t>("exptime");
   }
+
+  // "txn.fc"
+  std::optional<tao::json::value> forward_compat{};
   if (resp.fields[6].status == key_value_status_code::success) {
-    atr_scope_name = codec::tao_json_serializer::deserialize<std::string>(resp.fields[6].value);
+    forward_compat =
+      codec::tao_json_serializer::deserialize<tao::json::value>(resp.fields[6].value);
   }
+
+  // "$document"
+  std::optional<std::string> cas_from_doc{};
+  std::optional<std::string> revid_from_doc{};
+  std::optional<std::uint32_t> exptime_from_doc{};
+  std::optional<std::string> crc32_from_doc{};
+  codec::encoded_value content{};
   if (resp.fields[7].status == key_value_status_code::success) {
-    atr_collection_name =
-      codec::tao_json_serializer::deserialize<std::string>(resp.fields[7].value);
-  }
-
-  if (resp.fields[8].status == key_value_status_code::success) {
-    auto restore = core::utils::json::parse_binary(resp.fields[8].value);
-    cas_pre_txn = restore["CAS"].as<std::string>();
+    auto document = codec::tao_json_serializer::deserialize<tao::json::value>(resp.fields[7].value);
+    cas_from_doc = document["CAS"].as<std::string>();
     // only present in 6.5+
-    revid_pre_txn = restore["revid"].as<std::string>();
-    exptime_pre_txn = restore["exptime"].as<std::uint32_t>();
-  }
-  if (resp.fields[9].status == key_value_status_code::success) {
-    op = codec::tao_json_serializer::deserialize<std::string>(resp.fields[9].value);
-  }
-  if (resp.fields[10].status == key_value_status_code::success) {
-    auto doc = core::utils::json::parse_binary(resp.fields[10].value);
-    cas_from_doc = doc["CAS"].as<std::string>();
-    // only present in 6.5+
-    revid_from_doc = doc["revid"].as<std::string>();
-    exptime_from_doc = doc["exptime"].as<std::uint32_t>();
-    crc32_from_doc = doc["value_crc32c"].as<std::string>();
-  }
-  if (resp.fields[11].status == key_value_status_code::success) {
-    crc32_of_staging = codec::tao_json_serializer::deserialize<std::string>(resp.fields[11].value);
-  }
-  if (resp.fields[12].status == key_value_status_code::success) {
-    forward_compat = core::utils::json::parse_binary(resp.fields[12].value);
+    revid_from_doc = document["revid"].as<std::string>();
+    exptime_from_doc = document["exptime"].as<std::uint32_t>();
+    crc32_from_doc = document["value_crc32c"].as<std::string>();
+    content.flags = document["flags"].as<std::uint32_t>();
   } else {
-    forward_compat = tao::json::empty_object;
-  }
-  if (resp.fields[13].status == key_value_status_code::success) {
-    content = resp.fields[13].value;
+    // TODO(SA): throw exception here like Java SDK does
   }
 
-  transaction_links links(atr_id,
-                          atr_bucket_name,
-                          atr_scope_name,
-                          atr_collection_name,
-                          transaction_id,
-                          attempt_id,
-                          operation_id,
-                          staged_content,
-                          cas_pre_txn,
-                          revid_pre_txn,
-                          exptime_pre_txn,
-                          crc32_of_staging,
-                          op,
-                          forward_compat,
-                          resp.deleted);
-  document_metadata md(cas_from_doc, revid_from_doc, exptime_from_doc, crc32_from_doc);
-  return { { resp.ctx.bucket(), resp.ctx.scope(), resp.ctx.collection(), resp.ctx.id() },
-           content,
-           resp.cas.value(),
-           links,
-           std::make_optional(md) };
+  // "txn.op.bin"
+  std::optional<codec::encoded_value> staged_content_binary{};
+  if (resp.fields[8].status == key_value_status_code::success) {
+    staged_content_binary = {
+      resp.fields[8].value,
+      codec::codec_flags::binary_common_flags,
+    };
+  }
+
+  // "txn.aux"
+  if (resp.fields[9].status == key_value_status_code::success) {
+    auto aux = codec::tao_json_serializer::deserialize<tao::json::value>(resp.fields[9].value);
+    auto staged_user_flags = aux.optional<std::uint32_t>("uf");
+    if (staged_user_flags && staged_content_binary) {
+      staged_content_binary->flags = staged_user_flags.value();
+    }
+  }
+
+  if (resp.fields[10].status == key_value_status_code::success) {
+    content.data = resp.fields[10].value;
+  }
+
+  return {
+    {
+      resp.ctx.bucket(),
+      resp.ctx.scope(),
+      resp.ctx.collection(),
+      resp.ctx.id(),
+    },
+    content,
+    resp.cas.value(),
+    transaction_links{
+      atr_id,
+      atr_bucket_name,
+      atr_scope_name,
+      atr_collection_name,
+      transaction_id,
+      attempt_id,
+      operation_id,
+      staged_content_json,
+      staged_content_binary,
+      cas_pre_txn,
+      revid_pre_txn,
+      exptime_pre_txn,
+      crc32_of_staging,
+      op,
+      forward_compat,
+      resp.deleted,
+    },
+    {
+      document_metadata{
+        cas_from_doc,
+        revid_from_doc,
+        exptime_from_doc,
+        crc32_from_doc,
+      },
+    },
+  };
 }
 
 auto
-transaction_get_result::create_from(const core::document_id& id,
-                                    const result& res) -> transaction_get_result
+transaction_get_result::create_from(const transaction_get_result& document,
+                                    codec::encoded_value content) -> transaction_get_result
 {
-  std::optional<std::string> atr_id;
-  std::optional<std::string> transaction_id;
-  std::optional<std::string> attempt_id;
-  std::optional<std::string> operation_id;
-  std::optional<std::vector<std::byte>> staged_content;
-  std::optional<std::string> atr_bucket_name;
-  std::optional<std::string> atr_scope_name;
-  std::optional<std::string> atr_collection_name;
-  std::optional<tao::json::value> forward_compat;
-
-  // read from xattrs.txn.restore
-  std::optional<std::string> cas_pre_txn;
-  std::optional<std::string> revid_pre_txn;
-  std::optional<std::uint32_t> exptime_pre_txn;
-  std::optional<std::string> crc32_of_staging;
-
-  // read from $document
-  std::optional<std::string> cas_from_doc;
-  std::optional<std::string> revid_from_doc;
-  std::optional<std::uint32_t> exptime_from_doc;
-  std::optional<std::string> crc32_from_doc;
-
-  std::optional<std::string> op;
-  std::vector<std::byte> content;
-
-  if (res.values[0].has_value()) {
-    atr_id = res.values[0].content_as<std::string>();
-  }
-  if (res.values[1].has_value()) {
-    transaction_id = res.values[1].content_as<std::string>();
-  }
-  if (res.values[2].has_value()) {
-    attempt_id = res.values[2].content_as<std::string>();
-  }
-  if (res.values[3].has_value()) {
-    operation_id = res.values[3].content_as<std::string>();
-  }
-  if (res.values[4].has_value()) {
-    staged_content = res.values[4].raw_value;
-  }
-  if (res.values[5].has_value()) {
-    atr_bucket_name = res.values[5].content_as<std::string>();
-  }
-  if (res.values[6].has_value()) {
-    atr_scope_name = res.values[6].content_as<std::string>();
-  }
-  if (res.values[7].has_value()) {
-    atr_collection_name = res.values[7].content_as<std::string>();
-  }
-  if (res.values[8].has_value()) {
-    auto restore = res.values[8].content_as();
-    cas_pre_txn = restore["CAS"].as<std::string>();
-    // only present in 6.5+
-    revid_pre_txn = restore["revid"].as<std::string>();
-    exptime_pre_txn = restore["exptime"].as<std::uint32_t>();
-  }
-  if (res.values[9].has_value()) {
-    op = res.values[9].content_as<std::string>();
-  }
-  if (res.values[10].has_value()) {
-    auto doc = res.values[10].content_as();
-    cas_from_doc = doc["CAS"].as<std::string>();
-    // only present in 6.5+
-    revid_from_doc = doc["revid"].as<std::string>();
-    exptime_from_doc = doc["exptime"].as<std::uint32_t>();
-    crc32_from_doc = doc["value_crc32c"].as<std::string>();
-  }
-  if (res.values[11].has_value()) {
-    crc32_of_staging = res.values[11].content_as<std::string>();
-  }
-  if (res.values[12].has_value()) {
-    forward_compat = res.values[12].content_as();
-  } else {
-    forward_compat = tao::json::empty_object;
-  }
-  if (res.values[13].has_value()) {
-    content = res.values[13].raw_value;
-  }
-
-  transaction_links links(atr_id,
-                          atr_bucket_name,
-                          atr_scope_name,
-                          atr_collection_name,
-                          transaction_id,
-                          attempt_id,
-                          operation_id,
-                          staged_content,
-                          cas_pre_txn,
-                          revid_pre_txn,
-                          exptime_pre_txn,
-                          crc32_of_staging,
-                          op,
-                          forward_compat,
-                          res.is_deleted);
-  document_metadata md(cas_from_doc, revid_from_doc, exptime_from_doc, crc32_from_doc);
-  return { id, content, res.cas, links, std::make_optional(md) };
+  return {
+    document.id(),
+    std::move(content),
+    document.cas().value(),
+    transaction_links{
+      document.links().atr_id(),
+      document.links().atr_bucket_name(),
+      document.links().atr_scope_name(),
+      document.links().atr_collection_name(),
+      document.links().staged_transaction_id(),
+      document.links().staged_attempt_id(),
+      document.links().staged_operation_id(),
+      document.links().staged_content_json(),
+      document.links().staged_content_binary(),
+      document.links().cas_pre_txn(),
+      document.links().revid_pre_txn(),
+      document.links().exptime_pre_txn(),
+      document.links().crc32_of_staging(),
+      document.links().op(),
+      document.links().forward_compat(),
+      document.links().is_deleted(),
+    },
+    document.metadata(),
+  };
 }
 } // namespace couchbase::core::transactions

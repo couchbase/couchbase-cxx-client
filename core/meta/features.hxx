@@ -157,3 +157,8 @@
  * Support for base64 encoded vector types in the public API
  */
 #define COUCHBASE_CXX_CLIENT_SUPPORTS_BASE64_VECTOR_TYPES
+
+/**
+ * Supports binary objects in transactions
+ */
+#define COUCHBASE_CXX_CLIENT_SUPPORTS_BINARY_TRANSACTIONS

@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <couchbase/codec/encoded_value.hxx>
+
 #include "attempt_context_impl.hxx"
 #include "internal/utils.hxx"
 #include "transaction_get_result.hxx"
@@ -38,16 +40,15 @@ class staged_mutation
 private:
   transaction_get_result doc_;
   staged_mutation_type type_;
-  std::vector<std::byte> content_;
+  codec::encoded_value content_;
   std::string operation_id_;
 
 public:
-  template<typename Content>
-  staged_mutation(transaction_get_result& doc,
-                  Content content,
+  staged_mutation(transaction_get_result doc,
+                  codec::encoded_value content,
                   staged_mutation_type type,
                   std::string operation_id = uid_generator::next())
-    : doc_(doc)
+    : doc_(std::move(doc))
     , type_(type)
     , content_(std::move(content))
     , operation_id_(std::move(operation_id))
@@ -59,7 +60,7 @@ public:
   auto operator=(const staged_mutation& o) -> staged_mutation& = default;
   auto operator=(staged_mutation&& o) -> staged_mutation& = default;
 
-  auto id() const -> const core::document_id&
+  [[nodiscard]] auto id() const -> const core::document_id&
   {
     return doc_.id();
   }
@@ -84,12 +85,22 @@ public:
     type_ = type;
   }
 
-  [[nodiscard]] auto content() const -> const std::vector<std::byte>&
+  [[nodiscard]] auto is_staged_binary() const -> bool;
+
+  [[nodiscard]] auto content() const -> const codec::encoded_value&
   {
     return content_;
   }
 
-  void content(const std::vector<std::byte>& content)
+  /**
+   * @return current user flags before the staging of the document
+   */
+  [[nodiscard]] auto current_user_flags() const -> std::uint32_t
+  {
+    return doc_.content().flags;
+  }
+
+  void content(const codec::encoded_value& content)
   {
     content_ = content;
   }

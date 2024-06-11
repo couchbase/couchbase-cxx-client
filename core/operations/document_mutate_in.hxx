@@ -69,6 +69,7 @@ struct mutate_in_request {
   io::retry_context<false> retries{};
   bool preserve_expiry{ false };
   std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
+  std::optional<std::uint32_t> flags{};
 
   [[nodiscard]] auto encode_to(encoded_request_type& encoded,
                                mcbp_context&& context) -> std::error_code;

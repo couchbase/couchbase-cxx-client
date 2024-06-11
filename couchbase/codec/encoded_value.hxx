@@ -28,4 +28,17 @@ struct encoded_value {
   binary data;
   std::uint32_t flags;
 };
+
+static inline bool
+operator==(const encoded_value& lhs, const encoded_value& rhs) noexcept
+{
+  return lhs.data == rhs.data && lhs.flags == rhs.flags;
+}
+
+static inline bool
+operator!=(const encoded_value& lhs, const encoded_value& rhs) noexcept
+{
+  return !(lhs == rhs);
+}
+
 } // namespace couchbase::codec

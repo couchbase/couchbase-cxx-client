@@ -16,12 +16,14 @@
 
 #include "attempt_context_impl.hxx"
 #include "uid_generator.hxx"
-#include <asio/post.hpp>
-#include <asio/steady_timer.hpp>
 
+#include "exceptions_fmt.hxx"
 #include "internal/logging.hxx"
 #include "internal/transaction_context.hxx"
 #include "internal/utils.hxx"
+
+#include <asio/post.hpp>
+#include <asio/steady_timer.hpp>
 
 namespace couchbase::core::transactions
 {
@@ -76,7 +78,8 @@ transaction_context::has_expired_client_side() -> bool
   if (is_expired) {
     CB_ATTEMPT_CTX_LOG_INFO(
       current_attempt_context_,
-      "has expired client side (now={}ns, start={}ns, deferred_elapsed={}ns, expired={}ns ({}ms), "
+      "has expired client side (now={}ns, start={}ns, deferred_elapsed={}ns, "
+      "expired={}ns ({}ms), "
       "config={}ms)",
       now.time_since_epoch().count(),
       start_time_client_.time_since_epoch().count(),
@@ -103,8 +106,8 @@ void
 transaction_context::new_attempt_context(async_attempt_context::VoidCallback&& cb)
 {
   asio::post(transactions_.cluster_ref().io_context(), [this, cb = std::move(cb)]() {
-    // the first time we call the delay, it just records an end time.  After that, it
-    // actually delays.
+    // the first time we call the delay, it just records an end time.  After
+    // that, it actually delays.
     try {
       (*delay_)();
       current_attempt_context_ = std::make_shared<attempt_context_impl>(*this);
@@ -146,22 +149,22 @@ transaction_context::get_optional(const core::document_id& id, async_attempt_con
 
 void
 transaction_context::insert(const core::document_id& id,
-                            const std::vector<std::byte>& content,
+                            codec::encoded_value content,
                             async_attempt_context::Callback&& cb)
 {
   if (current_attempt_context_) {
-    return current_attempt_context_->insert_raw(id, content, std::move(cb));
+    return current_attempt_context_->insert_raw(id, std::move(content), std::move(cb));
   }
   throw transaction_operation_failed(FAIL_OTHER, "no current attempt context");
 }
 
 void
 transaction_context::replace(const transaction_get_result& doc,
-                             const std::vector<std::byte>& content,
+                             codec::encoded_value content,
                              async_attempt_context::Callback&& cb)
 {
   if (current_attempt_context_) {
-    return current_attempt_context_->replace_raw(doc, content, std::move(cb));
+    return current_attempt_context_->replace_raw(doc, std::move(content), std::move(cb));
   }
   throw transaction_operation_failed(FAIL_OTHER, "no current attempt context");
 }
@@ -233,8 +236,12 @@ transaction_context::handle_error(std::exception_ptr err, txn_complete_callback&
       throw transaction_operation_failed(FAIL_OTHER, e.what()).cause(e.cause());
     }
   } catch (const transaction_operation_failed& er) {
-    CB_ATTEMPT_CTX_LOG_ERROR(
-      current_attempt_context_, "got transaction_operation_failed {}", er.what());
+    CB_ATTEMPT_CTX_LOG_ERROR(current_attempt_context_,
+                             "got transaction_operation_failed {}, cause={}, retry={}, rollback={}",
+                             er.what(),
+                             er.cause(),
+                             er.should_retry(),
+                             er.should_rollback());
     if (er.should_rollback()) {
       CB_ATTEMPT_CTX_LOG_TRACE(current_attempt_context_,
                                "got rollback-able exception, rolling back");
@@ -248,9 +255,9 @@ transaction_context::handle_error(std::exception_ptr err, txn_complete_callback&
           er_rollback.what(),
           er.what());
         auto final = er.get_final_exception(*this);
-        // if you get here, we didn't throw, yet we had an error.  Fall through in
-        // this case.  Note the current logic is such that rollback will not have a
-        // commit ambiguous error, so we should always throw.
+        // if you get here, we didn't throw, yet we had an error.  Fall through
+        // in this case.  Note the current logic is such that rollback will not
+        // have a commit ambiguous error, so we should always throw.
         assert(final);
         return callback(final, std::nullopt);
       }

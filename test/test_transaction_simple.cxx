@@ -39,8 +39,7 @@ using namespace couchbase::core::transactions;
 static const tao::json::value content{
   { "some_number", 0 },
 };
-static const std::vector<std::byte> content_json =
-  couchbase::core::utils::json::generate_binary(content);
+static const auto content_json = couchbase::codec::default_json_transcoder::encode(content);
 
 couchbase::transactions::transactions_config
 get_conf()
@@ -61,7 +60,8 @@ TEST_CASE("transactions: arbitrary runtime error", "[transactions]")
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -122,7 +122,8 @@ TEST_CASE("transactions: can get replica", "[transactions]")
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -157,7 +158,8 @@ TEST_CASE("transactions: can use custom metadata collections per transactions", 
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -197,7 +199,8 @@ TEST_CASE("transactions: can use custom metadata collections", "[transactions]")
 
   // upsert initial doc
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -252,7 +255,8 @@ TEST_CASE("transactions: non existent scope in custom metadata collections", "[t
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -271,7 +275,7 @@ TEST_CASE("transactions: non existent scope in custom metadata collections", "[t
       couchbase::core::operations::get_request req{ id };
       auto resp = test::utils::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec());
-      REQUIRE(resp.value == content_json);
+      REQUIRE(resp.value == content_json.data);
     }
   }
 }
@@ -295,7 +299,8 @@ TEST_CASE("transactions: non existent collection in custom metadata collections"
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -312,7 +317,7 @@ TEST_CASE("transactions: non existent collection in custom metadata collections"
     couchbase::core::operations::get_request req{ id };
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
-    REQUIRE(resp.value == content_json);
+    REQUIRE(resp.value == content_json.data);
   }
 }
 
@@ -328,7 +333,8 @@ TEST_CASE("transactions: raw std::strings become json strings", "[transactions]"
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -424,7 +430,8 @@ TEST_CASE("transactions: query mode get optional", "[transactions]")
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -449,7 +456,8 @@ TEST_CASE("transactions: can get replace objects", "[transactions]")
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -471,7 +479,10 @@ TEST_CASE("transactions: can get replace mixed object strings", "[transactions]"
 {
   test::utils::integration_test_guard integration;
   SimpleObject o{ "someone", 100 };
-  tao::json::value v2 = { { "name", "someone else" }, { "number", 200 } };
+  tao::json::value v2 = {
+    { "name", "someone else" },
+    { "number", 200 },
+  };
   auto o2 = v2.as<SimpleObject>();
   auto cluster = integration.cluster;
 
@@ -481,14 +492,15 @@ TEST_CASE("transactions: can get replace mixed object strings", "[transactions]"
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
   txn->run([id, v2](attempt_context& ctx) {
     auto doc = ctx.get(id);
-    ctx.replace(doc, couchbase::core::utils::json::generate_binary(v2));
+    ctx.replace(doc, v2);
   });
   {
     couchbase::core::operations::get_request req{ id };
@@ -538,7 +550,8 @@ TEST_CASE("transactions: can rollback remove", "[transactions]")
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -570,7 +583,8 @@ TEST_CASE("transactions: can rollback replace", "[transactions]")
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -591,7 +605,7 @@ TEST_CASE("transactions: can rollback replace", "[transactions]")
     couchbase::core::operations::get_request req{ id };
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
-    REQUIRE(resp.value == content_json);
+    REQUIRE(resp.value == content_json.data);
   }
 }
 
@@ -611,7 +625,8 @@ TEST_CASE("transactions: can have trivial query in transaction", "[transactions]
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -641,7 +656,8 @@ TEST_CASE("transactions: can modify doc in query", "[transactions]")
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -673,7 +689,8 @@ TEST_CASE("transactions: can rollback", "[transactions]")
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -694,7 +711,7 @@ TEST_CASE("transactions: can rollback", "[transactions]")
     couchbase::core::operations::get_request req{ id };
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
-    REQUIRE(resp.value == content_json);
+    REQUIRE(resp.value == content_json.data);
   }
 }
 
@@ -783,7 +800,7 @@ TEST_CASE("transactions: can KV insert", "[transactions]")
     couchbase::core::operations::get_request req{ id };
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
-    REQUIRE(resp.value == content_json);
+    REQUIRE(resp.value == content_json.data);
   }
 }
 
@@ -834,7 +851,8 @@ TEST_CASE("transactions: can KV replace", "[transactions]")
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -873,7 +891,8 @@ TEST_CASE("transactions: can rollback KV replace", "[transactions]")
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -898,7 +917,7 @@ TEST_CASE("transactions: can rollback KV replace", "[transactions]")
     couchbase::core::operations::get_request req{ id };
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
-    REQUIRE(resp.value == content_json);
+    REQUIRE(resp.value == content_json.data);
   }
 }
 
@@ -918,7 +937,8 @@ TEST_CASE("transactions: can KV remove", "[transactions]")
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -952,7 +972,8 @@ TEST_CASE("transactions: can rollback KV remove", "[transactions]")
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -973,7 +994,7 @@ TEST_CASE("transactions: can rollback KV remove", "[transactions]")
     couchbase::core::operations::get_request req{ id };
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
-    REQUIRE(resp.value == content_json);
+    REQUIRE(resp.value == content_json.data);
   }
 }
 
@@ -992,7 +1013,8 @@ TEST_CASE("transactions: can rollback retry bad KV replace", "[transactions]")
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, content_json };
+    couchbase::core::operations::upsert_request req{ id, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -1012,7 +1034,7 @@ TEST_CASE("transactions: can rollback retry bad KV replace", "[transactions]")
     couchbase::core::operations::get_request req{ id };
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
-    REQUIRE(resp.value == content_json);
+    REQUIRE(resp.value == content_json.data);
   }
 }
 
@@ -1132,12 +1154,14 @@ TEST_CASE("transactions: sergey example", "[transactions]")
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id_to_remove, content_json };
+    couchbase::core::operations::upsert_request req{ id_to_remove, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
   {
-    couchbase::core::operations::upsert_request req{ id_to_replace, content_json };
+    couchbase::core::operations::upsert_request req{ id_to_replace, content_json.data };
+    req.flags = content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }

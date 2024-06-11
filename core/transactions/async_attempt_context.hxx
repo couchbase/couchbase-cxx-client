@@ -32,8 +32,8 @@ class transaction_operation_failed;
 /**
  * @brief Provides methods to perform asynchronous transactional operations.
  *
- * An @ref async_attempt_context object makes all the transactional kv operations
- * available.
+ * An @ref async_attempt_context object makes all the transactional kv
+ * operations available.
  */
 class async_attempt_context
 {
@@ -44,7 +44,8 @@ public:
     std::function<void(std::exception_ptr, std::optional<core::operations::query_response>)>;
   virtual ~async_attempt_context() = default;
   /**
-   * Gets a document from the specified Couchbase collection matching the specified id.
+   * Gets a document from the specified Couchbase collection matching the
+   * specified id.
    *
    * @param id the document's ID
    * @param cb callback function with the result when successful, or a @ref
@@ -53,7 +54,8 @@ public:
   virtual void get(const core::document_id& id, Callback&& cb) = 0;
 
   /**
-   * Gets a document from the specified Couchbase collection matching the specified id.
+   * Gets a document from the specified Couchbase collection matching the
+   * specified id.
    *
    * @param id the document's ID
    * @param cb callback function with the result when successful, or a @ref
@@ -65,57 +67,63 @@ public:
    * Mutates the specified document with new content, using the document's last
    * TransactionDocument#cas().
    *
-   * The mutation is staged until the transaction is committed.  That is, any read of the document
-   * by any Couchbase component will see the document's current value, rather than this staged or
-   * 'dirty' data.  If the attempt is rolled back, the staged mutation will be removed.
+   * The mutation is staged until the transaction is committed.  That is, any
+   * read of the document by any Couchbase component will see the document's
+   * current value, rather than this staged or 'dirty' data.  If the attempt is
+   * rolled back, the staged mutation will be removed.
    *
-   * This staged data effectively locks the document from other transactional writes until the
-   * attempt completes (commits or rolls back).
+   * This staged data effectively locks the document from other transactional
+   * writes until the attempt completes (commits or rolls back).
    *
-   * If the mutation fails, the transaction will automatically rollback this attempt, then retry.
+   * If the mutation fails, the transaction will automatically rollback this
+   * attempt, then retry.
    * @param document the doc to be updated
    * @param content the content to replace the doc with.
-   * @param cb callback function called with the updated @ref transaction_get_result with the new
-   * CAS value when successful, or @ref transaction_operation_failed
+   * @param cb callback function called with the updated @ref
+   * transaction_get_result with the new CAS value when successful, or @ref
+   * transaction_operation_failed
    *
    */
-  template<typename Content>
+  template<typename Transcoder = codec::default_json_transcoder, typename Content>
   void replace(const transaction_get_result& document, const Content& content, Callback&& cb)
   {
-    return replace_raw(document, codec::tao_json_serializer::serialize(content), std::move(cb));
+    return replace_raw(document, Transcoder::encode(content), std::move(cb));
   }
   /**
    * Inserts a new document into the specified Couchbase collection.
    *
-   * As with #replace, the insert is staged until the transaction is committed.  Due to technical
-   * limitations it is not as possible to completely hide the staged data from the rest of the
-   * Couchbase platform, as an empty document must be created.
+   * As with #replace, the insert is staged until the transaction is committed.
+   * Due to technical limitations it is not as possible to completely hide the
+   * staged data from the rest of the Couchbase platform, as an empty document
+   * must be created.
    *
-   * This staged data effectively locks the document from other transactional writes until the
-   * attempt completes (commits or rolls back).
+   * This staged data effectively locks the document from other transactional
+   * writes until the attempt completes (commits or rolls back).
    *
    * @param id the document's unique ID
    * @param content the content to insert
-   * @param cb callback function called with a @ref transaction_get_result with the new CAS value
-   * when successful, or @ref transaction_operation_failed
+   * @param cb callback function called with a @ref transaction_get_result with
+   * the new CAS value when successful, or @ref transaction_operation_failed
    */
-  template<typename Content>
+  template<typename Transcoder = codec::default_json_transcoder, typename Content>
   void insert(const core::document_id& id, const Content& content, Callback&& cb)
   {
-    return insert_raw(id, codec::tao_json_serializer::serialize(content), std::move(cb));
+    return insert_raw(id, Transcoder::encode(content), std::move(cb));
   }
   /**
-   * Removes the specified document, using the document's last TransactionDocument#cas
+   * Removes the specified document, using the document's last
+   * TransactionDocument#cas
    *
-   * As with {@link #replace}, the remove is staged until the transaction is committed.  That is,
-   * the document will continue to exist, and the rest of the Couchbase platform will continue to
-   * see it.
+   * As with {@link #replace}, the remove is staged until the transaction is
+   * committed.  That is, the document will continue to exist, and the rest of
+   * the Couchbase platform will continue to see it.
    *
-   * This staged data effectively locks the document from other transactional writes until the
-   * attempt completes (commits or rolls back).
+   * This staged data effectively locks the document from other transactional
+   * writes until the attempt completes (commits or rolls back).
    *
    * @param document the document to be removed
-   * @param cb callback function called with a @ref transaction_operation_failed when unsuccessful.
+   * @param cb callback function called with a @ref transaction_operation_failed
+   * when unsuccessful.
    */
   virtual void remove(const transaction_get_result& document, VoidCallback&& cb) = 0;
 
@@ -151,11 +159,12 @@ public:
   }
 
   /**
-   * Commits the transaction.  All staged replaces, inserts and removals will be written.
+   * Commits the transaction.  All staged replaces, inserts and removals will be
+   * written.
    *
-   * After this, no further operations are permitted on this instance, and they will result in an
-   * exception that will, if not caught in the transaction logic, cause the transaction to
-   * fail.
+   * After this, no further operations are permitted on this instance, and they
+   * will result in an exception that will, if not caught in the transaction
+   * logic, cause the transaction to fail.
    *
    * @param cb callback which is called when the commit succeeds
    */
@@ -164,9 +173,10 @@ public:
   /**
    * Rollback the transaction.  All staged mutations will be unstaged.
    *
-   * Typically, this is called internally to rollback transaction when errors occur in the lambda.
-   * Though it can be called explicitly from the app logic within the transaction as well, perhaps
-   * that is better modeled as a custom exception that you raise instead.
+   * Typically, this is called internally to rollback transaction when errors
+   * occur in the lambda. Though it can be called explicitly from the app logic
+   * within the transaction as well, perhaps that is better modeled as a custom
+   * exception that you raise instead.
    *
    * @param cb callback which is called when the rollback succeeds
    */
@@ -175,12 +185,12 @@ public:
 protected:
   /** @internal */
   virtual void insert_raw(const core::document_id& id,
-                          const std::vector<std::byte>& content,
+                          codec::encoded_value content,
                           Callback&& cb) = 0;
 
   /** @internal */
   virtual void replace_raw(const transaction_get_result& document,
-                           const std::vector<std::byte>& content,
+                           codec::encoded_value content,
                            Callback&& cb) = 0;
 };
 

@@ -22,15 +22,17 @@
 #include "core/transactions/internal/transaction_context.hxx"
 #include "core/transactions/internal/utils.hxx"
 
+#include <exception>
 #include <spdlog/spdlog.h>
 
 #include <future>
 #include <stdexcept>
 
 using namespace couchbase::core::transactions;
-static const tao::json::value tx_content{ { "some", "thing" } };
-static const std::vector<std::byte> tx_content_json =
-  couchbase::core::utils::json::generate_binary(tx_content);
+static const tao::json::value tx_content{
+  { "some", "thing" },
+};
+static const auto tx_content_json = couchbase::codec::default_json_transcoder::encode(tx_content);
 
 void
 txn_completed(std::exception_ptr err, std::shared_ptr<std::promise<void>> barrier)
@@ -53,8 +55,8 @@ simple_txn_wrapper(transaction_context& tx, Handler&& handler)
       std::make_shared<std::promise<std::optional<couchbase::transactions::transaction_result>>>();
     auto f = barrier->get_future();
     tx.new_attempt_context();
-    // in transactions.run, we currently handle exceptions that may come back from the
-    // txn logic as well (using tx::handle_error).
+    // in transactions.run, we currently handle exceptions that may come back
+    // from the txn logic as well (using tx::handle_error).
     handler();
     tx.finalize([barrier](std::optional<transaction_exception> err,
                           std::optional<couchbase::transactions::transaction_result> result) {
@@ -83,7 +85,9 @@ TEST_CASE("transactions: can do simple transaction with transaction wrapper", "[
     { "some", "thing else" },
   };
   {
-    couchbase::core::operations::upsert_request req{ id, tx_content_json };
+    couchbase::core::operations::upsert_request req{ id, tx_content_json.data };
+    req.flags = tx_content_json.flags;
+    req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -91,13 +95,13 @@ TEST_CASE("transactions: can do simple transaction with transaction wrapper", "[
   auto txn_logic = [&id, &tx, new_content]() {
     tx.get(id,
            [&tx, new_content](std::exception_ptr err, std::optional<transaction_get_result> res) {
-             CHECK(res);
-             CHECK_FALSE(err);
+             CHECK(err == nullptr);
+             CHECK(res.has_value());
              tx.replace(*res,
-                        couchbase::core::utils::json::generate_binary(new_content),
+                        couchbase::codec::default_json_transcoder::encode(new_content),
                         [](std::exception_ptr err, std::optional<transaction_get_result> replaced) {
-                          CHECK(replaced);
-                          CHECK_FALSE(err);
+                          CHECK(err == nullptr);
+                          CHECK(replaced.has_value());
                         });
            });
   };
@@ -125,7 +129,8 @@ TEST_CASE("transactions: can do simple transaction with finalize", "[transaction
     { "some", "thing else" },
   };
   {
-    couchbase::core::operations::upsert_request req{ id, tx_content_json };
+    couchbase::core::operations::upsert_request req{ id, tx_content_json.data };
+    req.flags = tx_content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -139,7 +144,7 @@ TEST_CASE("transactions: can do simple transaction with finalize", "[transaction
            CHECK(res);
            CHECK_FALSE(err);
            tx.replace(*res,
-                      couchbase::core::utils::json::generate_binary(new_content),
+                      couchbase::codec::default_json_transcoder::encode(new_content),
                       [](std::exception_ptr err, std::optional<transaction_get_result> replaced) {
                         CHECK(replaced);
                         CHECK_FALSE(err);
@@ -176,7 +181,8 @@ TEST_CASE("transactions: can do simple transaction explicit commit", "[transacti
     { "some", "thing else" },
   };
   {
-    couchbase::core::operations::upsert_request req{ id, tx_content_json };
+    couchbase::core::operations::upsert_request req{ id, tx_content_json.data };
+    req.flags = tx_content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -191,7 +197,7 @@ TEST_CASE("transactions: can do simple transaction explicit commit", "[transacti
            CHECK(res);
            CHECK_FALSE(err);
            tx.replace(*res,
-                      couchbase::core::utils::json::generate_binary(new_content),
+                      couchbase::codec::default_json_transcoder::encode(new_content),
                       [&tx, barrier](std::exception_ptr err,
                                      std::optional<transaction_get_result> replaced) {
                         CHECK(replaced);
@@ -226,7 +232,8 @@ TEST_CASE("transactions: can do rollback simple transaction", "[transactions]")
     { "some", "thing else" },
   };
   {
-    couchbase::core::operations::upsert_request req{ id, tx_content_json };
+    couchbase::core::operations::upsert_request req{ id, tx_content_json.data };
+    req.flags = tx_content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -241,7 +248,7 @@ TEST_CASE("transactions: can do rollback simple transaction", "[transactions]")
            CHECK(res);
            CHECK_FALSE(err);
            tx.replace(*res,
-                      couchbase::core::utils::json::generate_binary(new_content),
+                      couchbase::codec::default_json_transcoder::encode(new_content),
                       [&tx, barrier](std::exception_ptr err,
                                      std::optional<transaction_get_result> replaced) {
                         CHECK(replaced);
@@ -273,7 +280,8 @@ TEST_CASE("transactions: can get insert errors", "[transactions]")
     { "some", "thing else" },
   };
   {
-    couchbase::core::operations::upsert_request req{ id, tx_content_json };
+    couchbase::core::operations::upsert_request req{ id, tx_content_json.data };
+    req.flags = tx_content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -284,10 +292,10 @@ TEST_CASE("transactions: can get insert errors", "[transactions]")
   tx.new_attempt_context();
 
   tx.insert(id,
-            couchbase::core::utils::json::generate_binary(tx_content),
+            couchbase::codec::default_json_transcoder::encode(tx_content),
             [barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
-              // this should result in a transaction_operation_failed exception since it already
-              // exists, so lets check it
+              // this should result in a transaction_operation_failed exception
+              // since it already exists, so lets check it
               CHECK(err);
               CHECK_FALSE(result);
               if (err) {
@@ -315,7 +323,8 @@ TEST_CASE("transactions: can get remove errors", "[transactions]")
     { "some", "thing else" },
   };
   {
-    couchbase::core::operations::upsert_request req{ id, tx_content_json };
+    couchbase::core::operations::upsert_request req{ id, tx_content_json.data };
+    req.flags = tx_content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -325,8 +334,8 @@ TEST_CASE("transactions: can get remove errors", "[transactions]")
   auto f = barrier->get_future();
   tx.new_attempt_context();
   tx.get(id, [&tx, &barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
-    // this should result in a transaction_operation_failed exception since it already exists, so
-    // lets check it
+    // this should result in a transaction_operation_failed exception since it
+    // already exists, so lets check it
     CHECK_FALSE(err);
     CHECK(result);
     // make a cas mismatch error
@@ -359,7 +368,8 @@ TEST_CASE("transactions: can get replace errors", "[transactions]")
     { "some", "thing else" },
   };
   {
-    couchbase::core::operations::upsert_request req{ id, tx_content_json };
+    couchbase::core::operations::upsert_request req{ id, tx_content_json.data };
+    req.flags = tx_content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -370,14 +380,14 @@ TEST_CASE("transactions: can get replace errors", "[transactions]")
   tx.new_attempt_context();
 
   tx.get(id, [&tx, &barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
-    // this should result in a transaction_operation_failed exception since it already exists, so
-    // lets check it
+    // this should result in a transaction_operation_failed exception since it
+    // already exists, so lets check it
     CHECK_FALSE(err);
     CHECK(result);
     // make a cas mismatch error
     result->cas(100);
     tx.replace(*result,
-               couchbase::core::utils::json::generate_binary(tx_content),
+               couchbase::codec::default_json_transcoder::encode(tx_content),
                [barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
                  CHECK(err);
                  CHECK_FALSE(result);
@@ -412,7 +422,7 @@ TEST_CASE("transactions: RYOW get after insert", "[transactions]")
   auto logic = [barrier, &tx, &id]() {
     tx.insert(
       id,
-      couchbase::core::utils::json::generate_binary(tx_content),
+      couchbase::codec::default_json_transcoder::encode(tx_content),
       [&tx, &id, barrier](std::exception_ptr err, std::optional<transaction_get_result> res) {
         CHECK_FALSE(err);
         CHECK(res);
@@ -444,8 +454,8 @@ TEST_CASE("transactions: can get get errors", "[transactions]")
   auto f = barrier->get_future();
   tx.new_attempt_context();
   tx.get(id, [&barrier](std::exception_ptr err, std::optional<transaction_get_result> result) {
-    // this should result in a transaction_operation_failed exception since it already exists, so
-    // lets check it
+    // this should result in a transaction_operation_failed exception since it
+    // already exists, so lets check it
     CHECK(err);
     CHECK_FALSE(result);
     if (err) {
@@ -474,7 +484,8 @@ TEST_CASE("transactions: can do query", "[transactions]")
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
   };
   {
-    couchbase::core::operations::upsert_request req{ id, tx_content_json };
+    couchbase::core::operations::upsert_request req{ id, tx_content_json.data };
+    req.flags = tx_content_json.flags;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
@@ -490,8 +501,8 @@ TEST_CASE("transactions: can do query", "[transactions]")
            opts,
            [barrier](std::exception_ptr err,
                      std::optional<couchbase::core::operations::query_response> payload) {
-             // this should result in a transaction_operation_failed exception since the doc isn't
-             // there
+             // this should result in a transaction_operation_failed exception since
+             // the doc isn't there
              CHECK(payload);
              CHECK_FALSE(err);
              if (err) {

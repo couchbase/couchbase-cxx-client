@@ -16,6 +16,9 @@
 #pragma once
 
 #include "transaction_get_result.hxx"
+
+#include "internal/exceptions_internal.hxx"
+
 #include <couchbase/transactions/transaction_query_options.hxx>
 
 #include <optional>
@@ -36,7 +39,8 @@ class attempt_context
 public:
   virtual ~attempt_context() = default;
   /**
-   * Gets a document from the specified Couchbase collection matching the specified id.
+   * Gets a document from the specified Couchbase collection matching the
+   * specified id.
    *
    * @param bucket name of the bucket to use
    * @param collection the collection the document exists in (specified as
@@ -44,13 +48,14 @@ public:
    * @param id the document's ID
    * @return an TransactionDocument containing the document
    *
-   * @throws transaction_operation_failed which either should not be caught by the lambda, or
-   *         rethrown if it is caught.
+   * @throws transaction_operation_failed which either should not be caught by
+   * the lambda, or rethrown if it is caught.
    */
   virtual auto get(const core::document_id& id) -> transaction_get_result = 0;
 
   /**
-   * Gets a document from the specified Couchbase collection matching the specified id.
+   * Gets a document from the specified Couchbase collection matching the
+   * specified id.
    *
    * @param bucket name of the bucket to use
    * @param collection the collection the document exists in (specified as
@@ -58,8 +63,8 @@ public:
    * @param id the document's ID
    * @return a TransactionDocument containing the document, if it exists.
    *
-   * @throws transaction_operation_failed which either should not be caught by the lambda, or
-   *         rethrown if it is caught.
+   * @throws transaction_operation_failed which either should not be caught by
+   * the lambda, or rethrown if it is caught.
    */
   virtual auto get_optional(const core::document_id& id)
     -> std::optional<transaction_get_result> = 0;
@@ -68,72 +73,84 @@ public:
    * Mutates the specified document with new content, using the document's last
    * TransactionDocument#cas().
    *
-   * The mutation is staged until the transaction is committed.  That is, any read of the document
-   * by any Couchbase component will see the document's current value, rather than this staged or
-   * 'dirty' data.  If the attempt is rolled back, the staged mutation will be removed.
+   * The mutation is staged until the transaction is committed.  That is, any
+   * read of the document by any Couchbase component will see the document's
+   * current value, rather than this staged or 'dirty' data.  If the attempt is
+   * rolled back, the staged mutation will be removed.
    *
-   * This staged data effectively locks the document from other transactional writes until the
-   * attempt completes (commits or rolls back).
+   * This staged data effectively locks the document from other transactional
+   * writes until the attempt completes (commits or rolls back).
    *
-   * If the mutation fails, the transaction will automatically rollback this attempt, then retry.
+   * If the mutation fails, the transaction will automatically rollback this
+   * attempt, then retry.
    * @param document the doc to be updated
    * @param content the content to replace the doc with.
    * @return the document, updated with its new CAS value.
    *
-   * @throws transaction_operation_failed which either should not be caught by the lambda, or
-   *         rethrown if it is caught.
+   * @throws transaction_operation_failed which either should not be caught by
+   * the lambda, or rethrown if it is caught.
    */
-  template<typename Content>
+  template<typename Transcoder = codec::default_json_transcoder, typename Content>
   auto replace(const transaction_get_result& document,
                const Content& content) -> transaction_get_result
   {
-    if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
-      return replace_raw(document, content);
-    } else {
-      return replace_raw(document, codec::tao_json_serializer::serialize(content));
+    codec::encoded_value data;
+    try {
+      data = Transcoder::encode(content);
+    } catch (std::runtime_error& e) {
+      throw transaction_operation_failed(
+        FAIL_OTHER, std::string("failed to encode content as JSON: ") + e.what());
     }
+    return replace_raw(document, data);
   }
+
   /**
    * Inserts a new document into the specified Couchbase collection.
    *
-   * As with #replace, the insert is staged until the transaction is committed.  Due to technical
-   * limitations it is not as possible to completely hide the staged data from the rest of the
-   * Couchbase platform, as an empty document must be created.
+   * As with #replace, the insert is staged until the transaction is committed.
+   * Due to technical limitations it is not as possible to completely hide the
+   * staged data from the rest of the Couchbase platform, as an empty document
+   * must be created.
    *
-   * This staged data effectively locks the document from other transactional writes until the
-   * attempt completes (commits or rolls back).
+   * This staged data effectively locks the document from other transactional
+   * writes until the attempt completes (commits or rolls back).
    *
    * @param collection the Couchbase collection in which to insert the doc
    * @param id the document's unique ID
    * @param content the content to insert
-   * @return the doc, updated with its new CAS value and ID, and converted to a TransactionDocument
+   * @return the doc, updated with its new CAS value and ID, and converted to a
+   * TransactionDocument
    *
-   * @throws transaction_operation_failed which either should not be caught by the lambda, or
-   *         rethrown if it is caught.
+   * @throws transaction_operation_failed which either should not be caught by
+   * the lambda, or rethrown if it is caught.
    */
-  template<typename Content>
+  template<typename Transcoder = codec::default_json_transcoder, typename Content>
   auto insert(const core::document_id& id, const Content& content) -> transaction_get_result
   {
-    if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
-      return insert_raw(id, content);
-    } else {
-      return insert_raw(id, codec::tao_json_serializer::serialize(content));
+    codec::encoded_value data;
+    try {
+      data = Transcoder::encode(content);
+    } catch (std::runtime_error& e) {
+      throw transaction_operation_failed(
+        FAIL_OTHER, std::string("failed to encode content as JSON: ") + e.what());
     }
+    return insert_raw(id, data);
   }
   /**
-   * Removes the specified document, using the document's last TransactionDocument#cas
+   * Removes the specified document, using the document's last
+   * TransactionDocument#cas
    *
-   * As with {@link #replace}, the remove is staged until the transaction is committed.  That is,
-   * the document will continue to exist, and the rest of the Couchbase platform will continue to
-   * see it.
+   * As with {@link #replace}, the remove is staged until the transaction is
+   * committed.  That is, the document will continue to exist, and the rest of
+   * the Couchbase platform will continue to see it.
    *
-   * This staged data effectively locks the document from other transactional writes until the
-   * attempt completes (commits or rolls back).
+   * This staged data effectively locks the document from other transactional
+   * writes until the attempt completes (commits or rolls back).
    *
    * @param document the document to be removed
    *
-   * @throws transaction_operation_failed which either should not be caught by the lambda, or
-   *         rethrown if it is caught.
+   * @throws transaction_operation_failed which either should not be caught by
+   * the lambda, or rethrown if it is caught.
    */
   virtual void remove(const transaction_get_result& document) = 0;
 
@@ -164,37 +181,39 @@ public:
   }
 
   /**
-   * Commits the transaction.  All staged replaces, inserts and removals will be written.
+   * Commits the transaction.  All staged replaces, inserts and removals will be
+   * written.
    *
-   * After this, no further operations are permitted on this instance, and they will result in an
-   * exception that will, if not caught in the transaction logic, cause the transaction to
-   * fail.
+   * After this, no further operations are permitted on this instance, and they
+   * will result in an exception that will, if not caught in the transaction
+   * logic, cause the transaction to fail.
    *
-   * @throws transaction_operation_failed which either should not be caught by the lambda, or
-   *         rethrown if it is caught.
+   * @throws transaction_operation_failed which either should not be caught by
+   * the lambda, or rethrown if it is caught.
    */
   virtual void commit() = 0;
 
   /**
    * Rollback the transaction.  All staged mutations will be unstaged.
    *
-   * Typically, this is called internally to rollback transaction when errors occur in the lambda.
-   * Though it can be called explicitly from the app logic within the transaction as well, perhaps
-   * that is better modeled as a custom exception that you raise instead.
+   * Typically, this is called internally to rollback transaction when errors
+   * occur in the lambda. Though it can be called explicitly from the app logic
+   * within the transaction as well, perhaps that is better modeled as a custom
+   * exception that you raise instead.
    *
-   * @throws transaction_operation_failed which either should not be caught by the lambda, or
-   *         rethrown if it is caught.
+   * @throws transaction_operation_failed which either should not be caught by
+   * the lambda, or rethrown if it is caught.
    */
   virtual void rollback() = 0;
 
 protected:
   /** @internal */
   virtual auto insert_raw(const core::document_id& id,
-                          const std::vector<std::byte>& content) -> transaction_get_result = 0;
+                          codec::encoded_value content) -> transaction_get_result = 0;
 
   /** @internal */
   virtual auto replace_raw(const transaction_get_result& document,
-                           const std::vector<std::byte>& content) -> transaction_get_result = 0;
+                           codec::encoded_value content) -> transaction_get_result = 0;
 
   virtual auto do_core_query(const std::string&,
                              const couchbase::transactions::transaction_query_options& opts,

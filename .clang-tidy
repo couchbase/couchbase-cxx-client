@@ -15,6 +15,7 @@ Checks: |-
   cppcoreguidelines-*,
   -abseil-*,
   -altera-*,
+  -cppcoreguidelines-avoid-do-while,
   -cppcoreguidelines-avoid-magic-numbers,
   -cppcoreguidelines-avoid-non-const-global-variables,
   -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
@@ -36,4 +37,5 @@ Checks: |-
   -modernize-use-trailing-return-type,
   -readability-function-cognitive-complexity,
   -readability-identifier-length,
-  -readability-magic-numbers
+  -readability-magic-numbers,
+  -readability-redundant-member-init

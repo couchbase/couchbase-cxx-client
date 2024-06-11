@@ -14,10 +14,15 @@
  *   limitations under the License.
  */
 
-#include "core/operations.hxx"
-#include "core/operations/management/bucket_get_all.hxx"
-
 #include "internal/utils.hxx"
+
+#include "core/operations.hxx"
+#include "core/operations/document_lookup_in.hxx"
+#include "core/operations/management/bucket_get_all.hxx"
+#include "core/transactions/error_class.hxx"
+
+#include <couchbase/collection.hxx>
+#include <couchbase/scope.hxx>
 
 namespace couchbase::core::transactions
 {

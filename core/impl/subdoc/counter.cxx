@@ -31,7 +31,7 @@ subdoc::counter::encode(core::impl::subdoc::command_bundle& bundle) const
     core::impl::subdoc::opcode::counter,
     path_,
     codec::tao_json_serializer::serialize(delta_),
-    core::impl::subdoc::build_mutate_in_path_flags(xattr_, create_path_, false),
+    core::impl::subdoc::build_mutate_in_path_flags(xattr_, create_path_, false, false),
   });
 }
 } // namespace couchbase

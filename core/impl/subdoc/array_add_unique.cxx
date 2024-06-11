@@ -30,7 +30,7 @@ subdoc::array_add_unique::encode(core::impl::subdoc::command_bundle& bundle) con
     core::impl::subdoc::opcode::array_add_unique,
     path_,
     value_,
-    core::impl::subdoc::build_mutate_in_path_flags(xattr_, create_path_, expand_macro_),
+    core::impl::subdoc::build_mutate_in_path_flags(xattr_, create_path_, expand_macro_, false),
   });
 }
 } // namespace couchbase
