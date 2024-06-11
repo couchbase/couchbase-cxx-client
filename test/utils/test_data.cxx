@@ -26,8 +26,8 @@
 
 namespace test::utils
 {
-std::string
-uniq_id(const std::string& prefix)
+auto
+uniq_id(const std::string& prefix) -> std::string
 {
   return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
 }
@@ -46,8 +46,8 @@ read_all(const std::string& path) -> std::string
 }
 } // namespace
 
-std::string
-read_test_data(const std::string& file)
+auto
+read_test_data(const std::string& file) -> std::string
 {
   std::vector candidates{
     file,

@@ -75,9 +75,9 @@ public:
   mcbp_session() = delete;
   ~mcbp_session() = default;
   mcbp_session(const mcbp_session& other) = default;
-  mcbp_session& operator=(const mcbp_session& other) = default;
+  auto operator=(const mcbp_session& other) -> mcbp_session& = default;
   mcbp_session(mcbp_session&& other) = default;
-  mcbp_session& operator=(mcbp_session&& other) = default;
+  auto operator=(mcbp_session&& other) -> mcbp_session& = default;
 
   mcbp_session(std::string client_id,
                asio::io_context& ctx,
@@ -94,22 +94,23 @@ public:
                std::optional<std::string> bucket_name = {},
                std::vector<protocol::hello_feature> known_features = {});
 
-  [[nodiscard]] const std::string& log_prefix() const;
-  [[nodiscard]] bool cancel(std::uint32_t opaque, std::error_code ec, retry_reason reason);
-  [[nodiscard]] bool is_stopped() const;
-  [[nodiscard]] bool is_bootstrapped() const;
-  [[nodiscard]] std::uint32_t next_opaque();
-  [[nodiscard]] std::optional<std::uint32_t> get_collection_uid(const std::string& collection_path);
-  [[nodiscard]] mcbp_context context() const;
-  [[nodiscard]] bool supports_feature(protocol::hello_feature feature);
-  [[nodiscard]] std::vector<protocol::hello_feature> supported_features() const;
-  [[nodiscard]] const std::string& id() const;
-  [[nodiscard]] std::string remote_address() const;
-  [[nodiscard]] std::string local_address() const;
-  [[nodiscard]] const std::string& bootstrap_address() const;
-  [[nodiscard]] const std::string& bootstrap_hostname() const;
-  [[nodiscard]] const std::string& bootstrap_port() const;
-  [[nodiscard]] std::uint16_t bootstrap_port_number() const;
+  [[nodiscard]] auto log_prefix() const -> const std::string&;
+  [[nodiscard]] auto cancel(std::uint32_t opaque, std::error_code ec, retry_reason reason) -> bool;
+  [[nodiscard]] auto is_stopped() const -> bool;
+  [[nodiscard]] auto is_bootstrapped() const -> bool;
+  [[nodiscard]] auto next_opaque() -> std::uint32_t;
+  [[nodiscard]] auto get_collection_uid(const std::string& collection_path)
+    -> std::optional<std::uint32_t>;
+  [[nodiscard]] auto context() const -> mcbp_context;
+  [[nodiscard]] auto supports_feature(protocol::hello_feature feature) -> bool;
+  [[nodiscard]] auto supported_features() const -> std::vector<protocol::hello_feature>;
+  [[nodiscard]] auto id() const -> const std::string&;
+  [[nodiscard]] auto remote_address() const -> std::string;
+  [[nodiscard]] auto local_address() const -> std::string;
+  [[nodiscard]] auto bootstrap_address() const -> const std::string&;
+  [[nodiscard]] auto bootstrap_hostname() const -> const std::string&;
+  [[nodiscard]] auto bootstrap_port() const -> const std::string&;
+  [[nodiscard]] auto bootstrap_port_number() const -> std::uint16_t;
   void write_and_flush(std::vector<std::byte>&& buffer);
   void write_and_subscribe(std::shared_ptr<mcbp::queue_request>,
                            std::shared_ptr<response_handler> handler);
@@ -120,15 +121,16 @@ public:
                  bool retry_on_bucket_not_found = false);
   void on_stop(utils::movable_function<void()> handler);
   void stop(retry_reason reason);
-  [[nodiscard]] std::size_t index() const;
-  [[nodiscard]] bool has_config() const;
-  [[nodiscard]] std::optional<topology::configuration> config() const;
-  [[nodiscard]] diag::endpoint_diag_info diag_info() const;
+  [[nodiscard]] auto index() const -> std::size_t;
+  [[nodiscard]] auto has_config() const -> bool;
+  [[nodiscard]] auto config() const -> std::optional<topology::configuration>;
+  [[nodiscard]] auto diag_info() const -> diag::endpoint_diag_info;
   void on_configuration_update(std::shared_ptr<config_listener> handler);
   void ping(std::shared_ptr<diag::ping_reporter> handler,
             std::optional<std::chrono::milliseconds> = {}) const;
-  [[nodiscard]] bool supports_gcccp() const;
-  [[nodiscard]] std::optional<key_value_error_map_info> decode_error_code(std::uint16_t code);
+  [[nodiscard]] auto supports_gcccp() const -> bool;
+  [[nodiscard]] auto decode_error_code(std::uint16_t code)
+    -> std::optional<key_value_error_map_info>;
   void handle_not_my_vbucket(const io::mcbp_message& msg) const;
   void update_collection_uid(const std::string& path, std::uint32_t uid);
 

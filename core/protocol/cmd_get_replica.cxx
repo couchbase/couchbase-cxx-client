@@ -25,20 +25,20 @@
 
 namespace couchbase::core::protocol
 {
-std::uint32_t
-get_replica_response_body::flags() const
+auto
+get_replica_response_body::flags() const -> std::uint32_t
 {
   return flags_;
 }
 
-bool
+auto
 get_replica_response_body::parse(key_value_status_code status,
                                  const header_buffer& header,
                                  std::uint8_t framing_extras_size,
                                  std::uint16_t key_size,
                                  std::uint8_t extras_size,
                                  const std::vector<std::byte>& body,
-                                 const cmd_info& /* info */)
+                                 const cmd_info& /* info */) -> bool
 {
   Expects(header[1] == static_cast<std::byte>(opcode));
   if (status == key_value_status_code::success) {
@@ -63,8 +63,8 @@ get_replica_request_body::id(const document_id& id)
   key_ = make_protocol_key(id);
 }
 
-std::size_t
-get_replica_request_body::size() const
+auto
+get_replica_request_body::size() const -> std::size_t
 {
   return key_.size();
 }

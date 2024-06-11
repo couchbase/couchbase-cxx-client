@@ -53,8 +53,8 @@ transaction_context::add_attempt()
   attempts_.push_back(attempt);
 }
 
-[[nodiscard]] std::chrono::nanoseconds
-transaction_context::remaining() const
+[[nodiscard]] auto
+transaction_context::remaining() const -> std::chrono::nanoseconds
 {
   const auto& now = std::chrono::steady_clock::now();
   auto expired_nanos =
@@ -63,8 +63,8 @@ transaction_context::remaining() const
   return config_.timeout - expired_nanos;
 }
 
-[[nodiscard]] bool
-transaction_context::has_expired_client_side()
+[[nodiscard]] auto
+transaction_context::has_expired_client_side() -> bool
 {
   // repeat code above - nice for logging.  Ponder changing this.
   const auto& now = std::chrono::steady_clock::now();
@@ -120,8 +120,8 @@ transaction_context::new_attempt_context(async_attempt_context::VoidCallback&& c
   });
 }
 
-std::shared_ptr<attempt_context_impl>
-transaction_context::current_attempt_context()
+auto
+transaction_context::current_attempt_context() -> std::shared_ptr<attempt_context_impl>
 {
   return current_attempt_context_;
 }

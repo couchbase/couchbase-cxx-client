@@ -31,7 +31,7 @@ public:
    * @param consistency the query_scan_consistency to use.
    * @return reference to this, so calls can be chained.
    */
-  transactions_query_config& scan_consistency(query_scan_consistency consistency)
+  auto scan_consistency(query_scan_consistency consistency) -> transactions_query_config&
   {
     scan_consistency_ = consistency;
     return *this;
@@ -42,7 +42,7 @@ public:
    *
    * @return the query_scan_consistency
    */
-  [[nodiscard]] query_scan_consistency scan_consistency() const
+  [[nodiscard]] auto scan_consistency() const -> query_scan_consistency
   {
     return scan_consistency_;
   }

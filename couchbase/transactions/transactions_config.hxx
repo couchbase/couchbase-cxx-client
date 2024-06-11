@@ -50,7 +50,7 @@ public:
 
   transactions_config(transactions_config&& c) noexcept;
 
-  transactions_config& operator=(const transactions_config& c);
+  auto operator=(const transactions_config& c) -> transactions_config&;
 
   /**
    * @brief Get the default durability level for all transaction operations
@@ -59,7 +59,7 @@ public:
    *
    * @return The default durability level used for write operations.
    */
-  [[nodiscard]] couchbase::durability_level durability_level() const
+  [[nodiscard]] auto durability_level() const -> couchbase::durability_level
   {
     return level_;
   }
@@ -72,7 +72,7 @@ public:
    * @param level The default durability level desired for write operations.
    * @return reference to this, so calls can be chained.
    */
-  transactions_config& durability_level(enum couchbase::durability_level level)
+  auto durability_level(enum couchbase::durability_level level) -> transactions_config&
   {
     level_ = level;
     return *this;
@@ -87,7 +87,7 @@ public:
    *
    * @return timeout for transactions.
    */
-  [[nodiscard]] std::chrono::nanoseconds timeout() const
+  [[nodiscard]] auto timeout() const -> std::chrono::nanoseconds
   {
     return timeout_;
   }
@@ -98,7 +98,7 @@ public:
    * @return reference to this, so calls can be chained.
    */
   template<typename T>
-  transactions_config& timeout(T duration)
+  auto timeout(T duration) -> transactions_config&
   {
     timeout_ = std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
     return *this;
@@ -110,15 +110,15 @@ public:
    * @param keyspace The collection to use for the transaction metadata.
    * @return reference to this, so calls can be chained.
    */
-  transactions_config& metadata_collection(
-    const couchbase::transactions::transaction_keyspace& keyspace)
+  auto metadata_collection(const couchbase::transactions::transaction_keyspace& keyspace)
+    -> transactions_config&
   {
     metadata_collection_ = keyspace;
     return *this;
   }
 
-  [[nodiscard]] std::optional<couchbase::transactions::transaction_keyspace> metadata_collection()
-    const
+  [[nodiscard]] auto metadata_collection() const
+    -> std::optional<couchbase::transactions::transaction_keyspace>
   {
     return metadata_collection_;
   }
@@ -128,7 +128,7 @@ public:
    *
    * @return The query configuration for transactions.
    */
-  [[nodiscard]] const transactions_query_config& query_config() const
+  [[nodiscard]] auto query_config() const -> const transactions_query_config&
   {
     return query_config_;
   }
@@ -138,7 +138,7 @@ public:
    *
    * @return The query configuration for transactions.
    */
-  [[nodiscard]] transactions_query_config& query_config()
+  [[nodiscard]] auto query_config() -> transactions_query_config&
   {
     return query_config_;
   }
@@ -149,7 +149,7 @@ public:
    * @param config The transactions query configuration to use.
    * @return reference to this, so calls can be chained.
    */
-  transactions_config& query_config(const transactions_query_config& config)
+  auto query_config(const transactions_query_config& config) -> transactions_config&
   {
     query_config_ = config;
     return *this;
@@ -160,7 +160,7 @@ public:
    *
    * @return The cleanup configuration.
    */
-  [[nodiscard]] const transactions_cleanup_config& cleanup_config() const
+  [[nodiscard]] auto cleanup_config() const -> const transactions_cleanup_config&
   {
     return cleanup_config_;
   }
@@ -170,7 +170,7 @@ public:
    *
    * @return The cleanup configuration.
    */
-  [[nodiscard]] transactions_cleanup_config& cleanup_config()
+  [[nodiscard]] auto cleanup_config() -> transactions_cleanup_config&
   {
     return cleanup_config_;
   }
@@ -181,16 +181,16 @@ public:
    * @param cleanup_config The cleanup configuration to use.
    * @return reference to this, so calls can be chained.
    */
-  transactions_config& cleanup_config(const transactions_cleanup_config& cleanup_config)
+  auto cleanup_config(const transactions_cleanup_config& cleanup_config) -> transactions_config&
   {
     cleanup_config_ = cleanup_config;
     return *this;
   }
 
   /** @private */
-  transactions_config& test_factories(
-    std::shared_ptr<core::transactions::attempt_context_testing_hooks> hooks,
-    std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks)
+  auto test_factories(std::shared_ptr<core::transactions::attempt_context_testing_hooks> hooks,
+                      std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks)
+    -> transactions_config&
   {
     attempt_context_hooks_ = hooks;
     cleanup_hooks_ = cleanup_hooks;
@@ -198,13 +198,14 @@ public:
   }
 
   /** @private */
-  [[nodiscard]] core::transactions::attempt_context_testing_hooks& attempt_context_hooks() const
+  [[nodiscard]] auto attempt_context_hooks() const
+    -> core::transactions::attempt_context_testing_hooks&
   {
     return *attempt_context_hooks_;
   }
 
   /** @private */
-  [[nodiscard]] core::transactions::cleanup_testing_hooks& cleanup_hooks() const
+  [[nodiscard]] auto cleanup_hooks() const -> core::transactions::cleanup_testing_hooks&
   {
     return *cleanup_hooks_;
   }
@@ -221,7 +222,7 @@ public:
   };
 
   /** @internal */
-  [[nodiscard]] built build() const;
+  [[nodiscard]] auto build() const -> built;
 
 private:
   couchbase::durability_level level_{ couchbase::durability_level::majority };

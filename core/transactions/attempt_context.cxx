@@ -22,16 +22,18 @@
 
 namespace couchbase::transactions
 {
-std::pair<error, transaction_query_result>
+auto
 attempt_context::query(const scope& scope,
                        const std::string& statement,
                        const transaction_query_options& opts)
+  -> std::pair<error, transaction_query_result>
 {
   return do_public_query(statement, opts, fmt::format("{}.{}", scope.bucket_name(), scope.name()));
 }
 
-std::pair<error, transaction_query_result>
+auto
 attempt_context::query(const std::string& statement, const transaction_query_options& options)
+  -> std::pair<error, transaction_query_result>
 {
   return do_public_query(statement, options, {});
 }

@@ -43,11 +43,11 @@
 namespace couchbase::core::protocol
 {
 
-double
-parse_server_duration_us(const io::mcbp_message& msg);
+auto
+parse_server_duration_us(const io::mcbp_message& msg) -> double;
 
-bool
-parse_enhanced_error(std::string_view str, key_value_extended_error_info& info);
+auto
+parse_enhanced_error(std::string_view str, key_value_extended_error_info& info) -> bool;
 
 template<typename Body>
 class client_response
@@ -85,37 +85,37 @@ public:
     parse_body();
   }
 
-  [[nodiscard]] client_opcode opcode() const
+  [[nodiscard]] auto opcode() const -> client_opcode
   {
     return opcode_;
   }
 
-  [[nodiscard]] key_value_status_code status() const
+  [[nodiscard]] auto status() const -> key_value_status_code
   {
     return status_;
   }
 
-  [[nodiscard]] couchbase::cas cas() const
+  [[nodiscard]] auto cas() const -> couchbase::cas
   {
     return couchbase::cas{ cas_ };
   }
 
-  [[nodiscard]] std::uint32_t opaque() const
+  [[nodiscard]] auto opaque() const -> std::uint32_t
   {
     return opaque_;
   }
 
-  Body& body()
+  auto body() -> Body&
   {
     return body_;
   }
 
-  [[nodiscard]] const Body& body() const
+  [[nodiscard]] auto body() const -> const Body&
   {
     return body_;
   }
 
-  [[nodiscard]] header_buffer& header()
+  [[nodiscard]] auto header() -> header_buffer&
   {
     return header_;
   }
@@ -155,12 +155,12 @@ public:
     cas_ = utils::byte_swap(cas_);
   }
 
-  [[nodiscard]] std::optional<key_value_extended_error_info> error_info() const
+  [[nodiscard]] auto error_info() const -> std::optional<key_value_extended_error_info>
   {
     return error_;
   }
 
-  [[nodiscard]] std::string error_message() const
+  [[nodiscard]] auto error_message() const -> std::string
   {
     if (error_) {
       return fmt::format(
@@ -207,7 +207,7 @@ public:
     }
   }
 
-  [[nodiscard]] std::vector<std::byte>& data()
+  [[nodiscard]] auto data() -> std::vector<std::byte>&
   {
     return data_;
   }

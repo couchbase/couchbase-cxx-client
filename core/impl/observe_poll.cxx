@@ -31,8 +31,8 @@ namespace couchbase::core::impl
 {
 namespace
 {
-constexpr bool
-touches_replica(couchbase::persist_to persist_to, couchbase::replicate_to replicate_to)
+constexpr auto
+touches_replica(couchbase::persist_to persist_to, couchbase::replicate_to replicate_to) -> bool
 {
 
   switch (replicate_to) {
@@ -59,8 +59,8 @@ touches_replica(couchbase::persist_to persist_to, couchbase::replicate_to replic
   return false;
 }
 
-constexpr std::uint32_t
-number_of_replica_nodes_required(couchbase::persist_to persist_to)
+constexpr auto
+number_of_replica_nodes_required(couchbase::persist_to persist_to) -> std::uint32_t
 {
   switch (persist_to) {
     case persist_to::one:
@@ -78,8 +78,8 @@ number_of_replica_nodes_required(couchbase::persist_to persist_to)
   return 0U;
 }
 
-constexpr std::uint32_t
-number_of_replica_nodes_required(couchbase::replicate_to replicate_to)
+constexpr auto
+number_of_replica_nodes_required(couchbase::replicate_to replicate_to) -> std::uint32_t
 {
   switch (replicate_to) {
     case replicate_to::one:
@@ -94,10 +94,10 @@ number_of_replica_nodes_required(couchbase::replicate_to replicate_to)
   return 0U;
 }
 
-std::pair<std::error_code, std::uint32_t>
+auto
 validate_replicas(const topology::configuration& config,
                   couchbase::persist_to persist_to,
-                  couchbase::replicate_to replicate_to)
+                  couchbase::replicate_to replicate_to) -> std::pair<std::error_code, std::uint32_t>
 {
   if (config.node_locator != topology::configuration::node_locator_type::vbucket) {
     return { errc::common::feature_not_available, {} };
@@ -149,8 +149,8 @@ public:
     persisted_on_active_ |= (response.active && persisted);
   }
 
-  [[nodiscard]] bool meets_condition(couchbase::persist_to persist_to,
-                                     couchbase::replicate_to replicate_to) const
+  [[nodiscard]] auto meets_condition(couchbase::persist_to persist_to,
+                                     couchbase::replicate_to replicate_to) const -> bool
   {
     auto persistence_condition = (persist_to == persist_to::active && persisted_on_active_) ||
                                  (persisted_ >= number_of_replica_nodes_required(persist_to));

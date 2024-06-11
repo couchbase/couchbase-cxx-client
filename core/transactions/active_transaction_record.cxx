@@ -19,8 +19,9 @@
 
 namespace couchbase::core::transactions
 {
-active_transaction_record
+auto
 active_transaction_record::map_to_atr(const operations::lookup_in_response& resp)
+  -> active_transaction_record
 {
   std::vector<atr_entry> entries;
   if (resp.fields[0].status == key_value_status_code::success) {

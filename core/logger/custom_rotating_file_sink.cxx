@@ -28,8 +28,8 @@
 #include <memory>
 #include <spdlog/details/file_helper.h>
 
-static unsigned long
-find_first_logfile_id(const std::string& basename)
+static auto
+find_first_logfile_id(const std::string& basename) -> unsigned long
 {
   unsigned long id = 0;
 
@@ -138,8 +138,8 @@ custom_rotating_file_sink<Mutex>::add_hook(const std::string& hook)
 }
 
 template<class Mutex>
-std::unique_ptr<spdlog::details::file_helper>
-custom_rotating_file_sink<Mutex>::open_file()
+auto
+custom_rotating_file_sink<Mutex>::open_file() -> std::unique_ptr<spdlog::details::file_helper>
 {
   auto ret = std::make_unique<spdlog::details::file_helper>();
   do {

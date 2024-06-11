@@ -37,8 +37,8 @@ namespace couchbase::core::transactions
 
 // NOTE: priority queue outputs largest to smallest - since we want the least
 // recent statr time first, this returns true if lhs > rhs
-bool
-compare_atr_entries::operator()(atr_cleanup_entry& lhs, atr_cleanup_entry& rhs)
+auto
+compare_atr_entries::operator()(atr_cleanup_entry& lhs, atr_cleanup_entry& rhs) -> bool
 {
   return lhs.min_start_time_ > rhs.min_start_time_;
 }
@@ -454,14 +454,14 @@ atr_cleanup_entry::cleanup_entry(durability_level dl)
   }
 }
 
-bool
-atr_cleanup_entry::ready() const
+auto
+atr_cleanup_entry::ready() const -> bool
 {
   return std::chrono::steady_clock::now() > min_start_time_;
 }
 
-std::optional<atr_cleanup_entry>
-atr_cleanup_queue::pop(bool check_time)
+auto
+atr_cleanup_queue::pop(bool check_time) -> std::optional<atr_cleanup_entry>
 {
   std::unique_lock<std::mutex> lock(mutex_);
   if (!queue_.empty()) {
@@ -476,8 +476,8 @@ atr_cleanup_queue::pop(bool check_time)
   return {};
 }
 
-std::size_t
-atr_cleanup_queue::size() const
+auto
+atr_cleanup_queue::size() const -> std::size_t
 {
   std::unique_lock<std::mutex> lock(mutex_);
   return queue_.size();

@@ -35,20 +35,20 @@ private:
 public:
   static const inline client_opcode opcode = client_opcode::get_replica;
 
-  [[nodiscard]] const auto& value() const
+  [[nodiscard]] auto value() const -> const auto&
   {
     return value_;
   }
 
-  [[nodiscard]] std::uint32_t flags() const;
+  [[nodiscard]] auto flags() const -> std::uint32_t;
 
-  [[nodiscard]] bool parse(key_value_status_code status,
+  [[nodiscard]] auto parse(key_value_status_code status,
                            const header_buffer& header,
                            std::uint8_t framing_extras_size,
                            std::uint16_t key_size,
                            std::uint8_t extras_size,
                            const std::vector<std::byte>& body,
-                           const cmd_info& info);
+                           const cmd_info& info) -> bool;
 };
 
 class get_replica_request_body
@@ -62,27 +62,27 @@ public:
 
   void id(const document_id& id);
 
-  [[nodiscard]] const auto& key() const
+  [[nodiscard]] auto key() const -> const auto&
   {
     return key_;
   }
 
-  [[nodiscard]] const auto& framing_extras() const
+  [[nodiscard]] auto framing_extras() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& extras() const
+  [[nodiscard]] auto extras() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& value() const
+  [[nodiscard]] auto value() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] std::size_t size() const;
+  [[nodiscard]] auto size() const -> std::size_t;
 };
 
 } // namespace couchbase::core::protocol

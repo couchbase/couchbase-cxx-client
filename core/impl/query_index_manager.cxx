@@ -111,13 +111,13 @@ private:
     }
   }
 
-  std::chrono::milliseconds remaining() const
+  auto remaining() const -> std::chrono::milliseconds
   {
     return timeout_ - std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now() - start_time_);
   }
 
-  bool check(couchbase::core::operations::management::query_index_get_all_response& resp)
+  auto check(couchbase::core::operations::management::query_index_get_all_response& resp) -> bool
   {
     if (resp.ctx.ec == couchbase::errc::common::ambiguous_timeout) {
       return false;

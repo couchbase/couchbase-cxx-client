@@ -24,8 +24,8 @@ enum class server_opcode : std::uint8_t {
   invalid = 0xff,
 };
 
-constexpr bool
-is_valid_server_request_opcode(std::uint8_t code)
+constexpr auto
+is_valid_server_request_opcode(std::uint8_t code) -> bool
 {
   switch (server_opcode(code)) {
     case server_opcode::cluster_map_change_notification:

@@ -47,14 +47,14 @@ struct last_key_wins : Consumer {
   }
 };
 
-tao::json::value
-parse(std::string_view input)
+auto
+parse(std::string_view input) -> tao::json::value
 {
   return tao::json::from_string<utils::json::last_key_wins>(input);
 }
 
-tao::json::value
-parse(const json_string& input)
+auto
+parse(const json_string& input) -> tao::json::value
 {
   if (input.is_string()) {
     return parse(input.str());
@@ -64,21 +64,21 @@ parse(const json_string& input)
   return {};
 }
 
-tao::json::value
-parse(const char* input, std::size_t size)
+auto
+parse(const char* input, std::size_t size) -> tao::json::value
 {
   return tao::json::from_string<utils::json::last_key_wins>(input, size);
 }
 
-tao::json::value
-parse_binary(const std::vector<std::byte>& input)
+auto
+parse_binary(const std::vector<std::byte>& input) -> tao::json::value
 {
   return tao::json::from_string<utils::json::last_key_wins>(
     reinterpret_cast<const char*>(input.data()), input.size());
 }
 
-std::string
-generate(const tao::json::value& object)
+auto
+generate(const tao::json::value& object) -> std::string
 {
   return tao::json::to_string(object);
 }
@@ -286,8 +286,8 @@ public:
   }
 };
 
-std::vector<std::byte>
-generate_binary(const tao::json::value& object)
+auto
+generate_binary(const tao::json::value& object) -> std::vector<std::byte>
 {
   std::vector<std::byte> out;
   tao::json::events::transformer<to_byte_vector> consumer(out);

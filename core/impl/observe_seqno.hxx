@@ -37,7 +37,7 @@ struct observe_seqno_response {
   std::optional<std::uint64_t> old_partition_uuid{};
   std::optional<std::uint64_t> last_received_sequence_number{};
 
-  [[nodiscard]] bool failed_over() const
+  [[nodiscard]] auto failed_over() const -> bool
   {
     return old_partition_uuid.has_value();
   }
@@ -58,10 +58,11 @@ struct observe_seqno_request {
   std::uint32_t opaque{};
   io::retry_context<true> retries{};
 
-  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
-                                          core::mcbp_context&& context);
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded,
+                               core::mcbp_context&& context) -> std::error_code;
 
-  [[nodiscard]] observe_seqno_response make_response(key_value_error_context&& ctx,
-                                                     const encoded_response_type& encoded) const;
+  [[nodiscard]] auto make_response(key_value_error_context&& ctx,
+                                   const encoded_response_type& encoded) const
+    -> observe_seqno_response;
 };
 } // namespace couchbase::core::impl

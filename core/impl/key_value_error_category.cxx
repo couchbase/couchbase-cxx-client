@@ -22,12 +22,12 @@
 namespace couchbase::core::impl
 {
 struct key_value_error_category : std::error_category {
-  [[nodiscard]] const char* name() const noexcept override
+  [[nodiscard]] auto name() const noexcept -> const char* override
   {
     return "couchbase.key_value";
   }
 
-  [[nodiscard]] std::string message(int ev) const noexcept override
+  [[nodiscard]] auto message(int ev) const noexcept -> std::string override
   {
     switch (static_cast<errc::key_value>(ev)) {
       case errc::key_value::document_not_found:
@@ -98,8 +98,8 @@ struct key_value_error_category : std::error_category {
 
 const inline static key_value_error_category category_instance;
 
-const std::error_category&
-key_value_category() noexcept
+auto
+key_value_category() noexcept -> const std::error_category&
 {
   return category_instance;
 }

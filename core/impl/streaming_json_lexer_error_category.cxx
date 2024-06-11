@@ -23,12 +23,12 @@ namespace couchbase::core::impl
 {
 
 struct streaming_json_lexer_error_category : std::error_category {
-  [[nodiscard]] const char* name() const noexcept override
+  [[nodiscard]] auto name() const noexcept -> const char* override
   {
     return "couchbase.streaming_json_lexer";
   }
 
-  [[nodiscard]] std::string message(int ev) const noexcept override
+  [[nodiscard]] auto message(int ev) const noexcept -> std::string override
   {
     switch (static_cast<errc::streaming_json_lexer>(ev)) {
       case errc::streaming_json_lexer::garbage_trailing:
@@ -96,8 +96,8 @@ struct streaming_json_lexer_error_category : std::error_category {
 
 const inline static streaming_json_lexer_error_category category_instance;
 
-const std::error_category&
-streaming_json_lexer_category() noexcept
+auto
+streaming_json_lexer_category() noexcept -> const std::error_category&
 {
   return category_instance;
 }

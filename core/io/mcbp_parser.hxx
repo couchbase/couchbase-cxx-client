@@ -42,7 +42,7 @@ struct mcbp_parser {
     buf.clear();
   }
 
-  result next(mcbp_message& msg);
+  auto next(mcbp_message& msg) -> result;
 
   std::vector<std::byte> buf;
 };

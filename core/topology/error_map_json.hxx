@@ -27,7 +27,7 @@ namespace tao::json
 template<>
 struct traits<couchbase::core::error_map> {
   template<template<typename...> class Traits>
-  static couchbase::core::error_map as(const tao::json::basic_value<Traits>& v)
+  static auto as(const tao::json::basic_value<Traits>& v) -> couchbase::core::error_map
   {
     couchbase::core::error_map result;
     result.id = couchbase::core::uuid::random();

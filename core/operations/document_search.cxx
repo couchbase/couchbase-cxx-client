@@ -27,8 +27,9 @@
 
 namespace couchbase::core::operations
 {
-std::error_code
-search_request::encode_to(search_request::encoded_request_type& encoded, http_context& context)
+auto
+search_request::encode_to(search_request::encoded_request_type& encoded,
+                          http_context& context) -> std::error_code
 {
   auto body = tao::json::value{
     { "query", utils::json::parse(query) },
@@ -152,9 +153,9 @@ search_request::encode_to(search_request::encoded_request_type& encoded, http_co
   return {};
 }
 
-search_response
+auto
 search_request::make_response(error_context::search&& ctx,
-                              const encoded_response_type& encoded) const
+                              const encoded_response_type& encoded) const -> search_response
 {
   search_response response{ std::move(ctx) };
   response.meta.client_context_id = response.ctx.client_context_id;

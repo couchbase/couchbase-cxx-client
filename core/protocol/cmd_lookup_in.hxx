@@ -43,18 +43,18 @@ private:
   std::vector<lookup_in_field> fields_;
 
 public:
-  [[nodiscard]] const std::vector<lookup_in_field>& fields() const
+  [[nodiscard]] auto fields() const -> const std::vector<lookup_in_field>&
   {
     return fields_;
   }
 
-  bool parse(key_value_status_code status,
+  auto parse(key_value_status_code status,
              const header_buffer& header,
              std::uint8_t framing_extras_size,
              std::uint16_t key_size,
              std::uint8_t extras_size,
              const std::vector<std::byte>& body,
-             const cmd_info& info);
+             const cmd_info& info) -> bool;
 };
 
 class lookup_in_request_body
@@ -93,17 +93,17 @@ public:
     specs_ = specs;
   }
 
-  [[nodiscard]] const auto& key() const
+  [[nodiscard]] auto key() const -> const auto&
   {
     return key_;
   }
 
-  [[nodiscard]] const auto& framing_extras() const
+  [[nodiscard]] auto framing_extras() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& extras()
+  [[nodiscard]] auto extras() -> const auto&
   {
     if (extras_.empty()) {
       fill_extras();
@@ -111,7 +111,7 @@ public:
     return extras_;
   }
 
-  [[nodiscard]] const auto& value()
+  [[nodiscard]] auto value() -> const auto&
   {
     if (value_.empty()) {
       fill_value();
@@ -119,7 +119,7 @@ public:
     return value_;
   }
 
-  [[nodiscard]] std::size_t size()
+  [[nodiscard]] auto size() -> std::size_t
   {
     if (extras_.empty()) {
       fill_extras();

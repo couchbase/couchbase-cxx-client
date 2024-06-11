@@ -25,7 +25,7 @@ namespace couchbase::core::metrics
 class noop_value_recorder : public couchbase::metrics::value_recorder
 {
 public:
-  void record_value(std::int64_t /* value */) override
+  void record_value(int64_t /* value */) override
   {
     /* do nothing */
   }
@@ -37,9 +37,9 @@ private:
   std::shared_ptr<noop_value_recorder> instance_{ std::make_shared<noop_value_recorder>() };
 
 public:
-  std::shared_ptr<couchbase::metrics::value_recorder> get_value_recorder(
-    const std::string& /* name */,
-    const std::map<std::string, std::string>& /* tags */) override
+  auto get_value_recorder(const std::string& /* name */,
+                          const std::map<std::string, std::string>& /* tags */)
+    -> std::shared_ptr<couchbase::metrics::value_recorder> override
   {
     return instance_;
   }

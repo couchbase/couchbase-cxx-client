@@ -27,8 +27,8 @@ namespace couchbase::core::impl
 {
 namespace
 {
-query_status
-map_status(std::string status)
+auto
+map_status(std::string status) -> query_status
 {
   std::transform(status.cbegin(), status.cend(), status.begin(), [](unsigned char c) {
     return std::tolower(c);
@@ -55,8 +55,8 @@ map_status(std::string status)
   return query_status::unknown;
 }
 
-std::vector<codec::binary>
-map_rows(operations::query_response& resp)
+auto
+map_rows(operations::query_response& resp) -> std::vector<codec::binary>
 {
   std::vector<codec::binary> rows;
   rows.reserve(resp.rows.size());
@@ -66,8 +66,8 @@ map_rows(operations::query_response& resp)
   return rows;
 }
 
-std::vector<query_warning>
-map_warnings(operations::query_response& resp)
+auto
+map_warnings(operations::query_response& resp) -> std::vector<query_warning>
 {
   std::vector<query_warning> warnings;
   if (resp.meta.warnings) {
@@ -84,8 +84,8 @@ map_warnings(operations::query_response& resp)
   return warnings;
 }
 
-std::optional<query_metrics>
-map_metrics(operations::query_response& resp)
+auto
+map_metrics(operations::query_response& resp) -> std::optional<query_metrics>
 {
   if (!resp.meta.metrics) {
     return {};
@@ -99,8 +99,8 @@ map_metrics(operations::query_response& resp)
   };
 }
 
-std::optional<std::vector<std::byte>>
-map_signature(operations::query_response& resp)
+auto
+map_signature(operations::query_response& resp) -> std::optional<std::vector<std::byte>>
 {
   if (!resp.meta.signature) {
     return {};
@@ -108,8 +108,8 @@ map_signature(operations::query_response& resp)
   return utils::to_binary(resp.meta.signature.value());
 }
 
-std::optional<std::vector<std::byte>>
-map_profile(operations::query_response& resp)
+auto
+map_profile(operations::query_response& resp) -> std::optional<std::vector<std::byte>>
 {
   if (!resp.meta.profile) {
     return {};
@@ -118,8 +118,8 @@ map_profile(operations::query_response& resp)
 }
 } // namespace
 
-query_error_context
-build_context(operations::query_response& resp)
+auto
+build_context(operations::query_response& resp) -> query_error_context
 {
   return {
     resp.ctx.ec,
@@ -141,8 +141,8 @@ build_context(operations::query_response& resp)
   };
 }
 
-query_result
-build_result(operations::query_response& resp)
+auto
+build_result(operations::query_response& resp) -> query_result
 {
   return {
     query_meta_data{
@@ -158,10 +158,10 @@ build_result(operations::query_response& resp)
   };
 }
 
-core::operations::query_request
+auto
 build_query_request(std::string statement,
                     std::optional<std::string> query_context,
-                    query_options::built options)
+                    query_options::built options) -> core::operations::query_request
 {
   operations::query_request request{
     std::move(statement),     options.adhoc,
@@ -192,10 +192,11 @@ build_query_request(std::string statement,
   return request;
 }
 
-std::pair<couchbase::transaction_op_error_context,
-          couchbase::transactions::transaction_query_result>
+auto
 build_transaction_query_result(operations::query_response resp,
                                std::error_code txn_ec /*defaults to 0*/)
+  -> std::pair<couchbase::transaction_op_error_context,
+               couchbase::transactions::transaction_query_result>
 {
   if (resp.ctx.ec) {
     if (resp.ctx.ec == errc::common::parsing_failure) {
@@ -222,8 +223,8 @@ build_transaction_query_result(operations::query_response resp,
   };
 }
 
-core::operations::query_request
-build_transaction_query_request(query_options::built opts)
+auto
+build_transaction_query_request(query_options::built opts) -> core::operations::query_request
 {
   return core::impl::build_query_request("", {}, opts);
 }

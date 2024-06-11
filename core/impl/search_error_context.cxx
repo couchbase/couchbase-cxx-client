@@ -33,8 +33,8 @@ search_error_context::search_error_context(internal_search_error_context ctx)
 
 search_error_context::search_error_context(search_error_context&& other) = default;
 
-search_error_context&
-search_error_context::operator=(search_error_context&& other) = default;
+auto
+search_error_context::operator=(search_error_context&& other) -> search_error_context& = default;
 
 search_error_context::~search_error_context() = default;
 

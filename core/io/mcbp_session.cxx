@@ -182,7 +182,7 @@ private:
   std::map<std::string, std::uint32_t> cid_map_{ { "_default._default", 0 } };
 
 public:
-  [[nodiscard]] std::optional<std::uint32_t> get(const std::string& path)
+  [[nodiscard]] auto get(const std::string& path) -> std::optional<std::uint32_t>
   {
     Expects(!path.empty());
     if (auto ptr = cid_map_.find(path); ptr != cid_map_.end()) {
@@ -241,12 +241,12 @@ class mcbp_session_impl
       return { "SCRAM-SHA512", "SCRAM-SHA256", "SCRAM-SHA1" };
     }
 
-    std::string last_error_message() &&
+    auto last_error_message() && -> std::string
     {
       return std::move(last_error_message_);
     }
 
-    [[nodiscard]] const std::string& last_error_message() const&
+    [[nodiscard]] auto last_error_message() const& -> const std::string&
     {
       return last_error_message_;
     }
@@ -833,22 +833,22 @@ public:
     stop(retry_reason::do_not_retry);
   }
 
-  [[nodiscard]] const std::string& log_prefix() const
+  [[nodiscard]] auto log_prefix() const -> const std::string&
   {
     return log_prefix_;
   }
 
-  std::string remote_address() const
+  auto remote_address() const -> std::string
   {
     return connection_endpoints_.remote_address_with_port;
   }
 
-  std::string local_address() const
+  auto local_address() const -> std::string
   {
     return connection_endpoints_.local_address_with_port;
   }
 
-  [[nodiscard]] diag::endpoint_diag_info diag_info() const
+  [[nodiscard]] auto diag_info() const -> diag::endpoint_diag_info
   {
     return { service_type::key_value,
              id_,
@@ -923,7 +923,7 @@ public:
       });
   }
 
-  [[nodiscard]] mcbp_context context() const
+  [[nodiscard]] auto context() const -> mcbp_context
   {
     return { config_, supported_features_ };
   }
@@ -1012,17 +1012,17 @@ public:
                             std::placeholders::_2));
   }
 
-  [[nodiscard]] const std::string& id() const
+  [[nodiscard]] auto id() const -> const std::string&
   {
     return id_;
   }
 
-  [[nodiscard]] bool is_stopped() const
+  [[nodiscard]] auto is_stopped() const -> bool
   {
     return stopped_;
   }
 
-  [[nodiscard]] bool is_bootstrapped() const
+  [[nodiscard]] auto is_bootstrapped() const -> bool
   {
     return bootstrapped_;
   }
@@ -1259,7 +1259,7 @@ public:
     }
   }
 
-  [[nodiscard]] bool cancel(std::uint32_t opaque, std::error_code ec, retry_reason reason)
+  [[nodiscard]] auto cancel(std::uint32_t opaque, std::error_code ec, retry_reason reason) -> bool
   {
     if (stopped_) {
       return false;
@@ -1283,71 +1283,71 @@ public:
     return false;
   }
 
-  [[nodiscard]] bool supports_feature(protocol::hello_feature feature)
+  [[nodiscard]] auto supports_feature(protocol::hello_feature feature) -> bool
   {
     return std::find(supported_features_.begin(), supported_features_.end(), feature) !=
            supported_features_.end();
   }
 
-  [[nodiscard]] std::vector<protocol::hello_feature> supported_features() const
+  [[nodiscard]] auto supported_features() const -> std::vector<protocol::hello_feature>
   {
     return supported_features_;
   }
 
-  [[nodiscard]] bool supports_gcccp() const
+  [[nodiscard]] auto supports_gcccp() const -> bool
   {
     return supports_gcccp_;
   }
 
-  std::optional<topology::configuration> config() const
+  auto config() const -> std::optional<topology::configuration>
   {
     return config_;
   }
 
-  [[nodiscard]] bool has_config() const
+  [[nodiscard]] auto has_config() const -> bool
   {
     return configured_;
   }
 
-  [[nodiscard]] topology::configuration config()
+  [[nodiscard]] auto config() -> topology::configuration
   {
     std::scoped_lock lock(config_mutex_);
     return config_.value();
   }
 
-  [[nodiscard]] std::size_t index() const
+  [[nodiscard]] auto index() const -> std::size_t
   {
     std::scoped_lock lock(config_mutex_);
     Expects(config_.has_value());
     return config_->index_for_this_node();
   }
 
-  [[nodiscard]] const std::string& bootstrap_address() const
+  [[nodiscard]] auto bootstrap_address() const -> const std::string&
   {
     return bootstrap_address_;
   }
 
-  [[nodiscard]] const std::string& bootstrap_hostname() const
+  [[nodiscard]] auto bootstrap_hostname() const -> const std::string&
   {
     return bootstrap_hostname_;
   }
 
-  [[nodiscard]] const std::string& bootstrap_port() const
+  [[nodiscard]] auto bootstrap_port() const -> const std::string&
   {
     return bootstrap_port_;
   }
 
-  [[nodiscard]] std::uint16_t bootstrap_port_number() const
+  [[nodiscard]] auto bootstrap_port_number() const -> std::uint16_t
   {
     return bootstrap_port_number_;
   }
 
-  [[nodiscard]] std::uint32_t next_opaque()
+  [[nodiscard]] auto next_opaque() -> std::uint32_t
   {
     return ++opaque_;
   }
 
-  std::optional<key_value_error_map_info> decode_error_code(std::uint16_t code)
+  auto decode_error_code(std::uint16_t code) -> std::optional<key_value_error_map_info>
   {
     if (error_map_) {
       auto info = error_map_->errors.find(code);
@@ -1474,7 +1474,7 @@ public:
     }
   }
 
-  std::optional<std::uint32_t> get_collection_uid(const std::string& collection_path)
+  auto get_collection_uid(const std::string& collection_path) -> std::optional<std::uint32_t>
   {
     return collection_cache_.get(collection_path);
   }
@@ -1921,92 +1921,92 @@ mcbp_session::mcbp_session(std::string client_id,
 {
 }
 
-const std::string&
-mcbp_session::log_prefix() const
+auto
+mcbp_session::log_prefix() const -> const std::string&
 {
   return impl_->log_prefix();
 }
 
-bool
-mcbp_session::cancel(std::uint32_t opaque, std::error_code ec, retry_reason reason)
+auto
+mcbp_session::cancel(std::uint32_t opaque, std::error_code ec, retry_reason reason) -> bool
 {
   return impl_->cancel(opaque, ec, reason);
 }
 
-bool
-mcbp_session::is_stopped() const
+auto
+mcbp_session::is_stopped() const -> bool
 {
   return impl_->is_stopped();
 }
 
-bool
-mcbp_session::is_bootstrapped() const
+auto
+mcbp_session::is_bootstrapped() const -> bool
 {
   return impl_->is_bootstrapped();
 }
 
-std::uint32_t
-mcbp_session::next_opaque()
+auto
+mcbp_session::next_opaque() -> std::uint32_t
 {
   return impl_->next_opaque();
 }
 
-std::optional<std::uint32_t>
-mcbp_session::get_collection_uid(const std::string& collection_path)
+auto
+mcbp_session::get_collection_uid(const std::string& collection_path) -> std::optional<std::uint32_t>
 {
   return impl_->get_collection_uid(collection_path);
 }
 
-mcbp_context
-mcbp_session::context() const
+auto
+mcbp_session::context() const -> mcbp_context
 {
   return impl_->context();
 }
 
-bool
-mcbp_session::supports_feature(protocol::hello_feature feature)
+auto
+mcbp_session::supports_feature(protocol::hello_feature feature) -> bool
 {
   return impl_->supports_feature(feature);
 }
 
-const std::string&
-mcbp_session::id() const
+auto
+mcbp_session::id() const -> const std::string&
 {
   return impl_->id();
 }
 
-const std::string&
-mcbp_session::bootstrap_address() const
+auto
+mcbp_session::bootstrap_address() const -> const std::string&
 {
   return impl_->bootstrap_address();
 }
 
-std::string
-mcbp_session::remote_address() const
+auto
+mcbp_session::remote_address() const -> std::string
 {
   return impl_->remote_address();
 }
 
-std::string
-mcbp_session::local_address() const
+auto
+mcbp_session::local_address() const -> std::string
 {
   return impl_->local_address();
 }
 
-const std::string&
-mcbp_session::bootstrap_hostname() const
+auto
+mcbp_session::bootstrap_hostname() const -> const std::string&
 {
   return impl_->bootstrap_hostname();
 }
 
-const std::string&
-mcbp_session::bootstrap_port() const
+auto
+mcbp_session::bootstrap_port() const -> const std::string&
 {
   return impl_->bootstrap_port();
 }
 
-std::uint16_t
-mcbp_session::bootstrap_port_number() const
+auto
+mcbp_session::bootstrap_port_number() const -> std::uint16_t
 {
   return impl_->bootstrap_port_number();
 }
@@ -2039,26 +2039,26 @@ mcbp_session::stop(retry_reason reason)
   return impl_->stop(reason);
 }
 
-std::size_t
-mcbp_session::index() const
+auto
+mcbp_session::index() const -> std::size_t
 {
   return impl_->index();
 }
 
-std::optional<topology::configuration>
-mcbp_session::config() const
+auto
+mcbp_session::config() const -> std::optional<topology::configuration>
 {
   return impl_->config();
 }
 
-bool
-mcbp_session::has_config() const
+auto
+mcbp_session::has_config() const -> bool
 {
   return impl_->has_config();
 }
 
-diag::endpoint_diag_info
-mcbp_session::diag_info() const
+auto
+mcbp_session::diag_info() const -> diag::endpoint_diag_info
 {
   return impl_->diag_info();
 }
@@ -2069,8 +2069,8 @@ mcbp_session::on_configuration_update(std::shared_ptr<config_listener> handler)
   return impl_->on_configuration_update(std::move(handler));
 }
 
-std::vector<protocol::hello_feature>
-mcbp_session::supported_features() const
+auto
+mcbp_session::supported_features() const -> std::vector<protocol::hello_feature>
 {
   return impl_->supported_features();
 }
@@ -2082,14 +2082,14 @@ mcbp_session::ping(std::shared_ptr<diag::ping_reporter> handler,
   return impl_->ping(std::move(handler), std::move(timeout));
 }
 
-bool
-mcbp_session::supports_gcccp() const
+auto
+mcbp_session::supports_gcccp() const -> bool
 {
   return impl_->supports_gcccp();
 }
 
-std::optional<key_value_error_map_info>
-mcbp_session::decode_error_code(std::uint16_t code)
+auto
+mcbp_session::decode_error_code(std::uint16_t code) -> std::optional<key_value_error_map_info>
 {
   return impl_->decode_error_code(code);
 }

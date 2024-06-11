@@ -36,8 +36,8 @@ namespace couchbase
 {
 namespace
 {
-std::string
-service_type_as_string(service_type service_type)
+auto
+service_type_as_string(service_type service_type) -> std::string
 {
   switch (service_type) {
     case service_type::key_value:
@@ -58,8 +58,8 @@ service_type_as_string(service_type service_type)
   return "";
 }
 
-std::string
-ping_state_as_string(ping_state state)
+auto
+ping_state_as_string(ping_state state) -> std::string
 {
   switch (state) {
     case ping_state::ok:
@@ -72,8 +72,8 @@ ping_state_as_string(ping_state state)
   return "";
 }
 
-std::string
-endpoint_state_as_string(endpoint_state state)
+auto
+endpoint_state_as_string(endpoint_state state) -> std::string
 {
   switch (state) {
     case endpoint_state::connected:
@@ -88,8 +88,9 @@ endpoint_state_as_string(endpoint_state state)
   return "";
 }
 
-codec::tao_json_serializer::document_type
+auto
 endpoint_ping_report_as_json(const endpoint_ping_report& report)
+  -> codec::tao_json_serializer::document_type
 {
   codec::tao_json_serializer::document_type res{
     { "id", report.id() },
@@ -107,8 +108,9 @@ endpoint_ping_report_as_json(const endpoint_ping_report& report)
   return res;
 }
 
-codec::tao_json_serializer::document_type
+auto
 endpoint_diagnostics_as_json(const endpoint_diagnostics& report)
+  -> codec::tao_json_serializer::document_type
 {
   codec::tao_json_serializer::document_type res{
     { "id", report.id() },
@@ -172,8 +174,8 @@ namespace couchbase::core::impl
 {
 namespace
 {
-couchbase::service_type
-to_public_service_type(core::service_type service_type)
+auto
+to_public_service_type(core::service_type service_type) -> couchbase::service_type
 {
   switch (service_type) {
     case core::service_type::key_value:
@@ -194,8 +196,8 @@ to_public_service_type(core::service_type service_type)
   return {};
 }
 
-couchbase::ping_state
-to_public_ping_state(core::diag::ping_state ping_state)
+auto
+to_public_ping_state(core::diag::ping_state ping_state) -> couchbase::ping_state
 {
   switch (ping_state) {
     case core::diag::ping_state::timeout:
@@ -208,8 +210,8 @@ to_public_ping_state(core::diag::ping_state ping_state)
   return {};
 }
 
-couchbase::endpoint_state
-to_public_endpoint_state(core::diag::endpoint_state endpoint_state)
+auto
+to_public_endpoint_state(core::diag::endpoint_state endpoint_state) -> couchbase::endpoint_state
 {
   switch (endpoint_state) {
     case core::diag::endpoint_state::connected:
@@ -225,8 +227,9 @@ to_public_endpoint_state(core::diag::endpoint_state endpoint_state)
 }
 } // namespace
 
-std::set<core::service_type>
+auto
 to_core_service_types(const std::set<couchbase::service_type>& service_types)
+  -> std::set<core::service_type>
 {
   std::set<core::service_type> res{};
   for (auto s : service_types) {
@@ -257,8 +260,8 @@ to_core_service_types(const std::set<couchbase::service_type>& service_types)
   return res;
 }
 
-couchbase::ping_result
-build_result(const core::diag::ping_result& result)
+auto
+build_result(const core::diag::ping_result& result) -> couchbase::ping_result
 {
   std::map<couchbase::service_type, std::vector<couchbase::endpoint_ping_report>> endpoints{};
   for (const auto& [core_service_type, core_endpoints] : result.services) {
@@ -279,8 +282,8 @@ build_result(const core::diag::ping_result& result)
   return { result.id, static_cast<std::uint16_t>(result.version), result.sdk, endpoints };
 }
 
-couchbase::diagnostics_result
-build_result(const core::diag::diagnostics_result& result)
+auto
+build_result(const core::diag::diagnostics_result& result) -> couchbase::diagnostics_result
 {
   std::map<couchbase::service_type, std::vector<couchbase::endpoint_diagnostics>> endpoints{};
   for (const auto& [core_service_type, core_endpoints] : result.services) {

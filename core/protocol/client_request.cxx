@@ -22,8 +22,9 @@
 
 namespace couchbase::core::protocol
 {
-std::pair<bool, std::uint32_t>
-compress_value(const std::vector<std::byte>& value, std::vector<std::byte>::iterator& output)
+auto
+compress_value(const std::vector<std::byte>& value,
+               std::vector<std::byte>::iterator& output) -> std::pair<bool, std::uint32_t>
 {
   static const double min_ratio = 0.83;
 

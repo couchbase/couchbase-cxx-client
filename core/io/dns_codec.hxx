@@ -29,7 +29,7 @@ namespace couchbase::core::io::dns
 class dns_codec
 {
 public:
-  static dns_message decode(const std::vector<std::uint8_t>& payload)
+  static auto decode(const std::vector<std::uint8_t>& payload) -> dns_message
   {
     dns_message message{};
     std::size_t offset = 0;
@@ -127,7 +127,7 @@ public:
     return message;
   }
 
-  static std::vector<std::uint8_t> encode(const dns_message& message)
+  static auto encode(const dns_message& message) -> std::vector<std::uint8_t>
   {
     std::vector<std::uint8_t> payload;
     payload.resize(message.request_size(), 0);
@@ -176,7 +176,8 @@ public:
   }
 
 private:
-  static resource_name get_name(const std::vector<std::uint8_t>& payload, std::size_t& offset)
+  static auto get_name(const std::vector<std::uint8_t>& payload,
+                       std::size_t& offset) -> resource_name
   {
     resource_name name{};
     std::optional<std::size_t> save_offset{};

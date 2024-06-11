@@ -70,17 +70,17 @@ public:
 
   virtual ~stream_impl() = default;
 
-  [[nodiscard]] std::string_view log_prefix() const
+  [[nodiscard]] auto log_prefix() const -> std::string_view
   {
     return tls_ ? "tls" : "plain";
   }
 
-  [[nodiscard]] const std::string& id() const
+  [[nodiscard]] auto id() const -> const std::string&
   {
     return id_;
   }
 
-  [[nodiscard]] bool is_open() const
+  [[nodiscard]] auto is_open() const -> bool
   {
     return open_;
   }
@@ -90,7 +90,7 @@ public:
     return strand_;
   }
 
-  [[nodiscard]] virtual asio::ip::tcp::endpoint local_endpoint() const = 0;
+  [[nodiscard]] virtual auto local_endpoint() const -> asio::ip::tcp::endpoint = 0;
 
   virtual void close(std::function<void(std::error_code)>&& handler) = 0;
 
@@ -120,7 +120,7 @@ public:
   {
   }
 
-  [[nodiscard]] asio::ip::tcp::endpoint local_endpoint() const override
+  [[nodiscard]] auto local_endpoint() const -> asio::ip::tcp::endpoint override
   {
     std::error_code ec;
     auto res = stream_->local_endpoint(ec);
@@ -197,7 +197,7 @@ public:
   {
   }
 
-  [[nodiscard]] asio::ip::tcp::endpoint local_endpoint() const override
+  [[nodiscard]] auto local_endpoint() const -> asio::ip::tcp::endpoint override
   {
     std::error_code ec;
     auto res = stream_->lowest_layer().local_endpoint(ec);

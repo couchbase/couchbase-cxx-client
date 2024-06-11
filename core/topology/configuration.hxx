@@ -62,30 +62,30 @@ struct configuration {
     std::map<std::string, alternate_address> alt{};
     std::string server_group{};
 
-    bool operator!=(const node& other) const
+    auto operator!=(const node& other) const -> bool
     {
       return hostname != other.hostname ||
              services_plain.key_value != other.services_plain.key_value ||
              services_tls.key_value != other.services_tls.key_value;
     }
 
-    [[nodiscard]] std::uint16_t port_or(service_type type,
-                                        bool is_tls,
-                                        std::uint16_t default_value) const;
+    [[nodiscard]] auto port_or(service_type type,
+                               bool is_tls,
+                               std::uint16_t default_value) const -> std::uint16_t;
 
-    [[nodiscard]] std::uint16_t port_or(const std::string& network,
-                                        service_type type,
-                                        bool is_tls,
-                                        std::uint16_t default_value) const;
+    [[nodiscard]] auto port_or(const std::string& network,
+                               service_type type,
+                               bool is_tls,
+                               std::uint16_t default_value) const -> std::uint16_t;
 
-    [[nodiscard]] const std::string& hostname_for(const std::string& network) const;
+    [[nodiscard]] auto hostname_for(const std::string& network) const -> const std::string&;
 
-    [[nodiscard]] std::optional<std::string> endpoint(const std::string& network,
-                                                      service_type type,
-                                                      bool is_tls) const;
+    [[nodiscard]] auto endpoint(const std::string& network,
+                                service_type type,
+                                bool is_tls) const -> std::optional<std::string>;
   };
 
-  [[nodiscard]] std::string select_network(const std::string& bootstrap_hostname) const;
+  [[nodiscard]] auto select_network(const std::string& bootstrap_hostname) const -> std::string;
 
   using vbucket_map = typename std::vector<std::vector<std::int16_t>>;
 
@@ -102,45 +102,48 @@ struct configuration {
   node_locator_type node_locator{ node_locator_type::unknown };
   bool force{ false };
 
-  bool operator==(const configuration& other) const
+  auto operator==(const configuration& other) const -> bool
   {
     return epoch == other.epoch && rev == other.rev;
   }
 
-  bool operator<(const configuration& other) const
+  auto operator<(const configuration& other) const -> bool
   {
     return epoch < other.epoch || (epoch == other.epoch && rev < other.rev);
   }
 
-  bool operator>(const configuration& other) const
+  auto operator>(const configuration& other) const -> bool
   {
     return other < *this;
   }
 
-  [[nodiscard]] std::string rev_str() const;
+  [[nodiscard]] auto rev_str() const -> std::string;
 
-  [[nodiscard]] std::size_t index_for_this_node() const;
-  [[nodiscard]] bool has_node(const std::string& network,
+  [[nodiscard]] auto index_for_this_node() const -> std::size_t;
+  [[nodiscard]] auto has_node(const std::string& network,
                               service_type type,
                               bool is_tls,
                               const std::string& hostname,
-                              const std::string& port) const;
+                              const std::string& port) const -> bool;
 
-  std::pair<std::uint16_t, std::optional<std::size_t>> map_key(const std::string& key,
-                                                               std::size_t index) const;
-  std::pair<std::uint16_t, std::optional<std::size_t>> map_key(const std::vector<std::byte>& key,
-                                                               std::size_t index) const;
+  auto map_key(const std::string& key,
+               std::size_t index) const -> std::pair<std::uint16_t, std::optional<std::size_t>>;
+  auto map_key(const std::vector<std::byte>& key,
+               std::size_t index) const -> std::pair<std::uint16_t, std::optional<std::size_t>>;
 
-  std::optional<std::size_t> server_by_vbucket(std::uint16_t vbucket, std::size_t index) const;
+  auto server_by_vbucket(std::uint16_t vbucket,
+                         std::size_t index) const -> std::optional<std::size_t>;
 };
 
 using endpoint = std::pair<std::string, std::string>;
 
-configuration
+auto
 make_blank_configuration(const std::string& hostname,
                          std::uint16_t plain_port,
-                         std::uint16_t tls_port);
+                         std::uint16_t tls_port) -> configuration;
 
-configuration
-make_blank_configuration(const std::vector<endpoint>& endpoints, bool use_tls, bool force = false);
+auto
+make_blank_configuration(const std::vector<endpoint>& endpoints,
+                         bool use_tls,
+                         bool force = false) -> configuration;
 } // namespace couchbase::core::topology

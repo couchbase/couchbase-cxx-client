@@ -63,10 +63,10 @@ class movable_function : public std::function<Signature>
     }
 
     wrapper(wrapper&& /* other */) noexcept = default;
-    wrapper& operator=(wrapper&& /* other */) noexcept = default;
+    auto operator=(wrapper&& /* other */) noexcept -> wrapper& = default;
 
     wrapper(const wrapper& other) = default;
-    wrapper& operator=(const wrapper& /* other */) = default;
+    auto operator=(const wrapper& /* other */) -> wrapper& = default;
 
     template<typename... Args>
     auto operator()(Args&&... args)
@@ -96,21 +96,21 @@ public:
     other = nullptr;
   }
 
-  movable_function& operator=(movable_function&& other) noexcept
+  auto operator=(movable_function&& other) noexcept -> movable_function&
   {
     base::operator=(std::move(static_cast<base&&>(other)));
     other = nullptr;
     return *this;
   }
 
-  movable_function& operator=(std::nullptr_t /* other */)
+  auto operator=(std::nullptr_t /* other */) -> movable_function&
   {
     base::operator=(nullptr);
     return *this;
   }
 
   template<typename Functor>
-  movable_function& operator=(Functor&& f)
+  auto operator=(Functor&& f) -> movable_function&
   {
     base::operator=(wrapper<Functor>{ std::forward<Functor>(f) });
     return *this;

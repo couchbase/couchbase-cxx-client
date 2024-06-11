@@ -21,28 +21,28 @@
 
 namespace couchbase::core::transactions
 {
-std::string
-collection_spec_from_id(const core::document_id& id)
+auto
+collection_spec_from_id(const core::document_id& id) -> std::string
 {
   std::string retval = id.scope();
   return retval.append(".").append(id.collection());
 }
 
-bool
-document_ids_equal(const core::document_id& id1, const core::document_id& id2)
+auto
+document_ids_equal(const core::document_id& id1, const core::document_id& id2) -> bool
 {
   return id1.key() == id2.key() && id1.bucket() == id2.bucket() && id1.scope() == id2.scope() &&
          id1.collection() == id2.collection();
 }
 
-std::string
-jsonify(const tao::json::value& obj)
+auto
+jsonify(const tao::json::value& obj) -> std::string
 {
   return core::utils::json::generate(obj);
 }
 
-std::uint64_t
-now_ns_from_vbucket(const tao::json::value& vbucket)
+auto
+now_ns_from_vbucket(const tao::json::value& vbucket) -> std::uint64_t
 {
   std::string now_str = vbucket.at("HLC").at("now").get_string();
   return stoull(now_str, nullptr, 10) * 1000000000;
@@ -85,16 +85,17 @@ validate_operation_result(result& res, bool ignore_subdoc_errors)
   }
 }
 
-result
-wrap_operation_future(std::future<result>& fut, bool ignore_subdoc_errors)
+auto
+wrap_operation_future(std::future<result>& fut, bool ignore_subdoc_errors) -> result
 {
   auto res = fut.get();
   validate_operation_result(res, ignore_subdoc_errors);
   return res;
 }
 
-std::optional<error_class>
+auto
 wait_for_hook(std::function<void(utils::movable_function<void(std::optional<error_class>)>)> hook)
+  -> std::optional<error_class>
 {
   auto hook_barrier = std::make_shared<std::promise<std::optional<error_class>>>();
   auto hook_future = hook_barrier->get_future();
@@ -105,15 +106,16 @@ wait_for_hook(std::function<void(utils::movable_function<void(std::optional<erro
 }
 
 template<>
-bool
-is_error(const core::operations::mutate_in_response& resp)
+auto
+is_error(const core::operations::mutate_in_response& resp) -> bool
 {
   return resp.ctx.ec() || resp.ctx.first_error_index();
 }
 
 template<>
-std::optional<error_class>
+auto
 error_class_from_response_extras(const core::operations::mutate_in_response& resp)
+  -> std::optional<error_class>
 {
   if (!resp.ctx.first_error_index()) {
     return {};
@@ -128,10 +130,10 @@ error_class_from_response_extras(const core::operations::mutate_in_response& res
   return FAIL_OTHER;
 }
 
-core::document_id
+auto
 atr_id_from_bucket_and_key(const couchbase::transactions::transactions_config::built& cfg,
                            const std::string& bucket,
-                           const std::string& key)
+                           const std::string& key) -> core::document_id
 {
   if (cfg.metadata_collection) {
     return { cfg.metadata_collection->bucket,

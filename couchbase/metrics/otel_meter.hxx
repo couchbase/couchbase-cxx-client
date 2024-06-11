@@ -102,9 +102,8 @@ public:
   {
   }
 
-  std::shared_ptr<value_recorder> get_value_recorder(
-    const std::string& name,
-    const std::map<std::string, std::string>& tags) override
+  auto get_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags)
+    -> std::shared_ptr<value_recorder> override
   {
     // first look up the histogram, in case we already have it...
     std::scoped_lock<std::mutex> lock(mutex_);

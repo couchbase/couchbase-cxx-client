@@ -121,8 +121,9 @@ integration_test_guard::~integration_test_guard()
   }
 }
 
-const couchbase::core::operations::management::bucket_describe_response::bucket_info&
+auto
 integration_test_guard::load_bucket_info(const std::string& bucket_name, bool refresh)
+  -> const couchbase::core::operations::management::bucket_describe_response::bucket_info&
 {
   if (info.count(bucket_name) > 0 && !refresh) {
     return info[bucket_name];
@@ -145,8 +146,9 @@ integration_test_guard::load_bucket_info(const std::string& bucket_name, bool re
   return info[bucket_name];
 }
 
-const couchbase::core::operations::management::cluster_describe_response::cluster_info&
+auto
 integration_test_guard::load_cluster_info(bool refresh)
+  -> const couchbase::core::operations::management::cluster_describe_response::cluster_info&
 {
   if (cluster_info && !refresh) {
     return cluster_info.value();
@@ -167,8 +169,8 @@ integration_test_guard::load_cluster_info(bool refresh)
   return cluster_info.value();
 }
 
-pools_response
-integration_test_guard::load_pools_info(bool refresh)
+auto
+integration_test_guard::load_pools_info(bool refresh) -> pools_response
 {
   if (pools_info && !refresh) {
     return pools_info.value();
@@ -212,8 +214,8 @@ integration_test_guard::number_of_query_nodes() -> std::size_t
   return static_cast<std::size_t>(result);
 }
 
-server_version
-integration_test_guard::cluster_version()
+auto
+integration_test_guard::cluster_version() -> server_version
 {
   load_cluster_info();
   auto runtime_pools_info = load_pools_info();

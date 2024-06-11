@@ -22,8 +22,9 @@ namespace couchbase
 internal_search_error_context::internal_search_error_context(
   internal_search_error_context&& other) noexcept = default;
 
-internal_search_error_context&
-internal_search_error_context::operator=(internal_search_error_context&& other) noexcept = default;
+auto
+internal_search_error_context::operator=(internal_search_error_context&& other) noexcept
+  -> internal_search_error_context& = default;
 
 internal_search_error_context::internal_search_error_context(
   core::operations::search_response& resp)

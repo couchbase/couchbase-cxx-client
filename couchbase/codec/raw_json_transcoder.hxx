@@ -33,8 +33,8 @@ namespace couchbase
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace core::utils
 {
-std::vector<std::byte>
-to_binary(std::string_view value) noexcept;
+auto
+to_binary(std::string_view value) noexcept -> std::vector<std::byte>;
 } // namespace core::utils
 #endif
 

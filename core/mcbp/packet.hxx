@@ -41,7 +41,7 @@ namespace couchbase::core::mcbp
 class packet
 {
 public:
-  [[nodiscard]] std::string debug_string() const;
+  [[nodiscard]] auto debug_string() const -> std::string;
 
   protocol::magic magic_;
   protocol::client_opcode command_;

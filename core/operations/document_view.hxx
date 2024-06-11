@@ -96,10 +96,11 @@ struct document_view_request {
   std::optional<std::chrono::milliseconds> timeout{};
   std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
-  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded,
+                               http_context& context) -> std::error_code;
 
-  [[nodiscard]] document_view_response make_response(error_context::view&& ctx,
-                                                     const encoded_response_type& encoded) const;
+  [[nodiscard]] auto make_response(error_context::view&& ctx, const encoded_response_type& encoded)
+    const -> document_view_response;
 };
 
 } // namespace couchbase::core::operations

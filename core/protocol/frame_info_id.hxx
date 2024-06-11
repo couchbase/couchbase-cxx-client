@@ -98,8 +98,8 @@ enum class request_frame_info_id : std::uint8_t {
   preserve_ttl = 0x05,
 };
 
-constexpr bool
-is_valid_request_frame_info_id(std::uint8_t value)
+constexpr auto
+is_valid_request_frame_info_id(std::uint8_t value) -> bool
 {
   switch (request_frame_info_id(value)) {
     case request_frame_info_id::barrier:
@@ -134,8 +134,8 @@ enum class response_frame_info_id : std::uint8_t {
   server_duration = 0x00,
 };
 
-constexpr bool
-is_valid_response_frame_info_id(std::uint8_t value)
+constexpr auto
+is_valid_response_frame_info_id(std::uint8_t value) -> bool
 {
   switch (response_frame_info_id(value)) {
     case response_frame_info_id::server_duration:

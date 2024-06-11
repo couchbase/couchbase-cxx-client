@@ -26,7 +26,8 @@ namespace tao::json
 template<>
 struct traits<couchbase::core::management::eventing::status> {
   template<template<typename...> class Traits>
-  static couchbase::core::management::eventing::status as(const tao::json::basic_value<Traits>& v)
+  static auto as(const tao::json::basic_value<Traits>& v)
+    -> couchbase::core::management::eventing::status
   {
     couchbase::core::management::eventing::status result;
     result.num_eventing_nodes = v.at("num_eventing_nodes").get_unsigned();

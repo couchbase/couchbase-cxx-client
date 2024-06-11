@@ -23,12 +23,12 @@ namespace couchbase::core::impl
 {
 
 struct management_error_category : std::error_category {
-  [[nodiscard]] const char* name() const noexcept override
+  [[nodiscard]] auto name() const noexcept -> const char* override
   {
     return "couchbase.management";
   }
 
-  [[nodiscard]] std::string message(int ev) const noexcept override
+  [[nodiscard]] auto message(int ev) const noexcept -> std::string override
   {
     switch (static_cast<errc::management>(ev)) {
       case errc::management::collection_exists:
@@ -67,8 +67,8 @@ struct management_error_category : std::error_category {
 
 const inline static management_error_category category_instance;
 
-const std::error_category&
-management_category() noexcept
+auto
+management_category() noexcept -> const std::error_category&
 {
   return category_instance;
 }

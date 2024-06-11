@@ -51,233 +51,233 @@ struct server_version {
   server_config_profile profile{ server_config_profile::unknown };
   bool use_gocaves{ false };
 
-  static server_version parse(const std::string& str, deployment_type deployment);
+  static auto parse(const std::string& str, deployment_type deployment) -> server_version;
 
-  [[nodiscard]] bool is_mock() const
+  [[nodiscard]] auto is_mock() const -> bool
   {
     return use_gocaves;
   }
 
-  [[nodiscard]] bool is_alice() const
+  [[nodiscard]] auto is_alice() const -> bool
   {
     // [6.0.0, 6.5.0)
     return major == 6 && minor < 5;
   }
 
-  [[nodiscard]] bool is_mad_hatter() const
+  [[nodiscard]] auto is_mad_hatter() const -> bool
   {
     // [6.5.0, 7.0.0)
     return major == 6 && minor >= 5;
   }
 
-  [[nodiscard]] bool is_cheshire_cat() const
+  [[nodiscard]] auto is_cheshire_cat() const -> bool
   {
     // [7.0.0, 7.1.0)
     return major == 7 && minor < 1;
   }
 
-  [[nodiscard]] bool is_neo() const
+  [[nodiscard]] auto is_neo() const -> bool
   {
     // [7.1.0, inf)
     return (major == 7 && minor >= 1) || major > 7;
   }
 
-  [[nodiscard]] bool supports_gcccp() const
+  [[nodiscard]] auto supports_gcccp() const -> bool
   {
     return is_mad_hatter() || is_cheshire_cat() || is_neo();
   }
 
-  [[nodiscard]] bool supports_sync_replication() const
+  [[nodiscard]] auto supports_sync_replication() const -> bool
   {
     return is_mad_hatter() || is_cheshire_cat() || is_neo();
   }
 
-  [[nodiscard]] bool supports_enhanced_durability() const
+  [[nodiscard]] auto supports_enhanced_durability() const -> bool
   {
     return is_mad_hatter() || is_cheshire_cat() || is_neo();
   }
 
-  [[nodiscard]] bool supports_scoped_queries() const
+  [[nodiscard]] auto supports_scoped_queries() const -> bool
   {
     return is_cheshire_cat() || is_neo();
   }
 
-  [[nodiscard]] bool supports_queries_in_transactions() const
+  [[nodiscard]] auto supports_queries_in_transactions() const -> bool
   {
     return is_neo();
   }
 
-  [[nodiscard]] bool supports_collections() const
+  [[nodiscard]] auto supports_collections() const -> bool
   {
     return (is_mad_hatter() && developer_preview) || is_cheshire_cat() || is_neo();
   }
 
-  [[nodiscard]] bool supports_storage_backend() const
+  [[nodiscard]] auto supports_storage_backend() const -> bool
   {
     return is_neo() && is_enterprise();
   }
 
-  [[nodiscard]] bool supports_preserve_expiry() const
+  [[nodiscard]] auto supports_preserve_expiry() const -> bool
   {
     return !use_gocaves && (is_cheshire_cat() || is_neo());
   }
 
-  [[nodiscard]] bool supports_preserve_expiry_for_query() const
+  [[nodiscard]] auto supports_preserve_expiry_for_query() const -> bool
   {
     return is_neo();
   }
 
-  [[nodiscard]] bool supports_user_groups() const
+  [[nodiscard]] auto supports_user_groups() const -> bool
   {
     return supports_user_management() && (is_mad_hatter() || is_cheshire_cat() || is_neo()) &&
            is_enterprise();
   }
 
-  [[nodiscard]] bool supports_query_index_management() const
+  [[nodiscard]] auto supports_query_index_management() const -> bool
   {
     return !use_gocaves && (is_mad_hatter() || is_cheshire_cat() || is_neo());
   }
 
-  [[nodiscard]] bool supports_analytics() const
+  [[nodiscard]] auto supports_analytics() const -> bool
   {
     return !use_gocaves && is_enterprise() && (is_mad_hatter() || is_cheshire_cat() || is_neo());
   }
 
-  [[nodiscard]] bool supports_query() const
+  [[nodiscard]] auto supports_query() const -> bool
   {
     return !use_gocaves;
   }
 
-  [[nodiscard]] bool supports_search() const
+  [[nodiscard]] auto supports_search() const -> bool
   {
     return !use_gocaves;
   }
 
-  [[nodiscard]] bool supports_analytics_pending_mutations() const
+  [[nodiscard]] auto supports_analytics_pending_mutations() const -> bool
   {
     return supports_analytics() && (is_mad_hatter() || is_cheshire_cat() || is_neo());
   }
 
-  [[nodiscard]] bool supports_analytics_link_azure_blob() const
+  [[nodiscard]] auto supports_analytics_link_azure_blob() const -> bool
   {
     return supports_analytics() && is_cheshire_cat() && developer_preview;
   }
 
-  [[nodiscard]] bool supports_analytics_links() const
+  [[nodiscard]] auto supports_analytics_links() const -> bool
   {
     return supports_analytics() && ((major == 6 && minor >= 6) || major > 6);
   }
 
-  [[nodiscard]] bool supports_minimum_durability_level() const
+  [[nodiscard]] auto supports_minimum_durability_level() const -> bool
   {
     return (major == 6 && minor >= 6) || major > 6;
   }
 
-  [[nodiscard]] bool supports_bucket_history() const
+  [[nodiscard]] auto supports_bucket_history() const -> bool
   {
     return (major == 7 && minor >= 2) || major > 7;
   }
 
-  [[nodiscard]] bool supports_search_analyze() const
+  [[nodiscard]] auto supports_search_analyze() const -> bool
   {
     return supports_search() && (is_mad_hatter() || is_cheshire_cat() || is_neo());
   }
 
-  [[nodiscard]] bool supports_analytics_links_cert_auth() const
+  [[nodiscard]] auto supports_analytics_links_cert_auth() const -> bool
   {
     return supports_analytics() && is_neo();
   }
 
-  [[nodiscard]] bool supports_eventing_functions() const
+  [[nodiscard]] auto supports_eventing_functions() const -> bool
   {
     return !use_gocaves && is_enterprise() && (is_cheshire_cat() || is_neo()) &&
            deployment == deployment_type::on_prem;
   }
 
-  [[nodiscard]] bool supports_scoped_eventing_functions() const
+  [[nodiscard]] auto supports_scoped_eventing_functions() const -> bool
   {
     return !use_gocaves && is_enterprise() && is_neo() && deployment == deployment_type::on_prem;
   }
 
-  [[nodiscard]] bool supports_scope_search() const
+  [[nodiscard]] auto supports_scope_search() const -> bool
   {
     return (major == 7 && minor >= 6) || major > 7;
   }
 
-  [[nodiscard]] bool supports_vector_search() const
+  [[nodiscard]] auto supports_vector_search() const -> bool
   {
     return (major == 7 && minor >= 6) || major > 7;
   }
 
-  [[nodiscard]] bool supports_scope_search_analyze() const
+  [[nodiscard]] auto supports_scope_search_analyze() const -> bool
   {
     // Scoped endpoint for analyze_document added in 7.6.2 (MB-60643)
     return (major == 7 && minor == 6 && micro >= 2) || (major == 7 && minor > 6) || major > 7;
   }
 
-  [[nodiscard]] bool is_enterprise() const
+  [[nodiscard]] auto is_enterprise() const -> bool
   {
     return edition == server_edition::enterprise;
   }
 
-  [[nodiscard]] bool is_community() const
+  [[nodiscard]] auto is_community() const -> bool
   {
     return edition == server_edition::community;
   }
 
-  [[nodiscard]] bool supports_bucket_management() const
+  [[nodiscard]] auto supports_bucket_management() const -> bool
   {
     return !use_gocaves && deployment == deployment_type::on_prem;
   }
 
-  [[nodiscard]] bool supports_user_management() const
+  [[nodiscard]] auto supports_user_management() const -> bool
   {
     return !use_gocaves && deployment == deployment_type::on_prem;
   }
 
-  [[nodiscard]] bool requires_search_replicas() const
+  [[nodiscard]] auto requires_search_replicas() const -> bool
   {
     return deployment == deployment_type::elixir || deployment == deployment_type::capella ||
            is_serverless_config_profile();
   }
 
-  [[nodiscard]] bool supports_views() const
+  [[nodiscard]] auto supports_views() const -> bool
   {
     return !use_gocaves && deployment == deployment_type::on_prem &&
            (major < 7 || (major == 7 && minor < 2));
   }
 
-  [[nodiscard]] bool supports_memcached_buckets() const
+  [[nodiscard]] auto supports_memcached_buckets() const -> bool
   {
     return !is_serverless_config_profile();
   }
 
-  [[nodiscard]] bool is_serverless_config_profile() const
+  [[nodiscard]] auto is_serverless_config_profile() const -> bool
   {
     return profile == server_config_profile::serverless;
   }
 
-  [[nodiscard]] bool supports_search_disable_scoring() const
+  [[nodiscard]] auto supports_search_disable_scoring() const -> bool
   {
     return supports_search() && (is_mad_hatter() || is_cheshire_cat() || is_neo());
   }
 
-  [[nodiscard]] bool supports_document_not_locked_status() const
+  [[nodiscard]] auto supports_document_not_locked_status() const -> bool
   {
     return !use_gocaves && (major > 7 || (major == 7 && minor >= 6));
   }
 
-  [[nodiscard]] bool supports_collection_update_max_expiry() const
+  [[nodiscard]] auto supports_collection_update_max_expiry() const -> bool
   {
     return !use_gocaves && (major > 7 || (major == 7 && minor >= 6));
   }
 
-  [[nodiscard]] bool supports_collection_set_max_expiry_to_no_expiry() const
+  [[nodiscard]] auto supports_collection_set_max_expiry_to_no_expiry() const -> bool
   {
     return !use_gocaves && (major > 7 || (major == 7 && minor >= 6));
   }
 
-  [[nodiscard]] bool is_capella() const
+  [[nodiscard]] auto is_capella() const -> bool
   {
     return deployment == deployment_type::capella;
   }

@@ -20,8 +20,9 @@
 namespace couchbase
 {
 
-static std::vector<search_numeric_range>
+static auto
 map_ranges(const core::operations::search_response::search_facet& facet)
+  -> std::vector<search_numeric_range>
 {
   std::vector<search_numeric_range> ranges;
   ranges.reserve(facet.numeric_ranges.size());

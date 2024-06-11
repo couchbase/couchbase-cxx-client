@@ -58,7 +58,7 @@ public:
    * @return content of the document.
    */
   template<typename Content>
-  [[nodiscard]] Content content() const
+  [[nodiscard]] auto content() const -> Content
   {
     return codec::tao_json_serializer::deserialize<Content>(content());
   }
@@ -68,7 +68,7 @@ public:
    *
    * @return content
    */
-  [[nodiscard]] const std::vector<std::byte>& content() const;
+  [[nodiscard]] auto content() const -> const std::vector<std::byte>&;
 
   /**
    * Copy content into document
@@ -88,34 +88,34 @@ public:
    *
    * @return the id of this document.
    */
-  [[nodiscard]] const std::string key() const;
+  [[nodiscard]] auto key() const -> const std::string;
 
   /**
    * Get the name of the bucket this document is in.
    *
    * @return name of the bucket which contains the document.
    */
-  [[nodiscard]] const std::string bucket() const;
+  [[nodiscard]] auto bucket() const -> const std::string;
 
   /**
    * Get the name of the scope this document is in.
    *
    * @return name of the scope which contains the document.
    */
-  [[nodiscard]] const std::string scope() const;
+  [[nodiscard]] auto scope() const -> const std::string;
 
   /**
    * Get the name of the collection this document is in.
    *
    * @return name of the collection which contains the document.
    */
-  [[nodiscard]] const std::string collection() const;
+  [[nodiscard]] auto collection() const -> const std::string;
 
   /**
    * Get the CAS fot this document
    *
    * @return the CAS of the document.
    */
-  [[nodiscard]] const couchbase::cas cas() const;
+  [[nodiscard]] auto cas() const -> const couchbase::cas;
 };
 } // namespace couchbase::transactions

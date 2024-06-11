@@ -42,14 +42,14 @@ constexpr std::chrono::system_clock::time_point latest_valid_expiry_time_point{
   std::chrono::seconds{ std::numeric_limits<std::uint32_t>::max() }
 };
 
-std::uint32_t
-expiry_none()
+auto
+expiry_none() -> std::uint32_t
 {
   return 0;
 }
 
-std::uint32_t
-expiry_relative(std::chrono::seconds expiry)
+auto
+expiry_relative(std::chrono::seconds expiry) -> std::uint32_t
 {
   if (expiry == std::chrono::seconds::zero()) {
     return expiry_none();
@@ -84,8 +84,8 @@ expiry_relative(std::chrono::seconds expiry)
   return static_cast<std::uint32_t>(seconds.count());
 }
 
-std::uint32_t
-expiry_absolute(std::chrono::system_clock::time_point expiry)
+auto
+expiry_absolute(std::chrono::system_clock::time_point expiry) -> std::uint32_t
 {
   // Basic sanity check, prevent instant from being interpreted as a relative duration.
   // Allow EPOCH (zero instant) because that is how "get with expiry" represents "no expiry"

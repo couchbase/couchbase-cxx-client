@@ -30,16 +30,16 @@ public:
   static constexpr auto default_nameserver = "8.8.8.8";
   static constexpr std::uint16_t default_port = 53;
 
-  static const dns_config& system_config();
+  static auto system_config() -> const dns_config&;
 
   dns_config() = default;
   dns_config(std::string nameserver,
              std::uint16_t port,
              std::chrono::milliseconds timeout = timeout_defaults::dns_srv_timeout);
 
-  [[nodiscard]] std::uint16_t port() const;
-  [[nodiscard]] const std::string& nameserver() const;
-  [[nodiscard]] std::chrono::milliseconds timeout() const;
+  [[nodiscard]] auto port() const -> std::uint16_t;
+  [[nodiscard]] auto nameserver() const -> const std::string&;
+  [[nodiscard]] auto timeout() const -> std::chrono::milliseconds;
 
 private:
   std::string nameserver_{};

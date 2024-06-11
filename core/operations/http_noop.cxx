@@ -21,9 +21,9 @@
 
 namespace couchbase::core::operations
 {
-std::error_code
+auto
 http_noop_request::encode_to(http_noop_request::encoded_request_type& encoded,
-                             http_context& /* context */)
+                             http_context& /* context */) -> std::error_code
 {
   encoded.headers["connection"] = "keep-alive";
   encoded.method = "GET";
@@ -56,9 +56,10 @@ http_noop_request::encode_to(http_noop_request::encoded_request_type& encoded,
   return {};
 }
 
-http_noop_response
+auto
 http_noop_request::make_response(error_context::http&& ctx,
                                  const encoded_response_type& /* encoded */) const
+  -> http_noop_response
 {
   http_noop_response response{ std::move(ctx) };
   return response;

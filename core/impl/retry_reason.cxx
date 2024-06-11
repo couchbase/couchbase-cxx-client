@@ -21,8 +21,8 @@
 
 namespace couchbase
 {
-bool
-allows_non_idempotent_retry(retry_reason reason)
+auto
+allows_non_idempotent_retry(retry_reason reason) -> bool
 {
   switch (reason) {
     case retry_reason::socket_not_available:
@@ -52,8 +52,8 @@ allows_non_idempotent_retry(retry_reason reason)
   return false;
 }
 
-bool
-always_retry(retry_reason reason)
+auto
+always_retry(retry_reason reason) -> bool
 {
   switch (reason) {
     case retry_reason::unknown:

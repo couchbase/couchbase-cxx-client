@@ -28,9 +28,10 @@ class internal_search_error_context
 public:
   explicit internal_search_error_context(core::operations::search_response& resp);
   internal_search_error_context(internal_search_error_context&& other) noexcept;
-  internal_search_error_context& operator=(internal_search_error_context&& other) noexcept;
+  auto operator=(internal_search_error_context&& other) noexcept -> internal_search_error_context&;
   internal_search_error_context(const internal_search_error_context& other) = delete;
-  internal_search_error_context& operator=(const internal_search_error_context& other) = delete;
+  auto operator=(const internal_search_error_context& other) -> internal_search_error_context& =
+                                                                  delete;
 
   [[nodiscard]] auto ec() const -> std::error_code;
   [[nodiscard]] auto last_dispatched_to() const -> const std::optional<std::string>&;

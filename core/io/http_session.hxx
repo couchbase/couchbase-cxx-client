@@ -81,27 +81,27 @@ public:
                               remote_endpoint_.port());
   }
 
-  [[nodiscard]] const asio::ip::tcp::endpoint& remote_endpoint() const
+  [[nodiscard]] auto remote_endpoint() const -> const asio::ip::tcp::endpoint&
   {
     return remote_endpoint_;
   }
 
-  [[nodiscard]] const std::string& remote_address() const
+  [[nodiscard]] auto remote_address() const -> const std::string&
   {
     return remote_endpoint_address_;
   }
 
-  [[nodiscard]] const asio::ip::tcp::endpoint& local_endpoint() const
+  [[nodiscard]] auto local_endpoint() const -> const asio::ip::tcp::endpoint&
   {
     return local_endpoint_;
   }
 
-  [[nodiscard]] const std::string& local_address() const
+  [[nodiscard]] auto local_address() const -> const std::string&
   {
     return local_endpoint_address_;
   }
 
-  [[nodiscard]] const std::string& log_prefix() const
+  [[nodiscard]] auto log_prefix() const -> const std::string&
   {
     return log_prefix_;
   }
@@ -176,24 +176,24 @@ public:
     return stream_->get_executor();
   }
 
-  [[nodiscard]] couchbase::core::http_context& http_context()
+  [[nodiscard]] auto http_context() -> couchbase::core::http_context&
   {
     return http_ctx_;
   }
 
-  [[nodiscard]] std::string remote_address()
+  [[nodiscard]] auto remote_address() -> std::string
   {
     std::scoped_lock lock(info_mutex_);
     return info_.remote_address();
   }
 
-  [[nodiscard]] std::string local_address()
+  [[nodiscard]] auto local_address() -> std::string
   {
     std::scoped_lock lock(info_mutex_);
     return info_.local_address();
   }
 
-  [[nodiscard]] diag::endpoint_diag_info diag_info()
+  [[nodiscard]] auto diag_info() -> diag::endpoint_diag_info
   {
     return { type_,
              id_,
@@ -219,33 +219,33 @@ public:
                             std::placeholders::_2));
   }
 
-  [[nodiscard]] std::string log_prefix()
+  [[nodiscard]] auto log_prefix() -> std::string
   {
     std::scoped_lock lock(info_mutex_);
     return info_.log_prefix();
   }
 
-  [[nodiscard]] const std::string& id() const
+  [[nodiscard]] auto id() const -> const std::string&
   {
     return id_;
   }
 
-  [[nodiscard]] service_type type() const
+  [[nodiscard]] auto type() const -> service_type
   {
     return type_;
   }
 
-  [[nodiscard]] const std::string& hostname() const
+  [[nodiscard]] auto hostname() const -> const std::string&
   {
     return hostname_;
   }
 
-  [[nodiscard]] const std::string& port() const
+  [[nodiscard]] auto port() const -> const std::string&
   {
     return service_;
   }
 
-  [[nodiscard]] const asio::ip::tcp::endpoint& endpoint()
+  [[nodiscard]] auto endpoint() -> const asio::ip::tcp::endpoint&
   {
     std::scoped_lock lock(info_mutex_);
     return info_.remote_endpoint();
@@ -284,12 +284,12 @@ public:
     state_ = diag::endpoint_state::disconnected;
   }
 
-  bool keep_alive() const
+  auto keep_alive() const -> bool
   {
     return keep_alive_;
   }
 
-  bool is_stopped() const
+  auto is_stopped() const -> bool
   {
     return stopped_;
   }
@@ -375,7 +375,7 @@ public:
     });
   }
 
-  bool reset_idle()
+  auto reset_idle() -> bool
   {
     // Return true if cancel() is successful. Since the idle_timer_ has a single pending
     // wait per session, we know the timer has already expired if cancel() returns 0.

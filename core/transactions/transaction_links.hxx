@@ -135,109 +135,109 @@ public:
    * Note this doesn't guarantee an active transaction, as it may have expired and need rolling
    * back.
    */
-  [[nodiscard]] bool is_document_in_transaction() const
+  [[nodiscard]] auto is_document_in_transaction() const -> bool
   {
     return !!(atr_id_);
   }
-  [[nodiscard]] bool has_staged_content() const
+  [[nodiscard]] auto has_staged_content() const -> bool
   {
     return !!(staged_content_);
   }
-  [[nodiscard]] bool is_document_being_removed() const
+  [[nodiscard]] auto is_document_being_removed() const -> bool
   {
     return (!!op_ && *op_ == "remove");
   }
 
-  [[nodiscard]] bool is_document_being_inserted() const
+  [[nodiscard]] auto is_document_being_inserted() const -> bool
   {
     return (!!op_ && *op_ == "insert");
   }
 
-  [[nodiscard]] bool has_staged_write() const
+  [[nodiscard]] auto has_staged_write() const -> bool
   {
     return !!(staged_attempt_id_);
   }
 
-  [[nodiscard]] std::optional<std::string> atr_id() const
+  [[nodiscard]] auto atr_id() const -> std::optional<std::string>
   {
     return atr_id_;
   }
 
-  [[nodiscard]] std::optional<std::string> atr_bucket_name() const
+  [[nodiscard]] auto atr_bucket_name() const -> std::optional<std::string>
   {
     return atr_bucket_name_;
   }
 
-  [[nodiscard]] std::optional<std::string> atr_scope_name() const
+  [[nodiscard]] auto atr_scope_name() const -> std::optional<std::string>
   {
     return atr_scope_name_;
   }
 
-  [[nodiscard]] std::optional<std::string> atr_collection_name() const
+  [[nodiscard]] auto atr_collection_name() const -> std::optional<std::string>
   {
     return atr_collection_name_;
   }
 
-  [[nodiscard]] std::optional<std::string> staged_transaction_id() const
+  [[nodiscard]] auto staged_transaction_id() const -> std::optional<std::string>
   {
     return staged_transaction_id_;
   }
 
-  [[nodiscard]] std::optional<std::string> staged_attempt_id() const
+  [[nodiscard]] auto staged_attempt_id() const -> std::optional<std::string>
   {
     return staged_attempt_id_;
   }
 
-  [[nodiscard]] std::optional<std::string> staged_operation_id() const
+  [[nodiscard]] auto staged_operation_id() const -> std::optional<std::string>
   {
     return staged_operation_id_;
   }
 
-  [[nodiscard]] std::optional<std::string> cas_pre_txn() const
+  [[nodiscard]] auto cas_pre_txn() const -> std::optional<std::string>
   {
     return cas_pre_txn_;
   }
 
-  [[nodiscard]] std::optional<std::string> revid_pre_txn() const
+  [[nodiscard]] auto revid_pre_txn() const -> std::optional<std::string>
   {
     return revid_pre_txn_;
   }
 
-  [[nodiscard]] std::optional<std::uint32_t> exptime_pre_txn() const
+  [[nodiscard]] auto exptime_pre_txn() const -> std::optional<std::uint32_t>
   {
     return exptime_pre_txn_;
   }
 
-  [[nodiscard]] std::optional<std::string> op() const
+  [[nodiscard]] auto op() const -> std::optional<std::string>
   {
     return op_;
   }
 
-  [[nodiscard]] std::optional<std::string> crc32_of_staging() const
+  [[nodiscard]] auto crc32_of_staging() const -> std::optional<std::string>
   {
     return crc32_of_staging_;
   }
 
-  [[nodiscard]] std::vector<std::byte> staged_content() const
+  [[nodiscard]] auto staged_content() const -> std::vector<std::byte>
   {
     return staged_content_.value_or(std::vector<std::byte>{});
   }
 
-  [[nodiscard]] std::optional<tao::json::value> forward_compat() const
+  [[nodiscard]] auto forward_compat() const -> std::optional<tao::json::value>
   {
     return forward_compat_;
   }
 
-  [[nodiscard]] bool is_deleted() const
+  [[nodiscard]] auto is_deleted() const -> bool
   {
     return is_deleted_;
   }
 
-  friend std::ostream& operator<<(std::ostream& os, const transaction_links& links);
+  friend auto operator<<(std::ostream& os, const transaction_links& links) -> std::ostream&;
 };
 
-std::ostream&
-operator<<(std::ostream& os, const transaction_links& links);
+auto
+operator<<(std::ostream& os, const transaction_links& links) -> std::ostream&;
 } // namespace couchbase::core::transactions
 
 template<>

@@ -33,18 +33,18 @@ private:
   std::vector<std::string> supported_mechs_;
 
 public:
-  [[nodiscard]] const std::vector<std::string>& supported_mechs() const
+  [[nodiscard]] auto supported_mechs() const -> const std::vector<std::string>&
   {
     return supported_mechs_;
   }
 
-  bool parse(key_value_status_code status,
+  auto parse(key_value_status_code status,
              const header_buffer& header,
              std::uint8_t framing_extras_size,
              std::uint16_t key_size,
              std::uint8_t extras_size,
              const std::vector<std::byte>& body,
-             const cmd_info& info);
+             const cmd_info& info) -> bool;
 };
 
 class sasl_list_mechs_request_body
@@ -53,27 +53,27 @@ public:
   using response_body_type = sasl_list_mechs_response_body;
   static const inline client_opcode opcode = client_opcode::sasl_list_mechs;
 
-  [[nodiscard]] const std::string& key() const
+  [[nodiscard]] auto key() const -> const std::string&
   {
     return empty_string;
   }
 
-  [[nodiscard]] const auto& framing_extras() const
+  [[nodiscard]] auto framing_extras() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& extras() const
+  [[nodiscard]] auto extras() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& value() const
+  [[nodiscard]] auto value() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] std::size_t size() const
+  [[nodiscard]] auto size() const -> std::size_t
   {
     return 0;
   }

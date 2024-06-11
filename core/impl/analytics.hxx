@@ -26,15 +26,16 @@
 
 namespace couchbase::core::impl
 {
-analytics_error_context
-build_context(core::operations::analytics_response& resp);
+auto
+build_context(core::operations::analytics_response& resp) -> analytics_error_context;
 
-analytics_result
-build_result(core::operations::analytics_response& resp);
+auto
+build_result(core::operations::analytics_response& resp) -> analytics_result;
 
-core::operations::analytics_request
+auto
 build_analytics_request(std::string statement,
                         analytics_options::built options,
                         std::optional<std::string> bucket_name,
-                        std::optional<std::string> scope_name);
+                        std::optional<std::string> scope_name)
+  -> core::operations::analytics_request;
 } // namespace couchbase::core::impl

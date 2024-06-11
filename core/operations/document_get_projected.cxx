@@ -26,8 +26,8 @@
 namespace couchbase::core::operations
 {
 
-static std::optional<tao::json::value>
-subdoc_lookup(tao::json::value& root, const std::string& path)
+static auto
+subdoc_lookup(tao::json::value& root, const std::string& path) -> std::optional<tao::json::value>
 {
   std::string::size_type offset = 0;
   tao::json::value* cur = &root;
@@ -140,9 +140,9 @@ subdoc_apply_projection(tao::json::value& root,
   }
 }
 
-std::error_code
+auto
 get_projected_request::encode_to(get_projected_request::encoded_request_type& encoded,
-                                 mcbp_context&& /* context */)
+                                 mcbp_context&& /* context */) -> std::error_code
 {
   encoded.opaque(opaque);
   encoded.partition(partition);
@@ -176,9 +176,10 @@ get_projected_request::encode_to(get_projected_request::encoded_request_type& en
   return {};
 }
 
-get_projected_response
+auto
 get_projected_request::make_response(key_value_error_context&& ctx,
                                      const encoded_response_type& encoded) const
+  -> get_projected_response
 {
   get_projected_response response{ std::move(ctx) };
   if (!response.ctx.ec()) {

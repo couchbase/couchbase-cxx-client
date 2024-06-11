@@ -21,8 +21,8 @@
 
 namespace couchbase::core::transactions
 {
-std::string
-result::strerror() const
+auto
+result::strerror() const -> std::string
 {
   static std::string success("success");
   if (ec) {
@@ -31,14 +31,14 @@ result::strerror() const
   return success;
 }
 
-bool
-result::is_success() const
+auto
+result::is_success() const -> bool
 {
   return !ec;
 }
 
-subdoc_result::status_type
-result::subdoc_status() const
+auto
+result::subdoc_status() const -> subdoc_result::status_type
 {
   auto it = std::find_if(values.begin(), values.end(), [](const subdoc_result& res) {
     return res.status != subdoc_result::status_type::success;
@@ -49,8 +49,8 @@ result::subdoc_status() const
   return subdoc_result::status_type::success;
 }
 
-result
-result::create_from_subdoc_response(const core::operations::lookup_in_response& resp)
+auto
+result::create_from_subdoc_response(const core::operations::lookup_in_response& resp) -> result
 {
   result res{};
   res.ec = resp.ctx.ec();
@@ -64,8 +64,8 @@ result::create_from_subdoc_response(const core::operations::lookup_in_response& 
   return res;
 }
 
-result
-result::create_from_subdoc_response(const core::operations::mutate_in_response& resp)
+auto
+result::create_from_subdoc_response(const core::operations::mutate_in_response& resp) -> result
 {
   result res{};
   res.ec = resp.ctx.ec();

@@ -30,8 +30,8 @@
 
 namespace couchbase::core::io
 {
-mcbp_parser::result
-mcbp_parser::next(mcbp_message& msg)
+auto
+mcbp_parser::next(mcbp_message& msg) -> mcbp_parser::result
 {
   static const std::size_t header_size = 24;
   if (buf.size() < header_size) {

@@ -61,7 +61,7 @@ protected:
 private:
   void add_hook(const std::string& hook);
   // Calculate the full filename to use the next time
-  std::unique_ptr<spdlog::details::file_helper> open_file();
+  auto open_file() -> std::unique_ptr<spdlog::details::file_helper>;
 
   const spdlog::filename_t base_filename_;
   const std::size_t max_size_;

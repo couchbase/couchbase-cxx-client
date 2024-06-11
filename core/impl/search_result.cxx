@@ -41,8 +41,8 @@ search_result::search_result(internal_search_result internal)
 
 search_result::~search_result() = default;
 
-search_result&
-search_result::operator=(search_result&&) noexcept = default;
+auto
+search_result::operator=(search_result&&) noexcept -> search_result& = default;
 
 search_result::search_result(search_result&&) noexcept = default;
 

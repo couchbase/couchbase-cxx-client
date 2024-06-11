@@ -23,14 +23,14 @@
 
 namespace couchbase::core::impl
 {
-core::operations::query_request
+auto
 build_query_request(std::string statement,
                     std::optional<std::string> query_context,
-                    query_options::built options);
+                    query_options::built options) -> core::operations::query_request;
 
-query_result
-build_result(operations::query_response& resp);
+auto
+build_result(operations::query_response& resp) -> query_result;
 
-query_error_context
-build_context(operations::query_response& resp);
+auto
+build_context(operations::query_response& resp) -> query_error_context;
 } // namespace couchbase::core::impl

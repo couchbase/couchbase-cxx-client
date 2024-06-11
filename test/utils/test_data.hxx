@@ -21,9 +21,9 @@
 
 namespace test::utils
 {
-std::string
-uniq_id(const std::string& prefix);
+auto
+uniq_id(const std::string& prefix) -> std::string;
 
-std::string
-read_test_data(const std::string& file);
+auto
+read_test_data(const std::string& file) -> std::string;
 } // namespace test::utils

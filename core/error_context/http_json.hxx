@@ -58,7 +58,7 @@ struct traits<couchbase::core::error_context::http> {
     }
   }
   template<template<typename...> class Traits>
-  static couchbase::core::error_context::http as(const tao::json::basic_value<Traits>& v)
+  static auto as(const tao::json::basic_value<Traits>& v) -> couchbase::core::error_context::http
   {
     couchbase::core::error_context::http ctx;
     ctx.retry_attempts = v.at("retry_attempts").get_unsigned();

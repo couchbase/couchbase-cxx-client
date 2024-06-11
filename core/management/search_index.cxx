@@ -21,8 +21,8 @@
 
 namespace
 {
-bool
-has_vector_mapping_properties(tao::json::value properties)
+auto
+has_vector_mapping_properties(tao::json::value properties) -> bool
 {
   if (!properties.is_object()) {
     return false;

@@ -30,8 +30,8 @@ namespace couchbase::core::impl
 namespace
 {
 
-static analytics_status
-map_status(core::operations::analytics_response::analytics_status status)
+static auto
+map_status(core::operations::analytics_response::analytics_status status) -> analytics_status
 {
   switch (status) {
     case core::operations::analytics_response::running:
@@ -58,8 +58,9 @@ map_status(core::operations::analytics_response::analytics_status status)
   return analytics_status::unknown;
 }
 
-static std::optional<couchbase::core::analytics_scan_consistency>
+static auto
 map_scan_consistency(std::optional<couchbase::analytics_scan_consistency> consistency)
+  -> std::optional<couchbase::core::analytics_scan_consistency>
 {
   if (consistency.has_value()) {
     switch (consistency.value()) {
@@ -72,8 +73,8 @@ map_scan_consistency(std::optional<couchbase::analytics_scan_consistency> consis
   return {};
 }
 
-static std::vector<codec::binary>
-map_rows(const core::operations::analytics_response& resp)
+static auto
+map_rows(const core::operations::analytics_response& resp) -> std::vector<codec::binary>
 {
   std::vector<codec::binary> rows;
   rows.reserve(resp.rows.size());
@@ -83,8 +84,8 @@ map_rows(const core::operations::analytics_response& resp)
   return rows;
 }
 
-static std::vector<analytics_warning>
-map_warnings(core::operations::analytics_response& resp)
+static auto
+map_warnings(core::operations::analytics_response& resp) -> std::vector<analytics_warning>
 {
   if (resp.meta.warnings.empty()) {
     return {};
@@ -97,8 +98,8 @@ map_warnings(core::operations::analytics_response& resp)
   return warnings;
 }
 
-static analytics_metrics
-map_metrics(const core::operations::analytics_response& resp)
+static auto
+map_metrics(const core::operations::analytics_response& resp) -> analytics_metrics
 {
   return analytics_metrics{
     resp.meta.metrics.elapsed_time,      resp.meta.metrics.execution_time,
@@ -108,8 +109,8 @@ map_metrics(const core::operations::analytics_response& resp)
   };
 }
 
-static std::optional<std::vector<std::byte>>
-map_signature(core::operations::analytics_response& resp)
+static auto
+map_signature(core::operations::analytics_response& resp) -> std::optional<std::vector<std::byte>>
 {
   if (!resp.meta.signature) {
     return {};
@@ -119,8 +120,8 @@ map_signature(core::operations::analytics_response& resp)
 
 } // namespace
 
-analytics_error_context
-build_context(core::operations::analytics_response& resp)
+auto
+build_context(core::operations::analytics_response& resp) -> analytics_error_context
 {
   return {
     resp.ctx.ec,
@@ -142,8 +143,8 @@ build_context(core::operations::analytics_response& resp)
   };
 }
 
-analytics_result
-build_result(core::operations::analytics_response& resp)
+auto
+build_result(core::operations::analytics_response& resp) -> analytics_result
 {
   return {
     analytics_meta_data{
@@ -158,11 +159,12 @@ build_result(core::operations::analytics_response& resp)
   };
 }
 
-core::operations::analytics_request
+auto
 build_analytics_request(std::string statement,
                         analytics_options::built options,
                         std::optional<std::string> bucket_name,
                         std::optional<std::string> scope_name)
+  -> core::operations::analytics_request
 {
   core::operations::analytics_request request{
     std::move(statement),

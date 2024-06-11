@@ -40,6 +40,6 @@ public:
  *
  * Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
  */
-std::chrono::nanoseconds
-parse_duration(const std::string& text);
+auto
+parse_duration(const std::string& text) -> std::chrono::nanoseconds;
 } // namespace couchbase::core::utils

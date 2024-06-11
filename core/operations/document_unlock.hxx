@@ -47,11 +47,11 @@ struct unlock_request {
   io::retry_context<false> retries{};
   std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
-  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
-                                          mcbp_context&& context) const;
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded,
+                               mcbp_context&& context) const -> std::error_code;
 
-  [[nodiscard]] unlock_response make_response(key_value_error_context&& ctx,
-                                              const encoded_response_type& encoded) const;
+  [[nodiscard]] auto make_response(key_value_error_context&& ctx,
+                                   const encoded_response_type& encoded) const -> unlock_response;
 };
 
 } // namespace couchbase::core::operations

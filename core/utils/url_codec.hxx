@@ -6,14 +6,14 @@
 
 namespace couchbase::core::utils::string_codec
 {
-std::string
-url_decode(const std::string& src);
+auto
+url_decode(const std::string& src) -> std::string;
 
-std::string
-url_encode(const std::string& src);
+auto
+url_encode(const std::string& src) -> std::string;
 
-std::string
-form_encode(const std::string& src);
+auto
+form_encode(const std::string& src) -> std::string;
 
 namespace v2
 {
@@ -27,8 +27,8 @@ enum class encoding {
   encode_fragment,
 };
 
-std::string
-escape(const std::string& s, encoding mode);
+auto
+escape(const std::string& s, encoding mode) -> std::string;
 
 /**
  * Escapes the string so it can be safely placed inside a URL query.
@@ -36,8 +36,8 @@ escape(const std::string& s, encoding mode);
  * @param s
  * @return
  */
-inline std::string
-query_escape(const std::string& s)
+inline auto
+query_escape(const std::string& s) -> std::string
 {
   return escape(s, encoding::encode_query_component);
 }
@@ -46,14 +46,14 @@ query_escape(const std::string& s)
  * Escapes the string so it can be safely placed inside a URL path segment, replacing special
  * characters (including /) with %XX sequences as needed.
  */
-inline std::string
-path_escape(const std::string& s)
+inline auto
+path_escape(const std::string& s) -> std::string
 {
   return escape(s, encoding::encode_path_segment);
 }
 
-inline std::string
-form_encode(const std::map<std::string, std::string>& values)
+inline auto
+form_encode(const std::map<std::string, std::string>& values) -> std::string
 {
   std::stringstream ss;
   bool first{ true };

@@ -39,8 +39,8 @@ enum class forward_compat_stage {
   CLEANUP_ENTRY
 };
 
-static forward_compat_stage
-create_forward_compat_stage(const std::string& str)
+static auto
+create_forward_compat_stage(const std::string& str) -> forward_compat_stage
 {
   if (str == "WW_R") {
     return forward_compat_stage::WWC_READING_ATR;
@@ -68,8 +68,8 @@ enum class forward_compat_behavior {
   FAIL_FAST_TXN
 };
 
-inline forward_compat_behavior
-create_forward_compat_behavior(const std::string& str)
+inline auto
+create_forward_compat_behavior(const std::string& str) -> forward_compat_behavior
 {
   if (str == "r") {
     return forward_compat_behavior::RETRY_TXN;
@@ -78,8 +78,8 @@ create_forward_compat_behavior(const std::string& str)
 }
 
 // used only for logging
-inline const char*
-forward_compat_behavior_name(forward_compat_behavior b)
+inline auto
+forward_compat_behavior_name(forward_compat_behavior b) -> const char*
 {
   switch (b) {
     case forward_compat_behavior::CONTINUE:
@@ -113,7 +113,7 @@ struct forward_compat_behavior_full {
   }
 
   template<typename OStream>
-  friend OStream& operator<<(OStream& os, const forward_compat_behavior_full& b)
+  friend auto operator<<(OStream& os, const forward_compat_behavior_full& b) -> OStream&
   {
     os << "forward_compat_behavior_full:{";
     os << "behavior: " << forward_compat_behavior_name(b.behavior);
@@ -140,7 +140,7 @@ struct forward_compat_requirement {
   {
   }
 
-  virtual forward_compat_behavior_full check(forward_compat_supported supported) = 0;
+  virtual auto check(forward_compat_supported supported) -> forward_compat_behavior_full = 0;
   virtual ~forward_compat_requirement() = default;
 };
 
@@ -157,7 +157,7 @@ struct forward_compat_protocol_requirement : public forward_compat_requirement {
   {
   }
 
-  virtual forward_compat_behavior_full check(forward_compat_supported supported)
+  virtual auto check(forward_compat_supported supported) -> forward_compat_behavior_full
   {
     if ((min_protocol_major > supported.protocol_major) ||
         (min_protocol_minor > supported.protocol_minor)) {
@@ -176,7 +176,7 @@ struct forward_compat_extension_requirement : public forward_compat_requirement 
   {
   }
 
-  virtual forward_compat_behavior_full check(forward_compat_supported supported)
+  virtual auto check(forward_compat_supported supported) -> forward_compat_behavior_full
   {
     auto it = std::find(supported.extensions.begin(), supported.extensions.end(), extension_id);
     if (it == supported.extensions.end()) {
@@ -192,8 +192,8 @@ private:
   std::map<forward_compat_stage, std::list<forward_compat_requirement*>> compat_map_;
   tao::json::value json_;
 
-  std::optional<transaction_operation_failed> check_internal(forward_compat_stage stage,
-                                                             forward_compat_supported supported)
+  auto check_internal(forward_compat_stage stage, forward_compat_supported supported)
+    -> std::optional<transaction_operation_failed>
   {
     if (auto it = compat_map_.find(stage); it != compat_map_.end()) {
       transaction_operation_failed ex(FAIL_OTHER, "Forward Compatibililty failure");
@@ -248,8 +248,8 @@ private:
   }
 
 public:
-  static std::optional<transaction_operation_failed> check(forward_compat_stage stage,
-                                                           std::optional<tao::json::value> json)
+  static auto check(forward_compat_stage stage, std::optional<tao::json::value> json)
+    -> std::optional<transaction_operation_failed>
   {
     if (json) {
       forward_compat_supported supported;

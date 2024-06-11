@@ -26,10 +26,10 @@
 
 namespace couchbase::core::protocol
 {
-bool
+auto
 cluster_map_change_notification_request_body::parse(const header_buffer& header,
                                                     const std::vector<std::byte>& body,
-                                                    const cmd_info& info)
+                                                    const cmd_info& info) -> bool
 {
   Expects(header[1] == static_cast<std::byte>(opcode));
   using offset_type = std::vector<std::byte>::difference_type;

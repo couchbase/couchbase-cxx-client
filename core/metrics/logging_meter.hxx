@@ -54,9 +54,8 @@ public:
 
   void stop() override;
 
-  std::shared_ptr<couchbase::metrics::value_recorder> get_value_recorder(
-    const std::string& name,
-    const std::map<std::string, std::string>& tags) override;
+  auto get_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags)
+    -> std::shared_ptr<couchbase::metrics::value_recorder> override;
 };
 
 } // namespace couchbase::core::metrics

@@ -28,7 +28,8 @@ namespace tao::json
 template<>
 struct traits<couchbase::core::topology::configuration> {
   template<template<typename...> class Traits>
-  static couchbase::core::topology::configuration as(const tao::json::basic_value<Traits>& v)
+  static auto as(const tao::json::basic_value<Traits>& v)
+    -> couchbase::core::topology::configuration
   {
     couchbase::core::topology::configuration result;
     result.id = couchbase::core::uuid::random();

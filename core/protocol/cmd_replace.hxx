@@ -38,23 +38,23 @@ private:
   mutation_token token_;
 
 public:
-  mutation_token& token()
+  auto token() -> mutation_token&
   {
     return token_;
   }
 
-  [[nodiscard]] const mutation_token& token() const
+  [[nodiscard]] auto token() const -> const mutation_token&
   {
     return token_;
   }
 
-  bool parse(key_value_status_code status,
+  auto parse(key_value_status_code status,
              const header_buffer& header,
              std::uint8_t framing_extras_size,
              std::uint16_t key_size,
              std::uint8_t extras_size,
              const std::vector<std::byte>& body,
-             const cmd_info& info);
+             const cmd_info& info) -> bool;
 };
 
 class replace_request_body
@@ -93,17 +93,17 @@ public:
     expiry_ = value;
   }
 
-  [[nodiscard]] const auto& key() const
+  [[nodiscard]] auto key() const -> const auto&
   {
     return key_;
   }
 
-  [[nodiscard]] const auto& framing_extras() const
+  [[nodiscard]] auto framing_extras() const -> const auto&
   {
     return framing_extras_;
   }
 
-  [[nodiscard]] const auto& extras()
+  [[nodiscard]] auto extras() -> const auto&
   {
     if (extras_.empty()) {
       fill_extras();
@@ -111,12 +111,12 @@ public:
     return extras_;
   }
 
-  [[nodiscard]] const auto& value() const
+  [[nodiscard]] auto value() const -> const auto&
   {
     return content_;
   }
 
-  [[nodiscard]] std::size_t size()
+  [[nodiscard]] auto size() -> std::size_t
   {
     if (extras_.empty()) {
       fill_extras();

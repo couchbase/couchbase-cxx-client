@@ -51,8 +51,8 @@ transactions_cleanup::transactions_cleanup(
   start();
 }
 
-static std::uint64_t
-byteswap64(std::uint64_t val)
+static auto
+byteswap64(std::uint64_t val) -> std::uint64_t
 {
   std::uint64_t ret = 0;
   for (std::size_t ii = 0; ii < sizeof(std::uint64_t); ii++) {
@@ -76,8 +76,8 @@ byteswap64(std::uint64_t val)
  * Want:        0x155CD21DA7580000   (1539336197457313792 in base10, an epoch
  * time in millionths of a second)
  */
-static std::uint64_t
-parse_mutation_cas(const std::string& cas)
+static auto
+parse_mutation_cas(const std::string& cas) -> std::uint64_t
 {
   if (cas.empty()) {
     return 0;
@@ -99,8 +99,8 @@ static const std::string FIELD_NUM_ATRS = "num_atrs";
 #define SAFETY_MARGIN_EXPIRY_MS 2000
 
 template<class R, class P>
-bool
-transactions_cleanup::interruptable_wait(std::chrono::duration<R, P> delay)
+auto
+transactions_cleanup::interruptable_wait(std::chrono::duration<R, P> delay) -> bool
 {
   // wait for specified time, _or_ until the condition variable changes
   std::unique_lock<std::mutex> lock(mutex_);
@@ -204,9 +204,10 @@ transactions_cleanup::clean_collection(
   }
 }
 
-const atr_cleanup_stats
+auto
 transactions_cleanup::handle_atr_cleanup(const core::document_id& atr_id,
                                          std::vector<transactions_cleanup_attempt>* results)
+  -> const atr_cleanup_stats
 {
   atr_cleanup_stats stats;
   auto atr = active_transaction_record::get_atr(cluster_, atr_id);
@@ -286,10 +287,10 @@ transactions_cleanup::create_client_record(
   }
 }
 
-const client_record_details
+auto
 transactions_cleanup::get_active_clients(
   const couchbase::transactions::transaction_keyspace& keyspace,
-  const std::string& uuid)
+  const std::string& uuid) -> const client_record_details
 {
   client_record_details details;
   // Write our client record, return details.
@@ -492,9 +493,10 @@ transactions_cleanup::remove_client_record_from_all_buckets(const std::string& u
   }
 }
 
-const atr_cleanup_stats
+auto
 transactions_cleanup::force_cleanup_atr(const core::document_id& atr_id,
                                         std::vector<transactions_cleanup_attempt>& results)
+  -> const atr_cleanup_stats
 {
   CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("starting force_cleanup_atr: atr_id {}", atr_id);
   return handle_atr_cleanup(atr_id, &results);

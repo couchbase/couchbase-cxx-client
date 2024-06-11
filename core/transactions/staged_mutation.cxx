@@ -31,8 +31,8 @@
 namespace couchbase::core::transactions
 {
 
-bool
-unstaging_state::wait_until_unstage_possible()
+auto
+unstaging_state::wait_until_unstage_possible() -> bool
 {
   std::unique_lock lock(mutex_);
   auto success = cv_.wait_for(lock, ctx_->overall().remaining(), [this] {
@@ -65,8 +65,8 @@ unstaging_state::notify_unstage_error()
   cv_.notify_all();
 }
 
-bool
-staged_mutation_queue::empty()
+auto
+staged_mutation_queue::empty() -> bool
 {
   std::lock_guard<std::mutex> lock(mutex_);
   return queue_.empty();
@@ -141,8 +141,8 @@ staged_mutation_queue::remove_any(const core::document_id& id)
   queue_.erase(new_end, queue_.end());
 }
 
-staged_mutation*
-staged_mutation_queue::find_any(const core::document_id& id)
+auto
+staged_mutation_queue::find_any(const core::document_id& id) -> staged_mutation*
 {
   const std::lock_guard<std::mutex> lock(mutex_);
   for (auto& item : queue_) {
@@ -153,8 +153,8 @@ staged_mutation_queue::find_any(const core::document_id& id)
   return nullptr;
 }
 
-staged_mutation*
-staged_mutation_queue::find_replace(const core::document_id& id)
+auto
+staged_mutation_queue::find_replace(const core::document_id& id) -> staged_mutation*
 {
   std::lock_guard<std::mutex> lock(mutex_);
   for (auto& item : queue_) {
@@ -165,8 +165,8 @@ staged_mutation_queue::find_replace(const core::document_id& id)
   return nullptr;
 }
 
-staged_mutation*
-staged_mutation_queue::find_insert(const core::document_id& id)
+auto
+staged_mutation_queue::find_insert(const core::document_id& id) -> staged_mutation*
 {
   std::lock_guard<std::mutex> lock(mutex_);
   for (auto& item : queue_) {
@@ -177,8 +177,8 @@ staged_mutation_queue::find_insert(const core::document_id& id)
   return nullptr;
 }
 
-staged_mutation*
-staged_mutation_queue::find_remove(const core::document_id& id)
+auto
+staged_mutation_queue::find_remove(const core::document_id& id) -> staged_mutation*
 {
   std::lock_guard<std::mutex> lock(mutex_);
   for (auto& item : queue_) {

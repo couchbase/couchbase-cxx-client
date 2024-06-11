@@ -41,9 +41,9 @@ struct test_context {
   std::string other_bucket{ "secBucket" };
   bool use_wan_development_profile{ false };
 
-  [[nodiscard]] couchbase::core::cluster_credentials build_auth() const;
+  [[nodiscard]] auto build_auth() const -> couchbase::core::cluster_credentials;
 
-  static test_context load_from_environment();
+  static auto load_from_environment() -> test_context;
 };
 
 } // namespace test::utils

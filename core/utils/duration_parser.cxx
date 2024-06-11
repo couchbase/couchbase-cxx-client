@@ -22,8 +22,8 @@ namespace couchbase::core::utils
 /**
  * leading_int consumes the leading [0-9]* from s.
  */
-static bool
-leading_int(std::string& s, std::int64_t& v)
+static auto
+leading_int(std::string& s, std::int64_t& v) -> bool
 {
   v = 0;
   std::size_t i = 0;
@@ -93,8 +93,8 @@ leading_fraction(std::string& s, std::int64_t& x, std::uint32_t& scale)
   s = s.substr(i);
 }
 
-std::chrono::nanoseconds
-parse_duration(const std::string& text)
+auto
+parse_duration(const std::string& text) -> std::chrono::nanoseconds
 {
   // [-+]?([0-9]*(\.[0-9]*)?[a-z]+)+
   std::string s = text;

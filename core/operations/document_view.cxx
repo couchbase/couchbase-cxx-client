@@ -25,9 +25,9 @@
 
 namespace couchbase::core::operations
 {
-std::error_code
+auto
 document_view_request::encode_to(document_view_request::encoded_request_type& encoded,
-                                 http_context& /* context */)
+                                 http_context& /* context */) -> std::error_code
 {
   if (debug) {
     query_string.emplace_back("debug=true");
@@ -139,9 +139,10 @@ document_view_request::encode_to(document_view_request::encoded_request_type& en
   return {};
 }
 
-document_view_response
+auto
 document_view_request::make_response(error_context::view&& ctx,
                                      const encoded_response_type& encoded) const
+  -> document_view_response
 {
   document_view_response response{ std::move(ctx) };
   response.ctx.design_document_name = document_name;

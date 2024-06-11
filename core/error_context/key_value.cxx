@@ -20,20 +20,20 @@
 namespace couchbase::core
 {
 
-key_value_error_context
-make_key_value_error_context(std::error_code ec, const document_id& id)
+auto
+make_key_value_error_context(std::error_code ec, const document_id& id) -> key_value_error_context
 {
   return {
     {}, ec, {}, {}, 0, {}, id.key(), id.bucket(), id.scope(), id.collection(), 0, {}, {}, {}, {},
   };
 }
 
-subdocument_error_context
+auto
 make_subdocument_error_context(const key_value_error_context& ctx,
                                std::error_code ec,
                                std::optional<std::string> first_error_path,
                                std::optional<std::uint64_t> first_error_index,
-                               bool deleted)
+                               bool deleted) -> subdocument_error_context
 {
   return {
     ctx.operation_id(),

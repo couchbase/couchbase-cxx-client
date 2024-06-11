@@ -30,10 +30,10 @@
 namespace test::utils
 {
 template<class ConditionChecker>
-bool
+auto
 wait_until(ConditionChecker&& condition_checker,
            std::chrono::milliseconds timeout,
-           std::chrono::milliseconds delay)
+           std::chrono::milliseconds delay) -> bool
 {
   const auto start = std::chrono::high_resolution_clock::now();
   while (!condition_checker()) {
@@ -46,57 +46,60 @@ wait_until(ConditionChecker&& condition_checker,
 }
 
 template<class ConditionChecker>
-bool
-wait_until(ConditionChecker&& condition_checker, std::chrono::milliseconds timeout)
+auto
+wait_until(ConditionChecker&& condition_checker, std::chrono::milliseconds timeout) -> bool
 {
   return wait_until(condition_checker, timeout, std::chrono::milliseconds(100));
 }
 
 template<class ConditionChecker>
-bool
-wait_until(ConditionChecker&& condition_checker)
+auto
+wait_until(ConditionChecker&& condition_checker) -> bool
 {
   return wait_until(condition_checker, std::chrono::minutes(1));
 }
 
-bool
-wait_until_bucket_healthy(const couchbase::core::cluster& cluster, const std::string& bucket_name);
+auto
+wait_until_bucket_healthy(const couchbase::core::cluster& cluster,
+                          const std::string& bucket_name) -> bool;
 
-bool
+auto
 wait_until_collection_manifest_propagated(const couchbase::core::cluster& cluster,
                                           const std::string& bucket_name,
                                           std::uint64_t current_manifest_uid,
                                           std::size_t successful_rounds = 7,
                                           std::chrono::seconds total_timeout = std::chrono::minutes{
-                                            5 });
-bool
-wait_until_user_present(const couchbase::core::cluster& cluster, const std::string& username);
+                                            5 }) -> bool;
+auto
+wait_until_user_present(const couchbase::core::cluster& cluster,
+                        const std::string& username) -> bool;
 
-bool
+auto
 wait_until_cluster_connected(const std::string& username,
                              const std::string& password,
-                             const std::string& connection_string);
+                             const std::string& connection_string) -> bool;
 
-bool
+auto
 wait_for_search_pindexes_ready(const couchbase::core::cluster& cluster,
                                const std::string& bucket_name,
-                               const std::string& index_name);
+                               const std::string& index_name) -> bool;
 
-bool
+auto
 wait_for_function_created(const couchbase::core::cluster& cluster,
                           const std::string& function_name,
                           const std::optional<std::string>& bucket_name = {},
                           const std::optional<std::string>& scope_name = {},
                           std::size_t successful_rounds = 4,
-                          std::chrono::seconds total_timeout = std::chrono::seconds{ 120 });
+                          std::chrono::seconds total_timeout = std::chrono::seconds{ 120 }) -> bool;
 
-bool
+auto
 wait_until_indexed(const couchbase::core::cluster& cluster,
                    const std::string& index_name,
-                   std::uint64_t expected_count);
+                   std::uint64_t expected_count) -> bool;
 
-bool
-create_primary_index(const couchbase::core::cluster& cluster, const std::string& bucket_name);
+auto
+create_primary_index(const couchbase::core::cluster& cluster,
+                     const std::string& bucket_name) -> bool;
 
 class integration_test_guard;
 /**
@@ -110,13 +113,14 @@ class integration_test_guard;
  * @return pair of boolean value (success if true), and name of the index created (service might
  * rename index)
  */
-std::pair<bool, std::string>
+auto
 create_search_index(integration_test_guard& integration,
                     const std::string& bucket_name,
                     const std::string& index_name,
                     const std::string& index_params_file_name,
-                    std::size_t expected_number_of_documents_indexed = 800);
+                    std::size_t expected_number_of_documents_indexed = 800)
+  -> std::pair<bool, std::string>;
 
-bool
-drop_search_index(integration_test_guard& integration, const std::string& index_name);
+auto
+drop_search_index(integration_test_guard& integration, const std::string& index_name) -> bool;
 } // namespace test::utils

@@ -25,8 +25,8 @@
 
 namespace couchbase::core::management::analytics
 {
-std::error_code
-azure_blob_external_link::validate() const
+auto
+azure_blob_external_link::validate() const -> std::error_code
 {
   if (dataverse.empty() || link_name.empty()) {
     return errc::common::invalid_argument;
@@ -39,8 +39,8 @@ azure_blob_external_link::validate() const
   return errc::common::invalid_argument;
 }
 
-std::string
-azure_blob_external_link::encode() const
+auto
+azure_blob_external_link::encode() const -> std::string
 {
   std::map<std::string, std::string> values{
     { "type", "azureblob" },

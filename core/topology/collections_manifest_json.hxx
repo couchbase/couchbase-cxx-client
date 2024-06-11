@@ -26,7 +26,8 @@ namespace tao::json
 template<>
 struct traits<couchbase::core::topology::collections_manifest> {
   template<template<typename...> class Traits>
-  static couchbase::core::topology::collections_manifest as(const tao::json::basic_value<Traits>& v)
+  static auto as(const tao::json::basic_value<Traits>& v)
+    -> couchbase::core::topology::collections_manifest
   {
     (void)v;
     couchbase::core::topology::collections_manifest result;

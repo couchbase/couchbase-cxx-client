@@ -63,8 +63,8 @@ enum class attempt_state {
   UNKNOWN
 };
 
-inline const char*
-attempt_state_name(attempt_state state)
+inline auto
+attempt_state_name(attempt_state state) -> const char*
 {
   switch (state) {
     case attempt_state::NOT_STARTED:
@@ -86,8 +86,8 @@ attempt_state_name(attempt_state state)
   }
 }
 
-inline attempt_state
-attempt_state_value(const std::string& str)
+inline auto
+attempt_state_value(const std::string& str) -> attempt_state
 {
   if (str == "NOT_STARTED") {
     return attempt_state::NOT_STARTED;

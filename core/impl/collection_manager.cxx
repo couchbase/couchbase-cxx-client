@@ -33,9 +33,10 @@ namespace couchbase
 {
 namespace
 {
-management::bucket::collection_spec
+auto
 map_collection(std::string scope_name,
                const core::topology::collections_manifest::collection& collection)
+  -> management::bucket::collection_spec
 {
   management::bucket::collection_spec spec{};
   spec.name = collection.name;
@@ -45,8 +46,9 @@ map_collection(std::string scope_name,
   return spec;
 }
 
-std::vector<couchbase::management::bucket::scope_spec>
+auto
 map_scope_specs(core::topology::collections_manifest& manifest)
+  -> std::vector<couchbase::management::bucket::scope_spec>
 {
   std::vector<couchbase::management::bucket::scope_spec> scope_specs{};
   for (const auto& scope : manifest.scopes) {

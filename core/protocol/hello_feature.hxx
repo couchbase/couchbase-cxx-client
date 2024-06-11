@@ -180,8 +180,8 @@ enum class hello_feature : std::uint16_t {
   deduplicate_not_my_vbucket_clustermap = 0x1e,
 };
 
-constexpr bool
-is_valid_hello_feature(std::uint16_t code)
+constexpr auto
+is_valid_hello_feature(std::uint16_t code) -> bool
 {
   switch (static_cast<hello_feature>(code)) {
     case hello_feature::tls:

@@ -50,12 +50,12 @@ public:
   {
   }
 
-  [[nodiscard]] const auto& id() const
+  [[nodiscard]] auto id() const -> const auto&
   {
     return id_;
   }
 
-  [[nodiscard]] const auto& timeout() const
+  [[nodiscard]] auto timeout() const -> const auto&
   {
     return timeout_;
   }

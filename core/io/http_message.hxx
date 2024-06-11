@@ -83,17 +83,17 @@ public:
     }
   }
 
-  [[nodiscard]] const std::string& data() const
+  [[nodiscard]] auto data() const -> const std::string&
   {
     return storage_->data_;
   }
 
-  [[nodiscard]] const std::size_t& number_of_rows() const
+  [[nodiscard]] auto number_of_rows() const -> const std::size_t&
   {
     return storage_->number_of_rows_;
   }
 
-  [[nodiscard]] const std::error_code& ec() const
+  [[nodiscard]] auto ec() const -> const std::error_code&
   {
     return storage_->ec_;
   }
@@ -109,7 +109,7 @@ struct http_response {
   std::map<std::string, std::string> headers;
   http_response_body body{};
 
-  [[nodiscard]] bool must_close_connection() const
+  [[nodiscard]] auto must_close_connection() const -> bool
   {
     if (const auto it = headers.find("connection"); it != headers.end()) {
       return it->second == "close";

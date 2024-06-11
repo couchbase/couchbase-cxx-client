@@ -35,14 +35,14 @@ numeric_range::numeric_range(std::string name, std::optional<double> min, std::o
 {
 }
 
-numeric_range
-numeric_range::with_min(std::string name, double start)
+auto
+numeric_range::with_min(std::string name, double start) -> numeric_range
 {
   return { std::move(name), start, {} };
 }
 
-numeric_range
-numeric_range::with_max(std::string name, double end)
+auto
+numeric_range::with_max(std::string name, double end) -> numeric_range
 {
   return { std::move(name), {}, end };
 }

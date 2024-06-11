@@ -29,11 +29,11 @@ public:
   value_recorder() = default;
   value_recorder(const value_recorder& other) = default;
   value_recorder(value_recorder&& other) = default;
-  value_recorder& operator=(const value_recorder& other) = default;
-  value_recorder& operator=(value_recorder&& other) = default;
+  auto operator=(const value_recorder& other) -> value_recorder& = default;
+  auto operator=(value_recorder&& other) -> value_recorder& = default;
   virtual ~value_recorder() = default;
 
-  virtual void record_value(std::int64_t value) = 0;
+  virtual void record_value(int64_t value) = 0;
 };
 
 class meter
@@ -42,8 +42,8 @@ public:
   meter() = default;
   meter(const meter& other) = default;
   meter(meter&& other) = default;
-  meter& operator=(const meter& other) = default;
-  meter& operator=(meter&& other) = default;
+  auto operator=(const meter& other) -> meter& = default;
+  auto operator=(meter&& other) -> meter& = default;
   virtual ~meter() = default;
 
   /**
@@ -63,9 +63,9 @@ public:
     /* do nothing */
   }
 
-  virtual std::shared_ptr<value_recorder> get_value_recorder(
-    const std::string& name,
-    const std::map<std::string, std::string>& tags) = 0;
+  virtual auto get_value_recorder(const std::string& name,
+                                  const std::map<std::string, std::string>& tags)
+    -> std::shared_ptr<value_recorder> = 0;
 };
 
 } // namespace couchbase::metrics

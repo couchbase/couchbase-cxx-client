@@ -42,43 +42,43 @@ private:
   std::optional<std::uint64_t> last_received_sequence_number_{};
 
 public:
-  [[nodiscard]] std::uint16_t partition_id() const
+  [[nodiscard]] auto partition_id() const -> std::uint16_t
   {
     return partition_id_;
   }
 
-  [[nodiscard]] std::uint64_t partition_uuid() const
+  [[nodiscard]] auto partition_uuid() const -> std::uint64_t
   {
     return partition_uuid_;
   }
 
-  [[nodiscard]] std::uint64_t last_persisted_sequence_number() const
+  [[nodiscard]] auto last_persisted_sequence_number() const -> std::uint64_t
   {
     return last_persisted_sequence_number_;
   }
 
-  [[nodiscard]] std::uint64_t current_sequence_number() const
+  [[nodiscard]] auto current_sequence_number() const -> std::uint64_t
   {
     return current_sequence_number_;
   }
 
-  [[nodiscard]] const std::optional<std::uint64_t>& old_partition_uuid() const
+  [[nodiscard]] auto old_partition_uuid() const -> const std::optional<std::uint64_t>&
   {
     return old_partition_uuid_;
   }
 
-  [[nodiscard]] const std::optional<std::uint64_t>& last_received_sequence_number() const
+  [[nodiscard]] auto last_received_sequence_number() const -> const std::optional<std::uint64_t>&
   {
     return last_received_sequence_number_;
   }
 
-  bool parse(key_value_status_code status,
+  auto parse(key_value_status_code status,
              const header_buffer& header,
              std::uint8_t framing_extras_size,
              std::uint16_t key_size,
              std::uint8_t extras_size,
              const std::vector<std::byte>& body,
-             const cmd_info& info);
+             const cmd_info& info) -> bool;
 };
 
 class observe_seqno_request_body
@@ -94,22 +94,22 @@ private:
 public:
   void partition_uuid(const std::uint64_t& uuid);
 
-  [[nodiscard]] const auto& key() const
+  [[nodiscard]] auto key() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& framing_extras() const
+  [[nodiscard]] auto framing_extras() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& extras() const
+  [[nodiscard]] auto extras() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& value()
+  [[nodiscard]] auto value() -> const auto&
   {
     if (value_.empty()) {
       fill_body();
@@ -117,7 +117,7 @@ public:
     return value_;
   }
 
-  [[nodiscard]] std::size_t size()
+  [[nodiscard]] auto size() -> std::size_t
   {
     if (value_.empty()) {
       fill_body();

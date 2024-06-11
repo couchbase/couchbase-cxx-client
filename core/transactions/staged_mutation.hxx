@@ -56,25 +56,25 @@ public:
 
   staged_mutation(const staged_mutation& o) = default;
   staged_mutation(staged_mutation&& o) = default;
-  staged_mutation& operator=(const staged_mutation& o) = default;
-  staged_mutation& operator=(staged_mutation&& o) = default;
+  auto operator=(const staged_mutation& o) -> staged_mutation& = default;
+  auto operator=(staged_mutation&& o) -> staged_mutation& = default;
 
-  const core::document_id& id() const
+  auto id() const -> const core::document_id&
   {
     return doc_.id();
   }
 
-  [[nodiscard]] const transaction_get_result& doc() const
+  [[nodiscard]] auto doc() const -> const transaction_get_result&
   {
     return doc_;
   }
 
-  [[nodiscard]] transaction_get_result& doc()
+  [[nodiscard]] auto doc() -> transaction_get_result&
   {
     return doc_;
   }
 
-  [[nodiscard]] const staged_mutation_type& type() const
+  [[nodiscard]] auto type() const -> const staged_mutation_type&
   {
     return type_;
   }
@@ -84,7 +84,7 @@ public:
     type_ = type;
   }
 
-  [[nodiscard]] const std::vector<std::byte>& content() const
+  [[nodiscard]] auto content() const -> const std::vector<std::byte>&
   {
     return content_;
   }
@@ -94,7 +94,7 @@ public:
     content_ = content;
   }
 
-  [[nodiscard]] std::string type_as_string() const
+  [[nodiscard]] auto type_as_string() const -> std::string
   {
     switch (type_) {
       case staged_mutation_type::INSERT:
@@ -107,7 +107,7 @@ public:
     throw std::runtime_error("unknown type of staged mutation");
   }
 
-  [[nodiscard]] const std::string& operation_id() const
+  [[nodiscard]] auto operation_id() const -> const std::string&
   {
     return operation_id_;
   }
@@ -122,7 +122,7 @@ struct unstaging_state {
   std::atomic_size_t in_flight_count_{ 0 };
   bool abort_{ false };
 
-  bool wait_until_unstage_possible();
+  auto wait_until_unstage_possible() -> bool;
   void notify_unstage_complete();
   void notify_unstage_error();
 };
@@ -196,7 +196,7 @@ private:
                                   utils::movable_function<void(std::exception_ptr)> callback);
 
 public:
-  bool empty();
+  auto empty() -> bool;
   void add(const staged_mutation& mutation);
   void extract_to(const std::string& prefix, core::operations::mutate_in_request& req);
   void commit(attempt_context_impl* ctx);
@@ -204,9 +204,9 @@ public:
   void iterate(std::function<void(staged_mutation&)>);
   void remove_any(const core::document_id&);
 
-  staged_mutation* find_any(const core::document_id& id);
-  staged_mutation* find_replace(const core::document_id& id);
-  staged_mutation* find_insert(const core::document_id& id);
-  staged_mutation* find_remove(const core::document_id& id);
+  auto find_any(const core::document_id& id) -> staged_mutation*;
+  auto find_replace(const core::document_id& id) -> staged_mutation*;
+  auto find_insert(const core::document_id& id) -> staged_mutation*;
+  auto find_remove(const core::document_id& id) -> staged_mutation*;
 };
 } // namespace couchbase::core::transactions

@@ -35,23 +35,23 @@ private:
   std::uint32_t collection_uid_{};
 
 public:
-  [[nodiscard]] std::uint64_t manifest_uid() const
+  [[nodiscard]] auto manifest_uid() const -> std::uint64_t
   {
     return manifest_uid_;
   }
 
-  [[nodiscard]] std::uint32_t collection_uid() const
+  [[nodiscard]] auto collection_uid() const -> std::uint32_t
   {
     return collection_uid_;
   }
 
-  bool parse(key_value_status_code status,
+  auto parse(key_value_status_code status,
              const header_buffer& header,
              std::uint8_t framing_extras_size,
              std::uint16_t key_size,
              std::uint8_t extras_size,
              const std::vector<std::byte>& body,
-             const cmd_info& info);
+             const cmd_info& info) -> bool;
 };
 
 class get_collection_id_request_body
@@ -66,27 +66,27 @@ private:
 public:
   void collection_path(const std::string_view& path);
 
-  [[nodiscard]] const std::string& key() const
+  [[nodiscard]] auto key() const -> const std::string&
   {
     return empty_string;
   }
 
-  [[nodiscard]] const auto& framing_extras() const
+  [[nodiscard]] auto framing_extras() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& extras() const
+  [[nodiscard]] auto extras() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& value() const
+  [[nodiscard]] auto value() const -> const auto&
   {
     return value_;
   }
 
-  [[nodiscard]] std::size_t size() const
+  [[nodiscard]] auto size() const -> std::size_t
   {
     return value_.size();
   }

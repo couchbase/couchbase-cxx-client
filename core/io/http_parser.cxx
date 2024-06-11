@@ -24,8 +24,8 @@
 
 namespace
 {
-inline int
-static_on_status(llhttp_t* parser, const char* at, std::size_t length)
+inline auto
+static_on_status(llhttp_t* parser, const char* at, std::size_t length) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_parser*>(parser->data);
   wrapper->response.status_message.assign(at, length);
@@ -33,8 +33,8 @@ static_on_status(llhttp_t* parser, const char* at, std::size_t length)
   return 0;
 }
 
-inline int
-static_on_header_field(llhttp_t* parser, const char* at, std::size_t length)
+inline auto
+static_on_header_field(llhttp_t* parser, const char* at, std::size_t length) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_parser*>(parser->data);
   wrapper->header_field.assign(at, length);
@@ -47,24 +47,24 @@ static_on_header_field(llhttp_t* parser, const char* at, std::size_t length)
   return 0;
 }
 
-inline int
-static_on_header_value(llhttp_t* parser, const char* at, std::size_t length)
+inline auto
+static_on_header_value(llhttp_t* parser, const char* at, std::size_t length) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_parser*>(parser->data);
   wrapper->response.headers[wrapper->header_field] = std::string(at, length);
   return 0;
 }
 
-inline int
-static_on_body(llhttp_t* parser, const char* at, std::size_t length)
+inline auto
+static_on_body(llhttp_t* parser, const char* at, std::size_t length) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_parser*>(parser->data);
   wrapper->response.body.append(std::string_view{ at, length });
   return 0;
 }
 
-inline int
-static_on_message_complete(llhttp_t* parser)
+inline auto
+static_on_message_complete(llhttp_t* parser) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_parser*>(parser->data);
   wrapper->complete = true;
@@ -103,8 +103,8 @@ http_parser::http_parser(http_parser&& other) noexcept
   }
 }
 
-http_parser&
-http_parser::operator=(http_parser&& other) noexcept
+auto
+http_parser::operator=(http_parser&& other) noexcept -> http_parser&
 {
   response = std::move(other.response);
   header_field = std::move(other.header_field);
@@ -124,14 +124,14 @@ http_parser::reset()
   llhttp_init(&state_->parser_, HTTP_RESPONSE, &state_->settings_);
 }
 
-const char*
-http_parser::error_message() const
+auto
+http_parser::error_message() const -> const char*
 {
   return llhttp_errno_name(llhttp_get_errno(&state_->parser_));
 }
 
-http_parser::feeding_result
-http_parser::feed(const char* data, size_t data_len) const
+auto
+http_parser::feed(const char* data, size_t data_len) const -> http_parser::feeding_result
 {
   auto error = llhttp_execute(&state_->parser_, data, data_len);
   if (error != HPE_OK) {

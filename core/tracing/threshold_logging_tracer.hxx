@@ -38,9 +38,8 @@ class threshold_logging_tracer
 public:
   threshold_logging_tracer(asio::io_context& ctx, threshold_logging_options options);
 
-  std::shared_ptr<couchbase::tracing::request_span> start_span(
-    std::string name,
-    std::shared_ptr<couchbase::tracing::request_span> parent) override;
+  auto start_span(std::string name, std::shared_ptr<couchbase::tracing::request_span> parent)
+    -> std::shared_ptr<couchbase::tracing::request_span> override;
   void report(std::shared_ptr<threshold_logging_span> span);
   void start() override;
   void stop() override;

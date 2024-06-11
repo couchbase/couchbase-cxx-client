@@ -46,7 +46,7 @@ public:
    * @param level Durability level for this transaction.
    * @return reference to this object, convenient for chaining operations.
    */
-  transaction_options& durability_level(durability_level level);
+  auto durability_level(durability_level level) -> transaction_options&;
 
   /**
    * Get the durability if it has been set.
@@ -55,7 +55,7 @@ public:
    *
    * @return durability if set.
    */
-  [[nodiscard]] std::optional<couchbase::durability_level> durability_level() const;
+  [[nodiscard]] auto durability_level() const -> std::optional<couchbase::durability_level>;
 
   /**
    * Set the @ref query_scan_consistency for this transaction.
@@ -65,7 +65,7 @@ public:
    * @param scan_consistency The desired @ref query_scan_consistency for this transaction.
    * @return reference to this object, convenient for chaining operations.
    */
-  transaction_options& scan_consistency(query_scan_consistency scan_consistency);
+  auto scan_consistency(query_scan_consistency scan_consistency) -> transaction_options&;
 
   /**
    * Get the scan_consistency if it has been set.
@@ -74,7 +74,7 @@ public:
    *
    * @return The scan_consistency, if set.
    */
-  [[nodiscard]] std::optional<query_scan_consistency> scan_consistency() const;
+  [[nodiscard]] auto scan_consistency() const -> std::optional<query_scan_consistency>;
 
   /**
    * Set the timeout for this transaction.
@@ -84,7 +84,7 @@ public:
    * @return reference to this object, convenient for chaining operations.
    */
   template<typename T>
-  transaction_options& timeout(T timeout)
+  auto timeout(T timeout) -> transaction_options&
   {
     timeout_ = std::chrono::duration_cast<std::chrono::nanoseconds>(timeout);
     return *this;
@@ -95,7 +95,7 @@ public:
    *
    * @return the timeout, if set.
    */
-  std::optional<std::chrono::nanoseconds> timeout();
+  auto timeout() -> std::optional<std::chrono::nanoseconds>;
 
   /**
    * Set the metadata collection to use for this transaction
@@ -108,7 +108,7 @@ public:
    * @param coll The desired collection to use.
    * @return reference to this object, convenient for chaining operations.
    */
-  transaction_options& metadata_collection(const couchbase::collection& coll);
+  auto metadata_collection(const couchbase::collection& coll) -> transaction_options&;
 
   /**
    * Set metadata collection to use for this transaction
@@ -116,8 +116,8 @@ public:
    * @param keyspace The desired collection to use
    * @return reference to this object, convenient for chaining operations.
    */
-  transaction_options& metadata_collection(
-    const couchbase::transactions::transaction_keyspace& keyspace)
+  auto metadata_collection(const couchbase::transactions::transaction_keyspace& keyspace)
+    -> transaction_options&
   {
     metadata_collection_.emplace(keyspace);
     return *this;
@@ -127,14 +127,15 @@ public:
    *
    * @return the metadata collection, as a @ref transaction_keyspace, if set.
    */
-  [[nodiscard]] std::optional<transaction_keyspace> metadata_collection() const;
+  [[nodiscard]] auto metadata_collection() const -> std::optional<transaction_keyspace>;
 
   /** @private */
-  transaction_options& test_factories(
-    std::shared_ptr<core::transactions::attempt_context_testing_hooks> hooks,
-    std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks);
+  auto test_factories(std::shared_ptr<core::transactions::attempt_context_testing_hooks> hooks,
+                      std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks)
+    -> transaction_options&;
   /** @private */
-  [[nodiscard]] transactions_config::built apply(const transactions_config::built& conf) const;
+  [[nodiscard]] auto apply(const transactions_config::built& conf) const
+    -> transactions_config::built;
 
 private:
   std::optional<couchbase::durability_level> durability_;

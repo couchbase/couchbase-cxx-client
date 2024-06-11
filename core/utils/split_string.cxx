@@ -21,8 +21,8 @@
 
 namespace couchbase::core::utils
 {
-std::vector<std::string>
-split_string(const std::string& input, char delimiter)
+auto
+split_string(const std::string& input, char delimiter) -> std::vector<std::string>
 {
   std::vector<std::string> elements;
   std::stringstream stream(input);

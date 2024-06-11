@@ -316,7 +316,7 @@ struct dns_header {
     recursion_available ra{ recursion_available::no };
     response_code rcode{ response_code::no_error };
 
-    [[nodiscard]] std::uint16_t encode() const
+    [[nodiscard]] auto encode() const -> std::uint16_t
     {
       return std::uint16_t(
         (static_cast<std::uint32_t>(qr) & 1U) << 15U |
@@ -437,7 +437,7 @@ struct question_record {
    */
   resource_class klass{};
 
-  [[nodiscard]] std::size_t size() const
+  [[nodiscard]] auto size() const -> std::size_t
   {
     std::size_t res = 2 * sizeof(std::uint16_t); // type + class
     for (const auto& label : name.labels) {
@@ -566,7 +566,7 @@ struct dns_message {
   std::vector<srv_record> answers{};
   // the implementation only cares about SRV answers, so ignore everything else
 
-  [[nodiscard]] std::size_t request_size() const
+  [[nodiscard]] auto request_size() const -> std::size_t
   {
     std::size_t res = 6 * sizeof(std::uint16_t); // header
     for (const auto& question : questions) {

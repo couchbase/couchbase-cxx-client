@@ -36,8 +36,8 @@ enum class magic : std::uint8_t {
   server_response = 0x83
 };
 
-constexpr bool
-is_valid_magic(std::uint8_t code)
+constexpr auto
+is_valid_magic(std::uint8_t code) -> bool
 {
   switch (magic(code)) {
     case magic::client_request:

@@ -70,8 +70,8 @@ struct azure_blob_external_link {
    */
   std::optional<std::string> endpoint_suffix{};
 
-  [[nodiscard]] std::error_code validate() const;
+  [[nodiscard]] auto validate() const -> std::error_code;
 
-  [[nodiscard]] std::string encode() const;
+  [[nodiscard]] auto encode() const -> std::string;
 };
 } // namespace couchbase::core::management::analytics

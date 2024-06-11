@@ -54,8 +54,8 @@ enum class common_flags : std::uint32_t {
  * @param flags the flags to shift.
  * @return an integer having the common flags set.
  */
-constexpr std::uint32_t
-create_common_flags(common_flags flags)
+constexpr auto
+create_common_flags(common_flags flags) -> std::uint32_t
 {
   return static_cast<std::uint32_t>(flags) << 24U;
 }
@@ -68,8 +68,8 @@ create_common_flags(common_flags flags)
  * @param flags the flags to check.
  * @return only the common flags simple representation (8 bits).
  */
-constexpr common_flags
-extract_common_flags(std::uint32_t flags)
+constexpr auto
+extract_common_flags(std::uint32_t flags) -> common_flags
 {
   switch (auto value = static_cast<common_flags>(flags >> 24U)) {
     case common_flags::client_specific:
@@ -92,8 +92,8 @@ extract_common_flags(std::uint32_t flags)
  * @param flags the flags to check.
  * @return true if set, false otherwise.
  */
-constexpr bool
-has_common_flags(std::uint32_t flags)
+constexpr auto
+has_common_flags(std::uint32_t flags) -> bool
 {
   return extract_common_flags(flags) != common_flags::reserved;
 }
@@ -106,8 +106,8 @@ has_common_flags(std::uint32_t flags)
  * @param expected_common_flag the expected common flags format bits
  * @return true if common flags bits are set and correspond to expected_common_flag format
  */
-constexpr bool
-has_common_flags(std::uint32_t flags, std::uint32_t expected_common_flag)
+constexpr auto
+has_common_flags(std::uint32_t flags, std::uint32_t expected_common_flag) -> bool
 {
   return has_common_flags(flags) && (flags & common_format_mask) == expected_common_flag;
 }
@@ -120,8 +120,8 @@ has_common_flags(std::uint32_t flags, std::uint32_t expected_common_flag)
  * @param expected_common_flag the expected common flags enum value
  * @return true if common flags bits are set and correspond to expected_common_flag format
  */
-constexpr bool
-has_common_flags(std::uint32_t flags, common_flags expected_common_flag)
+constexpr auto
+has_common_flags(std::uint32_t flags, common_flags expected_common_flag) -> bool
 {
   return has_common_flags(flags) &&
          (flags & common_format_mask) == create_common_flags(expected_common_flag);
@@ -136,8 +136,8 @@ has_common_flags(std::uint32_t flags, common_flags expected_common_flag)
  * @param flags the flags to check.
  * @return true if compression set, false otherwise.
  */
-constexpr bool
-has_compression_flags(std::uint32_t flags)
+constexpr auto
+has_compression_flags(std::uint32_t flags) -> bool
 {
   return (flags >> 29U) > 0;
 }
