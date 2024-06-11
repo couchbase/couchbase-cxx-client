@@ -29,44 +29,46 @@
 namespace couchbase::core::operations::management
 {
 struct cluster_describe_response {
-    struct cluster_info {
-        struct node {
-            std::string uuid{};
-            std::string otp_node{};
-            std::string status{};
-            std::string hostname{};
-            std::string os{};
-            std::string version{};
-            std::vector<std::string> services{};
-        };
-
-        struct bucket {
-            std::string uuid{};
-            std::string name{};
-        };
-
-        std::vector<node> nodes{};
-        std::vector<bucket> buckets{};
-        std::set<service_type> services{};
+  struct cluster_info {
+    struct node {
+      std::string uuid{};
+      std::string otp_node{};
+      std::string status{};
+      std::string hostname{};
+      std::string os{};
+      std::string version{};
+      std::vector<std::string> services{};
     };
 
-    error_context::http ctx;
-    cluster_info info{};
+    struct bucket {
+      std::string uuid{};
+      std::string name{};
+    };
+
+    std::vector<node> nodes{};
+    std::vector<bucket> buckets{};
+    std::set<service_type> services{};
+  };
+
+  error_context::http ctx;
+  cluster_info info{};
 };
 
 struct cluster_describe_request {
-    using response_type = cluster_describe_response;
-    using encoded_request_type = io::http_request;
-    using encoded_response_type = io::http_response;
-    using error_context_type = error_context::http;
+  using response_type = cluster_describe_response;
+  using encoded_request_type = io::http_request;
+  using encoded_response_type = io::http_response;
+  using error_context_type = error_context::http;
 
-    static const inline service_type type = service_type::management;
+  static const inline service_type type = service_type::management;
 
-    std::optional<std::string> client_context_id{};
-    std::optional<std::chrono::milliseconds> timeout{};
+  std::optional<std::string> client_context_id{};
+  std::optional<std::chrono::milliseconds> timeout{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          http_context& context) const;
 
-    [[nodiscard]] cluster_describe_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] cluster_describe_response make_response(error_context::http&& ctx,
+                                                        const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::operations::management

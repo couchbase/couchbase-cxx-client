@@ -27,69 +27,69 @@ namespace couchbase::core::protocol
 
 class get_collection_id_response_body
 {
-  public:
-    static const inline client_opcode opcode = client_opcode::get_collection_id;
+public:
+  static const inline client_opcode opcode = client_opcode::get_collection_id;
 
-  private:
-    std::uint64_t manifest_uid_{};
-    std::uint32_t collection_uid_{};
+private:
+  std::uint64_t manifest_uid_{};
+  std::uint32_t collection_uid_{};
 
-  public:
-    [[nodiscard]] std::uint64_t manifest_uid() const
-    {
-        return manifest_uid_;
-    }
+public:
+  [[nodiscard]] std::uint64_t manifest_uid() const
+  {
+    return manifest_uid_;
+  }
 
-    [[nodiscard]] std::uint32_t collection_uid() const
-    {
-        return collection_uid_;
-    }
+  [[nodiscard]] std::uint32_t collection_uid() const
+  {
+    return collection_uid_;
+  }
 
-    bool parse(key_value_status_code status,
-               const header_buffer& header,
-               std::uint8_t framing_extras_size,
-               std::uint16_t key_size,
-               std::uint8_t extras_size,
-               const std::vector<std::byte>& body,
-               const cmd_info& info);
+  bool parse(key_value_status_code status,
+             const header_buffer& header,
+             std::uint8_t framing_extras_size,
+             std::uint16_t key_size,
+             std::uint8_t extras_size,
+             const std::vector<std::byte>& body,
+             const cmd_info& info);
 };
 
 class get_collection_id_request_body
 {
-  public:
-    using response_body_type = get_collection_id_response_body;
-    static const inline client_opcode opcode = client_opcode::get_collection_id;
+public:
+  using response_body_type = get_collection_id_response_body;
+  static const inline client_opcode opcode = client_opcode::get_collection_id;
 
-  private:
-    std::vector<std::byte> value_{};
+private:
+  std::vector<std::byte> value_{};
 
-  public:
-    void collection_path(const std::string_view& path);
+public:
+  void collection_path(const std::string_view& path);
 
-    [[nodiscard]] const std::string& key() const
-    {
-        return empty_string;
-    }
+  [[nodiscard]] const std::string& key() const
+  {
+    return empty_string;
+  }
 
-    [[nodiscard]] const auto& framing_extras() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& framing_extras() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] const auto& extras() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& extras() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] const auto& value() const
-    {
-        return value_;
-    }
+  [[nodiscard]] const auto& value() const
+  {
+    return value_;
+  }
 
-    [[nodiscard]] std::size_t size() const
-    {
-        return value_.size();
-    }
+  [[nodiscard]] std::size_t size() const
+  {
+    return value_.size();
+  }
 };
 
 } // namespace couchbase::core::protocol

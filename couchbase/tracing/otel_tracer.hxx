@@ -28,58 +28,60 @@ namespace couchbase::tracing
 {
 class otel_request_span : public couchbase::tracing::request_span
 {
-  public:
-    explicit otel_request_span(nostd::shared_ptr<opentelemetry::trace::Span> span)
-      : span_(std::move(span))
-    {
-    }
-    void add_tag(const std::string& name, const std::string& value) override
-    {
-        span_->SetAttribute(name, value);
-    }
-    void add_tag(const std::string& name, uint64_t value) override
-    {
-        span_->SetAttribute(name, value);
-    }
-    void end() override
-    {
-        span_->End();
-    }
-    nostd::shared_ptr<opentelemetry::trace::Span> wrapped_span()
-    {
-        return span_;
-    }
+public:
+  explicit otel_request_span(nostd::shared_ptr<opentelemetry::trace::Span> span)
+    : span_(std::move(span))
+  {
+  }
+  void add_tag(const std::string& name, const std::string& value) override
+  {
+    span_->SetAttribute(name, value);
+  }
+  void add_tag(const std::string& name, uint64_t value) override
+  {
+    span_->SetAttribute(name, value);
+  }
+  void end() override
+  {
+    span_->End();
+  }
+  nostd::shared_ptr<opentelemetry::trace::Span> wrapped_span()
+  {
+    return span_;
+  }
 
-  private:
-    nostd::shared_ptr<opentelemetry::trace::Span> span_;
+private:
+  nostd::shared_ptr<opentelemetry::trace::Span> span_;
 };
 
 class otel_request_tracer : public couchbase::tracing::request_tracer
 {
-  public:
-    otel_request_tracer(nostd::shared_ptr<opentelemetry::trace::Tracer> tracer)
-      : tracer_(std::move(tracer))
-    {
-    }
+public:
+  otel_request_tracer(nostd::shared_ptr<opentelemetry::trace::Tracer> tracer)
+    : tracer_(std::move(tracer))
+  {
+  }
 
-    std::shared_ptr<couchbase::tracing::request_span> start_span(std::string name,
-                                                                 std::shared_ptr<couchbase::tracing::request_span> parent = {}) override
-    {
-        auto wrapped_parent = std::dynamic_pointer_cast<otel_request_span>(parent);
-        if (wrapped_parent) {
-            opentelemetry::trace::StartSpanOptions opts;
-            opts.parent = wrapped_parent->wrapped_span()->GetContext();
-            return std::make_shared<otel_request_span>(tracer_->StartSpan(name, opts));
-        }
-        return std::make_shared<otel_request_span>(tracer_->StartSpan(name));
+  std::shared_ptr<couchbase::tracing::request_span> start_span(
+    std::string name,
+    std::shared_ptr<couchbase::tracing::request_span> parent = {}) override
+  {
+    auto wrapped_parent = std::dynamic_pointer_cast<otel_request_span>(parent);
+    if (wrapped_parent) {
+      opentelemetry::trace::StartSpanOptions opts;
+      opts.parent = wrapped_parent->wrapped_span()->GetContext();
+      return std::make_shared<otel_request_span>(tracer_->StartSpan(name, opts));
     }
+    return std::make_shared<otel_request_span>(tracer_->StartSpan(name));
+  }
 
-    std::shared_ptr<couchbase::tracing::otel_request_span> wrap_span(nostd::shared_ptr<opentelemetry::trace::Span> span)
-    {
-        return std::make_shared<couchbase::tracing::otel_request_span>(span);
-    }
+  std::shared_ptr<couchbase::tracing::otel_request_span> wrap_span(
+    nostd::shared_ptr<opentelemetry::trace::Span> span)
+  {
+    return std::make_shared<couchbase::tracing::otel_request_span>(span);
+  }
 
-  private:
-    nostd::shared_ptr<opentelemetry::trace::Tracer> tracer_;
+private:
+  nostd::shared_ptr<opentelemetry::trace::Tracer> tracer_;
 };
 } // namespace couchbase::tracing

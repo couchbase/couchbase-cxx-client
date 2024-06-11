@@ -29,18 +29,18 @@ search_meta_data::search_meta_data(internal_search_meta_data internal)
 auto
 search_meta_data::client_context_id() const -> const std::string&
 {
-    return internal_->client_context_id();
+  return internal_->client_context_id();
 }
 
 auto
 search_meta_data::errors() const -> const std::map<std::string, std::string>&
 {
-    return internal_->errors();
+  return internal_->errors();
 }
 
 auto
 search_meta_data::metrics() const -> const search_metrics&
 {
-    return internal_->metrics();
+  return internal_->metrics();
 }
 } // namespace couchbase

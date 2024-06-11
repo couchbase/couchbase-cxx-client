@@ -36,57 +36,57 @@ replace_response_body::parse(key_value_status_code status,
                              const std::vector<std::byte>& body,
                              const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == key_value_status_code::success) {
-        std::vector<std::uint8_t>::difference_type offset = framing_extras_size;
-        if (extras_size == 16) {
-            std::uint64_t partition_uuid{};
-            memcpy(&partition_uuid, body.data() + offset, sizeof(partition_uuid));
-            partition_uuid = utils::byte_swap(partition_uuid);
-            offset += 8;
+  Expects(header[1] == static_cast<std::byte>(opcode));
+  if (status == key_value_status_code::success) {
+    std::vector<std::uint8_t>::difference_type offset = framing_extras_size;
+    if (extras_size == 16) {
+      std::uint64_t partition_uuid{};
+      memcpy(&partition_uuid, body.data() + offset, sizeof(partition_uuid));
+      partition_uuid = utils::byte_swap(partition_uuid);
+      offset += 8;
 
-            std::uint64_t sequence_number{};
-            memcpy(&sequence_number, body.data() + offset, sizeof(sequence_number));
-            sequence_number = utils::byte_swap(sequence_number);
+      std::uint64_t sequence_number{};
+      memcpy(&sequence_number, body.data() + offset, sizeof(sequence_number));
+      sequence_number = utils::byte_swap(sequence_number);
 
-            token_ = couchbase::utils::build_mutation_token(partition_uuid, sequence_number);
-            return true;
-        }
+      token_ = couchbase::utils::build_mutation_token(partition_uuid, sequence_number);
+      return true;
     }
-    return false;
+  }
+  return false;
 }
 
 void
 replace_request_body::id(const document_id& id)
 {
-    key_ = make_protocol_key(id);
+  key_ = make_protocol_key(id);
 }
 
 void
 replace_request_body::durability(durability_level level, std::optional<std::uint16_t> timeout)
 {
-    if (level == durability_level::none) {
-        return;
-    }
+  if (level == durability_level::none) {
+    return;
+  }
 
-    add_durability_frame_info(framing_extras_, level, timeout);
+  add_durability_frame_info(framing_extras_, level, timeout);
 }
 
 void
 replace_request_body::preserve_expiry()
 {
-    add_preserve_expiry_frame_info(framing_extras_);
+  add_preserve_expiry_frame_info(framing_extras_);
 }
 
 void
 replace_request_body::fill_extras()
 {
-    extras_.resize(sizeof(flags_) + sizeof(expiry_));
+  extras_.resize(sizeof(flags_) + sizeof(expiry_));
 
-    std::uint32_t field = utils::byte_swap(flags_);
-    memcpy(extras_.data(), &field, sizeof(field));
+  std::uint32_t field = utils::byte_swap(flags_);
+  memcpy(extras_.data(), &field, sizeof(field));
 
-    field = utils::byte_swap(expiry_);
-    memcpy(extras_.data() + sizeof(flags_), &field, sizeof(field));
+  field = utils::byte_swap(expiry_);
+  memcpy(extras_.data() + sizeof(flags_), &field, sizeof(field));
 }
 } // namespace couchbase::core::protocol

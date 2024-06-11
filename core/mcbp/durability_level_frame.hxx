@@ -21,8 +21,9 @@
 
 namespace couchbase::core::mcbp
 {
-// durability_level_frame allows you to specify a durability level for an operation through the frame extras.
+// durability_level_frame allows you to specify a durability level for an operation through the
+// frame extras.
 struct durability_level_frame {
-    durability_level level;
+  durability_level level;
 };
 } // namespace couchbase::core::mcbp

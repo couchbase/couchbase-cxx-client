@@ -28,78 +28,79 @@ namespace couchbase::core::management::analytics
 std::error_code
 couchbase_remote_link::validate() const
 {
-    if (dataverse.empty() || link_name.empty() || hostname.empty()) {
-        return errc::common::invalid_argument;
-    }
-    switch (encryption.level) {
-        case couchbase_link_encryption_level::none:
-        case couchbase_link_encryption_level::half:
-            if (/* username and password must be provided */ username.has_value() && password.has_value() &&
-                /* and client certificate and key must be empty */
-                (!encryption.client_certificate.has_value() && !encryption.client_key.has_value())) {
+  if (dataverse.empty() || link_name.empty() || hostname.empty()) {
+    return errc::common::invalid_argument;
+  }
+  switch (encryption.level) {
+    case couchbase_link_encryption_level::none:
+    case couchbase_link_encryption_level::half:
+      if (/* username and password must be provided */ username.has_value() &&
+          password.has_value() &&
+          /* and client certificate and key must be empty */
+          (!encryption.client_certificate.has_value() && !encryption.client_key.has_value())) {
 
-                return {};
-            }
-            return errc::common::invalid_argument;
+        return {};
+      }
+      return errc::common::invalid_argument;
 
-        case couchbase_link_encryption_level::full:
-            if (/* certificate must be provided and */ encryption.certificate.has_value() &&
-                (/* either username/password must be set */ (username.has_value() && password.has_value() &&
-                                                             !encryption.client_certificate.has_value() &&
-                                                             !encryption.client_key.has_value()) ||
-                 /* or client certificate/key must be set */ (!username.has_value() && !password.has_value() &&
-                                                              encryption.client_certificate.has_value() &&
-                                                              encryption.client_key.has_value()))) {
-                return {};
-            }
-            return errc::common::invalid_argument;
-    }
-    return {};
+    case couchbase_link_encryption_level::full:
+      if (/* certificate must be provided and */ encryption.certificate.has_value() &&
+          (/* either username/password must be set */ (
+             username.has_value() && password.has_value() &&
+             !encryption.client_certificate.has_value() && !encryption.client_key.has_value()) ||
+           /* or client certificate/key must be set */ (
+             !username.has_value() && !password.has_value() &&
+             encryption.client_certificate.has_value() && encryption.client_key.has_value()))) {
+        return {};
+      }
+      return errc::common::invalid_argument;
+  }
+  return {};
 }
 
 std::string
 couchbase_remote_link::encode() const
 {
-    std::map<std::string, std::string> values{
-        { "type", "couchbase" },
-        { "hostname", hostname },
-        { "encryption", to_string(encryption.level) },
-    };
-    if (std::count(dataverse.begin(), dataverse.end(), '/') == 0) {
-        values["dataverse"] = dataverse;
-        values["name"] = link_name;
-    }
-    if (username) {
-        values["username"] = username.value();
-    }
-    if (password) {
-        values["password"] = password.value();
-    }
-    if (encryption.certificate) {
-        values["certificate"] = encryption.certificate.value();
-    }
-    if (encryption.client_certificate) {
-        values["clientCertificate"] = encryption.client_certificate.value();
-    }
-    if (encryption.client_key) {
-        values["clientKey"] = encryption.client_key.value();
-    }
-    return utils::string_codec::v2::form_encode(values);
+  std::map<std::string, std::string> values{
+    { "type", "couchbase" },
+    { "hostname", hostname },
+    { "encryption", to_string(encryption.level) },
+  };
+  if (std::count(dataverse.begin(), dataverse.end(), '/') == 0) {
+    values["dataverse"] = dataverse;
+    values["name"] = link_name;
+  }
+  if (username) {
+    values["username"] = username.value();
+  }
+  if (password) {
+    values["password"] = password.value();
+  }
+  if (encryption.certificate) {
+    values["certificate"] = encryption.certificate.value();
+  }
+  if (encryption.client_certificate) {
+    values["clientCertificate"] = encryption.client_certificate.value();
+  }
+  if (encryption.client_key) {
+    values["clientKey"] = encryption.client_key.value();
+  }
+  return utils::string_codec::v2::form_encode(values);
 }
 
 std::string
 to_string(couchbase_link_encryption_level level)
 {
-    switch (level) {
-        case couchbase_link_encryption_level::none:
-            return "none";
+  switch (level) {
+    case couchbase_link_encryption_level::none:
+      return "none";
 
-        case couchbase_link_encryption_level::half:
-            return "half";
+    case couchbase_link_encryption_level::half:
+      return "half";
 
-        case couchbase_link_encryption_level::full:
-            return "full";
-    }
-    return "none";
+    case couchbase_link_encryption_level::full:
+      return "full";
+  }
+  return "none";
 }
 } // namespace couchbase::core::management::analytics

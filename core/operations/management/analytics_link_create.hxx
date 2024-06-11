@@ -27,14 +27,14 @@
 namespace couchbase::core::operations::management
 {
 struct analytics_link_create_response {
-    struct problem {
-        std::uint32_t code;
-        std::string message;
-    };
+  struct problem {
+    std::uint32_t code;
+    std::string message;
+  };
 
-    error_context::http ctx;
-    std::string status{};
-    std::vector<problem> errors{};
+  error_context::http ctx;
+  std::string status{};
+  std::vector<problem> errors{};
 };
 
 namespace details
@@ -45,33 +45,36 @@ make_analytics_link_create_response(error_context::http&& ctx, const io::http_re
 
 template<typename analytics_link_type>
 struct analytics_link_create_request {
-    using response_type = analytics_link_create_response;
-    using encoded_request_type = io::http_request;
-    using encoded_response_type = io::http_response;
-    using error_context_type = error_context::http;
+  using response_type = analytics_link_create_response;
+  using encoded_request_type = io::http_request;
+  using encoded_response_type = io::http_response;
+  using error_context_type = error_context::http;
 
-    static const inline service_type type = service_type::analytics;
+  static const inline service_type type = service_type::analytics;
 
-    analytics_link_type link{};
-    std::optional<std::string> client_context_id{};
-    std::optional<std::chrono::milliseconds> timeout{};
+  analytics_link_type link{};
+  std::optional<std::string> client_context_id{};
+  std::optional<std::chrono::milliseconds> timeout{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& /* context */) const
-    {
-        if (std::error_code ec = link.validate(); ec) {
-            return ec;
-        }
-        encoded.headers["content-type"] = "application/x-www-form-urlencoded";
-        encoded.headers["accept"] = "application/json";
-        encoded.method = "POST";
-        encoded.path = endpoint_from_analytics_link(link);
-        encoded.body = link.encode();
-        return {};
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          http_context& /* context */) const
+  {
+    if (std::error_code ec = link.validate(); ec) {
+      return ec;
     }
+    encoded.headers["content-type"] = "application/x-www-form-urlencoded";
+    encoded.headers["accept"] = "application/json";
+    encoded.method = "POST";
+    encoded.path = endpoint_from_analytics_link(link);
+    encoded.body = link.encode();
+    return {};
+  }
 
-    [[nodiscard]] analytics_link_create_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
-    {
-        return details::make_analytics_link_create_response(std::move(ctx), encoded);
-    }
+  [[nodiscard]] analytics_link_create_response make_response(
+    error_context::http&& ctx,
+    const encoded_response_type& encoded) const
+  {
+    return details::make_analytics_link_create_response(std::move(ctx), encoded);
+  }
 };
 } // namespace couchbase::core::operations::management

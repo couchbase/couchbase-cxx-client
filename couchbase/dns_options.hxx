@@ -26,40 +26,40 @@ namespace couchbase
 {
 class dns_options
 {
-  public:
-    static constexpr std::chrono::milliseconds default_timeout{ 500 };
+public:
+  static constexpr std::chrono::milliseconds default_timeout{ 500 };
 
-    auto timeout(std::chrono::milliseconds duration) -> dns_options&
-    {
-        timeout_ = duration;
-        return *this;
-    }
+  auto timeout(std::chrono::milliseconds duration) -> dns_options&
+  {
+    timeout_ = duration;
+    return *this;
+  }
 
-    auto nameserver(std::string hostname, std::uint16_t port = 53) -> dns_options&
-    {
-        nameserver_ = hostname;
-        port_ = port;
-        return *this;
-    }
+  auto nameserver(std::string hostname, std::uint16_t port = 53) -> dns_options&
+  {
+    nameserver_ = hostname;
+    port_ = port;
+    return *this;
+  }
 
-    struct built {
-        std::chrono::milliseconds timeout;
-        std::optional<std::string> nameserver;
-        std::optional<std::uint16_t> port;
+  struct built {
+    std::chrono::milliseconds timeout;
+    std::optional<std::string> nameserver;
+    std::optional<std::uint16_t> port;
+  };
+
+  [[nodiscard]] auto build() const -> built
+  {
+    return {
+      timeout_,
+      nameserver_,
+      port_,
     };
+  }
 
-    [[nodiscard]] auto build() const -> built
-    {
-        return {
-            timeout_,
-            nameserver_,
-            port_,
-        };
-    }
-
-  private:
-    std::chrono::milliseconds timeout_{ default_timeout };
-    std::optional<std::string> nameserver_{};
-    std::optional<std::uint16_t> port_{};
+private:
+  std::chrono::milliseconds timeout_{ default_timeout };
+  std::optional<std::string> nameserver_{};
+  std::optional<std::uint16_t> port_{};
 };
 } // namespace couchbase

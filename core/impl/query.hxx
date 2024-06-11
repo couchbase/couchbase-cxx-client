@@ -24,7 +24,9 @@
 namespace couchbase::core::impl
 {
 core::operations::query_request
-build_query_request(std::string statement, std::optional<std::string> query_context, query_options::built options);
+build_query_request(std::string statement,
+                    std::optional<std::string> query_context,
+                    query_options::built options);
 
 query_result
 build_result(operations::query_response& resp);

@@ -23,13 +23,14 @@ namespace tao::json
 {
 template<>
 struct traits<couchbase::core::transactions::transaction_operation_failed> {
-    template<template<typename...> class Traits>
-    static void assign(tao::json::basic_value<Traits>& v, const couchbase::core::transactions::transaction_operation_failed& ctx)
-    {
-        v["error_class"] = fmt::format("{}", ctx.ec());
-        v["retry"] = ctx.should_retry();
-        v["rollback"] = ctx.should_rollback();
-        v["to_raise"] = fmt::format("{}", ctx.to_raise());
-    }
+  template<template<typename...> class Traits>
+  static void assign(tao::json::basic_value<Traits>& v,
+                     const couchbase::core::transactions::transaction_operation_failed& ctx)
+  {
+    v["error_class"] = fmt::format("{}", ctx.ec());
+    v["retry"] = ctx.should_retry();
+    v["rollback"] = ctx.should_rollback();
+    v["to_raise"] = fmt::format("{}", ctx.to_raise());
+  }
 };
 } // namespace tao::json

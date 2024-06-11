@@ -27,37 +27,37 @@ namespace couchbase::core::protocol
 
 class cluster_map_change_notification_request_body
 {
-  public:
-    static const inline server_opcode opcode = server_opcode::cluster_map_change_notification;
+public:
+  static const inline server_opcode opcode = server_opcode::cluster_map_change_notification;
 
-  private:
-    std::uint32_t protocol_revision_{};
-    std::string bucket_{};
-    std::optional<topology::configuration> config_{};
-    std::optional<std::string_view> config_text_;
+private:
+  std::uint32_t protocol_revision_{};
+  std::string bucket_{};
+  std::optional<topology::configuration> config_{};
+  std::optional<std::string_view> config_text_;
 
-  public:
-    [[nodiscard]] std::uint32_t protocol_revision() const
-    {
-        return protocol_revision_;
-    }
+public:
+  [[nodiscard]] std::uint32_t protocol_revision() const
+  {
+    return protocol_revision_;
+  }
 
-    [[nodiscard]] const std::string& bucket() const
-    {
-        return bucket_;
-    }
+  [[nodiscard]] const std::string& bucket() const
+  {
+    return bucket_;
+  }
 
-    [[nodiscard]] std::optional<topology::configuration> config()
-    {
-        return config_;
-    }
+  [[nodiscard]] std::optional<topology::configuration> config()
+  {
+    return config_;
+  }
 
-    [[nodiscard]] const std::optional<std::string_view>& config_text() const
-    {
-        return config_text_;
-    }
+  [[nodiscard]] const std::optional<std::string_view>& config_text() const
+  {
+    return config_text_;
+  }
 
-    bool parse(const header_buffer& header, const std::vector<std::byte>& body, const cmd_info& info);
+  bool parse(const header_buffer& header, const std::vector<std::byte>& body, const cmd_info& info);
 };
 
 } // namespace couchbase::core::protocol

@@ -28,52 +28,52 @@ namespace couchbase::core
 {
 class development_profile : public config_profile
 {
-  public:
-    void apply(couchbase::core::cluster_options& opts) override
-    {
-        opts.key_value_timeout = std::chrono::seconds(20);
-        opts.key_value_durable_timeout = std::chrono::seconds(20);
-        opts.connect_timeout = std::chrono::seconds(20);
-        opts.view_timeout = std::chrono::minutes(2);
-        opts.query_timeout = std::chrono::minutes(2);
-        opts.analytics_timeout = std::chrono::minutes(2);
-        opts.search_timeout = std::chrono::minutes(2);
-        opts.management_timeout = std::chrono::minutes(2);
+public:
+  void apply(couchbase::core::cluster_options& opts) override
+  {
+    opts.key_value_timeout = std::chrono::seconds(20);
+    opts.key_value_durable_timeout = std::chrono::seconds(20);
+    opts.connect_timeout = std::chrono::seconds(20);
+    opts.view_timeout = std::chrono::minutes(2);
+    opts.query_timeout = std::chrono::minutes(2);
+    opts.analytics_timeout = std::chrono::minutes(2);
+    opts.search_timeout = std::chrono::minutes(2);
+    opts.management_timeout = std::chrono::minutes(2);
 
-        // C++SDK specific
-        opts.dns_config = couchbase::core::io::dns::dns_config{
-            opts.dns_config.nameserver(),
-            opts.dns_config.port(),
-            std::chrono::seconds(20), // timeout to make DNS-SRV query
-        };
-        opts.resolve_timeout = std::chrono::seconds(20);  // timeout to resolve hostnames
-        opts.bootstrap_timeout = std::chrono::minutes(2); // overall timeout to bootstrap
-    }
+    // C++SDK specific
+    opts.dns_config = couchbase::core::io::dns::dns_config{
+      opts.dns_config.nameserver(),
+      opts.dns_config.port(),
+      std::chrono::seconds(20), // timeout to make DNS-SRV query
+    };
+    opts.resolve_timeout = std::chrono::seconds(20);  // timeout to resolve hostnames
+    opts.bootstrap_timeout = std::chrono::minutes(2); // overall timeout to bootstrap
+  }
 };
 
 config_profiles::config_profiles() noexcept
 {
-    // add all known profiles (above) to the map
-    register_profile<development_profile>("wan_development");
+  // add all known profiles (above) to the map
+  register_profile<development_profile>("wan_development");
 }
 
 void
 config_profiles::apply(std::string_view profile_name, couchbase::core::cluster_options& opts)
 {
-    const std::lock_guard<std::mutex> lock(mut_);
-    auto it = profiles_.find(profile_name);
-    if (it != profiles_.end()) {
-        it->second->apply(opts);
-    } else {
-        throw std::invalid_argument(fmt::format("unknown profile '{}'", profile_name));
-    }
+  const std::lock_guard<std::mutex> lock(mut_);
+  auto it = profiles_.find(profile_name);
+  if (it != profiles_.end()) {
+    it->second->apply(opts);
+  } else {
+    throw std::invalid_argument(fmt::format("unknown profile '{}'", profile_name));
+  }
 }
 
 config_profiles&
 known_profiles()
 {
-    static config_profiles profiles{};
-    return profiles;
+  static config_profiles profiles{};
+  return profiles;
 }
 
 } // namespace couchbase::core

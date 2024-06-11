@@ -23,17 +23,18 @@ namespace couchbase
 static std::vector<search_numeric_range>
 map_ranges(const core::operations::search_response::search_facet& facet)
 {
-    std::vector<search_numeric_range> ranges;
-    ranges.reserve(facet.numeric_ranges.size());
+  std::vector<search_numeric_range> ranges;
+  ranges.reserve(facet.numeric_ranges.size());
 
-    for (const auto& range : facet.numeric_ranges) {
-        ranges.emplace_back(range.name, range.min, range.max, range.count);
-    }
+  for (const auto& range : facet.numeric_ranges) {
+    ranges.emplace_back(range.name, range.min, range.max, range.count);
+  }
 
-    return ranges;
+  return ranges;
 }
 
-internal_numeric_range_facet_result::internal_numeric_range_facet_result(const core::operations::search_response::search_facet& facet)
+internal_numeric_range_facet_result::internal_numeric_range_facet_result(
+  const core::operations::search_response::search_facet& facet)
   : name_{ facet.name }
   , field_{ facet.field }
   , total_{ facet.total }
@@ -46,35 +47,36 @@ internal_numeric_range_facet_result::internal_numeric_range_facet_result(const c
 auto
 internal_numeric_range_facet_result::name() const -> const std::string&
 {
-    return name_;
+  return name_;
 }
 auto
 internal_numeric_range_facet_result::field() const -> const std::string&
 {
-    return field_;
+  return field_;
 }
 
 auto
 internal_numeric_range_facet_result::total() const -> std::uint64_t
 {
-    return total_;
+  return total_;
 }
 
 auto
 internal_numeric_range_facet_result::missing() const -> std::uint64_t
 {
-    return missing_;
+  return missing_;
 }
 
 auto
 internal_numeric_range_facet_result::other() const -> std::uint64_t
 {
-    return other_;
+  return other_;
 }
 
 auto
-internal_numeric_range_facet_result::numeric_ranges() const -> const std::vector<search_numeric_range>&
+internal_numeric_range_facet_result::numeric_ranges() const
+  -> const std::vector<search_numeric_range>&
 {
-    return ranges_;
+  return ranges_;
 }
 } // namespace couchbase

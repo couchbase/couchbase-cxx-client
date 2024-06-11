@@ -29,67 +29,69 @@ namespace couchbase::core::protocol
 {
 
 topology::configuration
-parse_config(std::string_view input, std::string_view endpoint_address, std::uint16_t endpoint_port);
+parse_config(std::string_view input,
+             std::string_view endpoint_address,
+             std::uint16_t endpoint_port);
 
 class get_cluster_config_response_body
 {
-  public:
-    static const inline client_opcode opcode = client_opcode::get_cluster_config;
+public:
+  static const inline client_opcode opcode = client_opcode::get_cluster_config;
 
-  private:
-    topology::configuration config_{};
-    std::optional<std::string_view> config_text_;
+private:
+  topology::configuration config_{};
+  std::optional<std::string_view> config_text_;
 
-  public:
-    [[nodiscard]] topology::configuration&& config()
-    {
-        return std::move(config_);
-    }
+public:
+  [[nodiscard]] topology::configuration&& config()
+  {
+    return std::move(config_);
+  }
 
-    [[nodiscard]] const std::optional<std::string_view>& config_text() const
-    {
-        return config_text_;
-    }
+  [[nodiscard]] const std::optional<std::string_view>& config_text() const
+  {
+    return config_text_;
+  }
 
-    bool parse(key_value_status_code status,
-               const header_buffer& header,
-               std::uint8_t framing_extras_size,
-               std::uint16_t key_size,
-               std::uint8_t extras_size,
-               const std::vector<std::byte>& body,
-               const cmd_info& info);
+  bool parse(key_value_status_code status,
+             const header_buffer& header,
+             std::uint8_t framing_extras_size,
+             std::uint16_t key_size,
+             std::uint8_t extras_size,
+             const std::vector<std::byte>& body,
+             const cmd_info& info);
 };
 
 class get_cluster_config_request_body
 {
-  public:
-    using response_body_type = get_cluster_config_response_body;
-    static const inline client_opcode opcode = client_opcode::get_cluster_config;
+public:
+  using response_body_type = get_cluster_config_response_body;
+  static const inline client_opcode opcode = client_opcode::get_cluster_config;
 
-    [[nodiscard]] const std::string& key() const
-    {
-        return empty_string;
-    }
+  [[nodiscard]] const std::string& key() const
+  {
+    return empty_string;
+  }
 
-    [[nodiscard]] const auto& framing_extras() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& framing_extras() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] const auto& extras() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& extras() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] const auto& value() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& value() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] std::size_t size() const
-    {
-        return 0;
-    }
+  [[nodiscard]] std::size_t size() const
+  {
+    return 0;
+  }
 };
 
 } // namespace couchbase::core::protocol

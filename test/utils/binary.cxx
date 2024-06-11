@@ -22,6 +22,6 @@ namespace test::utils
 [[nodiscard]] std::string
 to_string(const std::vector<std::byte>& input)
 {
-    return { reinterpret_cast<const char*>(input.data()), input.size() };
+  return { reinterpret_cast<const char*>(input.data()), input.size() };
 }
 } // namespace test::utils

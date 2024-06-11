@@ -27,16 +27,16 @@ namespace couchbase
  * @committed
  */
 enum class query_status {
-    running,
-    success,
-    errors,
-    completed,
-    stopped,
-    timeout,
-    closed,
-    fatal,
-    aborted,
-    unknown,
+  running,
+  success,
+  errors,
+  completed,
+  stopped,
+  timeout,
+  closed,
+  fatal,
+  aborted,
+  unknown,
 };
 
 } // namespace couchbase

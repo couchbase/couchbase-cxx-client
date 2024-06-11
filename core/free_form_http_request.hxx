@@ -37,54 +37,55 @@ class request_span;
 namespace couchbase::core
 {
 enum class http_service_type {
-    management,
-    capi,
-    n1ql,
-    search,
-    analytics,
+  management,
+  capi,
+  n1ql,
+  search,
+  analytics,
 };
 
 class http_request
 {
-  public:
-    http_service_type service;
-    std::string method{};
-    std::string endpoint{};
-    std::string path{};
-    std::string username{};
-    std::string password{};
-    std::vector<std::byte> body{};
-    std::map<std::string, std::string> headers{};
-    std::string content_type{};
-    bool is_idempotent{};
-    std::string unique_id{};
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
-    std::chrono::milliseconds timeout{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{};
+public:
+  http_service_type service;
+  std::string method{};
+  std::string endpoint{};
+  std::string path{};
+  std::string username{};
+  std::string password{};
+  std::vector<std::byte> body{};
+  std::map<std::string, std::string> headers{};
+  std::string content_type{};
+  bool is_idempotent{};
+  std::string unique_id{};
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
+  std::chrono::milliseconds timeout{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{};
 
-    struct {
-        std::string user{};
-    } internal{};
+  struct {
+    std::string user{};
+  } internal{};
 };
 
 class http_response_impl;
 
 class http_response
 {
-  public:
-    http_response();
+public:
+  http_response();
 
-    auto endpoint() -> std::string;
-    auto status_code() -> std::uint32_t;
-    auto content_length() -> std::size_t;
+  auto endpoint() -> std::string;
+  auto status_code() -> std::uint32_t;
+  auto content_length() -> std::size_t;
 
-    auto body() -> std::vector<std::byte>;
-    auto close() -> std::error_code;
+  auto body() -> std::vector<std::byte>;
+  auto close() -> std::error_code;
 
-  private:
-    std::shared_ptr<http_response_impl> impl_;
+private:
+  std::shared_ptr<http_response_impl> impl_;
 };
 
-using free_form_http_request_callback = utils::movable_function<void(http_response response, std::error_code ec)>;
+using free_form_http_request_callback =
+  utils::movable_function<void(http_response response, std::error_code ec)>;
 
 } // namespace couchbase::core

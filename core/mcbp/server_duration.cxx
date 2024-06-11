@@ -24,17 +24,17 @@ namespace couchbase::core::mcbp
 auto
 encode_server_duration(std::chrono::microseconds duration) -> std::uint16_t
 {
-    auto encoded = std::pow(static_cast<double>(duration.count()) * 2, 1.0 / 1.74);
-    if (encoded > 65535) {
-        return 65535;
-    }
-    return static_cast<std::uint16_t>(encoded);
+  auto encoded = std::pow(static_cast<double>(duration.count()) * 2, 1.0 / 1.74);
+  if (encoded > 65535) {
+    return 65535;
+  }
+  return static_cast<std::uint16_t>(encoded);
 }
 
 auto
 decode_server_duration(std::uint16_t encoded) -> std::chrono::microseconds
 {
-    auto decoded = std::pow(static_cast<double>(encoded), 1.74) / 2;
-    return std::chrono::microseconds{ static_cast<std::uint64_t>(decoded) };
+  auto decoded = std::pow(static_cast<double>(encoded), 1.74) / 2;
+  return std::chrono::microseconds{ static_cast<std::uint64_t>(decoded) };
 }
 } // namespace couchbase::core::mcbp

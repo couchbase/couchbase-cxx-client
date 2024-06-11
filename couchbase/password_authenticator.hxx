@@ -23,25 +23,25 @@ namespace couchbase
 {
 class password_authenticator
 {
-  public:
-    password_authenticator(std::string username, std::string password)
-      : username_{ std::move(username) }
-      , password_{ std::move(password) }
-    {
-    }
+public:
+  password_authenticator(std::string username, std::string password)
+    : username_{ std::move(username) }
+    , password_{ std::move(password) }
+  {
+  }
 
-    static auto ldap_compatible(std::string username, std::string password) -> password_authenticator
-    {
-        auto result = password_authenticator(std::move(username), std::move(password));
-        result.ldap_compatible_ = true;
-        return result;
-    }
+  static auto ldap_compatible(std::string username, std::string password) -> password_authenticator
+  {
+    auto result = password_authenticator(std::move(username), std::move(password));
+    result.ldap_compatible_ = true;
+    return result;
+  }
 
-  private:
-    std::string username_;
-    std::string password_;
-    bool ldap_compatible_{ false };
+private:
+  std::string username_;
+  std::string password_;
+  bool ldap_compatible_{ false };
 
-    friend class cluster_options;
+  friend class cluster_options;
 };
 } // namespace couchbase

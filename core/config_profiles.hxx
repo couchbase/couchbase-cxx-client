@@ -29,25 +29,25 @@ namespace couchbase::core
 // this class just registers the known profiles defined above, and allows access to them.
 class config_profiles
 {
-  private:
-    std::map<std::string, std::shared_ptr<config_profile>, std::less<>> profiles_;
-    mutable std::mutex mut_;
+private:
+  std::map<std::string, std::shared_ptr<config_profile>, std::less<>> profiles_;
+  mutable std::mutex mut_;
 
-  public:
-    config_profiles() noexcept;
+public:
+  config_profiles() noexcept;
 
-    void apply(std::string_view profile_name, couchbase::core::cluster_options& opts);
+  void apply(std::string_view profile_name, couchbase::core::cluster_options& opts);
 
-    template<typename T, typename... Args>
-    void register_profile(const std::string& name, Args... args)
-    {
-        // This will just add it, doesn't look to see if it is overwriting an existing profile.
-        // TODO: perhaps add a template Args param?
-        // TODO: should we make this thread-safe?   Easy enough here, but we'd need to make the
-        //   singleton thread-safe too.
-        const std::scoped_lock lock(mut_);
-        profiles_.emplace(std::make_pair(name, std::make_shared<T>(args...)));
-    }
+  template<typename T, typename... Args>
+  void register_profile(const std::string& name, Args... args)
+  {
+    // This will just add it, doesn't look to see if it is overwriting an existing profile.
+    // TODO: perhaps add a template Args param?
+    // TODO: should we make this thread-safe?   Easy enough here, but we'd need to make the
+    //   singleton thread-safe too.
+    const std::scoped_lock lock(mut_);
+    profiles_.emplace(std::make_pair(name, std::make_shared<T>(args...)));
+  }
 };
 
 config_profiles&

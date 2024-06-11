@@ -24,9 +24,9 @@ namespace couchbase::core::operations::management
 {
 
 struct eventing_problem {
-    std::uint64_t code{};
-    std::string name{};
-    std::string description{};
+  std::uint64_t code{};
+  std::string name{};
+  std::string description{};
 };
 
 } // namespace couchbase::core::operations::management

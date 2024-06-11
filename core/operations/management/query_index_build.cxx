@@ -29,64 +29,69 @@ template<typename Range>
 std::string
 quote_and_join_strings(const Range& values, const std::string& sep)
 {
-    std::stringstream stream;
-    auto sentinel = std::end(values);
-    if (auto it = std::begin(values); it != sentinel) {
-        stream << '`' << *it << '`';
-        ++it;
-        while (it != sentinel) {
-            stream << sep << '`' << *it << '`';
-            ++it;
-        }
+  std::stringstream stream;
+  auto sentinel = std::end(values);
+  if (auto it = std::begin(values); it != sentinel) {
+    stream << '`' << *it << '`';
+    ++it;
+    while (it != sentinel) {
+      stream << sep << '`' << *it << '`';
+      ++it;
     }
-    return stream.str();
+  }
+  return stream.str();
 }
 
 std::error_code
-query_index_build_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+query_index_build_request::encode_to(encoded_request_type& encoded,
+                                     http_context& /* context */) const
 {
-    if (!utils::check_query_management_request(*this)) {
-        return errc::common::invalid_argument;
-    }
-    auto keyspace = core::utils::build_keyspace(*this);
-    std::string statement = fmt::format(R"(BUILD INDEX ON {} ({}))", keyspace, quote_and_join_strings(index_names, ","));
-    encoded.headers["content-type"] = "application/json";
-    tao::json::value body{ { "statement", statement }, { "client_context_id", encoded.client_context_id } };
-    if (query_ctx.has_value()) {
-        body["query_context"] = query_ctx.value();
-    }
-    encoded.method = "POST";
-    encoded.path = "/query/service";
-    encoded.body = utils::json::generate(body);
-    return {};
+  if (!utils::check_query_management_request(*this)) {
+    return errc::common::invalid_argument;
+  }
+  auto keyspace = core::utils::build_keyspace(*this);
+  std::string statement =
+    fmt::format(R"(BUILD INDEX ON {} ({}))", keyspace, quote_and_join_strings(index_names, ","));
+  encoded.headers["content-type"] = "application/json";
+  tao::json::value body{ { "statement", statement },
+                         { "client_context_id", encoded.client_context_id } };
+  if (query_ctx.has_value()) {
+    body["query_context"] = query_ctx.value();
+  }
+  encoded.method = "POST";
+  encoded.path = "/query/service";
+  encoded.body = utils::json::generate(body);
+  return {};
 }
 
 query_index_build_response
-query_index_build_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+query_index_build_request::make_response(error_context::http&& ctx,
+                                         const encoded_response_type& encoded) const
 {
-    query_index_build_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        tao::json::value payload{};
-        try {
-            payload = utils::json::parse(encoded.body.data());
-        } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = errc::common::parsing_failure;
-            return response;
-        }
-        response.status = payload.at("status").get_string();
-        if (response.status != "success") {
-            std::optional<std::error_code> common_ec{};
-            for (const auto& entry : payload.at("errors").get_array()) {
-                query_index_build_response::query_problem error;
-                error.code = entry.at("code").get_unsigned();
-                error.message = entry.at("msg").get_string();
-                response.errors.emplace_back(error);
-                common_ec = management::extract_common_query_error_code(error.code, error.message);
-            }
-
-            response.ctx.ec = common_ec.value_or(extract_common_error_code(encoded.status_code, encoded.body.data()));
-        }
+  query_index_build_response response{ std::move(ctx) };
+  if (!response.ctx.ec) {
+    tao::json::value payload{};
+    try {
+      payload = utils::json::parse(encoded.body.data());
+    } catch (const tao::pegtl::parse_error&) {
+      response.ctx.ec = errc::common::parsing_failure;
+      return response;
     }
-    return response;
+    response.status = payload.at("status").get_string();
+    if (response.status != "success") {
+      std::optional<std::error_code> common_ec{};
+      for (const auto& entry : payload.at("errors").get_array()) {
+        query_index_build_response::query_problem error;
+        error.code = entry.at("code").get_unsigned();
+        error.message = entry.at("msg").get_string();
+        response.errors.emplace_back(error);
+        common_ec = management::extract_common_query_error_code(error.code, error.message);
+      }
+
+      response.ctx.ec =
+        common_ec.value_or(extract_common_error_code(encoded.status_code, encoded.body.data()));
+    }
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

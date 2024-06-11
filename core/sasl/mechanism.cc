@@ -27,19 +27,22 @@ namespace couchbase::core::sasl
 Mechanism
 select_mechanism(const std::vector<std::string>& available_mechanisms)
 {
-    // Search what we've got backends for
-    const std::vector<std::pair<std::string, Mechanism>> mechs = { { std::string{ "SCRAM-SHA512" }, Mechanism::SCRAM_SHA512 },
-                                                                   { std::string{ "SCRAM-SHA256" }, Mechanism::SCRAM_SHA256 },
-                                                                   { std::string{ "SCRAM-SHA1" }, Mechanism::SCRAM_SHA1 },
-                                                                   { std::string{ "PLAIN" }, Mechanism::PLAIN } };
+  // Search what we've got backends for
+  const std::vector<std::pair<std::string, Mechanism>> mechs = {
+    { std::string{ "SCRAM-SHA512" }, Mechanism::SCRAM_SHA512 },
+    { std::string{ "SCRAM-SHA256" }, Mechanism::SCRAM_SHA256 },
+    { std::string{ "SCRAM-SHA1" }, Mechanism::SCRAM_SHA1 },
+    { std::string{ "PLAIN" }, Mechanism::PLAIN }
+  };
 
-    for (const auto& [name, code] : mechs) {
-        if (std::find(available_mechanisms.begin(), available_mechanisms.end(), name) != available_mechanisms.end()) {
-            return code;
-        }
+  for (const auto& [name, code] : mechs) {
+    if (std::find(available_mechanisms.begin(), available_mechanisms.end(), name) !=
+        available_mechanisms.end()) {
+      return code;
     }
+  }
 
-    throw unknown_mechanism("unknown mechanism"); // TODO: avoid this exception
+  throw unknown_mechanism("unknown mechanism"); // TODO: avoid this exception
 }
 
 } // namespace couchbase::core::sasl

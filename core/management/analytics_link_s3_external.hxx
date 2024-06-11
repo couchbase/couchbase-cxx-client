@@ -27,43 +27,43 @@ namespace couchbase::core::management::analytics
  * An external analytics link which uses the AWS S3 service to access data.
  */
 struct s3_external_link {
-    /**
-     * The name of this link.
-     */
-    std::string link_name{};
+  /**
+   * The name of this link.
+   */
+  std::string link_name{};
 
-    /**
-     * The dataverse that this link belongs to.
-     */
-    std::string dataverse{};
+  /**
+   * The dataverse that this link belongs to.
+   */
+  std::string dataverse{};
 
-    /**
-     * AWS S3 access key ID
-     */
-    std::string access_key_id{};
+  /**
+   * AWS S3 access key ID
+   */
+  std::string access_key_id{};
 
-    /**
-     * AWS S3 secret key
-     */
-    std::string secret_access_key{};
+  /**
+   * AWS S3 secret key
+   */
+  std::string secret_access_key{};
 
-    /**
-     * AWS S3 token if temporary credentials are provided. Only available in 7.0+
-     */
-    std::optional<std::string> session_token{};
+  /**
+   * AWS S3 token if temporary credentials are provided. Only available in 7.0+
+   */
+  std::optional<std::string> session_token{};
 
-    /**
-     * AWS S3 region
-     */
-    std::string region{};
+  /**
+   * AWS S3 region
+   */
+  std::string region{};
 
-    /**
-     * AWS S3 service endpoint
-     */
-    std::optional<std::string> service_endpoint{};
+  /**
+   * AWS S3 service endpoint
+   */
+  std::optional<std::string> service_endpoint{};
 
-    [[nodiscard]] std::error_code validate() const;
+  [[nodiscard]] std::error_code validate() const;
 
-    [[nodiscard]] std::string encode() const;
+  [[nodiscard]] std::string encode() const;
 };
 } // namespace couchbase::core::management::analytics

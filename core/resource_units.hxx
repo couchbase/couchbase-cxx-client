@@ -20,7 +20,7 @@
 namespace couchbase
 {
 struct resource_unit_result {
-    std::uint16_t read_units{};
-    std::uint16_t write_units{};
+  std::uint16_t read_units{};
+  std::uint16_t write_units{};
 };
 } // namespace couchbase

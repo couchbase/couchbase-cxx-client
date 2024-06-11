@@ -25,30 +25,30 @@ namespace couchbase
 auto
 date_range_facet::encode() const -> encoded_search_facet
 {
-    encoded_search_facet built;
-    built.facet = {
-        { "field", field_ },
+  encoded_search_facet built;
+  built.facet = {
+    { "field", field_ },
+  };
+  if (size_) {
+    built.facet["size"] = size_.value();
+  }
+  if (ranges_.empty()) {
+    return { errc::common::invalid_argument };
+  }
+  tao::json::value ranges = tao::json::empty_array;
+  for (const auto& range : ranges_) {
+    tao::json::value entry = {
+      { "field", range.name() },
     };
-    if (size_) {
-        built.facet["size"] = size_.value();
+    if (const auto& start = range.start(); start.has_value()) {
+      entry["start"] = start.value();
     }
-    if (ranges_.empty()) {
-        return { errc::common::invalid_argument };
+    if (const auto& end = range.end(); end.has_value()) {
+      entry["end"] = end.value();
     }
-    tao::json::value ranges = tao::json::empty_array;
-    for (const auto& range : ranges_) {
-        tao::json::value entry = {
-            { "field", range.name() },
-        };
-        if (const auto& start = range.start(); start.has_value()) {
-            entry["start"] = start.value();
-        }
-        if (const auto& end = range.end(); end.has_value()) {
-            entry["end"] = end.value();
-        }
-        ranges.emplace_back(entry);
-    }
-    built.facet["date_ranges"] = ranges;
-    return built;
+    ranges.emplace_back(entry);
+  }
+  built.facet["date_ranges"] = ranges;
+  return built;
 }
 } // namespace couchbase

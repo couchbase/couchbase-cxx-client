@@ -25,53 +25,58 @@
 namespace couchbase::core::management::rbac
 {
 struct role {
-    std::string name;
-    std::optional<std::string> bucket{};
-    std::optional<std::string> scope{};
-    std::optional<std::string> collection{};
+  std::string name;
+  std::optional<std::string> bucket{};
+  std::optional<std::string> scope{};
+  std::optional<std::string> collection{};
 };
 
 struct role_and_description : public role {
-    std::string display_name{};
-    std::string description{};
+  std::string display_name{};
+  std::string description{};
 };
 
 struct origin {
-    std::string type;
-    std::optional<std::string> name{};
+  std::string type;
+  std::optional<std::string> name{};
 };
 
 struct role_and_origins : public role {
-    std::vector<origin> origins{};
+  std::vector<origin> origins{};
 };
 
 struct user {
-    std::string username;
-    std::optional<std::string> display_name{};
-    // names of the groups
-    std::set<std::string> groups{};
-    // only roles assigned directly to the user (not inherited from groups)
-    std::vector<role> roles{};
-    // write only, it is not populated on reads
-    std::optional<std::string> password{};
+  std::string username;
+  std::optional<std::string> display_name{};
+  // names of the groups
+  std::set<std::string> groups{};
+  // only roles assigned directly to the user (not inherited from groups)
+  std::vector<role> roles{};
+  // write only, it is not populated on reads
+  std::optional<std::string> password{};
 };
 
-enum class auth_domain { unknown, local, external };
+enum class auth_domain {
+  unknown,
+  local,
+  external
+};
 
 struct user_and_metadata : public user {
-    auth_domain domain{ auth_domain::unknown };
-    // all roles associated with the user, including information about whether each role is innate or inherited from a group
-    std::vector<role_and_origins> effective_roles{};
-    // timestamp of last password change
-    std::optional<std::string> password_changed{};
-    std::set<std::string> external_groups{};
+  auth_domain domain{ auth_domain::unknown };
+  // all roles associated with the user, including information about whether each role is innate or
+  // inherited from a group
+  std::vector<role_and_origins> effective_roles{};
+  // timestamp of last password change
+  std::optional<std::string> password_changed{};
+  std::set<std::string> external_groups{};
 };
 
 struct group {
-    std::string name;
-    std::optional<std::string> description{};
-    std::vector<role> roles{};
-    std::optional<std::string> ldap_group_reference{};
+  std::string name;
+  std::optional<std::string> description{};
+  std::vector<role> roles{};
+  std::optional<std::string> ldap_group_reference{};
 };
 
 } // namespace couchbase::core::management::rbac

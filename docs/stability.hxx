@@ -21,13 +21,17 @@
  * @page stability_committed Committed Interfaces
  * @brief List of the committed interfaces.
  *
- * A committed interface is the highest grade of stability, and is the preferred attribute level for consumers of the library.
+ * A committed interface is the highest grade of stability, and is the preferred attribute level for
+ * consumers of the library.
  *
- * Couchbase tries at best effort to preserve committed interfaces between major versions, and changes to committed interfaces within a
- * major version is highly exceptional. Such exceptions may include situations where the interface may lead to data corruption, security
- * holes etc. Explicitly note that backwards-compatible extensions are always allowed since they don't break old code.
+ * Couchbase tries at best effort to preserve committed interfaces between major versions, and
+ * changes to committed interfaces within a major version is highly exceptional. Such exceptions may
+ * include situations where the interface may lead to data corruption, security holes etc.
+ * Explicitly note that backwards-compatible extensions are always allowed since they don't break
+ * old code.
  *
- * @note This is the default interface level for an API, unless the API is specifically marked otherwise.
+ * @note This is the default interface level for an API, unless the API is specifically marked
+ * otherwise.
  */
 
 /**
@@ -49,9 +53,10 @@
  *
  * No commitment is made about the interface.
  *
- * It may be changed in incompatible ways and dropped from one release to another. The difference between an uncommitted interface and a
- * @ref stability_volatile "volatile" interface is its maturity and likelihood of being changed. Uncommitted interfaces may mature into @ref
- * stability_committed "committed" interfaces.
+ * It may be changed in incompatible ways and dropped from one release to another. The difference
+ * between an uncommitted interface and a
+ * @ref stability_volatile "volatile" interface is its maturity and likelihood of being changed.
+ * Uncommitted interfaces may mature into @ref stability_committed "committed" interfaces.
  */
 
 /**
@@ -60,9 +65,10 @@
  *
  * This is internal API and may not be relied on at all.
  *
- * Similar to @ref stability_volatile "volatile" interfaces, no promises are made about these kinds of interfaces and they change or may
- * vanish at every point in time. But in addition to that, those interfaces are explicitly marked as being designed for internal use and not
- * for external consumption in the first place.
+ * Similar to @ref stability_volatile "volatile" interfaces, no promises are made about these kinds
+ * of interfaces and they change or may vanish at every point in time. But in addition to that,
+ * those interfaces are explicitly marked as being designed for internal use and not for external
+ * consumption in the first place.
  *
  * @warning Use at your own risk
  */
@@ -71,13 +77,17 @@
  * @page api_stability Interfaces by Stability
  * @brief Indexes of the API grouped by stability.
  *
- * We use interface stability taxonomy to categorize publicly visible API. See the following pages for more details:
+ * We use interface stability taxonomy to categorize publicly visible API. See the following pages
+ * for more details:
  *
- * @subpage stability_committed considered as generally available (GA) API and should be preferred in production applications.
+ * @subpage stability_committed considered as generally available (GA) API and should be preferred
+ * in production applications.
  *
  * @subpage stability_volatile might be changed in the future, and eventually promoted to committed.
  *
- * @subpage stability_uncommitted should not be used in production application, and the library does not give any guarantees on them.
+ * @subpage stability_uncommitted should not be used in production application, and the library does
+ * not give any guarantees on them.
  *
- * @subpage stability_internal like volatile, but they might be used by other project maintained by Couchbase.
+ * @subpage stability_internal like volatile, but they might be used by other project maintained by
+ * Couchbase.
  */

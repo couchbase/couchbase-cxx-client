@@ -26,27 +26,29 @@
 
 template<>
 struct fmt::formatter<couchbase::core::topology::collections_manifest> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
+
+  template<typename FormatContext>
+  auto format(const couchbase::core::topology::collections_manifest& manifest,
+              FormatContext& ctx) const
+  {
+    std::vector<std::string> collections;
+    for (const auto& scope : manifest.scopes) {
+      for (const auto& collection : scope.collections) {
+        collections.emplace_back(
+          fmt::format("{}.{}={}", scope.name, collection.name, collection.uid));
+      }
     }
 
-    template<typename FormatContext>
-    auto format(const couchbase::core::topology::collections_manifest& manifest, FormatContext& ctx) const
-    {
-        std::vector<std::string> collections;
-        for (const auto& scope : manifest.scopes) {
-            for (const auto& collection : scope.collections) {
-                collections.emplace_back(fmt::format("{}.{}={}", scope.name, collection.name, collection.uid));
-            }
-        }
-
-        return format_to(ctx.out(),
-                         R"(#<manifest:{} uid={}, collections({})=[{}]>)",
-                         couchbase::core::uuid::to_string(manifest.id),
-                         manifest.uid,
-                         collections.size(),
-                         couchbase::core::utils::join_strings(collections, ", "));
-    }
+    return format_to(ctx.out(),
+                     R"(#<manifest:{} uid={}, collections({})=[{}]>)",
+                     couchbase::core::uuid::to_string(manifest.id),
+                     manifest.uid,
+                     collections.size(),
+                     couchbase::core::utils::join_strings(collections, ", "));
+  }
 };

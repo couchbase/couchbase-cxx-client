@@ -26,11 +26,11 @@ namespace couchbase
 void
 subdoc::replace::encode(core::impl::subdoc::command_bundle& bundle) const
 {
-    bundle.emplace_back({
-      path_.empty() ? core::impl::subdoc::opcode::set_doc : core::impl::subdoc::opcode::replace,
-      path_,
-      value_,
-      core::impl::subdoc::build_mutate_in_path_flags(xattr_, false, expand_macro_),
-    });
+  bundle.emplace_back({
+    path_.empty() ? core::impl::subdoc::opcode::set_doc : core::impl::subdoc::opcode::replace,
+    path_,
+    value_,
+    core::impl::subdoc::build_mutate_in_path_flags(xattr_, false, expand_macro_),
+  });
 }
 } // namespace couchbase

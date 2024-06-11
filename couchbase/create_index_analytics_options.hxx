@@ -28,68 +28,69 @@ namespace couchbase
 {
 class create_index_analytics_options : public common_options<create_index_analytics_options>
 {
-  public:
-    /**
-     * Ignore error if the index already exists.
-     *
-     * defaults to `false`
-     *
-     * @param ignore_if_exists
-     * @return reference to this object, for use in chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto ignore_if_exists(bool ignore_if_exists) -> create_index_analytics_options&
-    {
-        ignore_if_exists_ = ignore_if_exists;
-        return self();
-    }
+public:
+  /**
+   * Ignore error if the index already exists.
+   *
+   * defaults to `false`
+   *
+   * @param ignore_if_exists
+   * @return reference to this object, for use in chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto ignore_if_exists(bool ignore_if_exists) -> create_index_analytics_options&
+  {
+    ignore_if_exists_ = ignore_if_exists;
+    return self();
+  }
 
-    /**
-     * The name of the dataverse the index should be created into
-     *
-     * @param dataverse_name
-     * @return reference to this object, for use in chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto dataverse_name(std::string dataverse_name) -> create_index_analytics_options&
-    {
-        dataverse_name_ = std::move(dataverse_name);
-        return self();
-    }
+  /**
+   * The name of the dataverse the index should be created into
+   *
+   * @param dataverse_name
+   * @return reference to this object, for use in chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto dataverse_name(std::string dataverse_name) -> create_index_analytics_options&
+  {
+    dataverse_name_ = std::move(dataverse_name);
+    return self();
+  }
 
-    /**
-     * Immutable value object representing consistent options.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    struct built : public common_options<create_index_analytics_options>::built {
-        bool ignore_if_exists{};
-        std::optional<std::string> dataverse_name{};
-    };
+  /**
+   * Immutable value object representing consistent options.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  struct built : public common_options<create_index_analytics_options>::built {
+    bool ignore_if_exists{};
+    std::optional<std::string> dataverse_name{};
+  };
 
-    /**
-     * Validates options and returns them as an immutable value.
-     *
-     * @return consistent options as an immutable value
-     *
-     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options(), ignore_if_exists_, dataverse_name_ };
-    }
+  /**
+   * Validates options and returns them as an immutable value.
+   *
+   * @return consistent options as an immutable value
+   *
+   * @exception std::system_error with code errc::common::invalid_argument if the options are not
+   * valid
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options(), ignore_if_exists_, dataverse_name_ };
+  }
 
-  private:
-    bool ignore_if_exists_{ false };
-    std::optional<std::string> dataverse_name_{};
+private:
+  bool ignore_if_exists_{ false };
+  std::optional<std::string> dataverse_name_{};
 };
 
 /**

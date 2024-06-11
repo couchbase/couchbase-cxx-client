@@ -24,9 +24,10 @@
 
 namespace couchbase::core::mcbp
 {
-// unsupported_frame is used to include an unsupported frame type in the packet data to enable further processing if needed.
+// unsupported_frame is used to include an unsupported frame type in the packet data to enable
+// further processing if needed.
 struct unsupported_frame {
-    frame_type type;
-    std::vector<std::byte> data;
+  frame_type type;
+  std::vector<std::byte> data;
 };
 } // namespace couchbase::core::mcbp

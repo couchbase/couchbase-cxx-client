@@ -35,58 +35,60 @@ observe_seqno_response_body::parse(key_value_status_code status,
                                    const std::vector<std::byte>& body,
                                    const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == key_value_status_code::success) {
-        using offset_type = std::vector<std::byte>::difference_type;
-        offset_type offset = framing_extras_size + extras_size + key_size;
+  Expects(header[1] == static_cast<std::byte>(opcode));
+  if (status == key_value_status_code::success) {
+    using offset_type = std::vector<std::byte>::difference_type;
+    offset_type offset = framing_extras_size + extras_size + key_size;
 
-        bool failover = std::to_integer<std::uint8_t>(body[static_cast<std::size_t>(offset)]) != 0U;
-        ++offset;
+    bool failover = std::to_integer<std::uint8_t>(body[static_cast<std::size_t>(offset)]) != 0U;
+    ++offset;
 
-        memcpy(&partition_id_, body.data() + offset, sizeof(partition_id_));
-        partition_id_ = utils::byte_swap(partition_id_);
-        offset += static_cast<offset_type>(sizeof(partition_id_));
+    memcpy(&partition_id_, body.data() + offset, sizeof(partition_id_));
+    partition_id_ = utils::byte_swap(partition_id_);
+    offset += static_cast<offset_type>(sizeof(partition_id_));
 
-        memcpy(&partition_uuid_, body.data() + offset, sizeof(partition_uuid_));
-        partition_uuid_ = utils::byte_swap(partition_uuid_);
-        offset += static_cast<offset_type>(sizeof(partition_uuid_));
+    memcpy(&partition_uuid_, body.data() + offset, sizeof(partition_uuid_));
+    partition_uuid_ = utils::byte_swap(partition_uuid_);
+    offset += static_cast<offset_type>(sizeof(partition_uuid_));
 
-        memcpy(&last_persisted_sequence_number_, body.data() + offset, sizeof(last_persisted_sequence_number_));
-        last_persisted_sequence_number_ = utils::byte_swap(last_persisted_sequence_number_);
-        offset += static_cast<offset_type>(sizeof(last_persisted_sequence_number_));
+    memcpy(&last_persisted_sequence_number_,
+           body.data() + offset,
+           sizeof(last_persisted_sequence_number_));
+    last_persisted_sequence_number_ = utils::byte_swap(last_persisted_sequence_number_);
+    offset += static_cast<offset_type>(sizeof(last_persisted_sequence_number_));
 
-        memcpy(&current_sequence_number_, body.data() + offset, sizeof(current_sequence_number_));
-        current_sequence_number_ = utils::byte_swap(current_sequence_number_);
-        offset += static_cast<offset_type>(sizeof(current_sequence_number_));
+    memcpy(&current_sequence_number_, body.data() + offset, sizeof(current_sequence_number_));
+    current_sequence_number_ = utils::byte_swap(current_sequence_number_);
+    offset += static_cast<offset_type>(sizeof(current_sequence_number_));
 
-        if (failover) {
-            std::uint64_t field{};
+    if (failover) {
+      std::uint64_t field{};
 
-            memcpy(&field, body.data() + offset, sizeof(field));
-            old_partition_uuid_.emplace(utils::byte_swap(field));
-            offset += static_cast<offset_type>(sizeof(field));
+      memcpy(&field, body.data() + offset, sizeof(field));
+      old_partition_uuid_.emplace(utils::byte_swap(field));
+      offset += static_cast<offset_type>(sizeof(field));
 
-            memcpy(&field, body.data() + offset, sizeof(field));
-            last_received_sequence_number_.emplace(utils::byte_swap(field));
-        }
+      memcpy(&field, body.data() + offset, sizeof(field));
+      last_received_sequence_number_.emplace(utils::byte_swap(field));
     }
-    return false;
+  }
+  return false;
 }
 
 void
 observe_seqno_request_body::partition_uuid(const uint64_t& uuid)
 {
-    partition_uuid_ = uuid;
+  partition_uuid_ = uuid;
 }
 
 void
 observe_seqno_request_body::fill_body()
 {
-    std::vector<std::byte>::size_type offset = 0;
+  std::vector<std::byte>::size_type offset = 0;
 
-    value_.resize(sizeof(std::uint64_t));
+  value_.resize(sizeof(std::uint64_t));
 
-    std::uint64_t field = utils::byte_swap(partition_uuid_);
-    memcpy(value_.data() + offset, &field, sizeof(field));
+  std::uint64_t field = utils::byte_swap(partition_uuid_);
+  memcpy(value_.data() + offset, &field, sizeof(field));
 }
 } // namespace couchbase::core::protocol

@@ -25,30 +25,31 @@ namespace couchbase::core::sasl::mechanism::plain
 
 class ClientBackend : public MechanismBackend
 {
-  public:
-    ClientBackend(GetUsernameCallback user_cb, GetPasswordCallback password_cb, ClientContext& ctx)
-      : MechanismBackend(std::move(user_cb), std::move(password_cb), ctx)
-    {
-    }
+public:
+  ClientBackend(GetUsernameCallback user_cb, GetPasswordCallback password_cb, ClientContext& ctx)
+    : MechanismBackend(std::move(user_cb), std::move(password_cb), ctx)
+  {
+  }
 
-    [[nodiscard]] std::string_view get_name() const override
-    {
-        return "PLAIN";
-    }
+  [[nodiscard]] std::string_view get_name() const override
+  {
+    return "PLAIN";
+  }
 
-    std::pair<error, std::string_view> start() override;
+  std::pair<error, std::string_view> start() override;
 
-    std::pair<error, std::string_view> step(std::string_view) override
-    {
-        throw std::logic_error("cb::sasl::mechanism::plain::ClientBackend::step(): Plain auth should not call step");
-    }
+  std::pair<error, std::string_view> step(std::string_view) override
+  {
+    throw std::logic_error(
+      "cb::sasl::mechanism::plain::ClientBackend::step(): Plain auth should not call step");
+  }
 
-  private:
-    /**
-     * Where to store the encoded string:
-     * "\0username\0password"
-     */
-    std::vector<char> buffer;
+private:
+  /**
+   * Where to store the encoded string:
+   * "\0username\0password"
+   */
+  std::vector<char> buffer;
 };
 
 } // namespace couchbase::core::sasl::mechanism::plain

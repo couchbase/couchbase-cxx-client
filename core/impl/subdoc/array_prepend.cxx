@@ -27,11 +27,11 @@ namespace couchbase
 void
 subdoc::array_prepend::encode(core::impl::subdoc::command_bundle& bundle) const
 {
-    bundle.emplace_back({
-      core::impl::subdoc::opcode::array_push_first,
-      path_,
-      core::impl::subdoc::join_values(values_),
-      core::impl::subdoc::build_mutate_in_path_flags(xattr_, create_path_, false),
-    });
+  bundle.emplace_back({
+    core::impl::subdoc::opcode::array_push_first,
+    path_,
+    core::impl::subdoc::join_values(values_),
+    core::impl::subdoc::build_mutate_in_path_flags(xattr_, create_path_, false),
+  });
 }
 } // namespace couchbase

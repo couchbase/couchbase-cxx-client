@@ -33,53 +33,54 @@ namespace couchbase
  *
  * @snippet test_unit_search.cxx search-geo-polygon
  *
- * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-geo-bounded-polygon.html server documentation
+ * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-geo-bounded-polygon.html
+ * server documentation
  *
  * @since 1.0.0
  * @committed
  */
 class geo_polygon_query : public search_query
 {
-  public:
-    /**
-     * Create a new geo polygon query.
-     *
-     * @param points the points specifying corners of geo polygon.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    explicit geo_polygon_query(std::vector<geo_point> points)
-      : polygon_points_{ std::move(points) }
-    {
-    }
+public:
+  /**
+   * Create a new geo polygon query.
+   *
+   * @param points the points specifying corners of geo polygon.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  explicit geo_polygon_query(std::vector<geo_point> points)
+    : polygon_points_{ std::move(points) }
+  {
+  }
 
-    /**
-     * If a field is specified, only terms in that field will be matched.
-     *
-     * @param field_name name of the field to be matched
-     *
-     * @return this query for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto field(std::string field_name) -> geo_polygon_query&
-    {
-        field_ = std::move(field_name);
-        return *this;
-    }
+  /**
+   * If a field is specified, only terms in that field will be matched.
+   *
+   * @param field_name name of the field to be matched
+   *
+   * @return this query for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto field(std::string field_name) -> geo_polygon_query&
+  {
+    field_ = std::move(field_name);
+    return *this;
+  }
 
-    /**
-     * @return encoded representation of the query.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto encode() const -> encoded_search_query override;
+  /**
+   * @return encoded representation of the query.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto encode() const -> encoded_search_query override;
 
-  private:
-    std::vector<geo_point> polygon_points_;
-    std::optional<std::string> field_{};
+private:
+  std::vector<geo_point> polygon_points_;
+  std::optional<std::string> field_{};
 };
 } // namespace couchbase

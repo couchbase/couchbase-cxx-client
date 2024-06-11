@@ -30,18 +30,18 @@ operation_consumer::operation_consumer(std::shared_ptr<operation_queue> parent)
 auto
 operation_consumer::queue() -> std::shared_ptr<operation_queue>
 {
-    return parent_;
+  return parent_;
 }
 
 void
 operation_consumer::close()
 {
-    parent_->close_consumer(shared_from_this());
+  parent_->close_consumer(shared_from_this());
 }
 
 auto
 operation_consumer::pop() -> std::shared_ptr<queue_request>
 {
-    return parent_->pop(shared_from_this());
+  return parent_->pop(shared_from_this());
 }
 } // namespace couchbase::core::mcbp

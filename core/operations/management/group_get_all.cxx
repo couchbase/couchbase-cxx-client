@@ -26,32 +26,33 @@ namespace couchbase::core::operations::management
 std::error_code
 group_get_all_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
-    encoded.method = "GET";
-    encoded.path = "/settings/rbac/groups";
-    encoded.headers["content-type"] = "application/x-www-form-urlencoded";
-    return {};
+  encoded.method = "GET";
+  encoded.path = "/settings/rbac/groups";
+  encoded.headers["content-type"] = "application/x-www-form-urlencoded";
+  return {};
 }
 
 group_get_all_response
-group_get_all_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+group_get_all_request::make_response(error_context::http&& ctx,
+                                     const encoded_response_type& encoded) const
 {
-    group_get_all_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        if (encoded.status_code != 200) {
-            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
-            return response;
-        }
-        tao::json::value payload{};
-        try {
-            payload = utils::json::parse(encoded.body.data());
-        } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = errc::common::parsing_failure;
-            return response;
-        }
-        for (const auto& entry : payload.get_array()) {
-            response.groups.emplace_back(entry.as<couchbase::core::management::rbac::group>());
-        }
+  group_get_all_response response{ std::move(ctx) };
+  if (!response.ctx.ec) {
+    if (encoded.status_code != 200) {
+      response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+      return response;
     }
-    return response;
+    tao::json::value payload{};
+    try {
+      payload = utils::json::parse(encoded.body.data());
+    } catch (const tao::pegtl::parse_error&) {
+      response.ctx.ec = errc::common::parsing_failure;
+      return response;
+    }
+    for (const auto& entry : payload.get_array()) {
+      response.groups.emplace_back(entry.as<couchbase::core::management::rbac::group>());
+    }
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

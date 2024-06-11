@@ -27,11 +27,11 @@ namespace couchbase
 void
 subdoc::counter::encode(core::impl::subdoc::command_bundle& bundle) const
 {
-    bundle.emplace_back({
-      core::impl::subdoc::opcode::counter,
-      path_,
-      codec::tao_json_serializer::serialize(delta_),
-      core::impl::subdoc::build_mutate_in_path_flags(xattr_, create_path_, false),
-    });
+  bundle.emplace_back({
+    core::impl::subdoc::opcode::counter,
+    path_,
+    codec::tao_json_serializer::serialize(delta_),
+    core::impl::subdoc::build_mutate_in_path_flags(xattr_, create_path_, false),
+  });
 }
 } // namespace couchbase

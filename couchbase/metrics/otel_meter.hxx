@@ -36,96 +36,109 @@ namespace couchbase::metrics
 
 class otel_sync_histogram
 {
-  public:
-    otel_sync_histogram(nostd::shared_ptr<metrics_api::Histogram<long>> histogram_counter)
-      : histogram_counter_(histogram_counter)
-    {
+public:
+  otel_sync_histogram(nostd::shared_ptr<metrics_api::Histogram<long>> histogram_counter)
+    : histogram_counter_(histogram_counter)
+  {
+  }
+  void record(uint64_t value,
+              const opentelemetry::common::KeyValueIterable& tags,
+              opentelemetry::context::Context& ctx)
+  {
+    // overflow
+    if (value > LONG_MAX) {
+      value = LONG_MAX;
     }
-    void record(uint64_t value, const opentelemetry::common::KeyValueIterable& tags, opentelemetry::context::Context& ctx)
-    {
-        // overflow
-        if (value > LONG_MAX) {
-            value = LONG_MAX;
-        }
-        long lvalue = static_cast<long>(value);
-        histogram_counter_->Record(lvalue, tags, ctx);
-    }
+    long lvalue = static_cast<long>(value);
+    histogram_counter_->Record(lvalue, tags, ctx);
+  }
 
-  private:
-    nostd::shared_ptr<metrics_api::Histogram<long>> histogram_counter_;
-    std::mutex mutex_;
+private:
+  nostd::shared_ptr<metrics_api::Histogram<long>> histogram_counter_;
+  std::mutex mutex_;
 };
 
 class otel_value_recorder : public couchbase::metrics::value_recorder
 {
-  public:
-    explicit otel_value_recorder(nostd::shared_ptr<metrics_api::Histogram<long>> histogram_counter,
-                                 const std::map<std::string, std::string>& tags)
-      : histogram_counter_(histogram_counter)
-      , tags_(tags)
-    {
+public:
+  explicit otel_value_recorder(nostd::shared_ptr<metrics_api::Histogram<long>> histogram_counter,
+                               const std::map<std::string, std::string>& tags)
+    : histogram_counter_(histogram_counter)
+    , tags_(tags)
+  {
+  }
+  void record_value(std::int64_t value) override
+  {
+    if (value > LONG_MAX) {
+      value = LONG_MAX;
     }
-    void record_value(std::int64_t value) override
-    {
-        if (value > LONG_MAX) {
-            value = LONG_MAX;
-        }
-        long lvalue = static_cast<long>(value);
-        histogram_counter_->Record(value, opentelemetry::common::KeyValueIterableView<decltype(tags_)>{ tags_ }, context_);
-    }
+    long lvalue = static_cast<long>(value);
+    histogram_counter_->Record(
+      value, opentelemetry::common::KeyValueIterableView<decltype(tags_)>{ tags_ }, context_);
+  }
 
-    const std::map<std::string, std::string> tags()
-    {
-        return tags_;
-    }
+  const std::map<std::string, std::string> tags()
+  {
+    return tags_;
+  }
 
-    nostd::shared_ptr<metrics_api::Histogram<long>> histogram_counter()
-    {
-        return histogram_counter_;
-    }
+  nostd::shared_ptr<metrics_api::Histogram<long>> histogram_counter()
+  {
+    return histogram_counter_;
+  }
 
-  private:
-    nostd::shared_ptr<metrics_api::Histogram<long>> histogram_counter_;
-    const std::map<std::string, std::string> tags_;
-    opentelemetry::context::Context context_{};
-    std::mutex mutex_;
+private:
+  nostd::shared_ptr<metrics_api::Histogram<long>> histogram_counter_;
+  const std::map<std::string, std::string> tags_;
+  opentelemetry::context::Context context_{};
+  std::mutex mutex_;
 };
 
 class otel_meter : public couchbase::metrics::meter
 {
-  public:
-    explicit otel_meter(nostd::shared_ptr<metrics_api::Meter> meter)
-      : meter_(meter)
-    {
-    }
+public:
+  explicit otel_meter(nostd::shared_ptr<metrics_api::Meter> meter)
+    : meter_(meter)
+  {
+  }
 
-    std::shared_ptr<value_recorder> get_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags) override
-    {
-        // first look up the histogram, in case we already have it...
-        std::scoped_lock<std::mutex> lock(mutex_);
-        auto it = recorders_.equal_range(name);
-        if (it.first == it.second) {
-            // this name isn't associated with any histogram, so make one and return it.
-            // Note we'd like to make one with more buckets than default, given the range of
-            // response times we'd like to display (queries vs kv for instance), but otel
-            // api doesn't seem to allow this.
-            return recorders_.insert({ name, std::make_shared<otel_value_recorder>(meter_->CreateLongHistogram(name, "", "us"), tags) })
-              ->second;
-        }
-        // so it is already, lets see if we already have one with those tags, or need
-        // to make a new one (using the histogram we already have).
-        for (auto itr = it.first; itr != it.second; itr++) {
-            if (tags == itr->second->tags()) {
-                return itr->second;
-            }
-        }
-        // if you are here, we need to add one with these tags and the histogram associated with the name.
-        return recorders_.insert({ name, std::make_shared<otel_value_recorder>(it.first->second->histogram_counter(), tags) })->second;
+  std::shared_ptr<value_recorder> get_value_recorder(
+    const std::string& name,
+    const std::map<std::string, std::string>& tags) override
+  {
+    // first look up the histogram, in case we already have it...
+    std::scoped_lock<std::mutex> lock(mutex_);
+    auto it = recorders_.equal_range(name);
+    if (it.first == it.second) {
+      // this name isn't associated with any histogram, so make one and return it.
+      // Note we'd like to make one with more buckets than default, given the range of
+      // response times we'd like to display (queries vs kv for instance), but otel
+      // api doesn't seem to allow this.
+      return recorders_
+        .insert({ name,
+                  std::make_shared<otel_value_recorder>(meter_->CreateLongHistogram(name, "", "us"),
+                                                        tags) })
+        ->second;
     }
+    // so it is already, lets see if we already have one with those tags, or need
+    // to make a new one (using the histogram we already have).
+    for (auto itr = it.first; itr != it.second; itr++) {
+      if (tags == itr->second->tags()) {
+        return itr->second;
+      }
+    }
+    // if you are here, we need to add one with these tags and the histogram associated with the
+    // name.
+    return recorders_
+      .insert(
+        { name,
+          std::make_shared<otel_value_recorder>(it.first->second->histogram_counter(), tags) })
+      ->second;
+  }
 
-  private:
-    nostd::shared_ptr<metrics_api::Meter> meter_;
-    std::mutex mutex_;
-    std::multimap<std::string, std::shared_ptr<otel_value_recorder>> recorders_;
+private:
+  nostd::shared_ptr<metrics_api::Meter> meter_;
+  std::mutex mutex_;
+  std::multimap<std::string, std::shared_ptr<otel_value_recorder>> recorders_;
 };
 } // namespace couchbase::metrics

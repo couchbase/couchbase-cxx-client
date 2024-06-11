@@ -20,8 +20,8 @@
 namespace couchbase
 {
 enum class ip_protocol {
-    any,
-    force_ipv4,
-    force_ipv6,
+  any,
+  force_ipv4,
+  force_ipv6,
 };
 } // namespace couchbase

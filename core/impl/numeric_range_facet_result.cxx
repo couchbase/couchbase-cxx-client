@@ -29,36 +29,36 @@ numeric_range_facet_result::numeric_range_facet_result(internal_numeric_range_fa
 auto
 numeric_range_facet_result::name() const -> const std::string&
 {
-    return internal_->name();
+  return internal_->name();
 }
 
 auto
 numeric_range_facet_result::field() const -> const std::string&
 {
-    return internal_->field();
+  return internal_->field();
 }
 
 auto
 numeric_range_facet_result::total() const -> std::uint64_t
 {
-    return internal_->total();
+  return internal_->total();
 }
 
 auto
 numeric_range_facet_result::missing() const -> std::uint64_t
 {
-    return internal_->missing();
+  return internal_->missing();
 }
 
 auto
 numeric_range_facet_result::other() const -> std::uint64_t
 {
-    return internal_->other();
+  return internal_->other();
 }
 
 auto
 numeric_range_facet_result::numeric_ranges() const -> const std::vector<search_numeric_range>&
 {
-    return internal_->numeric_ranges();
+  return internal_->numeric_ranges();
 }
 } // namespace couchbase

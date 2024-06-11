@@ -25,17 +25,18 @@ namespace couchbase
 {
 class internal_search_meta_data
 {
-  public:
-    explicit internal_search_meta_data(const core::operations::search_response::search_meta_data& meta);
+public:
+  explicit internal_search_meta_data(
+    const core::operations::search_response::search_meta_data& meta);
 
-    [[nodiscard]] auto client_context_id() const -> const std::string&;
-    [[nodiscard]] auto errors() const -> const std::map<std::string, std::string>&;
-    [[nodiscard]] auto metrics() const -> const couchbase::search_metrics&;
+  [[nodiscard]] auto client_context_id() const -> const std::string&;
+  [[nodiscard]] auto errors() const -> const std::map<std::string, std::string>&;
+  [[nodiscard]] auto metrics() const -> const couchbase::search_metrics&;
 
-  private:
-    std::string client_context_id_{};
-    couchbase::search_metrics metrics_{};
-    std::map<std::string, std::string> errors_{};
+private:
+  std::string client_context_id_{};
+  couchbase::search_metrics metrics_{};
+  std::map<std::string, std::string> errors_{};
 };
 
 } // namespace couchbase

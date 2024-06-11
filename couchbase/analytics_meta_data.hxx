@@ -37,119 +37,119 @@ namespace couchbase
  */
 class analytics_meta_data
 {
-  public:
-    /**
-     * @since 1.0.0
-     * @internal
-     */
-    analytics_meta_data() = default;
+public:
+  /**
+   * @since 1.0.0
+   * @internal
+   */
+  analytics_meta_data() = default;
 
-    /**
-     * @since 1.0.0
-     * @volatile
-     */
-    analytics_meta_data(std::string request_id,
-                        std::string client_context_id,
-                        analytics_status status,
-                        std::vector<analytics_warning> warnings,
-                        analytics_metrics metrics,
-                        std::optional<codec::binary> signature)
-      : request_id_{ std::move(request_id) }
-      , client_context_id_{ std::move(client_context_id) }
-      , status_{ status }
-      , warnings_{ std::move(warnings) }
-      , metrics_{ std::move(metrics) }
-      , signature_{ std::move(signature) }
-    {
-    }
+  /**
+   * @since 1.0.0
+   * @volatile
+   */
+  analytics_meta_data(std::string request_id,
+                      std::string client_context_id,
+                      analytics_status status,
+                      std::vector<analytics_warning> warnings,
+                      analytics_metrics metrics,
+                      std::optional<codec::binary> signature)
+    : request_id_{ std::move(request_id) }
+    , client_context_id_{ std::move(client_context_id) }
+    , status_{ status }
+    , warnings_{ std::move(warnings) }
+    , metrics_{ std::move(metrics) }
+    , signature_{ std::move(signature) }
+  {
+  }
 
-    /**
-     * Returns the request identifier string of the query request
-     *
-     * @return The request identifier string
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto request_id() const -> const std::string&
-    {
-        return request_id_;
-    }
+  /**
+   * Returns the request identifier string of the query request
+   *
+   * @return The request identifier string
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto request_id() const -> const std::string&
+  {
+    return request_id_;
+  }
 
-    /**
-     * Returns the client context identifier string set on the query request.
-     *
-     * @return client context identifier
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto client_context_id() const -> const std::string&
-    {
-        return client_context_id_;
-    }
+  /**
+   * Returns the client context identifier string set on the query request.
+   *
+   * @return client context identifier
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto client_context_id() const -> const std::string&
+  {
+    return client_context_id_;
+  }
 
-    /**
-     * Returns the raw query execution status as returned by the query engine
-     *
-     * @return query execution status
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto status() const -> analytics_status
-    {
-        return status_;
-    }
+  /**
+   * Returns the raw query execution status as returned by the query engine
+   *
+   * @return query execution status
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto status() const -> analytics_status
+  {
+    return status_;
+  }
 
-    /**
-     * Returns any warnings returned by the analytics engine.
-     *
-     * It returns an empty vector if no warnings were returned.
-     *
-     * @return vector of the reported warnings.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto warnings() const -> const std::vector<analytics_warning>&
-    {
-        return warnings_;
-    }
+  /**
+   * Returns any warnings returned by the analytics engine.
+   *
+   * It returns an empty vector if no warnings were returned.
+   *
+   * @return vector of the reported warnings.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto warnings() const -> const std::vector<analytics_warning>&
+  {
+    return warnings_;
+  }
 
-    /**
-     * Returns the {@link analytics_metrics} as returned by the analytics engine if enabled.
-     *
-     * @return metrics
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto metrics() const -> const analytics_metrics&
-    {
-        return metrics_;
-    }
+  /**
+   * Returns the {@link analytics_metrics} as returned by the analytics engine if enabled.
+   *
+   * @return metrics
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto metrics() const -> const analytics_metrics&
+  {
+    return metrics_;
+  }
 
-    /**
-     * Returns the signature as returned by the analytics engine.
-     *
-     * @return optional byte string containing JSON encoded signature
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto signature() const -> const std::optional<codec::binary>&
-    {
-        return signature_;
-    }
+  /**
+   * Returns the signature as returned by the analytics engine.
+   *
+   * @return optional byte string containing JSON encoded signature
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto signature() const -> const std::optional<codec::binary>&
+  {
+    return signature_;
+  }
 
-  private:
-    std::string request_id_{};
-    std::string client_context_id_{};
-    analytics_status status_{};
-    std::vector<analytics_warning> warnings_{};
-    analytics_metrics metrics_{};
-    std::optional<codec::binary> signature_{};
+private:
+  std::string request_id_{};
+  std::string client_context_id_{};
+  analytics_status status_{};
+  std::vector<analytics_warning> warnings_{};
+  analytics_metrics metrics_{};
+  std::optional<codec::binary> signature_{};
 };
 
 } // namespace couchbase

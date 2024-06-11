@@ -30,31 +30,31 @@ namespace couchbase
  */
 class search_sort_score : public search_sort
 {
-  public:
-    search_sort_score() = default;
+public:
+  search_sort_score() = default;
 
-    explicit search_sort_score(bool descending)
-      : search_sort{ descending }
-    {
-    }
+  explicit search_sort_score(bool descending)
+    : search_sort{ descending }
+  {
+  }
 
-    /**
-     * Set the sorting direction.
-     *
-     * @param desc `true` for descending order, `false` for ascending
-     * @return pointer to this
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto descending(bool desc) -> search_sort_score&;
+  /**
+   * Set the sorting direction.
+   *
+   * @param desc `true` for descending order, `false` for ascending
+   * @return pointer to this
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto descending(bool desc) -> search_sort_score&;
 
-    /**
-     * @return encoded representation of the search facet.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto encode() const -> encoded_search_sort override;
+  /**
+   * @return encoded representation of the search facet.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto encode() const -> encoded_search_sort override;
 };
 } // namespace couchbase

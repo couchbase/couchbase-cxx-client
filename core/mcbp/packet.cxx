@@ -30,63 +30,77 @@ namespace couchbase::core::mcbp
 std::string
 packet::debug_string() const
 {
-    std::vector<char> out;
+  std::vector<char> out;
+  fmt::format_to(
+    std::back_insert_iterator(out),
+    "mcbp::packet{{magic:{:02x}({}), command:{:02x}({}), datatype:{:02x}, status:{:02x}({}), "
+    "vbucket:{}({:04x}), "
+    "opaque:{:08x}, cas:{:08x}, collection_id:{}({:08x})\nkey: {:a}\nvalue: {:a}\nextras: {:a}",
+    static_cast<std::uint8_t>(magic_),
+    magic_,
+    static_cast<std::uint8_t>(command_),
+    command_,
+    datatype_,
+    static_cast<std::uint16_t>(status_),
+    status_,
+    vbucket_,
+    vbucket_,
+    opaque_,
+    cas_,
+    collection_id_,
+    collection_id_,
+    spdlog::to_hex(key_),
+    spdlog::to_hex(value_),
+    spdlog::to_hex(extras_));
+
+  if (durability_level_frame_) {
     fmt::format_to(std::back_insert_iterator(out),
-                   "mcbp::packet{{magic:{:02x}({}), command:{:02x}({}), datatype:{:02x}, status:{:02x}({}), vbucket:{}({:04x}), "
-                   "opaque:{:08x}, cas:{:08x}, collection_id:{}({:08x})\nkey: {:a}\nvalue: {:a}\nextras: {:a}",
-                   static_cast<std::uint8_t>(magic_),
-                   magic_,
-                   static_cast<std::uint8_t>(command_),
-                   command_,
-                   datatype_,
-                   static_cast<std::uint16_t>(status_),
-                   status_,
-                   vbucket_,
-                   vbucket_,
-                   opaque_,
-                   cas_,
-                   collection_id_,
-                   collection_id_,
-                   spdlog::to_hex(key_),
-                   spdlog::to_hex(value_),
-                   spdlog::to_hex(extras_));
-
-    if (durability_level_frame_) {
-        fmt::format_to(
-          std::back_insert_iterator(out), "\ndurability level: {:02x}", static_cast<std::uint8_t>(durability_level_frame_->level));
-        if (durability_timeout_frame_) {
-            fmt::format_to(std::back_insert_iterator(out), "\ndurability timeout: {}ms", durability_timeout_frame_->timeout.count());
-        }
+                   "\ndurability level: {:02x}",
+                   static_cast<std::uint8_t>(durability_level_frame_->level));
+    if (durability_timeout_frame_) {
+      fmt::format_to(std::back_insert_iterator(out),
+                     "\ndurability timeout: {}ms",
+                     durability_timeout_frame_->timeout.count());
     }
+  }
 
-    if (preserve_expiry_frame_) {
-        fmt::format_to(std::back_insert_iterator(out), "\npreserve expiry: true");
+  if (preserve_expiry_frame_) {
+    fmt::format_to(std::back_insert_iterator(out), "\npreserve expiry: true");
+  }
+
+  if (stream_id_frame_) {
+    fmt::format_to(std::back_insert_iterator(out), "\nstream id: {}", stream_id_frame_->stream_id);
+  }
+
+  if (open_tracing_frame_) {
+    fmt::format_to(std::back_insert_iterator(out),
+                   "\ntrace context: {:a}",
+                   spdlog::to_hex(open_tracing_frame_->trace_context));
+  }
+
+  if (server_duration_frame_) {
+    fmt::format_to(std::back_insert_iterator(out),
+                   "\nserver duration: {}ms",
+                   server_duration_frame_->server_duration.count());
+  }
+
+  if (user_impersonation_frame_) {
+    fmt::format_to(std::back_insert_iterator(out),
+                   "\nuser: {:a}",
+                   spdlog::to_hex(user_impersonation_frame_->user));
+  }
+
+  if (!unsupported_frames_.empty()) {
+    fmt::format_to(std::back_insert_iterator(out), "\nunsupported frames:");
+    for (const auto& frame : unsupported_frames_) {
+      fmt::format_to(std::back_insert_iterator(out),
+                     "\nframe type: {}, data: {:n}",
+                     frame.type,
+                     spdlog::to_hex(frame.data));
     }
+  }
 
-    if (stream_id_frame_) {
-        fmt::format_to(std::back_insert_iterator(out), "\nstream id: {}", stream_id_frame_->stream_id);
-    }
-
-    if (open_tracing_frame_) {
-        fmt::format_to(std::back_insert_iterator(out), "\ntrace context: {:a}", spdlog::to_hex(open_tracing_frame_->trace_context));
-    }
-
-    if (server_duration_frame_) {
-        fmt::format_to(std::back_insert_iterator(out), "\nserver duration: {}ms", server_duration_frame_->server_duration.count());
-    }
-
-    if (user_impersonation_frame_) {
-        fmt::format_to(std::back_insert_iterator(out), "\nuser: {:a}", spdlog::to_hex(user_impersonation_frame_->user));
-    }
-
-    if (!unsupported_frames_.empty()) {
-        fmt::format_to(std::back_insert_iterator(out), "\nunsupported frames:");
-        for (const auto& frame : unsupported_frames_) {
-            fmt::format_to(std::back_insert_iterator(out), "\nframe type: {}, data: {:n}", frame.type, spdlog::to_hex(frame.data));
-        }
-    }
-
-    fmt::format_to(std::back_insert_iterator(out), "}}");
-    return { out.begin(), out.end() };
+  fmt::format_to(std::back_insert_iterator(out), "}}");
+  return { out.begin(), out.end() };
 }
 } // namespace couchbase::core::mcbp

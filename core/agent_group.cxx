@@ -29,114 +29,121 @@ namespace couchbase::core
 {
 class agent_group_impl
 {
-  public:
-    agent_group_impl(asio::io_context& io, agent_group_config config)
-      : io_{ io }
-      , config_(std::move(config))
-      , cluster_agent_({
-          config_.shim,
-          config_.user_agent,
-          config_.default_retry_strategy,
-          config_.seed,
-          config_.key_value,
-        })
-    {
-        CB_LOG_DEBUG("SDK version: {}", meta::sdk_id());
-        CB_LOG_DEBUG("creating new agent group: {}", config_.to_string());
+public:
+  agent_group_impl(asio::io_context& io, agent_group_config config)
+    : io_{ io }
+    , config_(std::move(config))
+    , cluster_agent_({
+        config_.shim,
+        config_.user_agent,
+        config_.default_retry_strategy,
+        config_.seed,
+        config_.key_value,
+      })
+  {
+    CB_LOG_DEBUG("SDK version: {}", meta::sdk_id());
+    CB_LOG_DEBUG("creating new agent group: {}", config_.to_string());
+  }
+
+  auto open_bucket(const std::string& bucket_name) -> std::error_code
+  {
+    std::scoped_lock lock(bound_agents_mutex_);
+
+    if (auto existing_agent = get_agent(bucket_name)) {
+      return {};
     }
 
-    auto open_bucket(const std::string& bucket_name) -> std::error_code
-    {
-        std::scoped_lock lock(bound_agents_mutex_);
+    bound_agents_.try_emplace(bucket_name,
+                              agent{
+                                io_,
+                                {
+                                  config_.shim,
+                                  bucket_name,
+                                  config_.user_agent,
+                                  config_.default_retry_strategy,
+                                  config_.seed,
+                                  config_.key_value,
+                                },
+                              });
 
-        if (auto existing_agent = get_agent(bucket_name)) {
-            return {};
-        }
+    return {};
+  }
 
-        bound_agents_.try_emplace(bucket_name,
-                                  agent{
-                                    io_,
-                                    {
-                                      config_.shim,
-                                      bucket_name,
-                                      config_.user_agent,
-                                      config_.default_retry_strategy,
-                                      config_.seed,
-                                      config_.key_value,
-                                    },
-                                  });
+  auto get_agent(const std::string& bucket_name) -> tl::expected<agent, std::error_code>
+  {
+    std::scoped_lock lock(bound_agents_mutex_);
 
-        return {};
+    if (auto existing_agent = bound_agents_.find(bucket_name);
+        existing_agent != bound_agents_.end()) {
+      return existing_agent->second;
     }
+    return tl::make_unexpected(errc::common::bucket_not_found);
+  }
 
-    auto get_agent(const std::string& bucket_name) -> tl::expected<agent, std::error_code>
-    {
-        std::scoped_lock lock(bound_agents_mutex_);
+  auto close() -> std::error_code
+  {
+    return {};
+  }
 
-        if (auto existing_agent = bound_agents_.find(bucket_name); existing_agent != bound_agents_.end()) {
-            return existing_agent->second;
-        }
-        return tl::make_unexpected(errc::common::bucket_not_found);
-    }
+  auto n1ql_query(n1ql_query_options /* options */, n1ql_query_callback&& /* callback */)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    return {};
+  }
 
-    auto close() -> std::error_code
-    {
-        return {};
-    }
+  auto prepared_n1ql_query(n1ql_query_options /* options */, n1ql_query_callback&& /* callback */)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    return {};
+  }
 
-    auto n1ql_query(n1ql_query_options /* options */, n1ql_query_callback && /* callback */)
-      -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
-    {
-        return {};
-    }
+  auto analytics_query(analytics_query_options /* options */,
+                       analytics_query_callback&& /* callback */)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    return {};
+  }
 
-    auto prepared_n1ql_query(n1ql_query_options /* options */, n1ql_query_callback && /* callback */)
-      -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
-    {
-        return {};
-    }
+  auto search_query(search_query_options /* options */, search_query_callback&& /* callback */)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    return {};
+  }
 
-    auto analytics_query(analytics_query_options /* options */, analytics_query_callback && /* callback */)
-      -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
-    {
-        return {};
-    }
+  auto free_form_http_request(http_request /* request */,
+                              free_form_http_request_callback&& /* callback */)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    return {};
+  }
 
-    auto search_query(search_query_options /* options */, search_query_callback && /* callback */)
-      -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
-    {
-        return {};
-    }
+  auto wait_until_ready(
+    std::chrono::milliseconds /* timeout */,
+    wait_until_ready_options /* options */,
+    wait_until_ready_callback&&
+    /* callback */) -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    return {};
+  }
 
-    auto free_form_http_request(http_request /* request */, free_form_http_request_callback && /* callback */)
-      -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
-    {
-        return {};
-    }
+  auto ping(ping_options /* options */, ping_callback&& /* callback */)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    return {};
+  }
 
-    auto wait_until_ready(std::chrono::milliseconds /* timeout */, wait_until_ready_options /* options */, wait_until_ready_callback &&
-                          /* callback */) -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
-    {
-        return {};
-    }
+  auto diagnostics(diagnostics_options /* options */)
+    -> tl::expected<diagnostic_info, std::error_code>
+  {
+    return {};
+  }
 
-    auto ping(ping_options /* options */, ping_callback && /* callback */)
-      -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
-    {
-        return {};
-    }
-
-    auto diagnostics(diagnostics_options /* options */) -> tl::expected<diagnostic_info, std::error_code>
-    {
-        return {};
-    }
-
-  private:
-    asio::io_context& io_;
-    const agent_group_config config_;
-    cluster_agent cluster_agent_;
-    std::map<std::string, agent, std::less<>> bound_agents_{};
-    mutable std::recursive_mutex bound_agents_mutex_{};
+private:
+  asio::io_context& io_;
+  const agent_group_config config_;
+  cluster_agent cluster_agent_;
+  std::map<std::string, agent, std::less<>> bound_agents_{};
+  mutable std::recursive_mutex bound_agents_mutex_{};
 };
 
 agent_group::agent_group(asio::io_context& io, agent_group_config config)
@@ -147,72 +154,77 @@ agent_group::agent_group(asio::io_context& io, agent_group_config config)
 auto
 agent_group::open_bucket(const std::string& bucket_name) -> std::error_code
 {
-    return impl_->open_bucket(bucket_name);
+  return impl_->open_bucket(bucket_name);
 }
 
 auto
 agent_group::get_agent(const std::string& bucket_name) -> tl::expected<agent, std::error_code>
 {
-    return impl_->get_agent(bucket_name);
+  return impl_->get_agent(bucket_name);
 }
 
 auto
 agent_group::close() -> std::error_code
 {
-    return impl_->close();
+  return impl_->close();
 }
 
 auto
 agent_group::n1ql_query(n1ql_query_options options, n1ql_query_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-    return impl_->n1ql_query(std::move(options), std::move(callback));
+  return impl_->n1ql_query(std::move(options), std::move(callback));
 }
 
 auto
 agent_group::prepared_n1ql_query(n1ql_query_options options, n1ql_query_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-    return impl_->prepared_n1ql_query(std::move(options), std::move(callback));
+  return impl_->prepared_n1ql_query(std::move(options), std::move(callback));
 }
 
 auto
 agent_group::analytics_query(analytics_query_options options, analytics_query_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-    return impl_->analytics_query(std::move(options), std::move(callback));
+  return impl_->analytics_query(std::move(options), std::move(callback));
 }
 
 auto
 agent_group::search_query(search_query_options options, search_query_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-    return impl_->search_query(std::move(options), std::move(callback));
+  return impl_->search_query(std::move(options), std::move(callback));
 }
 
 auto
-agent_group::free_form_http_request(http_request request, free_form_http_request_callback&& callback)
+agent_group::free_form_http_request(http_request request,
+                                    free_form_http_request_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-    return impl_->free_form_http_request(std::move(request), std::move(callback));
+  return impl_->free_form_http_request(std::move(request), std::move(callback));
 }
 
 auto
-agent_group::wait_until_ready(std::chrono::milliseconds timeout, wait_until_ready_options options, wait_until_ready_callback&& callback)
+agent_group::wait_until_ready(std::chrono::milliseconds timeout,
+                              wait_until_ready_options options,
+                              wait_until_ready_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-    return impl_->wait_until_ready(timeout, std::move(options), std::move(callback));
+  return impl_->wait_until_ready(timeout, std::move(options), std::move(callback));
 }
 
 auto
-agent_group::ping(ping_options options, ping_callback&& callback) -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+agent_group::ping(ping_options options, ping_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-    return impl_->ping(std::move(options), std::move(callback));
+  return impl_->ping(std::move(options), std::move(callback));
 }
 
 auto
-agent_group::diagnostics(diagnostics_options options) -> tl::expected<diagnostic_info, std::error_code>
+agent_group::diagnostics(diagnostics_options options)
+  -> tl::expected<diagnostic_info, std::error_code>
 {
-    return impl_->diagnostics(options);
+  return impl_->diagnostics(options);
 }
 } // namespace couchbase::core

@@ -24,14 +24,14 @@ class collections_component_unit_test_api;
 
 class agent_unit_test_api
 {
-  public:
-    [[nodiscard]] auto collections() -> collections_component_unit_test_api;
+public:
+  [[nodiscard]] auto collections() -> collections_component_unit_test_api;
 
-  private:
-    friend class agent;
+private:
+  friend class agent;
 
-    explicit agent_unit_test_api(std::shared_ptr<agent_impl>);
+  explicit agent_unit_test_api(std::shared_ptr<agent_impl>);
 
-    std::shared_ptr<agent_impl> impl_;
+  std::shared_ptr<agent_impl> impl_;
 };
 } // namespace couchbase::core

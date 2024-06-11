@@ -22,52 +22,52 @@ namespace couchbase::core::mcbp::big_endian
 auto
 read_uint64(gsl::span<std::byte> buffer, std::size_t offset) -> std::uint64_t
 {
-    return (std::to_integer<std::uint64_t>(buffer[offset + 7])) |       //
-           (std::to_integer<std::uint64_t>(buffer[offset + 6]) << 8) |  //
-           (std::to_integer<std::uint64_t>(buffer[offset + 5]) << 16) | //
-           (std::to_integer<std::uint64_t>(buffer[offset + 4]) << 24) | //
-           (std::to_integer<std::uint64_t>(buffer[offset + 3]) << 32) | //
-           (std::to_integer<std::uint64_t>(buffer[offset + 2]) << 40) | //
-           (std::to_integer<std::uint64_t>(buffer[offset + 1]) << 48) | //
-           (std::to_integer<std::uint64_t>(buffer[offset + 0]) << 56);
+  return (std::to_integer<std::uint64_t>(buffer[offset + 7])) |       //
+         (std::to_integer<std::uint64_t>(buffer[offset + 6]) << 8) |  //
+         (std::to_integer<std::uint64_t>(buffer[offset + 5]) << 16) | //
+         (std::to_integer<std::uint64_t>(buffer[offset + 4]) << 24) | //
+         (std::to_integer<std::uint64_t>(buffer[offset + 3]) << 32) | //
+         (std::to_integer<std::uint64_t>(buffer[offset + 2]) << 40) | //
+         (std::to_integer<std::uint64_t>(buffer[offset + 1]) << 48) | //
+         (std::to_integer<std::uint64_t>(buffer[offset + 0]) << 56);
 }
 
 auto
 read_uint32(gsl::span<std::byte> buffer, std::size_t offset) -> std::uint32_t
 {
-    return (std::to_integer<std::uint32_t>(buffer[offset + 3])) |       //
-           (std::to_integer<std::uint32_t>(buffer[offset + 2]) << 8) |  //
-           (std::to_integer<std::uint32_t>(buffer[offset + 1]) << 16) | //
-           (std::to_integer<std::uint32_t>(buffer[offset + 0]) << 24);
+  return (std::to_integer<std::uint32_t>(buffer[offset + 3])) |       //
+         (std::to_integer<std::uint32_t>(buffer[offset + 2]) << 8) |  //
+         (std::to_integer<std::uint32_t>(buffer[offset + 1]) << 16) | //
+         (std::to_integer<std::uint32_t>(buffer[offset + 0]) << 24);
 }
 
 auto
 read_uint16(gsl::span<std::byte> buffer, std::size_t offset) -> std::uint16_t
 {
-    return static_cast<std::uint16_t>((std::to_integer<std::uint32_t>(buffer[offset + 1])) |
-                                      (std::to_integer<std::uint32_t>(buffer[offset + 0]) << 8));
+  return static_cast<std::uint16_t>((std::to_integer<std::uint32_t>(buffer[offset + 1])) |
+                                    (std::to_integer<std::uint32_t>(buffer[offset + 0]) << 8));
 }
 
 auto
 read_uint8(gsl::span<std::byte> buffer, std::size_t offset) -> std::uint8_t
 {
-    return std::to_integer<std::uint8_t>(buffer[offset]);
+  return std::to_integer<std::uint8_t>(buffer[offset]);
 }
 
 auto
 read(gsl::span<std::byte> buffer, std::size_t offset, std::size_t length) -> std::vector<std::byte>
 {
-    std::vector<std::byte> ret(length);
-    std::memcpy(ret.data(), buffer.data() + offset, length);
-    return ret;
+  std::vector<std::byte> ret(length);
+  std::memcpy(ret.data(), buffer.data() + offset, length);
+  return ret;
 }
 
 void
 put_uint32(gsl::span<std::byte> bytes, std::uint32_t value)
 {
-    bytes[0] = static_cast<std::byte>(value >> 24);
-    bytes[1] = static_cast<std::byte>(value >> 16);
-    bytes[2] = static_cast<std::byte>(value >> 8);
-    bytes[3] = static_cast<std::byte>(value);
+  bytes[0] = static_cast<std::byte>(value >> 24);
+  bytes[1] = static_cast<std::byte>(value >> 16);
+  bytes[2] = static_cast<std::byte>(value >> 8);
+  bytes[3] = static_cast<std::byte>(value);
 }
 } // namespace couchbase::core::mcbp::big_endian

@@ -36,51 +36,52 @@ class internal_search_row_locations;
  */
 class search_row_locations
 {
-  public:
-    /**
-     * @since 1.0.0
-     * @internal
-     */
-    explicit search_row_locations(internal_search_row_locations internal);
+public:
+  /**
+   * @since 1.0.0
+   * @internal
+   */
+  explicit search_row_locations(internal_search_row_locations internal);
 
-    /**
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto get(const std::string& field) const -> std::vector<search_row_location>;
+  /**
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto get(const std::string& field) const -> std::vector<search_row_location>;
 
-    /**
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto get(const std::string& field, const std::string& term) const -> std::vector<search_row_location>;
+  /**
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto get(const std::string& field,
+                         const std::string& term) const -> std::vector<search_row_location>;
 
-    /**
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto get_all() const -> std::vector<search_row_location>;
+  /**
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto get_all() const -> std::vector<search_row_location>;
 
-    /**
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto fields() const -> std::vector<std::string>;
+  /**
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto fields() const -> std::vector<std::string>;
 
-    /**
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto terms() const -> std::set<std::string>;
+  /**
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto terms() const -> std::set<std::string>;
 
-    /**
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto terms_for(const std::string& field) const -> std::vector<std::string>;
+  /**
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto terms_for(const std::string& field) const -> std::vector<std::string>;
 
-  private:
-    std::unique_ptr<internal_search_row_locations> internal_;
+private:
+  std::unique_ptr<internal_search_row_locations> internal_;
 };
 
 } // namespace couchbase

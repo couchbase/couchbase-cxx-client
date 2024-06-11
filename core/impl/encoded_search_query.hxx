@@ -22,8 +22,8 @@
 namespace couchbase
 {
 struct encoded_search_query {
-    std::error_code ec{};
-    tao::json::value query{};
+  std::error_code ec{};
+  tao::json::value query{};
 };
 
 } // namespace couchbase

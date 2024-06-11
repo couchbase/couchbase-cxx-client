@@ -20,13 +20,13 @@
 namespace couchbase::core::utils::json
 {
 enum class stream_control {
-    /**
-     * continue streaming rows
-     */
-    next_row,
-    /**
-     * stop streaming rows, but wait for complete meta
-     */
-    stop,
+  /**
+   * continue streaming rows
+   */
+  next_row,
+  /**
+   * stop streaming rows, but wait for complete meta
+   */
+  stop,
 };
 } // namespace couchbase::core::utils::json

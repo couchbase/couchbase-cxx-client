@@ -30,38 +30,38 @@ namespace couchbase::core
 static bool
 is_valid_collection_char(char ch)
 {
-    if (ch >= 'A' && ch <= 'Z') {
-        return true;
-    }
-    if (ch >= 'a' && ch <= 'z') {
-        return true;
-    }
-    if (ch >= '0' && ch <= '9') {
-        return true;
-    }
-    switch (ch) {
-        case '_':
-        case '-':
-        case '%':
-            return true;
-        default:
-            return false;
-    }
+  if (ch >= 'A' && ch <= 'Z') {
+    return true;
+  }
+  if (ch >= 'a' && ch <= 'z') {
+    return true;
+  }
+  if (ch >= '0' && ch <= '9') {
+    return true;
+  }
+  switch (ch) {
+    case '_':
+    case '-':
+    case '%':
+      return true;
+    default:
+      return false;
+  }
 }
 
 bool
 is_valid_collection_element(std::string_view element)
 {
-    if (element.empty() || element.size() > 251) {
-        return false;
-    }
-    return std::all_of(element.begin(), element.end(), is_valid_collection_char);
+  if (element.empty() || element.size() > 251) {
+    return false;
+  }
+  return std::all_of(element.begin(), element.end(), is_valid_collection_char);
 }
 
 [[nodiscard]] static std::string
 compile_collection_path(const std::string& scope, const std::string& collection)
 {
-    return fmt::format("{}.{}", scope, collection);
+  return fmt::format("{}.{}", scope, collection);
 }
 
 document_id::document_id(std::string bucket, std::string key)
@@ -71,32 +71,35 @@ document_id::document_id(std::string bucket, std::string key)
 {
 }
 
-document_id::document_id(std::string bucket, std::string scope, std::string collection, std::string key)
+document_id::document_id(std::string bucket,
+                         std::string scope,
+                         std::string collection,
+                         std::string key)
   : bucket_(std::move(bucket))
   , scope_(std::move(scope))
   , collection_(std::move(collection))
   , key_(std::move(key))
 {
-    collection_path_ = compile_collection_path(scope_, collection_);
+  collection_path_ = compile_collection_path(scope_, collection_);
 }
 
 bool
 document_id::has_default_collection() const
 {
-    return !use_collections_ || collection_path_ == "_default._default";
+  return !use_collections_ || collection_path_ == "_default._default";
 }
 
 std::vector<std::byte>
 make_protocol_key(const document_id& id)
 {
-    std::vector<std::byte> key{};
-    if (id.is_collection_resolved()) {
-        utils::unsigned_leb128<std::uint32_t> encoded(id.collection_uid());
-        key.reserve(encoded.size());
-        key.insert(key.end(), encoded.begin(), encoded.end());
-    }
-    key.reserve(key.size() + id.key().size());
-    couchbase::core::utils::to_binary(id.key(), std::back_insert_iterator(key));
-    return key;
+  std::vector<std::byte> key{};
+  if (id.is_collection_resolved()) {
+    utils::unsigned_leb128<std::uint32_t> encoded(id.collection_uid());
+    key.reserve(encoded.size());
+    key.insert(key.end(), encoded.begin(), encoded.end());
+  }
+  key.reserve(key.size() + id.key().size());
+  couchbase::core::utils::to_binary(id.key(), std::back_insert_iterator(key));
+  return key;
 }
 } // namespace couchbase::core

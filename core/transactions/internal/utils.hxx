@@ -36,7 +36,8 @@
 
 namespace couchbase::core::transactions
 {
-// returns the parsed server time from the result of a lookup_in_spec::get(subdoc::lookup_in_macro::vbucket).xattr() call
+// returns the parsed server time from the result of a
+// lookup_in_spec::get(subdoc::lookup_in_macro::vbucket).xattr() call
 std::uint64_t
 now_ns_from_vbucket(const tao::json::value& vbucket);
 
@@ -53,25 +54,25 @@ template<typename OStream>
 OStream&
 operator<<(OStream& os, const core::document_id& id)
 {
-    os << "document_id{bucket: " << id.bucket() << ", scope: " << id.scope() << ", collection: " << id.collection() << ", key: " << id.key()
-       << "}";
-    return os;
+  os << "document_id{bucket: " << id.bucket() << ", scope: " << id.scope()
+     << ", collection: " << id.collection() << ", key: " << id.key() << "}";
+  return os;
 }
 
 template<typename T>
 T&
 wrap_durable_request(T&& req, const couchbase::transactions::transactions_config::built& config)
 {
-    req.durability_level = config.level;
-    return req;
+  req.durability_level = config.level;
+  return req;
 }
 
 template<typename T>
 T&
 wrap_durable_request(T&& req, durability_level level)
 {
-    req.durability_level = level;
-    return req;
+  req.durability_level = level;
+  return req;
 }
 
 void
@@ -90,7 +91,7 @@ template<typename Resp>
 bool
 is_error(const Resp& resp)
 {
-    return !!resp.ctx.ec();
+  return !!resp.ctx.ec();
 }
 
 template<>
@@ -101,7 +102,7 @@ template<typename Resp>
 std::optional<error_class>
 error_class_from_response_extras(const Resp&)
 {
-    return {};
+  return {};
 }
 
 template<>
@@ -112,39 +113,41 @@ template<typename Resp>
 std::optional<error_class>
 error_class_from_response(const Resp& resp)
 {
-    if (!is_error(resp)) {
-        return {};
-    }
-    if (resp.ctx.ec() == couchbase::errc::key_value::document_not_found) {
-        return FAIL_DOC_NOT_FOUND;
-    }
-    if (resp.ctx.ec() == couchbase::errc::key_value::document_exists) {
-        return FAIL_DOC_ALREADY_EXISTS;
-    }
-    if (resp.ctx.ec() == couchbase::errc::common::cas_mismatch) {
-        return FAIL_CAS_MISMATCH;
-    }
-    if (resp.ctx.ec() == couchbase::errc::key_value::value_too_large) {
-        return FAIL_ATR_FULL;
-    }
-    if (resp.ctx.ec() == couchbase::errc::common::unambiguous_timeout || resp.ctx.ec() == couchbase::errc::common::temporary_failure ||
-        resp.ctx.ec() == couchbase::errc::key_value::durable_write_in_progress) {
-        return FAIL_TRANSIENT;
-    }
-    if (resp.ctx.ec() == couchbase::errc::key_value::durability_ambiguous || resp.ctx.ec() == couchbase::errc::common::ambiguous_timeout ||
-        resp.ctx.ec() == couchbase::errc::common::request_canceled) {
-        return FAIL_AMBIGUOUS;
-    }
-    if (resp.ctx.ec() == couchbase::errc::key_value::path_not_found) {
-        return FAIL_PATH_NOT_FOUND;
-    }
-    if (resp.ctx.ec() == couchbase::errc::key_value::path_exists) {
-        return FAIL_PATH_ALREADY_EXISTS;
-    }
-    if (resp.ctx.ec()) {
-        return FAIL_OTHER;
-    }
-    return error_class_from_response_extras(resp);
+  if (!is_error(resp)) {
+    return {};
+  }
+  if (resp.ctx.ec() == couchbase::errc::key_value::document_not_found) {
+    return FAIL_DOC_NOT_FOUND;
+  }
+  if (resp.ctx.ec() == couchbase::errc::key_value::document_exists) {
+    return FAIL_DOC_ALREADY_EXISTS;
+  }
+  if (resp.ctx.ec() == couchbase::errc::common::cas_mismatch) {
+    return FAIL_CAS_MISMATCH;
+  }
+  if (resp.ctx.ec() == couchbase::errc::key_value::value_too_large) {
+    return FAIL_ATR_FULL;
+  }
+  if (resp.ctx.ec() == couchbase::errc::common::unambiguous_timeout ||
+      resp.ctx.ec() == couchbase::errc::common::temporary_failure ||
+      resp.ctx.ec() == couchbase::errc::key_value::durable_write_in_progress) {
+    return FAIL_TRANSIENT;
+  }
+  if (resp.ctx.ec() == couchbase::errc::key_value::durability_ambiguous ||
+      resp.ctx.ec() == couchbase::errc::common::ambiguous_timeout ||
+      resp.ctx.ec() == couchbase::errc::common::request_canceled) {
+    return FAIL_AMBIGUOUS;
+  }
+  if (resp.ctx.ec() == couchbase::errc::key_value::path_not_found) {
+    return FAIL_PATH_NOT_FOUND;
+  }
+  if (resp.ctx.ec() == couchbase::errc::key_value::path_exists) {
+    return FAIL_PATH_ALREADY_EXISTS;
+  }
+  if (resp.ctx.ec()) {
+    return FAIL_OTHER;
+  }
+  return error_class_from_response_extras(resp);
 }
 
 static constexpr std::chrono::milliseconds DEFAULT_RETRY_OP_DELAY{ 3 };
@@ -157,13 +160,13 @@ static constexpr std::size_t DEFAULT_RETRY_OP_EXPONENT_CAP{ 8 };
 static inline double
 jitter()
 {
-    static std::mutex mtx;
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    static std::uniform_real_distribution<> dist(1 - RETRY_OP_JITTER, 1 + RETRY_OP_JITTER);
+  static std::mutex mtx;
+  static std::random_device rd;
+  static std::mt19937 gen(rd());
+  static std::uniform_real_distribution<> dist(1 - RETRY_OP_JITTER, 1 + RETRY_OP_JITTER);
 
-    std::lock_guard<std::mutex> lock(mtx);
-    return dist(gen);
+  std::lock_guard<std::mutex> lock(mtx);
+  return dist(gen);
 }
 
 template<typename R, typename R1, typename P1, typename R2, typename P2, typename R3, typename P3>
@@ -173,218 +176,233 @@ retry_op_exponential_backoff_timeout(std::chrono::duration<R1, P1> initial_delay
                                      std::chrono::duration<R3, P3> timeout,
                                      std::function<R()> func)
 {
-    auto end_time = std::chrono::steady_clock::now() + timeout;
-    std::uint32_t retries = 0;
-    while (true) {
-        try {
-            return func();
-        } catch (const retry_operation&) {
-            auto now = std::chrono::steady_clock::now();
-            if (now > end_time) {
-                break;
-            }
-            auto delay = initial_delay * (jitter() * pow(2, retries++));
-            if (delay > max_delay) {
-                delay = max_delay;
-            }
-            if (now + delay > end_time) {
-                std::this_thread::sleep_for(end_time - now);
-            } else {
-                std::this_thread::sleep_for(delay);
-            }
-        }
+  auto end_time = std::chrono::steady_clock::now() + timeout;
+  std::uint32_t retries = 0;
+  while (true) {
+    try {
+      return func();
+    } catch (const retry_operation&) {
+      auto now = std::chrono::steady_clock::now();
+      if (now > end_time) {
+        break;
+      }
+      auto delay = initial_delay * (jitter() * pow(2, retries++));
+      if (delay > max_delay) {
+        delay = max_delay;
+      }
+      if (now + delay > end_time) {
+        std::this_thread::sleep_for(end_time - now);
+      } else {
+        std::this_thread::sleep_for(delay);
+      }
     }
-    throw retry_operation_timeout("timed out");
+  }
+  throw retry_operation_timeout("timed out");
 }
 
 template<typename R, typename Rep, typename Period>
 R
-retry_op_exponential_backoff(std::chrono::duration<Rep, Period> delay, std::size_t max_retries, std::function<R()> func)
+retry_op_exponential_backoff(std::chrono::duration<Rep, Period> delay,
+                             std::size_t max_retries,
+                             std::function<R()> func)
 {
-    for (std::size_t retries = 0; retries <= max_retries; retries++) {
-        try {
-            return func();
-        } catch (const retry_operation&) {
-            // 2^7 = 128, so max delay fixed at 128 * delay
-            std::this_thread::sleep_for(delay * (jitter() * std::pow(2, std::fmin(DEFAULT_RETRY_OP_EXPONENT_CAP, retries))));
-        }
+  for (std::size_t retries = 0; retries <= max_retries; retries++) {
+    try {
+      return func();
+    } catch (const retry_operation&) {
+      // 2^7 = 128, so max delay fixed at 128 * delay
+      std::this_thread::sleep_for(
+        delay * (jitter() * std::pow(2, std::fmin(DEFAULT_RETRY_OP_EXPONENT_CAP, retries))));
     }
-    throw retry_operation_retries_exhausted("retry_op hit max retries!");
+  }
+  throw retry_operation_retries_exhausted("retry_op hit max retries!");
 }
 
 template<typename R>
 R
 retry_op_exp(std::function<R()> func)
 {
-    return retry_op_exponential_backoff<R>(DEFAULT_RETRY_OP_EXP_DELAY, DEFAULT_RETRY_OP_MAX_RETRIES, func);
+  return retry_op_exponential_backoff<R>(
+    DEFAULT_RETRY_OP_EXP_DELAY, DEFAULT_RETRY_OP_MAX_RETRIES, func);
 }
 
 template<typename R, typename Rep, typename Period>
 R
-retry_op_constant_delay(std::chrono::duration<Rep, Period> delay, std::size_t max_retries, std::function<R()> func)
+retry_op_constant_delay(std::chrono::duration<Rep, Period> delay,
+                        std::size_t max_retries,
+                        std::function<R()> func)
 {
-    for (std::size_t retries = 0; retries <= max_retries; retries++) {
-        try {
-            return func();
-        } catch (const retry_operation&) {
-            std::this_thread::sleep_for(delay);
-        }
+  for (std::size_t retries = 0; retries <= max_retries; retries++) {
+    try {
+      return func();
+    } catch (const retry_operation&) {
+      std::this_thread::sleep_for(delay);
     }
-    throw retry_operation_retries_exhausted("retry_op hit max retries!");
+  }
+  throw retry_operation_retries_exhausted("retry_op hit max retries!");
 }
 
 template<typename R>
 R
 retry_op(std::function<R()> func)
 {
-    return retry_op_constant_delay<R>(DEFAULT_RETRY_OP_DELAY, std::numeric_limits<std::size_t>::max(), func);
+  return retry_op_constant_delay<R>(
+    DEFAULT_RETRY_OP_DELAY, std::numeric_limits<std::size_t>::max(), func);
 }
 
 struct exp_delay {
-    std::chrono::nanoseconds initial_delay;
-    std::chrono::nanoseconds max_delay;
-    std::chrono::nanoseconds timeout;
-    mutable std::uint32_t retries;
-    mutable std::optional<std::chrono::time_point<std::chrono::steady_clock>> end_time;
-    std::size_t max_retries{ 100 };
+  std::chrono::nanoseconds initial_delay;
+  std::chrono::nanoseconds max_delay;
+  std::chrono::nanoseconds timeout;
+  mutable std::uint32_t retries;
+  mutable std::optional<std::chrono::time_point<std::chrono::steady_clock>> end_time;
+  std::size_t max_retries{ 100 };
 
-    template<typename R1, typename P1, typename R2, typename P2, typename R3, typename P3>
-    exp_delay(std::chrono::duration<R1, P1> initial, std::chrono::duration<R2, P2> max, std::chrono::duration<R3, P3> limit)
-      : initial_delay(std::chrono::duration_cast<std::chrono::nanoseconds>(initial))
-      , max_delay(std::chrono::duration_cast<std::chrono::nanoseconds>(max))
-      , timeout(std::chrono::duration_cast<std::chrono::nanoseconds>(limit))
-      , retries(0)
-      , end_time()
-    {
+  template<typename R1, typename P1, typename R2, typename P2, typename R3, typename P3>
+  exp_delay(std::chrono::duration<R1, P1> initial,
+            std::chrono::duration<R2, P2> max,
+            std::chrono::duration<R3, P3> limit)
+    : initial_delay(std::chrono::duration_cast<std::chrono::nanoseconds>(initial))
+    , max_delay(std::chrono::duration_cast<std::chrono::nanoseconds>(max))
+    , timeout(std::chrono::duration_cast<std::chrono::nanoseconds>(limit))
+    , retries(0)
+    , end_time()
+  {
+  }
+  void operator()() const
+  {
+    auto now = std::chrono::steady_clock::now();
+    if (retries >= max_retries) {
+      throw retry_operation_retries_exhausted("retries exhausted");
     }
-    void operator()() const
-    {
-        auto now = std::chrono::steady_clock::now();
-        if (retries >= max_retries) {
-            throw retry_operation_retries_exhausted("retries exhausted");
-        }
-        if (!end_time) {
-            end_time = std::chrono::steady_clock::now() + timeout;
-            return;
-        }
-        if (now > *end_time) {
-            throw retry_operation_timeout("timed out");
-        }
-        auto delay = initial_delay * (jitter() * pow(2, retries++));
-        if (delay > max_delay) {
-            delay = max_delay;
-        }
-        if (now + delay > *end_time) {
-            std::this_thread::sleep_for(*end_time - now);
-        } else {
-            std::this_thread::sleep_for(delay);
-        }
+    if (!end_time) {
+      end_time = std::chrono::steady_clock::now() + timeout;
+      return;
     }
+    if (now > *end_time) {
+      throw retry_operation_timeout("timed out");
+    }
+    auto delay = initial_delay * (jitter() * pow(2, retries++));
+    if (delay > max_delay) {
+      delay = max_delay;
+    }
+    if (now + delay > *end_time) {
+      std::this_thread::sleep_for(*end_time - now);
+    } else {
+      std::this_thread::sleep_for(delay);
+    }
+  }
 };
 
 template<typename R, typename P>
 struct constant_delay {
-    std::chrono::duration<R, P> delay;
-    std::size_t max_retries;
-    std::size_t retries;
+  std::chrono::duration<R, P> delay;
+  std::size_t max_retries;
+  std::size_t retries;
 
-    constant_delay(std::chrono::duration<R, P> d = DEFAULT_RETRY_OP_DELAY, std::size_t max = DEFAULT_RETRY_OP_MAX_RETRIES)
-      : delay(d)
-      , max_retries(max)
-      , retries(0)
-    {
+  constant_delay(std::chrono::duration<R, P> d = DEFAULT_RETRY_OP_DELAY,
+                 std::size_t max = DEFAULT_RETRY_OP_MAX_RETRIES)
+    : delay(d)
+    , max_retries(max)
+    , retries(0)
+  {
+  }
+  void operator()()
+  {
+    if (retries++ >= max_retries) {
+      throw retry_operation_retries_exhausted("retries exhausted");
     }
-    void operator()()
-    {
-        if (retries++ >= max_retries) {
-            throw retry_operation_retries_exhausted("retries exhausted");
-        }
-        std::this_thread::sleep_for(delay);
-    }
+    std::this_thread::sleep_for(delay);
+  }
 };
 
 struct async_exp_delay {
-    std::shared_ptr<asio::steady_timer> timer;
-    std::chrono::microseconds initial_delay;
-    std::chrono::microseconds max_delay;
-    std::size_t max_retries;
-    mutable std::size_t retries;
+  std::shared_ptr<asio::steady_timer> timer;
+  std::chrono::microseconds initial_delay;
+  std::chrono::microseconds max_delay;
+  std::size_t max_retries;
+  mutable std::size_t retries;
 
-    template<typename R1, typename P1, typename R2, typename P2>
-    async_exp_delay(std::shared_ptr<asio::steady_timer> timer,
-                    std::chrono::duration<R1, P1> initial,
-                    std::chrono::duration<R2, P2> max,
-                    std::size_t max_retries)
-      : timer(std::move(timer))
-      , initial_delay(std::chrono::duration_cast<std::chrono::microseconds>(initial))
-      , max_delay(std::chrono::duration_cast<std::chrono::microseconds>(max))
-      , max_retries(max_retries)
-      , retries(0)
-    {
-    }
+  template<typename R1, typename P1, typename R2, typename P2>
+  async_exp_delay(std::shared_ptr<asio::steady_timer> timer,
+                  std::chrono::duration<R1, P1> initial,
+                  std::chrono::duration<R2, P2> max,
+                  std::size_t max_retries)
+    : timer(std::move(timer))
+    , initial_delay(std::chrono::duration_cast<std::chrono::microseconds>(initial))
+    , max_delay(std::chrono::duration_cast<std::chrono::microseconds>(max))
+    , max_retries(max_retries)
+    , retries(0)
+  {
+  }
 
-    async_exp_delay(std::shared_ptr<asio::steady_timer> timer)
-      : async_exp_delay(std::move(timer), DEFAULT_RETRY_OP_EXP_DELAY, DEFAULT_RETRY_OP_MAX_EXP_DELAY, DEFAULT_RETRY_OP_MAX_RETRIES)
-    {
-    }
+  async_exp_delay(std::shared_ptr<asio::steady_timer> timer)
+    : async_exp_delay(std::move(timer),
+                      DEFAULT_RETRY_OP_EXP_DELAY,
+                      DEFAULT_RETRY_OP_MAX_EXP_DELAY,
+                      DEFAULT_RETRY_OP_MAX_RETRIES)
+  {
+  }
 
-    void operator()(utils::movable_function<void(std::exception_ptr)> callback) const
-    {
-        if (retries++ >= max_retries) {
-            callback(std::make_exception_ptr(retry_operation_retries_exhausted("retries exhausted")));
-            return;
-        }
-        auto delay =
-          std::chrono::duration_cast<std::chrono::microseconds>(initial_delay * (jitter() * pow(2, static_cast<double>(retries++))));
-        if (delay > max_delay) {
-            delay = max_delay;
-        }
-        timer->expires_after(delay);
-        timer->async_wait([callback = std::move(callback)](std::error_code ec) mutable {
-            if (ec == asio::error::operation_aborted) {
-                callback(std::make_exception_ptr(retry_operation_retries_exhausted("retry aborted")));
-                return;
-            }
-            callback({});
-        });
+  void operator()(utils::movable_function<void(std::exception_ptr)> callback) const
+  {
+    if (retries++ >= max_retries) {
+      callback(std::make_exception_ptr(retry_operation_retries_exhausted("retries exhausted")));
+      return;
     }
+    auto delay = std::chrono::duration_cast<std::chrono::microseconds>(
+      initial_delay * (jitter() * pow(2, static_cast<double>(retries++))));
+    if (delay > max_delay) {
+      delay = max_delay;
+    }
+    timer->expires_after(delay);
+    timer->async_wait([callback = std::move(callback)](std::error_code ec) mutable {
+      if (ec == asio::error::operation_aborted) {
+        callback(std::make_exception_ptr(retry_operation_retries_exhausted("retry aborted")));
+        return;
+      }
+      callback({});
+    });
+  }
 };
 
 struct async_constant_delay {
-    std::shared_ptr<asio::steady_timer> timer;
-    std::chrono::microseconds delay;
-    std::size_t max_retries;
-    std::size_t retries;
+  std::shared_ptr<asio::steady_timer> timer;
+  std::chrono::microseconds delay;
+  std::size_t max_retries;
+  std::size_t retries;
 
-    template<typename R, typename P>
-    async_constant_delay(std::shared_ptr<asio::steady_timer> timer, std::chrono::duration<R, P> d, std::size_t max)
-      : timer(std::move(timer))
-      , delay(std::chrono::duration_cast<std::chrono::microseconds>(d))
-      , max_retries(max)
-      , retries(0)
-    {
-    }
+  template<typename R, typename P>
+  async_constant_delay(std::shared_ptr<asio::steady_timer> timer,
+                       std::chrono::duration<R, P> d,
+                       std::size_t max)
+    : timer(std::move(timer))
+    , delay(std::chrono::duration_cast<std::chrono::microseconds>(d))
+    , max_retries(max)
+    , retries(0)
+  {
+  }
 
-    explicit async_constant_delay(std::shared_ptr<asio::steady_timer> timer)
-      : async_constant_delay(std::move(timer), DEFAULT_RETRY_OP_DELAY, DEFAULT_RETRY_OP_MAX_RETRIES)
-    {
-    }
+  explicit async_constant_delay(std::shared_ptr<asio::steady_timer> timer)
+    : async_constant_delay(std::move(timer), DEFAULT_RETRY_OP_DELAY, DEFAULT_RETRY_OP_MAX_RETRIES)
+  {
+  }
 
-    void operator()(utils::movable_function<void(std::exception_ptr)> callback)
-    {
-        if (retries++ >= max_retries) {
-            callback(std::make_exception_ptr(retry_operation_retries_exhausted("retries exhausted")));
-            return;
-        }
-        timer->expires_after(delay);
-        timer->async_wait([callback = std::move(callback)](std::error_code ec) mutable {
-            if (ec == asio::error::operation_aborted) {
-                callback(std::make_exception_ptr(retry_operation_retries_exhausted("retry aborted")));
-                return;
-            }
-            callback({});
-        });
+  void operator()(utils::movable_function<void(std::exception_ptr)> callback)
+  {
+    if (retries++ >= max_retries) {
+      callback(std::make_exception_ptr(retry_operation_retries_exhausted("retries exhausted")));
+      return;
     }
+    timer->expires_after(delay);
+    timer->async_wait([callback = std::move(callback)](std::error_code ec) mutable {
+      if (ec == asio::error::operation_aborted) {
+        callback(std::make_exception_ptr(retry_operation_retries_exhausted("retry aborted")));
+        return;
+      }
+      callback({});
+    });
+  }
 };
 
 std::list<std::string>

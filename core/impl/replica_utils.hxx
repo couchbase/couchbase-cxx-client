@@ -29,8 +29,8 @@
 namespace couchbase::core::impl
 {
 struct readable_node {
-    bool is_replica;
-    std::size_t index;
+  bool is_replica;
+  std::size_t index;
 };
 
 /**

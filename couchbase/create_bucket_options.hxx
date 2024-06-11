@@ -24,16 +24,16 @@
 namespace couchbase
 {
 struct create_bucket_options : public common_options<create_bucket_options> {
-  public:
-    struct built : public common_options<create_bucket_options>::built {
-    };
+public:
+  struct built : public common_options<create_bucket_options>::built {
+  };
 
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options() };
-    }
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options() };
+  }
 
-  private:
+private:
 };
 
 using create_bucket_handler = std::function<void(error)>;

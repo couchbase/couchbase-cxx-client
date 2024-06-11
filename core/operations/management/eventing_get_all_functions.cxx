@@ -24,55 +24,61 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-eventing_get_all_functions_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+eventing_get_all_functions_request::encode_to(encoded_request_type& encoded,
+                                              http_context& /* context */) const
 {
-    encoded.method = "GET";
-    encoded.path = "/api/v1/functions";
-    return {};
+  encoded.method = "GET";
+  encoded.path = "/api/v1/functions";
+  return {};
 }
 
 eventing_get_all_functions_response
-eventing_get_all_functions_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+eventing_get_all_functions_request::make_response(error_context::http&& ctx,
+                                                  const encoded_response_type& encoded) const
 {
-    eventing_get_all_functions_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        tao::json::value payload{};
-        try {
-            payload = utils::json::parse(encoded.body.data());
-        } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = errc::common::parsing_failure;
-            return response;
-        }
-        auto [ec, problem] = extract_eventing_error_code(payload);
-        if (ec) {
-            response.ctx.ec = ec;
-            response.error.emplace(problem);
-            return response;
-        }
-        if (!payload.is_array()) {
-            response.ctx.ec = errc::common::parsing_failure;
-            return response;
-        }
-        const auto& entries = payload.get_array();
-        response.functions.reserve(entries.size());
-        for (const auto& entry : entries) {
-            bool include{};
-            auto function = entry.as<couchbase::core::management::eventing::function>();
-            if (bucket_name.has_value() && scope_name.has_value()) {
-                include = function.internal.bucket_name.has_value() && function.internal.scope_name.has_value() &&
-                          function.internal.bucket_name.value() == bucket_name.value() &&
-                          function.internal.scope_name.value() == scope_name.value();
-            } else {
-                include = (!function.internal.bucket_name.has_value() && !function.internal.scope_name.has_value()) ||
-                          (function.internal.bucket_name.has_value() && function.internal.scope_name.has_value() &&
-                           function.internal.bucket_name.value() == "*" && function.internal.scope_name.value() == "*");
-            }
-
-            if (include) {
-                response.functions.push_back(function);
-            }
-        }
+  eventing_get_all_functions_response response{ std::move(ctx) };
+  if (!response.ctx.ec) {
+    tao::json::value payload{};
+    try {
+      payload = utils::json::parse(encoded.body.data());
+    } catch (const tao::pegtl::parse_error&) {
+      response.ctx.ec = errc::common::parsing_failure;
+      return response;
     }
-    return response;
+    auto [ec, problem] = extract_eventing_error_code(payload);
+    if (ec) {
+      response.ctx.ec = ec;
+      response.error.emplace(problem);
+      return response;
+    }
+    if (!payload.is_array()) {
+      response.ctx.ec = errc::common::parsing_failure;
+      return response;
+    }
+    const auto& entries = payload.get_array();
+    response.functions.reserve(entries.size());
+    for (const auto& entry : entries) {
+      bool include{};
+      auto function = entry.as<couchbase::core::management::eventing::function>();
+      if (bucket_name.has_value() && scope_name.has_value()) {
+        include = function.internal.bucket_name.has_value() &&
+                  function.internal.scope_name.has_value() &&
+                  function.internal.bucket_name.value() == bucket_name.value() &&
+                  function.internal.scope_name.value() == scope_name.value();
+      } else {
+        include =
+          (!function.internal.bucket_name.has_value() &&
+           !function.internal.scope_name.has_value()) ||
+          (function.internal.bucket_name.has_value() && function.internal.scope_name.has_value() &&
+           function.internal.bucket_name.value() == "*" &&
+           function.internal.scope_name.value() == "*");
+      }
+
+      if (include) {
+        response.functions.push_back(function);
+      }
+    }
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

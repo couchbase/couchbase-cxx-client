@@ -24,56 +24,59 @@ namespace couchbase::core::transactions
 std::string
 result::strerror() const
 {
-    static std::string success("success");
-    if (ec) {
-        return ec.message();
-    }
-    return success;
+  static std::string success("success");
+  if (ec) {
+    return ec.message();
+  }
+  return success;
 }
 
 bool
 result::is_success() const
 {
-    return !ec;
+  return !ec;
 }
 
 subdoc_result::status_type
 result::subdoc_status() const
 {
-    auto it = std::find_if(
-      values.begin(), values.end(), [](const subdoc_result& res) { return res.status != subdoc_result::status_type::success; });
-    if (it != values.end()) {
-        return it->status;
-    }
-    return subdoc_result::status_type::success;
+  auto it = std::find_if(values.begin(), values.end(), [](const subdoc_result& res) {
+    return res.status != subdoc_result::status_type::success;
+  });
+  if (it != values.end()) {
+    return it->status;
+  }
+  return subdoc_result::status_type::success;
 }
 
 result
 result::create_from_subdoc_response(const core::operations::lookup_in_response& resp)
 {
-    result res{};
-    res.ec = resp.ctx.ec();
-    res.cas = resp.cas.value();
-    res.key = resp.ctx.id();
-    res.is_deleted = resp.deleted;
-    for (std::size_t i = 0; i < resp.fields.size(); ++i) {
-        res.values.emplace_back(resp.fields[i].value, static_cast<std::uint32_t>(resp.fields[i].status));
-    }
-    return res;
+  result res{};
+  res.ec = resp.ctx.ec();
+  res.cas = resp.cas.value();
+  res.key = resp.ctx.id();
+  res.is_deleted = resp.deleted;
+  for (std::size_t i = 0; i < resp.fields.size(); ++i) {
+    res.values.emplace_back(resp.fields[i].value,
+                            static_cast<std::uint32_t>(resp.fields[i].status));
+  }
+  return res;
 }
 
 result
 result::create_from_subdoc_response(const core::operations::mutate_in_response& resp)
 {
-    result res{};
-    res.ec = resp.ctx.ec();
-    res.cas = resp.cas.value();
-    res.key = resp.ctx.id();
-    res.is_deleted = resp.deleted;
+  result res{};
+  res.ec = resp.ctx.ec();
+  res.cas = resp.cas.value();
+  res.key = resp.ctx.id();
+  res.is_deleted = resp.deleted;
 
-    for (std::size_t i = 0; i < resp.fields.size(); i++) {
-        res.values.emplace_back(resp.fields[i].value, static_cast<std::uint32_t>(resp.fields[i].status));
-    }
-    return res;
+  for (std::size_t i = 0; i < resp.fields.size(); i++) {
+    res.values.emplace_back(resp.fields[i].value,
+                            static_cast<std::uint32_t>(resp.fields[i].status));
+  }
+  return res;
 }
 } // namespace couchbase::core::transactions

@@ -26,54 +26,54 @@ namespace couchbase::core::protocol
 {
 class select_bucket_response_body
 {
-  public:
-    static const inline client_opcode opcode = client_opcode::select_bucket;
+public:
+  static const inline client_opcode opcode = client_opcode::select_bucket;
 
-    bool parse(key_value_status_code status,
-               const header_buffer& header,
-               std::uint8_t framing_extras_size,
-               std::uint16_t key_size,
-               std::uint8_t extras_size,
-               const std::vector<std::byte>& body,
-               const cmd_info& info);
+  bool parse(key_value_status_code status,
+             const header_buffer& header,
+             std::uint8_t framing_extras_size,
+             std::uint16_t key_size,
+             std::uint8_t extras_size,
+             const std::vector<std::byte>& body,
+             const cmd_info& info);
 };
 
 class select_bucket_request_body
 {
-  public:
-    using response_body_type = select_bucket_response_body;
-    static const inline client_opcode opcode = client_opcode::select_bucket;
+public:
+  using response_body_type = select_bucket_response_body;
+  static const inline client_opcode opcode = client_opcode::select_bucket;
 
-  private:
-    std::vector<std::byte> key_;
+private:
+  std::vector<std::byte> key_;
 
-  public:
-    void bucket_name(std::string_view name);
+public:
+  void bucket_name(std::string_view name);
 
-    [[nodiscard]] const auto& key() const
-    {
-        return key_;
-    }
+  [[nodiscard]] const auto& key() const
+  {
+    return key_;
+  }
 
-    [[nodiscard]] const auto& framing_extras() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& framing_extras() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] const auto& extras() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& extras() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] const auto& value() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& value() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] std::size_t size() const
-    {
-        return key_.size();
-    }
+  [[nodiscard]] std::size_t size() const
+  {
+    return key_.size();
+  }
 };
 
 } // namespace couchbase::core::protocol

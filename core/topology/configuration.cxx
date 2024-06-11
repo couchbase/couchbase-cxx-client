@@ -31,262 +31,276 @@ namespace couchbase::core::topology
 std::uint16_t
 configuration::node::port_or(service_type type, bool is_tls, std::uint16_t default_value) const
 {
-    if (is_tls) {
-        switch (type) {
-            case service_type::query:
-                return services_tls.query.value_or(default_value);
-
-            case service_type::analytics:
-                return services_tls.analytics.value_or(default_value);
-
-            case service_type::search:
-                return services_tls.search.value_or(default_value);
-
-            case service_type::view:
-                return services_tls.views.value_or(default_value);
-
-            case service_type::management:
-                return services_tls.management.value_or(default_value);
-
-            case service_type::key_value:
-                return services_tls.key_value.value_or(default_value);
-
-            case service_type::eventing:
-                return services_tls.eventing.value_or(default_value);
-        }
-    }
+  if (is_tls) {
     switch (type) {
-        case service_type::query:
-            return services_plain.query.value_or(default_value);
+      case service_type::query:
+        return services_tls.query.value_or(default_value);
 
-        case service_type::analytics:
-            return services_plain.analytics.value_or(default_value);
+      case service_type::analytics:
+        return services_tls.analytics.value_or(default_value);
 
-        case service_type::search:
-            return services_plain.search.value_or(default_value);
+      case service_type::search:
+        return services_tls.search.value_or(default_value);
 
-        case service_type::view:
-            return services_plain.views.value_or(default_value);
+      case service_type::view:
+        return services_tls.views.value_or(default_value);
 
-        case service_type::management:
-            return services_plain.management.value_or(default_value);
+      case service_type::management:
+        return services_tls.management.value_or(default_value);
 
-        case service_type::key_value:
-            return services_plain.key_value.value_or(default_value);
+      case service_type::key_value:
+        return services_tls.key_value.value_or(default_value);
 
-        case service_type::eventing:
-            return services_plain.eventing.value_or(default_value);
+      case service_type::eventing:
+        return services_tls.eventing.value_or(default_value);
     }
-    return default_value;
+  }
+  switch (type) {
+    case service_type::query:
+      return services_plain.query.value_or(default_value);
+
+    case service_type::analytics:
+      return services_plain.analytics.value_or(default_value);
+
+    case service_type::search:
+      return services_plain.search.value_or(default_value);
+
+    case service_type::view:
+      return services_plain.views.value_or(default_value);
+
+    case service_type::management:
+      return services_plain.management.value_or(default_value);
+
+    case service_type::key_value:
+      return services_plain.key_value.value_or(default_value);
+
+    case service_type::eventing:
+      return services_plain.eventing.value_or(default_value);
+  }
+  return default_value;
 }
 
 const std::string&
 configuration::node::hostname_for(const std::string& network) const
 {
-    if (network == "default") {
-        return hostname;
-    }
-    const auto& address = alt.find(network);
-    if (address == alt.end()) {
-        CB_LOG_WARNING(R"(requested network "{}" is not found, fallback to "default" host)", network);
-        return hostname;
-    }
-    return address->second.hostname;
+  if (network == "default") {
+    return hostname;
+  }
+  const auto& address = alt.find(network);
+  if (address == alt.end()) {
+    CB_LOG_WARNING(R"(requested network "{}" is not found, fallback to "default" host)", network);
+    return hostname;
+  }
+  return address->second.hostname;
 }
 
 std::uint16_t
-configuration::node::port_or(const std::string& network, service_type type, bool is_tls, std::uint16_t default_value) const
+configuration::node::port_or(const std::string& network,
+                             service_type type,
+                             bool is_tls,
+                             std::uint16_t default_value) const
 {
-    if (network == "default") {
-        return port_or(type, is_tls, default_value);
-    }
-    const auto& address = alt.find(network);
-    if (address == alt.end()) {
-        CB_LOG_WARNING(R"(requested network "{}" is not found, fallback to "default" port of {} service)", network, type);
-        return port_or(type, is_tls, default_value);
-    }
-    if (is_tls) {
-        switch (type) {
-            case service_type::query:
-                return address->second.services_tls.query.value_or(default_value);
-
-            case service_type::analytics:
-                return address->second.services_tls.analytics.value_or(default_value);
-
-            case service_type::search:
-                return address->second.services_tls.search.value_or(default_value);
-
-            case service_type::view:
-                return address->second.services_tls.views.value_or(default_value);
-
-            case service_type::management:
-                return address->second.services_tls.management.value_or(default_value);
-
-            case service_type::key_value:
-                return address->second.services_tls.key_value.value_or(default_value);
-
-            case service_type::eventing:
-                return address->second.services_tls.eventing.value_or(default_value);
-        }
-    }
+  if (network == "default") {
+    return port_or(type, is_tls, default_value);
+  }
+  const auto& address = alt.find(network);
+  if (address == alt.end()) {
+    CB_LOG_WARNING(
+      R"(requested network "{}" is not found, fallback to "default" port of {} service)",
+      network,
+      type);
+    return port_or(type, is_tls, default_value);
+  }
+  if (is_tls) {
     switch (type) {
-        case service_type::query:
-            return address->second.services_plain.query.value_or(default_value);
+      case service_type::query:
+        return address->second.services_tls.query.value_or(default_value);
 
-        case service_type::analytics:
-            return address->second.services_plain.analytics.value_or(default_value);
+      case service_type::analytics:
+        return address->second.services_tls.analytics.value_or(default_value);
 
-        case service_type::search:
-            return address->second.services_plain.search.value_or(default_value);
+      case service_type::search:
+        return address->second.services_tls.search.value_or(default_value);
 
-        case service_type::view:
-            return address->second.services_plain.views.value_or(default_value);
+      case service_type::view:
+        return address->second.services_tls.views.value_or(default_value);
 
-        case service_type::management:
-            return address->second.services_plain.management.value_or(default_value);
+      case service_type::management:
+        return address->second.services_tls.management.value_or(default_value);
 
-        case service_type::key_value:
-            return address->second.services_plain.key_value.value_or(default_value);
+      case service_type::key_value:
+        return address->second.services_tls.key_value.value_or(default_value);
 
-        case service_type::eventing:
-            return address->second.services_plain.eventing.value_or(default_value);
+      case service_type::eventing:
+        return address->second.services_tls.eventing.value_or(default_value);
     }
-    return default_value;
+  }
+  switch (type) {
+    case service_type::query:
+      return address->second.services_plain.query.value_or(default_value);
+
+    case service_type::analytics:
+      return address->second.services_plain.analytics.value_or(default_value);
+
+    case service_type::search:
+      return address->second.services_plain.search.value_or(default_value);
+
+    case service_type::view:
+      return address->second.services_plain.views.value_or(default_value);
+
+    case service_type::management:
+      return address->second.services_plain.management.value_or(default_value);
+
+    case service_type::key_value:
+      return address->second.services_plain.key_value.value_or(default_value);
+
+    case service_type::eventing:
+      return address->second.services_plain.eventing.value_or(default_value);
+  }
+  return default_value;
 }
 
 std::optional<std::string>
 configuration::node::endpoint(const std::string& network, service_type type, bool is_tls) const
 {
-    auto p = port_or(type, is_tls, 0);
-    if (p == 0) {
-        return {};
-    }
-    return fmt::format("{}:{}", hostname_for(network), p);
+  auto p = port_or(type, is_tls, 0);
+  if (p == 0) {
+    return {};
+  }
+  return fmt::format("{}:{}", hostname_for(network), p);
 }
 
 bool
-configuration::has_node(const std::string& network, service_type type, bool is_tls, const std::string& hostname, const std::string& port)
-  const
+configuration::has_node(const std::string& network,
+                        service_type type,
+                        bool is_tls,
+                        const std::string& hostname,
+                        const std::string& port) const
 {
-    std::uint16_t port_number{ 0 };
-    try {
-        port_number = gsl::narrow_cast<std::uint16_t>(std::stoul(port, nullptr, 10));
-    } catch (const std::invalid_argument&) {
-        return false;
-    } catch (const std::out_of_range&) {
-        return false;
-    }
-    return std::any_of(nodes.begin(), nodes.end(), [&](const auto& n) {
-        return n.hostname_for(network) == hostname && n.port_or(network, type, is_tls, 0) == port_number;
-    });
+  std::uint16_t port_number{ 0 };
+  try {
+    port_number = gsl::narrow_cast<std::uint16_t>(std::stoul(port, nullptr, 10));
+  } catch (const std::invalid_argument&) {
+    return false;
+  } catch (const std::out_of_range&) {
+    return false;
+  }
+  return std::any_of(nodes.begin(), nodes.end(), [&](const auto& n) {
+    return n.hostname_for(network) == hostname &&
+           n.port_or(network, type, is_tls, 0) == port_number;
+  });
 }
 
 std::string
 configuration::select_network(const std::string& bootstrap_hostname) const
 {
-    for (const auto& n : nodes) {
-        if (n.this_node) {
-            if (n.hostname == bootstrap_hostname) {
-                return "default";
-            }
-            for (const auto& [network, address] : n.alt) {
-                if (address.hostname == bootstrap_hostname) {
-                    return network;
-                }
-            }
+  for (const auto& n : nodes) {
+    if (n.this_node) {
+      if (n.hostname == bootstrap_hostname) {
+        return "default";
+      }
+      for (const auto& [network, address] : n.alt) {
+        if (address.hostname == bootstrap_hostname) {
+          return network;
         }
+      }
     }
-    return "default";
+  }
+  return "default";
 }
 
 std::string
 configuration::rev_str() const
 {
-    if (epoch) {
-        return fmt::format("{}:{}", epoch.value(), rev.value_or(0));
-    }
-    return rev ? fmt::format("{}", *rev) : "(none)";
+  if (epoch) {
+    return fmt::format("{}:{}", epoch.value(), rev.value_or(0));
+  }
+  return rev ? fmt::format("{}", *rev) : "(none)";
 }
 
 std::size_t
 configuration::index_for_this_node() const
 {
-    for (const auto& n : nodes) {
-        if (n.this_node) {
-            return n.index;
-        }
+  for (const auto& n : nodes) {
+    if (n.this_node) {
+      return n.index;
     }
-    throw std::runtime_error("no nodes marked as this_node");
+  }
+  throw std::runtime_error("no nodes marked as this_node");
 }
 
 std::optional<std::size_t>
 configuration::server_by_vbucket(std::uint16_t vbucket, std::size_t index) const
 {
-    if (!vbmap.has_value() || vbucket >= vbmap->size()) {
-        return {};
-    }
-    if (auto server_index = vbmap->at(vbucket)[index]; server_index >= 0) {
-        return static_cast<std::size_t>(server_index);
-    }
+  if (!vbmap.has_value() || vbucket >= vbmap->size()) {
     return {};
+  }
+  if (auto server_index = vbmap->at(vbucket)[index]; server_index >= 0) {
+    return static_cast<std::size_t>(server_index);
+  }
+  return {};
 }
 
 std::pair<std::uint16_t, std::optional<std::size_t>>
 configuration::map_key(const std::string& key, std::size_t index) const
 {
-    if (!vbmap.has_value()) {
-        return { 0, {} };
-    }
-    const std::uint32_t crc = utils::hash_crc32(key.data(), key.size());
-    auto vbucket = static_cast<std::uint16_t>(crc % vbmap->size());
-    return { vbucket, server_by_vbucket(vbucket, index) };
+  if (!vbmap.has_value()) {
+    return { 0, {} };
+  }
+  const std::uint32_t crc = utils::hash_crc32(key.data(), key.size());
+  auto vbucket = static_cast<std::uint16_t>(crc % vbmap->size());
+  return { vbucket, server_by_vbucket(vbucket, index) };
 }
 
 std::pair<std::uint16_t, std::optional<std::size_t>>
 configuration::map_key(const std::vector<std::byte>& key, std::size_t index) const
 {
-    if (!vbmap.has_value()) {
-        return { 0, {} };
-    }
-    const std::uint32_t crc = utils::hash_crc32(key.data(), key.size());
-    auto vbucket = static_cast<std::uint16_t>(crc % vbmap->size());
-    return { vbucket, server_by_vbucket(vbucket, index) };
+  if (!vbmap.has_value()) {
+    return { 0, {} };
+  }
+  const std::uint32_t crc = utils::hash_crc32(key.data(), key.size());
+  auto vbucket = static_cast<std::uint16_t>(crc % vbmap->size());
+  return { vbucket, server_by_vbucket(vbucket, index) };
 }
 
 configuration
-make_blank_configuration(const std::string& hostname, std::uint16_t plain_port, std::uint16_t tls_port)
+make_blank_configuration(const std::string& hostname,
+                         std::uint16_t plain_port,
+                         std::uint16_t tls_port)
 {
-    configuration result;
-    result.id = couchbase::core::uuid::random();
-    result.epoch = 0;
-    result.rev = 0;
-    result.nodes.resize(1);
-    result.nodes[0].hostname = hostname;
-    result.nodes[0].this_node = true;
-    result.nodes[0].services_plain.key_value = plain_port;
-    result.nodes[0].services_tls.key_value = tls_port;
-    return result;
+  configuration result;
+  result.id = couchbase::core::uuid::random();
+  result.epoch = 0;
+  result.rev = 0;
+  result.nodes.resize(1);
+  result.nodes[0].hostname = hostname;
+  result.nodes[0].this_node = true;
+  result.nodes[0].services_plain.key_value = plain_port;
+  result.nodes[0].services_tls.key_value = tls_port;
+  return result;
 }
 
 configuration
-make_blank_configuration(const std::vector<std::pair<std::string, std::string>>& endpoints, bool use_tls, bool force)
+make_blank_configuration(const std::vector<std::pair<std::string, std::string>>& endpoints,
+                         bool use_tls,
+                         bool force)
 {
-    configuration result;
-    result.force = force;
-    result.id = couchbase::core::uuid::random();
-    result.epoch = 0;
-    result.rev = 0;
-    result.nodes.resize(endpoints.size());
-    std::size_t idx{ 0 };
-    for (const auto& [hostname, port] : endpoints) {
-        configuration::node node{ false, idx++, hostname };
-        if (use_tls) {
-            node.services_tls.key_value = std::stol(port);
-        } else {
-            node.services_plain.key_value = std::stol(port);
-        }
-        result.nodes.emplace_back(node);
+  configuration result;
+  result.force = force;
+  result.id = couchbase::core::uuid::random();
+  result.epoch = 0;
+  result.rev = 0;
+  result.nodes.resize(endpoints.size());
+  std::size_t idx{ 0 };
+  for (const auto& [hostname, port] : endpoints) {
+    configuration::node node{ false, idx++, hostname };
+    if (use_tls) {
+      node.services_tls.key_value = std::stol(port);
+    } else {
+      node.services_plain.key_value = std::stol(port);
     }
-    return result;
+    result.nodes.emplace_back(node);
+  }
+  return result;
 }
 } // namespace couchbase::core::topology

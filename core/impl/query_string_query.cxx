@@ -24,14 +24,14 @@ namespace couchbase
 auto
 query_string_query::encode() const -> encoded_search_query
 {
-    encoded_search_query built;
+  encoded_search_query built;
 
-    built.query = tao::json::empty_object;
-    if (boost_) {
-        built.query["boost"] = boost_.value();
-    }
-    built.query["query"] = query_;
+  built.query = tao::json::empty_object;
+  if (boost_) {
+    built.query["boost"] = boost_.value();
+  }
+  built.query["query"] = query_;
 
-    return built;
+  return built;
 }
 } // namespace couchbase

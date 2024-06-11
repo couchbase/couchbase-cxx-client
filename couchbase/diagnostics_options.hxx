@@ -26,49 +26,50 @@
 namespace couchbase
 {
 struct diagnostics_options : public common_options<diagnostics_options> {
-    /**
-     * Sets a custom report ID that will be used in the report. If no report ID is provided, the client will generate a
-     * unique one.
-     *
-     * @param report_id the report ID that should be used.
-     * @return reference to this object, for use in chaining.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto report_id(std::string report_id) -> diagnostics_options&
-    {
-        report_id_ = std::move(report_id);
-        return self();
-    }
+  /**
+   * Sets a custom report ID that will be used in the report. If no report ID is provided, the
+   * client will generate a unique one.
+   *
+   * @param report_id the report ID that should be used.
+   * @return reference to this object, for use in chaining.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto report_id(std::string report_id) -> diagnostics_options&
+  {
+    report_id_ = std::move(report_id);
+    return self();
+  }
 
-    /**
-     * Immutable value object representing consistent options.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    struct built : public common_options<diagnostics_options>::built {
-        std::optional<std::string> report_id;
-    };
+  /**
+   * Immutable value object representing consistent options.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  struct built : public common_options<diagnostics_options>::built {
+    std::optional<std::string> report_id;
+  };
 
-    /**
-     * Validates the options and returns them as an immutable value.
-     *
-     * @return consistent options as an immutable value
-     *
-     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options(), report_id_ };
-    }
+  /**
+   * Validates the options and returns them as an immutable value.
+   *
+   * @return consistent options as an immutable value
+   *
+   * @exception std::system_error with code errc::common::invalid_argument if the options are not
+   * valid
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options(), report_id_ };
+  }
 
-  private:
-    std::optional<std::string> report_id_{};
+private:
+  std::optional<std::string> report_id_{};
 };
 
 using diagnostics_handler = std::function<void(error, diagnostics_result)>;

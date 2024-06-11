@@ -26,35 +26,36 @@ namespace couchbase::core::operations::management
 std::error_code
 bucket_flush_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
-    encoded.method = "POST";
-    encoded.path = fmt::format("/pools/default/buckets/{}/controller/doFlush", name);
-    return {};
+  encoded.method = "POST";
+  encoded.path = fmt::format("/pools/default/buckets/{}/controller/doFlush", name);
+  return {};
 }
 
 bucket_flush_response
-bucket_flush_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+bucket_flush_request::make_response(error_context::http&& ctx,
+                                    const encoded_response_type& encoded) const
 {
-    bucket_flush_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        switch (encoded.status_code) {
-            case 400: {
-                if (encoded.body.data().find("Flush is disabled") != std::string::npos) {
-                    response.ctx.ec = errc::management::bucket_not_flushable;
-                } else {
-                    response.ctx.ec = errc::common::invalid_argument;
-                }
-            } break;
-            case 404:
-                response.ctx.ec = errc::common::bucket_not_found;
-                break;
-            case 200:
-                response.ctx.ec = {};
-                break;
-            default:
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
-                break;
+  bucket_flush_response response{ std::move(ctx) };
+  if (!response.ctx.ec) {
+    switch (encoded.status_code) {
+      case 400: {
+        if (encoded.body.data().find("Flush is disabled") != std::string::npos) {
+          response.ctx.ec = errc::management::bucket_not_flushable;
+        } else {
+          response.ctx.ec = errc::common::invalid_argument;
         }
+      } break;
+      case 404:
+        response.ctx.ec = errc::common::bucket_not_found;
+        break;
+      case 200:
+        response.ctx.ec = {};
+        break;
+      default:
+        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+        break;
     }
-    return response;
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

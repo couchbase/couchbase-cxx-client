@@ -29,24 +29,25 @@
  */
 template<>
 struct fmt::formatter<couchbase::error> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(const couchbase::error& err, FormatContext& ctx) const
-    {
-        if (err.message().empty()) {
-            if (err.ctx()) {
-                return format_to(ctx.out(), "{} | {}", err.ec().message(), err.ctx().to_json());
-            }
-            return format_to(ctx.out(), "{}", err.ec().message());
-        }
-        if (err.ctx()) {
-            return format_to(ctx.out(), "{} - {} | {}", err.ec().message(), err.message(), err.ctx().to_json());
-        }
-        return format_to(ctx.out(), "{} - {}", err.ec().message(), err.message());
+  template<typename FormatContext>
+  auto format(const couchbase::error& err, FormatContext& ctx) const
+  {
+    if (err.message().empty()) {
+      if (err.ctx()) {
+        return format_to(ctx.out(), "{} | {}", err.ec().message(), err.ctx().to_json());
+      }
+      return format_to(ctx.out(), "{}", err.ec().message());
     }
+    if (err.ctx()) {
+      return format_to(
+        ctx.out(), "{} - {} | {}", err.ec().message(), err.message(), err.ctx().to_json());
+    }
+    return format_to(ctx.out(), "{} - {}", err.ec().message(), err.message());
+  }
 };

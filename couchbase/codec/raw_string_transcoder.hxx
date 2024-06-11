@@ -42,25 +42,27 @@ namespace codec
 {
 class raw_string_transcoder
 {
-  public:
-    using document_type = std::string;
+public:
+  using document_type = std::string;
 
-    static auto encode(document_type document) -> encoded_value
-    {
-        return { core::utils::to_binary(document), codec_flags::string_common_flags };
+  static auto encode(document_type document) -> encoded_value
+  {
+    return { core::utils::to_binary(document), codec_flags::string_common_flags };
+  }
+
+  template<typename Document = document_type,
+           std::enable_if_t<std::is_same_v<Document, document_type>, bool> = true>
+  static auto decode(const encoded_value& encoded) -> Document
+  {
+    if (!codec_flags::has_common_flags(encoded.flags, codec_flags::string_common_flags)) {
+      throw std::system_error(
+        errc::common::decoding_failure,
+        "raw_string_transcoder expects document to have STRING common flags, flags=" +
+          std::to_string(encoded.flags));
     }
 
-    template<typename Document = document_type, std::enable_if_t<std::is_same_v<Document, document_type>, bool> = true>
-    static auto decode(const encoded_value& encoded) -> Document
-    {
-        if (!codec_flags::has_common_flags(encoded.flags, codec_flags::string_common_flags)) {
-            throw std::system_error(errc::common::decoding_failure,
-                                    "raw_string_transcoder expects document to have STRING common flags, flags=" +
-                                      std::to_string(encoded.flags));
-        }
-
-        return std::string{ reinterpret_cast<const char*>(encoded.data.data()), encoded.data.size() };
-    }
+    return std::string{ reinterpret_cast<const char*>(encoded.data.data()), encoded.data.size() };
+  }
 };
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN

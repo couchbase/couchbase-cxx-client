@@ -28,49 +28,50 @@ namespace couchbase::core::management::analytics
  * Only available as of 7.0 Developer Preview.
  */
 struct azure_blob_external_link {
-    /**
-     * The name of this link.
-     */
-    std::string link_name{};
+  /**
+   * The name of this link.
+   */
+  std::string link_name{};
 
-    /**
-     * The dataverse that this link belongs to.
-     */
-    std::string dataverse{};
+  /**
+   * The dataverse that this link belongs to.
+   */
+  std::string dataverse{};
 
-    /**
-     * The connection string can be used as an authentication method, connectionString contains other authentication methods embedded inside
-     * the string. Only a single authentication method can be used. (e.g. "AccountName=myAccountName;AccountKey=myAccountKey").
-     */
-    std::optional<std::string> connection_string{};
+  /**
+   * The connection string can be used as an authentication method, connectionString contains other
+   * authentication methods embedded inside the string. Only a single authentication method can be
+   * used. (e.g. "AccountName=myAccountName;AccountKey=myAccountKey").
+   */
+  std::optional<std::string> connection_string{};
 
-    /**
-     * Azure blob storage account name
-     */
-    std::optional<std::string> account_name{};
+  /**
+   * Azure blob storage account name
+   */
+  std::optional<std::string> account_name{};
 
-    /**
-     * Azure blob storage account key
-     */
-    std::optional<std::string> account_key{};
+  /**
+   * Azure blob storage account key
+   */
+  std::optional<std::string> account_key{};
 
-    /**
-     * Token that can be used for authentication
-     */
-    std::optional<std::string> shared_access_signature{};
+  /**
+   * Token that can be used for authentication
+   */
+  std::optional<std::string> shared_access_signature{};
 
-    /**
-     * Azure blob storage endpoint
-     */
-    std::optional<std::string> blob_endpoint{};
+  /**
+   * Azure blob storage endpoint
+   */
+  std::optional<std::string> blob_endpoint{};
 
-    /**
-     * Azure blob endpoint suffix
-     */
-    std::optional<std::string> endpoint_suffix{};
+  /**
+   * Azure blob endpoint suffix
+   */
+  std::optional<std::string> endpoint_suffix{};
 
-    [[nodiscard]] std::error_code validate() const;
+  [[nodiscard]] std::error_code validate() const;
 
-    [[nodiscard]] std::string encode() const;
+  [[nodiscard]] std::string encode() const;
 };
 } // namespace couchbase::core::management::analytics

@@ -27,17 +27,18 @@
 namespace couchbase
 {
 struct get_all_buckets_options : public common_options<get_all_buckets_options> {
-  public:
-    struct built : public common_options<get_all_buckets_options>::built {
-    };
+public:
+  struct built : public common_options<get_all_buckets_options>::built {
+  };
 
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options() };
-    }
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options() };
+  }
 
-  private:
+private:
 };
 
-using get_all_buckets_handler = std::function<void(error, std::vector<management::cluster::bucket_settings>)>;
+using get_all_buckets_handler =
+  std::function<void(error, std::vector<management::cluster::bucket_settings>)>;
 } // namespace couchbase

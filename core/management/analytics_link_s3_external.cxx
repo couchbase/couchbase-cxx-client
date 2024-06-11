@@ -28,31 +28,32 @@ namespace couchbase::core::management::analytics
 std::error_code
 s3_external_link::validate() const
 {
-    if (dataverse.empty() || link_name.empty() || access_key_id.empty() || secret_access_key.empty() || region.empty()) {
-        return errc::common::invalid_argument;
-    }
-    return {};
+  if (dataverse.empty() || link_name.empty() || access_key_id.empty() ||
+      secret_access_key.empty() || region.empty()) {
+    return errc::common::invalid_argument;
+  }
+  return {};
 }
 
 std::string
 s3_external_link::encode() const
 {
-    std::map<std::string, std::string> values{
-        { "type", "s3" },
-        { "accessKeyId", access_key_id },
-        { "secretAccessKey", secret_access_key },
-        { "region", region },
-    };
-    if (std::count(dataverse.begin(), dataverse.end(), '/') == 0) {
-        values["dataverse"] = dataverse;
-        values["name"] = link_name;
-    }
-    if (session_token) {
-        values["sessionToken"] = session_token.value();
-    }
-    if (service_endpoint) {
-        values["serviceEndpoint"] = service_endpoint.value();
-    }
-    return utils::string_codec::v2::form_encode(values);
+  std::map<std::string, std::string> values{
+    { "type", "s3" },
+    { "accessKeyId", access_key_id },
+    { "secretAccessKey", secret_access_key },
+    { "region", region },
+  };
+  if (std::count(dataverse.begin(), dataverse.end(), '/') == 0) {
+    values["dataverse"] = dataverse;
+    values["name"] = link_name;
+  }
+  if (session_token) {
+    values["sessionToken"] = session_token.value();
+  }
+  if (service_endpoint) {
+    values["serviceEndpoint"] = service_endpoint.value();
+  }
+  return utils::string_codec::v2::form_encode(values);
 }
 } // namespace couchbase::core::management::analytics

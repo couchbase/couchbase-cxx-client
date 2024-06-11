@@ -21,8 +21,9 @@
 
 namespace couchbase::core::mcbp
 {
-// read_units_frame allows the server to return information about the number of read units used by a command.
+// read_units_frame allows the server to return information about the number of read units used by a
+// command.
 struct read_units_frame {
-    std::uint16_t read_units;
+  std::uint16_t read_units;
 };
 } // namespace couchbase::core::mcbp

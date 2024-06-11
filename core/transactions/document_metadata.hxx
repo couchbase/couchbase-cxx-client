@@ -28,79 +28,79 @@ namespace couchbase::core::transactions
  */
 class document_metadata
 {
-  public:
-    /**
-     *  @internal
-     *  @brief Create document metadata, given results of a kv operation
-     *
-     *  We expect this constructor to become private soon.
-     */
-    document_metadata(std::optional<std::string> cas,
-                      std::optional<std::string> revid,
-                      std::optional<std::uint32_t> exptime,
-                      std::optional<std::string> crc32)
-      : cas_(std::move(cas))
-      , revid_(std::move(revid))
-      , exptime_(exptime)
-      , crc32_(std::move(crc32))
-    {
-    }
+public:
+  /**
+   *  @internal
+   *  @brief Create document metadata, given results of a kv operation
+   *
+   *  We expect this constructor to become private soon.
+   */
+  document_metadata(std::optional<std::string> cas,
+                    std::optional<std::string> revid,
+                    std::optional<std::uint32_t> exptime,
+                    std::optional<std::string> crc32)
+    : cas_(std::move(cas))
+    , revid_(std::move(revid))
+    , exptime_(exptime)
+    , crc32_(std::move(crc32))
+  {
+  }
 
-    /** @internal
-     * @brief Create document metadata, used in responses from query server.
-     *
-     * @param cas string representation of document cas.
-     */
-    explicit document_metadata(std::string cas)
-      : cas_(std::move(cas))
-    {
-    }
+  /** @internal
+   * @brief Create document metadata, used in responses from query server.
+   *
+   * @param cas string representation of document cas.
+   */
+  explicit document_metadata(std::string cas)
+    : cas_(std::move(cas))
+  {
+  }
 
-    /**
-     * @brief Get CAS for the document
-     *
-     * @return the CAS of the document, as a string.
-     */
-    [[nodiscard]] std::optional<std::string> cas() const
-    {
-        return cas_;
-    }
+  /**
+   * @brief Get CAS for the document
+   *
+   * @return the CAS of the document, as a string.
+   */
+  [[nodiscard]] std::optional<std::string> cas() const
+  {
+    return cas_;
+  }
 
-    /**
-     * @brief Get revid for the document
-     *
-     * @return the revid of the document, as a string.
-     */
-    [[nodiscard]] std::optional<std::string> revid() const
-    {
-        return revid_;
-    }
+  /**
+   * @brief Get revid for the document
+   *
+   * @return the revid of the document, as a string.
+   */
+  [[nodiscard]] std::optional<std::string> revid() const
+  {
+    return revid_;
+  }
 
-    /**
-     * @brief Get the expiry of the document, if set
-     *
-     * @return the expiry of the document, if one was set, and the request
-     *         specified it.
-     */
-    [[nodiscard]] std::optional<std::uint32_t> exptime() const
-    {
-        return exptime_;
-    }
+  /**
+   * @brief Get the expiry of the document, if set
+   *
+   * @return the expiry of the document, if one was set, and the request
+   *         specified it.
+   */
+  [[nodiscard]] std::optional<std::uint32_t> exptime() const
+  {
+    return exptime_;
+  }
 
-    /**
-     * @brief Get the crc for the document
-     *
-     * @return the crc-32 for the document, as a string
-     */
-    [[nodiscard]] std::optional<std::string> crc32() const
-    {
-        return crc32_;
-    }
+  /**
+   * @brief Get the crc for the document
+   *
+   * @return the crc-32 for the document, as a string
+   */
+  [[nodiscard]] std::optional<std::string> crc32() const
+  {
+    return crc32_;
+  }
 
-  private:
-    const std::optional<std::string> cas_;
-    const std::optional<std::string> revid_;
-    const std::optional<std::uint32_t> exptime_;
-    const std::optional<std::string> crc32_;
+private:
+  const std::optional<std::string> cas_;
+  const std::optional<std::string> revid_;
+  const std::optional<std::uint32_t> exptime_;
+  const std::optional<std::string> crc32_;
 };
 } // namespace couchbase::core::transactions

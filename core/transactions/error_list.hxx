@@ -27,28 +27,28 @@ namespace couchbase::core::transactions
 
 class error_list
 {
-  private:
-    std::list<transaction_operation_failed> list_;
-    std::mutex mutex_;
-    std::atomic<std::size_t> size_{ 0 };
+private:
+  std::list<transaction_operation_failed> list_;
+  std::mutex mutex_;
+  std::atomic<std::size_t> size_{ 0 };
 
-  public:
-    bool empty()
-    {
-        return size_.load() == 0;
-    }
-    void push_back(const transaction_operation_failed& ex)
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        list_.push_back(ex);
-        size_ = list_.size();
-    }
-    void do_throw(std::optional<external_exception> cause = {})
-    {
-        assert(size_.load() > 0);
-        // merge the errors, throw a composite
-        std::lock_guard<std::mutex> lock(mutex_);
-        transaction_operation_failed::merge_errors(list_, cause);
-    }
+public:
+  bool empty()
+  {
+    return size_.load() == 0;
+  }
+  void push_back(const transaction_operation_failed& ex)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    list_.push_back(ex);
+    size_ = list_.size();
+  }
+  void do_throw(std::optional<external_exception> cause = {})
+  {
+    assert(size_.load() > 0);
+    // merge the errors, throw a composite
+    std::lock_guard<std::mutex> lock(mutex_);
+    transaction_operation_failed::merge_errors(list_, cause);
+  }
 };
 } // namespace couchbase::core::transactions

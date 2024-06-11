@@ -21,7 +21,11 @@
 
 namespace couchbase::core::crypto
 {
-enum class Algorithm { ALG_SHA1, ALG_SHA256, ALG_SHA512 };
+enum class Algorithm {
+  ALG_SHA1,
+  ALG_SHA256,
+  ALG_SHA512
+};
 
 bool
 isSupported(Algorithm algorithm);
@@ -48,7 +52,10 @@ CBC_HMAC(Algorithm algorithm, std::string_view key, std::string_view data);
  *         std::runtime_error - Failures generating the HMAC
  */
 std::string
-PBKDF2_HMAC(Algorithm algorithm, const std::string& pass, std::string_view salt, unsigned int iterationCount);
+PBKDF2_HMAC(Algorithm algorithm,
+            const std::string& pass,
+            std::string_view salt,
+            unsigned int iterationCount);
 
 /**
  * Generate a digest by using the requested algorithm
@@ -56,7 +63,9 @@ PBKDF2_HMAC(Algorithm algorithm, const std::string& pass, std::string_view salt,
 std::string
 digest(Algorithm algorithm, std::string_view data);
 
-enum class Cipher { AES_256_cbc };
+enum class Cipher {
+  AES_256_cbc
+};
 
 Cipher
 to_cipher(const std::string& str);

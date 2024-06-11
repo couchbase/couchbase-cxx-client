@@ -28,17 +28,18 @@
 namespace couchbase
 {
 struct get_all_search_indexes_options : public common_options<get_all_search_indexes_options> {
-  public:
-    struct built : public common_options<get_all_search_indexes_options>::built {
-    };
+public:
+  struct built : public common_options<get_all_search_indexes_options>::built {
+  };
 
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options() };
-    }
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options() };
+  }
 
-  private:
+private:
 };
 
-using get_all_search_indexes_handler = std::function<void(error, std::vector<management::search::index>)>;
+using get_all_search_indexes_handler =
+  std::function<void(error, std::vector<management::search::index>)>;
 } // namespace couchbase

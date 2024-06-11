@@ -29,36 +29,36 @@ date_range_facet_result::date_range_facet_result(internal_date_range_facet_resul
 auto
 date_range_facet_result::name() const -> const std::string&
 {
-    return internal_->name();
+  return internal_->name();
 }
 
 auto
 date_range_facet_result::field() const -> const std::string&
 {
-    return internal_->field();
+  return internal_->field();
 }
 
 auto
 date_range_facet_result::total() const -> std::uint64_t
 {
-    return internal_->total();
+  return internal_->total();
 }
 
 auto
 date_range_facet_result::missing() const -> std::uint64_t
 {
-    return internal_->missing();
+  return internal_->missing();
 }
 
 auto
 date_range_facet_result::other() const -> std::uint64_t
 {
-    return internal_->other();
+  return internal_->other();
 }
 
 auto
 date_range_facet_result::date_ranges() const -> const std::vector<search_date_range>&
 {
-    return internal_->date_ranges();
+  return internal_->date_ranges();
 }
 } // namespace couchbase

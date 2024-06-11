@@ -30,26 +30,28 @@ namespace couchbase::core::operations
 {
 
 struct touch_response {
-    key_value_error_context ctx;
-    couchbase::cas cas{};
+  key_value_error_context ctx;
+  couchbase::cas cas{};
 };
 
 struct touch_request {
-    using response_type = touch_response;
-    using encoded_request_type = protocol::client_request<protocol::touch_request_body>;
-    using encoded_response_type = protocol::client_response<protocol::touch_response_body>;
+  using response_type = touch_response;
+  using encoded_request_type = protocol::client_request<protocol::touch_request_body>;
+  using encoded_response_type = protocol::client_response<protocol::touch_response_body>;
 
-    document_id id;
-    std::uint16_t partition{};
-    std::uint32_t opaque{};
-    std::uint32_t expiry{};
-    std::optional<std::chrono::milliseconds> timeout{};
-    io::retry_context<false> retries{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
+  document_id id;
+  std::uint16_t partition{};
+  std::uint32_t opaque{};
+  std::uint32_t expiry{};
+  std::optional<std::chrono::milliseconds> timeout{};
+  io::retry_context<false> retries{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          mcbp_context&& context) const;
 
-    [[nodiscard]] touch_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] touch_response make_response(key_value_error_context&& ctx,
+                                             const encoded_response_type& encoded) const;
 };
 
 } // namespace couchbase::core::operations

@@ -31,107 +31,107 @@ namespace couchbase::core::protocol
 
 class lookup_in_replica_response_body
 {
-  public:
-    static const inline client_opcode opcode = client_opcode::subdoc_multi_lookup;
+public:
+  static const inline client_opcode opcode = client_opcode::subdoc_multi_lookup;
 
-    struct lookup_in_field {
-        key_value_status_code status{};
-        std::string value;
-    };
+  struct lookup_in_field {
+    key_value_status_code status{};
+    std::string value;
+  };
 
-  private:
-    std::vector<lookup_in_field> fields_{};
+private:
+  std::vector<lookup_in_field> fields_{};
 
-  public:
-    [[nodiscard]] const std::vector<lookup_in_field>& fields() const
-    {
-        return fields_;
-    }
+public:
+  [[nodiscard]] const std::vector<lookup_in_field>& fields() const
+  {
+    return fields_;
+  }
 
-    [[nodiscard]] bool parse(key_value_status_code status,
-                             const header_buffer& header,
-                             std::uint8_t framing_extras_size,
-                             std::uint16_t key_size,
-                             std::uint8_t extras_size,
-                             const std::vector<std::byte>& body,
-                             const cmd_info& info);
+  [[nodiscard]] bool parse(key_value_status_code status,
+                           const header_buffer& header,
+                           std::uint8_t framing_extras_size,
+                           std::uint16_t key_size,
+                           std::uint8_t extras_size,
+                           const std::vector<std::byte>& body,
+                           const cmd_info& info);
 };
 
 class lookup_in_replica_request_body
 {
-  public:
-    using response_body_type = lookup_in_replica_response_body;
-    static const inline client_opcode opcode = client_opcode::subdoc_multi_lookup;
+public:
+  using response_body_type = lookup_in_replica_response_body;
+  static const inline client_opcode opcode = client_opcode::subdoc_multi_lookup;
 
-    /**
-     * Tells the server to operate on replica vbucket instead of active
-     */
-    static const inline std::uint8_t doc_flag_replica_read = 0b0010'0000;
+  /**
+   * Tells the server to operate on replica vbucket instead of active
+   */
+  static const inline std::uint8_t doc_flag_replica_read = 0b0010'0000;
 
-  private:
-    std::vector<std::byte> key_;
-    std::vector<std::byte> extras_{};
-    std::vector<std::byte> value_{};
+private:
+  std::vector<std::byte> key_;
+  std::vector<std::byte> extras_{};
+  std::vector<std::byte> value_{};
 
-    std::uint8_t flags_{ 0 };
-    std::vector<couchbase::core::impl::subdoc::command> specs_;
+  std::uint8_t flags_{ 0 };
+  std::vector<couchbase::core::impl::subdoc::command> specs_;
 
-  public:
-    void id(const document_id& id);
+public:
+  void id(const document_id& id);
 
-    void read_replica(bool value)
-    {
-        if (value) {
-            flags_ = flags_ | doc_flag_replica_read;
-        }
+  void read_replica(bool value)
+  {
+    if (value) {
+      flags_ = flags_ | doc_flag_replica_read;
     }
+  }
 
-    void specs(const std::vector<couchbase::core::impl::subdoc::command>& specs)
-    {
-        specs_ = specs;
+  void specs(const std::vector<couchbase::core::impl::subdoc::command>& specs)
+  {
+    specs_ = specs;
+  }
+
+  [[nodiscard]] const auto& key() const
+  {
+    return key_;
+  }
+
+  [[nodiscard]] const auto& framing_extras() const
+  {
+    return empty_buffer;
+  }
+
+  [[nodiscard]] const auto& extras()
+  {
+    if (extras_.empty()) {
+      fill_extras();
     }
+    return extras_;
+  }
 
-    [[nodiscard]] const auto& key() const
-    {
-        return key_;
+  [[nodiscard]] const auto& value()
+  {
+    if (value_.empty()) {
+      fill_value();
     }
+    return value_;
+  }
 
-    [[nodiscard]] const auto& framing_extras() const
-    {
-        return empty_buffer;
+  [[nodiscard]] std::size_t size()
+  {
+    if (extras_.empty()) {
+      fill_extras();
     }
-
-    [[nodiscard]] const auto& extras()
-    {
-        if (extras_.empty()) {
-            fill_extras();
-        }
-        return extras_;
+    if (value_.empty()) {
+      fill_value();
     }
+    return key_.size() + extras_.size() + value_.size();
+  }
 
-    [[nodiscard]] const auto& value()
-    {
-        if (value_.empty()) {
-            fill_value();
-        }
-        return value_;
-    }
+private:
+  void fill_extras();
 
-    [[nodiscard]] std::size_t size()
-    {
-        if (extras_.empty()) {
-            fill_extras();
-        }
-        if (value_.empty()) {
-            fill_value();
-        }
-        return key_.size() + extras_.size() + value_.size();
-    }
-
-  private:
-    void fill_extras();
-
-    void fill_value();
+  void fill_value();
 };
 
 } // namespace couchbase::core::protocol

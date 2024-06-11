@@ -29,27 +29,28 @@
 namespace couchbase::core::io::dns
 {
 struct dns_srv_response {
-    struct address {
-        std::string hostname;
-        std::uint16_t port;
-    };
-    std::error_code ec;
-    std::vector<address> targets{};
+  struct address {
+    std::string hostname;
+    std::uint16_t port;
+  };
+  std::error_code ec;
+  std::vector<address> targets{};
 };
 
 class dns_client
 {
-  public:
-    explicit dns_client(asio::io_context& ctx)
-      : ctx_(ctx)
-    {
-    }
+public:
+  explicit dns_client(asio::io_context& ctx)
+    : ctx_(ctx)
+  {
+  }
 
-    void query_srv(const std::string& name,
-                   const std::string& service,
-                   const dns_config& config,
-                   utils::movable_function<void(couchbase::core::io::dns::dns_srv_response&& resp)>&& handler);
+  void query_srv(
+    const std::string& name,
+    const std::string& service,
+    const dns_config& config,
+    utils::movable_function<void(couchbase::core::io::dns::dns_srv_response&& resp)>&& handler);
 
-    asio::io_context& ctx_;
+  asio::io_context& ctx_;
 };
 } // namespace couchbase::core::io::dns

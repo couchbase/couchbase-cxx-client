@@ -30,104 +30,116 @@
 namespace couchbase::core::topology
 {
 struct configuration {
-    enum class node_locator_type {
-        unknown,
-        vbucket,
-        ketama,
-    };
+  enum class node_locator_type {
+    unknown,
+    vbucket,
+    ketama,
+  };
 
-    struct port_map {
-        std::optional<std::uint16_t> key_value{};
-        std::optional<std::uint16_t> management{};
-        std::optional<std::uint16_t> analytics{};
-        std::optional<std::uint16_t> search{};
-        std::optional<std::uint16_t> views{};
-        std::optional<std::uint16_t> query{};
-        std::optional<std::uint16_t> eventing{};
-    };
+  struct port_map {
+    std::optional<std::uint16_t> key_value{};
+    std::optional<std::uint16_t> management{};
+    std::optional<std::uint16_t> analytics{};
+    std::optional<std::uint16_t> search{};
+    std::optional<std::uint16_t> views{};
+    std::optional<std::uint16_t> query{};
+    std::optional<std::uint16_t> eventing{};
+  };
 
-    struct alternate_address {
-        std::string name{};
-        std::string hostname{};
-        port_map services_plain{};
-        port_map services_tls{};
-    };
+  struct alternate_address {
+    std::string name{};
+    std::string hostname{};
+    port_map services_plain{};
+    port_map services_tls{};
+  };
 
-    struct node {
-        bool this_node{ false };
-        size_t index{};
-        std::string hostname{};
-        port_map services_plain{};
-        port_map services_tls{};
-        std::map<std::string, alternate_address> alt{};
-        std::string server_group{};
+  struct node {
+    bool this_node{ false };
+    size_t index{};
+    std::string hostname{};
+    port_map services_plain{};
+    port_map services_tls{};
+    std::map<std::string, alternate_address> alt{};
+    std::string server_group{};
 
-        bool operator!=(const node& other) const
-        {
-            return hostname != other.hostname || services_plain.key_value != other.services_plain.key_value ||
-                   services_tls.key_value != other.services_tls.key_value;
-        }
-
-        [[nodiscard]] std::uint16_t port_or(service_type type, bool is_tls, std::uint16_t default_value) const;
-
-        [[nodiscard]] std::uint16_t port_or(const std::string& network, service_type type, bool is_tls, std::uint16_t default_value) const;
-
-        [[nodiscard]] const std::string& hostname_for(const std::string& network) const;
-
-        [[nodiscard]] std::optional<std::string> endpoint(const std::string& network, service_type type, bool is_tls) const;
-    };
-
-    [[nodiscard]] std::string select_network(const std::string& bootstrap_hostname) const;
-
-    using vbucket_map = typename std::vector<std::vector<std::int16_t>>;
-
-    std::optional<std::int64_t> epoch{};
-    std::optional<std::int64_t> rev{};
-    couchbase::core::uuid::uuid_t id{};
-    std::optional<std::uint32_t> num_replicas{};
-    std::vector<node> nodes{};
-    std::optional<std::string> uuid{};
-    std::optional<std::string> bucket{};
-    std::optional<vbucket_map> vbmap{};
-    std::optional<std::uint64_t> collections_manifest_uid{};
-    configuration_capabilities capabilities{};
-    node_locator_type node_locator{ node_locator_type::unknown };
-    bool force{ false };
-
-    bool operator==(const configuration& other) const
+    bool operator!=(const node& other) const
     {
-        return epoch == other.epoch && rev == other.rev;
+      return hostname != other.hostname ||
+             services_plain.key_value != other.services_plain.key_value ||
+             services_tls.key_value != other.services_tls.key_value;
     }
 
-    bool operator<(const configuration& other) const
-    {
-        return epoch < other.epoch || (epoch == other.epoch && rev < other.rev);
-    }
+    [[nodiscard]] std::uint16_t port_or(service_type type,
+                                        bool is_tls,
+                                        std::uint16_t default_value) const;
 
-    bool operator>(const configuration& other) const
-    {
-        return other < *this;
-    }
+    [[nodiscard]] std::uint16_t port_or(const std::string& network,
+                                        service_type type,
+                                        bool is_tls,
+                                        std::uint16_t default_value) const;
 
-    [[nodiscard]] std::string rev_str() const;
+    [[nodiscard]] const std::string& hostname_for(const std::string& network) const;
 
-    [[nodiscard]] std::size_t index_for_this_node() const;
-    [[nodiscard]] bool has_node(const std::string& network,
-                                service_type type,
-                                bool is_tls,
-                                const std::string& hostname,
-                                const std::string& port) const;
+    [[nodiscard]] std::optional<std::string> endpoint(const std::string& network,
+                                                      service_type type,
+                                                      bool is_tls) const;
+  };
 
-    std::pair<std::uint16_t, std::optional<std::size_t>> map_key(const std::string& key, std::size_t index) const;
-    std::pair<std::uint16_t, std::optional<std::size_t>> map_key(const std::vector<std::byte>& key, std::size_t index) const;
+  [[nodiscard]] std::string select_network(const std::string& bootstrap_hostname) const;
 
-    std::optional<std::size_t> server_by_vbucket(std::uint16_t vbucket, std::size_t index) const;
+  using vbucket_map = typename std::vector<std::vector<std::int16_t>>;
+
+  std::optional<std::int64_t> epoch{};
+  std::optional<std::int64_t> rev{};
+  couchbase::core::uuid::uuid_t id{};
+  std::optional<std::uint32_t> num_replicas{};
+  std::vector<node> nodes{};
+  std::optional<std::string> uuid{};
+  std::optional<std::string> bucket{};
+  std::optional<vbucket_map> vbmap{};
+  std::optional<std::uint64_t> collections_manifest_uid{};
+  configuration_capabilities capabilities{};
+  node_locator_type node_locator{ node_locator_type::unknown };
+  bool force{ false };
+
+  bool operator==(const configuration& other) const
+  {
+    return epoch == other.epoch && rev == other.rev;
+  }
+
+  bool operator<(const configuration& other) const
+  {
+    return epoch < other.epoch || (epoch == other.epoch && rev < other.rev);
+  }
+
+  bool operator>(const configuration& other) const
+  {
+    return other < *this;
+  }
+
+  [[nodiscard]] std::string rev_str() const;
+
+  [[nodiscard]] std::size_t index_for_this_node() const;
+  [[nodiscard]] bool has_node(const std::string& network,
+                              service_type type,
+                              bool is_tls,
+                              const std::string& hostname,
+                              const std::string& port) const;
+
+  std::pair<std::uint16_t, std::optional<std::size_t>> map_key(const std::string& key,
+                                                               std::size_t index) const;
+  std::pair<std::uint16_t, std::optional<std::size_t>> map_key(const std::vector<std::byte>& key,
+                                                               std::size_t index) const;
+
+  std::optional<std::size_t> server_by_vbucket(std::uint16_t vbucket, std::size_t index) const;
 };
 
 using endpoint = std::pair<std::string, std::string>;
 
 configuration
-make_blank_configuration(const std::string& hostname, std::uint16_t plain_port, std::uint16_t tls_port);
+make_blank_configuration(const std::string& hostname,
+                         std::uint16_t plain_port,
+                         std::uint16_t tls_port);
 
 configuration
 make_blank_configuration(const std::vector<endpoint>& endpoints, bool use_tls, bool force = false);

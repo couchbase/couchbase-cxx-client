@@ -26,17 +26,18 @@
 
 namespace couchbase
 {
-struct pause_ingest_search_index_options : public common_options<pause_ingest_search_index_options> {
-  public:
-    struct built : public common_options<pause_ingest_search_index_options>::built {
-    };
+struct pause_ingest_search_index_options
+  : public common_options<pause_ingest_search_index_options> {
+public:
+  struct built : public common_options<pause_ingest_search_index_options>::built {
+  };
 
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options() };
-    }
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options() };
+  }
 
-  private:
+private:
 };
 
 using pause_ingest_search_index_handler = std::function<void(error)>;

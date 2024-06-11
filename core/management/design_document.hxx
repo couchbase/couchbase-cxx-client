@@ -26,16 +26,16 @@
 namespace couchbase::core::management::views
 {
 struct design_document {
-    struct view {
-        std::string name;
-        std::optional<std::string> map{};
-        std::optional<std::string> reduce{};
-    };
-
-    std::optional<std::string> rev;
+  struct view {
     std::string name;
-    design_document_namespace ns;
-    std::map<std::string, view> views;
+    std::optional<std::string> map{};
+    std::optional<std::string> reduce{};
+  };
+
+  std::optional<std::string> rev;
+  std::string name;
+  design_document_namespace ns;
+  std::map<std::string, view> views;
 };
 
 } // namespace couchbase::core::management::views

@@ -25,32 +25,32 @@ namespace tao::json
 {
 template<>
 struct traits<couchbase::core::topology::collections_manifest> {
-    template<template<typename...> class Traits>
-    static couchbase::core::topology::collections_manifest as(const tao::json::basic_value<Traits>& v)
-    {
-        (void)v;
-        couchbase::core::topology::collections_manifest result;
-        result.id = couchbase::core::uuid::random();
-        result.uid = std::stoull(v.at("uid").get_string(), nullptr, 16);
-        for (const auto& s : v.at("scopes").get_array()) {
-            couchbase::core::topology::collections_manifest::scope scope;
-            scope.uid = std::stoull(s.at("uid").get_string(), nullptr, 16);
-            scope.name = s.at("name").get_string();
-            for (const auto& c : s.at("collections").get_array()) {
-                couchbase::core::topology::collections_manifest::collection collection;
-                collection.uid = std::stoull(c.at("uid").get_string(), nullptr, 16);
-                collection.name = c.at("name").get_string();
-                if (const auto* max_ttl = c.find("maxTTL"); max_ttl != nullptr) {
-                    collection.max_expiry = max_ttl->template as<std::int32_t>();
-                }
-                if (const auto* history = c.find("history"); history != nullptr) {
-                    collection.history = history->template as<std::optional<bool>>();
-                }
-                scope.collections.emplace_back(collection);
-            }
-            result.scopes.emplace_back(scope);
+  template<template<typename...> class Traits>
+  static couchbase::core::topology::collections_manifest as(const tao::json::basic_value<Traits>& v)
+  {
+    (void)v;
+    couchbase::core::topology::collections_manifest result;
+    result.id = couchbase::core::uuid::random();
+    result.uid = std::stoull(v.at("uid").get_string(), nullptr, 16);
+    for (const auto& s : v.at("scopes").get_array()) {
+      couchbase::core::topology::collections_manifest::scope scope;
+      scope.uid = std::stoull(s.at("uid").get_string(), nullptr, 16);
+      scope.name = s.at("name").get_string();
+      for (const auto& c : s.at("collections").get_array()) {
+        couchbase::core::topology::collections_manifest::collection collection;
+        collection.uid = std::stoull(c.at("uid").get_string(), nullptr, 16);
+        collection.name = c.at("name").get_string();
+        if (const auto* max_ttl = c.find("maxTTL"); max_ttl != nullptr) {
+          collection.max_expiry = max_ttl->template as<std::int32_t>();
         }
-        return result;
+        if (const auto* history = c.find("history"); history != nullptr) {
+          collection.history = history->template as<std::optional<bool>>();
+        }
+        scope.collections.emplace_back(collection);
+      }
+      result.scopes.emplace_back(scope);
     }
+    return result;
+  }
 };
 } // namespace tao::json

@@ -29,7 +29,8 @@ error_context::error_context(internal_error_context internal)
 {
 }
 
-error_context::error_context(couchbase::internal_error_context internal, couchbase::internal_error_context internal_metadata)
+error_context::error_context(couchbase::internal_error_context internal,
+                             couchbase::internal_error_context internal_metadata)
   : internal_(std::move(internal))
   , internal_metadata_(std::move(internal_metadata))
 {
@@ -37,30 +38,30 @@ error_context::error_context(couchbase::internal_error_context internal, couchba
 
 error_context::operator bool() const
 {
-    return internal_.operator bool();
+  return internal_.operator bool();
 }
 
 auto
 error_context::to_json(error_context_json_format format) const -> std::string
 {
-    switch (format) {
-        case error_context_json_format::compact:
-            return tao::json::to_string(internal_);
-        case error_context_json_format::pretty:
-            return tao::json::to_string(internal_, 2);
-    }
-    return "{}";
+  switch (format) {
+    case error_context_json_format::compact:
+      return tao::json::to_string(internal_);
+    case error_context_json_format::pretty:
+      return tao::json::to_string(internal_, 2);
+  }
+  return "{}";
 }
 
 auto
 error_context::internal_metadata(couchbase::error_context_json_format format) const -> std::string
 {
-    switch (format) {
-        case error_context_json_format::compact:
-            return tao::json::to_string(internal_metadata_);
-        case error_context_json_format::pretty:
-            return tao::json::to_string(internal_metadata_, 2);
-    }
-    return "{}";
+  switch (format) {
+    case error_context_json_format::compact:
+      return tao::json::to_string(internal_metadata_);
+    case error_context_json_format::pretty:
+      return tao::json::to_string(internal_metadata_, 2);
+  }
+  return "{}";
 }
 } // namespace couchbase

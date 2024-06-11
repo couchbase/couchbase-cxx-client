@@ -30,37 +30,37 @@ namespace couchbase
  */
 class result
 {
-  public:
-    /**
-     * @since 1.0.0
-     * @internal
-     */
-    result() = default;
+public:
+  /**
+   * @since 1.0.0
+   * @internal
+   */
+  result() = default;
 
-    /**
-     * @param cas
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    explicit result(couchbase::cas cas)
-      : cas_(cas)
-    {
-    }
+  /**
+   * @param cas
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  explicit result(couchbase::cas cas)
+    : cas_(cas)
+  {
+  }
 
-    /**
-     * @return
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto cas() const -> couchbase::cas
-    {
-        return cas_;
-    }
+  /**
+   * @return
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto cas() const -> couchbase::cas
+  {
+    return cas_;
+  }
 
-  private:
-    couchbase::cas cas_{ 0U };
+private:
+  couchbase::cas cas_{ 0U };
 };
 
 } // namespace couchbase

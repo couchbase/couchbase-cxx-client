@@ -23,8 +23,8 @@ namespace couchbase::core::diag
 {
 class ping_reporter
 {
-  public:
-    virtual ~ping_reporter() = default;
-    virtual void report(diag::endpoint_ping_info&& info) = 0;
+public:
+  virtual ~ping_reporter() = default;
+  virtual void report(diag::endpoint_ping_info&& info) = 0;
 };
 } // namespace couchbase::core::diag

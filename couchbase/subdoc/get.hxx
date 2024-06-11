@@ -39,42 +39,42 @@ namespace subdoc
  */
 class get
 {
-  public:
-    /**
-     * Sets that this is an extended attribute (XATTR) field.
-     *
-     * @param value new value for the option
-     * @return this, for chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto xattr(bool value = true) -> get&
-    {
-        xattr_ = value;
-        return *this;
-    }
+public:
+  /**
+   * Sets that this is an extended attribute (XATTR) field.
+   *
+   * @param value new value for the option
+   * @return this, for chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto xattr(bool value = true) -> get&
+  {
+    xattr_ = value;
+    return *this;
+  }
 
-  private:
+private:
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-    friend couchbase::lookup_in_specs;
+  friend couchbase::lookup_in_specs;
 #endif
 
-    explicit get(std::string path)
-      : path_(std::move(path))
-    {
-    }
+  explicit get(std::string path)
+    : path_(std::move(path))
+  {
+  }
 
-    explicit get(lookup_in_macro macro)
-      : path_(to_string(macro))
-      , xattr_{ true }
-    {
-    }
+  explicit get(lookup_in_macro macro)
+    : path_(to_string(macro))
+    , xattr_{ true }
+  {
+  }
 
-    void encode(core::impl::subdoc::command_bundle& bundle) const;
+  void encode(core::impl::subdoc::command_bundle& bundle) const;
 
-    std::string path_;
-    bool xattr_{ false };
+  std::string path_;
+  bool xattr_{ false };
 };
 } // namespace subdoc
 } // namespace couchbase

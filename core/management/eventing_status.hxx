@@ -25,65 +25,65 @@ namespace couchbase::core::management::eventing
 {
 
 enum class function_status {
-    /**
-     * The function is not deployed.
-     */
-    undeployed,
+  /**
+   * The function is not deployed.
+   */
+  undeployed,
 
-    /**
-     * The function is currently being undeployed.
-     */
-    undeploying,
+  /**
+   * The function is currently being undeployed.
+   */
+  undeploying,
 
-    /**
-     * The function is currently being deployed.
-     */
-    deploying,
+  /**
+   * The function is currently being deployed.
+   */
+  deploying,
 
-    /**
-     * The function is deployed.
-     */
-    deployed,
+  /**
+   * The function is deployed.
+   */
+  deployed,
 
-    /**
-     * The function is paused.
-     */
-    paused,
+  /**
+   * The function is paused.
+   */
+  paused,
 
-    /**
-     * The function is currently being paused.
-     */
-    pausing,
+  /**
+   * The function is currently being paused.
+   */
+  pausing,
 };
 
 enum class function_deployment_status {
-    deployed,
-    undeployed,
+  deployed,
+  undeployed,
 };
 
 enum class function_processing_status {
-    running,
-    paused,
+  running,
+  paused,
 };
 
 struct function_state {
-    std::string name;
-    function_status status;
-    std::uint64_t num_bootstrapping_nodes;
-    std::uint64_t num_deployed_nodes;
-    function_deployment_status deployment_status;
-    function_processing_status processing_status;
-    std::optional<bool> redeploy_required{};
+  std::string name;
+  function_status status;
+  std::uint64_t num_bootstrapping_nodes;
+  std::uint64_t num_deployed_nodes;
+  function_deployment_status deployment_status;
+  function_processing_status processing_status;
+  std::optional<bool> redeploy_required{};
 
-    struct {
-        std::optional<std::string> bucket_name{};
-        std::optional<std::string> scope_name{};
-    } internal{};
+  struct {
+    std::optional<std::string> bucket_name{};
+    std::optional<std::string> scope_name{};
+  } internal{};
 };
 
 struct status {
-    std::uint64_t num_eventing_nodes{};
-    std::vector<function_state> functions{};
+  std::uint64_t num_eventing_nodes{};
+  std::vector<function_state> functions{};
 };
 
 } // namespace couchbase::core::management::eventing

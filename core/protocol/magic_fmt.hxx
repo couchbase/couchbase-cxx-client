@@ -23,36 +23,36 @@
 
 template<>
 struct fmt::formatter<couchbase::core::protocol::magic> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(couchbase::core::protocol::magic code, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (code) {
-            case couchbase::core::protocol::magic::client_request:
-                name = "client_request (0x80)";
-                break;
-            case couchbase::core::protocol::magic::alt_client_request:
-                name = "alt_client_request (0x08)";
-                break;
-            case couchbase::core::protocol::magic::client_response:
-                name = "client_response (0x81)";
-                break;
-            case couchbase::core::protocol::magic::alt_client_response:
-                name = "alt_client_response (0x18)";
-                break;
-            case couchbase::core::protocol::magic::server_request:
-                name = "server_request (0x82)";
-                break;
-            case couchbase::core::protocol::magic::server_response:
-                name = "server_response (0x83)";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
+  template<typename FormatContext>
+  auto format(couchbase::core::protocol::magic code, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (code) {
+      case couchbase::core::protocol::magic::client_request:
+        name = "client_request (0x80)";
+        break;
+      case couchbase::core::protocol::magic::alt_client_request:
+        name = "alt_client_request (0x08)";
+        break;
+      case couchbase::core::protocol::magic::client_response:
+        name = "client_response (0x81)";
+        break;
+      case couchbase::core::protocol::magic::alt_client_response:
+        name = "alt_client_response (0x18)";
+        break;
+      case couchbase::core::protocol::magic::server_request:
+        name = "server_request (0x82)";
+        break;
+      case couchbase::core::protocol::magic::server_response:
+        name = "server_response (0x83)";
+        break;
     }
+    return format_to(ctx.out(), "{}", name);
+  }
 };

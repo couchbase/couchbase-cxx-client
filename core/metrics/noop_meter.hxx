@@ -24,24 +24,25 @@ namespace couchbase::core::metrics
 
 class noop_value_recorder : public couchbase::metrics::value_recorder
 {
-  public:
-    void record_value(std::int64_t /* value */) override
-    {
-        /* do nothing */
-    }
+public:
+  void record_value(std::int64_t /* value */) override
+  {
+    /* do nothing */
+  }
 };
 
 class noop_meter : public couchbase::metrics::meter
 {
-  private:
-    std::shared_ptr<noop_value_recorder> instance_{ std::make_shared<noop_value_recorder>() };
+private:
+  std::shared_ptr<noop_value_recorder> instance_{ std::make_shared<noop_value_recorder>() };
 
-  public:
-    std::shared_ptr<couchbase::metrics::value_recorder> get_value_recorder(const std::string& /* name */,
-                                                                           const std::map<std::string, std::string>& /* tags */) override
-    {
-        return instance_;
-    }
+public:
+  std::shared_ptr<couchbase::metrics::value_recorder> get_value_recorder(
+    const std::string& /* name */,
+    const std::map<std::string, std::string>& /* tags */) override
+  {
+    return instance_;
+  }
 };
 
 } // namespace couchbase::core::metrics

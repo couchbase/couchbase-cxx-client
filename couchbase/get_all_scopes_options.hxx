@@ -27,17 +27,18 @@
 namespace couchbase
 {
 struct get_all_scopes_options : public common_options<get_all_scopes_options> {
-  public:
-    struct built : public common_options<get_all_scopes_options>::built {
-    };
+public:
+  struct built : public common_options<get_all_scopes_options>::built {
+  };
 
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options() };
-    }
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options() };
+  }
 
-  private:
+private:
 };
 
-using get_all_scopes_handler = std::function<void(error, std::vector<management::bucket::scope_spec>)>;
+using get_all_scopes_handler =
+  std::function<void(error, std::vector<management::bucket::scope_spec>)>;
 } // namespace couchbase

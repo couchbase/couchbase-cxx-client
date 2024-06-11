@@ -30,59 +30,61 @@ namespace couchbase::core::operations::management
 std::error_code
 collection_update_request::encode_to(encoded_request_type& encoded, http_context& /*context*/) const
 {
-    encoded.method = "PATCH";
-    encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}/collections/{}", bucket_name, scope_name, collection_name);
-    encoded.headers["content-type"] = "application/x-www-form-urlencoded";
-    std::map<std::string, std::string> values{};
-    if (max_expiry.has_value()) {
-        if (max_expiry.value() >= -1) {
-            values["maxTTL"] = std::to_string(max_expiry.value());
-        } else {
-            return errc::common::invalid_argument;
-        }
+  encoded.method = "PATCH";
+  encoded.path = fmt::format(
+    "/pools/default/buckets/{}/scopes/{}/collections/{}", bucket_name, scope_name, collection_name);
+  encoded.headers["content-type"] = "application/x-www-form-urlencoded";
+  std::map<std::string, std::string> values{};
+  if (max_expiry.has_value()) {
+    if (max_expiry.value() >= -1) {
+      values["maxTTL"] = std::to_string(max_expiry.value());
+    } else {
+      return errc::common::invalid_argument;
     }
-    if (history.has_value()) {
-        values["history"] = history.value() ? "true" : "false";
-    }
-    encoded.body = utils::string_codec::v2::form_encode(values);
-    return {};
+  }
+  if (history.has_value()) {
+    values["history"] = history.value() ? "true" : "false";
+  }
+  encoded.body = utils::string_codec::v2::form_encode(values);
+  return {};
 }
 
 collection_update_response
-collection_update_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+collection_update_request::make_response(error_context::http&& ctx,
+                                         const encoded_response_type& encoded) const
 {
-    collection_update_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        switch (encoded.status_code) {
-            case 400: {
-                response.ctx.ec = errc::common::invalid_argument;
-            } break;
-            case 404: {
-                std::regex scope_not_found("Scope with name .+ is not found");
-                std::regex collection_not_found("Collection with name .+ is not found");
-                if (std::regex_search(encoded.body.data(), collection_not_found)) {
-                    response.ctx.ec = errc::common::collection_not_found;
-                } else if (std::regex_search(encoded.body.data(), scope_not_found)) {
-                    response.ctx.ec = errc::common::scope_not_found;
-                } else {
-                    response.ctx.ec = errc::common::bucket_not_found;
-                }
-            } break;
-            case 200: {
-                tao::json::value payload{};
-                try {
-                    payload = utils::json::parse(encoded.body.data());
-                } catch (const tao::pegtl::parse_error&) {
-                    response.ctx.ec = errc::common::parsing_failure;
-                    return response;
-                }
-                response.uid = std::stoull(payload.at("uid").get_string(), nullptr, 16);
-            } break;
-            default:
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
-                break;
+  collection_update_response response{ std::move(ctx) };
+  if (!response.ctx.ec) {
+    switch (encoded.status_code) {
+      case 400: {
+        response.ctx.ec = errc::common::invalid_argument;
+      } break;
+      case 404: {
+        std::regex scope_not_found("Scope with name .+ is not found");
+        std::regex collection_not_found("Collection with name .+ is not found");
+        if (std::regex_search(encoded.body.data(), collection_not_found)) {
+          response.ctx.ec = errc::common::collection_not_found;
+        } else if (std::regex_search(encoded.body.data(), scope_not_found)) {
+          response.ctx.ec = errc::common::scope_not_found;
+        } else {
+          response.ctx.ec = errc::common::bucket_not_found;
         }
+      } break;
+      case 200: {
+        tao::json::value payload{};
+        try {
+          payload = utils::json::parse(encoded.body.data());
+        } catch (const tao::pegtl::parse_error&) {
+          response.ctx.ec = errc::common::parsing_failure;
+          return response;
+        }
+        response.uid = std::stoull(payload.at("uid").get_string(), nullptr, 16);
+      } break;
+      default:
+        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+        break;
     }
-    return response;
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

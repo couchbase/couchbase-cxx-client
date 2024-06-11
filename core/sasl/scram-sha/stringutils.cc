@@ -46,37 +46,37 @@ namespace couchbase::core::sasl::mechanism::scram
 const std::string&
 sasl_prep(const std::string& string)
 {
-    for (const auto& c : string) {
-        if ((static_cast<unsigned int>(c) & 0x80U) != 0) {
-            throw std::runtime_error("sasl_prep: Multibyte UTF-8 is not"
-                                     " implemented yet");
-        }
-
-        if (iscntrl(c) != 0) {
-            throw std::runtime_error("sasl_prep: control characters is not"
-                                     " allowed");
-        }
+  for (const auto& c : string) {
+    if ((static_cast<unsigned int>(c) & 0x80U) != 0) {
+      throw std::runtime_error("sasl_prep: Multibyte UTF-8 is not"
+                               " implemented yet");
     }
 
-    return string;
+    if (iscntrl(c) != 0) {
+      throw std::runtime_error("sasl_prep: control characters is not"
+                               " allowed");
+    }
+  }
+
+  return string;
 }
 
 std::string
 encode_username(const std::string& username)
 {
-    std::string ret(username);
+  std::string ret(username);
 
-    std::string::size_type index = 0;
-    while ((index = ret.find_first_of(",=", index)) != std::string::npos) {
-        if (ret[index] == ',') {
-            ret.replace(index, 1, "=2C");
-        } else {
-            ret.replace(index, 1, "=3D");
-        }
-        ++index;
+  std::string::size_type index = 0;
+  while ((index = ret.find_first_of(",=", index)) != std::string::npos) {
+    if (ret[index] == ',') {
+      ret.replace(index, 1, "=2C");
+    } else {
+      ret.replace(index, 1, "=3D");
     }
+    ++index;
+  }
 
-    return ret;
+  return ret;
 }
 
 } // namespace couchbase::core::sasl::mechanism::scram

@@ -23,13 +23,13 @@ namespace
 inline void
 noop1(const std::string&, utils::movable_function<void(std::optional<error_class>)>&& handler)
 {
-    return handler({});
+  return handler({});
 }
 
 inline void
 noop2(utils::movable_function<void(std::optional<error_class>)>&& handler)
 {
-    return handler({});
+  return handler({});
 }
 } // namespace
 

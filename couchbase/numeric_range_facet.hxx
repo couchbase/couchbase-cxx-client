@@ -29,28 +29,28 @@ namespace couchbase
  */
 class numeric_range_facet : public search_facet
 {
-  public:
-    numeric_range_facet(std::string field, std::vector<numeric_range> ranges)
-      : search_facet{ std::move(field) }
-      , ranges_{ std::move(ranges) }
-    {
-    }
+public:
+  numeric_range_facet(std::string field, std::vector<numeric_range> ranges)
+    : search_facet{ std::move(field) }
+    , ranges_{ std::move(ranges) }
+  {
+  }
 
-    numeric_range_facet(std::string field, std::uint32_t size, std::vector<numeric_range> ranges)
-      : search_facet{ std::move(field), size }
-      , ranges_{ std::move(ranges) }
-    {
-    }
+  numeric_range_facet(std::string field, std::uint32_t size, std::vector<numeric_range> ranges)
+    : search_facet{ std::move(field), size }
+    , ranges_{ std::move(ranges) }
+  {
+  }
 
-    /**
-     * @return encoded representation of the search facet.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto encode() const -> encoded_search_facet override;
+  /**
+   * @return encoded representation of the search facet.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto encode() const -> encoded_search_facet override;
 
-  private:
-    std::vector<numeric_range> ranges_;
+private:
+  std::vector<numeric_range> ranges_;
 };
 } // namespace couchbase

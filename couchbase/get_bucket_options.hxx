@@ -27,16 +27,16 @@
 namespace couchbase
 {
 struct get_bucket_options : public common_options<get_bucket_options> {
-  public:
-    struct built : public common_options<get_bucket_options>::built {
-    };
+public:
+  struct built : public common_options<get_bucket_options>::built {
+  };
 
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options() };
-    }
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options() };
+  }
 
-  private:
+private:
 };
 
 using get_bucket_handler = std::function<void(error, management::cluster::bucket_settings)>;

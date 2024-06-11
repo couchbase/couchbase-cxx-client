@@ -28,24 +28,24 @@ namespace couchbase
 {
 class error
 {
-  public:
-    error() = default;
-    error(std::error_code ec, std::string message = {}, error_context ctx = {});
-    error(std::error_code ec, std::string message, error_context ctx, error cause);
+public:
+  error() = default;
+  error(std::error_code ec, std::string message = {}, error_context ctx = {});
+  error(std::error_code ec, std::string message, error_context ctx, error cause);
 
-    [[nodiscard]] auto ec() const -> std::error_code;
-    [[nodiscard]] auto message() const -> const std::string&;
-    [[nodiscard]] auto ctx() const -> const error_context&;
-    [[nodiscard]] auto cause() const -> std::optional<error>;
+  [[nodiscard]] auto ec() const -> std::error_code;
+  [[nodiscard]] auto message() const -> const std::string&;
+  [[nodiscard]] auto ctx() const -> const error_context&;
+  [[nodiscard]] auto cause() const -> std::optional<error>;
 
-    explicit operator bool() const;
-    auto operator==(const error& other) const -> bool;
+  explicit operator bool() const;
+  auto operator==(const error& other) const -> bool;
 
-  private:
-    std::error_code ec_{};
-    std::string message_{};
-    error_context ctx_{};
-    std::shared_ptr<error> cause_{};
+private:
+  std::error_code ec_{};
+  std::string message_{};
+  error_context ctx_{};
+  std::shared_ptr<error> cause_{};
 };
 
 } // namespace couchbase

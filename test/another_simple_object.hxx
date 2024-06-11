@@ -21,30 +21,30 @@
 #include <string>
 
 struct AnotherSimpleObject {
-    std::string foo;
+  std::string foo;
 
-    bool operator==(const AnotherSimpleObject& other) const
-    {
-        return foo == other.foo;
-    }
+  bool operator==(const AnotherSimpleObject& other) const
+  {
+    return foo == other.foo;
+  }
 };
 
 template<>
 struct tao::json::traits<AnotherSimpleObject> {
-    template<template<typename...> class Traits>
-    static void assign(tao::json::basic_value<Traits>& v, const AnotherSimpleObject& p)
-    {
-        v = {
-            { "foo", p.foo },
-        };
-    }
+  template<template<typename...> class Traits>
+  static void assign(tao::json::basic_value<Traits>& v, const AnotherSimpleObject& p)
+  {
+    v = {
+      { "foo", p.foo },
+    };
+  }
 
-    template<template<typename...> class Traits>
-    static AnotherSimpleObject as(const tao::json::basic_value<Traits>& v)
-    {
-        AnotherSimpleObject result;
-        const auto& object = v.get_object();
-        result.foo = object.at("foo").template as<std::string>();
-        return result;
-    }
+  template<template<typename...> class Traits>
+  static AnotherSimpleObject as(const tao::json::basic_value<Traits>& v)
+  {
+    AnotherSimpleObject result;
+    const auto& object = v.get_object();
+    result.foo = object.at("foo").template as<std::string>();
+    return result;
+  }
 };

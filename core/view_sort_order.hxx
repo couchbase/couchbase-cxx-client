@@ -19,5 +19,8 @@
 
 namespace couchbase::core
 {
-enum class view_sort_order { ascending = 0, descending };
+enum class view_sort_order {
+  ascending = 0,
+  descending
+};
 } // namespace couchbase::core

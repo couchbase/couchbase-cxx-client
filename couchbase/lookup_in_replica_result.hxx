@@ -32,43 +32,46 @@ namespace couchbase
  */
 class lookup_in_replica_result : public lookup_in_result
 {
-  public:
-    /**
-     * @since 1.0.0
-     * @internal
-     */
-    lookup_in_replica_result() = default;
+public:
+  /**
+   * @since 1.0.0
+   * @internal
+   */
+  lookup_in_replica_result() = default;
 
-    /**
-     * Constructs result for lookup_in_replica operation
-     *
-     * @param cas
-     * @param entries list of the fields returned by the server
-     * @param is_deleted
-     * @param is_replica true if document originates from replica node
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    lookup_in_replica_result(couchbase::cas cas, std::vector<entry> entries, bool is_deleted, bool is_replica)
-      : lookup_in_result{ cas, std::move(entries), is_deleted }
-      , is_replica_{ is_replica }
-    {
-    }
+  /**
+   * Constructs result for lookup_in_replica operation
+   *
+   * @param cas
+   * @param entries list of the fields returned by the server
+   * @param is_deleted
+   * @param is_replica true if document originates from replica node
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  lookup_in_replica_result(couchbase::cas cas,
+                           std::vector<entry> entries,
+                           bool is_deleted,
+                           bool is_replica)
+    : lookup_in_result{ cas, std::move(entries), is_deleted }
+    , is_replica_{ is_replica }
+  {
+  }
 
-    /**
-     * Returns whether this document originates from a replica node
-     *
-     * @return whether document originates from a replica node
-     *
-     * @since 1.0.0
-     */
-    [[nodiscard]] auto is_replica() const -> bool
-    {
-        return is_replica_;
-    }
+  /**
+   * Returns whether this document originates from a replica node
+   *
+   * @return whether document originates from a replica node
+   *
+   * @since 1.0.0
+   */
+  [[nodiscard]] auto is_replica() const -> bool
+  {
+    return is_replica_;
+  }
 
-  private:
-    bool is_replica_{ false };
+private:
+  bool is_replica_{ false };
 };
 } // namespace couchbase

@@ -20,14 +20,18 @@
 namespace couchbase::utils
 {
 [[nodiscard]] auto
-build_mutation_token(const mutation_token& source, std::uint16_t partition_id, std::string bucket_name) -> mutation_token
+build_mutation_token(const mutation_token& source,
+                     std::uint16_t partition_id,
+                     std::string bucket_name) -> mutation_token
 {
-    return mutation_token{ source.partition_uuid(), source.sequence_number(), partition_id, std::move(bucket_name) };
+  return mutation_token{
+    source.partition_uuid(), source.sequence_number(), partition_id, std::move(bucket_name)
+  };
 }
 
 [[nodiscard]] auto
 build_mutation_token(std::uint64_t partition_uuid, std::uint64_t sequence_number) -> mutation_token
 {
-    return mutation_token{ partition_uuid, sequence_number, 0, {} };
+  return mutation_token{ partition_uuid, sequence_number, 0, {} };
 }
 } // namespace couchbase::utils

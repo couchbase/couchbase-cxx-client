@@ -24,8 +24,8 @@
 namespace couchbase::core::default_ca
 {
 struct certificate {
-    std::string_view authority;
-    std::string_view body;
+  std::string_view authority;
+  std::string_view body;
 };
 
 auto

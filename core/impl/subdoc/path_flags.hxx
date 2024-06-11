@@ -45,33 +45,33 @@ constexpr std::byte path_flag_expand_macros{ 0b0001'0000U };
 constexpr std::byte
 build_mutate_in_path_flags(bool xattr, bool create_path, bool expand_macro)
 {
-    std::byte flags{ 0 };
-    if (xattr) {
-        flags |= path_flag_xattr;
-    }
-    if (create_path) {
-        flags |= path_flag_create_parents;
-    }
-    if (expand_macro) {
-        flags |= path_flag_expand_macros;
-    }
-    return flags;
+  std::byte flags{ 0 };
+  if (xattr) {
+    flags |= path_flag_xattr;
+  }
+  if (create_path) {
+    flags |= path_flag_create_parents;
+  }
+  if (expand_macro) {
+    flags |= path_flag_expand_macros;
+  }
+  return flags;
 }
 
 constexpr std::byte
 build_lookup_in_path_flags(bool xattr)
 {
-    std::byte flags{ 0U };
-    if (xattr) {
-        flags |= path_flag_xattr;
-    }
-    return flags;
+  std::byte flags{ 0U };
+  if (xattr) {
+    flags |= path_flag_xattr;
+  }
+  return flags;
 }
 
 constexpr bool
 has_xattr_path_flag(std::byte flags)
 {
-    return (flags & path_flag_xattr) == path_flag_xattr;
+  return (flags & path_flag_xattr) == path_flag_xattr;
 }
 
 } // namespace couchbase::core::impl::subdoc

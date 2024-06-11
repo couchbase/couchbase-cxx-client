@@ -38,37 +38,38 @@ namespace couchbase::core
 {
 class analytics_query_options
 {
-  public:
-    std::vector<std::byte> payload{};
-    std::int32_t priority{};
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
-    std::chrono::milliseconds timeout{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{};
+public:
+  std::vector<std::byte> payload{};
+  std::int32_t priority{};
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
+  std::chrono::milliseconds timeout{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{};
 
-    struct {
-        std::string user{};
-    } internal{};
+  struct {
+    std::string user{};
+  } internal{};
 };
 
 class analytics_query_row_reader_impl;
 
 class analytics_query_row_reader
 {
-  public:
-    analytics_query_row_reader();
+public:
+  analytics_query_row_reader();
 
-    auto next_row() -> std::vector<std::byte>;
+  auto next_row() -> std::vector<std::byte>;
 
-    auto error() -> std::error_code;
+  auto error() -> std::error_code;
 
-    auto meta_data() -> std::optional<std::vector<std::byte>>;
+  auto meta_data() -> std::optional<std::vector<std::byte>>;
 
-    auto close() -> std::error_code;
+  auto close() -> std::error_code;
 
-  private:
-    std::shared_ptr<analytics_query_row_reader_impl> impl_;
+private:
+  std::shared_ptr<analytics_query_row_reader_impl> impl_;
 };
 
-using analytics_query_callback = utils::movable_function<void(analytics_query_row_reader reader, std::error_code ec)>;
+using analytics_query_callback =
+  utils::movable_function<void(analytics_query_row_reader reader, std::error_code ec)>;
 
 } // namespace couchbase::core

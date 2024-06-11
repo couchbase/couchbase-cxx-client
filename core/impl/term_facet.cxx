@@ -24,13 +24,13 @@ namespace couchbase
 auto
 term_facet::encode() const -> encoded_search_facet
 {
-    encoded_search_facet built;
-    built.facet = {
-        { "field", field_ },
-    };
-    if (size_) {
-        built.facet["size"] = size_.value();
-    }
-    return built;
+  encoded_search_facet built;
+  built.facet = {
+    { "field", field_ },
+  };
+  if (size_) {
+    built.facet["size"] = size_.value();
+  }
+  return built;
 }
 } // namespace couchbase

@@ -20,7 +20,7 @@
 namespace couchbase::core
 {
 enum class tls_verify_mode {
-    none,
-    peer,
+  none,
+  peer,
 };
 } // namespace couchbase::core

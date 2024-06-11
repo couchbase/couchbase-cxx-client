@@ -27,57 +27,57 @@ namespace tao::json
 {
 template<>
 struct traits<couchbase::query_error_context> {
-    template<template<typename...> class Traits>
-    static void assign(tao::json::basic_value<Traits>& v, const couchbase::query_error_context& ctx)
-    {
-        std::vector<tao::json::basic_value<Traits>> reasons{};
-        for (couchbase::retry_reason r : ctx.retry_reasons()) {
-            reasons.emplace_back(fmt::format("{}", r));
-        }
-        v["retry_attempts"] = ctx.retry_attempts();
-        v["retry_reasons"] = reasons;
-        if (ctx.last_dispatched_to()) {
-            v["last_dispatched_to"] = ctx.last_dispatched_to().value();
-        }
-        if (ctx.last_dispatched_from()) {
-            v["last_dispatched_from"] = ctx.last_dispatched_from().value();
-        }
-        if (!ctx.operation_id().empty()) {
-            v["operation_id"] = ctx.operation_id();
-        }
-        if (ctx.first_error_code()) {
-            v["first_error_code"] = ctx.first_error_code();
-        }
-        if (!ctx.first_error_message().empty()) {
-            v["first_error_message"] = ctx.first_error_message();
-        }
-        if (!ctx.client_context_id().empty()) {
-            v["client_context_id"] = ctx.client_context_id();
-        }
-        if (!ctx.statement().empty()) {
-            v["statement"] = ctx.statement();
-        }
-        if (ctx.parameters()) {
-            v["parameters"] = ctx.parameters().value();
-        }
-        if (!ctx.method().empty()) {
-            v["method"] = ctx.method();
-        }
-        if (!ctx.path().empty()) {
-            v["path"] = ctx.path();
-        }
-        if (ctx.http_status()) {
-            v["http_status"] = ctx.http_status();
-        }
-        if (!ctx.http_body().empty()) {
-            v["http_body"] = ctx.http_body();
-        }
-        if (!ctx.hostname().empty()) {
-            v["hostname"] = ctx.hostname();
-        }
-        if (ctx.port()) {
-            v["port"] = ctx.port();
-        }
+  template<template<typename...> class Traits>
+  static void assign(tao::json::basic_value<Traits>& v, const couchbase::query_error_context& ctx)
+  {
+    std::vector<tao::json::basic_value<Traits>> reasons{};
+    for (couchbase::retry_reason r : ctx.retry_reasons()) {
+      reasons.emplace_back(fmt::format("{}", r));
     }
+    v["retry_attempts"] = ctx.retry_attempts();
+    v["retry_reasons"] = reasons;
+    if (ctx.last_dispatched_to()) {
+      v["last_dispatched_to"] = ctx.last_dispatched_to().value();
+    }
+    if (ctx.last_dispatched_from()) {
+      v["last_dispatched_from"] = ctx.last_dispatched_from().value();
+    }
+    if (!ctx.operation_id().empty()) {
+      v["operation_id"] = ctx.operation_id();
+    }
+    if (ctx.first_error_code()) {
+      v["first_error_code"] = ctx.first_error_code();
+    }
+    if (!ctx.first_error_message().empty()) {
+      v["first_error_message"] = ctx.first_error_message();
+    }
+    if (!ctx.client_context_id().empty()) {
+      v["client_context_id"] = ctx.client_context_id();
+    }
+    if (!ctx.statement().empty()) {
+      v["statement"] = ctx.statement();
+    }
+    if (ctx.parameters()) {
+      v["parameters"] = ctx.parameters().value();
+    }
+    if (!ctx.method().empty()) {
+      v["method"] = ctx.method();
+    }
+    if (!ctx.path().empty()) {
+      v["path"] = ctx.path();
+    }
+    if (ctx.http_status()) {
+      v["http_status"] = ctx.http_status();
+    }
+    if (!ctx.http_body().empty()) {
+      v["http_body"] = ctx.http_body();
+    }
+    if (!ctx.hostname().empty()) {
+      v["hostname"] = ctx.hostname();
+    }
+    if (ctx.port()) {
+      v["port"] = ctx.port();
+    }
+  }
 };
 } // namespace tao::json

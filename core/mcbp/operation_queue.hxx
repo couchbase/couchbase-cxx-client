@@ -31,27 +31,28 @@ class operation_consumer;
 
 class operation_queue : public std::enable_shared_from_this<operation_queue>
 {
-  public:
-    using drain_callback = std::function<void(std::shared_ptr<queue_request> request)>;
+public:
+  using drain_callback = std::function<void(std::shared_ptr<queue_request> request)>;
 
-    [[nodiscard]] auto push(std::shared_ptr<queue_request> request, std::size_t max_items) -> std::error_code;
-    auto remove(std::shared_ptr<queue_request> request) -> bool;
-    void drain(drain_callback callback);
+  [[nodiscard]] auto push(std::shared_ptr<queue_request> request,
+                          std::size_t max_items) -> std::error_code;
+  auto remove(std::shared_ptr<queue_request> request) -> bool;
+  void drain(drain_callback callback);
 
-    [[nodiscard]] auto consumer() -> std::shared_ptr<operation_consumer>;
-    void close();
-    [[nodiscard]] auto debug_string() const -> std::string;
+  [[nodiscard]] auto consumer() -> std::shared_ptr<operation_consumer>;
+  void close();
+  [[nodiscard]] auto debug_string() const -> std::string;
 
-  private:
-    void close_consumer(std::shared_ptr<operation_consumer> consumer);
-    auto pop(std::shared_ptr<operation_consumer> consumer) -> std::shared_ptr<queue_request>;
-    auto items_to_drain() -> std::list<std::shared_ptr<queue_request>>;
+private:
+  void close_consumer(std::shared_ptr<operation_consumer> consumer);
+  auto pop(std::shared_ptr<operation_consumer> consumer) -> std::shared_ptr<queue_request>;
+  auto items_to_drain() -> std::list<std::shared_ptr<queue_request>>;
 
-    std::list<std::shared_ptr<queue_request>> items_{};
-    mutable std::mutex mutex_{};
-    std::condition_variable signal_{};
-    bool is_open_{ true };
+  std::list<std::shared_ptr<queue_request>> items_{};
+  mutable std::mutex mutex_{};
+  std::condition_variable signal_{};
+  bool is_open_{ true };
 
-    friend operation_consumer;
+  friend operation_consumer;
 };
 } // namespace couchbase::core::mcbp

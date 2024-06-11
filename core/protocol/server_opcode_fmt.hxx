@@ -23,24 +23,24 @@
 
 template<>
 struct fmt::formatter<couchbase::core::protocol::server_opcode> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(couchbase::core::protocol::server_opcode opcode, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (opcode) {
-            case couchbase::core::protocol::server_opcode::cluster_map_change_notification:
-                name = "cluster_map_change_notification (0x01)";
-                break;
-            case couchbase::core::protocol::server_opcode::invalid:
-                name = "invalid (0xff)";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
+  template<typename FormatContext>
+  auto format(couchbase::core::protocol::server_opcode opcode, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (opcode) {
+      case couchbase::core::protocol::server_opcode::cluster_map_change_notification:
+        name = "cluster_map_change_notification (0x01)";
+        break;
+      case couchbase::core::protocol::server_opcode::invalid:
+        name = "invalid (0xff)";
+        break;
     }
+    return format_to(ctx.out(), "{}", name);
+  }
 };

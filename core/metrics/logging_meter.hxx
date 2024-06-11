@@ -33,28 +33,30 @@ class logging_meter
   : public couchbase::metrics::meter
   , public std::enable_shared_from_this<logging_meter>
 {
-  private:
-    asio::steady_timer emit_report_;
-    logging_meter_options options_;
-    std::mutex recorders_mutex_{};
-    // service name -> operation name -> recorder
-    std::map<std::string, std::map<std::string, std::shared_ptr<logging_value_recorder>>> recorders_{};
+private:
+  asio::steady_timer emit_report_;
+  logging_meter_options options_;
+  std::mutex recorders_mutex_{};
+  // service name -> operation name -> recorder
+  std::map<std::string, std::map<std::string, std::shared_ptr<logging_value_recorder>>>
+    recorders_{};
 
-    void log_report() const;
+  void log_report() const;
 
-    void rearm_reporter();
+  void rearm_reporter();
 
-  public:
-    logging_meter(asio::io_context& ctx, logging_meter_options options);
+public:
+  logging_meter(asio::io_context& ctx, logging_meter_options options);
 
-    ~logging_meter() override;
+  ~logging_meter() override;
 
-    void start() override;
+  void start() override;
 
-    void stop() override;
+  void stop() override;
 
-    std::shared_ptr<couchbase::metrics::value_recorder> get_value_recorder(const std::string& name,
-                                                                           const std::map<std::string, std::string>& tags) override;
+  std::shared_ptr<couchbase::metrics::value_recorder> get_value_recorder(
+    const std::string& name,
+    const std::map<std::string, std::string>& tags) override;
 };
 
 } // namespace couchbase::core::metrics

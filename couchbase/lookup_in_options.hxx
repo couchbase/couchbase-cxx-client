@@ -43,46 +43,47 @@ namespace couchbase
  * @committed
  */
 struct lookup_in_options : public common_durability_options<lookup_in_options> {
-    /**
-     * Immutable value object representing consistent options.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    struct built : public common_durability_options<lookup_in_options>::built {
-        const bool access_deleted;
-    };
+  /**
+   * Immutable value object representing consistent options.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  struct built : public common_durability_options<lookup_in_options>::built {
+    const bool access_deleted;
+  };
 
-    /**
-     * Validates options and returns them as an immutable value.
-     *
-     * @return consistent options as an immutable value
-     *
-     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto build() const -> built
-    {
-        auto base = build_common_durability_options();
-        return { base, access_deleted_ };
-    }
+  /**
+   * Validates options and returns them as an immutable value.
+   *
+   * @return consistent options as an immutable value
+   *
+   * @exception std::system_error with code errc::common::invalid_argument if the options are not
+   * valid
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto build() const -> built
+  {
+    auto base = build_common_durability_options();
+    return { base, access_deleted_ };
+  }
 
-    /**
-     * For internal use only: allows access to deleted documents that are in 'tombstone' form.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    auto access_deleted(bool value) -> lookup_in_options&
-    {
-        access_deleted_ = value;
-        return self();
-    }
+  /**
+   * For internal use only: allows access to deleted documents that are in 'tombstone' form.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  auto access_deleted(bool value) -> lookup_in_options&
+  {
+    access_deleted_ = value;
+    return self();
+  }
 
-  private:
-    bool access_deleted_{ false };
+private:
+  bool access_deleted_{ false };
 };
 
 /**

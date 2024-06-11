@@ -48,8 +48,10 @@ transactions_config::transactions_config(transactions_config&& c) noexcept
 transactions_config::transactions_config(const transactions_config& config)
   : level_(config.durability_level())
   , timeout_(config.timeout())
-  , attempt_context_hooks_(std::make_shared<core::transactions::attempt_context_testing_hooks>(config.attempt_context_hooks()))
-  , cleanup_hooks_(std::make_shared<core::transactions::cleanup_testing_hooks>(config.cleanup_hooks()))
+  , attempt_context_hooks_(std::make_shared<core::transactions::attempt_context_testing_hooks>(
+      config.attempt_context_hooks()))
+  , cleanup_hooks_(
+      std::make_shared<core::transactions::cleanup_testing_hooks>(config.cleanup_hooks()))
   , metadata_collection_(config.metadata_collection())
   , query_config_(config.query_config())
   , cleanup_config_(config.cleanup_config())
@@ -59,24 +61,28 @@ transactions_config::transactions_config(const transactions_config& config)
 transactions_config&
 transactions_config::operator=(const transactions_config& c)
 {
-    if (this != &c) {
-        level_ = c.level_;
-        timeout_ = c.timeout_;
-        attempt_context_hooks_ = c.attempt_context_hooks_;
-        cleanup_hooks_ = c.cleanup_hooks_;
-        query_config_ = c.query_config_;
-        metadata_collection_ = c.metadata_collection_;
-        cleanup_config_ = c.cleanup_config_;
-    }
-    return *this;
+  if (this != &c) {
+    level_ = c.level_;
+    timeout_ = c.timeout_;
+    attempt_context_hooks_ = c.attempt_context_hooks_;
+    cleanup_hooks_ = c.cleanup_hooks_;
+    query_config_ = c.query_config_;
+    metadata_collection_ = c.metadata_collection_;
+    cleanup_config_ = c.cleanup_config_;
+  }
+  return *this;
 }
 
 transactions_config::built
 transactions_config::build() const
 {
-    return {
-        level_, timeout_, attempt_context_hooks_, cleanup_hooks_, metadata_collection_, query_config_.build(), cleanup_config_.build()
-    };
+  return { level_,
+           timeout_,
+           attempt_context_hooks_,
+           cleanup_hooks_,
+           metadata_collection_,
+           query_config_.build(),
+           cleanup_config_.build() };
 }
 
 } // namespace couchbase::transactions

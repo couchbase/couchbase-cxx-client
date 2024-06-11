@@ -30,36 +30,38 @@ namespace couchbase::core::operations
 {
 
 struct exists_response {
-    key_value_error_context ctx;
-    bool deleted{};
-    couchbase::cas cas{};
-    std::uint32_t flags{};
-    std::uint32_t expiry{};
-    std::uint64_t sequence_number{};
-    std::uint8_t datatype{};
-    bool document_exists{ false };
+  key_value_error_context ctx;
+  bool deleted{};
+  couchbase::cas cas{};
+  std::uint32_t flags{};
+  std::uint32_t expiry{};
+  std::uint64_t sequence_number{};
+  std::uint8_t datatype{};
+  bool document_exists{ false };
 
-    [[nodiscard]] inline bool exists() const
-    {
-        return document_exists;
-    }
+  [[nodiscard]] inline bool exists() const
+  {
+    return document_exists;
+  }
 };
 
 struct exists_request {
-    using response_type = exists_response;
-    using encoded_request_type = protocol::client_request<protocol::get_meta_request_body>;
-    using encoded_response_type = protocol::client_response<protocol::get_meta_response_body>;
+  using response_type = exists_response;
+  using encoded_request_type = protocol::client_request<protocol::get_meta_request_body>;
+  using encoded_response_type = protocol::client_response<protocol::get_meta_response_body>;
 
-    document_id id;
-    std::uint16_t partition{};
-    std::uint32_t opaque{};
-    std::optional<std::chrono::milliseconds> timeout{};
-    io::retry_context<false> retries{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
+  document_id id;
+  std::uint16_t partition{};
+  std::uint32_t opaque{};
+  std::optional<std::chrono::milliseconds> timeout{};
+  io::retry_context<false> retries{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          mcbp_context&& context) const;
 
-    [[nodiscard]] exists_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] exists_response make_response(key_value_error_context&& ctx,
+                                              const encoded_response_type& encoded) const;
 };
 
 } // namespace couchbase::core::operations

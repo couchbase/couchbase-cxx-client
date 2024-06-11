@@ -33,41 +33,41 @@ namespace couchbase
  */
 class mutation_result : public result
 {
-  public:
-    /**
-     * @since 1.0.0
-     * @internal
-     */
-    mutation_result() = default;
+public:
+  /**
+   * @since 1.0.0
+   * @internal
+   */
+  mutation_result() = default;
 
-    /**
-     * Constructs result for get_any_replica operation, or an entry for get_all_replicas operation.
-     *
-     * @param cas
-     * @param token mutation token returned by the server
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    mutation_result(couchbase::cas cas, mutation_token token)
-      : result{ cas }
-      , mutation_token_{ std::move(token) }
-    {
-    }
+  /**
+   * Constructs result for get_any_replica operation, or an entry for get_all_replicas operation.
+   *
+   * @param cas
+   * @param token mutation token returned by the server
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  mutation_result(couchbase::cas cas, mutation_token token)
+    : result{ cas }
+    , mutation_token_{ std::move(token) }
+  {
+  }
 
-    /**
-     * @return mutation token returned by the server
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto mutation_token() const -> const std::optional<mutation_token>&
-    {
-        return mutation_token_;
-    }
+  /**
+   * @return mutation token returned by the server
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto mutation_token() const -> const std::optional<mutation_token>&
+  {
+    return mutation_token_;
+  }
 
-  private:
-    std::optional<couchbase::mutation_token> mutation_token_{};
+private:
+  std::optional<couchbase::mutation_token> mutation_token_{};
 };
 
 } // namespace couchbase

@@ -29,17 +29,17 @@ template<typename Range>
 std::string
 join_strings(const Range& values, const std::string& sep)
 {
-    std::stringstream stream;
-    auto sentinel = std::end(values);
-    if (auto it = std::begin(values); it != sentinel) {
-        stream << *it;
-        ++it;
-        while (it != sentinel) {
-            stream << sep << *it;
-            ++it;
-        }
+  std::stringstream stream;
+  auto sentinel = std::end(values);
+  if (auto it = std::begin(values); it != sentinel) {
+    stream << *it;
+    ++it;
+    while (it != sentinel) {
+      stream << sep << *it;
+      ++it;
     }
-    return stream.str();
+  }
+  return stream.str();
 }
 
 /**
@@ -50,17 +50,17 @@ template<typename Range>
 std::string
 join_strings_fmt(const Range& values, const std::string& sep)
 {
-    std::stringstream stream;
-    auto sentinel = std::end(values);
-    if (auto it = std::begin(values); it != sentinel) {
-        stream << fmt::format("{}", *it);
-        ++it;
-        while (it != sentinel) {
-            stream << sep << fmt::format("{}", *it);
-            ++it;
-        }
+  std::stringstream stream;
+  auto sentinel = std::end(values);
+  if (auto it = std::begin(values); it != sentinel) {
+    stream << fmt::format("{}", *it);
+    ++it;
+    while (it != sentinel) {
+      stream << sep << fmt::format("{}", *it);
+      ++it;
     }
-    return stream.str();
+  }
+  return stream.str();
 }
 
 } // namespace couchbase::core::utils

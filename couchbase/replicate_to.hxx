@@ -20,36 +20,36 @@
 namespace couchbase
 {
 enum class replicate_to {
-    /**
-     * Do not apply any replication requirements.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    none = 0,
+  /**
+   * Do not apply any replication requirements.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  none = 0,
 
-    /**
-     * Wait for replication to at least one node.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    one = 1,
+  /**
+   * Wait for replication to at least one node.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  one = 1,
 
-    /**
-     * Wait for replication to at least two nodes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    two = 2,
+  /**
+   * Wait for replication to at least two nodes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  two = 2,
 
-    /**
-     * Wait for replication to all three replica nodes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    three = 3,
+  /**
+   * Wait for replication to all three replica nodes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  three = 3,
 };
 } // namespace couchbase

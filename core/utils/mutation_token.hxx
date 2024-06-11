@@ -22,7 +22,9 @@
 namespace couchbase::utils
 {
 [[nodiscard]] auto
-build_mutation_token(const mutation_token& source, std::uint16_t partition_id, std::string bucket_name) -> mutation_token;
+build_mutation_token(const mutation_token& source,
+                     std::uint16_t partition_id,
+                     std::string bucket_name) -> mutation_token;
 
 [[nodiscard]] auto
 build_mutation_token(std::uint64_t partition_uuid, std::uint64_t sequence_number) -> mutation_token;

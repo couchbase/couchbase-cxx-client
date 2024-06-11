@@ -24,8 +24,8 @@ namespace couchbase::core::operations::management
 {
 
 struct analytics_problem {
-    std::uint32_t code;
-    std::string message;
+  std::uint32_t code;
+  std::string message;
 };
 
 } // namespace couchbase::core::operations::management

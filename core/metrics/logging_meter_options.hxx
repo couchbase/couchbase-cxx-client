@@ -22,7 +22,7 @@
 namespace couchbase::core::metrics
 {
 struct logging_meter_options {
-    std::chrono::milliseconds emit_interval{ std::chrono::minutes{ 10 } };
+  std::chrono::milliseconds emit_interval{ std::chrono::minutes{ 10 } };
 };
 
 } // namespace couchbase::core::metrics

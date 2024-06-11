@@ -26,16 +26,16 @@ namespace couchbase
  * @committed
  */
 enum class analytics_status {
-    running,
-    success,
-    errors,
-    completed,
-    stopped,
-    timeout,
-    closed,
-    fatal,
-    aborted,
-    unknown,
+  running,
+  success,
+  errors,
+  completed,
+  stopped,
+  timeout,
+  closed,
+  fatal,
+  aborted,
+  unknown,
 };
 
 } // namespace couchbase

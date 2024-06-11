@@ -24,68 +24,68 @@ namespace couchbase::core::transactions
 constexpr std::string_view
 durability_level_to_string(durability_level level)
 {
-    switch (level) {
-        case durability_level::none:
-            return "NONE";
-        case durability_level::majority:
-            return "MAJORITY";
-        case durability_level::majority_and_persist_to_active:
-            return "MAJORITY_AND_PERSIST_TO_ACTIVE";
-        case durability_level::persist_to_majority:
-            return "PERSIST_TO_MAJORITY";
-    }
-    return "MAJORITY";
+  switch (level) {
+    case durability_level::none:
+      return "NONE";
+    case durability_level::majority:
+      return "MAJORITY";
+    case durability_level::majority_and_persist_to_active:
+      return "MAJORITY_AND_PERSIST_TO_ACTIVE";
+    case durability_level::persist_to_majority:
+      return "PERSIST_TO_MAJORITY";
+  }
+  return "MAJORITY";
 }
 
 constexpr std::string_view
 durability_level_to_string_for_query(durability_level level)
 {
-    switch (level) {
-        case durability_level::none:
-            return "none";
-        case durability_level::majority:
-            return "majority";
-        case durability_level::majority_and_persist_to_active:
-            return "majorityAndPersistActive";
-        case durability_level::persist_to_majority:
-            return "persistToMajority";
-    }
-    return "majority";
+  switch (level) {
+    case durability_level::none:
+      return "none";
+    case durability_level::majority:
+      return "majority";
+    case durability_level::majority_and_persist_to_active:
+      return "majorityAndPersistActive";
+    case durability_level::persist_to_majority:
+      return "persistToMajority";
+  }
+  return "majority";
 }
 
 constexpr std::string_view
 store_durability_level_to_string(durability_level level)
 {
-    switch (level) {
-        case durability_level::none:
-            return "n";
-        case durability_level::majority:
-            return "m";
-        case durability_level::majority_and_persist_to_active:
-            return "pa";
-        case durability_level::persist_to_majority:
-            return "pm";
-        default:
-            return "m";
-    }
+  switch (level) {
+    case durability_level::none:
+      return "n";
+    case durability_level::majority:
+      return "m";
+    case durability_level::majority_and_persist_to_active:
+      return "pa";
+    case durability_level::persist_to_majority:
+      return "pm";
+    default:
+      return "m";
+  }
 }
 
 constexpr durability_level
 store_string_to_durability_level(std::string_view input)
 {
-    if (input == "m") {
-        return durability_level::majority;
-    }
-    if (input == "pa") {
-        return durability_level::majority_and_persist_to_active;
-    }
-    if (input == "pm") {
-        return durability_level::persist_to_majority;
-    }
-    if (input == "n") {
-        return durability_level::none;
-    }
-    // Default to a something sensible if we don't understand the code
+  if (input == "m") {
     return durability_level::majority;
+  }
+  if (input == "pa") {
+    return durability_level::majority_and_persist_to_active;
+  }
+  if (input == "pm") {
+    return durability_level::persist_to_majority;
+  }
+  if (input == "n") {
+    return durability_level::none;
+  }
+  // Default to a something sensible if we don't understand the code
+  return durability_level::majority;
 }
 } // namespace couchbase::core::transactions

@@ -26,31 +26,31 @@ namespace couchbase
 auto
 numeric_range_query::encode() const -> encoded_search_query
 {
-    if (!min_ && !max_) {
-        return { errc::common::invalid_argument };
-    }
+  if (!min_ && !max_) {
+    return { errc::common::invalid_argument };
+  }
 
-    encoded_search_query built;
-    built.query = tao::json::empty_object;
-    if (boost_) {
-        built.query["boost"] = boost_.value();
+  encoded_search_query built;
+  built.query = tao::json::empty_object;
+  if (boost_) {
+    built.query["boost"] = boost_.value();
+  }
+  if (field_) {
+    built.query["field"] = field_.value();
+  }
+  if (min_.has_value()) {
+    built.query["min"] = min_.value();
+    if (inclusive_min_.has_value()) {
+      built.query["inclusive_min"] = inclusive_min_.value();
     }
-    if (field_) {
-        built.query["field"] = field_.value();
+  }
+  if (max_.has_value()) {
+    built.query["max"] = max_.value();
+    if (inclusive_max_.has_value()) {
+      built.query["inclusive_max"] = inclusive_max_.value();
     }
-    if (min_.has_value()) {
-        built.query["min"] = min_.value();
-        if (inclusive_min_.has_value()) {
-            built.query["inclusive_min"] = inclusive_min_.value();
-        }
-    }
-    if (max_.has_value()) {
-        built.query["max"] = max_.value();
-        if (inclusive_max_.has_value()) {
-            built.query["inclusive_max"] = inclusive_max_.value();
-        }
-    }
+  }
 
-    return built;
+  return built;
 }
 } // namespace couchbase

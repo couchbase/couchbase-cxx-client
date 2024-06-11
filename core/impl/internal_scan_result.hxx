@@ -25,13 +25,13 @@ namespace couchbase
 class internal_scan_result
 {
 
-  public:
-    explicit internal_scan_result(core::scan_result core_result);
-    ~internal_scan_result();
-    void next(scan_item_handler&& handler);
-    void cancel();
+public:
+  explicit internal_scan_result(core::scan_result core_result);
+  ~internal_scan_result();
+  void next(scan_item_handler&& handler);
+  void cancel();
 
-  private:
-    core::scan_result core_result_;
+private:
+  core::scan_result core_result_;
 };
 } // namespace couchbase

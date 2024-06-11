@@ -32,36 +32,39 @@
 namespace couchbase::core::impl
 {
 struct lookup_in_replica_response {
-    struct entry {
-        std::string path;
-        couchbase::codec::binary value;
-        std::size_t original_index;
-        bool exists;
-        protocol::subdoc_opcode opcode;
-        key_value_status_code status;
-        std::error_code ec{};
-    };
-    subdocument_error_context ctx{};
-    couchbase::cas cas{};
-    std::vector<entry> fields{};
-    bool deleted{ false };
+  struct entry {
+    std::string path;
+    couchbase::codec::binary value;
+    std::size_t original_index;
+    bool exists;
+    protocol::subdoc_opcode opcode;
+    key_value_status_code status;
+    std::error_code ec{};
+  };
+  subdocument_error_context ctx{};
+  couchbase::cas cas{};
+  std::vector<entry> fields{};
+  bool deleted{ false };
 };
 
 struct lookup_in_replica_request {
-    using response_type = lookup_in_replica_response;
-    using encoded_request_type = protocol::client_request<protocol::lookup_in_replica_request_body>;
-    using encoded_response_type = protocol::client_response<protocol::lookup_in_replica_response_body>;
+  using response_type = lookup_in_replica_response;
+  using encoded_request_type = protocol::client_request<protocol::lookup_in_replica_request_body>;
+  using encoded_response_type =
+    protocol::client_response<protocol::lookup_in_replica_response_body>;
 
-    document_id id;
-    std::vector<couchbase::core::impl::subdoc::command> specs{};
-    std::optional<std::chrono::milliseconds> timeout{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
-    std::uint16_t partition{};
-    std::uint32_t opaque{};
-    io::retry_context<false> retries{};
+  document_id id;
+  std::vector<couchbase::core::impl::subdoc::command> specs{};
+  std::optional<std::chrono::milliseconds> timeout{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
+  std::uint16_t partition{};
+  std::uint32_t opaque{};
+  io::retry_context<false> retries{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context);
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context);
 
-    [[nodiscard]] lookup_in_replica_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] lookup_in_replica_response make_response(
+    key_value_error_context&& ctx,
+    const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::impl

@@ -3,5 +3,5 @@
 int
 main()
 {
-    return static_cast<int>(OpenSSL_version_num());
+  return static_cast<int>(OpenSSL_version_num());
 }

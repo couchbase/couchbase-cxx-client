@@ -25,7 +25,7 @@ namespace couchbase::codec
 using binary = std::vector<std::byte>;
 
 struct encoded_value {
-    binary data;
-    std::uint32_t flags;
+  binary data;
+  std::uint32_t flags;
 };
 } // namespace couchbase::codec

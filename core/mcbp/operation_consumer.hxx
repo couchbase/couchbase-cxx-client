@@ -26,17 +26,17 @@ class queue_request;
 
 class operation_consumer : public std::enable_shared_from_this<operation_consumer>
 {
-  public:
-    explicit operation_consumer(std::shared_ptr<operation_queue> parent);
+public:
+  explicit operation_consumer(std::shared_ptr<operation_queue> parent);
 
-    [[nodiscard]] auto queue() -> std::shared_ptr<operation_queue>;
-    [[nodiscard]] auto pop() -> std::shared_ptr<queue_request>;
-    void close();
+  [[nodiscard]] auto queue() -> std::shared_ptr<operation_queue>;
+  [[nodiscard]] auto pop() -> std::shared_ptr<queue_request>;
+  void close();
 
-  private:
-    std::shared_ptr<operation_queue> parent_;
-    bool is_closed_{ false };
+private:
+  std::shared_ptr<operation_queue> parent_;
+  bool is_closed_{ false };
 
-    friend operation_queue;
+  friend operation_queue;
 };
 } // namespace couchbase::core::mcbp

@@ -23,43 +23,44 @@ namespace couchbase::core::impl
 {
 
 struct network_error_category : std::error_category {
-    [[nodiscard]] const char* name() const noexcept override
-    {
-        return "couchbase.network";
-    }
+  [[nodiscard]] const char* name() const noexcept override
+  {
+    return "couchbase.network";
+  }
 
-    [[nodiscard]] std::string message(int ev) const noexcept override
-    {
-        switch (static_cast<errc::network>(ev)) {
-            case errc::network::resolve_failure:
-                return "resolve_failure (1001)";
-            case errc::network::no_endpoints_left:
-                return "no_endpoints_left (1002)";
-            case errc::network::handshake_failure:
-                return "handshake_failure (1003)";
-            case errc::network::protocol_error:
-                return "protocol_error (1004)";
-            case errc::network::configuration_not_available:
-                return "configuration_not_available (1005)";
-            case errc::network::cluster_closed:
-                return "cluster_closed (1006)";
-            case errc::network::end_of_stream:
-                return "end_of_stream (1007)";
-            case errc::network::need_more_data:
-                return "need_more_data (1008)";
-            case errc::network::operation_queue_closed:
-                return "operation_queue_closed (1009)";
-            case errc::network::operation_queue_full:
-                return "operation_queue_full (1010)";
-            case errc::network::request_already_queued:
-                return "request_already_queued (1011)";
-            case errc::network::request_cancelled:
-                return "request_cancelled (1012)";
-            case errc::network::bucket_closed:
-                return "bucket_closed (1013)";
-        }
-        return "FIXME: unknown error code (recompile with newer library): couchbase.network." + std::to_string(ev);
+  [[nodiscard]] std::string message(int ev) const noexcept override
+  {
+    switch (static_cast<errc::network>(ev)) {
+      case errc::network::resolve_failure:
+        return "resolve_failure (1001)";
+      case errc::network::no_endpoints_left:
+        return "no_endpoints_left (1002)";
+      case errc::network::handshake_failure:
+        return "handshake_failure (1003)";
+      case errc::network::protocol_error:
+        return "protocol_error (1004)";
+      case errc::network::configuration_not_available:
+        return "configuration_not_available (1005)";
+      case errc::network::cluster_closed:
+        return "cluster_closed (1006)";
+      case errc::network::end_of_stream:
+        return "end_of_stream (1007)";
+      case errc::network::need_more_data:
+        return "need_more_data (1008)";
+      case errc::network::operation_queue_closed:
+        return "operation_queue_closed (1009)";
+      case errc::network::operation_queue_full:
+        return "operation_queue_full (1010)";
+      case errc::network::request_already_queued:
+        return "request_already_queued (1011)";
+      case errc::network::request_cancelled:
+        return "request_cancelled (1012)";
+      case errc::network::bucket_closed:
+        return "bucket_closed (1013)";
     }
+    return "FIXME: unknown error code (recompile with newer library): couchbase.network." +
+           std::to_string(ev);
+  }
 };
 
 const inline static network_error_category network_category_instance;
@@ -67,7 +68,7 @@ const inline static network_error_category network_category_instance;
 const std::error_category&
 network_category() noexcept
 {
-    return network_category_instance;
+  return network_category_instance;
 }
 
 } // namespace couchbase::core::impl

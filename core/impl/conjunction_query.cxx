@@ -26,26 +26,26 @@ namespace couchbase
 auto
 conjunction_query::encode() const -> encoded_search_query
 {
-    if (conjuncts_.empty()) {
-        return { errc::common::invalid_argument };
-    }
+  if (conjuncts_.empty()) {
+    return { errc::common::invalid_argument };
+  }
 
-    encoded_search_query built;
-    built.query = tao::json::empty_object;
-    if (boost_) {
-        built.query["boost"] = boost_.value();
-    }
+  encoded_search_query built;
+  built.query = tao::json::empty_object;
+  if (boost_) {
+    built.query["boost"] = boost_.value();
+  }
 
-    tao::json::value conjuncts = tao::json::empty_array;
-    for (const auto& conjunct : conjuncts_) {
-        auto encoded = conjunct->encode();
-        if (encoded.ec) {
-            return { encoded.ec };
-        }
-        conjuncts.push_back(encoded.query);
+  tao::json::value conjuncts = tao::json::empty_array;
+  for (const auto& conjunct : conjuncts_) {
+    auto encoded = conjunct->encode();
+    if (encoded.ec) {
+      return { encoded.ec };
     }
-    built.query["conjuncts"] = conjuncts;
+    conjuncts.push_back(encoded.query);
+  }
+  built.query["conjuncts"] = conjuncts;
 
-    return built;
+  return built;
 }
 } // namespace couchbase

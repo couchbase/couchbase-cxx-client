@@ -26,17 +26,18 @@
 
 namespace couchbase
 {
-struct allow_querying_search_index_options : public common_options<allow_querying_search_index_options> {
-  public:
-    struct built : public common_options<allow_querying_search_index_options>::built {
-    };
+struct allow_querying_search_index_options
+  : public common_options<allow_querying_search_index_options> {
+public:
+  struct built : public common_options<allow_querying_search_index_options>::built {
+  };
 
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options() };
-    }
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options() };
+  }
 
-  private:
+private:
 };
 
 using allow_querying_search_index_handler = std::function<void(error)>;

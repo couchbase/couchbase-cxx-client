@@ -18,8 +18,8 @@
 namespace couchbase::core
 {
 enum class cluster_state {
-    online,
-    degraded,
-    offline,
+  online,
+  degraded,
+  offline,
 };
 } // namespace couchbase::core

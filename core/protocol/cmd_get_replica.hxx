@@ -28,61 +28,61 @@ namespace couchbase::core::protocol
 
 class get_replica_response_body
 {
-  private:
-    std::uint32_t flags_{};
-    std::vector<std::byte> value_{};
+private:
+  std::uint32_t flags_{};
+  std::vector<std::byte> value_{};
 
-  public:
-    static const inline client_opcode opcode = client_opcode::get_replica;
+public:
+  static const inline client_opcode opcode = client_opcode::get_replica;
 
-    [[nodiscard]] const auto& value() const
-    {
-        return value_;
-    }
+  [[nodiscard]] const auto& value() const
+  {
+    return value_;
+  }
 
-    [[nodiscard]] std::uint32_t flags() const;
+  [[nodiscard]] std::uint32_t flags() const;
 
-    [[nodiscard]] bool parse(key_value_status_code status,
-                             const header_buffer& header,
-                             std::uint8_t framing_extras_size,
-                             std::uint16_t key_size,
-                             std::uint8_t extras_size,
-                             const std::vector<std::byte>& body,
-                             const cmd_info& info);
+  [[nodiscard]] bool parse(key_value_status_code status,
+                           const header_buffer& header,
+                           std::uint8_t framing_extras_size,
+                           std::uint16_t key_size,
+                           std::uint8_t extras_size,
+                           const std::vector<std::byte>& body,
+                           const cmd_info& info);
 };
 
 class get_replica_request_body
 {
-  private:
-    std::vector<std::byte> key_;
+private:
+  std::vector<std::byte> key_;
 
-  public:
-    using response_body_type = get_replica_response_body;
-    static const inline client_opcode opcode = client_opcode::get_replica;
+public:
+  using response_body_type = get_replica_response_body;
+  static const inline client_opcode opcode = client_opcode::get_replica;
 
-    void id(const document_id& id);
+  void id(const document_id& id);
 
-    [[nodiscard]] const auto& key() const
-    {
-        return key_;
-    }
+  [[nodiscard]] const auto& key() const
+  {
+    return key_;
+  }
 
-    [[nodiscard]] const auto& framing_extras() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& framing_extras() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] const auto& extras() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& extras() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] const auto& value() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& value() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] std::size_t size() const;
+  [[nodiscard]] std::size_t size() const;
 };
 
 } // namespace couchbase::core::protocol

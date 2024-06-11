@@ -25,40 +25,42 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-eventing_drop_function_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+eventing_drop_function_request::encode_to(encoded_request_type& encoded,
+                                          http_context& /* context */) const
 {
-    encoded.method = "DELETE";
-    encoded.path = fmt::format("/api/v1/functions/{}", name);
-    if (bucket_name.has_value() && scope_name.has_value()) {
-        encoded.path += fmt::format("?bucket={}&scope={}",
-                                    utils::string_codec::v2::path_escape(bucket_name.value()),
-                                    utils::string_codec::v2::path_escape(scope_name.value()));
-    }
-    return {};
+  encoded.method = "DELETE";
+  encoded.path = fmt::format("/api/v1/functions/{}", name);
+  if (bucket_name.has_value() && scope_name.has_value()) {
+    encoded.path += fmt::format("?bucket={}&scope={}",
+                                utils::string_codec::v2::path_escape(bucket_name.value()),
+                                utils::string_codec::v2::path_escape(scope_name.value()));
+  }
+  return {};
 }
 
 eventing_drop_function_response
-eventing_drop_function_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+eventing_drop_function_request::make_response(error_context::http&& ctx,
+                                              const encoded_response_type& encoded) const
 {
-    eventing_drop_function_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        if (encoded.body.data().empty()) {
-            return response;
-        }
-        tao::json::value payload{};
-        try {
-            payload = utils::json::parse(encoded.body.data());
-        } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = errc::common::parsing_failure;
-            return response;
-        }
-        auto [ec, problem] = extract_eventing_error_code(payload);
-        if (ec) {
-            response.ctx.ec = ec;
-            response.error.emplace(problem);
-            return response;
-        }
+  eventing_drop_function_response response{ std::move(ctx) };
+  if (!response.ctx.ec) {
+    if (encoded.body.data().empty()) {
+      return response;
     }
-    return response;
+    tao::json::value payload{};
+    try {
+      payload = utils::json::parse(encoded.body.data());
+    } catch (const tao::pegtl::parse_error&) {
+      response.ctx.ec = errc::common::parsing_failure;
+      return response;
+    }
+    auto [ec, problem] = extract_eventing_error_code(payload);
+    if (ec) {
+      response.ctx.ec = ec;
+      response.error.emplace(problem);
+      return response;
+    }
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

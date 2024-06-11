@@ -26,7 +26,7 @@ namespace couchbase
  * @committed
  */
 struct geo_point {
-    double latitude{ 0 };
-    double longitude{ 0 };
+  double latitude{ 0 };
+  double longitude{ 0 };
 };
 } // namespace couchbase

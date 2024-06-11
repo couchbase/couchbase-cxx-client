@@ -28,41 +28,43 @@ namespace couchbase::core::management::analytics
 std::error_code
 azure_blob_external_link::validate() const
 {
-    if (dataverse.empty() || link_name.empty()) {
-        return errc::common::invalid_argument;
-    }
-    if (connection_string.has_value() || (account_name.has_value() && (account_key.has_value() || shared_access_signature.has_value()))) {
-        return {};
-    }
+  if (dataverse.empty() || link_name.empty()) {
     return errc::common::invalid_argument;
+  }
+  if (connection_string.has_value() ||
+      (account_name.has_value() &&
+       (account_key.has_value() || shared_access_signature.has_value()))) {
+    return {};
+  }
+  return errc::common::invalid_argument;
 }
 
 std::string
 azure_blob_external_link::encode() const
 {
-    std::map<std::string, std::string> values{
-        { "type", "azureblob" },
-    };
-    if (std::count(dataverse.begin(), dataverse.end(), '/') == 0) {
-        values["dataverse"] = dataverse;
-        values["name"] = link_name;
+  std::map<std::string, std::string> values{
+    { "type", "azureblob" },
+  };
+  if (std::count(dataverse.begin(), dataverse.end(), '/') == 0) {
+    values["dataverse"] = dataverse;
+    values["name"] = link_name;
+  }
+  if (connection_string) {
+    values["connectionString"] = connection_string.value();
+  } else if (account_name) {
+    values["accountName"] = account_name.value();
+    if (account_key) {
+      values["accountKey"] = account_key.value();
+    } else if (shared_access_signature) {
+      values["sharedAccessSignature"] = shared_access_signature.value();
     }
-    if (connection_string) {
-        values["connectionString"] = connection_string.value();
-    } else if (account_name) {
-        values["accountName"] = account_name.value();
-        if (account_key) {
-            values["accountKey"] = account_key.value();
-        } else if (shared_access_signature) {
-            values["sharedAccessSignature"] = shared_access_signature.value();
-        }
-    }
-    if (blob_endpoint) {
-        values["blobEndpoint"] = blob_endpoint.value();
-    }
-    if (endpoint_suffix) {
-        values["endpointSuffix"] = endpoint_suffix.value();
-    }
-    return utils::string_codec::v2::form_encode(values);
+  }
+  if (blob_endpoint) {
+    values["blobEndpoint"] = blob_endpoint.value();
+  }
+  if (endpoint_suffix) {
+    values["endpointSuffix"] = endpoint_suffix.value();
+  }
+  return utils::string_codec::v2::form_encode(values);
 }
 } // namespace couchbase::core::management::analytics

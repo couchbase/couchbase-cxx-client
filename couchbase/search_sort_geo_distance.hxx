@@ -34,51 +34,51 @@ namespace couchbase
  */
 class search_sort_geo_distance : public search_sort
 {
-  public:
-    search_sort_geo_distance(geo_point location, std::string field)
-      : location_{ location }
-      , field_{ std::move(field) }
-    {
-    }
+public:
+  search_sort_geo_distance(geo_point location, std::string field)
+    : location_{ location }
+    , field_{ std::move(field) }
+  {
+  }
 
-    search_sort_geo_distance(double latitude, double longitude, std::string field)
-      : location_{ geo_point{ latitude, longitude } }
-      , field_{ std::move(field) }
-    {
-    }
+  search_sort_geo_distance(double latitude, double longitude, std::string field)
+    : location_{ geo_point{ latitude, longitude } }
+    , field_{ std::move(field) }
+  {
+  }
 
-    /**
-     * Set the sorting direction.
-     *
-     * @param desc `true` for descending order, `false` for ascending
-     * @return pointer to this
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto descending(bool desc) -> search_sort_geo_distance&;
+  /**
+   * Set the sorting direction.
+   *
+   * @param desc `true` for descending order, `false` for ascending
+   * @return pointer to this
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto descending(bool desc) -> search_sort_geo_distance&;
 
-    /**
-     * Specifies the unit used for sorting
-     *
-     * @param unit the unit used
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto unit(search_geo_distance_units unit) -> search_sort_geo_distance&;
+  /**
+   * Specifies the unit used for sorting
+   *
+   * @param unit the unit used
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto unit(search_geo_distance_units unit) -> search_sort_geo_distance&;
 
-    /**
-     * @return encoded representation of the search facet.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto encode() const -> encoded_search_sort override;
+  /**
+   * @return encoded representation of the search facet.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto encode() const -> encoded_search_sort override;
 
-  private:
-    geo_point location_;
-    std::string field_;
-    std::optional<search_geo_distance_units> unit_;
+private:
+  geo_point location_;
+  std::string field_;
+  std::optional<search_geo_distance_units> unit_;
 };
 } // namespace couchbase

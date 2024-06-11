@@ -28,68 +28,69 @@ namespace couchbase
 {
 class drop_dataset_analytics_options : public common_options<drop_dataset_analytics_options>
 {
-  public:
-    /**
-     * Ignore error if the dataset does not exist.
-     *
-     * defaults to `false`
-     *
-     * @param ignore_if_not_exists
-     * @return reference to this object, for use in chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto ignore_if_not_exists(bool ignore_if_not_exists) -> drop_dataset_analytics_options&
-    {
-        ignore_if_not_exists_ = ignore_if_not_exists;
-        return self();
-    }
+public:
+  /**
+   * Ignore error if the dataset does not exist.
+   *
+   * defaults to `false`
+   *
+   * @param ignore_if_not_exists
+   * @return reference to this object, for use in chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto ignore_if_not_exists(bool ignore_if_not_exists) -> drop_dataset_analytics_options&
+  {
+    ignore_if_not_exists_ = ignore_if_not_exists;
+    return self();
+  }
 
-    /**
-     * The name of the dataverse the dataset should be dropped from
-     *
-     * @param dataverse_name
-     * @return reference to this object, for use in chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto dataverse_name(std::string dataverse_name) -> drop_dataset_analytics_options&
-    {
-        dataverse_name_ = std::move(dataverse_name);
-        return self();
-    }
+  /**
+   * The name of the dataverse the dataset should be dropped from
+   *
+   * @param dataverse_name
+   * @return reference to this object, for use in chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto dataverse_name(std::string dataverse_name) -> drop_dataset_analytics_options&
+  {
+    dataverse_name_ = std::move(dataverse_name);
+    return self();
+  }
 
-    /**
-     * Immutable value object representing consistent options.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    struct built : public common_options<drop_dataset_analytics_options>::built {
-        bool ignore_if_not_exists{};
-        std::optional<std::string> dataverse_name{};
-    };
+  /**
+   * Immutable value object representing consistent options.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  struct built : public common_options<drop_dataset_analytics_options>::built {
+    bool ignore_if_not_exists{};
+    std::optional<std::string> dataverse_name{};
+  };
 
-    /**
-     * Validates options and returns them as an immutable value.
-     *
-     * @return consistent options as an immutable value
-     *
-     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options(), ignore_if_not_exists_, dataverse_name_ };
-    }
+  /**
+   * Validates options and returns them as an immutable value.
+   *
+   * @return consistent options as an immutable value
+   *
+   * @exception std::system_error with code errc::common::invalid_argument if the options are not
+   * valid
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options(), ignore_if_not_exists_, dataverse_name_ };
+  }
 
-  private:
-    bool ignore_if_not_exists_{ false };
-    std::optional<std::string> dataverse_name_{};
+private:
+  bool ignore_if_not_exists_{ false };
+  std::optional<std::string> dataverse_name_{};
 };
 
 /**

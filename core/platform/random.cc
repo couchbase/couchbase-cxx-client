@@ -38,52 +38,53 @@ namespace couchbase::core
 {
 class RandomGeneratorProvider
 {
-  public:
-    RandomGeneratorProvider()
-    {
+public:
+  RandomGeneratorProvider()
+  {
 #ifdef WIN32
-        if (!CryptAcquireContext(&handle, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT | CRYPT_SILENT)) {
-            throw std::system_error(int(GetLastError()),
-                                    std::system_category(),
-                                    "RandomGeneratorProvider::Failed to "
-                                    "initialize random generator");
-        }
-#else
-        if ((handle = open("/dev/urandom", O_RDONLY)) == -1) {
-            throw std::system_error(errno,
-                                    std::system_category(),
-                                    "RandomGeneratorProvider::Failed to "
-                                    "initialize random generator");
-        }
-#endif
+    if (!CryptAcquireContext(
+          &handle, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT | CRYPT_SILENT)) {
+      throw std::system_error(int(GetLastError()),
+                              std::system_category(),
+                              "RandomGeneratorProvider::Failed to "
+                              "initialize random generator");
     }
-
-    virtual ~RandomGeneratorProvider()
-    {
-#ifdef WIN32
-        CryptReleaseContext(handle, 0);
 #else
-        close(handle);
-#endif
+    if ((handle = open("/dev/urandom", O_RDONLY)) == -1) {
+      throw std::system_error(errno,
+                              std::system_category(),
+                              "RandomGeneratorProvider::Failed to "
+                              "initialize random generator");
     }
-
-    bool getBytes(void* dest, size_t size)
-    {
-        std::lock_guard<std::mutex> lock(mutex);
-#ifdef WIN32
-        return CryptGenRandom(handle, (DWORD)size, static_cast<BYTE*>(dest));
-#else
-        return size_t(read(handle, dest, size)) == size;
 #endif
-    }
+  }
 
-  protected:
+  virtual ~RandomGeneratorProvider()
+  {
 #ifdef WIN32
-    HCRYPTPROV handle{};
+    CryptReleaseContext(handle, 0);
 #else
-    int handle = -1;
+    close(handle);
 #endif
-    std::mutex mutex;
+  }
+
+  bool getBytes(void* dest, size_t size)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+#ifdef WIN32
+    return CryptGenRandom(handle, (DWORD)size, static_cast<BYTE*>(dest));
+#else
+    return size_t(read(handle, dest, size)) == size;
+#endif
+  }
+
+protected:
+#ifdef WIN32
+  HCRYPTPROV handle{};
+#else
+  int handle = -1;
+#endif
+  std::mutex mutex;
 };
 
 std::mutex shared_provider_lock;
@@ -91,30 +92,30 @@ std::unique_ptr<RandomGeneratorProvider> shared_provider;
 
 RandomGenerator::RandomGenerator()
 {
+  if (!shared_provider) {
+    // This might be the first one, lets lock and create
+    std::lock_guard<std::mutex> guard(shared_provider_lock);
     if (!shared_provider) {
-        // This might be the first one, lets lock and create
-        std::lock_guard<std::mutex> guard(shared_provider_lock);
-        if (!shared_provider) {
-            shared_provider = std::make_unique<RandomGeneratorProvider>();
-        }
+      shared_provider = std::make_unique<RandomGeneratorProvider>();
     }
+  }
 }
 
 std::uint64_t
 RandomGenerator::next()
 {
-    std::uint64_t ret;
-    if (getBytes(&ret, sizeof(ret))) {
-        return ret;
-    }
+  std::uint64_t ret;
+  if (getBytes(&ret, sizeof(ret))) {
+    return ret;
+  }
 
-    return static_cast<std::uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+  return static_cast<std::uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
 }
 
 bool
 RandomGenerator::getBytes(void* dest, size_t size)
 {
-    return shared_provider->getBytes(dest, size);
+  return shared_provider->getBytes(dest, size);
 }
 
 } // namespace couchbase::core

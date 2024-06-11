@@ -34,18 +34,20 @@ get_collections_manifest_response_body::parse(key_value_status_code status,
                                               const std::vector<std::byte>& body,
                                               const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == key_value_status_code::success) {
-        std::vector<std::uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
-        std::string_view manifest_text{ reinterpret_cast<const char*>(body.data()) + offset,
-                                        body.size() - static_cast<std::size_t>(offset) };
-        try {
-            manifest_ = utils::json::parse(manifest_text).as<topology::collections_manifest>();
-        } catch (const tao::pegtl::parse_error& e) {
-            CB_LOG_DEBUG("unable to parse collections manifest as JSON: {}, {}", e.message(), manifest_text);
-        }
-        return true;
+  Expects(header[1] == static_cast<std::byte>(opcode));
+  if (status == key_value_status_code::success) {
+    std::vector<std::uint8_t>::difference_type offset =
+      framing_extras_size + key_size + extras_size;
+    std::string_view manifest_text{ reinterpret_cast<const char*>(body.data()) + offset,
+                                    body.size() - static_cast<std::size_t>(offset) };
+    try {
+      manifest_ = utils::json::parse(manifest_text).as<topology::collections_manifest>();
+    } catch (const tao::pegtl::parse_error& e) {
+      CB_LOG_DEBUG(
+        "unable to parse collections manifest as JSON: {}, {}", e.message(), manifest_text);
     }
-    return false;
+    return true;
+  }
+  return false;
 }
 } // namespace couchbase::core::protocol

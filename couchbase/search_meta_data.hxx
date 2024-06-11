@@ -40,46 +40,46 @@ class internal_search_meta_data;
  */
 class search_meta_data
 {
-  public:
-    /**
-     * @since 1.0.0
-     * @volatile
-     */
-    explicit search_meta_data(internal_search_meta_data internal);
+public:
+  /**
+   * @since 1.0.0
+   * @volatile
+   */
+  explicit search_meta_data(internal_search_meta_data internal);
 
-    /**
-     * Returns the client context identifier string set on the search request.
-     *
-     * @return client context identifier
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto client_context_id() const -> const std::string&;
-    /**
-     * Returns any warnings returned by the search engine.
-     *
-     * It returns an empty vector if no warnings were returned.
-     *
-     * @return vector of the reported warnings.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto errors() const -> const std::map<std::string, std::string>&;
+  /**
+   * Returns the client context identifier string set on the search request.
+   *
+   * @return client context identifier
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto client_context_id() const -> const std::string&;
+  /**
+   * Returns any warnings returned by the search engine.
+   *
+   * It returns an empty vector if no warnings were returned.
+   *
+   * @return vector of the reported warnings.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto errors() const -> const std::map<std::string, std::string>&;
 
-    /**
-     * Returns the {@link search_metrics} as returned by the search engine if enabled.
-     *
-     * @return metrics
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto metrics() const -> const search_metrics&;
+  /**
+   * Returns the {@link search_metrics} as returned by the search engine if enabled.
+   *
+   * @return metrics
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto metrics() const -> const search_metrics&;
 
-  private:
-    std::unique_ptr<internal_search_meta_data> internal_;
+private:
+  std::unique_ptr<internal_search_meta_data> internal_;
 };
 
 } // namespace couchbase

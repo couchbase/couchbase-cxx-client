@@ -20,9 +20,9 @@
 namespace couchbase
 {
 enum class search_sort_field_type {
-    automatic,
-    string,
-    number,
-    date,
+  automatic,
+  string,
+  number,
+  date,
 };
 } // namespace couchbase

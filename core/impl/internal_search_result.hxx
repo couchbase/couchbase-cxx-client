@@ -25,19 +25,20 @@ namespace couchbase
 {
 class internal_search_result
 {
-  public:
-    explicit internal_search_result(const core::operations::search_response& response);
+public:
+  explicit internal_search_result(const core::operations::search_response& response);
 
-    [[nodiscard]] auto meta_data() const -> const search_meta_data&;
+  [[nodiscard]] auto meta_data() const -> const search_meta_data&;
 
-    [[nodiscard]] auto rows() const -> const std::vector<search_row>&;
+  [[nodiscard]] auto rows() const -> const std::vector<search_row>&;
 
-    [[nodiscard]] auto facets() const -> const std::map<std::string, std::shared_ptr<search_facet_result>>&;
+  [[nodiscard]] auto facets() const
+    -> const std::map<std::string, std::shared_ptr<search_facet_result>>&;
 
-  private:
-    search_meta_data meta_data_;
-    std::map<std::string, std::shared_ptr<search_facet_result>> facets_;
-    std::vector<search_row> rows_;
+private:
+  search_meta_data meta_data_;
+  std::map<std::string, std::shared_ptr<search_facet_result>> facets_;
+  std::vector<search_row> rows_;
 };
 
 } // namespace couchbase

@@ -28,7 +28,8 @@ namespace couchbase::core::mcbp
 class queue_request;
 class queue_response;
 
-using queue_callback =
-  utils::movable_function<void(std::shared_ptr<queue_response> response, std::shared_ptr<queue_request> request, std::error_code error)>;
+using queue_callback = utils::movable_function<void(std::shared_ptr<queue_response> response,
+                                                    std::shared_ptr<queue_request> request,
+                                                    std::error_code error)>;
 
 } // namespace couchbase::core::mcbp

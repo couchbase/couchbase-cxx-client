@@ -30,63 +30,64 @@
 namespace couchbase
 {
 struct ping_options : public common_options<ping_options> {
-    /**
-     * Sets a custom report ID that will be used in the report. If no report ID is provided, the client will generate a
-     * unique one.
-     *
-     * @param report_id the report ID that should be used.
-     * @return reference to this object, for use in chaining.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto report_id(std::string report_id) -> ping_options&
-    {
-        report_id_ = std::move(report_id);
-        return self();
-    }
+  /**
+   * Sets a custom report ID that will be used in the report. If no report ID is provided, the
+   * client will generate a unique one.
+   *
+   * @param report_id the report ID that should be used.
+   * @return reference to this object, for use in chaining.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto report_id(std::string report_id) -> ping_options&
+  {
+    report_id_ = std::move(report_id);
+    return self();
+  }
 
-    /**
-     * Customizes the set of services to ping.
-     *
-     * @param service_types the services to ping.
-     * @return reference to this object, for use in chaining.
-     */
-    auto service_types(std::set<service_type> service_types) -> ping_options&
-    {
-        service_types_ = std::move(service_types);
-        return self();
-    }
+  /**
+   * Customizes the set of services to ping.
+   *
+   * @param service_types the services to ping.
+   * @return reference to this object, for use in chaining.
+   */
+  auto service_types(std::set<service_type> service_types) -> ping_options&
+  {
+    service_types_ = std::move(service_types);
+    return self();
+  }
 
-    /**
-     * Immutable value object representing consistent options.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    struct built : public common_options<ping_options>::built {
-        std::optional<std::string> report_id;
-        std::set<service_type> service_types;
-    };
+  /**
+   * Immutable value object representing consistent options.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  struct built : public common_options<ping_options>::built {
+    std::optional<std::string> report_id;
+    std::set<service_type> service_types;
+  };
 
-    /**
-     * Validates the options and returns them as an immutable value.
-     *
-     * @return consistent options as an immutable value
-     *
-     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options(), report_id_, service_types_ };
-    }
+  /**
+   * Validates the options and returns them as an immutable value.
+   *
+   * @return consistent options as an immutable value
+   *
+   * @exception std::system_error with code errc::common::invalid_argument if the options are not
+   * valid
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options(), report_id_, service_types_ };
+  }
 
-  private:
-    std::optional<std::string> report_id_{};
-    std::set<service_type> service_types_{};
+private:
+  std::optional<std::string> report_id_{};
+  std::set<service_type> service_types_{};
 };
 
 using ping_handler = std::function<void(error, ping_result)>;

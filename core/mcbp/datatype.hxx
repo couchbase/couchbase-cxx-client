@@ -35,6 +35,6 @@ static constexpr datatype datatype_xattrs{ 0x04 };
 static constexpr bool
 has_json_datatype(std::byte flags)
 {
-    return (flags & datatype_json) == datatype_json;
+  return (flags & datatype_json) == datatype_json;
 }
 } // namespace couchbase::core::mcbp

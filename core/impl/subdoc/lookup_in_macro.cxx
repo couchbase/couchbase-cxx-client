@@ -38,80 +38,81 @@ static const std::string macro_vbucket{ "$vbucket" };
 auto
 to_lookup_in_macro(std::string_view input) -> std::optional<couchbase::subdoc::lookup_in_macro>
 {
-    if (input == macro_document) {
-        return lookup_in_macro::document;
-    }
-    if (input == macro_expiry_time) {
-        return lookup_in_macro::expiry_time;
-    }
-    if (input == macro_cas) {
-        return lookup_in_macro::cas;
-    }
-    if (input == macro_sequence_number) {
-        return lookup_in_macro::sequence_number;
-    }
-    if (input == macro_vbucket_uuid) {
-        return lookup_in_macro::vbucket_uuid;
-    }
-    if (input == macro_last_modified) {
-        return lookup_in_macro::last_modified;
-    }
-    if (input == macro_is_deleted) {
-        return lookup_in_macro::is_deleted;
-    }
-    if (input == macro_value_size_bytes) {
-        return lookup_in_macro::value_size_bytes;
-    }
-    if (input == macro_revision_id) {
-        return lookup_in_macro::revision_id;
-    }
-    if (input == macro_flags) {
-        return lookup_in_macro::flags;
-    }
-    if (input == macro_vbucket) {
-        return lookup_in_macro::vbucket;
-    }
-    return {};
+  if (input == macro_document) {
+    return lookup_in_macro::document;
+  }
+  if (input == macro_expiry_time) {
+    return lookup_in_macro::expiry_time;
+  }
+  if (input == macro_cas) {
+    return lookup_in_macro::cas;
+  }
+  if (input == macro_sequence_number) {
+    return lookup_in_macro::sequence_number;
+  }
+  if (input == macro_vbucket_uuid) {
+    return lookup_in_macro::vbucket_uuid;
+  }
+  if (input == macro_last_modified) {
+    return lookup_in_macro::last_modified;
+  }
+  if (input == macro_is_deleted) {
+    return lookup_in_macro::is_deleted;
+  }
+  if (input == macro_value_size_bytes) {
+    return lookup_in_macro::value_size_bytes;
+  }
+  if (input == macro_revision_id) {
+    return lookup_in_macro::revision_id;
+  }
+  if (input == macro_flags) {
+    return lookup_in_macro::flags;
+  }
+  if (input == macro_vbucket) {
+    return lookup_in_macro::vbucket;
+  }
+  return {};
 }
 
 auto
 to_string(lookup_in_macro value) -> const std::string&
 {
-    switch (value) {
-        case lookup_in_macro::document:
-            return macro_document;
+  switch (value) {
+    case lookup_in_macro::document:
+      return macro_document;
 
-        case lookup_in_macro::expiry_time:
-            return macro_expiry_time;
+    case lookup_in_macro::expiry_time:
+      return macro_expiry_time;
 
-        case lookup_in_macro::cas:
-            return macro_cas;
+    case lookup_in_macro::cas:
+      return macro_cas;
 
-        case lookup_in_macro::sequence_number:
-            return macro_sequence_number;
+    case lookup_in_macro::sequence_number:
+      return macro_sequence_number;
 
-        case lookup_in_macro::vbucket_uuid:
-            return macro_vbucket_uuid;
+    case lookup_in_macro::vbucket_uuid:
+      return macro_vbucket_uuid;
 
-        case lookup_in_macro::last_modified:
-            return macro_last_modified;
+    case lookup_in_macro::last_modified:
+      return macro_last_modified;
 
-        case lookup_in_macro::is_deleted:
-            return macro_is_deleted;
+    case lookup_in_macro::is_deleted:
+      return macro_is_deleted;
 
-        case lookup_in_macro::value_size_bytes:
-            return macro_value_size_bytes;
+    case lookup_in_macro::value_size_bytes:
+      return macro_value_size_bytes;
 
-        case lookup_in_macro::revision_id:
-            return macro_revision_id;
+    case lookup_in_macro::revision_id:
+      return macro_revision_id;
 
-        case lookup_in_macro::flags:
-            return macro_flags;
+    case lookup_in_macro::flags:
+      return macro_flags;
 
-        case lookup_in_macro::vbucket:
-            return macro_vbucket;
-    }
-    throw std::system_error(errc::common::invalid_argument,
-                            "Unexpected lookup_in macro: " + std::to_string(static_cast<std::uint32_t>(value)));
+    case lookup_in_macro::vbucket:
+      return macro_vbucket;
+  }
+  throw std::system_error(errc::common::invalid_argument,
+                          "Unexpected lookup_in macro: " +
+                            std::to_string(static_cast<std::uint32_t>(value)));
 }
 } // namespace couchbase::subdoc

@@ -22,17 +22,18 @@ namespace couchbase
 static couchbase::search_metrics
 map_metrics(const core::operations::search_response::search_metrics& metrics)
 {
-    return {
-        metrics.took,
-        metrics.total_rows,
-        metrics.success_partition_count,
-        metrics.error_partition_count,
-        metrics.success_partition_count + metrics.error_partition_count,
-        metrics.max_score,
-    };
+  return {
+    metrics.took,
+    metrics.total_rows,
+    metrics.success_partition_count,
+    metrics.error_partition_count,
+    metrics.success_partition_count + metrics.error_partition_count,
+    metrics.max_score,
+  };
 }
 
-internal_search_meta_data::internal_search_meta_data(const core::operations::search_response::search_meta_data& meta)
+internal_search_meta_data::internal_search_meta_data(
+  const core::operations::search_response::search_meta_data& meta)
   : client_context_id_{ meta.client_context_id }
   , metrics_{ map_metrics(meta.metrics) }
   , errors_{ meta.errors }
@@ -42,19 +43,19 @@ internal_search_meta_data::internal_search_meta_data(const core::operations::sea
 auto
 internal_search_meta_data::client_context_id() const -> const std::string&
 {
-    return client_context_id_;
+  return client_context_id_;
 }
 
 auto
 internal_search_meta_data::errors() const -> const std::map<std::string, std::string>&
 {
-    return errors_;
+  return errors_;
 }
 
 auto
 internal_search_meta_data::metrics() const -> const couchbase::search_metrics&
 {
-    return metrics_;
+  return metrics_;
 }
 
 } // namespace couchbase

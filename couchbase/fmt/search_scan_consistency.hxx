@@ -29,21 +29,21 @@
  */
 template<>
 struct fmt::formatter<couchbase::search_scan_consistency> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(couchbase::search_scan_consistency mode, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (mode) {
-            case couchbase::search_scan_consistency::not_bounded:
-                name = "not_bounded";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
+  template<typename FormatContext>
+  auto format(couchbase::search_scan_consistency mode, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (mode) {
+      case couchbase::search_scan_consistency::not_bounded:
+        name = "not_bounded";
+        break;
     }
+    return format_to(ctx.out(), "{}", name);
+  }
 };

@@ -35,43 +35,46 @@ class internal_search_result;
 #endif
 
 /**
- * Represents result of @ref cluster#search_query(), @ref cluster#search() and @ref scope#search() calls.
+ * Represents result of @ref cluster#search_query(), @ref cluster#search() and @ref scope#search()
+ * calls.
  *
  * @since 1.0.0
  * @committed
  */
 class search_result
 {
-  public:
-    search_result();
-    /**
-     * @since 1.0.0
-     * @volatile
-     */
-    explicit search_result(internal_search_result internal);
-    ~search_result();
+public:
+  search_result();
+  /**
+   * @since 1.0.0
+   * @volatile
+   */
+  explicit search_result(internal_search_result internal);
+  ~search_result();
 
-    search_result(const search_result&) = delete;
-    search_result& operator=(const search_result&) = delete;
+  search_result(const search_result&) = delete;
+  search_result& operator=(const search_result&) = delete;
 
-    search_result(search_result&&) noexcept;
-    search_result& operator=(search_result&&) noexcept;
+  search_result(search_result&&) noexcept;
+  search_result& operator=(search_result&&) noexcept;
 
-    /**
-     * Returns the {@link search_meta_data} giving access to the additional metadata associated with this search.
-     *
-     * @return response metadata
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto meta_data() const -> const search_meta_data&;
+  /**
+   * Returns the {@link search_meta_data} giving access to the additional metadata associated with
+   * this search.
+   *
+   * @return response metadata
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto meta_data() const -> const search_meta_data&;
 
-    [[nodiscard]] auto rows() const -> const std::vector<search_row>&;
+  [[nodiscard]] auto rows() const -> const std::vector<search_row>&;
 
-    [[nodiscard]] auto facets() const -> const std::map<std::string, std::shared_ptr<search_facet_result>>&;
+  [[nodiscard]] auto facets() const
+    -> const std::map<std::string, std::shared_ptr<search_facet_result>>&;
 
-  private:
-    std::unique_ptr<internal_search_result> internal_;
+private:
+  std::unique_ptr<internal_search_result> internal_;
 };
 } // namespace couchbase

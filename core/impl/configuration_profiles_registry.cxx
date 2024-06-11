@@ -26,50 +26,52 @@ namespace couchbase
 {
 
 struct registry {
-    static inline std::map<std::string, std::shared_ptr<configuration_profile>, std::less<>> store{
-        { "wan_development", std::make_shared<wan_development_configuration_profile>() }
-    };
-    static inline std::mutex store_mutex{};
+  static inline std::map<std::string, std::shared_ptr<configuration_profile>, std::less<>> store{
+    { "wan_development", std::make_shared<wan_development_configuration_profile>() }
+  };
+  static inline std::mutex store_mutex{};
 };
 
 void
-configuration_profiles_registry::register_profile(const std::string& name, std::shared_ptr<configuration_profile> profile)
+configuration_profiles_registry::register_profile(const std::string& name,
+                                                  std::shared_ptr<configuration_profile> profile)
 {
-    if (name.empty()) {
-        return;
-    }
-    std::scoped_lock lock(registry::store_mutex);
-    registry::store[name] = std::move(profile);
+  if (name.empty()) {
+    return;
+  }
+  std::scoped_lock lock(registry::store_mutex);
+  registry::store[name] = std::move(profile);
 }
 
 void
-configuration_profiles_registry::apply_profile(const std::string& name, couchbase::cluster_options& options)
+configuration_profiles_registry::apply_profile(const std::string& name,
+                                               couchbase::cluster_options& options)
 {
-    std::shared_ptr<configuration_profile> profile;
-    if (name.empty()) {
-        return;
-    } else {
-        std::scoped_lock lock(registry::store_mutex);
-        if (auto it = registry::store.find(name); it == registry::store.end()) {
-            return;
-        } else if (it->second != nullptr) {
-            profile = it->second;
-        }
+  std::shared_ptr<configuration_profile> profile;
+  if (name.empty()) {
+    return;
+  } else {
+    std::scoped_lock lock(registry::store_mutex);
+    if (auto it = registry::store.find(name); it == registry::store.end()) {
+      return;
+    } else if (it->second != nullptr) {
+      profile = it->second;
     }
+  }
 
-    if (profile) {
-        profile->apply(options);
-    }
+  if (profile) {
+    profile->apply(options);
+  }
 }
 
 auto
 configuration_profiles_registry::available_profiles() -> std::vector<std::string>
 {
-    std::vector<std::string> profile_names;
-    std::scoped_lock lock(registry::store_mutex);
-    for (const auto& [name, _] : registry::store) {
-        profile_names.push_back(name);
-    }
-    return profile_names;
+  std::vector<std::string> profile_names;
+  std::scoped_lock lock(registry::store_mutex);
+  for (const auto& [name, _] : registry::store) {
+    profile_names.push_back(name);
+  }
+  return profile_names;
 }
 } // namespace couchbase

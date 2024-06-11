@@ -31,109 +31,109 @@ namespace couchbase::core::protocol
 
 class lookup_in_response_body
 {
-  public:
-    static const inline client_opcode opcode = client_opcode::subdoc_multi_lookup;
+public:
+  static const inline client_opcode opcode = client_opcode::subdoc_multi_lookup;
 
-    struct lookup_in_field {
-        key_value_status_code status{};
-        std::string value;
-    };
+  struct lookup_in_field {
+    key_value_status_code status{};
+    std::string value;
+  };
 
-  private:
-    std::vector<lookup_in_field> fields_;
+private:
+  std::vector<lookup_in_field> fields_;
 
-  public:
-    [[nodiscard]] const std::vector<lookup_in_field>& fields() const
-    {
-        return fields_;
-    }
+public:
+  [[nodiscard]] const std::vector<lookup_in_field>& fields() const
+  {
+    return fields_;
+  }
 
-    bool parse(key_value_status_code status,
-               const header_buffer& header,
-               std::uint8_t framing_extras_size,
-               std::uint16_t key_size,
-               std::uint8_t extras_size,
-               const std::vector<std::byte>& body,
-               const cmd_info& info);
+  bool parse(key_value_status_code status,
+             const header_buffer& header,
+             std::uint8_t framing_extras_size,
+             std::uint16_t key_size,
+             std::uint8_t extras_size,
+             const std::vector<std::byte>& body,
+             const cmd_info& info);
 };
 
 class lookup_in_request_body
 {
-  public:
-    using response_body_type = lookup_in_response_body;
-    static const inline client_opcode opcode = client_opcode::subdoc_multi_lookup;
+public:
+  using response_body_type = lookup_in_response_body;
+  static const inline client_opcode opcode = client_opcode::subdoc_multi_lookup;
 
-    /**
-     * Allow access to XATTRs for deleted documents (instead of returning KEY_ENOENT).
-     */
-    static const inline std::uint8_t doc_flag_access_deleted = 0b0000'0100;
+  /**
+   * Allow access to XATTRs for deleted documents (instead of returning KEY_ENOENT).
+   */
+  static const inline std::uint8_t doc_flag_access_deleted = 0b0000'0100;
 
-  private:
-    std::vector<std::byte> key_;
-    std::vector<std::byte> extras_{};
-    std::vector<std::byte> value_{};
+private:
+  std::vector<std::byte> key_;
+  std::vector<std::byte> extras_{};
+  std::vector<std::byte> value_{};
 
-    std::uint8_t flags_{ 0 };
-    std::vector<couchbase::core::impl::subdoc::command> specs_;
+  std::uint8_t flags_{ 0 };
+  std::vector<couchbase::core::impl::subdoc::command> specs_;
 
-  public:
-    void id(const document_id& id);
+public:
+  void id(const document_id& id);
 
-    void access_deleted(bool value)
-    {
-        if (value) {
-            flags_ = doc_flag_access_deleted;
-        } else {
-            flags_ = 0;
-        }
+  void access_deleted(bool value)
+  {
+    if (value) {
+      flags_ = doc_flag_access_deleted;
+    } else {
+      flags_ = 0;
     }
+  }
 
-    void specs(const std::vector<couchbase::core::impl::subdoc::command>& specs)
-    {
-        specs_ = specs;
+  void specs(const std::vector<couchbase::core::impl::subdoc::command>& specs)
+  {
+    specs_ = specs;
+  }
+
+  [[nodiscard]] const auto& key() const
+  {
+    return key_;
+  }
+
+  [[nodiscard]] const auto& framing_extras() const
+  {
+    return empty_buffer;
+  }
+
+  [[nodiscard]] const auto& extras()
+  {
+    if (extras_.empty()) {
+      fill_extras();
     }
+    return extras_;
+  }
 
-    [[nodiscard]] const auto& key() const
-    {
-        return key_;
+  [[nodiscard]] const auto& value()
+  {
+    if (value_.empty()) {
+      fill_value();
     }
+    return value_;
+  }
 
-    [[nodiscard]] const auto& framing_extras() const
-    {
-        return empty_buffer;
+  [[nodiscard]] std::size_t size()
+  {
+    if (extras_.empty()) {
+      fill_extras();
     }
-
-    [[nodiscard]] const auto& extras()
-    {
-        if (extras_.empty()) {
-            fill_extras();
-        }
-        return extras_;
+    if (value_.empty()) {
+      fill_value();
     }
+    return key_.size() + extras_.size() + value_.size();
+  }
 
-    [[nodiscard]] const auto& value()
-    {
-        if (value_.empty()) {
-            fill_value();
-        }
-        return value_;
-    }
+private:
+  void fill_extras();
 
-    [[nodiscard]] std::size_t size()
-    {
-        if (extras_.empty()) {
-            fill_extras();
-        }
-        if (value_.empty()) {
-            fill_value();
-        }
-        return key_.size() + extras_.size() + value_.size();
-    }
-
-  private:
-    void fill_extras();
-
-    void fill_value();
+  void fill_value();
 };
 
 } // namespace couchbase::core::protocol

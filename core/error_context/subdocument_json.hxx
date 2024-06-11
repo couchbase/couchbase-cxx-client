@@ -30,16 +30,18 @@ namespace tao::json
 {
 template<>
 struct traits<couchbase::subdocument_error_context> {
-    template<template<typename...> class Traits>
-    static void assign(tao::json::basic_value<Traits>& v, const couchbase::subdocument_error_context& ctx)
-    {
-        tao::json::traits<couchbase::key_value_error_context>::assign(v, dynamic_cast<const couchbase::key_value_error_context&>(ctx));
-        if (ctx.first_error_index().has_value()) {
-            v["first_error_index"] = ctx.first_error_index().value();
-        }
-        if (ctx.first_error_path().has_value()) {
-            v["first_error_path"] = ctx.first_error_path().value();
-        }
+  template<template<typename...> class Traits>
+  static void assign(tao::json::basic_value<Traits>& v,
+                     const couchbase::subdocument_error_context& ctx)
+  {
+    tao::json::traits<couchbase::key_value_error_context>::assign(
+      v, dynamic_cast<const couchbase::key_value_error_context&>(ctx));
+    if (ctx.first_error_index().has_value()) {
+      v["first_error_index"] = ctx.first_error_index().value();
     }
+    if (ctx.first_error_path().has_value()) {
+      v["first_error_path"] = ctx.first_error_path().value();
+    }
+  }
 };
 } // namespace tao::json

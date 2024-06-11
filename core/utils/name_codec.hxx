@@ -23,19 +23,19 @@
 namespace couchbase::core::utils
 {
 struct analytics {
-    static std::string uncompound_name(const std::string& name)
-    {
-        std::stringstream ss;
-        ss << '`';
-        for (const auto symbol : name) {
-            if (symbol == '/') {
-                ss << "`.`";
-            } else {
-                ss << symbol;
-            }
-        }
-        ss << '`';
-        return ss.str();
+  static std::string uncompound_name(const std::string& name)
+  {
+    std::stringstream ss;
+    ss << '`';
+    for (const auto symbol : name) {
+      if (symbol == '/') {
+        ss << "`.`";
+      } else {
+        ss << symbol;
+      }
     }
+    ss << '`';
+    return ss.str();
+  }
 };
 } // namespace couchbase::core::utils

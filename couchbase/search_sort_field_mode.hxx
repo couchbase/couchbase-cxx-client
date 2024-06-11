@@ -20,8 +20,8 @@
 namespace couchbase
 {
 enum class search_sort_field_mode {
-    server_default,
-    min,
-    max,
+  server_default,
+  min,
+  max,
 };
 } // namespace couchbase

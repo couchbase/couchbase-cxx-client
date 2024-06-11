@@ -35,18 +35,20 @@ namespace couchbase::core::mcbp
 
 class codec
 {
-  public:
-    explicit codec(std::set<protocol::hello_feature> enabled_features);
+public:
+  explicit codec(std::set<protocol::hello_feature> enabled_features);
 
-    auto encode_packet(const packet& packet) -> tl::expected<std::vector<std::byte>, std::error_code>;
-    auto decode_packet(gsl::span<std::byte> input) -> std::tuple<packet, std::size_t, std::error_code>;
-    auto decode_packet(gsl::span<std::byte> header, gsl::span<std::byte> body) -> std::tuple<packet, std::size_t, std::error_code>;
-    void enable_feature(protocol::hello_feature feature);
-    [[nodiscard]] auto is_feature_enabled(protocol::hello_feature feature) const -> bool;
+  auto encode_packet(const packet& packet) -> tl::expected<std::vector<std::byte>, std::error_code>;
+  auto decode_packet(gsl::span<std::byte> input)
+    -> std::tuple<packet, std::size_t, std::error_code>;
+  auto decode_packet(gsl::span<std::byte> header,
+                     gsl::span<std::byte> body) -> std::tuple<packet, std::size_t, std::error_code>;
+  void enable_feature(protocol::hello_feature feature);
+  [[nodiscard]] auto is_feature_enabled(protocol::hello_feature feature) const -> bool;
 
-  private:
-    std::set<protocol::hello_feature> enabled_features_{};
-    bool collections_enabled_{ false };
+private:
+  std::set<protocol::hello_feature> enabled_features_{};
+  bool collections_enabled_{ false };
 };
 
 } // namespace couchbase::core::mcbp

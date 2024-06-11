@@ -27,26 +27,28 @@
 namespace couchbase::core::operations::management
 {
 struct view_index_drop_response {
-    error_context::http ctx;
+  error_context::http ctx;
 };
 
 struct view_index_drop_request {
-    using response_type = view_index_drop_response;
-    using encoded_request_type = io::http_request;
-    using encoded_response_type = io::http_response;
-    using error_context_type = error_context::http;
+  using response_type = view_index_drop_response;
+  using encoded_request_type = io::http_request;
+  using encoded_response_type = io::http_response;
+  using error_context_type = error_context::http;
 
-    static const inline service_type type = service_type::view;
+  static const inline service_type type = service_type::view;
 
-    std::string bucket_name;
-    std::string document_name;
-    design_document_namespace ns;
+  std::string bucket_name;
+  std::string document_name;
+  design_document_namespace ns;
 
-    std::optional<std::string> client_context_id{};
-    std::optional<std::chrono::milliseconds> timeout{};
+  std::optional<std::string> client_context_id{};
+  std::optional<std::chrono::milliseconds> timeout{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          http_context& context) const;
 
-    [[nodiscard]] view_index_drop_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] view_index_drop_response make_response(error_context::http&& ctx,
+                                                       const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::operations::management

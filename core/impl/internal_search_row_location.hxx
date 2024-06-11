@@ -25,8 +25,8 @@ namespace couchbase
 {
 class internal_search_row_location
 {
-  public:
-    core::operations::search_response::search_location location;
+public:
+  core::operations::search_response::search_location location;
 };
 
 } // namespace couchbase

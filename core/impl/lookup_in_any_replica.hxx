@@ -27,39 +27,43 @@ namespace couchbase::core::impl
 {
 class lookup_in_any_replica_request
 {
-  public:
-    explicit lookup_in_any_replica_request(std::string bucket_name,
-                                           std::string scope_name,
-                                           std::string collection_name,
-                                           std::string document_key,
-                                           std::vector<couchbase::core::impl::subdoc::command> specs,
-                                           std::optional<std::chrono::milliseconds> timeout)
-      : id_{ std::move(bucket_name), std::move(scope_name), std::move(collection_name), std::move(document_key) }
-      , specs_{ std::move(specs) }
-      , timeout_{ timeout }
-    {
-    }
+public:
+  explicit lookup_in_any_replica_request(std::string bucket_name,
+                                         std::string scope_name,
+                                         std::string collection_name,
+                                         std::string document_key,
+                                         std::vector<couchbase::core::impl::subdoc::command> specs,
+                                         std::optional<std::chrono::milliseconds> timeout)
+    : id_{ std::move(bucket_name),
+           std::move(scope_name),
+           std::move(collection_name),
+           std::move(document_key) }
+    , specs_{ std::move(specs) }
+    , timeout_{ timeout }
+  {
+  }
 
-    [[nodiscard]] const auto& id() const
-    {
-        return id_;
-    }
+  [[nodiscard]] const auto& id() const
+  {
+    return id_;
+  }
 
-    [[nodiscard]] const auto& specs() const
-    {
-        return specs_;
-    }
+  [[nodiscard]] const auto& specs() const
+  {
+    return specs_;
+  }
 
-    [[nodiscard]] const auto& timeout() const
-    {
-        return timeout_;
-    }
+  [[nodiscard]] const auto& timeout() const
+  {
+    return timeout_;
+  }
 
-  private:
-    core::document_id id_;
-    std::vector<couchbase::core::impl::subdoc::command> specs_;
-    std::optional<std::chrono::milliseconds> timeout_{};
+private:
+  core::document_id id_;
+  std::vector<couchbase::core::impl::subdoc::command> specs_;
+  std::optional<std::chrono::milliseconds> timeout_{};
 };
 
-using movable_lookup_in_any_replica_handler = utils::movable_function<void(error, lookup_in_replica_result)>;
+using movable_lookup_in_any_replica_handler =
+  utils::movable_function<void(error, lookup_in_replica_result)>;
 } // namespace couchbase::core::impl

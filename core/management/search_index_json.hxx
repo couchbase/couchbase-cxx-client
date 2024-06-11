@@ -27,32 +27,32 @@ namespace tao::json
 {
 template<>
 struct traits<couchbase::core::management::search::index> {
-    template<template<typename...> class Traits>
-    static couchbase::core::management::search::index as(const tao::json::basic_value<Traits>& v)
-    {
-        couchbase::core::management::search::index result;
-        result.uuid = v.at("uuid").get_string();
-        result.name = v.at("name").get_string();
-        result.type = v.at("type").get_string();
-        if (const auto* params = v.find("params"); params != nullptr && params->is_object()) {
-            result.params_json = couchbase::core::utils::json::generate(*params);
-        }
-        if (v.find("sourceUUID") != nullptr) {
-            result.source_uuid = v.at("sourceUUID").get_string();
-        }
-        if (v.find("sourceName") != nullptr) {
-            result.source_name = v.at("sourceName").get_string();
-        }
-        if (v.find("sourceType") != nullptr) {
-            result.source_type = v.at("sourceType").get_string();
-        }
-        if (const auto* params = v.find("sourceParams"); params != nullptr && params->is_object()) {
-            result.source_params_json = couchbase::core::utils::json::generate(*params);
-        }
-        if (const auto* params = v.find("planParams"); params != nullptr && params->is_object()) {
-            result.plan_params_json = couchbase::core::utils::json::generate(*params);
-        }
-        return result;
+  template<template<typename...> class Traits>
+  static couchbase::core::management::search::index as(const tao::json::basic_value<Traits>& v)
+  {
+    couchbase::core::management::search::index result;
+    result.uuid = v.at("uuid").get_string();
+    result.name = v.at("name").get_string();
+    result.type = v.at("type").get_string();
+    if (const auto* params = v.find("params"); params != nullptr && params->is_object()) {
+      result.params_json = couchbase::core::utils::json::generate(*params);
     }
+    if (v.find("sourceUUID") != nullptr) {
+      result.source_uuid = v.at("sourceUUID").get_string();
+    }
+    if (v.find("sourceName") != nullptr) {
+      result.source_name = v.at("sourceName").get_string();
+    }
+    if (v.find("sourceType") != nullptr) {
+      result.source_type = v.at("sourceType").get_string();
+    }
+    if (const auto* params = v.find("sourceParams"); params != nullptr && params->is_object()) {
+      result.source_params_json = couchbase::core::utils::json::generate(*params);
+    }
+    if (const auto* params = v.find("planParams"); params != nullptr && params->is_object()) {
+      result.plan_params_json = couchbase::core::utils::json::generate(*params);
+    }
+    return result;
+  }
 };
 } // namespace tao::json

@@ -22,8 +22,8 @@ namespace couchbase::core
 {
 class config_profile
 {
-  public:
-    virtual ~config_profile() = default;
-    virtual void apply(cluster_options&) = 0;
+public:
+  virtual ~config_profile() = default;
+  virtual void apply(cluster_options&) = 0;
 };
 } // namespace couchbase::core

@@ -24,33 +24,37 @@
 
 namespace couchbase::core::transactions
 {
-using error_func3 = std::function<void(const std::string&, core::utils::movable_function<void(std::optional<error_class>)>&&)>;
-using error_func4 = std::function<void(core::utils::movable_function<void(std::optional<error_class>)>&&)>;
+using error_func3 =
+  std::function<void(const std::string&,
+                     core::utils::movable_function<void(std::optional<error_class>)>&&)>;
+using error_func4 =
+  std::function<void(core::utils::movable_function<void(std::optional<error_class>)>&&)>;
 
 /**
- * Hooks purely for testing purposes.  If you're an end-user looking at these for any reason, then please contact us first
- * about your use-case: we are always open to adding good ideas into the transactions library.
+ * Hooks purely for testing purposes.  If you're an end-user looking at these for any reason, then
+ * please contact us first about your use-case: we are always open to adding good ideas into the
+ * transactions library.
  */
 struct cleanup_testing_hooks {
-    error_func3 before_commit_doc;
-    error_func3 before_doc_get;
-    error_func3 before_remove_doc_staged_for_removal;
-    error_func3 before_remove_doc;
-    error_func3 before_atr_get;
-    error_func3 before_remove_links;
+  error_func3 before_commit_doc;
+  error_func3 before_doc_get;
+  error_func3 before_remove_doc_staged_for_removal;
+  error_func3 before_remove_doc;
+  error_func3 before_atr_get;
+  error_func3 before_remove_links;
 
-    error_func4 before_atr_remove;
+  error_func4 before_atr_remove;
 
-    error_func4 on_cleanup_docs_completed;
-    error_func4 on_cleanup_completed;
+  error_func4 on_cleanup_docs_completed;
+  error_func4 on_cleanup_completed;
 
-    error_func3 client_record_before_create;
-    error_func3 client_record_before_get;
-    error_func3 client_record_before_update;
-    error_func3 client_record_before_remove_client;
+  error_func3 client_record_before_create;
+  error_func3 client_record_before_get;
+  error_func3 client_record_before_update;
+  error_func3 client_record_before_remove_client;
 
-    cleanup_testing_hooks();
-    // needed for unique_ptr<cleanup_testing_hooks> in transaction_config, with a forward declaration.
-    ~cleanup_testing_hooks() = default;
+  cleanup_testing_hooks();
+  // needed for unique_ptr<cleanup_testing_hooks> in transaction_config, with a forward declaration.
+  ~cleanup_testing_hooks() = default;
 };
 } // namespace couchbase::core::transactions

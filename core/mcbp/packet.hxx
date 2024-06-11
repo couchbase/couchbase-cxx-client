@@ -40,32 +40,32 @@ namespace couchbase::core::mcbp
 {
 class packet
 {
-  public:
-    [[nodiscard]] std::string debug_string() const;
+public:
+  [[nodiscard]] std::string debug_string() const;
 
-    protocol::magic magic_;
-    protocol::client_opcode command_;
-    std::byte datatype_{};
-    std::uint16_t status_{ 0x00 };
-    key_value_status_code status_code_{ key_value_status_code::success };
-    std::uint16_t vbucket_{};
-    std::uint32_t opaque_{};
-    std::uint64_t cas_{};
-    std::uint32_t collection_id_{};
-    std::vector<std::byte> key_{};
-    std::vector<std::byte> extras_{};
-    std::vector<std::byte> value_{};
+  protocol::magic magic_;
+  protocol::client_opcode command_;
+  std::byte datatype_{};
+  std::uint16_t status_{ 0x00 };
+  key_value_status_code status_code_{ key_value_status_code::success };
+  std::uint16_t vbucket_{};
+  std::uint32_t opaque_{};
+  std::uint64_t cas_{};
+  std::uint32_t collection_id_{};
+  std::vector<std::byte> key_{};
+  std::vector<std::byte> extras_{};
+  std::vector<std::byte> value_{};
 
-    std::optional<barrier_frame> barrier_frame_{};
-    std::optional<durability_level_frame> durability_level_frame_{};
-    std::optional<durability_timeout_frame> durability_timeout_frame_{};
-    std::optional<stream_id_frame> stream_id_frame_{};
-    std::optional<open_tracing_frame> open_tracing_frame_{};
-    std::optional<server_duration_frame> server_duration_frame_{};
-    std::optional<user_impersonation_frame> user_impersonation_frame_{};
-    std::optional<preserve_expiry_frame> preserve_expiry_frame_{};
-    std::optional<read_units_frame> read_units_frame_{};
-    std::optional<write_units_frame> write_units_frame_{};
-    std::vector<unsupported_frame> unsupported_frames_{};
+  std::optional<barrier_frame> barrier_frame_{};
+  std::optional<durability_level_frame> durability_level_frame_{};
+  std::optional<durability_timeout_frame> durability_timeout_frame_{};
+  std::optional<stream_id_frame> stream_id_frame_{};
+  std::optional<open_tracing_frame> open_tracing_frame_{};
+  std::optional<server_duration_frame> server_duration_frame_{};
+  std::optional<user_impersonation_frame> user_impersonation_frame_{};
+  std::optional<preserve_expiry_frame> preserve_expiry_frame_{};
+  std::optional<read_units_frame> read_units_frame_{};
+  std::optional<write_units_frame> write_units_frame_{};
+  std::vector<unsupported_frame> unsupported_frames_{};
 };
 } // namespace couchbase::core::mcbp

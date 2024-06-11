@@ -23,15 +23,15 @@
 
 template<>
 struct fmt::formatter<couchbase::core::document_id> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(const couchbase::core::document_id& id, FormatContext& ctx) const
-    {
-        return format_to(ctx.out(), "{}/{}/{}", id.bucket(), id.collection_path(), id.key());
-    }
+  template<typename FormatContext>
+  auto format(const couchbase::core::document_id& id, FormatContext& ctx) const
+  {
+    return format_to(ctx.out(), "{}/{}/{}", id.bucket(), id.collection_path(), id.key());
+  }
 };

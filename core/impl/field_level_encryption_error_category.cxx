@@ -23,33 +23,35 @@ namespace couchbase::core::impl
 {
 
 struct field_level_encryption_error_category : std::error_category {
-    [[nodiscard]] const char* name() const noexcept override
-    {
-        return "couchbase.field_level_encryption";
-    }
+  [[nodiscard]] const char* name() const noexcept override
+  {
+    return "couchbase.field_level_encryption";
+  }
 
-    [[nodiscard]] std::string message(int ev) const noexcept override
-    {
-        switch (static_cast<errc::field_level_encryption>(ev)) {
-            case errc::field_level_encryption::generic_cryptography_failure:
-                return "generic_cryptography_failure (700)";
-            case errc::field_level_encryption::encryption_failure:
-                return "encryption_failure (701)";
-            case errc::field_level_encryption::decryption_failure:
-                return "decryption_failure (702)";
-            case errc::field_level_encryption::crypto_key_not_found:
-                return "crypto_key_not_found (703)";
-            case errc::field_level_encryption::invalid_crypto_key:
-                return "invalid_crypto_key (704)";
-            case errc::field_level_encryption::decrypter_not_found:
-                return "decrypter_not_found (705)";
-            case errc::field_level_encryption::encrypter_not_found:
-                return "encrypter_not_found (706)";
-            case errc::field_level_encryption::invalid_ciphertext:
-                return "invalid_ciphertext (707)";
-        }
-        return "FIXME: unknown error code (recompile with newer library): couchbase.field_level_encryption." + std::to_string(ev);
+  [[nodiscard]] std::string message(int ev) const noexcept override
+  {
+    switch (static_cast<errc::field_level_encryption>(ev)) {
+      case errc::field_level_encryption::generic_cryptography_failure:
+        return "generic_cryptography_failure (700)";
+      case errc::field_level_encryption::encryption_failure:
+        return "encryption_failure (701)";
+      case errc::field_level_encryption::decryption_failure:
+        return "decryption_failure (702)";
+      case errc::field_level_encryption::crypto_key_not_found:
+        return "crypto_key_not_found (703)";
+      case errc::field_level_encryption::invalid_crypto_key:
+        return "invalid_crypto_key (704)";
+      case errc::field_level_encryption::decrypter_not_found:
+        return "decrypter_not_found (705)";
+      case errc::field_level_encryption::encrypter_not_found:
+        return "encrypter_not_found (706)";
+      case errc::field_level_encryption::invalid_ciphertext:
+        return "invalid_ciphertext (707)";
     }
+    return "FIXME: unknown error code (recompile with newer library): "
+           "couchbase.field_level_encryption." +
+           std::to_string(ev);
+  }
 };
 
 const inline static field_level_encryption_error_category category_instance;
@@ -57,7 +59,7 @@ const inline static field_level_encryption_error_category category_instance;
 const std::error_category&
 field_level_encryption_category() noexcept
 {
-    return category_instance;
+  return category_instance;
 }
 
 } // namespace couchbase::core::impl

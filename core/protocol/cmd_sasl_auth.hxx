@@ -26,66 +26,66 @@ namespace couchbase::core::protocol
 {
 class sasl_auth_response_body
 {
-  public:
-    static const inline client_opcode opcode = client_opcode::sasl_auth;
+public:
+  static const inline client_opcode opcode = client_opcode::sasl_auth;
 
-  private:
-    std::string value_;
+private:
+  std::string value_;
 
-  public:
-    bool parse(key_value_status_code status,
-               const header_buffer& header,
-               std::uint8_t framing_extras_size,
-               std::uint16_t key_size,
-               std::uint8_t extras_size,
-               const std::vector<std::byte>& body,
-               const cmd_info& info);
+public:
+  bool parse(key_value_status_code status,
+             const header_buffer& header,
+             std::uint8_t framing_extras_size,
+             std::uint16_t key_size,
+             std::uint8_t extras_size,
+             const std::vector<std::byte>& body,
+             const cmd_info& info);
 
-    [[nodiscard]] std::string_view value() const
-    {
-        return value_;
-    }
+  [[nodiscard]] std::string_view value() const
+  {
+    return value_;
+  }
 };
 
 class sasl_auth_request_body
 {
-  public:
-    using response_body_type = sasl_auth_response_body;
-    static const inline client_opcode opcode = client_opcode::sasl_auth;
+public:
+  using response_body_type = sasl_auth_response_body;
+  static const inline client_opcode opcode = client_opcode::sasl_auth;
 
-  private:
-    std::vector<std::byte> key_;
-    std::vector<std::byte> value_;
+private:
+  std::vector<std::byte> key_;
+  std::vector<std::byte> value_;
 
-  public:
-    void mechanism(std::string_view mech);
+public:
+  void mechanism(std::string_view mech);
 
-    void sasl_data(std::string_view data);
+  void sasl_data(std::string_view data);
 
-    [[nodiscard]] const auto& key() const
-    {
-        return key_;
-    }
+  [[nodiscard]] const auto& key() const
+  {
+    return key_;
+  }
 
-    [[nodiscard]] const auto& framing_extras() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& framing_extras() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] const auto& extras() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& extras() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] const auto& value() const
-    {
-        return value_;
-    }
+  [[nodiscard]] const auto& value() const
+  {
+    return value_;
+  }
 
-    [[nodiscard]] std::size_t size() const
-    {
-        return key_.size() + value_.size();
-    }
+  [[nodiscard]] std::size_t size() const
+  {
+    return key_.size() + value_.size();
+  }
 };
 
 } // namespace couchbase::core::protocol

@@ -26,23 +26,23 @@ namespace couchbase
 {
 class internal_term_facet_result
 {
-  public:
-    explicit internal_term_facet_result(const core::operations::search_response::search_facet& facet);
+public:
+  explicit internal_term_facet_result(const core::operations::search_response::search_facet& facet);
 
-    [[nodiscard]] auto name() const -> const std::string&;
-    [[nodiscard]] auto field() const -> const std::string&;
-    [[nodiscard]] auto total() const -> std::uint64_t;
-    [[nodiscard]] auto missing() const -> std::uint64_t;
-    [[nodiscard]] auto other() const -> std::uint64_t;
-    [[nodiscard]] auto terms() const -> const std::vector<search_term_range>&;
+  [[nodiscard]] auto name() const -> const std::string&;
+  [[nodiscard]] auto field() const -> const std::string&;
+  [[nodiscard]] auto total() const -> std::uint64_t;
+  [[nodiscard]] auto missing() const -> std::uint64_t;
+  [[nodiscard]] auto other() const -> std::uint64_t;
+  [[nodiscard]] auto terms() const -> const std::vector<search_term_range>&;
 
-  private:
-    std::string name_;
-    std::string field_;
-    std::uint64_t total_{};
-    std::uint64_t missing_{};
-    std::uint64_t other_{};
-    std::vector<search_term_range> ranges_;
+private:
+  std::string name_;
+  std::string field_;
+  std::uint64_t total_{};
+  std::uint64_t missing_{};
+  std::uint64_t other_{};
+  std::vector<search_term_range> ranges_;
 };
 
 } // namespace couchbase

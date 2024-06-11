@@ -22,20 +22,21 @@
 namespace couchbase
 {
 auto
-fail_fast_retry_strategy::retry_after(const retry_request& /* request */, retry_reason /* reason */) -> retry_action
+fail_fast_retry_strategy::retry_after(const retry_request& /* request */,
+                                      retry_reason /* reason */) -> retry_action
 {
-    return retry_action::do_not_retry();
+  return retry_action::do_not_retry();
 }
 
 auto
 fail_fast_retry_strategy::to_string() const -> std::string
 {
-    return fmt::format(R"(#<fail_fast_retry_strategy:{}>)", static_cast<const void*>(this));
+  return fmt::format(R"(#<fail_fast_retry_strategy:{}>)", static_cast<const void*>(this));
 }
 
 auto
 make_fail_fast_retry_strategy() -> std::shared_ptr<fail_fast_retry_strategy>
 {
-    return std::make_shared<fail_fast_retry_strategy>();
+  return std::make_shared<fail_fast_retry_strategy>();
 }
 } // namespace couchbase

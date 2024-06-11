@@ -26,17 +26,17 @@ namespace couchbase
 auto
 phrase_query::encode() const -> encoded_search_query
 {
-    encoded_search_query built;
-    built.query = tao::json::empty_object;
-    if (boost_) {
-        built.query["boost"] = boost_.value();
-    }
+  encoded_search_query built;
+  built.query = tao::json::empty_object;
+  if (boost_) {
+    built.query["boost"] = boost_.value();
+  }
 
-    built.query["terms"] = terms_;
-    if (field_) {
-        built.query["field"] = field_.value();
-    }
+  built.query["terms"] = terms_;
+  if (field_) {
+    built.query["field"] = field_.value();
+  }
 
-    return built;
+  return built;
 }
 } // namespace couchbase

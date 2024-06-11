@@ -19,5 +19,7 @@
 
 namespace couchbase::core
 {
-enum class search_scan_consistency { not_bounded = 0 };
+enum class search_scan_consistency {
+  not_bounded = 0
+};
 } // namespace couchbase::core

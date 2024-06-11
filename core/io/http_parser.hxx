@@ -29,29 +29,29 @@ namespace couchbase::core::io
 struct http_parser_state;
 
 struct http_parser {
-    struct feeding_result {
-        bool failure{ false };
-        bool complete{ false };
-        std::string error{};
-    };
-
-    http_response response;
-    std::string header_field;
+  struct feeding_result {
+    bool failure{ false };
     bool complete{ false };
+    std::string error{};
+  };
 
-    http_parser();
-    http_parser(http_parser&& other) noexcept;
-    http_parser& operator=(http_parser&& other) noexcept;
-    http_parser(const http_parser& other) = delete;
-    http_parser& operator=(const http_parser& other) = delete;
+  http_response response;
+  std::string header_field;
+  bool complete{ false };
 
-    void reset();
+  http_parser();
+  http_parser(http_parser&& other) noexcept;
+  http_parser& operator=(http_parser&& other) noexcept;
+  http_parser(const http_parser& other) = delete;
+  http_parser& operator=(const http_parser& other) = delete;
 
-    [[nodiscard]] const char* error_message() const;
+  void reset();
 
-    feeding_result feed(const char* data, size_t data_len) const;
+  [[nodiscard]] const char* error_message() const;
 
-  private:
-    std::shared_ptr<http_parser_state> state_{};
+  feeding_result feed(const char* data, size_t data_len) const;
+
+private:
+  std::shared_ptr<http_parser_state> state_{};
 };
 } // namespace couchbase::core::io

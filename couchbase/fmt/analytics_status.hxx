@@ -29,48 +29,48 @@
  */
 template<>
 struct fmt::formatter<couchbase::analytics_status> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(couchbase::analytics_status status, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (status) {
-            case couchbase::analytics_status::running:
-                name = "running";
-                break;
-            case couchbase::analytics_status::success:
-                name = "success";
-                break;
-            case couchbase::analytics_status::errors:
-                name = "errors";
-                break;
-            case couchbase::analytics_status::completed:
-                name = "completed";
-                break;
-            case couchbase::analytics_status::stopped:
-                name = "stopped";
-                break;
-            case couchbase::analytics_status::timeout:
-                name = "timeout";
-                break;
-            case couchbase::analytics_status::closed:
-                name = "closed";
-                break;
-            case couchbase::analytics_status::fatal:
-                name = "fatal";
-                break;
-            case couchbase::analytics_status::aborted:
-                name = "aborted";
-                break;
-            case couchbase::analytics_status::unknown:
-                name = "unknown";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
+  template<typename FormatContext>
+  auto format(couchbase::analytics_status status, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (status) {
+      case couchbase::analytics_status::running:
+        name = "running";
+        break;
+      case couchbase::analytics_status::success:
+        name = "success";
+        break;
+      case couchbase::analytics_status::errors:
+        name = "errors";
+        break;
+      case couchbase::analytics_status::completed:
+        name = "completed";
+        break;
+      case couchbase::analytics_status::stopped:
+        name = "stopped";
+        break;
+      case couchbase::analytics_status::timeout:
+        name = "timeout";
+        break;
+      case couchbase::analytics_status::closed:
+        name = "closed";
+        break;
+      case couchbase::analytics_status::fatal:
+        name = "fatal";
+        break;
+      case couchbase::analytics_status::aborted:
+        name = "aborted";
+        break;
+      case couchbase::analytics_status::unknown:
+        name = "unknown";
+        break;
     }
+    return format_to(ctx.out(), "{}", name);
+  }
 };

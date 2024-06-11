@@ -27,31 +27,34 @@
 namespace couchbase::core::operations::management
 {
 struct analytics_dataset_create_response {
-    error_context::http ctx;
-    std::string status{};
-    std::vector<analytics_problem> errors{};
+  error_context::http ctx;
+  std::string status{};
+  std::vector<analytics_problem> errors{};
 };
 
 struct analytics_dataset_create_request {
-    using response_type = analytics_dataset_create_response;
-    using encoded_request_type = io::http_request;
-    using encoded_response_type = io::http_response;
-    using error_context_type = error_context::http;
+  using response_type = analytics_dataset_create_response;
+  using encoded_request_type = io::http_request;
+  using encoded_response_type = io::http_response;
+  using error_context_type = error_context::http;
 
-    static const inline service_type type = service_type::analytics;
+  static const inline service_type type = service_type::analytics;
 
-    std::string dataverse_name{ "Default" };
-    std::string dataset_name;
-    std::string bucket_name;
+  std::string dataverse_name{ "Default" };
+  std::string dataset_name;
+  std::string bucket_name;
 
-    std::optional<std::string> condition{};
-    std::optional<std::string> client_context_id{};
-    std::optional<std::chrono::milliseconds> timeout{};
+  std::optional<std::string> condition{};
+  std::optional<std::string> client_context_id{};
+  std::optional<std::chrono::milliseconds> timeout{};
 
-    bool ignore_if_exists{ false };
+  bool ignore_if_exists{ false };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          http_context& context) const;
 
-    [[nodiscard]] analytics_dataset_create_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] analytics_dataset_create_response make_response(
+    error_context::http&& ctx,
+    const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::operations::management

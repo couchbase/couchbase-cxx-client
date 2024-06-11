@@ -24,32 +24,35 @@
 namespace couchbase::core::operations
 {
 std::error_code
-replace_request::encode_to(replace_request::encoded_request_type& encoded, mcbp_context&& /* context */) const
+replace_request::encode_to(replace_request::encoded_request_type& encoded,
+                           mcbp_context&& /* context */) const
 {
-    encoded.opaque(opaque);
-    encoded.partition(partition);
-    encoded.cas(cas);
-    encoded.body().id(id);
-    encoded.body().expiry(expiry);
-    encoded.body().flags(flags);
-    encoded.body().content(value);
-    if (preserve_expiry) {
-        encoded.body().preserve_expiry();
-    }
-    if (codec::codec_flags::has_common_flags(flags, codec::codec_flags::common_flags::json)) {
-        encoded.datatype(protocol::datatype::json);
-    }
-    return {};
+  encoded.opaque(opaque);
+  encoded.partition(partition);
+  encoded.cas(cas);
+  encoded.body().id(id);
+  encoded.body().expiry(expiry);
+  encoded.body().flags(flags);
+  encoded.body().content(value);
+  if (preserve_expiry) {
+    encoded.body().preserve_expiry();
+  }
+  if (codec::codec_flags::has_common_flags(flags, codec::codec_flags::common_flags::json)) {
+    encoded.datatype(protocol::datatype::json);
+  }
+  return {};
 }
 
 replace_response
-replace_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
+replace_request::make_response(key_value_error_context&& ctx,
+                               const encoded_response_type& encoded) const
 {
-    replace_response response{ std::move(ctx) };
-    if (!response.ctx.ec()) {
-        response.cas = encoded.cas();
-        response.token = couchbase::utils::build_mutation_token(encoded.body().token(), partition, response.ctx.bucket());
-    }
-    return response;
+  replace_response response{ std::move(ctx) };
+  if (!response.ctx.ec()) {
+    response.cas = encoded.cas();
+    response.token = couchbase::utils::build_mutation_token(
+      encoded.body().token(), partition, response.ctx.bucket());
+  }
+  return response;
 }
 } // namespace couchbase::core::operations

@@ -37,84 +37,85 @@ namespace couchbase::transactions
 
 class transaction_get_result
 {
-    friend class couchbase::core::transactions::transaction_get_result;
+  friend class couchbase::core::transactions::transaction_get_result;
 
-  private:
-    std::shared_ptr<couchbase::core::transactions::transaction_get_result> base_{};
+private:
+  std::shared_ptr<couchbase::core::transactions::transaction_get_result> base_{};
 
-    transaction_get_result(std::shared_ptr<couchbase::core::transactions::transaction_get_result> base)
-      : base_(base)
-    {
-    }
+  transaction_get_result(
+    std::shared_ptr<couchbase::core::transactions::transaction_get_result> base)
+    : base_(base)
+  {
+  }
 
-  public:
-    /** @private */
+public:
+  /** @private */
 
-    transaction_get_result();
-    /**
-     * Content of the document.
-     *
-     * @return content of the document.
-     */
-    template<typename Content>
-    [[nodiscard]] Content content() const
-    {
-        return codec::tao_json_serializer::deserialize<Content>(content());
-    }
+  transaction_get_result();
+  /**
+   * Content of the document.
+   *
+   * @return content of the document.
+   */
+  template<typename Content>
+  [[nodiscard]] Content content() const
+  {
+    return codec::tao_json_serializer::deserialize<Content>(content());
+  }
 
-    /**
-     * Content of the document as raw byte vector
-     *
-     * @return content
-     */
-    [[nodiscard]] const std::vector<std::byte>& content() const;
+  /**
+   * Content of the document as raw byte vector
+   *
+   * @return content
+   */
+  [[nodiscard]] const std::vector<std::byte>& content() const;
 
-    /**
-     * Copy content into document
-     * @param content
-     */
-    void content(std::vector<std::byte> content);
+  /**
+   * Copy content into document
+   * @param content
+   */
+  void content(std::vector<std::byte> content);
 
-    /**
-     * Move content into document
-     *
-     * @param content
-     */
-    void content(std::vector<std::byte>&& content);
+  /**
+   * Move content into document
+   *
+   * @param content
+   */
+  void content(std::vector<std::byte>&& content);
 
-    /**
-     * Get document id.
-     *
-     * @return the id of this document.
-     */
-    [[nodiscard]] const std::string key() const;
+  /**
+   * Get document id.
+   *
+   * @return the id of this document.
+   */
+  [[nodiscard]] const std::string key() const;
 
-    /**
-     * Get the name of the bucket this document is in.
-     *
-     * @return name of the bucket which contains the document.
-     */
-    [[nodiscard]] const std::string bucket() const;
+  /**
+   * Get the name of the bucket this document is in.
+   *
+   * @return name of the bucket which contains the document.
+   */
+  [[nodiscard]] const std::string bucket() const;
 
-    /**
-     * Get the name of the scope this document is in.
-     *
-     * @return name of the scope which contains the document.
-     */
-    [[nodiscard]] const std::string scope() const;
+  /**
+   * Get the name of the scope this document is in.
+   *
+   * @return name of the scope which contains the document.
+   */
+  [[nodiscard]] const std::string scope() const;
 
-    /**
-     * Get the name of the collection this document is in.
-     *
-     * @return name of the collection which contains the document.
-     */
-    [[nodiscard]] const std::string collection() const;
+  /**
+   * Get the name of the collection this document is in.
+   *
+   * @return name of the collection which contains the document.
+   */
+  [[nodiscard]] const std::string collection() const;
 
-    /**
-     * Get the CAS fot this document
-     *
-     * @return the CAS of the document.
-     */
-    [[nodiscard]] const couchbase::cas cas() const;
+  /**
+   * Get the CAS fot this document
+   *
+   * @return the CAS of the document.
+   */
+  [[nodiscard]] const couchbase::cas cas() const;
 };
 } // namespace couchbase::transactions

@@ -23,23 +23,26 @@
 namespace couchbase::core::operations
 {
 std::error_code
-remove_request::encode_to(remove_request::encoded_request_type& encoded, mcbp_context&& /* context */) const
+remove_request::encode_to(remove_request::encoded_request_type& encoded,
+                          mcbp_context&& /* context */) const
 {
-    encoded.opaque(opaque);
-    encoded.partition(partition);
-    encoded.cas(cas);
-    encoded.body().id(id);
-    return {};
+  encoded.opaque(opaque);
+  encoded.partition(partition);
+  encoded.cas(cas);
+  encoded.body().id(id);
+  return {};
 }
 
 remove_response
-remove_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
+remove_request::make_response(key_value_error_context&& ctx,
+                              const encoded_response_type& encoded) const
 {
-    remove_response response{ std::move(ctx) };
-    if (!response.ctx.ec()) {
-        response.cas = encoded.cas();
-        response.token = couchbase::utils::build_mutation_token(encoded.body().token(), partition, response.ctx.bucket());
-    }
-    return response;
+  remove_response response{ std::move(ctx) };
+  if (!response.ctx.ec()) {
+    response.cas = encoded.cas();
+    response.token = couchbase::utils::build_mutation_token(
+      encoded.body().token(), partition, response.ctx.bucket());
+  }
+  return response;
 }
 } // namespace couchbase::core::operations

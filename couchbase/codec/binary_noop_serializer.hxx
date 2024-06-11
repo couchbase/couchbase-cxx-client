@@ -24,19 +24,19 @@ namespace couchbase::codec
 {
 class binary_noop_serializer
 {
-  public:
-    using document_type = binary;
+public:
+  using document_type = binary;
 
-    static auto serialize(binary document) -> binary
-    {
-        return document;
-    }
+  static auto serialize(binary document) -> binary
+  {
+    return document;
+  }
 
-    template<typename Document>
-    static auto deserialize(binary data) -> binary
-    {
-        return data;
-    }
+  template<typename Document>
+  static auto deserialize(binary data) -> binary
+  {
+    return data;
+  }
 };
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN

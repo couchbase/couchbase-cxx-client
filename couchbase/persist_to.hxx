@@ -20,54 +20,55 @@
 namespace couchbase
 {
 enum class persist_to {
-    /**
-     * Do not apply any persistence requirements
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    none = 0,
+  /**
+   * Do not apply any persistence requirements
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  none = 0,
 
-    /**
-     * Wait for persistence to active node.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    active = 1,
+  /**
+   * Wait for persistence to active node.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  active = 1,
 
-    /**
-     * Wait for persistence to at least one node.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    one = 2,
+  /**
+   * Wait for persistence to at least one node.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  one = 2,
 
-    /**
-     * Wait for persistence to at least two nodes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    two = 3,
+  /**
+   * Wait for persistence to at least two nodes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  two = 3,
 
-    /**
-     * Wait for persistence to at least three nodes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    three = 4,
+  /**
+   * Wait for persistence to at least three nodes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  three = 4,
 
-    /**
-     * Wait for persistence to at least all nodes nodes.
-     *
-     * This is maximum possible persistence requirement, that includes active and all three replica nodes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    four = 5,
+  /**
+   * Wait for persistence to at least all nodes nodes.
+   *
+   * This is maximum possible persistence requirement, that includes active and all three replica
+   * nodes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  four = 5,
 };
 } // namespace couchbase

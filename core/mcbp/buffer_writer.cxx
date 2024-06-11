@@ -30,49 +30,49 @@ buffer_writer::buffer_writer(std::size_t size)
 void
 buffer_writer::write(const std::vector<std::byte>& val)
 {
-    std::memcpy(store_.data() + offset_, val.data(), val.size());
-    offset_ += val.size();
+  std::memcpy(store_.data() + offset_, val.data(), val.size());
+  offset_ += val.size();
 }
 
 void
 buffer_writer::write_frame_header(std::uint8_t type, std::size_t length)
 {
-    write_byte((std::byte{ type } << 4) | static_cast<std::byte>(length));
+  write_byte((std::byte{ type } << 4) | static_cast<std::byte>(length));
 }
 
 void
 buffer_writer::write_uint64(std::uint64_t val)
 {
-    write_byte(static_cast<std::byte>(val >> 56));
-    write_byte(static_cast<std::byte>(val >> 48));
-    write_byte(static_cast<std::byte>(val >> 40));
-    write_byte(static_cast<std::byte>(val >> 32));
-    write_byte(static_cast<std::byte>(val >> 24));
-    write_byte(static_cast<std::byte>(val >> 16));
-    write_byte(static_cast<std::byte>(val >> 8));
-    write_byte(static_cast<std::byte>(val));
+  write_byte(static_cast<std::byte>(val >> 56));
+  write_byte(static_cast<std::byte>(val >> 48));
+  write_byte(static_cast<std::byte>(val >> 40));
+  write_byte(static_cast<std::byte>(val >> 32));
+  write_byte(static_cast<std::byte>(val >> 24));
+  write_byte(static_cast<std::byte>(val >> 16));
+  write_byte(static_cast<std::byte>(val >> 8));
+  write_byte(static_cast<std::byte>(val));
 }
 
 void
 buffer_writer::write_uint32(std::uint32_t val)
 {
-    write_byte(static_cast<std::byte>(val >> 24));
-    write_byte(static_cast<std::byte>(val >> 16));
-    write_byte(static_cast<std::byte>(val >> 8));
-    write_byte(static_cast<std::byte>(val));
+  write_byte(static_cast<std::byte>(val >> 24));
+  write_byte(static_cast<std::byte>(val >> 16));
+  write_byte(static_cast<std::byte>(val >> 8));
+  write_byte(static_cast<std::byte>(val));
 }
 
 void
 buffer_writer::write_uint16(std::uint16_t val)
 {
-    write_byte(static_cast<std::byte>(val >> 8));
-    write_byte(static_cast<std::byte>(val));
+  write_byte(static_cast<std::byte>(val >> 8));
+  write_byte(static_cast<std::byte>(val));
 }
 
 void
 buffer_writer::write_byte(std::byte val)
 {
-    store_[offset_] = val;
-    ++offset_;
+  store_[offset_] = val;
+  ++offset_;
 }
 } // namespace couchbase::core::mcbp

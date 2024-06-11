@@ -20,29 +20,28 @@
 namespace couchbase::core::protocol
 {
 enum class datatype : std::uint8_t {
-    raw = 0x00,
-    json = 0x01,
-    snappy = 0x02,
-    xattr = 0x04,
-
+  raw = 0x00,
+  json = 0x01,
+  snappy = 0x02,
+  xattr = 0x04,
 };
 
 constexpr bool
 is_valid_datatype(std::uint8_t code)
 {
-    switch (static_cast<datatype>(code)) {
-        case datatype::raw:
-        case datatype::json:
-        case datatype::snappy:
-        case datatype::xattr:
-            return true;
-    }
-    return false;
+  switch (static_cast<datatype>(code)) {
+    case datatype::raw:
+    case datatype::json:
+    case datatype::snappy:
+    case datatype::xattr:
+      return true;
+  }
+  return false;
 }
 
 constexpr bool
 has_json_datatype(std::uint8_t code)
 {
-    return (code & static_cast<std::uint8_t>(datatype::json)) != 0;
+  return (code & static_cast<std::uint8_t>(datatype::json)) != 0;
 }
 } // namespace couchbase::core::protocol

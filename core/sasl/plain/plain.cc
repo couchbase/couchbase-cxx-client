@@ -24,16 +24,16 @@ namespace couchbase::core::sasl::mechanism::plain
 std::pair<error, std::string_view>
 ClientBackend::start()
 {
-    auto usernm = usernameCallback();
-    auto passwd = passwordCallback();
+  auto usernm = usernameCallback();
+  auto passwd = passwordCallback();
 
-    buffer.reserve(usernm.size() + passwd.size() + 2);
-    buffer.push_back(0);
-    std::copy(usernm.begin(), usernm.end(), std::back_insert_iterator(buffer));
-    buffer.push_back(0);
-    std::copy(passwd.begin(), passwd.end(), std::back_insert_iterator(buffer));
+  buffer.reserve(usernm.size() + passwd.size() + 2);
+  buffer.push_back(0);
+  std::copy(usernm.begin(), usernm.end(), std::back_insert_iterator(buffer));
+  buffer.push_back(0);
+  std::copy(passwd.begin(), passwd.end(), std::back_insert_iterator(buffer));
 
-    return { error::OK, { buffer.data(), buffer.size() } };
+  return { error::OK, { buffer.data(), buffer.size() } };
 }
 
 } // namespace couchbase::core::sasl::mechanism::plain

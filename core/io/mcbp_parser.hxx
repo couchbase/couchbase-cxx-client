@@ -24,22 +24,26 @@
 namespace couchbase::core::io
 {
 struct mcbp_parser {
-    enum class result { ok, need_data, failure };
+  enum class result {
+    ok,
+    need_data,
+    failure
+  };
 
-    template<typename Iterator>
-    void feed(Iterator begin, Iterator end)
-    {
-        buf.reserve(buf.size() + static_cast<std::size_t>(std::distance(begin, end)));
-        buf.insert(buf.end(), begin, end);
-    }
+  template<typename Iterator>
+  void feed(Iterator begin, Iterator end)
+  {
+    buf.reserve(buf.size() + static_cast<std::size_t>(std::distance(begin, end)));
+    buf.insert(buf.end(), begin, end);
+  }
 
-    void reset()
-    {
-        buf.clear();
-    }
+  void reset()
+  {
+    buf.clear();
+  }
 
-    result next(mcbp_message& msg);
+  result next(mcbp_message& msg);
 
-    std::vector<std::byte> buf;
+  std::vector<std::byte> buf;
 };
 } // namespace couchbase::core::io

@@ -32,29 +32,31 @@ class cluster_options;
  */
 class configuration_profiles_registry
 {
-  public:
-    /**
-     * Register a @ref configuration_profile, and associate it with a name.
-     *
-     * @param name  The name to use to refer to the profile.
-     * @param profile Instance of class derived from @ref configuration_profile, which is being registered.
-     *
-     * @since 1.0.0
-     * @volatile
-     */
-    static void register_profile(const std::string& name, std::shared_ptr<configuration_profile> profile);
+public:
+  /**
+   * Register a @ref configuration_profile, and associate it with a name.
+   *
+   * @param name  The name to use to refer to the profile.
+   * @param profile Instance of class derived from @ref configuration_profile, which is being
+   * registered.
+   *
+   * @since 1.0.0
+   * @volatile
+   */
+  static void register_profile(const std::string& name,
+                               std::shared_ptr<configuration_profile> profile);
 
-    /**
-     * Apply a profile to an instance of @ref cluster_options.
-     *
-     * @param name
-     * @param options
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    static void apply_profile(const std::string& name, couchbase::cluster_options& options);
+  /**
+   * Apply a profile to an instance of @ref cluster_options.
+   *
+   * @param name
+   * @param options
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  static void apply_profile(const std::string& name, couchbase::cluster_options& options);
 
-    static auto available_profiles() -> std::vector<std::string>;
+  static auto available_profiles() -> std::vector<std::string>;
 };
 } // namespace couchbase

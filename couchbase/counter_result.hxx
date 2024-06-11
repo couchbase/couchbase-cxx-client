@@ -33,41 +33,41 @@ namespace couchbase
  */
 class counter_result : public mutation_result
 {
-  public:
-    /**
-     * @since 1.0.0
-     * @internal
-     */
-    counter_result() = default;
+public:
+  /**
+   * @since 1.0.0
+   * @internal
+   */
+  counter_result() = default;
 
-    /**
-     * Constructs result for get_any_replica operation, or an entry for get_all_replicas operation.
-     *
-     * @param cas
-     * @param token counter token returned by the server
-     * @param content current value of the counter
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    counter_result(couchbase::cas cas, couchbase::mutation_token token, std::uint64_t content)
-      : mutation_result{ cas, std::move(token) }
-      , content_{ content }
-    {
-    }
+  /**
+   * Constructs result for get_any_replica operation, or an entry for get_all_replicas operation.
+   *
+   * @param cas
+   * @param token counter token returned by the server
+   * @param content current value of the counter
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  counter_result(couchbase::cas cas, couchbase::mutation_token token, std::uint64_t content)
+    : mutation_result{ cas, std::move(token) }
+    , content_{ content }
+  {
+  }
 
-    /**
-     * Current value of the counter.
-     *
-     * @return unsigned value of the counter
-     */
-    [[nodiscard]] auto content() const -> std::uint64_t
-    {
-        return content_;
-    }
+  /**
+   * Current value of the counter.
+   *
+   * @return unsigned value of the counter
+   */
+  [[nodiscard]] auto content() const -> std::uint64_t
+  {
+    return content_;
+  }
 
-  private:
-    std::uint64_t content_{};
+private:
+  std::uint64_t content_{};
 };
 
 } // namespace couchbase

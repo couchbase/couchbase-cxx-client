@@ -34,112 +34,118 @@ namespace couchbase::core::transactions
 {
 class active_transaction_record
 {
-  public:
-    template<typename Callback>
-    static void get_atr(const core::cluster& cluster, const core::document_id& atr_id, Callback&& cb)
-    {
-        core::operations::lookup_in_request req{ atr_id };
-        req.specs =
-          lookup_in_specs{
-              lookup_in_specs::get(ATR_FIELD_ATTEMPTS).xattr(),
-              lookup_in_specs::get(subdoc::lookup_in_macro::vbucket).xattr(),
+public:
+  template<typename Callback>
+  static void get_atr(const core::cluster& cluster, const core::document_id& atr_id, Callback&& cb)
+  {
+    core::operations::lookup_in_request req{ atr_id };
+    req.specs =
+      lookup_in_specs{
+        lookup_in_specs::get(ATR_FIELD_ATTEMPTS).xattr(),
+        lookup_in_specs::get(subdoc::lookup_in_macro::vbucket).xattr(),
+      }
+        .specs();
+    cluster.execute(
+      req, [atr_id, cb = std::move(cb)](core::operations::lookup_in_response resp) mutable {
+        try {
+          if (resp.ctx.ec() == couchbase::errc::key_value::document_not_found) {
+            // that's ok, just return an empty one.
+            return cb({}, {});
           }
-            .specs();
-        cluster.execute(req, [atr_id, cb = std::move(cb)](core::operations::lookup_in_response resp) mutable {
-            try {
-                if (resp.ctx.ec() == couchbase::errc::key_value::document_not_found) {
-                    // that's ok, just return an empty one.
-                    return cb({}, {});
-                }
-                if (!resp.ctx.ec()) {
-                    // success
-                    return cb(resp.ctx.ec(), map_to_atr(resp));
-                }
-                // otherwise, raise an error.
-                cb(resp.ctx.ec(), {});
-            } catch (const std::exception&) {
-                // ok - we have a corrupt ATR.  The question is:  what should we return for an error?
-                // Turns out, we don't much care in the code what this error is.  Since we cannot parse
-                // the atr, but there wasn't an error, lets select this one for now.
-                // TODO: consider a different mechanism - not an error_code.  Or, perhaps we need txn-specific
-                // error codes?
-                cb(couchbase::errc::key_value::path_invalid, std::nullopt);
-            }
-        });
-    }
-
-    static std::optional<active_transaction_record> get_atr(const core::cluster& cluster, const core::document_id& atr_id)
-    {
-        auto barrier = std::promise<std::optional<active_transaction_record>>();
-        auto f = barrier.get_future();
-        get_atr(cluster, atr_id, [&](std::error_code ec, std::optional<active_transaction_record> atr) {
-            if (!ec) {
-                return barrier.set_value(atr);
-            }
-            return barrier.set_exception(std::make_exception_ptr(std::runtime_error(ec.message())));
-        });
-        return f.get();
-    }
-
-    active_transaction_record(core::document_id id, uint64_t, std::vector<atr_entry> entries)
-      : id_(std::move(id))
-      , entries_(std::move(entries))
-    {
-    }
-
-    [[nodiscard]] const std::vector<atr_entry>& entries() const
-    {
-        return entries_;
-    }
-
-  private:
-    core::document_id id_;
-    std::vector<atr_entry> entries_;
-
-    /**
-     * ${Mutation.CAS} is written by kvengine with 'macroToString(htonll(info.cas))'.  Discussed this with KV team and, though there is
-     * consensus that this is off (htonll is definitely wrong, and a string is an odd choice), there are clients (SyncGateway) that
-     * consume the current string, so it can't be changed.  Note that only little-endian servers are supported for Couchbase, so the 8
-     * byte long inside the string will always be little-endian ordered.
-     *
-     * Looks like: "0x000058a71dd25c15"
-     * Want:        0x155CD21DA7580000   (1539336197457313792 in base10, an epoch time in millionths of a second)
-     *
-     * returns epoch time in ms
-     */
-    static inline uint64_t parse_mutation_cas(const std::string& cas)
-    {
-        if (cas.empty()) {
-            return 0;
+          if (!resp.ctx.ec()) {
+            // success
+            return cb(resp.ctx.ec(), map_to_atr(resp));
+          }
+          // otherwise, raise an error.
+          cb(resp.ctx.ec(), {});
+        } catch (const std::exception&) {
+          // ok - we have a corrupt ATR.  The question is:  what should we return for an error?
+          // Turns out, we don't much care in the code what this error is.  Since we cannot parse
+          // the atr, but there wasn't an error, lets select this one for now.
+          // TODO: consider a different mechanism - not an error_code.  Or, perhaps we need
+          // txn-specific error codes?
+          cb(couchbase::errc::key_value::path_invalid, std::nullopt);
         }
+      });
+  }
 
-        uint64_t val = stoull(cas, nullptr, 16);
-        /* byteswap */
-        std::size_t ii;
-        uint64_t ret = 0;
-        for (ii = 0; ii < sizeof(uint64_t); ii++) {
-            ret <<= 8ull;
-            ret |= val & 0xffull;
-            val >>= 8ull;
-        }
-        return ret / 1000000;
+  static std::optional<active_transaction_record> get_atr(const core::cluster& cluster,
+                                                          const core::document_id& atr_id)
+  {
+    auto barrier = std::promise<std::optional<active_transaction_record>>();
+    auto f = barrier.get_future();
+    get_atr(cluster, atr_id, [&](std::error_code ec, std::optional<active_transaction_record> atr) {
+      if (!ec) {
+        return barrier.set_value(atr);
+      }
+      return barrier.set_exception(std::make_exception_ptr(std::runtime_error(ec.message())));
+    });
+    return f.get();
+  }
+
+  active_transaction_record(core::document_id id, uint64_t, std::vector<atr_entry> entries)
+    : id_(std::move(id))
+    , entries_(std::move(entries))
+  {
+  }
+
+  [[nodiscard]] const std::vector<atr_entry>& entries() const
+  {
+    return entries_;
+  }
+
+private:
+  core::document_id id_;
+  std::vector<atr_entry> entries_;
+
+  /**
+   * ${Mutation.CAS} is written by kvengine with 'macroToString(htonll(info.cas))'.  Discussed this
+   * with KV team and, though there is consensus that this is off (htonll is definitely wrong, and a
+   * string is an odd choice), there are clients (SyncGateway) that consume the current string, so
+   * it can't be changed.  Note that only little-endian servers are supported for Couchbase, so the
+   * 8 byte long inside the string will always be little-endian ordered.
+   *
+   * Looks like: "0x000058a71dd25c15"
+   * Want:        0x155CD21DA7580000   (1539336197457313792 in base10, an epoch time in millionths
+   * of a second)
+   *
+   * returns epoch time in ms
+   */
+  static inline uint64_t parse_mutation_cas(const std::string& cas)
+  {
+    if (cas.empty()) {
+      return 0;
     }
 
-    static inline std::optional<std::vector<doc_record>> process_document_ids(const tao::json::value& entry, const std::string& key)
-    {
-        const auto* items = entry.find(key);
-        if (items == nullptr || !items->is_array()) {
-            return {};
-        }
-        std::vector<doc_record> records;
-        records.reserve(items->get_array().size());
-        for (const auto& record : items->get_array()) {
-            records.push_back(doc_record::create_from(record.get_object()));
-        }
-        return records;
+    uint64_t val = stoull(cas, nullptr, 16);
+    /* byteswap */
+    std::size_t ii;
+    uint64_t ret = 0;
+    for (ii = 0; ii < sizeof(uint64_t); ii++) {
+      ret <<= 8ull;
+      ret |= val & 0xffull;
+      val >>= 8ull;
     }
+    return ret / 1000000;
+  }
 
-    static active_transaction_record map_to_atr(const core::operations::lookup_in_response& resp);
+  static inline std::optional<std::vector<doc_record>> process_document_ids(
+    const tao::json::value& entry,
+    const std::string& key)
+  {
+    const auto* items = entry.find(key);
+    if (items == nullptr || !items->is_array()) {
+      return {};
+    }
+    std::vector<doc_record> records;
+    records.reserve(items->get_array().size());
+    for (const auto& record : items->get_array()) {
+      records.push_back(doc_record::create_from(record.get_object()));
+    }
+    return records;
+  }
+
+  static active_transaction_record map_to_atr(const core::operations::lookup_in_response& resp);
 };
 
 } // namespace couchbase::core::transactions

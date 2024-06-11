@@ -26,13 +26,18 @@ namespace couchbase::subdoc
  * @since 1.0.0
  * @volatile
  */
-enum class mutate_in_macro { cas, sequence_number, value_crc32c };
+enum class mutate_in_macro {
+  cas,
+  sequence_number,
+  value_crc32c
+};
 
 /**
  * Parses string as mutate_in macro.
  *
  * @param input string
- * @return empty `optional` if the string does not contain macro, corresponding enum value otherwise.
+ * @return empty `optional` if the string does not contain macro, corresponding enum value
+ * otherwise.
  *
  * @since 1.0.0
  * @volatile

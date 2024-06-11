@@ -34,28 +34,30 @@ sasl_auth_response_body::parse(key_value_status_code status,
                                const std::vector<std::byte>& body,
                                const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == key_value_status_code::success || status == key_value_status_code::auth_continue) {
-        std::transform(body.begin() + framing_extras_size + extras_size + key_size,
-                       body.end(),
-                       std::back_insert_iterator(value_),
-                       [](auto b) { return static_cast<char>(b); });
-        return true;
-    }
-    return false;
+  Expects(header[1] == static_cast<std::byte>(opcode));
+  if (status == key_value_status_code::success || status == key_value_status_code::auth_continue) {
+    std::transform(body.begin() + framing_extras_size + extras_size + key_size,
+                   body.end(),
+                   std::back_insert_iterator(value_),
+                   [](auto b) {
+                     return static_cast<char>(b);
+                   });
+    return true;
+  }
+  return false;
 }
 
 void
 sasl_auth_request_body::mechanism(std::string_view mech)
 {
-    key_.reserve(mech.size());
-    utils::to_binary(mech, std::back_insert_iterator(key_));
+  key_.reserve(mech.size());
+  utils::to_binary(mech, std::back_insert_iterator(key_));
 }
 
 void
 sasl_auth_request_body::sasl_data(std::string_view data)
 {
-    value_.reserve(data.size());
-    utils::to_binary(data, std::back_insert_iterator(value_));
+  value_.reserve(data.size());
+  utils::to_binary(data, std::back_insert_iterator(value_));
 }
 } // namespace couchbase::core::protocol

@@ -25,81 +25,83 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-analytics_index_create_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+analytics_index_create_request::encode_to(encoded_request_type& encoded,
+                                          http_context& /* context */) const
 {
-    std::string if_not_exists_clause = ignore_if_exists ? "IF NOT EXISTS" : "";
-    std::vector<std::string> field_specs;
-    field_specs.reserve(fields.size());
-    for (const auto& [field_name, field_type] : fields) {
-        field_specs.emplace_back(fmt::format("{}:{}", field_name, field_type));
-    }
+  std::string if_not_exists_clause = ignore_if_exists ? "IF NOT EXISTS" : "";
+  std::vector<std::string> field_specs;
+  field_specs.reserve(fields.size());
+  for (const auto& [field_name, field_type] : fields) {
+    field_specs.emplace_back(fmt::format("{}:{}", field_name, field_type));
+  }
 
-    tao::json::value body{
-        { "statement",
-          fmt::format("CREATE INDEX `{}` {} ON {}.`{}` ({})",
-                      index_name,
-                      if_not_exists_clause,
-                      utils::analytics::uncompound_name(dataverse_name),
-                      dataset_name,
-                      utils::join_strings(field_specs, ",")) },
-    };
-    encoded.headers["content-type"] = "application/json";
-    encoded.method = "POST";
-    encoded.path = "/analytics/service";
-    encoded.body = utils::json::generate(body);
-    return {};
+  tao::json::value body{
+    { "statement",
+      fmt::format("CREATE INDEX `{}` {} ON {}.`{}` ({})",
+                  index_name,
+                  if_not_exists_clause,
+                  utils::analytics::uncompound_name(dataverse_name),
+                  dataset_name,
+                  utils::join_strings(field_specs, ",")) },
+  };
+  encoded.headers["content-type"] = "application/json";
+  encoded.method = "POST";
+  encoded.path = "/analytics/service";
+  encoded.body = utils::json::generate(body);
+  return {};
 }
 
 analytics_index_create_response
-analytics_index_create_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+analytics_index_create_request::make_response(error_context::http&& ctx,
+                                              const encoded_response_type& encoded) const
 {
-    analytics_index_create_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        tao::json::value payload{};
-        try {
-            payload = utils::json::parse(encoded.body.data());
-        } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = errc::common::parsing_failure;
-            return response;
-        }
-        response.status = payload.optional<std::string>("status").value_or("unknown");
-
-        if (response.status != "success") {
-            bool index_exists = false;
-            bool dataset_not_found = false;
-            bool link_not_found = false;
-
-            if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
-                for (const auto& error : errors->get_array()) {
-                    analytics_problem err{
-                        error.at("code").as<std::uint32_t>(),
-                        error.at("msg").get_string(),
-                    };
-                    switch (err.code) {
-                        case 24048: /* An index with this name [string] already exists */
-                            index_exists = true;
-                            break;
-                        case 24025: /* Cannot find dataset with name [string] in dataverse [string] */
-                            dataset_not_found = true;
-                            break;
-                        case 24006: /* Link [string] does not exist */
-                            link_not_found = true;
-                            break;
-                    }
-                    response.errors.emplace_back(err);
-                }
-            }
-            if (index_exists) {
-                response.ctx.ec = errc::common::index_exists;
-            } else if (dataset_not_found) {
-                response.ctx.ec = errc::analytics::dataset_not_found;
-            } else if (link_not_found) {
-                response.ctx.ec = errc::analytics::link_not_found;
-            } else {
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
-            }
-        }
+  analytics_index_create_response response{ std::move(ctx) };
+  if (!response.ctx.ec) {
+    tao::json::value payload{};
+    try {
+      payload = utils::json::parse(encoded.body.data());
+    } catch (const tao::pegtl::parse_error&) {
+      response.ctx.ec = errc::common::parsing_failure;
+      return response;
     }
-    return response;
+    response.status = payload.optional<std::string>("status").value_or("unknown");
+
+    if (response.status != "success") {
+      bool index_exists = false;
+      bool dataset_not_found = false;
+      bool link_not_found = false;
+
+      if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
+        for (const auto& error : errors->get_array()) {
+          analytics_problem err{
+            error.at("code").as<std::uint32_t>(),
+            error.at("msg").get_string(),
+          };
+          switch (err.code) {
+            case 24048: /* An index with this name [string] already exists */
+              index_exists = true;
+              break;
+            case 24025: /* Cannot find dataset with name [string] in dataverse [string] */
+              dataset_not_found = true;
+              break;
+            case 24006: /* Link [string] does not exist */
+              link_not_found = true;
+              break;
+          }
+          response.errors.emplace_back(err);
+        }
+      }
+      if (index_exists) {
+        response.ctx.ec = errc::common::index_exists;
+      } else if (dataset_not_found) {
+        response.ctx.ec = errc::analytics::dataset_not_found;
+      } else if (link_not_found) {
+        response.ctx.ec = errc::analytics::link_not_found;
+      } else {
+        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+      }
+    }
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

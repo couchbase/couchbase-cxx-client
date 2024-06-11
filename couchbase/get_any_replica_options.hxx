@@ -36,55 +36,56 @@ namespace couchbase
  * @committed
  */
 struct get_any_replica_options : public common_options<get_any_replica_options> {
-    /**
-     * Immutable value object representing consistent options.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    struct built : public common_options<get_any_replica_options>::built {
-        couchbase::read_preference read_preference;
+  /**
+   * Immutable value object representing consistent options.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  struct built : public common_options<get_any_replica_options>::built {
+    couchbase::read_preference read_preference;
+  };
+
+  /**
+   * Choose how the replica nodes will be selected. By default it has no
+   * preference and will select any available replica, but it is possible to
+   * prioritize or restrict to only nodes in local server group.
+   *
+   * @param preference
+   * @return this options builder for chaining purposes.
+   *
+   * @since 1.0.0
+   * @volatile
+   */
+  auto read_preference(read_preference preference) -> get_any_replica_options&
+  {
+    read_preference_ = preference;
+    return self();
+  }
+
+  /**
+   * Validates options and returns them as an immutable value.
+   *
+   * @return consistent options as an immutable value
+   *
+   * @exception std::system_error with code errc::common::invalid_argument if the options are not
+   * valid
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto build() const -> built
+  {
+    return {
+      build_common_options(),
+      read_preference_,
     };
+  }
 
-    /**
-     * Choose how the replica nodes will be selected. By default it has no
-     * preference and will select any available replica, but it is possible to
-     * prioritize or restrict to only nodes in local server group.
-     *
-     * @param preference
-     * @return this options builder for chaining purposes.
-     *
-     * @since 1.0.0
-     * @volatile
-     */
-    auto read_preference(read_preference preference) -> get_any_replica_options&
-    {
-        read_preference_ = preference;
-        return self();
-    }
-
-    /**
-     * Validates options and returns them as an immutable value.
-     *
-     * @return consistent options as an immutable value
-     *
-     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto build() const -> built
-    {
-        return {
-            build_common_options(),
-            read_preference_,
-        };
-    }
-
-  private:
-    enum read_preference read_preference_ {
-        read_preference::no_preference
-    };
+private:
+  enum read_preference read_preference_ {
+    read_preference::no_preference
+  };
 };
 
 /**

@@ -27,86 +27,90 @@
 namespace couchbase
 {
 /**
- * A query that looks for **exact** match of several terms (in the exact order) in the index. The provided terms must exist in the correct
- * order, at the correct index offsets, in the specified field (as no analyzer are applied to the terms). Queried field must have been
- * indexed with `includeTermVectors` set to `true`. It is generally more useful in debugging scenarios, and the @ref match_phrase_query
- * should usually be preferred for real-world use cases.
+ * A query that looks for **exact** match of several terms (in the exact order) in the index. The
+ * provided terms must exist in the correct order, at the correct index offsets, in the specified
+ * field (as no analyzer are applied to the terms). Queried field must have been indexed with
+ * `includeTermVectors` set to `true`. It is generally more useful in debugging scenarios, and the
+ * @ref match_phrase_query should usually be preferred for real-world use cases.
  *
  * Match documents with terms `"nice"` and `"view"` in field `reviews.content`:
  * @snippet test_unit_search.cxx search-phrase
  *
- * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-phrase.html server documentation
+ * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-phrase.html server
+ * documentation
  *
  * @since 1.0.0
  * @committed
  */
 class phrase_query : public search_query
 {
-  public:
-    /**
-     * Create a new phrase query.
-     *
-     * The mandatory list of terms that must exactly match in the index. Note that the index can (and usually will) contain terms that are
-     * derived from the text in documents, as analyzers can apply process like stemming.
-     *
-     * @param terms non-empty vector of terms.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    explicit phrase_query(std::initializer_list<std::string> terms)
-      : terms_{ terms }
-    {
-        if (terms_.empty()) {
-            throw std::invalid_argument("terms must not be empty in phrase_query");
-        }
+public:
+  /**
+   * Create a new phrase query.
+   *
+   * The mandatory list of terms that must exactly match in the index. Note that the index can (and
+   * usually will) contain terms that are derived from the text in documents, as analyzers can apply
+   * process like stemming.
+   *
+   * @param terms non-empty vector of terms.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  explicit phrase_query(std::initializer_list<std::string> terms)
+    : terms_{ terms }
+  {
+    if (terms_.empty()) {
+      throw std::invalid_argument("terms must not be empty in phrase_query");
     }
+  }
 
-    /**
-     * Create a new phrase query.
-     *
-     * The mandatory list of terms that must exactly match in the index. Note that the index can (and usually will) contain terms that are
-     * derived from the text in documents, as analyzers can apply process like stemming.
-     *
-     * @param terms non-empty vector of terms.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    explicit phrase_query(std::vector<std::string> terms)
-      : terms_{ std::move(terms) }
-    {
-        if (terms_.empty()) {
-            throw std::invalid_argument("terms must not be empty in phrase_query");
-        }
+  /**
+   * Create a new phrase query.
+   *
+   * The mandatory list of terms that must exactly match in the index. Note that the index can (and
+   * usually will) contain terms that are derived from the text in documents, as analyzers can apply
+   * process like stemming.
+   *
+   * @param terms non-empty vector of terms.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  explicit phrase_query(std::vector<std::string> terms)
+    : terms_{ std::move(terms) }
+  {
+    if (terms_.empty()) {
+      throw std::invalid_argument("terms must not be empty in phrase_query");
     }
+  }
 
-    /**
-     * If a field is specified, only terms in that field will be matched.
-     *
-     * @param field_name name of the field to be matched
-     *
-     * @return this query for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto field(std::string field_name) -> phrase_query&
-    {
-        field_ = std::move(field_name);
-        return *this;
-    }
+  /**
+   * If a field is specified, only terms in that field will be matched.
+   *
+   * @param field_name name of the field to be matched
+   *
+   * @return this query for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto field(std::string field_name) -> phrase_query&
+  {
+    field_ = std::move(field_name);
+    return *this;
+  }
 
-    /**
-     * @return encoded representation of the query.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto encode() const -> encoded_search_query override;
+  /**
+   * @return encoded representation of the query.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto encode() const -> encoded_search_query override;
 
-  private:
-    std::vector<std::string> terms_;
-    std::optional<std::string> field_{};
+private:
+  std::vector<std::string> terms_;
+  std::optional<std::string> field_{};
 };
 } // namespace couchbase

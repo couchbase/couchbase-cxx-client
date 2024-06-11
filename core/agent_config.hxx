@@ -30,15 +30,15 @@ class retry_strategy;
 namespace couchbase::core
 {
 struct agent_config {
-    core_sdk_shim shim; // TODO: remove once refactoring will be finished.
+  core_sdk_shim shim; // TODO: remove once refactoring will be finished.
 
-    std::string bucket_name{};
-    std::string user_agent{};
-    std::shared_ptr<retry_strategy> default_retry_strategy{};
+  std::string bucket_name{};
+  std::string user_agent{};
+  std::shared_ptr<retry_strategy> default_retry_strategy{};
 
-    seed_config seed{};
-    key_value_config key_value{};
+  seed_config seed{};
+  key_value_config key_value{};
 
-    [[nodiscard]] auto to_string() const -> std::string;
+  [[nodiscard]] auto to_string() const -> std::string;
 };
 } // namespace couchbase::core

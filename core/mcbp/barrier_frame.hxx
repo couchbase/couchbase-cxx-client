@@ -19,9 +19,10 @@
 
 namespace couchbase::core::mcbp
 {
-// barrier_frame is used to signal to the server that this command should be barriered and must not be executed concurrently with other
-// commands.
+// barrier_frame is used to signal to the server that this command should be barriered and must not
+// be executed concurrently with other commands.
 struct barrier_frame {
-    // Barrier frames have no additional configuration, but their existence triggers the barriering behaviour.
+  // Barrier frames have no additional configuration, but their existence triggers the barriering
+  // behaviour.
 };
 } // namespace couchbase::core::mcbp

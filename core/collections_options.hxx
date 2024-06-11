@@ -38,50 +38,52 @@ namespace couchbase::core
 {
 class get_collection_manifest_options
 {
-  public:
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
-    std::chrono::milliseconds timeout{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{};
+public:
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
+  std::chrono::milliseconds timeout{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{};
 
-    struct {
-        std::string user{};
-    } internal{};
+  struct {
+    std::string user{};
+  } internal{};
 };
 
 class get_collection_manifest_result
 {
-  public:
-    std::vector<std::byte> manifest{};
+public:
+  std::vector<std::byte> manifest{};
 
-    struct {
-        std::optional<resource_unit_result> resource_units{};
-    } internal{};
+  struct {
+    std::optional<resource_unit_result> resource_units{};
+  } internal{};
 };
 
-using get_collection_manifest_callback = utils::movable_function<void(get_collection_manifest_result result, std::error_code ec)>;
+using get_collection_manifest_callback =
+  utils::movable_function<void(get_collection_manifest_result result, std::error_code ec)>;
 
 class get_collection_id_options
 {
-  public:
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
-    std::chrono::milliseconds timeout{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{};
+public:
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
+  std::chrono::milliseconds timeout{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{};
 
-    struct {
-        std::string user{};
-    } internal{};
+  struct {
+    std::string user{};
+  } internal{};
 };
 
 class get_collection_id_result
 {
-  public:
-    std::uint64_t manifest_id{};
-    std::uint32_t collection_id{};
+public:
+  std::uint64_t manifest_id{};
+  std::uint32_t collection_id{};
 
-    struct {
-        std::optional<resource_unit_result> resource_units{};
-    } internal{};
+  struct {
+    std::optional<resource_unit_result> resource_units{};
+  } internal{};
 };
 
-using get_collection_id_callback = utils::movable_function<void(get_collection_id_result result, std::error_code ec)>;
+using get_collection_id_callback =
+  utils::movable_function<void(get_collection_id_result result, std::error_code ec)>;
 } // namespace couchbase::core

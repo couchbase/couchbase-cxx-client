@@ -30,27 +30,29 @@ namespace couchbase::core::operations
 {
 
 struct get_response {
-    key_value_error_context ctx;
-    std::vector<std::byte> value{};
-    couchbase::cas cas{};
-    std::uint32_t flags{};
+  key_value_error_context ctx;
+  std::vector<std::byte> value{};
+  couchbase::cas cas{};
+  std::uint32_t flags{};
 };
 
 struct get_request {
-    using response_type = get_response;
-    using encoded_request_type = protocol::client_request<protocol::get_request_body>;
-    using encoded_response_type = protocol::client_response<protocol::get_response_body>;
+  using response_type = get_response;
+  using encoded_request_type = protocol::client_request<protocol::get_request_body>;
+  using encoded_response_type = protocol::client_response<protocol::get_response_body>;
 
-    document_id id;
-    std::uint16_t partition{};
-    std::uint32_t opaque{};
-    std::optional<std::chrono::milliseconds> timeout{};
-    io::retry_context<true> retries{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
+  document_id id;
+  std::uint16_t partition{};
+  std::uint32_t opaque{};
+  std::optional<std::chrono::milliseconds> timeout{};
+  io::retry_context<true> retries{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          mcbp_context&& context) const;
 
-    [[nodiscard]] get_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] get_response make_response(key_value_error_context&& ctx,
+                                           const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::operations
 

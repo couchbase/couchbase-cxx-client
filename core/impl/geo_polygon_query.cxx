@@ -24,23 +24,23 @@ namespace couchbase
 auto
 geo_polygon_query::encode() const -> encoded_search_query
 {
-    encoded_search_query built;
-    built.query = tao::json::empty_object;
-    if (boost_) {
-        built.query["boost"] = boost_.value();
-    }
-    if (field_) {
-        built.query["field"] = field_.value();
-    }
-    tao::json::value polygon_points = tao::json::empty_array;
-    for (const auto& point : polygon_points_) {
-        polygon_points.emplace_back(tao::json::value{
-          { "lat", point.latitude },
-          { "lon", point.longitude },
-        });
-    }
-    built.query["polygon_points"] = polygon_points;
+  encoded_search_query built;
+  built.query = tao::json::empty_object;
+  if (boost_) {
+    built.query["boost"] = boost_.value();
+  }
+  if (field_) {
+    built.query["field"] = field_.value();
+  }
+  tao::json::value polygon_points = tao::json::empty_array;
+  for (const auto& point : polygon_points_) {
+    polygon_points.emplace_back(tao::json::value{
+      { "lat", point.latitude },
+      { "lon", point.longitude },
+    });
+  }
+  built.query["polygon_points"] = polygon_points;
 
-    return built;
+  return built;
 }
 } // namespace couchbase

@@ -24,12 +24,12 @@ namespace couchbase::core::utils
 std::vector<std::string>
 split_string(const std::string& input, char delimiter)
 {
-    std::vector<std::string> elements;
-    std::stringstream stream(input);
-    std::string element;
-    while (std::getline(stream, element, delimiter)) {
-        elements.push_back(element);
-    }
-    return elements;
+  std::vector<std::string> elements;
+  std::stringstream stream(input);
+  std::string element;
+  while (std::getline(stream, element, delimiter)) {
+    elements.push_back(element);
+  }
+  return elements;
 }
 } // namespace couchbase::core::utils

@@ -23,25 +23,26 @@ namespace couchbase::core::impl
 {
 
 struct query_error_category : std::error_category {
-    [[nodiscard]] const char* name() const noexcept override
-    {
-        return "couchbase.query";
-    }
+  [[nodiscard]] const char* name() const noexcept override
+  {
+    return "couchbase.query";
+  }
 
-    [[nodiscard]] std::string message(int ev) const noexcept override
-    {
-        switch (static_cast<errc::query>(ev)) {
-            case errc::query::planning_failure:
-                return "planning_failure (201)";
-            case errc::query::index_failure:
-                return "index_failure (202)";
-            case errc::query::prepared_statement_failure:
-                return "prepared_statement_failure (203)";
-            case errc::query::dml_failure:
-                return "dml_failure (204)";
-        }
-        return "FIXME: unknown error code (recompile with newer library): couchbase.query." + std::to_string(ev);
+  [[nodiscard]] std::string message(int ev) const noexcept override
+  {
+    switch (static_cast<errc::query>(ev)) {
+      case errc::query::planning_failure:
+        return "planning_failure (201)";
+      case errc::query::index_failure:
+        return "index_failure (202)";
+      case errc::query::prepared_statement_failure:
+        return "prepared_statement_failure (203)";
+      case errc::query::dml_failure:
+        return "dml_failure (204)";
     }
+    return "FIXME: unknown error code (recompile with newer library): couchbase.query." +
+           std::to_string(ev);
+  }
 };
 
 const inline static query_error_category query_category_instance;
@@ -49,7 +50,7 @@ const inline static query_error_category query_category_instance;
 const std::error_category&
 query_category() noexcept
 {
-    return query_category_instance;
+  return query_category_instance;
 }
 
 } // namespace couchbase::core::impl

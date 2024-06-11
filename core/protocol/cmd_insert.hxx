@@ -31,94 +31,94 @@ namespace couchbase::core::protocol
 
 class insert_response_body
 {
-  public:
-    static const inline client_opcode opcode = client_opcode::insert;
+public:
+  static const inline client_opcode opcode = client_opcode::insert;
 
-  private:
-    mutation_token token_;
+private:
+  mutation_token token_;
 
-  public:
-    [[nodiscard]] const mutation_token& token() const
-    {
-        return token_;
-    }
+public:
+  [[nodiscard]] const mutation_token& token() const
+  {
+    return token_;
+  }
 
-    bool parse(key_value_status_code status,
-               const header_buffer& header,
-               std::uint8_t framing_extras_size,
-               std::uint16_t key_size,
-               std::uint8_t extras_size,
-               const std::vector<std::byte>& body,
-               const cmd_info& info);
+  bool parse(key_value_status_code status,
+             const header_buffer& header,
+             std::uint8_t framing_extras_size,
+             std::uint16_t key_size,
+             std::uint8_t extras_size,
+             const std::vector<std::byte>& body,
+             const cmd_info& info);
 };
 
 class insert_request_body
 {
-  public:
-    using response_body_type = insert_response_body;
-    static const inline client_opcode opcode = client_opcode::insert;
+public:
+  using response_body_type = insert_response_body;
+  static const inline client_opcode opcode = client_opcode::insert;
 
-  private:
-    std::vector<std::byte> key_{};
-    std::vector<std::byte> extras_{};
-    std::vector<std::byte> content_{};
-    std::uint32_t flags_{};
-    std::uint32_t expiry_{};
-    std::vector<std::byte> framing_extras_{};
+private:
+  std::vector<std::byte> key_{};
+  std::vector<std::byte> extras_{};
+  std::vector<std::byte> content_{};
+  std::uint32_t flags_{};
+  std::uint32_t expiry_{};
+  std::vector<std::byte> framing_extras_{};
 
-  public:
-    void id(const document_id& id);
+public:
+  void id(const document_id& id);
 
-    void durability(durability_level level, std::optional<std::uint16_t> timeout);
+  void durability(durability_level level, std::optional<std::uint16_t> timeout);
 
-    void content(const std::vector<std::byte>& content)
-    {
-        content_ = { content.begin(), content.end() };
+  void content(const std::vector<std::byte>& content)
+  {
+    content_ = { content.begin(), content.end() };
+  }
+
+  void flags(std::uint32_t flags)
+  {
+    flags_ = flags;
+  }
+
+  void expiry(std::uint32_t value)
+  {
+    expiry_ = value;
+  }
+
+  [[nodiscard]] const auto& key() const
+  {
+    return key_;
+  }
+
+  [[nodiscard]] const auto& framing_extras() const
+  {
+    return framing_extras_;
+  }
+
+  [[nodiscard]] const auto& extras()
+  {
+    if (extras_.empty()) {
+      fill_extras();
     }
+    return extras_;
+  }
 
-    void flags(std::uint32_t flags)
-    {
-        flags_ = flags;
+  [[nodiscard]] const auto& value() const
+  {
+    return content_;
+  }
+
+  [[nodiscard]] std::size_t size()
+  {
+    if (extras_.empty()) {
+      fill_extras();
     }
+    return framing_extras_.size() + extras_.size() + key_.size() + content_.size();
+  }
 
-    void expiry(std::uint32_t value)
-    {
-        expiry_ = value;
-    }
-
-    [[nodiscard]] const auto& key() const
-    {
-        return key_;
-    }
-
-    [[nodiscard]] const auto& framing_extras() const
-    {
-        return framing_extras_;
-    }
-
-    [[nodiscard]] const auto& extras()
-    {
-        if (extras_.empty()) {
-            fill_extras();
-        }
-        return extras_;
-    }
-
-    [[nodiscard]] const auto& value() const
-    {
-        return content_;
-    }
-
-    [[nodiscard]] std::size_t size()
-    {
-        if (extras_.empty()) {
-            fill_extras();
-        }
-        return framing_extras_.size() + extras_.size() + key_.size() + content_.size();
-    }
-
-  private:
-    void fill_extras();
+private:
+  void fill_extras();
 };
 
 } // namespace couchbase::core::protocol

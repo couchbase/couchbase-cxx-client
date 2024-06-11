@@ -22,8 +22,8 @@
 namespace couchbase
 {
 struct encoded_search_sort {
-    std::error_code ec{};
-    tao::json::value sort{};
+  std::error_code ec{};
+  tao::json::value sort{};
 };
 
 } // namespace couchbase

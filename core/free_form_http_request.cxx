@@ -19,31 +19,31 @@ namespace couchbase::core
 {
 class http_response_impl
 {
-  public:
-    auto endpoint() -> std::string
-    {
-        return {};
-    }
+public:
+  auto endpoint() -> std::string
+  {
+    return {};
+  }
 
-    auto status_code() -> std::uint32_t
-    {
-        return {};
-    }
+  auto status_code() -> std::uint32_t
+  {
+    return {};
+  }
 
-    auto content_length() -> std::size_t
-    {
-        return {};
-    }
+  auto content_length() -> std::size_t
+  {
+    return {};
+  }
 
-    auto body() -> std::vector<std::byte>
-    {
-        return {};
-    }
+  auto body() -> std::vector<std::byte>
+  {
+    return {};
+  }
 
-    auto close() -> std::error_code
-    {
-        return {};
-    }
+  auto close() -> std::error_code
+  {
+    return {};
+  }
 };
 
 http_response::http_response()
@@ -54,28 +54,28 @@ http_response::http_response()
 auto
 http_response::endpoint() -> std::string
 {
-    return impl_->endpoint();
+  return impl_->endpoint();
 }
 auto
 http_response::status_code() -> std::uint32_t
 {
-    return impl_->status_code();
+  return impl_->status_code();
 }
 auto
 http_response::content_length() -> std::size_t
 {
-    return impl_->content_length();
+  return impl_->content_length();
 }
 
 auto
 http_response::body() -> std::vector<std::byte>
 {
-    return impl_->body();
+  return impl_->body();
 }
 
 auto
 http_response::close() -> std::error_code
 {
-    return impl_->close();
+  return impl_->close();
 }
 } // namespace couchbase::core

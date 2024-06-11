@@ -23,23 +23,26 @@
 namespace couchbase::core::operations
 {
 std::error_code
-append_request::encode_to(protocol::client_request<protocol::append_request_body>& encoded, mcbp_context&& /* context */) const
+append_request::encode_to(protocol::client_request<protocol::append_request_body>& encoded,
+                          mcbp_context&& /* context */) const
 {
-    encoded.opaque(opaque);
-    encoded.partition(partition);
-    encoded.body().id(id);
-    encoded.body().content(value);
-    return {};
+  encoded.opaque(opaque);
+  encoded.partition(partition);
+  encoded.body().id(id);
+  encoded.body().content(value);
+  return {};
 }
 
 append_response
-append_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
+append_request::make_response(key_value_error_context&& ctx,
+                              const encoded_response_type& encoded) const
 {
-    append_response response{ std::move(ctx) };
-    if (!response.ctx.ec()) {
-        response.cas = encoded.cas();
-        response.token = couchbase::utils::build_mutation_token(encoded.body().token(), partition, response.ctx.bucket());
-    }
-    return response;
+  append_response response{ std::move(ctx) };
+  if (!response.ctx.ec()) {
+    response.cas = encoded.cas();
+    response.token = couchbase::utils::build_mutation_token(
+      encoded.body().token(), partition, response.ctx.bucket());
+  }
+  return response;
 }
 } // namespace couchbase::core::operations

@@ -24,19 +24,19 @@ namespace couchbase
 auto
 lookup_in_specs::specs() const -> const std::vector<core::impl::subdoc::command>&
 {
-    static std::vector<core::impl::subdoc::command> empty{};
-    if (specs_ == nullptr) {
-        return empty;
-    }
-    return specs_->specs();
+  static std::vector<core::impl::subdoc::command> empty{};
+  if (specs_ == nullptr) {
+    return empty;
+  }
+  return specs_->specs();
 }
 
 auto
 lookup_in_specs::bundle() -> core::impl::subdoc::command_bundle&
 {
-    if (specs_ == nullptr) {
-        specs_ = std::make_shared<core::impl::subdoc::command_bundle>();
-    }
-    return *specs_;
+  if (specs_ == nullptr) {
+    specs_ = std::make_shared<core::impl::subdoc::command_bundle>();
+  }
+  return *specs_;
 }
 } // namespace couchbase

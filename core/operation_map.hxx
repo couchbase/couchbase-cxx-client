@@ -28,9 +28,9 @@ class queue_request;
 
 class operation_map
 {
-  public:
-    virtual ~operation_map() = default;
-    virtual void remove_request(std::shared_ptr<mcbp::queue_request> request) = 0;
+public:
+  virtual ~operation_map() = default;
+  virtual void remove_request(std::shared_ptr<mcbp::queue_request> request) = 0;
 };
 
 } // namespace couchbase::core

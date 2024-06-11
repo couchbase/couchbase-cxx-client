@@ -40,33 +40,37 @@ namespace couchbase::core::impl
  */
 class get_all_replicas_request
 {
-  public:
-    explicit get_all_replicas_request(std::string bucket_name,
-                                      std::string scope_name,
-                                      std::string collection_name,
-                                      std::string document_key,
-                                      std::optional<std::chrono::milliseconds> timeout)
-      : id_{ std::move(bucket_name), std::move(scope_name), std::move(collection_name), std::move(document_key) }
-      , timeout_{ timeout }
-    {
-    }
+public:
+  explicit get_all_replicas_request(std::string bucket_name,
+                                    std::string scope_name,
+                                    std::string collection_name,
+                                    std::string document_key,
+                                    std::optional<std::chrono::milliseconds> timeout)
+    : id_{ std::move(bucket_name),
+           std::move(scope_name),
+           std::move(collection_name),
+           std::move(document_key) }
+    , timeout_{ timeout }
+  {
+  }
 
-    [[nodiscard]] const auto& id() const
-    {
-        return id_;
-    }
+  [[nodiscard]] const auto& id() const
+  {
+    return id_;
+  }
 
-    [[nodiscard]] const auto& timeout() const
-    {
-        return timeout_;
-    }
+  [[nodiscard]] const auto& timeout() const
+  {
+    return timeout_;
+  }
 
-  private:
-    core::document_id id_;
-    std::optional<std::chrono::milliseconds> timeout_{};
+private:
+  core::document_id id_;
+  std::optional<std::chrono::milliseconds> timeout_{};
 };
 
-using movable_get_all_replicas_handler = utils::movable_function<void(error, get_all_replicas_result)>;
+using movable_get_all_replicas_handler =
+  utils::movable_function<void(error, get_all_replicas_result)>;
 
 void
 initiate_get_all_replicas_operation(std::shared_ptr<cluster> core,

@@ -31,95 +31,97 @@ static constexpr const char* iso_8601_format = "{:%Y-%m-%dT%H:%M:%S%z}";
 auto
 date_range_query::start(std::chrono::system_clock::time_point value) -> date_range_query&
 {
-    start_ = fmt::format(iso_8601_format, value);
-    return *this;
+  start_ = fmt::format(iso_8601_format, value);
+  return *this;
 }
 
 auto
 date_range_query::start(std::tm value) -> date_range_query&
 {
-    start_ = fmt::format(iso_8601_format, value);
-    return *this;
+  start_ = fmt::format(iso_8601_format, value);
+  return *this;
 }
 
 auto
-date_range_query::start(std::chrono::system_clock::time_point value, bool inclusive) -> date_range_query&
+date_range_query::start(std::chrono::system_clock::time_point value,
+                        bool inclusive) -> date_range_query&
 {
-    start_ = fmt::format(iso_8601_format, value);
-    inclusive_start_ = inclusive;
-    return *this;
+  start_ = fmt::format(iso_8601_format, value);
+  inclusive_start_ = inclusive;
+  return *this;
 }
 
 auto
 date_range_query::start(std::tm value, bool inclusive) -> date_range_query&
 {
-    start_ = fmt::format(iso_8601_format, value);
-    inclusive_start_ = inclusive;
-    return *this;
+  start_ = fmt::format(iso_8601_format, value);
+  inclusive_start_ = inclusive;
+  return *this;
 }
 
 auto
 date_range_query::end(std::chrono::system_clock::time_point value) -> date_range_query&
 {
 
-    end_ = fmt::format(iso_8601_format, value);
-    return *this;
+  end_ = fmt::format(iso_8601_format, value);
+  return *this;
 }
 
 auto
 date_range_query::end(std::tm value) -> date_range_query&
 {
-    end_ = fmt::format(iso_8601_format, value);
-    return *this;
+  end_ = fmt::format(iso_8601_format, value);
+  return *this;
 }
 
 auto
-date_range_query::end(std::chrono::system_clock::time_point value, bool inclusive) -> date_range_query&
+date_range_query::end(std::chrono::system_clock::time_point value,
+                      bool inclusive) -> date_range_query&
 {
-    end_ = fmt::format(iso_8601_format, value);
-    inclusive_end_ = inclusive;
-    return *this;
+  end_ = fmt::format(iso_8601_format, value);
+  inclusive_end_ = inclusive;
+  return *this;
 }
 
 auto
 date_range_query::end(std::tm value, bool inclusive) -> date_range_query&
 {
-    end_ = fmt::format(iso_8601_format, value);
-    inclusive_end_ = inclusive;
-    return *this;
+  end_ = fmt::format(iso_8601_format, value);
+  inclusive_end_ = inclusive;
+  return *this;
 }
 
 auto
 date_range_query::encode() const -> encoded_search_query
 {
-    if ((!start_ || start_->empty()) && (!end_ || end_->empty())) {
-        return { errc::common::invalid_argument };
-    }
+  if ((!start_ || start_->empty()) && (!end_ || end_->empty())) {
+    return { errc::common::invalid_argument };
+  }
 
-    encoded_search_query built;
-    built.query = tao::json::empty_object;
-    if (boost_) {
-        built.query["boost"] = boost_.value();
+  encoded_search_query built;
+  built.query = tao::json::empty_object;
+  if (boost_) {
+    built.query["boost"] = boost_.value();
+  }
+  if (field_) {
+    built.query["field"] = field_.value();
+  }
+  if (start_) {
+    built.query["start"] = start_.value();
+    if (inclusive_start_.has_value()) {
+      built.query["inclusive_start"] = inclusive_start_.value();
     }
-    if (field_) {
-        built.query["field"] = field_.value();
+  }
+  if (end_) {
+    built.query["end"] = end_.value();
+    if (inclusive_end_.has_value()) {
+      built.query["inclusive_end"] = inclusive_end_.value();
     }
-    if (start_) {
-        built.query["start"] = start_.value();
-        if (inclusive_start_.has_value()) {
-            built.query["inclusive_start"] = inclusive_start_.value();
-        }
-    }
-    if (end_) {
-        built.query["end"] = end_.value();
-        if (inclusive_end_.has_value()) {
-            built.query["inclusive_end"] = inclusive_end_.value();
-        }
-    }
-    if (date_time_parser_) {
-        built.query["datetime_parser"] = date_time_parser_.value();
-    }
+  }
+  if (date_time_parser_) {
+    built.query["datetime_parser"] = date_time_parser_.value();
+  }
 
-    return built;
+  return built;
 }
 } // namespace couchbase

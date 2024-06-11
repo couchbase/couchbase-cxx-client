@@ -68,7 +68,8 @@ create_protocol_logger(const configuration& logger_settings);
 /**
  * Initialize the logger with the blackhole logger object
  *
- * This method is intended to be used by unit tests which don't need any output (but may call methods who tries to fetch the logger)
+ * This method is intended to be used by unit tests which don't need any output (but may call
+ * methods who tries to fetch the logger)
  *
  * See note about thread safety at the top of the file
  *
@@ -113,8 +114,9 @@ void
 reset();
 
 /**
- * Engines that create their own instances of an spdlog::logger should register the logger here to ensure that the verbosity of the logger
- * is updated when memcached receives a request to update verbosity
+ * Engines that create their own instances of an spdlog::logger should register the logger here to
+ * ensure that the verbosity of the logger is updated when memcached receives a request to update
+ * verbosity
  *
  * @param l spdlog::logger instance
  */
@@ -180,16 +182,25 @@ log_protocol(const char* file, int line, const char* function, std::string_view 
  */
 template<typename... Args>
 inline void
-log(const char* file, int line, const char* function, level lvl, fmt::format_string<Args...> msg, Args&&... args)
+log(const char* file,
+    int line,
+    const char* function,
+    level lvl,
+    fmt::format_string<Args...> msg,
+    Args&&... args)
 {
-    detail::log(file, line, function, lvl, fmt::format(msg, std::forward<Args>(args)...));
+  detail::log(file, line, function, lvl, fmt::format(msg, std::forward<Args>(args)...));
 }
 
 template<typename... Args>
 inline void
-log_protocol(const char* file, int line, const char* function, fmt::format_string<Args...> msg, Args&&... args)
+log_protocol(const char* file,
+             int line,
+             const char* function,
+             fmt::format_string<Args...> msg,
+             Args&&... args)
 {
-    detail::log_protocol(file, line, function, fmt::format(msg, std::forward<Args>(args)...));
+  detail::log_protocol(file, line, function, fmt::format(msg, std::forward<Args>(args)...));
 }
 
 /**
@@ -223,27 +234,57 @@ is_initialized();
  * on log messages which likely will not actually be logged due to their
  * severity value not matching the logger.
  */
-#define COUCHBASE_LOG(file, line, function, severity, ...)                                                                                 \
-    do {                                                                                                                                   \
-        if (couchbase::core::logger::should_log(severity)) {                                                                               \
-            couchbase::core::logger::log(file, line, function, severity, __VA_ARGS__);                                                     \
-        }                                                                                                                                  \
-    } while (false)
+#define COUCHBASE_LOG(file, line, function, severity, ...)                                         \
+  do {                                                                                             \
+    if (couchbase::core::logger::should_log(severity)) {                                           \
+      couchbase::core::logger::log(file, line, function, severity, __VA_ARGS__);                   \
+    }                                                                                              \
+  } while (false)
 
-#define CB_LOG_TRACE(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::trace, __VA_ARGS__)
-#define CB_LOG_DEBUG(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::debug, __VA_ARGS__)
-#define CB_LOG_INFO(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::info, __VA_ARGS__)
-#define CB_LOG_WARNING(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::warn, __VA_ARGS__)
-#define CB_LOG_ERROR(...) COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::err, __VA_ARGS__)
-#define CB_LOG_CRITICAL(...)                                                                                                               \
-    COUCHBASE_LOG(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::critical, __VA_ARGS__)
+#define CB_LOG_TRACE(...)                                                                          \
+  COUCHBASE_LOG(__FILE__,                                                                          \
+                __LINE__,                                                                          \
+                COUCHBASE_LOGGER_FUNCTION,                                                         \
+                couchbase::core::logger::level::trace,                                             \
+                __VA_ARGS__)
+#define CB_LOG_DEBUG(...)                                                                          \
+  COUCHBASE_LOG(__FILE__,                                                                          \
+                __LINE__,                                                                          \
+                COUCHBASE_LOGGER_FUNCTION,                                                         \
+                couchbase::core::logger::level::debug,                                             \
+                __VA_ARGS__)
+#define CB_LOG_INFO(...)                                                                           \
+  COUCHBASE_LOG(__FILE__,                                                                          \
+                __LINE__,                                                                          \
+                COUCHBASE_LOGGER_FUNCTION,                                                         \
+                couchbase::core::logger::level::info,                                              \
+                __VA_ARGS__)
+#define CB_LOG_WARNING(...)                                                                        \
+  COUCHBASE_LOG(__FILE__,                                                                          \
+                __LINE__,                                                                          \
+                COUCHBASE_LOGGER_FUNCTION,                                                         \
+                couchbase::core::logger::level::warn,                                              \
+                __VA_ARGS__)
+#define CB_LOG_ERROR(...)                                                                          \
+  COUCHBASE_LOG(__FILE__,                                                                          \
+                __LINE__,                                                                          \
+                COUCHBASE_LOGGER_FUNCTION,                                                         \
+                couchbase::core::logger::level::err,                                               \
+                __VA_ARGS__)
+#define CB_LOG_CRITICAL(...)                                                                       \
+  COUCHBASE_LOG(__FILE__,                                                                          \
+                __LINE__,                                                                          \
+                COUCHBASE_LOGGER_FUNCTION,                                                         \
+                couchbase::core::logger::level::critical,                                          \
+                __VA_ARGS__)
 
-#define CB_LOG_PROTOCOL(...)                                                                                                               \
-    do {                                                                                                                                   \
-        if (couchbase::core::logger::should_log_protocol()) {                                                                              \
-            couchbase::core::logger::log_protocol(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, __VA_ARGS__);                             \
-        }                                                                                                                                  \
-    } while (false)
+#define CB_LOG_PROTOCOL(...)                                                                       \
+  do {                                                                                             \
+    if (couchbase::core::logger::should_log_protocol()) {                                          \
+      couchbase::core::logger::log_protocol(                                                       \
+        __FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, __VA_ARGS__);                               \
+    }                                                                                              \
+  } while (false)
 
 /**
  * Convenience macros which log with the given level, and message, if the given
@@ -255,17 +296,28 @@ is_initialized();
  *   LOG_INFO_RAW("Starting flusher");
  *   LOG_INFO_RAW(std:string{...});
  */
-#define COUCHBASE_LOG_RAW(file, line, function, severity, msg)                                                                             \
-    do {                                                                                                                                   \
-        if (couchbase::core::logger::should_log(severity)) {                                                                               \
-            couchbase::core::logger::detail::log(file, line, function, severity, msg);                                                     \
-        }                                                                                                                                  \
-    } while (false)
+#define COUCHBASE_LOG_RAW(file, line, function, severity, msg)                                     \
+  do {                                                                                             \
+    if (couchbase::core::logger::should_log(severity)) {                                           \
+      couchbase::core::logger::detail::log(file, line, function, severity, msg);                   \
+    }                                                                                              \
+  } while (false)
 
-#define CB_LOG_TRACE_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::trace, msg)
-#define CB_LOG_DEBUG_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::debug, msg)
-#define CB_LOG_INFO_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::info, msg)
-#define CB_LOG_WARNING_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::warn, msg)
-#define CB_LOG_ERROR_RAW(msg) COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::err, msg)
-#define CB_LOG_CRITICAL_RAW(msg)                                                                                                           \
-    COUCHBASE_LOG_RAW(__FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::critical, msg)
+#define CB_LOG_TRACE_RAW(msg)                                                                      \
+  COUCHBASE_LOG_RAW(                                                                               \
+    __FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::trace, msg)
+#define CB_LOG_DEBUG_RAW(msg)                                                                      \
+  COUCHBASE_LOG_RAW(                                                                               \
+    __FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::debug, msg)
+#define CB_LOG_INFO_RAW(msg)                                                                       \
+  COUCHBASE_LOG_RAW(                                                                               \
+    __FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::info, msg)
+#define CB_LOG_WARNING_RAW(msg)                                                                    \
+  COUCHBASE_LOG_RAW(                                                                               \
+    __FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::warn, msg)
+#define CB_LOG_ERROR_RAW(msg)                                                                      \
+  COUCHBASE_LOG_RAW(                                                                               \
+    __FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::err, msg)
+#define CB_LOG_CRITICAL_RAW(msg)                                                                   \
+  COUCHBASE_LOG_RAW(                                                                               \
+    __FILE__, __LINE__, COUCHBASE_LOGGER_FUNCTION, couchbase::core::logger::level::critical, msg)

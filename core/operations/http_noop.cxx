@@ -22,43 +22,45 @@
 namespace couchbase::core::operations
 {
 std::error_code
-http_noop_request::encode_to(http_noop_request::encoded_request_type& encoded, http_context& /* context */)
+http_noop_request::encode_to(http_noop_request::encoded_request_type& encoded,
+                             http_context& /* context */)
 {
-    encoded.headers["connection"] = "keep-alive";
-    encoded.method = "GET";
-    encoded.path = "/";
-    switch (type) {
-        case service_type::query:
-            timeout = timeout_defaults::query_timeout;
-            encoded.path = "/admin/ping";
-            break;
-        case service_type::analytics:
-            timeout = timeout_defaults::analytics_timeout;
-            encoded.path = "/admin/ping";
-            break;
-        case service_type::search:
-            timeout = timeout_defaults::search_timeout;
-            encoded.path = "/api/ping";
-            break;
-        case service_type::view:
-            timeout = timeout_defaults::view_timeout;
-            break;
-        case service_type::management:
-            timeout = timeout_defaults::management_timeout;
-            break;
-        case service_type::eventing:
-            timeout = timeout_defaults::eventing_timeout;
-            break;
-        case service_type::key_value:
-            return errc::common::feature_not_available;
-    }
-    return {};
+  encoded.headers["connection"] = "keep-alive";
+  encoded.method = "GET";
+  encoded.path = "/";
+  switch (type) {
+    case service_type::query:
+      timeout = timeout_defaults::query_timeout;
+      encoded.path = "/admin/ping";
+      break;
+    case service_type::analytics:
+      timeout = timeout_defaults::analytics_timeout;
+      encoded.path = "/admin/ping";
+      break;
+    case service_type::search:
+      timeout = timeout_defaults::search_timeout;
+      encoded.path = "/api/ping";
+      break;
+    case service_type::view:
+      timeout = timeout_defaults::view_timeout;
+      break;
+    case service_type::management:
+      timeout = timeout_defaults::management_timeout;
+      break;
+    case service_type::eventing:
+      timeout = timeout_defaults::eventing_timeout;
+      break;
+    case service_type::key_value:
+      return errc::common::feature_not_available;
+  }
+  return {};
 }
 
 http_noop_response
-http_noop_request::make_response(error_context::http&& ctx, const encoded_response_type& /* encoded */) const
+http_noop_request::make_response(error_context::http&& ctx,
+                                 const encoded_response_type& /* encoded */) const
 {
-    http_noop_response response{ std::move(ctx) };
-    return response;
+  http_noop_response response{ std::move(ctx) };
+  return response;
 }
 } // namespace couchbase::core::operations

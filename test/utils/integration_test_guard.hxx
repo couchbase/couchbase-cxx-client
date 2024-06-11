@@ -35,111 +35,117 @@ namespace test::utils
 {
 
 struct pools_response {
-    bool is_developer_preview{ false };
-    server_config_profile config_profile{ server_config_profile::unknown };
+  bool is_developer_preview{ false };
+  server_config_profile config_profile{ server_config_profile::unknown };
 };
 
 class integration_test_guard
 {
-  public:
-    integration_test_guard();
-    integration_test_guard(const couchbase::core::cluster_options& opts);
-    ~integration_test_guard();
+public:
+  integration_test_guard();
+  integration_test_guard(const couchbase::core::cluster_options& opts);
+  ~integration_test_guard();
 
-    inline const couchbase::core::operations::management::bucket_describe_response::bucket_info& load_bucket_info(bool refresh = false)
-    {
-        return load_bucket_info(ctx.bucket, refresh);
+  inline const couchbase::core::operations::management::bucket_describe_response::bucket_info&
+  load_bucket_info(bool refresh = false)
+  {
+    return load_bucket_info(ctx.bucket, refresh);
+  }
+
+  const couchbase::core::operations::management::bucket_describe_response::bucket_info&
+  load_bucket_info(const std::string& bucket_name, bool refresh = false);
+
+  inline std::size_t number_of_nodes()
+  {
+    return load_bucket_info(ctx.bucket).number_of_nodes;
+  }
+
+  auto server_groups() -> std::vector<std::string>;
+  auto generate_key_not_in_server_group(const std::string& group_name) -> std::string;
+
+  std::size_t number_of_nodes(const std::string& bucket_name)
+  {
+    return load_bucket_info(bucket_name).number_of_nodes;
+  }
+
+  inline std::size_t number_of_replicas()
+  {
+    return load_bucket_info(ctx.bucket).number_of_replicas;
+  }
+
+  std::size_t number_of_replicas(const std::string& bucket_name)
+  {
+    return load_bucket_info(bucket_name).number_of_replicas;
+  }
+
+  inline couchbase::core::management::cluster::bucket_storage_backend storage_backend()
+  {
+    return load_bucket_info(ctx.bucket).storage_backend;
+  }
+
+  inline bool has_bucket_capability(const std::string& bucket_name, const std::string& capability)
+  {
+    return load_bucket_info(bucket_name).has_capability(capability);
+  }
+
+  inline bool has_bucket_capability(const std::string& capability)
+  {
+    return has_bucket_capability(ctx.bucket, capability);
+  }
+
+  const couchbase::core::operations::management::cluster_describe_response::cluster_info&
+  load_cluster_info(bool refresh = false);
+
+  pools_response load_pools_info(bool refresh = false);
+
+  inline bool has_service(couchbase::core::service_type service)
+  {
+    return load_cluster_info().services.count(service) > 0;
+  }
+
+  inline bool has_eventing_service()
+  {
+    return has_service(couchbase::core::service_type::eventing);
+  }
+
+  inline bool has_analytics_service()
+  {
+    return has_service(couchbase::core::service_type::analytics);
+  }
+
+  auto number_of_query_nodes() -> std::size_t;
+
+  auto transactions() -> std::shared_ptr<couchbase::core::transactions::transactions>
+  {
+    couchbase::transactions::transactions_config cfg{};
+    cfg.timeout(std::chrono::seconds(2));
+    auto [ec, txns] = couchbase::core::transactions::transactions::create(cluster, cfg).get();
+    if (ec) {
+      CB_LOG_CRITICAL("unable to initialize transactions: {}", ec.message());
+      throw std::runtime_error(fmt::format("unable to initialize transactions: {}", ec.message()));
     }
+    return txns;
+  }
 
-    const couchbase::core::operations::management::bucket_describe_response::bucket_info& load_bucket_info(const std::string& bucket_name,
-                                                                                                           bool refresh = false);
+  auto public_cluster() -> couchbase::cluster
+  {
+    return couchbase::cluster{ cluster, transactions() };
+  }
 
-    inline std::size_t number_of_nodes()
-    {
-        return load_bucket_info(ctx.bucket).number_of_nodes;
-    }
+  server_version cluster_version();
 
-    auto server_groups() -> std::vector<std::string>;
-    auto generate_key_not_in_server_group(const std::string& group_name) -> std::string;
+  test_context ctx;
+  asio::io_context io;
+  std::vector<std::thread> io_threads;
+  couchbase::core::cluster cluster;
+  couchbase::core::origin origin;
 
-    std::size_t number_of_nodes(const std::string& bucket_name)
-    {
-        return load_bucket_info(bucket_name).number_of_nodes;
-    }
-
-    inline std::size_t number_of_replicas()
-    {
-        return load_bucket_info(ctx.bucket).number_of_replicas;
-    }
-
-    std::size_t number_of_replicas(const std::string& bucket_name)
-    {
-        return load_bucket_info(bucket_name).number_of_replicas;
-    }
-
-    inline couchbase::core::management::cluster::bucket_storage_backend storage_backend()
-    {
-        return load_bucket_info(ctx.bucket).storage_backend;
-    }
-
-    inline bool has_bucket_capability(const std::string& bucket_name, const std::string& capability)
-    {
-        return load_bucket_info(bucket_name).has_capability(capability);
-    }
-
-    inline bool has_bucket_capability(const std::string& capability)
-    {
-        return has_bucket_capability(ctx.bucket, capability);
-    }
-
-    const couchbase::core::operations::management::cluster_describe_response::cluster_info& load_cluster_info(bool refresh = false);
-
-    pools_response load_pools_info(bool refresh = false);
-
-    inline bool has_service(couchbase::core::service_type service)
-    {
-        return load_cluster_info().services.count(service) > 0;
-    }
-
-    inline bool has_eventing_service()
-    {
-        return has_service(couchbase::core::service_type::eventing);
-    }
-
-    inline bool has_analytics_service()
-    {
-        return has_service(couchbase::core::service_type::analytics);
-    }
-
-    auto number_of_query_nodes() -> std::size_t;
-
-    auto transactions() -> std::shared_ptr<couchbase::core::transactions::transactions>
-    {
-        couchbase::transactions::transactions_config cfg{};
-        cfg.timeout(std::chrono::seconds(2));
-        auto [ec, txns] = couchbase::core::transactions::transactions::create(cluster, cfg).get();
-        if (ec) {
-            CB_LOG_CRITICAL("unable to initialize transactions: {}", ec.message());
-            throw std::runtime_error(fmt::format("unable to initialize transactions: {}", ec.message()));
-        }
-        return txns;
-    }
-
-    auto public_cluster() -> couchbase::cluster
-    {
-        return couchbase::cluster{ cluster, transactions() };
-    }
-
-    server_version cluster_version();
-
-    test_context ctx;
-    asio::io_context io;
-    std::vector<std::thread> io_threads;
-    couchbase::core::cluster cluster;
-    couchbase::core::origin origin;
-
-    std::map<std::string, couchbase::core::operations::management::bucket_describe_response::bucket_info, std::less<>> info{};
-    std::optional<couchbase::core::operations::management::cluster_describe_response::cluster_info> cluster_info{};
-    std::optional<pools_response> pools_info{};
+  std::map<std::string,
+           couchbase::core::operations::management::bucket_describe_response::bucket_info,
+           std::less<>>
+    info{};
+  std::optional<couchbase::core::operations::management::cluster_describe_response::cluster_info>
+    cluster_info{};
+  std::optional<pools_response> pools_info{};
 };
 } // namespace test::utils

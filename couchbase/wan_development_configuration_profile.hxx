@@ -27,18 +27,18 @@ namespace couchbase
 {
 class wan_development_configuration_profile : public configuration_profile
 {
-  public:
-    void apply(cluster_options& options) override
-    {
-        auto& timeouts = options.timeouts();
-        timeouts.key_value_timeout(std::chrono::seconds(20));
-        timeouts.key_value_durable_timeout(std::chrono::seconds(20));
-        timeouts.connect_timeout(std::chrono::seconds(20));
-        timeouts.view_timeout(std::chrono::minutes(2));
-        timeouts.query_timeout(std::chrono::minutes(2));
-        timeouts.analytics_timeout(std::chrono::minutes(2));
-        timeouts.search_timeout(std::chrono::minutes(2));
-        timeouts.management_timeout(std::chrono::minutes(2));
-    }
+public:
+  void apply(cluster_options& options) override
+  {
+    auto& timeouts = options.timeouts();
+    timeouts.key_value_timeout(std::chrono::seconds(20));
+    timeouts.key_value_durable_timeout(std::chrono::seconds(20));
+    timeouts.connect_timeout(std::chrono::seconds(20));
+    timeouts.view_timeout(std::chrono::minutes(2));
+    timeouts.query_timeout(std::chrono::minutes(2));
+    timeouts.analytics_timeout(std::chrono::minutes(2));
+    timeouts.search_timeout(std::chrono::minutes(2));
+    timeouts.management_timeout(std::chrono::minutes(2));
+  }
 };
 } // namespace couchbase

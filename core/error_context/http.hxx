@@ -29,20 +29,20 @@ namespace couchbase::core::error_context
 {
 
 struct http {
-    std::error_code ec{};
-    std::string client_context_id{};
+  std::error_code ec{};
+  std::string client_context_id{};
 
-    std::string method{};
-    std::string path{};
-    std::uint32_t http_status{};
-    std::string http_body{};
-    std::string hostname{};
-    std::uint16_t port{};
+  std::string method{};
+  std::string path{};
+  std::uint32_t http_status{};
+  std::string http_body{};
+  std::string hostname{};
+  std::uint16_t port{};
 
-    std::optional<std::string> last_dispatched_to{};
-    std::optional<std::string> last_dispatched_from{};
-    std::size_t retry_attempts{ 0 };
-    std::set<retry_reason> retry_reasons{};
+  std::optional<std::string> last_dispatched_to{};
+  std::optional<std::string> last_dispatched_from{};
+  std::size_t retry_attempts{ 0 };
+  std::set<retry_reason> retry_reasons{};
 };
 
 } // namespace couchbase::core::error_context

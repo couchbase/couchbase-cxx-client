@@ -26,20 +26,21 @@ namespace couchbase
  * @committed
  */
 enum class match_operator {
-    /**
-     * Individual match terms are concatenated with a logical OR - this is the default if not provided.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    logical_or,
+  /**
+   * Individual match terms are concatenated with a logical OR - this is the default if not
+   * provided.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  logical_or,
 
-    /**
-     * Individual match terms are concatenated with a logical AND.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    logical_and,
+  /**
+   * Individual match terms are concatenated with a logical AND.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  logical_and,
 };
 } // namespace couchbase

@@ -29,27 +29,27 @@ class diagnostics_options
 };
 
 enum class endpoint_state {
-    disconnected,
-    connecting,
-    connected,
-    disconnecting,
+  disconnected,
+  connecting,
+  connected,
+  disconnecting,
 };
 
 struct mcbp_connection_info {
-    std::string local_address;
-    std::string remote_address;
-    std::chrono::steady_clock::time_point last_activity;
-    std::string scope;
-    std::string id;
-    endpoint_state state;
+  std::string local_address;
+  std::string remote_address;
+  std::chrono::steady_clock::time_point last_activity;
+  std::string scope;
+  std::string id;
+  endpoint_state state;
 };
 
 class diagnostic_info
 {
-  public:
-    std::uint64_t config_revision;
-    cluster_state state;
-    std::vector<mcbp_connection_info> mcbp_connections{};
+public:
+  std::uint64_t config_revision;
+  cluster_state state;
+  std::vector<mcbp_connection_info> mcbp_connections{};
 };
 
 } // namespace couchbase::core

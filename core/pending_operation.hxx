@@ -19,8 +19,8 @@ namespace couchbase::core
 {
 class pending_operation
 {
-  public:
-    virtual ~pending_operation() = default;
-    virtual void cancel() = 0;
+public:
+  virtual ~pending_operation() = default;
+  virtual void cancel() = 0;
 };
 } // namespace couchbase::core

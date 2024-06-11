@@ -37,74 +37,75 @@ class request_span;
 namespace couchbase::core
 {
 enum class key_state {
-    not_persisted = 0x00,
-    persisted = 0x01,
-    not_found = 0x80,
-    deleted = 0x81,
+  not_persisted = 0x00,
+  persisted = 0x01,
+  not_found = 0x80,
+  deleted = 0x81,
 };
 
 class observe_options
 {
-  public:
-    std::vector<std::byte> key{};
-    std::uint32_t replica_index{};
-    std::string collection_name{};
-    std::string scope_name{};
-    std::uint32_t collection_id{};
+public:
+  std::vector<std::byte> key{};
+  std::uint32_t replica_index{};
+  std::string collection_name{};
+  std::string scope_name{};
+  std::uint32_t collection_id{};
 
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
-    std::chrono::milliseconds timeout{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{};
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
+  std::chrono::milliseconds timeout{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{};
 
-    struct {
-        std::string user{};
-    } internal{};
+  struct {
+    std::string user{};
+  } internal{};
 };
 
 class observe_result
 {
-  public:
-    key_state state{};
-    couchbase::cas cas{};
+public:
+  key_state state{};
+  couchbase::cas cas{};
 
-    struct {
-        std::optional<resource_unit_result> resource_units{};
-    } internal{};
+  struct {
+    std::optional<resource_unit_result> resource_units{};
+  } internal{};
 };
 
 using observe_callback = utils::movable_function<void(observe_result result, std::error_code ec)>;
 
 class observe_seqno_options
 {
-  public:
-    std::uint16_t vbucket_id{};
-    std::uint64_t vbucket_uuid{};
-    std::uint32_t replica_index{};
+public:
+  std::uint16_t vbucket_id{};
+  std::uint64_t vbucket_uuid{};
+  std::uint32_t replica_index{};
 
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
-    std::chrono::milliseconds timeout{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{};
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
+  std::chrono::milliseconds timeout{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{};
 
-    struct {
-        std::string user{};
-    } internal{};
+  struct {
+    std::string user{};
+  } internal{};
 };
 
 class observe_seqno_result
 {
-  public:
-    bool did_failover{};
-    std::uint16_t vbucket_id{};
-    std::uint64_t vbucket_uuid{};
-    std::uint64_t persist_sequence_number{};
-    std::uint64_t current_sequence_number{};
-    std::uint64_t old_vbucket_uuid{};
-    std::uint64_t last_sequence_number{};
+public:
+  bool did_failover{};
+  std::uint16_t vbucket_id{};
+  std::uint64_t vbucket_uuid{};
+  std::uint64_t persist_sequence_number{};
+  std::uint64_t current_sequence_number{};
+  std::uint64_t old_vbucket_uuid{};
+  std::uint64_t last_sequence_number{};
 
-    struct {
-        std::optional<resource_unit_result> resource_units{};
-    } internal{};
+  struct {
+    std::optional<resource_unit_result> resource_units{};
+  } internal{};
 };
 
-using observe_seqno_callback = utils::movable_function<void(observe_seqno_result result, std::error_code ec)>;
+using observe_seqno_callback =
+  utils::movable_function<void(observe_seqno_result result, std::error_code ec)>;
 } // namespace couchbase::core

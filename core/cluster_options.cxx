@@ -30,27 +30,27 @@ namespace couchbase::core
 std::chrono::milliseconds
 cluster_options::default_timeout_for(service_type type) const
 {
-    switch (type) {
-        case service_type::key_value:
-            return key_value_timeout;
-        case service_type::query:
-            return query_timeout;
-        case service_type::analytics:
-            return analytics_timeout;
-        case service_type::search:
-            return search_timeout;
-        case service_type::view:
-            return view_timeout;
-        case service_type::management:
-        case service_type::eventing:
-            return management_timeout;
-    }
-    throw std::runtime_error("unexpected service type");
+  switch (type) {
+    case service_type::key_value:
+      return key_value_timeout;
+    case service_type::query:
+      return query_timeout;
+    case service_type::analytics:
+      return analytics_timeout;
+    case service_type::search:
+      return search_timeout;
+    case service_type::view:
+      return view_timeout;
+    case service_type::management:
+    case service_type::eventing:
+      return management_timeout;
+  }
+  throw std::runtime_error("unexpected service type");
 }
 void
 cluster_options::apply_profile(std::string_view profile_name)
 {
-    known_profiles().apply(profile_name, *this);
+  known_profiles().apply(profile_name, *this);
 }
 
 cluster_options::cluster_options()

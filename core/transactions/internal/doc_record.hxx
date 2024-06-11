@@ -27,47 +27,50 @@
 namespace couchbase::core::transactions
 {
 struct doc_record {
-  public:
-    static doc_record create_from(const tao::json::value& obj);
+public:
+  static doc_record create_from(const tao::json::value& obj);
 
-    doc_record(std::string bucket_name, std::string scope_name, std::string collection_name, std::string id)
-      : id_(std::move(bucket_name), std::move(scope_name), std::move(collection_name), std::move(id))
-    {
-    }
+  doc_record(std::string bucket_name,
+             std::string scope_name,
+             std::string collection_name,
+             std::string id)
+    : id_(std::move(bucket_name), std::move(scope_name), std::move(collection_name), std::move(id))
+  {
+  }
 
-    [[nodiscard]] const std::string& bucket_name() const
-    {
-        return id_.bucket();
-    }
+  [[nodiscard]] const std::string& bucket_name() const
+  {
+    return id_.bucket();
+  }
 
-    [[nodiscard]] const std::string& id() const
-    {
-        return id_.key();
-    }
+  [[nodiscard]] const std::string& id() const
+  {
+    return id_.key();
+  }
 
-    [[nodiscard]] const std::string& collection_name() const
-    {
-        return id_.collection();
-    }
+  [[nodiscard]] const std::string& collection_name() const
+  {
+    return id_.collection();
+  }
 
-    [[nodiscard]] const core::document_id& document_id() const
-    {
-        return id_;
-    }
+  [[nodiscard]] const core::document_id& document_id() const
+  {
+    return id_;
+  }
 
-    template<typename OStream>
-    friend OStream& operator<<(OStream& os, const doc_record& dr)
-    {
-        os << "doc_record{";
-        os << "bucket: " << dr.id_.bucket() << ",";
-        os << "scope: " << dr.id_.scope() << ",";
-        os << "collection: " << dr.id_.collection() << ",";
-        os << "key: " << dr.id_.key();
-        os << "}";
-        return os;
-    }
+  template<typename OStream>
+  friend OStream& operator<<(OStream& os, const doc_record& dr)
+  {
+    os << "doc_record{";
+    os << "bucket: " << dr.id_.bucket() << ",";
+    os << "scope: " << dr.id_.scope() << ",";
+    os << "collection: " << dr.id_.collection() << ",";
+    os << "key: " << dr.id_.key();
+    os << "}";
+    return os;
+  }
 
-  private:
-    core::document_id id_;
+private:
+  core::document_id id_;
 };
 } // namespace couchbase::core::transactions

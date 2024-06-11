@@ -32,30 +32,30 @@ using header_buffer = std::array<std::byte, header_size>;
 namespace io
 {
 struct binary_header {
-    std::uint8_t magic;
-    std::uint8_t opcode;
-    std::uint16_t keylen;
-    std::uint8_t extlen;
-    std::uint8_t datatype;
-    std::uint16_t specific;
-    std::uint32_t bodylen;
-    std::uint32_t opaque;
-    std::uint64_t cas;
+  std::uint8_t magic;
+  std::uint8_t opcode;
+  std::uint16_t keylen;
+  std::uint8_t extlen;
+  std::uint8_t datatype;
+  std::uint16_t specific;
+  std::uint32_t bodylen;
+  std::uint32_t opaque;
+  std::uint64_t cas;
 
-    [[nodiscard]] std::uint16_t status() const;
+  [[nodiscard]] std::uint16_t status() const;
 };
 
 struct mcbp_message {
-    binary_header header{};
-    std::vector<std::byte> body{};
+  binary_header header{};
+  std::vector<std::byte> body{};
 
-    mcbp_message() = default;
-    mcbp_message(const mcbp_message& other) = delete;
-    mcbp_message& operator=(const mcbp_message& other) = delete;
-    mcbp_message(mcbp_message&& other) = default;
-    mcbp_message& operator=(mcbp_message&& other) = default;
+  mcbp_message() = default;
+  mcbp_message(const mcbp_message& other) = delete;
+  mcbp_message& operator=(const mcbp_message& other) = delete;
+  mcbp_message(mcbp_message&& other) = default;
+  mcbp_message& operator=(mcbp_message&& other) = default;
 
-    [[nodiscard]] protocol::header_buffer header_data() const;
+  [[nodiscard]] protocol::header_buffer header_data() const;
 };
 } // namespace io
 } // namespace couchbase::core

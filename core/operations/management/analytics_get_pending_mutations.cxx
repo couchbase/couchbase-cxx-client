@@ -25,47 +25,50 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-analytics_get_pending_mutations_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+analytics_get_pending_mutations_request::encode_to(encoded_request_type& encoded,
+                                                   http_context& /* context */) const
 {
-    encoded.method = "GET";
-    encoded.path = "/analytics/node/agg/stats/remaining";
-    return {};
+  encoded.method = "GET";
+  encoded.path = "/analytics/node/agg/stats/remaining";
+  return {};
 }
 
 analytics_get_pending_mutations_response
-analytics_get_pending_mutations_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+analytics_get_pending_mutations_request::make_response(error_context::http&& ctx,
+                                                       const encoded_response_type& encoded) const
 {
-    analytics_get_pending_mutations_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        tao::json::value payload{};
-        try {
-            payload = utils::json::parse(encoded.body.data());
-        } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = errc::common::parsing_failure;
-            return response;
-        }
-        if (encoded.status_code == 200) {
-            if (payload.is_object()) {
-                for (const auto& [dataverse, entry] : payload.get_object()) {
-                    for (const auto& [dataset, counter] : entry.get_object()) {
-                        response.stats.try_emplace(fmt::format("{}.{}", dataverse, dataset), counter.as<std::int64_t>());
-                    }
-                }
-            }
-            return response;
-        }
-        response.status = payload.optional<std::string>("status").value_or("unknown");
-        if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
-            for (const auto& error : errors->get_array()) {
-                analytics_problem err{
-                    error.at("code").as<std::uint32_t>(),
-                    error.at("msg").get_string(),
-                };
-                response.errors.emplace_back(err);
-            }
-        }
-        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+  analytics_get_pending_mutations_response response{ std::move(ctx) };
+  if (!response.ctx.ec) {
+    tao::json::value payload{};
+    try {
+      payload = utils::json::parse(encoded.body.data());
+    } catch (const tao::pegtl::parse_error&) {
+      response.ctx.ec = errc::common::parsing_failure;
+      return response;
     }
-    return response;
+    if (encoded.status_code == 200) {
+      if (payload.is_object()) {
+        for (const auto& [dataverse, entry] : payload.get_object()) {
+          for (const auto& [dataset, counter] : entry.get_object()) {
+            response.stats.try_emplace(fmt::format("{}.{}", dataverse, dataset),
+                                       counter.as<std::int64_t>());
+          }
+        }
+      }
+      return response;
+    }
+    response.status = payload.optional<std::string>("status").value_or("unknown");
+    if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
+      for (const auto& error : errors->get_array()) {
+        analytics_problem err{
+          error.at("code").as<std::uint32_t>(),
+          error.at("msg").get_string(),
+        };
+        response.errors.emplace_back(err);
+      }
+    }
+    response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

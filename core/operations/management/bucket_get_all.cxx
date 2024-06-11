@@ -26,33 +26,35 @@ namespace couchbase::core::operations::management
 std::error_code
 bucket_get_all_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
-    encoded.method = "GET";
-    encoded.path = "/pools/default/buckets";
-    return {};
+  encoded.method = "GET";
+  encoded.path = "/pools/default/buckets";
+  return {};
 }
 
 bucket_get_all_response
-bucket_get_all_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+bucket_get_all_request::make_response(error_context::http&& ctx,
+                                      const encoded_response_type& encoded) const
 {
-    bucket_get_all_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        if (encoded.status_code != 200) {
-            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
-            return response;
-        }
-        tao::json::value payload{};
-        try {
-            payload = utils::json::parse(encoded.body.data());
-        } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = errc::common::parsing_failure;
-            return response;
-        }
-        const auto& entries = payload.get_array();
-        response.buckets.reserve(entries.size());
-        for (const auto& entry : entries) {
-            response.buckets.emplace_back(entry.as<couchbase::core::management::cluster::bucket_settings>());
-        }
+  bucket_get_all_response response{ std::move(ctx) };
+  if (!response.ctx.ec) {
+    if (encoded.status_code != 200) {
+      response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+      return response;
     }
-    return response;
+    tao::json::value payload{};
+    try {
+      payload = utils::json::parse(encoded.body.data());
+    } catch (const tao::pegtl::parse_error&) {
+      response.ctx.ec = errc::common::parsing_failure;
+      return response;
+    }
+    const auto& entries = payload.get_array();
+    response.buckets.reserve(entries.size());
+    for (const auto& entry : entries) {
+      response.buckets.emplace_back(
+        entry.as<couchbase::core::management::cluster::bucket_settings>());
+    }
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

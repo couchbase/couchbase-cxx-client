@@ -32,46 +32,46 @@ namespace couchbase
  */
 class boolean_field_query : public search_query
 {
-  public:
-    /**
-     * Create a new boolean field query.
-     *
-     * @param value the input string to be matched against
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    explicit boolean_field_query(bool value)
-      : bool_{ value }
-    {
-    }
+public:
+  /**
+   * Create a new boolean field query.
+   *
+   * @param value the input string to be matched against
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  explicit boolean_field_query(bool value)
+    : bool_{ value }
+  {
+  }
 
-    /**
-     * If a field is specified, only terms in that field will be matched.
-     *
-     * @param field_name name of the field to be matched
-     *
-     * @return this query for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto field(std::string field_name) -> boolean_field_query&
-    {
-        field_ = std::move(field_name);
-        return *this;
-    }
+  /**
+   * If a field is specified, only terms in that field will be matched.
+   *
+   * @param field_name name of the field to be matched
+   *
+   * @return this query for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto field(std::string field_name) -> boolean_field_query&
+  {
+    field_ = std::move(field_name);
+    return *this;
+  }
 
-    /**
-     * @return encoded representation of the query.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto encode() const -> encoded_search_query override;
+  /**
+   * @return encoded representation of the query.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto encode() const -> encoded_search_query override;
 
-  private:
-    bool bool_;
-    std::optional<std::string> field_{};
+private:
+  bool bool_;
+  std::optional<std::string> field_{};
 };
 } // namespace couchbase

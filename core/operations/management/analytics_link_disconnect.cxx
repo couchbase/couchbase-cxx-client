@@ -26,56 +26,60 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-analytics_link_disconnect_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+analytics_link_disconnect_request::encode_to(encoded_request_type& encoded,
+                                             http_context& /* context */) const
 {
-    tao::json::value body{
-        { "statement", fmt::format("DISCONNECT LINK {}.`{}`", utils::analytics::uncompound_name(dataverse_name), link_name) },
-    };
-    encoded.headers["content-type"] = "application/json";
-    encoded.method = "POST";
-    encoded.path = "/analytics/service";
-    encoded.body = utils::json::generate(body);
-    return {};
+  tao::json::value body{
+    { "statement",
+      fmt::format(
+        "DISCONNECT LINK {}.`{}`", utils::analytics::uncompound_name(dataverse_name), link_name) },
+  };
+  encoded.headers["content-type"] = "application/json";
+  encoded.method = "POST";
+  encoded.path = "/analytics/service";
+  encoded.body = utils::json::generate(body);
+  return {};
 }
 
 analytics_link_disconnect_response
-analytics_link_disconnect_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+analytics_link_disconnect_request::make_response(error_context::http&& ctx,
+                                                 const encoded_response_type& encoded) const
 {
-    analytics_link_disconnect_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        tao::json::value payload{};
-        try {
-            payload = utils::json::parse(encoded.body.data());
-        } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = errc::common::parsing_failure;
-            return response;
-        }
-        response.status = payload.optional<std::string>("status").value_or("unknown");
-
-        if (response.status != "success") {
-            bool link_not_found = false;
-
-            if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
-                for (const auto& error : errors->get_array()) {
-                    analytics_link_disconnect_response::problem err{
-                        error.at("code").as<std::uint32_t>(),
-                        error.at("msg").get_string(),
-                    };
-                    switch (err.code) {
-                        case 24006: /* Link [string] does not exist */
-                            link_not_found = true;
-                            break;
-                    }
-                    response.errors.emplace_back(err);
-                }
-            }
-            if (link_not_found) {
-                response.ctx.ec = errc::analytics::link_not_found;
-            } else {
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
-            }
-        }
+  analytics_link_disconnect_response response{ std::move(ctx) };
+  if (!response.ctx.ec) {
+    tao::json::value payload{};
+    try {
+      payload = utils::json::parse(encoded.body.data());
+    } catch (const tao::pegtl::parse_error&) {
+      response.ctx.ec = errc::common::parsing_failure;
+      return response;
     }
-    return response;
+    response.status = payload.optional<std::string>("status").value_or("unknown");
+
+    if (response.status != "success") {
+      bool link_not_found = false;
+
+      if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
+        for (const auto& error : errors->get_array()) {
+          analytics_link_disconnect_response::problem err{
+            error.at("code").as<std::uint32_t>(),
+            error.at("msg").get_string(),
+          };
+          switch (err.code) {
+            case 24006: /* Link [string] does not exist */
+              link_not_found = true;
+              break;
+          }
+          response.errors.emplace_back(err);
+        }
+      }
+      if (link_not_found) {
+        response.ctx.ec = errc::analytics::link_not_found;
+      } else {
+        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+      }
+    }
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

@@ -30,32 +30,33 @@ namespace couchbase::core::operations
 {
 
 struct get_projected_response {
-    key_value_error_context ctx;
-    std::vector<std::byte> value{};
-    couchbase::cas cas{};
-    std::uint32_t flags{};
-    std::optional<std::uint32_t> expiry{};
+  key_value_error_context ctx;
+  std::vector<std::byte> value{};
+  couchbase::cas cas{};
+  std::uint32_t flags{};
+  std::optional<std::uint32_t> expiry{};
 };
 
 struct get_projected_request {
-    using response_type = get_projected_response;
-    using encoded_request_type = protocol::client_request<protocol::lookup_in_request_body>;
-    using encoded_response_type = protocol::client_response<protocol::lookup_in_response_body>;
+  using response_type = get_projected_response;
+  using encoded_request_type = protocol::client_request<protocol::lookup_in_request_body>;
+  using encoded_response_type = protocol::client_response<protocol::lookup_in_response_body>;
 
-    document_id id;
-    std::uint16_t partition{};
-    std::uint32_t opaque{};
-    std::vector<std::string> projections{};
-    bool with_expiry{ false };
-    std::vector<std::string> effective_projections{};
-    bool preserve_array_indexes{ false };
-    std::optional<std::chrono::milliseconds> timeout{};
-    io::retry_context<true> retries{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
+  document_id id;
+  std::uint16_t partition{};
+  std::uint32_t opaque{};
+  std::vector<std::string> projections{};
+  bool with_expiry{ false };
+  std::vector<std::string> effective_projections{};
+  bool preserve_array_indexes{ false };
+  std::optional<std::chrono::milliseconds> timeout{};
+  io::retry_context<true> retries{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context);
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context);
 
-    [[nodiscard]] get_projected_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] get_projected_response make_response(key_value_error_context&& ctx,
+                                                     const encoded_response_type& encoded) const;
 };
 
 } // namespace couchbase::core::operations
@@ -63,6 +64,7 @@ struct get_projected_request {
 namespace couchbase::core::io::mcbp_traits
 {
 template<>
-struct supports_parent_span<couchbase::core::operations::get_projected_request> : public std::true_type {
+struct supports_parent_span<couchbase::core::operations::get_projected_request>
+  : public std::true_type {
 };
 } // namespace couchbase::core::io::mcbp_traits

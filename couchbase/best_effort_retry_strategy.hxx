@@ -42,23 +42,25 @@ controlled_backoff(std::size_t retry_attempts) -> std::chrono::milliseconds;
  * @return backoff calculator
  */
 auto
-exponential_backoff(std::chrono::milliseconds min_backoff, std::chrono::milliseconds max_backoff, double backoff_factor)
-  -> backoff_calculator;
+exponential_backoff(std::chrono::milliseconds min_backoff,
+                    std::chrono::milliseconds max_backoff,
+                    double backoff_factor) -> backoff_calculator;
 
 class best_effort_retry_strategy : public retry_strategy
 {
-  public:
-    explicit best_effort_retry_strategy(backoff_calculator calculator);
-    ~best_effort_retry_strategy() override = default;
+public:
+  explicit best_effort_retry_strategy(backoff_calculator calculator);
+  ~best_effort_retry_strategy() override = default;
 
-    auto retry_after(const retry_request& request, retry_reason reason) -> retry_action override;
+  auto retry_after(const retry_request& request, retry_reason reason) -> retry_action override;
 
-    [[nodiscard]] auto to_string() const -> std::string override;
+  [[nodiscard]] auto to_string() const -> std::string override;
 
-  private:
-    backoff_calculator backoff_calculator_;
+private:
+  backoff_calculator backoff_calculator_;
 };
 
 [[nodiscard]] auto
-make_best_effort_retry_strategy(backoff_calculator calculator = controlled_backoff) -> std::shared_ptr<best_effort_retry_strategy>;
+make_best_effort_retry_strategy(backoff_calculator calculator = controlled_backoff)
+  -> std::shared_ptr<best_effort_retry_strategy>;
 } // namespace couchbase

@@ -22,22 +22,24 @@
 namespace couchbase::core::operations
 {
 std::error_code
-unlock_request::encode_to(unlock_request::encoded_request_type& encoded, mcbp_context&& /* context */) const
+unlock_request::encode_to(unlock_request::encoded_request_type& encoded,
+                          mcbp_context&& /* context */) const
 {
-    encoded.opaque(opaque);
-    encoded.partition(partition);
-    encoded.body().id(id);
-    encoded.cas(cas);
-    return {};
+  encoded.opaque(opaque);
+  encoded.partition(partition);
+  encoded.body().id(id);
+  encoded.cas(cas);
+  return {};
 }
 
 unlock_response
-unlock_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
+unlock_request::make_response(key_value_error_context&& ctx,
+                              const encoded_response_type& encoded) const
 {
-    unlock_response response{ std::move(ctx) };
-    if (!response.ctx.ec()) {
-        response.cas = encoded.cas();
-    }
-    return response;
+  unlock_response response{ std::move(ctx) };
+  if (!response.ctx.ec()) {
+    response.cas = encoded.cas();
+  }
+  return response;
 }
 } // namespace couchbase::core::operations

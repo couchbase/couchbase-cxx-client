@@ -26,8 +26,8 @@
 namespace couchbase
 {
 /**
- * The disjunction query is a compound query. The result documents must satisfy a configurable minimal (@ref min) number of child queries.
- * By default this min is set to 1.
+ * The disjunction query is a compound query. The result documents must satisfy a configurable
+ * minimal (@ref min) number of child queries. By default this min is set to 1.
  *
  * At execution, a conjunction query that has no child queries is not allowed and will fail fast.
  *
@@ -37,73 +37,74 @@ namespace couchbase
  *
  * @snippet test_unit_search.cxx search-disjunction
  *
- * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-conjuncts-disjuncts.html server documentation
+ * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-conjuncts-disjuncts.html
+ * server documentation
  *
  * @since 1.0.0
  * @committed
  */
 class disjunction_query : public search_query
 {
-  public:
-    /**
-     * Create a disjunction query.
-     *
-     * @tparam SearchQuery any subclass of @ref search_query
-     * @param queries sequence of query arguments
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    template<typename... SearchQuery>
-    explicit disjunction_query(SearchQuery&&... queries)
-    {
-        or_else(std::forward<SearchQuery>(queries)...);
-    }
+public:
+  /**
+   * Create a disjunction query.
+   *
+   * @tparam SearchQuery any subclass of @ref search_query
+   * @param queries sequence of query arguments
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  template<typename... SearchQuery>
+  explicit disjunction_query(SearchQuery&&... queries)
+  {
+    or_else(std::forward<SearchQuery>(queries)...);
+  }
 
-    /**
-     * Add one or more queries to add to the disjunction.
-     *
-     * @tparam SearchQuery any subclass of @ref search_query
-     * @param queries sequence of query arguments
-     *
-     * @return this query for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    template<typename... SearchQuery>
-    auto or_else(SearchQuery... queries) -> disjunction_query&
-    {
-        (disjuncts_.emplace_back(std::make_shared<SearchQuery>(std::move(queries))), ...);
-        return *this;
-    }
+  /**
+   * Add one or more queries to add to the disjunction.
+   *
+   * @tparam SearchQuery any subclass of @ref search_query
+   * @param queries sequence of query arguments
+   *
+   * @return this query for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  template<typename... SearchQuery>
+  auto or_else(SearchQuery... queries) -> disjunction_query&
+  {
+    (disjuncts_.emplace_back(std::make_shared<SearchQuery>(std::move(queries))), ...);
+    return *this;
+  }
 
-    /**
-     * Set the minimum number of child queries that must be satisfied for the disjunction query.
-     *
-     * @param number_of_queries minimum number of child queries.
-     *
-     * @return this query for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto min(std::uint32_t number_of_queries) -> disjunction_query&
-    {
-        min_ = number_of_queries;
-        return *this;
-    }
+  /**
+   * Set the minimum number of child queries that must be satisfied for the disjunction query.
+   *
+   * @param number_of_queries minimum number of child queries.
+   *
+   * @return this query for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto min(std::uint32_t number_of_queries) -> disjunction_query&
+  {
+    min_ = number_of_queries;
+    return *this;
+  }
 
-    /**
-     * @return encoded representation of the query.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto encode() const -> encoded_search_query override;
+  /**
+   * @return encoded representation of the query.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto encode() const -> encoded_search_query override;
 
-  private:
-    std::vector<std::shared_ptr<search_query>> disjuncts_{};
-    std::uint32_t min_{ 1 };
+private:
+  std::vector<std::shared_ptr<search_query>> disjuncts_{};
+  std::uint32_t min_{ 1 };
 };
 } // namespace couchbase

@@ -20,39 +20,39 @@
 namespace couchbase
 {
 enum class service_type {
-    /**
-     * The Key-Value service (KV)
-     */
-    key_value,
+  /**
+   * The Key-Value service (KV)
+   */
+  key_value,
 
-    /**
-     * The Query service (SQL++)
-     */
-    query,
+  /**
+   * The Query service (SQL++)
+   */
+  query,
 
-    /**
-     * The Analytics service
-     */
-    analytics,
+  /**
+   * The Analytics service
+   */
+  analytics,
 
-    /**
-     * The Search service (FTS)
-     */
-    search,
+  /**
+   * The Search service (FTS)
+   */
+  search,
 
-    /**
-     * The View service
-     */
-    view,
+  /**
+   * The View service
+   */
+  view,
 
-    /**
-     * The Cluster Manager service (ns_server)
-     */
-    management,
+  /**
+   * The Cluster Manager service (ns_server)
+   */
+  management,
 
-    /**
-     * The Eventing service
-     */
-    eventing,
+  /**
+   * The Eventing service
+   */
+  eventing,
 };
 } // namespace couchbase

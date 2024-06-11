@@ -25,49 +25,50 @@
 namespace couchbase
 {
 /**
- * Aggregation of one or more {@link mutation_token}s for specifying consistency requirements of N1QL or FTS queries.
+ * Aggregation of one or more {@link mutation_token}s for specifying consistency requirements of
+ * N1QL or FTS queries.
  *
  * @since 1.0.0
  * @committed
  */
 class mutation_state
 {
-  public:
-    /**
-     * @since 1.0.0
-     * @committed
-     */
-    mutation_state() = default;
+public:
+  /**
+   * @since 1.0.0
+   * @committed
+   */
+  mutation_state() = default;
 
-    /**
-     * Copies mutation token from the given mutation result.
-     *
-     * @param result mutation result
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void add(const mutation_result& result)
-    {
-        if (result.mutation_token().has_value()) {
-            tokens_.push_back(result.mutation_token().value());
-        }
+  /**
+   * Copies mutation token from the given mutation result.
+   *
+   * @param result mutation result
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  void add(const mutation_result& result)
+  {
+    if (result.mutation_token().has_value()) {
+      tokens_.push_back(result.mutation_token().value());
     }
+  }
 
-    /**
-     * List of the mutation tokens
-     *
-     * @return tokens
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto tokens() const -> const std::vector<mutation_token>&
-    {
-        return tokens_;
-    }
+  /**
+   * List of the mutation tokens
+   *
+   * @return tokens
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto tokens() const -> const std::vector<mutation_token>&
+  {
+    return tokens_;
+  }
 
-  private:
-    std::vector<mutation_token> tokens_{ 0 };
+private:
+  std::vector<mutation_token> tokens_{ 0 };
 };
 } // namespace couchbase

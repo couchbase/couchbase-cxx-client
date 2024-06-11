@@ -25,64 +25,66 @@
 namespace couchbase
 {
 /**
- * The conjunction query is a compound query. The result documents must satisfy all of the child queries. It is possible to recursively nest
- * compound queries.
+ * The conjunction query is a compound query. The result documents must satisfy all of the child
+ * queries. It is possible to recursively nest compound queries.
  *
  * At execution, a conjunction query that has no child queries is not allowed and will fail fast.
  *
- * Match documents with `"location"` in the field `reviews.content` and `true` in the field `free_breakfast`.
+ * Match documents with `"location"` in the field `reviews.content` and `true` in the field
+ * `free_breakfast`.
  * @snippet test_unit_search.cxx search-conjunction
  *
- * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-conjuncts-disjuncts.html server documentation
+ * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-conjuncts-disjuncts.html
+ * server documentation
  *
  * @since 1.0.0
  * @committed
  */
 class conjunction_query : public search_query
 {
-  public:
-    /**
-     * Create a conjunction query.
-     *
-     * @tparam SearchQuery any subclass of @ref search_query
-     * @param queries sequence of query arguments
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    template<typename... SearchQuery>
-    explicit conjunction_query(SearchQuery&&... queries)
-    {
-        and_also(std::forward<SearchQuery>(queries)...);
-    }
+public:
+  /**
+   * Create a conjunction query.
+   *
+   * @tparam SearchQuery any subclass of @ref search_query
+   * @param queries sequence of query arguments
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  template<typename... SearchQuery>
+  explicit conjunction_query(SearchQuery&&... queries)
+  {
+    and_also(std::forward<SearchQuery>(queries)...);
+  }
 
-    /**
-     * Add one or more queries to add to the conjunction.
-     *
-     * @tparam SearchQuery any subclass of @ref search_query
-     * @param queries sequence of query arguments
-     *
-     * @return this query for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    template<typename... SearchQuery>
-    auto and_also(SearchQuery... queries) -> conjunction_query&
-    {
-        (conjuncts_.emplace_back(std::make_shared<SearchQuery>(std::move(queries))), ...);
-        return *this;
-    }
+  /**
+   * Add one or more queries to add to the conjunction.
+   *
+   * @tparam SearchQuery any subclass of @ref search_query
+   * @param queries sequence of query arguments
+   *
+   * @return this query for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  template<typename... SearchQuery>
+  auto and_also(SearchQuery... queries) -> conjunction_query&
+  {
+    (conjuncts_.emplace_back(std::make_shared<SearchQuery>(std::move(queries))), ...);
+    return *this;
+  }
 
-    /**
-     * @return encoded representation of the query.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto encode() const -> encoded_search_query override;
+  /**
+   * @return encoded representation of the query.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto encode() const -> encoded_search_query override;
 
-  private:
-    std::vector<std::shared_ptr<search_query>> conjuncts_{};
+private:
+  std::vector<std::shared_ptr<search_query>> conjuncts_{};
 };
 } // namespace couchbase

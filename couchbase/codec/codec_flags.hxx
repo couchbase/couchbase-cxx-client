@@ -41,11 +41,11 @@ namespace couchbase::codec::codec_flags
 constexpr std::uint32_t common_format_mask = 0x0F000000;
 
 enum class common_flags : std::uint32_t {
-    reserved = 0x00,
-    client_specific = 0x01, // called PRIVATE in RFC and other SDKs
-    json = 0x02,
-    binary = 0x03,
-    string = 0x04
+  reserved = 0x00,
+  client_specific = 0x01, // called PRIVATE in RFC and other SDKs
+  json = 0x02,
+  binary = 0x03,
+  string = 0x04
 };
 
 /**
@@ -57,7 +57,7 @@ enum class common_flags : std::uint32_t {
 constexpr std::uint32_t
 create_common_flags(common_flags flags)
 {
-    return static_cast<std::uint32_t>(flags) << 24U;
+  return static_cast<std::uint32_t>(flags) << 24U;
 }
 
 /**
@@ -71,16 +71,16 @@ create_common_flags(common_flags flags)
 constexpr common_flags
 extract_common_flags(std::uint32_t flags)
 {
-    switch (auto value = static_cast<common_flags>(flags >> 24U)) {
-        case common_flags::client_specific:
-        case common_flags::json:
-        case common_flags::binary:
-        case common_flags::string:
-            return value;
-        default:
-            break;
-    }
-    return common_flags::reserved;
+  switch (auto value = static_cast<common_flags>(flags >> 24U)) {
+    case common_flags::client_specific:
+    case common_flags::json:
+    case common_flags::binary:
+    case common_flags::string:
+      return value;
+    default:
+      break;
+  }
+  return common_flags::reserved;
 }
 
 /**
@@ -95,11 +95,12 @@ extract_common_flags(std::uint32_t flags)
 constexpr bool
 has_common_flags(std::uint32_t flags)
 {
-    return extract_common_flags(flags) != common_flags::reserved;
+  return extract_common_flags(flags) != common_flags::reserved;
 }
 
 /**
- * Checks that flags has common flags bits set and that they correspond to expected common flags format.
+ * Checks that flags has common flags bits set and that they correspond to expected common flags
+ * format.
  *
  * @param flags the 32 bits flags to check
  * @param expected_common_flag the expected common flags format bits
@@ -108,11 +109,12 @@ has_common_flags(std::uint32_t flags)
 constexpr bool
 has_common_flags(std::uint32_t flags, std::uint32_t expected_common_flag)
 {
-    return has_common_flags(flags) && (flags & common_format_mask) == expected_common_flag;
+  return has_common_flags(flags) && (flags & common_format_mask) == expected_common_flag;
 }
 
 /**
- * Checks that flags has common flags bits set and that they correspond to expected common flags value.
+ * Checks that flags has common flags bits set and that they correspond to expected common flags
+ * value.
  *
  * @param flags the 32 bits flags to check
  * @param expected_common_flag the expected common flags enum value
@@ -121,13 +123,15 @@ has_common_flags(std::uint32_t flags, std::uint32_t expected_common_flag)
 constexpr bool
 has_common_flags(std::uint32_t flags, common_flags expected_common_flag)
 {
-    return has_common_flags(flags) && (flags & common_format_mask) == create_common_flags(expected_common_flag);
+  return has_common_flags(flags) &&
+         (flags & common_format_mask) == create_common_flags(expected_common_flag);
 }
 
 /**
  * Checks whether the upper 3 bits are set, indicating compression presence.
  *
- * It does this by shifting bits to the right until only the most significant bits are remaining and then checks if one of them is set.
+ * It does this by shifting bits to the right until only the most significant bits are remaining and
+ * then checks if one of them is set.
  *
  * @param flags the flags to check.
  * @return true if compression set, false otherwise.
@@ -135,7 +139,7 @@ has_common_flags(std::uint32_t flags, common_flags expected_common_flag)
 constexpr bool
 has_compression_flags(std::uint32_t flags)
 {
-    return (flags >> 29U) > 0;
+  return (flags >> 29U) > 0;
 }
 
 constexpr std::uint32_t private_common_flags = create_common_flags(common_flags::client_specific);

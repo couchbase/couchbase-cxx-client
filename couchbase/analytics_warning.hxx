@@ -27,59 +27,60 @@ namespace couchbase
 /**
  * Represents a single warning returned from the analytics engine.
  *
- * @note warnings are not terminal errors but hints from the engine that something was not as expected.
+ * @note warnings are not terminal errors but hints from the engine that something was not as
+ * expected.
  *
  * @since 1.0.0
  * @committed
  */
 class analytics_warning
 {
-  public:
-    /**
-     * @since 1.0.0
-     * @internal
-     */
-    analytics_warning() = default;
+public:
+  /**
+   * @since 1.0.0
+   * @internal
+   */
+  analytics_warning() = default;
 
-    /**
-     * @since 1.0.0
-     * @volatile
-     */
-    analytics_warning(std::uint64_t code, std::string message)
-      : code_{ code }
-      , message_{ std::move(message) }
-    {
-    }
+  /**
+   * @since 1.0.0
+   * @volatile
+   */
+  analytics_warning(std::uint64_t code, std::string message)
+    : code_{ code }
+    , message_{ std::move(message) }
+  {
+  }
 
-    /**
-     * Error code.
-     *
-     * @return error code
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto code() const -> std::uint64_t
-    {
-        return code_;
-    }
+  /**
+   * Error code.
+   *
+   * @return error code
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto code() const -> std::uint64_t
+  {
+    return code_;
+  }
 
-    /**
-     * Error message.
-     *
-     * @return human readable explanation
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto message() const -> const std::string&
-    {
-        return message_;
-    }
+  /**
+   * Error message.
+   *
+   * @return human readable explanation
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto message() const -> const std::string&
+  {
+    return message_;
+  }
 
-  private:
-    std::uint64_t code_{};
-    std::string message_{};
+private:
+  std::uint64_t code_{};
+  std::string message_{};
 };
 
 } // namespace couchbase

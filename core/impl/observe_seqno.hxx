@@ -28,36 +28,40 @@
 namespace couchbase::core::impl
 {
 struct observe_seqno_response {
-    key_value_error_context ctx{};
-    bool active;
-    std::uint16_t partition{};
-    std::uint64_t partition_uuid{};
-    std::uint64_t last_persisted_sequence_number{};
-    std::uint64_t current_sequence_number{};
-    std::optional<std::uint64_t> old_partition_uuid{};
-    std::optional<std::uint64_t> last_received_sequence_number{};
+  key_value_error_context ctx{};
+  bool active;
+  std::uint16_t partition{};
+  std::uint64_t partition_uuid{};
+  std::uint64_t last_persisted_sequence_number{};
+  std::uint64_t current_sequence_number{};
+  std::optional<std::uint64_t> old_partition_uuid{};
+  std::optional<std::uint64_t> last_received_sequence_number{};
 
-    [[nodiscard]] bool failed_over() const
-    {
-        return old_partition_uuid.has_value();
-    }
+  [[nodiscard]] bool failed_over() const
+  {
+    return old_partition_uuid.has_value();
+  }
 };
 
 struct observe_seqno_request {
-    using response_type = observe_seqno_response;
-    using encoded_request_type = core::protocol::client_request<core::protocol::observe_seqno_request_body>;
-    using encoded_response_type = core::protocol::client_response<core::protocol::observe_seqno_response_body>;
+  using response_type = observe_seqno_response;
+  using encoded_request_type =
+    core::protocol::client_request<core::protocol::observe_seqno_request_body>;
+  using encoded_response_type =
+    core::protocol::client_response<core::protocol::observe_seqno_response_body>;
 
-    core::document_id id;
-    bool active;
-    std::uint64_t partition_uuid;
-    std::optional<std::chrono::milliseconds> timeout{};
-    std::uint16_t partition{};
-    std::uint32_t opaque{};
-    io::retry_context<true> retries{};
+  core::document_id id;
+  bool active;
+  std::uint64_t partition_uuid;
+  std::optional<std::chrono::milliseconds> timeout{};
+  std::uint16_t partition{};
+  std::uint32_t opaque{};
+  io::retry_context<true> retries{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, core::mcbp_context&& context);
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          core::mcbp_context&& context);
 
-    [[nodiscard]] observe_seqno_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] observe_seqno_response make_response(key_value_error_context&& ctx,
+                                                     const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::impl

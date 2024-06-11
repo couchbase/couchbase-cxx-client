@@ -27,95 +27,97 @@ namespace couchbase::core::utils
 template<typename Signature>
 class movable_function : public std::function<Signature>
 {
-    template<typename Functor, typename En = void>
-    struct wrapper;
+  template<typename Functor, typename En = void>
+  struct wrapper;
 
-    template<typename Functor>
-    struct wrapper<Functor, std::enable_if_t<std::is_copy_constructible_v<Functor>>> {
-        Functor fn;
+  template<typename Functor>
+  struct wrapper<Functor, std::enable_if_t<std::is_copy_constructible_v<Functor>>> {
+    Functor fn;
 
-        template<typename... Args>
-        auto operator()(Args&&... args)
-        {
-            return fn(std::forward<Args>(args)...);
-        }
-    };
+    template<typename... Args>
+    auto operator()(Args&&... args)
+    {
+      return fn(std::forward<Args>(args)...);
+    }
+  };
 
-    template<typename Functor>
-    struct copy_wrapper {
-        Functor fn;
+  template<typename Functor>
+  struct copy_wrapper {
+    Functor fn;
 
-        explicit copy_wrapper(Functor&& f)
-          : fn(std::move(f))
-        {
-        }
-    };
+    explicit copy_wrapper(Functor&& f)
+      : fn(std::move(f))
+    {
+    }
+  };
 
-    template<typename Functor>
-    struct wrapper<Functor, std::enable_if_t<!std::is_copy_constructible_v<Functor> && std::is_move_constructible_v<Functor>>> {
-        std::shared_ptr<copy_wrapper<Functor>> fnPtr;
+  template<typename Functor>
+  struct wrapper<Functor,
+                 std::enable_if_t<!std::is_copy_constructible_v<Functor> &&
+                                  std::is_move_constructible_v<Functor>>> {
+    std::shared_ptr<copy_wrapper<Functor>> fnPtr;
 
-        explicit wrapper(Functor&& f)
-          : fnPtr(new copy_wrapper<Functor>(std::move(f)))
-        {
-        }
-
-        wrapper(wrapper&& /* other */) noexcept = default;
-        wrapper& operator=(wrapper&& /* other */) noexcept = default;
-
-        wrapper(const wrapper& other) = default;
-        wrapper& operator=(const wrapper& /* other */) = default;
-
-        template<typename... Args>
-        auto operator()(Args&&... args)
-        {
-            return std::move(fnPtr->fn)(std::forward<Args>(args)...);
-        }
-    };
-
-    using base = std::function<Signature>;
-
-  public:
-    movable_function() noexcept = default;
-    movable_function(std::nullptr_t) noexcept
-      : base(nullptr)
+    explicit wrapper(Functor&& f)
+      : fnPtr(new copy_wrapper<Functor>(std::move(f)))
     {
     }
 
-    template<typename Functor>
-    movable_function(Functor&& f)
-      : base(wrapper<Functor>{ std::forward<Functor>(f) })
-    {
-    }
+    wrapper(wrapper&& /* other */) noexcept = default;
+    wrapper& operator=(wrapper&& /* other */) noexcept = default;
 
-    movable_function(movable_function&& other) noexcept
-      : base(std::move(static_cast<base&&>(other)))
-    {
-        other = nullptr;
-    }
+    wrapper(const wrapper& other) = default;
+    wrapper& operator=(const wrapper& /* other */) = default;
 
-    movable_function& operator=(movable_function&& other) noexcept
+    template<typename... Args>
+    auto operator()(Args&&... args)
     {
-        base::operator=(std::move(static_cast<base&&>(other)));
-        other = nullptr;
-        return *this;
+      return std::move(fnPtr->fn)(std::forward<Args>(args)...);
     }
+  };
 
-    movable_function& operator=(std::nullptr_t /* other */)
-    {
-        base::operator=(nullptr);
-        return *this;
-    }
+  using base = std::function<Signature>;
 
-    template<typename Functor>
-    movable_function& operator=(Functor&& f)
-    {
-        base::operator=(wrapper<Functor>{ std::forward<Functor>(f) });
-        return *this;
-    }
+public:
+  movable_function() noexcept = default;
+  movable_function(std::nullptr_t) noexcept
+    : base(nullptr)
+  {
+  }
 
-    using base::operator bool;
-    using base::operator();
+  template<typename Functor>
+  movable_function(Functor&& f)
+    : base(wrapper<Functor>{ std::forward<Functor>(f) })
+  {
+  }
+
+  movable_function(movable_function&& other) noexcept
+    : base(std::move(static_cast<base&&>(other)))
+  {
+    other = nullptr;
+  }
+
+  movable_function& operator=(movable_function&& other) noexcept
+  {
+    base::operator=(std::move(static_cast<base&&>(other)));
+    other = nullptr;
+    return *this;
+  }
+
+  movable_function& operator=(std::nullptr_t /* other */)
+  {
+    base::operator=(nullptr);
+    return *this;
+  }
+
+  template<typename Functor>
+  movable_function& operator=(Functor&& f)
+  {
+    base::operator=(wrapper<Functor>{ std::forward<Functor>(f) });
+    return *this;
+  }
+
+  using base::operator bool;
+  using base::operator();
 };
 
 } // namespace couchbase::core::utils

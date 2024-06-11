@@ -19,26 +19,26 @@ namespace couchbase::core
 {
 class analytics_query_row_reader_impl
 {
-  public:
-    auto next_row() -> std::vector<std::byte>
-    {
-        return {};
-    }
+public:
+  auto next_row() -> std::vector<std::byte>
+  {
+    return {};
+  }
 
-    auto error() -> std::error_code
-    {
-        return {};
-    }
+  auto error() -> std::error_code
+  {
+    return {};
+  }
 
-    auto meta_data() -> std::optional<std::vector<std::byte>>
-    {
-        return {};
-    }
+  auto meta_data() -> std::optional<std::vector<std::byte>>
+  {
+    return {};
+  }
 
-    auto close() -> std::error_code
-    {
-        return {};
-    }
+  auto close() -> std::error_code
+  {
+    return {};
+  }
 };
 
 analytics_query_row_reader::analytics_query_row_reader()
@@ -49,24 +49,24 @@ analytics_query_row_reader::analytics_query_row_reader()
 auto
 analytics_query_row_reader::next_row() -> std::vector<std::byte>
 {
-    return impl_->next_row();
+  return impl_->next_row();
 }
 
 auto
 analytics_query_row_reader::error() -> std::error_code
 {
-    return impl_->error();
+  return impl_->error();
 }
 
 auto
 analytics_query_row_reader::meta_data() -> std::optional<std::vector<std::byte>>
 {
-    return impl_->meta_data();
+  return impl_->meta_data();
 }
 
 auto
 analytics_query_row_reader::close() -> std::error_code
 {
-    return impl_->close();
+  return impl_->close();
 }
 } // namespace couchbase::core

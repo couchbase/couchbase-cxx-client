@@ -23,78 +23,78 @@
 
 template<>
 struct fmt::formatter<couchbase::key_value_error_map_attribute> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(couchbase::key_value_error_map_attribute attr, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (attr) {
-            case couchbase::key_value_error_map_attribute::success:
-                name = "success";
-                break;
-            case couchbase::key_value_error_map_attribute::item_only:
-                name = "item-only";
-                break;
-            case couchbase::key_value_error_map_attribute::invalid_input:
-                name = "invalid-input";
-                break;
-            case couchbase::key_value_error_map_attribute::fetch_config:
-                name = "fetch-config";
-                break;
-            case couchbase::key_value_error_map_attribute::conn_state_invalidated:
-                name = "conn-state-invalidated";
-                break;
-            case couchbase::key_value_error_map_attribute::auth:
-                name = "auth";
-                break;
-            case couchbase::key_value_error_map_attribute::special_handling:
-                name = "special-handling";
-                break;
-            case couchbase::key_value_error_map_attribute::support:
-                name = "support";
-                break;
-            case couchbase::key_value_error_map_attribute::temp:
-                name = "temp";
-                break;
-            case couchbase::key_value_error_map_attribute::internal:
-                name = "internal";
-                break;
-            case couchbase::key_value_error_map_attribute::retry_now:
-                name = "retry-now";
-                break;
-            case couchbase::key_value_error_map_attribute::retry_later:
-                name = "retry-later";
-                break;
-            case couchbase::key_value_error_map_attribute::subdoc:
-                name = "subdoc";
-                break;
-            case couchbase::key_value_error_map_attribute::dcp:
-                name = "dcp";
-                break;
-            case couchbase::key_value_error_map_attribute::auto_retry:
-                name = "auto-retry";
-                break;
-            case couchbase::key_value_error_map_attribute::item_locked:
-                name = "item-locked";
-                break;
-            case couchbase::key_value_error_map_attribute::item_deleted:
-                name = "item-deleted";
-                break;
-            case couchbase::key_value_error_map_attribute::rate_limit:
-                name = "rate-limit";
-                break;
-            case couchbase::key_value_error_map_attribute::system_constraint:
-                name = "system-constraint";
-                break;
-            case couchbase::key_value_error_map_attribute::no_retry:
-                name = "no-retry";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
+  template<typename FormatContext>
+  auto format(couchbase::key_value_error_map_attribute attr, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (attr) {
+      case couchbase::key_value_error_map_attribute::success:
+        name = "success";
+        break;
+      case couchbase::key_value_error_map_attribute::item_only:
+        name = "item-only";
+        break;
+      case couchbase::key_value_error_map_attribute::invalid_input:
+        name = "invalid-input";
+        break;
+      case couchbase::key_value_error_map_attribute::fetch_config:
+        name = "fetch-config";
+        break;
+      case couchbase::key_value_error_map_attribute::conn_state_invalidated:
+        name = "conn-state-invalidated";
+        break;
+      case couchbase::key_value_error_map_attribute::auth:
+        name = "auth";
+        break;
+      case couchbase::key_value_error_map_attribute::special_handling:
+        name = "special-handling";
+        break;
+      case couchbase::key_value_error_map_attribute::support:
+        name = "support";
+        break;
+      case couchbase::key_value_error_map_attribute::temp:
+        name = "temp";
+        break;
+      case couchbase::key_value_error_map_attribute::internal:
+        name = "internal";
+        break;
+      case couchbase::key_value_error_map_attribute::retry_now:
+        name = "retry-now";
+        break;
+      case couchbase::key_value_error_map_attribute::retry_later:
+        name = "retry-later";
+        break;
+      case couchbase::key_value_error_map_attribute::subdoc:
+        name = "subdoc";
+        break;
+      case couchbase::key_value_error_map_attribute::dcp:
+        name = "dcp";
+        break;
+      case couchbase::key_value_error_map_attribute::auto_retry:
+        name = "auto-retry";
+        break;
+      case couchbase::key_value_error_map_attribute::item_locked:
+        name = "item-locked";
+        break;
+      case couchbase::key_value_error_map_attribute::item_deleted:
+        name = "item-deleted";
+        break;
+      case couchbase::key_value_error_map_attribute::rate_limit:
+        name = "rate-limit";
+        break;
+      case couchbase::key_value_error_map_attribute::system_constraint:
+        name = "system-constraint";
+        break;
+      case couchbase::key_value_error_map_attribute::no_retry:
+        name = "no-retry";
+        break;
     }
+    return format_to(ctx.out(), "{}", name);
+  }
 };

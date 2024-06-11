@@ -28,70 +28,71 @@ namespace couchbase
 {
 class disconnect_link_analytics_options : public common_options<disconnect_link_analytics_options>
 {
-  public:
-    /**
-     * The name of the dataverse to connect to.
-     *
-     * defaults to `Default`
-     *
-     * @param dataverse_name
-     * @return reference to this object, for use in chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto dataverse_name(std::string dataverse_name) -> disconnect_link_analytics_options&
-    {
-        dataverse_name_ = std::move(dataverse_name);
-        return self();
-    }
+public:
+  /**
+   * The name of the dataverse to connect to.
+   *
+   * defaults to `Default`
+   *
+   * @param dataverse_name
+   * @return reference to this object, for use in chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto dataverse_name(std::string dataverse_name) -> disconnect_link_analytics_options&
+  {
+    dataverse_name_ = std::move(dataverse_name);
+    return self();
+  }
 
-    /**
-     * The name of the link
-     *
-     * defaults to `Local`
-     *
-     * @param link_name
-     * @return reference to this object, for use in chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto link_name(std::string link_name) -> disconnect_link_analytics_options&
-    {
-        link_name_ = std::move(link_name);
-        return self();
-    }
+  /**
+   * The name of the link
+   *
+   * defaults to `Local`
+   *
+   * @param link_name
+   * @return reference to this object, for use in chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto link_name(std::string link_name) -> disconnect_link_analytics_options&
+  {
+    link_name_ = std::move(link_name);
+    return self();
+  }
 
-    /**
-     * Immutable value object representing consistent options.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    struct built : public common_options<disconnect_link_analytics_options>::built {
-        std::optional<std::string> dataverse_name{};
-        std::optional<std::string> link_name{};
-    };
+  /**
+   * Immutable value object representing consistent options.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  struct built : public common_options<disconnect_link_analytics_options>::built {
+    std::optional<std::string> dataverse_name{};
+    std::optional<std::string> link_name{};
+  };
 
-    /**
-     * Validates options and returns them as an immutable value.
-     *
-     * @return consistent options as an immutable value
-     *
-     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options(), dataverse_name_, link_name_ };
-    }
+  /**
+   * Validates options and returns them as an immutable value.
+   *
+   * @return consistent options as an immutable value
+   *
+   * @exception std::system_error with code errc::common::invalid_argument if the options are not
+   * valid
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options(), dataverse_name_, link_name_ };
+  }
 
-  private:
-    std::optional<std::string> dataverse_name_{};
-    std::optional<std::string> link_name_{};
+private:
+  std::optional<std::string> dataverse_name_{};
+  std::optional<std::string> link_name_{};
 };
 
 /**

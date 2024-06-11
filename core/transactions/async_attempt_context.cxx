@@ -23,8 +23,14 @@
 namespace couchbase::transactions
 {
 void
-async_attempt_context::query(const scope& scope, std::string statement, transaction_query_options opts, async_query_handler&& handler)
+async_attempt_context::query(const scope& scope,
+                             std::string statement,
+                             transaction_query_options opts,
+                             async_query_handler&& handler)
 {
-    return query(std::move(statement), std::move(opts), fmt::format("{}.{}", scope.bucket_name(), scope.name()), std::move(handler));
+  return query(std::move(statement),
+               std::move(opts),
+               fmt::format("{}.{}", scope.bucket_name(), scope.name()),
+               std::move(handler));
 }
 } // namespace couchbase::transactions

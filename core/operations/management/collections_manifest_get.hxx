@@ -29,25 +29,29 @@
 namespace couchbase::core::operations::management
 {
 struct collections_manifest_get_response {
-    key_value_error_context ctx;
-    topology::collections_manifest manifest{};
+  key_value_error_context ctx;
+  topology::collections_manifest manifest{};
 };
 
 struct collections_manifest_get_request {
-    using response_type = collections_manifest_get_response;
-    using encoded_request_type = protocol::client_request<protocol::get_collections_manifest_request_body>;
-    using encoded_response_type = protocol::client_response<protocol::get_collections_manifest_response_body>;
+  using response_type = collections_manifest_get_response;
+  using encoded_request_type =
+    protocol::client_request<protocol::get_collections_manifest_request_body>;
+  using encoded_response_type =
+    protocol::client_response<protocol::get_collections_manifest_response_body>;
 
-    document_id id{};
-    std::uint16_t partition{};
-    std::uint32_t opaque{};
+  document_id id{};
+  std::uint16_t partition{};
+  std::uint32_t opaque{};
 
-    std::optional<std::chrono::milliseconds> timeout{};
-    io::retry_context<true> retries{};
+  std::optional<std::chrono::milliseconds> timeout{};
+  io::retry_context<true> retries{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& /* context */) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          mcbp_context&& /* context */) const;
 
-    [[nodiscard]] collections_manifest_get_response make_response(key_value_error_context&& ctx,
-                                                                  const encoded_response_type& encoded) const;
+  [[nodiscard]] collections_manifest_get_response make_response(
+    key_value_error_context&& ctx,
+    const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::operations::management

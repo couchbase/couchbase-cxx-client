@@ -40,36 +40,38 @@ namespace codec
 {
 class tao_json_serializer
 {
-  public:
-    using document_type = tao::json::value;
+public:
+  using document_type = tao::json::value;
 
-    template<typename Document>
-    static auto serialize([[maybe_unused]] Document document) -> binary
-    {
-        if constexpr (std::is_null_pointer_v<Document>) {
-            return core::utils::json::generate_binary(tao::json::null);
-        } else {
-            return core::utils::json::generate_binary(tao::json::value(document));
-        }
+  template<typename Document>
+  static auto serialize([[maybe_unused]] Document document) -> binary
+  {
+    if constexpr (std::is_null_pointer_v<Document>) {
+      return core::utils::json::generate_binary(tao::json::null);
+    } else {
+      return core::utils::json::generate_binary(tao::json::value(document));
     }
+  }
 
-    template<typename Document>
-    static auto deserialize(const binary& data) -> Document
-    {
-        try {
-            if constexpr (std::is_same_v<Document, tao::json::value>) {
-                return core::utils::json::parse_binary(data);
-            } else {
-                return core::utils::json::parse_binary(data).as<Document>();
-            }
-        } catch (const tao::pegtl::parse_error& e) {
-            throw std::system_error(errc::common::decoding_failure,
-                                    std::string("json_transcoder cannot parse document as JSON: ").append(e.message()));
-        } catch (const std::out_of_range& e) {
-            throw std::system_error(errc::common::decoding_failure,
-                                    std::string("json_transcoder cannot parse document: ").append(e.what()));
-        }
+  template<typename Document>
+  static auto deserialize(const binary& data) -> Document
+  {
+    try {
+      if constexpr (std::is_same_v<Document, tao::json::value>) {
+        return core::utils::json::parse_binary(data);
+      } else {
+        return core::utils::json::parse_binary(data).as<Document>();
+      }
+    } catch (const tao::pegtl::parse_error& e) {
+      throw std::system_error(
+        errc::common::decoding_failure,
+        std::string("json_transcoder cannot parse document as JSON: ").append(e.message()));
+    } catch (const std::out_of_range& e) {
+      throw std::system_error(
+        errc::common::decoding_failure,
+        std::string("json_transcoder cannot parse document: ").append(e.what()));
     }
+  }
 };
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN

@@ -22,8 +22,8 @@
 namespace couchbase::core::mcbp
 {
 struct queue_request_connection_info {
-    std::string last_dispatched_to{};
-    std::string last_dispatched_from{};
-    std::string last_connection_id{};
+  std::string last_dispatched_to{};
+  std::string last_dispatched_from{};
+  std::string last_connection_id{};
 };
 } // namespace couchbase::core::mcbp

@@ -25,37 +25,37 @@ namespace couchbase
 {
 class internal_search_error_context
 {
-  public:
-    explicit internal_search_error_context(core::operations::search_response& resp);
-    internal_search_error_context(internal_search_error_context&& other) noexcept;
-    internal_search_error_context& operator=(internal_search_error_context&& other) noexcept;
-    internal_search_error_context(const internal_search_error_context& other) = delete;
-    internal_search_error_context& operator=(const internal_search_error_context& other) = delete;
+public:
+  explicit internal_search_error_context(core::operations::search_response& resp);
+  internal_search_error_context(internal_search_error_context&& other) noexcept;
+  internal_search_error_context& operator=(internal_search_error_context&& other) noexcept;
+  internal_search_error_context(const internal_search_error_context& other) = delete;
+  internal_search_error_context& operator=(const internal_search_error_context& other) = delete;
 
-    [[nodiscard]] auto ec() const -> std::error_code;
-    [[nodiscard]] auto last_dispatched_to() const -> const std::optional<std::string>&;
-    [[nodiscard]] auto last_dispatched_from() const -> const std::optional<std::string>&;
-    [[nodiscard]] auto retry_attempts() const -> std::size_t;
-    [[nodiscard]] auto retry_reasons() const -> const std::set<retry_reason>&;
-    [[nodiscard]] auto retried_because_of(retry_reason reason) const -> bool;
+  [[nodiscard]] auto ec() const -> std::error_code;
+  [[nodiscard]] auto last_dispatched_to() const -> const std::optional<std::string>&;
+  [[nodiscard]] auto last_dispatched_from() const -> const std::optional<std::string>&;
+  [[nodiscard]] auto retry_attempts() const -> std::size_t;
+  [[nodiscard]] auto retry_reasons() const -> const std::set<retry_reason>&;
+  [[nodiscard]] auto retried_because_of(retry_reason reason) const -> bool;
 
-    [[nodiscard]] auto index_name() const -> const std::string&;
-    [[nodiscard]] auto client_context_id() const -> const std::string&;
-    [[nodiscard]] auto query() const -> const std::string&;
-    [[nodiscard]] auto parameters() const -> const std::optional<std::string>&;
-    [[nodiscard]] auto method() const -> const std::string&;
-    [[nodiscard]] auto path() const -> const std::string&;
-    [[nodiscard]] auto http_status() const -> std::uint32_t;
-    [[nodiscard]] auto http_body() const -> const std::string&;
-    [[nodiscard]] auto hostname() const -> const std::string&;
-    [[nodiscard]] auto port() const -> std::uint16_t;
-    [[nodiscard]] auto error() const -> const std::string&;
-    [[nodiscard]] auto status() const -> const std::string&;
+  [[nodiscard]] auto index_name() const -> const std::string&;
+  [[nodiscard]] auto client_context_id() const -> const std::string&;
+  [[nodiscard]] auto query() const -> const std::string&;
+  [[nodiscard]] auto parameters() const -> const std::optional<std::string>&;
+  [[nodiscard]] auto method() const -> const std::string&;
+  [[nodiscard]] auto path() const -> const std::string&;
+  [[nodiscard]] auto http_status() const -> std::uint32_t;
+  [[nodiscard]] auto http_body() const -> const std::string&;
+  [[nodiscard]] auto hostname() const -> const std::string&;
+  [[nodiscard]] auto port() const -> std::uint16_t;
+  [[nodiscard]] auto error() const -> const std::string&;
+  [[nodiscard]] auto status() const -> const std::string&;
 
-  private:
-    core::error_context::search ctx_;
-    std::string status_{};
-    std::string error_{};
+private:
+  core::error_context::search ctx_;
+  std::string status_{};
+  std::string error_{};
 };
 
 } // namespace couchbase

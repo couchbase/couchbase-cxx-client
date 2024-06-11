@@ -37,68 +37,68 @@ class internal_search_row;
  */
 class search_row
 {
-  public:
-    /**
-     * @since 1.0.0
-     * @volatile
-     */
-    explicit search_row(internal_search_row internal);
+public:
+  /**
+   * @since 1.0.0
+   * @volatile
+   */
+  explicit search_row(internal_search_row internal);
 
-    /**
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto index() const -> const std::string&;
+  /**
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto index() const -> const std::string&;
 
-    /**
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto id() const -> const std::string&;
+  /**
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto id() const -> const std::string&;
 
-    /**
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto score() const -> double;
+  /**
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto score() const -> double;
 
-    /**
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto fields() const -> const codec::binary&;
+  /**
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto fields() const -> const codec::binary&;
 
-    template<typename Serializer,
-             typename Document = typename Serializer::document_type,
-             std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
-    [[nodiscard]] auto fields_as() const -> Document
-    {
-        if (fields().empty()) {
-            return Document{};
-        }
-        return Serializer::template deserialize<Document>(fields());
+  template<typename Serializer,
+           typename Document = typename Serializer::document_type,
+           std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
+  [[nodiscard]] auto fields_as() const -> Document
+  {
+    if (fields().empty()) {
+      return Document{};
     }
+    return Serializer::template deserialize<Document>(fields());
+  }
 
-    /**
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto explanation() const -> const codec::binary&;
+  /**
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto explanation() const -> const codec::binary&;
 
-    /**
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto locations() const -> const std::optional<search_row_locations>&;
+  /**
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto locations() const -> const std::optional<search_row_locations>&;
 
-    /**
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto fragments() const -> const std::map<std::string, std::vector<std::string>>&;
+  /**
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto fragments() const -> const std::map<std::string, std::vector<std::string>>&;
 
-  private:
-    std::unique_ptr<internal_search_row> internal_;
+private:
+  std::unique_ptr<internal_search_row> internal_;
 };
 
 } // namespace couchbase

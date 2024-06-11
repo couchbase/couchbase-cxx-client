@@ -23,14 +23,14 @@ class collections_component_impl;
 
 class collections_component_unit_test_api
 {
-  public:
-    void remove_collection_from_cache(std::string_view scope_name, std::string_view collection_name);
+public:
+  void remove_collection_from_cache(std::string_view scope_name, std::string_view collection_name);
 
-  private:
-    friend class collections_component;
+private:
+  friend class collections_component;
 
-    explicit collections_component_unit_test_api(std::shared_ptr<collections_component_impl>);
+  explicit collections_component_unit_test_api(std::shared_ptr<collections_component_impl>);
 
-    std::shared_ptr<collections_component_impl> impl_;
+  std::shared_ptr<collections_component_impl> impl_;
 };
 } // namespace couchbase::core

@@ -46,7 +46,8 @@ static const std::string ATR_FIELD_PREVENT_COLLLISION = "p";
 // Fields inside regular docs that are part of a transaction
 static const std::string TRANSACTION_INTERFACE_PREFIX_ONLY = "txn";
 static const std::string TRANSACTION_INTERFACE_PREFIX = TRANSACTION_INTERFACE_PREFIX_ONLY + ".";
-static const std::string TRANSACTION_RESTORE_PREFIX_ONLY = TRANSACTION_INTERFACE_PREFIX_ONLY + ".restore";
+static const std::string TRANSACTION_RESTORE_PREFIX_ONLY =
+  TRANSACTION_INTERFACE_PREFIX_ONLY + ".restore";
 static const std::string TRANSACTION_RESTORE_PREFIX = TRANSACTION_RESTORE_PREFIX_ONLY + ".";
 static const std::string TRANSACTION_ID = TRANSACTION_INTERFACE_PREFIX + "id.txn";
 static const std::string ATTEMPT_ID = TRANSACTION_INTERFACE_PREFIX + "id.atmpt";

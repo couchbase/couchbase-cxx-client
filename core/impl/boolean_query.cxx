@@ -26,37 +26,37 @@ namespace couchbase
 auto
 boolean_query::encode() const -> encoded_search_query
 {
-    if (!must_ && !should_ && !must_not_) {
-        return { errc::common::invalid_argument };
-    }
+  if (!must_ && !should_ && !must_not_) {
+    return { errc::common::invalid_argument };
+  }
 
-    encoded_search_query built;
-    built.query = tao::json::empty_object;
-    if (boost_) {
-        built.query["boost"] = boost_.value();
+  encoded_search_query built;
+  built.query = tao::json::empty_object;
+  if (boost_) {
+    built.query["boost"] = boost_.value();
+  }
+  if (must_) {
+    auto encoded = must_->encode();
+    if (encoded.ec) {
+      return { encoded.ec };
     }
-    if (must_) {
-        auto encoded = must_->encode();
-        if (encoded.ec) {
-            return { encoded.ec };
-        }
-        built.query["must"] = encoded.query;
+    built.query["must"] = encoded.query;
+  }
+  if (must_not_) {
+    auto encoded = must_not_->encode();
+    if (encoded.ec) {
+      return { encoded.ec };
     }
-    if (must_not_) {
-        auto encoded = must_not_->encode();
-        if (encoded.ec) {
-            return { encoded.ec };
-        }
-        built.query["must_not"] = encoded.query;
+    built.query["must_not"] = encoded.query;
+  }
+  if (should_) {
+    auto encoded = should_->encode();
+    if (encoded.ec) {
+      return { encoded.ec };
     }
-    if (should_) {
-        auto encoded = should_->encode();
-        if (encoded.ec) {
-            return { encoded.ec };
-        }
-        built.query["should"] = encoded.query;
-    }
+    built.query["should"] = encoded.query;
+  }
 
-    return built;
+  return built;
 }
 } // namespace couchbase

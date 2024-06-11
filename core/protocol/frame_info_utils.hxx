@@ -37,7 +37,9 @@ namespace couchbase::core::protocol
  * @internal
  */
 void
-add_durability_frame_info(std::vector<std::byte>& framing_extras, durability_level level, std::optional<std::uint16_t> timeout);
+add_durability_frame_info(std::vector<std::byte>& framing_extras,
+                          durability_level level,
+                          std::optional<std::uint16_t> timeout);
 
 /**
  * Appends "preserve expiry" frame to @c framing_extras.

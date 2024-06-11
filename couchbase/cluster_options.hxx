@@ -49,258 +49,258 @@ namespace couchbase
 {
 class cluster_options
 {
-  public:
-    /**
-     *
-     * @param username
-     * @param password
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    cluster_options(std::string username, std::string password)
-      : username_{ std::move(username) }
-      , password_{ std::move(password) }
-    {
-    }
+public:
+  /**
+   *
+   * @param username
+   * @param password
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  cluster_options(std::string username, std::string password)
+    : username_{ std::move(username) }
+    , password_{ std::move(password) }
+  {
+  }
 
-    /**
-     *
-     * @param authenticator
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    explicit cluster_options(password_authenticator authenticator)
-      : username_{ std::move(authenticator.username_) }
-      , password_{ std::move(authenticator.password_) }
-    {
-        if (authenticator.ldap_compatible_) {
-            sasl_mechanisms_ = { { "PLAIN" } };
-        }
+  /**
+   *
+   * @param authenticator
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  explicit cluster_options(password_authenticator authenticator)
+    : username_{ std::move(authenticator.username_) }
+    , password_{ std::move(authenticator.password_) }
+  {
+    if (authenticator.ldap_compatible_) {
+      sasl_mechanisms_ = { { "PLAIN" } };
     }
+  }
 
-    /**
-     *
-     * @param authenticator
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    explicit cluster_options(certificate_authenticator authenticator)
-      : certificate_path_{ std::move(authenticator.certificate_path_) }
-      , key_path_{ std::move(authenticator.key_path_) }
-    {
+  /**
+   *
+   * @param authenticator
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  explicit cluster_options(certificate_authenticator authenticator)
+    : certificate_path_{ std::move(authenticator.certificate_path_) }
+    , key_path_{ std::move(authenticator.key_path_) }
+  {
+  }
+
+  /**
+   * Apply settings profile by name.
+   *
+   * At the moment the only one profile is defined: "wan_development".
+   *
+   * @param profile_name  name of the registered profile
+   *
+   * @see configuration_profile_registry
+   * @see wan_development_configuration_profile
+   *
+   * @since 1.0.0
+   * @volatile
+   */
+  void apply_profile(const std::string& profile_name)
+  {
+    configuration_profiles_registry::apply_profile(profile_name, *this);
+  }
+
+  /**
+   * Returns compression options.
+   *
+   * @return compression options
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto compression() -> compression_options&
+  {
+    return compression_;
+  }
+
+  /**
+   * Returns various timeout options.
+   *
+   * @return timeout options
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto timeouts() -> timeout_options&
+  {
+    return timeouts_;
+  }
+
+  /**
+   * Returns options for DNS-SRV bootstrap.
+   *
+   * @return DNS options
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto dns() -> dns_options&
+  {
+    return dns_;
+  }
+
+  /**
+   * Returns security options (including TLS)
+   *
+   * @return security options
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto security() -> security_options&
+  {
+    return security_;
+  }
+
+  /**
+   * Returns network options
+   *
+   * @return network options
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto network() -> network_options&
+  {
+    return network_;
+  }
+
+  /**
+   * Returns metrics and observability options
+   *
+   * @return metrics options
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto metrics() -> metrics_options&
+  {
+    return metrics_;
+  }
+
+  /**
+   * Returns tracing options
+   *
+   * @return tracing options
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto tracing() -> tracing_options&
+  {
+    return tracing_;
+  }
+
+  /**
+   * Returns misc options that affects cluster behavior.
+   *
+   * @return misc options.
+   *
+   * @since 1.0.0
+   * @volatile
+   */
+  [[nodiscard]] auto behavior() -> behavior_options&
+  {
+    return behavior_;
+  }
+
+  /**
+   * Returns the transactions options which effect the transactions behavior.
+   *
+   * @return  transactions configuration.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto transactions() -> transactions::transactions_config&
+  {
+    return transactions_;
+  }
+
+  /**
+   * Override default retry strategy
+   *
+   * @return cluster options object for chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto default_retry_strategy(std::shared_ptr<retry_strategy> strategy) -> cluster_options&
+  {
+    if (strategy == nullptr) {
+      throw std::invalid_argument("retry strategy cannot be null");
     }
+    default_retry_strategy_ = std::move(strategy);
+    return *this;
+  }
 
-    /**
-     * Apply settings profile by name.
-     *
-     * At the moment the only one profile is defined: "wan_development".
-     *
-     * @param profile_name  name of the registered profile
-     *
-     * @see configuration_profile_registry
-     * @see wan_development_configuration_profile
-     *
-     * @since 1.0.0
-     * @volatile
-     */
-    void apply_profile(const std::string& profile_name)
-    {
-        configuration_profiles_registry::apply_profile(profile_name, *this);
-    }
+  struct built {
+    std::string username;
+    std::string password;
+    std::string certificate_path;
+    std::string key_path;
+    std::optional<std::vector<std::string>> allowed_sasl_mechanisms;
+    compression_options::built compression;
+    timeout_options::built timeouts;
+    dns_options::built dns;
+    security_options::built security;
+    network_options::built network;
+    metrics_options::built metrics;
+    tracing_options::built tracing;
+    behavior_options::built behavior;
+    transactions::transactions_config::built transactions;
+    std::shared_ptr<retry_strategy> default_retry_strategy;
+  };
 
-    /**
-     * Returns compression options.
-     *
-     * @return compression options
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto compression() -> compression_options&
-    {
-        return compression_;
-    }
-
-    /**
-     * Returns various timeout options.
-     *
-     * @return timeout options
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto timeouts() -> timeout_options&
-    {
-        return timeouts_;
-    }
-
-    /**
-     * Returns options for DNS-SRV bootstrap.
-     *
-     * @return DNS options
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto dns() -> dns_options&
-    {
-        return dns_;
-    }
-
-    /**
-     * Returns security options (including TLS)
-     *
-     * @return security options
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto security() -> security_options&
-    {
-        return security_;
-    }
-
-    /**
-     * Returns network options
-     *
-     * @return network options
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto network() -> network_options&
-    {
-        return network_;
-    }
-
-    /**
-     * Returns metrics and observability options
-     *
-     * @return metrics options
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto metrics() -> metrics_options&
-    {
-        return metrics_;
-    }
-
-    /**
-     * Returns tracing options
-     *
-     * @return tracing options
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto tracing() -> tracing_options&
-    {
-        return tracing_;
-    }
-
-    /**
-     * Returns misc options that affects cluster behavior.
-     *
-     * @return misc options.
-     *
-     * @since 1.0.0
-     * @volatile
-     */
-    [[nodiscard]] auto behavior() -> behavior_options&
-    {
-        return behavior_;
-    }
-
-    /**
-     * Returns the transactions options which effect the transactions behavior.
-     *
-     * @return  transactions configuration.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto transactions() -> transactions::transactions_config&
-    {
-        return transactions_;
-    }
-
-    /**
-     * Override default retry strategy
-     *
-     * @return cluster options object for chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto default_retry_strategy(std::shared_ptr<retry_strategy> strategy) -> cluster_options&
-    {
-        if (strategy == nullptr) {
-            throw std::invalid_argument("retry strategy cannot be null");
-        }
-        default_retry_strategy_ = std::move(strategy);
-        return *this;
-    }
-
-    struct built {
-        std::string username;
-        std::string password;
-        std::string certificate_path;
-        std::string key_path;
-        std::optional<std::vector<std::string>> allowed_sasl_mechanisms;
-        compression_options::built compression;
-        timeout_options::built timeouts;
-        dns_options::built dns;
-        security_options::built security;
-        network_options::built network;
-        metrics_options::built metrics;
-        tracing_options::built tracing;
-        behavior_options::built behavior;
-        transactions::transactions_config::built transactions;
-        std::shared_ptr<retry_strategy> default_retry_strategy;
+  [[nodiscard]] auto build() const -> built
+  {
+    return {
+      username_,
+      password_,
+      certificate_path_,
+      key_path_,
+      sasl_mechanisms_,
+      compression_.build(),
+      timeouts_.build(),
+      dns_.build(),
+      security_.build(),
+      network_.build(),
+      metrics_.build(),
+      tracing_.build(),
+      behavior_.build(),
+      transactions_.build(),
+      default_retry_strategy_,
     };
+  }
 
-    [[nodiscard]] auto build() const -> built
-    {
-        return {
-            username_,
-            password_,
-            certificate_path_,
-            key_path_,
-            sasl_mechanisms_,
-            compression_.build(),
-            timeouts_.build(),
-            dns_.build(),
-            security_.build(),
-            network_.build(),
-            metrics_.build(),
-            tracing_.build(),
-            behavior_.build(),
-            transactions_.build(),
-            default_retry_strategy_,
-        };
-    }
+private:
+  std::string username_{};
+  std::string password_{};
+  std::string certificate_path_{};
+  std::string key_path_{};
+  std::optional<std::vector<std::string>> sasl_mechanisms_{};
 
-  private:
-    std::string username_{};
-    std::string password_{};
-    std::string certificate_path_{};
-    std::string key_path_{};
-    std::optional<std::vector<std::string>> sasl_mechanisms_{};
-
-    compression_options compression_{};
-    timeout_options timeouts_{};
-    dns_options dns_{};
-    security_options security_{};
-    network_options network_{};
-    metrics_options metrics_{};
-    tracing_options tracing_{};
-    behavior_options behavior_{};
-    transactions::transactions_config transactions_{};
-    std::shared_ptr<retry_strategy> default_retry_strategy_{ nullptr };
+  compression_options compression_{};
+  timeout_options timeouts_{};
+  dns_options dns_{};
+  security_options security_{};
+  network_options network_{};
+  metrics_options metrics_{};
+  tracing_options tracing_{};
+  behavior_options behavior_{};
+  transactions::transactions_config transactions_{};
+  std::shared_ptr<retry_strategy> default_retry_strategy_{ nullptr };
 };
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN

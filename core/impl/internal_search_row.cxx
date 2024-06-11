@@ -33,50 +33,50 @@ internal_search_row::internal_search_row(core::operations::search_response::sear
   , explanation_{ core::utils::to_binary(row_.explanation) }
   , fragments_{ row_.fragments }
 {
-    if (!row_.locations.empty()) {
-        locations_.emplace(internal_search_row_locations{ row_.locations });
-    }
+  if (!row_.locations.empty()) {
+    locations_.emplace(internal_search_row_locations{ row_.locations });
+  }
 }
 
 auto
 internal_search_row::index() const -> const std::string&
 {
-    return row_.index;
+  return row_.index;
 }
 
 auto
 internal_search_row::id() const -> const std::string&
 {
-    return row_.id;
+  return row_.id;
 }
 
 auto
 internal_search_row::score() const -> double
 {
-    return row_.score;
+  return row_.score;
 }
 
 auto
 internal_search_row::fields() const -> const codec::binary&
 {
-    return fields_;
+  return fields_;
 }
 
 auto
 internal_search_row::explanation() const -> const codec::binary&
 {
-    return explanation_;
+  return explanation_;
 }
 
 auto
 internal_search_row::fragments() const -> const std::map<std::string, std::vector<std::string>>&
 {
-    return fragments_;
+  return fragments_;
 }
 
 auto
 internal_search_row::locations() const -> const std::optional<search_row_locations>&
 {
-    return locations_;
+  return locations_;
 }
 } // namespace couchbase

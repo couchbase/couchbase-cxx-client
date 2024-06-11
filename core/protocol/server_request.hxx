@@ -32,90 +32,90 @@ namespace couchbase::core::protocol
 template<typename Body>
 class server_request
 {
-  private:
-    static const inline magic magic_ = magic::server_request;
+private:
+  static const inline magic magic_ = magic::server_request;
 
-    Body body_;
-    server_opcode opcode_{ server_opcode::invalid };
-    header_buffer header_;
-    std::uint8_t data_type_;
-    std::vector<std::byte> data_;
-    std::size_t body_size_;
-    std::uint32_t opaque_;
-    std::uint64_t cas_;
-    cmd_info info_;
+  Body body_;
+  server_opcode opcode_{ server_opcode::invalid };
+  header_buffer header_;
+  std::uint8_t data_type_;
+  std::vector<std::byte> data_;
+  std::size_t body_size_;
+  std::uint32_t opaque_;
+  std::uint64_t cas_;
+  cmd_info info_;
 
-  public:
-    server_request() = default;
-    explicit server_request(io::mcbp_message&& msg)
-      : server_request(std::move(msg), {})
-    {
-    }
+public:
+  server_request() = default;
+  explicit server_request(io::mcbp_message&& msg)
+    : server_request(std::move(msg), {})
+  {
+  }
 
-    server_request(io::mcbp_message&& msg, const cmd_info& info)
-      : header_(msg.header_data())
-      , data_(std::move(msg.body))
-      , info_(info)
-    {
-        verify_header();
-        parse_body();
-    }
+  server_request(io::mcbp_message&& msg, const cmd_info& info)
+    : header_(msg.header_data())
+    , data_(std::move(msg.body))
+    , info_(info)
+  {
+    verify_header();
+    parse_body();
+  }
 
-    [[nodiscard]] server_opcode opcode() const
-    {
-        return opcode_;
-    }
+  [[nodiscard]] server_opcode opcode() const
+  {
+    return opcode_;
+  }
 
-    [[nodiscard]] std::size_t body_size() const
-    {
-        return body_size_;
-    }
+  [[nodiscard]] std::size_t body_size() const
+  {
+    return body_size_;
+  }
 
-    [[nodiscard]] couchbase::cas cas() const
-    {
-        return couchbase::cas{ cas_ };
-    }
+  [[nodiscard]] couchbase::cas cas() const
+  {
+    return couchbase::cas{ cas_ };
+  }
 
-    [[nodiscard]] std::uint32_t opaque() const
-    {
-        return opaque_;
-    }
+  [[nodiscard]] std::uint32_t opaque() const
+  {
+    return opaque_;
+  }
 
-    Body& body()
-    {
-        return body_;
-    }
+  Body& body()
+  {
+    return body_;
+  }
 
-    [[nodiscard]] header_buffer& header()
-    {
-        return header_;
-    }
+  [[nodiscard]] header_buffer& header()
+  {
+    return header_;
+  }
 
-    void verify_header()
-    {
-        Expects(header_[0] == static_cast<std::byte>(magic_));
-        Expects(header_[1] == static_cast<std::byte>(Body::opcode));
-        opcode_ = static_cast<server_opcode>(header_[1]);
-        data_type_ = std::to_integer<std::uint8_t>(header_[5]);
+  void verify_header()
+  {
+    Expects(header_[0] == static_cast<std::byte>(magic_));
+    Expects(header_[1] == static_cast<std::byte>(Body::opcode));
+    opcode_ = static_cast<server_opcode>(header_[1]);
+    data_type_ = std::to_integer<std::uint8_t>(header_[5]);
 
-        std::uint32_t field = 0;
-        memcpy(&field, header_.data() + 8, sizeof(field));
-        body_size_ = utils::byte_swap(field);
-        data_.resize(body_size_);
+    std::uint32_t field = 0;
+    memcpy(&field, header_.data() + 8, sizeof(field));
+    body_size_ = utils::byte_swap(field);
+    data_.resize(body_size_);
 
-        memcpy(&opaque_, header_.data() + 12, sizeof(opaque_));
+    memcpy(&opaque_, header_.data() + 12, sizeof(opaque_));
 
-        memcpy(&cas_, header_.data() + 16, sizeof(cas_));
-    }
+    memcpy(&cas_, header_.data() + 16, sizeof(cas_));
+  }
 
-    void parse_body()
-    {
-        body_.parse(header_, data_, info_);
-    }
+  void parse_body()
+  {
+    body_.parse(header_, data_, info_);
+  }
 
-    [[nodiscard]] std::vector<std::byte>& data()
-    {
-        return data_;
-    }
+  [[nodiscard]] std::vector<std::byte>& data()
+  {
+    return data_;
+  }
 };
 } // namespace couchbase::core::protocol

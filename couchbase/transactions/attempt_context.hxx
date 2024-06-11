@@ -36,106 +36,117 @@ namespace transactions
 
 class attempt_context
 {
-  public:
-    /**
-     * Get a document from a collection.
-     *
-     * Fetch the document contents, in the form of a @ref transaction_get_result.   This can be used in subsequent calls
-     * to @ref attempt_context::replace or @ref attempt_context::remove
-     *
-     * @param coll The collection which contains the document.
-     * @param id The unique id of the document.
-     * @return The result of the operation, which is an @ref error and a @ref transaction_get_result.
-     */
-    virtual std::pair<error, transaction_get_result> get(const couchbase::collection& coll, const std::string& id) = 0;
+public:
+  /**
+   * Get a document from a collection.
+   *
+   * Fetch the document contents, in the form of a @ref transaction_get_result.   This can be used
+   * in subsequent calls to @ref attempt_context::replace or @ref attempt_context::remove
+   *
+   * @param coll The collection which contains the document.
+   * @param id The unique id of the document.
+   * @return The result of the operation, which is an @ref error and a @ref transaction_get_result.
+   */
+  virtual std::pair<error, transaction_get_result> get(const couchbase::collection& coll,
+                                                       const std::string& id) = 0;
 
-    /**
-     * Insert a document into a collection.
-     *
-     * Given an id and the content, this inserts a new document into a collection.   Note that currently this content can be either a
-     * <std::vector<std::byte>> or an object which can be serialized with the @ref codec::tao_json_serializer.
-     *
-     * @tparam Content Type of the contents of the document.
-     * @param coll Collection in which to insert document.
-     * @param id The unique id of the document.
-     * @param content The content of the document.
-     * @return The result of the operation, which is an @ref error and a @ref transaction_get_result.
-     */
-    template<typename Content>
-    std::pair<error, transaction_get_result> insert(const couchbase::collection& coll, const std::string& id, const Content& content)
-    {
-        if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
-            return insert_raw(coll, id, content);
-        } else {
-            return insert_raw(coll, id, codec::tao_json_serializer::serialize(content));
-        }
+  /**
+   * Insert a document into a collection.
+   *
+   * Given an id and the content, this inserts a new document into a collection.   Note that
+   * currently this content can be either a <std::vector<std::byte>> or an object which can be
+   * serialized with the @ref codec::tao_json_serializer.
+   *
+   * @tparam Content Type of the contents of the document.
+   * @param coll Collection in which to insert document.
+   * @param id The unique id of the document.
+   * @param content The content of the document.
+   * @return The result of the operation, which is an @ref error and a @ref transaction_get_result.
+   */
+  template<typename Content>
+  std::pair<error, transaction_get_result> insert(const couchbase::collection& coll,
+                                                  const std::string& id,
+                                                  const Content& content)
+  {
+    if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
+      return insert_raw(coll, id, content);
+    } else {
+      return insert_raw(coll, id, codec::tao_json_serializer::serialize(content));
     }
+  }
 
-    /**
-     * Replace the contents of a document in a collection.
-     *
-     * Replaces the contents of an existing document. Note that currently this content can be either a
-     * <std::vector<std::byte>> or an object which can be serialized with the @ref codec::tao_json_serializer.
+  /**
+   * Replace the contents of a document in a collection.
+   *
+   * Replaces the contents of an existing document. Note that currently this content can be either a
+   * <std::vector<std::byte>> or an object which can be serialized with the @ref
+   codec::tao_json_serializer.
 
-     * @tparam Content Type of the contents of the document.
-     * @param doc Document whose content will be replaced.  This is gotten from a call to @ref attempt_context::get
-     * @param content New content of the document.
-     * @return The result of the operation, which is an @ref error and a @ref transaction_get_result.
-     */
-    template<typename Content>
-    std::pair<error, transaction_get_result> replace(const transaction_get_result& doc, const Content& content)
-    {
-        if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
-            return replace_raw(doc, content);
-        } else {
-            return replace_raw(doc, codec::tao_json_serializer::serialize(content));
-        }
+   * @tparam Content Type of the contents of the document.
+   * @param doc Document whose content will be replaced.  This is gotten from a call to @ref
+   attempt_context::get
+   * @param content New content of the document.
+   * @return The result of the operation, which is an @ref error and a @ref transaction_get_result.
+   */
+  template<typename Content>
+  std::pair<error, transaction_get_result> replace(const transaction_get_result& doc,
+                                                   const Content& content)
+  {
+    if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
+      return replace_raw(doc, content);
+    } else {
+      return replace_raw(doc, codec::tao_json_serializer::serialize(content));
     }
+  }
 
-    /**
-     * Remove a document.
-     *
-     * Removes a document from a collection, where the document was gotten from a previous call to @ref attempt_context::get
-     *
-     * @param doc The document to remove.
-     * @return The result of the operation.
-     */
-    virtual error remove(const transaction_get_result& doc) = 0;
+  /**
+   * Remove a document.
+   *
+   * Removes a document from a collection, where the document was gotten from a previous call to
+   * @ref attempt_context::get
+   *
+   * @param doc The document to remove.
+   * @return The result of the operation.
+   */
+  virtual error remove(const transaction_get_result& doc) = 0;
 
-    /**
-     * Perform an unscoped query.
-     *
-     * @param statement The query statement.
-     * @param options Options for the query.
-     * @return The result of the operation, with is an @ref error and a @ref transaction_query_result.
-     */
-    std::pair<error, transaction_query_result> query(const std::string& statement, const transaction_query_options& options = {});
+  /**
+   * Perform an unscoped query.
+   *
+   * @param statement The query statement.
+   * @param options Options for the query.
+   * @return The result of the operation, with is an @ref error and a @ref transaction_query_result.
+   */
+  std::pair<error, transaction_query_result> query(const std::string& statement,
+                                                   const transaction_query_options& options = {});
 
-    /**
-     * Perform a scoped query.
-     *
-     * @param scope Scope for the query.
-     * @param statement The query statement.
-     * @param opts Options for the query.
-     * @return The result of the operation, with is an @ref error and a @ref transaction_query_result.
-     */
-    std::pair<error, transaction_query_result> query(const scope& scope,
-                                                     const std::string& statement,
-                                                     const transaction_query_options& opts = {});
+  /**
+   * Perform a scoped query.
+   *
+   * @param scope Scope for the query.
+   * @param statement The query statement.
+   * @param opts Options for the query.
+   * @return The result of the operation, with is an @ref error and a @ref transaction_query_result.
+   */
+  std::pair<error, transaction_query_result> query(const scope& scope,
+                                                   const std::string& statement,
+                                                   const transaction_query_options& opts = {});
 
-    virtual ~attempt_context() = default;
+  virtual ~attempt_context() = default;
 
-  protected:
-    /** @private */
-    virtual std::pair<error, transaction_get_result> replace_raw(const transaction_get_result& doc, std::vector<std::byte> content) = 0;
-    /** @private */
-    virtual std::pair<error, transaction_get_result> insert_raw(const couchbase::collection& coll,
-                                                                const std::string& id,
-                                                                std::vector<std::byte> content) = 0;
-    /** @private */
-    virtual std::pair<error, transaction_query_result> do_public_query(const std::string& statement,
-                                                                       const transaction_query_options& options,
-                                                                       std::optional<std::string> query_context) = 0;
+protected:
+  /** @private */
+  virtual std::pair<error, transaction_get_result> replace_raw(const transaction_get_result& doc,
+                                                               std::vector<std::byte> content) = 0;
+  /** @private */
+  virtual std::pair<error, transaction_get_result> insert_raw(const couchbase::collection& coll,
+                                                              const std::string& id,
+                                                              std::vector<std::byte> content) = 0;
+  /** @private */
+  virtual std::pair<error, transaction_query_result> do_public_query(
+    const std::string& statement,
+    const transaction_query_options& options,
+    std::optional<std::string> query_context) = 0;
 };
 } // namespace transactions
 } // namespace couchbase

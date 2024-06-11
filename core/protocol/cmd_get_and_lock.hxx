@@ -28,85 +28,85 @@ namespace couchbase::core::protocol
 
 class get_and_lock_response_body
 {
-  public:
-    static const inline client_opcode opcode = client_opcode::get_and_lock;
+public:
+  static const inline client_opcode opcode = client_opcode::get_and_lock;
 
-  private:
-    std::uint32_t flags_{};
-    std::vector<std::byte> value_;
+private:
+  std::uint32_t flags_{};
+  std::vector<std::byte> value_;
 
-  public:
-    [[nodiscard]] const auto& value() const
-    {
-        return value_;
-    }
+public:
+  [[nodiscard]] const auto& value() const
+  {
+    return value_;
+  }
 
-    [[nodiscard]] std::uint32_t flags() const
-    {
-        return flags_;
-    }
+  [[nodiscard]] std::uint32_t flags() const
+  {
+    return flags_;
+  }
 
-    bool parse(key_value_status_code status,
-               const header_buffer& header,
-               std::uint8_t framing_extras_size,
-               std::uint16_t key_size,
-               std::uint8_t extras_size,
-               const std::vector<std::byte>& body,
-               const cmd_info& info);
+  bool parse(key_value_status_code status,
+             const header_buffer& header,
+             std::uint8_t framing_extras_size,
+             std::uint16_t key_size,
+             std::uint8_t extras_size,
+             const std::vector<std::byte>& body,
+             const cmd_info& info);
 };
 
 class get_and_lock_request_body
 {
-  public:
-    using response_body_type = get_and_lock_response_body;
-    static const inline client_opcode opcode = client_opcode::get_and_lock;
+public:
+  using response_body_type = get_and_lock_response_body;
+  static const inline client_opcode opcode = client_opcode::get_and_lock;
 
-  private:
-    std::vector<std::byte> key_;
-    std::uint32_t lock_time_;
-    std::vector<std::byte> extras_{};
+private:
+  std::vector<std::byte> key_;
+  std::uint32_t lock_time_;
+  std::vector<std::byte> extras_{};
 
-  public:
-    void id(const document_id& id);
+public:
+  void id(const document_id& id);
 
-    void lock_time(std::uint32_t seconds)
-    {
-        lock_time_ = seconds;
+  void lock_time(std::uint32_t seconds)
+  {
+    lock_time_ = seconds;
+  }
+
+  [[nodiscard]] const auto& key() const
+  {
+    return key_;
+  }
+
+  [[nodiscard]] const auto& framing_extras() const
+  {
+    return empty_buffer;
+  }
+
+  [[nodiscard]] const auto& extras()
+  {
+    if (extras_.empty()) {
+      fill_extras();
     }
+    return extras_;
+  }
 
-    [[nodiscard]] const auto& key() const
-    {
-        return key_;
+  [[nodiscard]] const auto& value() const
+  {
+    return empty_buffer;
+  }
+
+  [[nodiscard]] std::size_t size()
+  {
+    if (extras_.empty()) {
+      fill_extras();
     }
+    return key_.size() + extras_.size();
+  }
 
-    [[nodiscard]] const auto& framing_extras() const
-    {
-        return empty_buffer;
-    }
-
-    [[nodiscard]] const auto& extras()
-    {
-        if (extras_.empty()) {
-            fill_extras();
-        }
-        return extras_;
-    }
-
-    [[nodiscard]] const auto& value() const
-    {
-        return empty_buffer;
-    }
-
-    [[nodiscard]] std::size_t size()
-    {
-        if (extras_.empty()) {
-            fill_extras();
-        }
-        return key_.size() + extras_.size();
-    }
-
-  private:
-    void fill_extras();
+private:
+  void fill_extras();
 };
 
 } // namespace couchbase::core::protocol

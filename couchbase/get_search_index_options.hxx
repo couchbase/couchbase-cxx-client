@@ -28,16 +28,16 @@
 namespace couchbase
 {
 struct get_search_index_options : public common_options<get_search_index_options> {
-  public:
-    struct built : public common_options<get_search_index_options>::built {
-    };
+public:
+  struct built : public common_options<get_search_index_options>::built {
+  };
 
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options() };
-    }
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options() };
+  }
 
-  private:
+private:
 };
 
 using get_search_index_handler = std::function<void(error, management::search::index)>;

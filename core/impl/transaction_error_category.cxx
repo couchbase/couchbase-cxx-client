@@ -22,25 +22,26 @@ namespace couchbase::core::impl
 {
 
 struct transaction_error_category : std::error_category {
-    [[nodiscard]] const char* name() const noexcept override
-    {
-        return "couchbase.transaction";
-    }
+  [[nodiscard]] const char* name() const noexcept override
+  {
+    return "couchbase.transaction";
+  }
 
-    [[nodiscard]] std::string message(int ev) const noexcept override
-    {
-        switch (static_cast<errc::transaction>(ev)) {
-            case errc::transaction::failed:
-                return "transaction failed (1200)";
-            case errc::transaction::expired:
-                return "transaction expired (1201)";
-            case errc::transaction::failed_post_commit:
-                return "transaction failed post-commit (1202)";
-            case errc::transaction::ambiguous:
-                return "transaction commit ambiguous (1203)";
-        }
-        return "FIXME: unknown error code (recompile with newer library): couchbase.transaction." + std::to_string(ev);
+  [[nodiscard]] std::string message(int ev) const noexcept override
+  {
+    switch (static_cast<errc::transaction>(ev)) {
+      case errc::transaction::failed:
+        return "transaction failed (1200)";
+      case errc::transaction::expired:
+        return "transaction expired (1201)";
+      case errc::transaction::failed_post_commit:
+        return "transaction failed post-commit (1202)";
+      case errc::transaction::ambiguous:
+        return "transaction commit ambiguous (1203)";
     }
+    return "FIXME: unknown error code (recompile with newer library): couchbase.transaction." +
+           std::to_string(ev);
+  }
 };
 
 const inline static transaction_error_category transaction_category_instance;
@@ -48,7 +49,7 @@ const inline static transaction_error_category transaction_category_instance;
 const std::error_category&
 transaction_category() noexcept
 {
-    return transaction_category_instance;
+  return transaction_category_instance;
 }
 
 } // namespace couchbase::core::impl

@@ -26,27 +26,28 @@ namespace couchbase::core::operations::management
 std::error_code
 group_drop_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
-    encoded.method = "DELETE";
-    encoded.path = fmt::format("/settings/rbac/groups/{}", name);
-    return {};
+  encoded.method = "DELETE";
+  encoded.path = fmt::format("/settings/rbac/groups/{}", name);
+  return {};
 }
 
 group_drop_response
-group_drop_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+group_drop_request::make_response(error_context::http&& ctx,
+                                  const encoded_response_type& encoded) const
 {
-    group_drop_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        switch (encoded.status_code) {
-            case 200:
-                break;
-            case 404:
-                response.ctx.ec = errc::management::group_not_found;
-                break;
-            default:
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
-                break;
-        }
+  group_drop_response response{ std::move(ctx) };
+  if (!response.ctx.ec) {
+    switch (encoded.status_code) {
+      case 200:
+        break;
+      case 404:
+        response.ctx.ec = errc::management::group_not_found;
+        break;
+      default:
+        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+        break;
     }
-    return response;
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

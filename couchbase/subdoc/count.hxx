@@ -37,36 +37,36 @@ namespace subdoc
  */
 class count
 {
-  public:
-    /**
-     * Sets that this is an extended attribute (XATTR) field.
-     *
-     * @param value new value for the option
-     * @return this, for chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto xattr(bool value = true) -> count&
-    {
-        xattr_ = value;
-        return *this;
-    }
+public:
+  /**
+   * Sets that this is an extended attribute (XATTR) field.
+   *
+   * @param value new value for the option
+   * @return this, for chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto xattr(bool value = true) -> count&
+  {
+    xattr_ = value;
+    return *this;
+  }
 
-  private:
+private:
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-    friend couchbase::lookup_in_specs;
+  friend couchbase::lookup_in_specs;
 #endif
 
-    explicit count(std::string path)
-      : path_(std::move(path))
-    {
-    }
+  explicit count(std::string path)
+    : path_(std::move(path))
+  {
+  }
 
-    void encode(core::impl::subdoc::command_bundle& bundle) const;
+  void encode(core::impl::subdoc::command_bundle& bundle) const;
 
-    std::string path_;
-    bool xattr_{ false };
+  std::string path_;
+  bool xattr_{ false };
 };
 } // namespace subdoc
 } // namespace couchbase

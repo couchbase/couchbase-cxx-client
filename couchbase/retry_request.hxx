@@ -26,14 +26,14 @@ namespace couchbase
 {
 class retry_request
 {
-  public:
-    [[nodiscard]] virtual auto retry_attempts() const -> std::size_t = 0;
-    [[nodiscard]] virtual auto identifier() const -> std::string = 0;
-    [[nodiscard]] virtual auto idempotent() const -> bool = 0;
-    [[nodiscard]] virtual auto retry_reasons() const -> std::set<retry_reason> = 0;
+public:
+  [[nodiscard]] virtual auto retry_attempts() const -> std::size_t = 0;
+  [[nodiscard]] virtual auto identifier() const -> std::string = 0;
+  [[nodiscard]] virtual auto idempotent() const -> bool = 0;
+  [[nodiscard]] virtual auto retry_reasons() const -> std::set<retry_reason> = 0;
 
-    virtual ~retry_request() = default;
+  virtual ~retry_request() = default;
 
-    virtual void record_retry_attempt(retry_reason reason) = 0;
+  virtual void record_retry_attempt(retry_reason reason) = 0;
 };
 } // namespace couchbase
