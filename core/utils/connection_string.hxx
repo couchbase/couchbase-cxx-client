@@ -46,12 +46,12 @@ struct connection_string {
     address_type type;
     bootstrap_mode mode{ bootstrap_mode::unspecified };
 
-    bool operator==(const node& rhs) const
+    auto operator==(const node& rhs) const -> bool
     {
       return address == rhs.address && port == rhs.port && type == rhs.type && mode == rhs.mode;
     }
 
-    bool operator!=(const node& rhs) const
+    auto operator!=(const node& rhs) const -> bool
     {
       return !(rhs == *this);
     }
@@ -72,6 +72,7 @@ struct connection_string {
   std::optional<std::string> error{};
 };
 
-connection_string
-parse_connection_string(const std::string& input, cluster_options options = {});
+auto
+parse_connection_string(const std::string& input,
+                        cluster_options options = {}) -> connection_string;
 } // namespace couchbase::core::utils

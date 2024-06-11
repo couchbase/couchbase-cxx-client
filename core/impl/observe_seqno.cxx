@@ -21,9 +21,9 @@
 
 namespace couchbase::core::impl
 {
-std::error_code
+auto
 observe_seqno_request::encode_to(observe_seqno_request::encoded_request_type& encoded,
-                                 core::mcbp_context&& /* context */)
+                                 core::mcbp_context&& /* context */) -> std::error_code
 {
   encoded.opaque(opaque);
   encoded.partition(partition);
@@ -31,9 +31,10 @@ observe_seqno_request::encode_to(observe_seqno_request::encoded_request_type& en
   return {};
 }
 
-observe_seqno_response
+auto
 observe_seqno_request::make_response(key_value_error_context&& ctx,
                                      const encoded_response_type& encoded) const
+  -> observe_seqno_response
 {
   observe_seqno_response response{ std::move(ctx), active };
   if (!response.ctx.ec()) {

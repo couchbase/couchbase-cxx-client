@@ -32,8 +32,8 @@ static constexpr datatype datatype_compressed{ 0x02 };
 // indicates the inclusion of xattr data in the value payload.
 static constexpr datatype datatype_xattrs{ 0x04 };
 
-static constexpr bool
-has_json_datatype(std::byte flags)
+static constexpr auto
+has_json_datatype(std::byte flags) -> bool
 {
   return (flags & datatype_json) == datatype_json;
 }

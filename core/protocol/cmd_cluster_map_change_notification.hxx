@@ -37,27 +37,29 @@ private:
   std::optional<std::string_view> config_text_;
 
 public:
-  [[nodiscard]] std::uint32_t protocol_revision() const
+  [[nodiscard]] auto protocol_revision() const -> std::uint32_t
   {
     return protocol_revision_;
   }
 
-  [[nodiscard]] const std::string& bucket() const
+  [[nodiscard]] auto bucket() const -> const std::string&
   {
     return bucket_;
   }
 
-  [[nodiscard]] std::optional<topology::configuration> config()
+  [[nodiscard]] auto config() -> std::optional<topology::configuration>
   {
     return config_;
   }
 
-  [[nodiscard]] const std::optional<std::string_view>& config_text() const
+  [[nodiscard]] auto config_text() const -> const std::optional<std::string_view>&
   {
     return config_text_;
   }
 
-  bool parse(const header_buffer& header, const std::vector<std::byte>& body, const cmd_info& info);
+  auto parse(const header_buffer& header,
+             const std::vector<std::byte>& body,
+             const cmd_info& info) -> bool;
 };
 
 } // namespace couchbase::core::protocol

@@ -46,16 +46,16 @@ public:
   integration_test_guard(const couchbase::core::cluster_options& opts);
   ~integration_test_guard();
 
-  inline const couchbase::core::operations::management::bucket_describe_response::bucket_info&
-  load_bucket_info(bool refresh = false)
+  inline auto load_bucket_info(bool refresh = false)
+    -> const couchbase::core::operations::management::bucket_describe_response::bucket_info&
   {
     return load_bucket_info(ctx.bucket, refresh);
   }
 
-  const couchbase::core::operations::management::bucket_describe_response::bucket_info&
-  load_bucket_info(const std::string& bucket_name, bool refresh = false);
+  auto load_bucket_info(const std::string& bucket_name, bool refresh = false)
+    -> const couchbase::core::operations::management::bucket_describe_response::bucket_info&;
 
-  inline std::size_t number_of_nodes()
+  inline auto number_of_nodes() -> std::size_t
   {
     return load_bucket_info(ctx.bucket).number_of_nodes;
   }
@@ -63,52 +63,53 @@ public:
   auto server_groups() -> std::vector<std::string>;
   auto generate_key_not_in_server_group(const std::string& group_name) -> std::string;
 
-  std::size_t number_of_nodes(const std::string& bucket_name)
+  auto number_of_nodes(const std::string& bucket_name) -> std::size_t
   {
     return load_bucket_info(bucket_name).number_of_nodes;
   }
 
-  inline std::size_t number_of_replicas()
+  inline auto number_of_replicas() -> std::size_t
   {
     return load_bucket_info(ctx.bucket).number_of_replicas;
   }
 
-  std::size_t number_of_replicas(const std::string& bucket_name)
+  auto number_of_replicas(const std::string& bucket_name) -> std::size_t
   {
     return load_bucket_info(bucket_name).number_of_replicas;
   }
 
-  inline couchbase::core::management::cluster::bucket_storage_backend storage_backend()
+  inline auto storage_backend() -> couchbase::core::management::cluster::bucket_storage_backend
   {
     return load_bucket_info(ctx.bucket).storage_backend;
   }
 
-  inline bool has_bucket_capability(const std::string& bucket_name, const std::string& capability)
+  inline auto has_bucket_capability(const std::string& bucket_name,
+                                    const std::string& capability) -> bool
   {
     return load_bucket_info(bucket_name).has_capability(capability);
   }
 
-  inline bool has_bucket_capability(const std::string& capability)
+  inline auto has_bucket_capability(const std::string& capability) -> bool
   {
     return has_bucket_capability(ctx.bucket, capability);
   }
 
-  const couchbase::core::operations::management::cluster_describe_response::cluster_info&
-  load_cluster_info(bool refresh = false);
+  auto load_cluster_info(bool refresh = false)
+    -> const couchbase::core::operations::management::cluster_describe_response::cluster_info&;
 
-  pools_response load_pools_info(bool refresh = false);
+  auto load_pools_info(bool refresh = false) -> pools_response;
 
-  inline bool has_service(couchbase::core::service_type service)
+  inline auto has_service(couchbase::core::service_type service) -> bool
   {
     return load_cluster_info().services.count(service) > 0;
   }
 
-  inline bool has_eventing_service()
+  inline auto has_eventing_service() -> bool
   {
     return has_service(couchbase::core::service_type::eventing);
   }
 
-  inline bool has_analytics_service()
+  inline auto has_analytics_service() -> bool
   {
     return has_service(couchbase::core::service_type::analytics);
   }
@@ -132,7 +133,7 @@ public:
     return couchbase::cluster{ cluster, transactions() };
   }
 
-  server_version cluster_version();
+  auto cluster_version() -> server_version;
 
   test_context ctx;
   asio::io_context io;

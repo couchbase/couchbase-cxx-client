@@ -25,8 +25,8 @@
 
 namespace couchbase::core::management::analytics
 {
-std::error_code
-couchbase_remote_link::validate() const
+auto
+couchbase_remote_link::validate() const -> std::error_code
 {
   if (dataverse.empty() || link_name.empty() || hostname.empty()) {
     return errc::common::invalid_argument;
@@ -58,8 +58,8 @@ couchbase_remote_link::validate() const
   return {};
 }
 
-std::string
-couchbase_remote_link::encode() const
+auto
+couchbase_remote_link::encode() const -> std::string
 {
   std::map<std::string, std::string> values{
     { "type", "couchbase" },
@@ -88,8 +88,8 @@ couchbase_remote_link::encode() const
   return utils::string_codec::v2::form_encode(values);
 }
 
-std::string
-to_string(couchbase_link_encryption_level level)
+auto
+to_string(couchbase_link_encryption_level level) -> std::string
 {
   switch (level) {
     case couchbase_link_encryption_level::none:

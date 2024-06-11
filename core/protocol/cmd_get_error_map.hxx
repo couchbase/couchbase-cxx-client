@@ -35,18 +35,18 @@ private:
   error_map errmap_{};
 
 public:
-  [[nodiscard]] const couchbase::core::error_map& errmap() const
+  [[nodiscard]] auto errmap() const -> const couchbase::core::error_map&
   {
     return errmap_;
   }
 
-  bool parse(key_value_status_code status,
+  auto parse(key_value_status_code status,
              const header_buffer& header,
              std::uint8_t framing_extras_size,
              std::uint16_t key_size,
              std::uint8_t extras_size,
              const std::vector<std::byte>& body,
-             const cmd_info& info);
+             const cmd_info& info) -> bool;
 };
 
 class get_error_map_request_body
@@ -65,22 +65,22 @@ public:
     version_ = version;
   }
 
-  [[nodiscard]] const std::string& key() const
+  [[nodiscard]] auto key() const -> const std::string&
   {
     return empty_string;
   }
 
-  [[nodiscard]] const auto& framing_extras() const
+  [[nodiscard]] auto framing_extras() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& extras() const
+  [[nodiscard]] auto extras() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& value()
+  [[nodiscard]] auto value() -> const auto&
   {
     if (value_.empty()) {
       fill_body();
@@ -88,7 +88,7 @@ public:
     return value_;
   }
 
-  [[nodiscard]] std::size_t size()
+  [[nodiscard]] auto size() -> std::size_t
   {
     if (value_.empty()) {
       fill_body();

@@ -55,38 +55,38 @@ date_range::date_range(std::string name,
 {
 }
 
-date_range
-date_range::with_start(std::string name, std::string start)
+auto
+date_range::with_start(std::string name, std::string start) -> date_range
 {
   return { std::move(name), std::move(start), {} };
 }
 
-date_range
-date_range::with_start(std::string name, std::chrono::system_clock::time_point start)
+auto
+date_range::with_start(std::string name, std::chrono::system_clock::time_point start) -> date_range
 {
   return { std::move(name), fmt::format(iso_8601_format, start), {} };
 }
 
-date_range
-date_range::with_start(std::string name, std::tm start)
+auto
+date_range::with_start(std::string name, std::tm start) -> date_range
 {
   return { std::move(name), fmt::format(iso_8601_format, start), {} };
 }
 
-date_range
-date_range::with_end(std::string name, std::string end)
+auto
+date_range::with_end(std::string name, std::string end) -> date_range
 {
   return { std::move(name), {}, std::move(end) };
 }
 
-date_range
-date_range::with_end(std::string name, std::chrono::system_clock::time_point end)
+auto
+date_range::with_end(std::string name, std::chrono::system_clock::time_point end) -> date_range
 {
   return { std::move(name), {}, fmt::format(iso_8601_format, end) };
 }
 
-date_range
-date_range::with_end(std::string name, std::tm end)
+auto
+date_range::with_end(std::string name, std::tm end) -> date_range
 {
   return { std::move(name), {}, fmt::format(iso_8601_format, end) };
 }

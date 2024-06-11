@@ -28,8 +28,8 @@ namespace couchbase::core::utils
 using binary = std::vector<std::byte>;
 
 template<typename T>
-[[nodiscard]] binary
-to_binary(const T* data, const std::size_t size) noexcept
+[[nodiscard]] auto
+to_binary(const T* data, const std::size_t size) noexcept -> binary
 {
   static_assert(sizeof(T) == 1);
   binary copy;
@@ -40,12 +40,12 @@ to_binary(const T* data, const std::size_t size) noexcept
   return copy;
 }
 
-[[nodiscard]] binary
-to_binary(std::string_view value) noexcept;
+[[nodiscard]] auto
+to_binary(std::string_view value) noexcept -> binary;
 
 template<typename InputIterator, typename OutputIterator>
-OutputIterator
-to_binary(InputIterator first, InputIterator last, OutputIterator result) noexcept
+auto
+to_binary(InputIterator first, InputIterator last, OutputIterator result) noexcept -> OutputIterator
 {
   return std::transform(first, last, result, [](auto e) {
     return static_cast<std::byte>(e);
@@ -53,8 +53,8 @@ to_binary(InputIterator first, InputIterator last, OutputIterator result) noexce
 }
 
 template<typename Container, typename OutputIterator>
-OutputIterator
-to_binary(Container container, OutputIterator result) noexcept
+auto
+to_binary(Container container, OutputIterator result) noexcept -> OutputIterator
 {
   return to_binary(std::begin(container), std::end(container), result);
 }

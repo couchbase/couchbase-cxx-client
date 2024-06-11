@@ -19,8 +19,8 @@
 
 namespace test::utils
 {
-[[nodiscard]] std::string
-to_string(const std::vector<std::byte>& input)
+[[nodiscard]] auto
+to_string(const std::vector<std::byte>& input) -> std::string
 {
   return { reinterpret_cast<const char*>(input.data()), input.size() };
 }

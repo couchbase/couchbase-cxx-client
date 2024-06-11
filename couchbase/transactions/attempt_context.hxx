@@ -47,8 +47,8 @@ public:
    * @param id The unique id of the document.
    * @return The result of the operation, which is an @ref error and a @ref transaction_get_result.
    */
-  virtual std::pair<error, transaction_get_result> get(const couchbase::collection& coll,
-                                                       const std::string& id) = 0;
+  virtual auto get(const couchbase::collection& coll,
+                   const std::string& id) -> std::pair<error, transaction_get_result> = 0;
 
   /**
    * Insert a document into a collection.
@@ -64,9 +64,9 @@ public:
    * @return The result of the operation, which is an @ref error and a @ref transaction_get_result.
    */
   template<typename Content>
-  std::pair<error, transaction_get_result> insert(const couchbase::collection& coll,
-                                                  const std::string& id,
-                                                  const Content& content)
+  auto insert(const couchbase::collection& coll,
+              const std::string& id,
+              const Content& content) -> std::pair<error, transaction_get_result>
   {
     if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
       return insert_raw(coll, id, content);
@@ -89,8 +89,8 @@ public:
    * @return The result of the operation, which is an @ref error and a @ref transaction_get_result.
    */
   template<typename Content>
-  std::pair<error, transaction_get_result> replace(const transaction_get_result& doc,
-                                                   const Content& content)
+  auto replace(const transaction_get_result& doc,
+               const Content& content) -> std::pair<error, transaction_get_result>
   {
     if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
       return replace_raw(doc, content);
@@ -108,7 +108,7 @@ public:
    * @param doc The document to remove.
    * @return The result of the operation.
    */
-  virtual error remove(const transaction_get_result& doc) = 0;
+  virtual auto remove(const transaction_get_result& doc) -> error = 0;
 
   /**
    * Perform an unscoped query.
@@ -117,8 +117,8 @@ public:
    * @param options Options for the query.
    * @return The result of the operation, with is an @ref error and a @ref transaction_query_result.
    */
-  std::pair<error, transaction_query_result> query(const std::string& statement,
-                                                   const transaction_query_options& options = {});
+  auto query(const std::string& statement, const transaction_query_options& options = {})
+    -> std::pair<error, transaction_query_result>;
 
   /**
    * Perform a scoped query.
@@ -128,25 +128,27 @@ public:
    * @param opts Options for the query.
    * @return The result of the operation, with is an @ref error and a @ref transaction_query_result.
    */
-  std::pair<error, transaction_query_result> query(const scope& scope,
-                                                   const std::string& statement,
-                                                   const transaction_query_options& opts = {});
+  auto query(const scope& scope,
+             const std::string& statement,
+             const transaction_query_options& opts = {})
+    -> std::pair<error, transaction_query_result>;
 
   virtual ~attempt_context() = default;
 
 protected:
   /** @private */
-  virtual std::pair<error, transaction_get_result> replace_raw(const transaction_get_result& doc,
-                                                               std::vector<std::byte> content) = 0;
+  virtual auto replace_raw(const transaction_get_result& doc, std::vector<std::byte> content)
+    -> std::pair<error, transaction_get_result> = 0;
   /** @private */
-  virtual std::pair<error, transaction_get_result> insert_raw(const couchbase::collection& coll,
-                                                              const std::string& id,
-                                                              std::vector<std::byte> content) = 0;
+  virtual auto insert_raw(const couchbase::collection& coll,
+                          const std::string& id,
+                          std::vector<std::byte> content)
+    -> std::pair<error, transaction_get_result> = 0;
   /** @private */
-  virtual std::pair<error, transaction_query_result> do_public_query(
-    const std::string& statement,
-    const transaction_query_options& options,
-    std::optional<std::string> query_context) = 0;
+  virtual auto do_public_query(const std::string& statement,
+                               const transaction_query_options& options,
+                               std::optional<std::string> query_context)
+    -> std::pair<error, transaction_query_result> = 0;
 };
 } // namespace transactions
 } // namespace couchbase

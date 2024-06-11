@@ -26,8 +26,8 @@ namespace tao::json
 template<>
 struct traits<couchbase::core::management::cluster::bucket_settings> {
   template<template<typename...> class Traits>
-  static couchbase::core::management::cluster::bucket_settings as(
-    const tao::json::basic_value<Traits>& v)
+  static auto as(const tao::json::basic_value<Traits>& v)
+    -> couchbase::core::management::cluster::bucket_settings
   {
     couchbase::core::management::cluster::bucket_settings result;
     result.name = v.at("name").get_string();

@@ -60,54 +60,54 @@ struct configuration_capabilities {
   std::set<bucket_capability> bucket{};
   std::set<cluster_capability> cluster{};
 
-  [[nodiscard]] bool has_cluster_capability(cluster_capability cap) const
+  [[nodiscard]] auto has_cluster_capability(cluster_capability cap) const -> bool
   {
     return cluster.find(cap) != cluster.end();
   }
 
-  [[nodiscard]] bool has_bucket_capability(bucket_capability cap) const
+  [[nodiscard]] auto has_bucket_capability(bucket_capability cap) const -> bool
   {
     return bucket.find(cap) != bucket.end();
   }
 
-  [[nodiscard]] bool supports_enhanced_prepared_statements() const
+  [[nodiscard]] auto supports_enhanced_prepared_statements() const -> bool
   {
     return has_cluster_capability(cluster_capability::n1ql_enhanced_prepared_statements);
   }
 
-  [[nodiscard]] bool supports_read_from_replica() const
+  [[nodiscard]] auto supports_read_from_replica() const -> bool
   {
     return has_cluster_capability(cluster_capability::n1ql_read_from_replica);
   }
 
-  [[nodiscard]] bool supports_range_scan() const
+  [[nodiscard]] auto supports_range_scan() const -> bool
   {
     return has_bucket_capability(bucket_capability::range_scan);
   }
 
-  [[nodiscard]] bool ephemeral() const
+  [[nodiscard]] auto ephemeral() const -> bool
   {
     // Use bucket capabilities to identify if couchapi is missing (then its ephemeral). If its null
     // then we are running an old version of couchbase which doesn't have ephemeral buckets at all.
     return has_bucket_capability(bucket_capability::couchapi);
   }
 
-  [[nodiscard]] bool supports_subdoc_read_replica() const
+  [[nodiscard]] auto supports_subdoc_read_replica() const -> bool
   {
     return has_bucket_capability(bucket_capability::subdoc_replica_read);
   }
 
-  [[nodiscard]] bool supports_non_deduped_history() const
+  [[nodiscard]] auto supports_non_deduped_history() const -> bool
   {
     return has_bucket_capability(bucket_capability::non_deduped_history);
   }
 
-  [[nodiscard]] bool supports_scoped_search_indexes() const
+  [[nodiscard]] auto supports_scoped_search_indexes() const -> bool
   {
     return has_cluster_capability(cluster_capability::search_scoped_search_index);
   }
 
-  [[nodiscard]] bool supports_vector_search() const
+  [[nodiscard]] auto supports_vector_search() const -> bool
   {
     return has_cluster_capability(cluster_capability::search_vector_search);
   }

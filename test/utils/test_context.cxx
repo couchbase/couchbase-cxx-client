@@ -23,8 +23,8 @@
 
 namespace test::utils
 {
-test_context
-test_context::load_from_environment()
+auto
+test_context::load_from_environment() -> test_context
 {
   test_context ctx{};
 
@@ -117,8 +117,8 @@ test_context::load_from_environment()
   return ctx;
 }
 
-couchbase::core::cluster_credentials
-test_context::build_auth() const
+auto
+test_context::build_auth() const -> couchbase::core::cluster_credentials
 {
   couchbase::core::cluster_credentials auth{};
   if (certificate_path.empty()) {

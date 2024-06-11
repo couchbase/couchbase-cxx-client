@@ -95,59 +95,59 @@ error::operator==(const couchbase::error& other) const -> bool
 
 namespace core::impl
 {
-error
-make_error(const core::error_context::query& core_ctx)
+auto
+make_error(const core::error_context::query& core_ctx) -> error
 {
   return { core_ctx.ec, "", couchbase::error_context{ internal_error_context(core_ctx) } };
 }
 
-error
-make_error(const query_error_context& core_ctx)
+auto
+make_error(const query_error_context& core_ctx) -> error
 {
   tao::json::value ctx(core_ctx);
   return { core_ctx.ec(), {}, couchbase::error_context(ctx) };
 }
 
-error
-make_error(const core::error_context::search& core_ctx)
+auto
+make_error(const core::error_context::search& core_ctx) -> error
 {
   return { core_ctx.ec, "", couchbase::error_context{ internal_error_context(core_ctx) } };
 }
 
-error
-make_error(const core::error_context::analytics& core_ctx)
+auto
+make_error(const core::error_context::analytics& core_ctx) -> error
 {
   return { core_ctx.ec, "", couchbase::error_context{ internal_error_context(core_ctx) } };
 }
 
-error
-make_error(const core::error_context::http& core_ctx)
+auto
+make_error(const core::error_context::http& core_ctx) -> error
 {
   return { core_ctx.ec, "", couchbase::error_context{ internal_error_context(core_ctx) } };
 }
 
-error
-make_error(const couchbase::key_value_error_context& core_ctx)
+auto
+make_error(const couchbase::key_value_error_context& core_ctx) -> error
 {
   tao::json::value ctx(core_ctx);
   return { core_ctx.ec(), "", couchbase::error_context(ctx) };
 }
 
-error
-make_error(const couchbase::subdocument_error_context& core_ctx)
+auto
+make_error(const couchbase::subdocument_error_context& core_ctx) -> error
 {
   tao::json::value ctx(core_ctx);
   return { core_ctx.ec(), "", couchbase::error_context(ctx) };
 }
 
-error
-make_error(const couchbase::transaction_error_context& ctx)
+auto
+make_error(const couchbase::transaction_error_context& ctx) -> error
 {
   return { ctx.ec(), "", {}, { ctx.cause() } };
 }
 
-error
-make_error(const couchbase::transaction_op_error_context& ctx)
+auto
+make_error(const couchbase::transaction_op_error_context& ctx) -> error
 {
   if (std::holds_alternative<key_value_error_context>(ctx.cause())) {
     return { ctx.ec(), "", {}, make_error(std::get<key_value_error_context>(ctx.cause())) };
@@ -158,8 +158,9 @@ make_error(const couchbase::transaction_op_error_context& ctx)
   return ctx.ec();
 }
 
-couchbase::error
+auto
 make_error(const couchbase::core::transactions::transaction_operation_failed& core_tof)
+  -> couchbase::error
 {
 
   return { couchbase::errc::transaction_op::transaction_op_failed,

@@ -22,9 +22,9 @@
 
 namespace couchbase::core::operations
 {
-std::error_code
+auto
 lookup_in_request::encode_to(lookup_in_request::encoded_request_type& encoded,
-                             mcbp_context&& /* context */)
+                             mcbp_context&& /* context */) -> std::error_code
 {
   for (std::size_t i = 0; i < specs.size(); ++i) {
     specs[i].original_index_ = i;
@@ -43,9 +43,9 @@ lookup_in_request::encode_to(lookup_in_request::encoded_request_type& encoded,
   return {};
 }
 
-lookup_in_response
+auto
 lookup_in_request::make_response(key_value_error_context&& ctx,
-                                 const encoded_response_type& encoded) const
+                                 const encoded_response_type& encoded) const -> lookup_in_response
 {
 
   bool deleted = false;

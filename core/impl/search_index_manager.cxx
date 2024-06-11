@@ -39,8 +39,9 @@ namespace couchbase
 {
 namespace
 {
-couchbase::management::search::index
+auto
 map_search_index(const couchbase::core::management::search::index& index)
+  -> couchbase::management::search::index
 {
   couchbase::management::search::index public_index{};
   public_index.uuid = index.uuid;
@@ -58,8 +59,9 @@ map_search_index(const couchbase::core::management::search::index& index)
   return public_index;
 }
 
-std::vector<couchbase::management::search::index>
+auto
 map_all_search_indexes(const std::vector<couchbase::core::management::search::index>& indexes)
+  -> std::vector<couchbase::management::search::index>
 {
   std::vector<couchbase::management::search::index> search_indexes{};
   for (const auto& index : indexes) {
@@ -69,8 +71,9 @@ map_all_search_indexes(const std::vector<couchbase::core::management::search::in
   return search_indexes;
 }
 
-couchbase::core::management::search::index
+auto
 map_search_index(const couchbase::management::search::index& index)
+  -> couchbase::core::management::search::index
 {
   couchbase::core::management::search::index search_index{};
   search_index.name = index.name;
@@ -105,8 +108,8 @@ map_search_index(const couchbase::management::search::index& index)
   return search_index;
 }
 
-std::vector<std::string>
-convert_analysis(const std::string& analysis)
+auto
+convert_analysis(const std::string& analysis) -> std::vector<std::string>
 {
   std::vector<std::string> result;
 

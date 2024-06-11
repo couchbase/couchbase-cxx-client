@@ -107,8 +107,8 @@ load_resolv_conf()
 #else
 static constexpr auto default_resolv_conf_path = "/etc/resolv.conf";
 
-std::string
-load_resolv_conf(const char* conf_path)
+auto
+load_resolv_conf(const char* conf_path) -> std::string
 {
   if (std::error_code ec{}; std::filesystem::exists(conf_path, ec) && !ec) {
     std::ifstream conf(conf_path);
@@ -145,8 +145,8 @@ load_resolv_conf(const char* conf_path)
 #endif
 static std::once_flag system_config_initialized_flag;
 
-const dns_config&
-dns_config::system_config()
+auto
+dns_config::system_config() -> const dns_config&
 {
   static dns_config instance{};
 
@@ -185,20 +185,20 @@ dns_config::dns_config(std::string nameserver,
 {
 }
 
-std::uint16_t
-dns_config::port() const
+auto
+dns_config::port() const -> std::uint16_t
 {
   return port_;
 }
 
-const std::string&
-dns_config::nameserver() const
+auto
+dns_config::nameserver() const -> const std::string&
 {
   return nameserver_;
 }
 
-std::chrono::milliseconds
-dns_config::timeout() const
+auto
+dns_config::timeout() const -> std::chrono::milliseconds
 {
   return timeout_;
 }

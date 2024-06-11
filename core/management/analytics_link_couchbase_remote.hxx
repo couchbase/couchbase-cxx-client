@@ -45,8 +45,8 @@ enum class couchbase_link_encryption_level {
   full,
 };
 
-std::string
-to_string(couchbase_link_encryption_level level);
+auto
+to_string(couchbase_link_encryption_level level) -> std::string;
 
 struct couchbase_link_encryption_settings {
   /**
@@ -107,8 +107,8 @@ struct couchbase_remote_link {
 
   couchbase_link_encryption_settings encryption{};
 
-  [[nodiscard]] std::error_code validate() const;
+  [[nodiscard]] auto validate() const -> std::error_code;
 
-  [[nodiscard]] std::string encode() const;
+  [[nodiscard]] auto encode() const -> std::string;
 };
 } // namespace couchbase::core::management::analytics

@@ -39,7 +39,7 @@ struct exists_response {
   std::uint8_t datatype{};
   bool document_exists{ false };
 
-  [[nodiscard]] inline bool exists() const
+  [[nodiscard]] inline auto exists() const -> bool
   {
     return document_exists;
   }
@@ -57,11 +57,11 @@ struct exists_request {
   io::retry_context<false> retries{};
   std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
-  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
-                                          mcbp_context&& context) const;
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded,
+                               mcbp_context&& context) const -> std::error_code;
 
-  [[nodiscard]] exists_response make_response(key_value_error_context&& ctx,
-                                              const encoded_response_type& encoded) const;
+  [[nodiscard]] auto make_response(key_value_error_context&& ctx,
+                                   const encoded_response_type& encoded) const -> exists_response;
 };
 
 } // namespace couchbase::core::operations

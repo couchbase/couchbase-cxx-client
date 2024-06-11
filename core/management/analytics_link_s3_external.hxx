@@ -62,8 +62,8 @@ struct s3_external_link {
    */
   std::optional<std::string> service_endpoint{};
 
-  [[nodiscard]] std::error_code validate() const;
+  [[nodiscard]] auto validate() const -> std::error_code;
 
-  [[nodiscard]] std::string encode() const;
+  [[nodiscard]] auto encode() const -> std::string;
 };
 } // namespace couchbase::core::management::analytics

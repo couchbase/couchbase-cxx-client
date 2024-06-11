@@ -69,8 +69,8 @@ public:
       });
   }
 
-  static std::optional<active_transaction_record> get_atr(const core::cluster& cluster,
-                                                          const core::document_id& atr_id)
+  static auto get_atr(const core::cluster& cluster,
+                      const core::document_id& atr_id) -> std::optional<active_transaction_record>
   {
     auto barrier = std::promise<std::optional<active_transaction_record>>();
     auto f = barrier.get_future();
@@ -89,7 +89,7 @@ public:
   {
   }
 
-  [[nodiscard]] const std::vector<atr_entry>& entries() const
+  [[nodiscard]] auto entries() const -> const std::vector<atr_entry>&
   {
     return entries_;
   }
@@ -111,7 +111,7 @@ private:
    *
    * returns epoch time in ms
    */
-  static inline uint64_t parse_mutation_cas(const std::string& cas)
+  static inline auto parse_mutation_cas(const std::string& cas) -> uint64_t
   {
     if (cas.empty()) {
       return 0;
@@ -129,9 +129,8 @@ private:
     return ret / 1000000;
   }
 
-  static inline std::optional<std::vector<doc_record>> process_document_ids(
-    const tao::json::value& entry,
-    const std::string& key)
+  static inline auto process_document_ids(const tao::json::value& entry, const std::string& key)
+    -> std::optional<std::vector<doc_record>>
   {
     const auto* items = entry.find(key);
     if (items == nullptr || !items->is_array()) {
@@ -145,7 +144,8 @@ private:
     return records;
   }
 
-  static active_transaction_record map_to_atr(const core::operations::lookup_in_response& resp);
+  static auto map_to_atr(const core::operations::lookup_in_response& resp)
+    -> active_transaction_record;
 };
 
 } // namespace couchbase::core::transactions

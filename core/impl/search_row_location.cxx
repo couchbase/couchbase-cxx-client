@@ -35,8 +35,9 @@ search_row_location::~search_row_location() = default;
 
 search_row_location::search_row_location(search_row_location&&) noexcept = default;
 
-search_row_location&
-search_row_location::operator=(couchbase::search_row_location&&) noexcept = default;
+auto
+search_row_location::operator=(couchbase::search_row_location&&) noexcept
+  -> search_row_location& = default;
 
 auto
 search_row_location::field() const -> const std::string&

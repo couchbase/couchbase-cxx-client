@@ -40,38 +40,38 @@ private:
   std::uint8_t datatype_{};
 
 public:
-  [[nodiscard]] bool is_deleted() const
+  [[nodiscard]] auto is_deleted() const -> bool
   {
     return deleted_ != 0;
   }
 
-  [[nodiscard]] std::uint32_t flags() const
+  [[nodiscard]] auto flags() const -> std::uint32_t
   {
     return flags_;
   }
 
-  [[nodiscard]] std::uint32_t expiry() const
+  [[nodiscard]] auto expiry() const -> std::uint32_t
   {
     return expiry_;
   }
 
-  [[nodiscard]] std::uint64_t sequence_number() const
+  [[nodiscard]] auto sequence_number() const -> std::uint64_t
   {
     return sequence_number_;
   }
 
-  [[nodiscard]] std::uint8_t datatype() const
+  [[nodiscard]] auto datatype() const -> std::uint8_t
   {
     return datatype_;
   }
 
-  bool parse(key_value_status_code status,
+  auto parse(key_value_status_code status,
              const header_buffer& header,
              std::uint8_t framing_extras_size,
              std::uint16_t key_size,
              std::uint8_t extras_size,
              const std::vector<std::byte>& body,
-             const cmd_info& info);
+             const cmd_info& info) -> bool;
 };
 
 class get_meta_request_body
@@ -90,27 +90,27 @@ private:
 public:
   void id(const document_id& id);
 
-  [[nodiscard]] const auto& key() const
+  [[nodiscard]] auto key() const -> const auto&
   {
     return key_;
   }
 
-  [[nodiscard]] const auto& framing_extras() const
+  [[nodiscard]] auto framing_extras() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& extras() const
+  [[nodiscard]] auto extras() const -> const auto&
   {
     return extras_;
   }
 
-  [[nodiscard]] const auto& value()
+  [[nodiscard]] auto value() -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] std::size_t size()
+  [[nodiscard]] auto size() -> std::size_t
   {
     return extras_.size() + key_.size();
   }

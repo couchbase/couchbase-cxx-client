@@ -43,8 +43,8 @@ codec::enable_feature(protocol::hello_feature feature)
   }
 }
 
-bool
-codec::is_feature_enabled(protocol::hello_feature feature) const
+auto
+codec::is_feature_enabled(protocol::hello_feature feature) const -> bool
 {
   return enabled_features_.count(feature) > 0;
 }
@@ -315,8 +315,8 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet)
   return buffer.store_;
 }
 
-std::tuple<packet, std::size_t, std::error_code>
-codec::decode_packet(gsl::span<std::byte> input)
+auto
+codec::decode_packet(gsl::span<std::byte> input) -> std::tuple<packet, std::size_t, std::error_code>
 {
   if (input.empty()) {
     return { {}, {}, errc::network::end_of_stream };
@@ -340,8 +340,9 @@ codec::decode_packet(gsl::span<std::byte> input)
   return decode_packet(header, body);
 }
 
-std::tuple<packet, std::size_t, std::error_code>
-codec::decode_packet(gsl::span<std::byte> header, gsl::span<std::byte> body)
+auto
+codec::decode_packet(gsl::span<std::byte> header,
+                     gsl::span<std::byte> body) -> std::tuple<packet, std::size_t, std::error_code>
 {
   packet pkt;
 

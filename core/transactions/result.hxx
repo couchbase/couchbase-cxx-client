@@ -51,7 +51,7 @@ struct result_base {
   {
   }
 
-  bool has_value() const
+  auto has_value() const -> bool
   {
     return !raw_value.empty();
   }
@@ -108,7 +108,7 @@ struct subdoc_result : result_base {
   }
 
   template<typename T>
-  T content_as() const
+  auto content_as() const -> T
   {
     // this will always be a json string.  To not have extraneous
     // "" when asked to return as a string, we parse it first.
@@ -116,7 +116,7 @@ struct subdoc_result : result_base {
     return codec::tao_json_serializer::deserialize<T>(raw_value);
   }
 
-  [[nodiscard]] tao::json::value content_as() const
+  [[nodiscard]] auto content_as() const -> tao::json::value
   {
     return core::utils::json::parse_binary(raw_value);
   }
@@ -196,7 +196,7 @@ struct result : result_base {
   bool ignore_subdoc_errors{ false };
 
   template<typename Resp>
-  static result create_from_mutation_response(const Resp& resp)
+  static auto create_from_mutation_response(const Resp& resp) -> result
   {
     result res{};
     res.ec = resp.ctx.ec();
@@ -206,7 +206,7 @@ struct result : result_base {
   }
 
   template<typename Resp>
-  static result create_from_response(const Resp& resp)
+  static auto create_from_response(const Resp& resp) -> result
   {
     result res{};
     res.ec = resp.ctx.ec();
@@ -217,9 +217,11 @@ struct result : result_base {
     return res;
   }
 
-  static result create_from_subdoc_response(const core::operations::lookup_in_response& resp);
+  static auto create_from_subdoc_response(const core::operations::lookup_in_response& resp)
+    -> result;
 
-  static result create_from_subdoc_response(const core::operations::mutate_in_response& resp);
+  static auto create_from_subdoc_response(const core::operations::mutate_in_response& resp)
+    -> result;
 
   result() = default;
 
@@ -228,16 +230,16 @@ struct result : result_base {
    *
    * @return String describing the error code.
    */
-  [[nodiscard]] std::string strerror() const;
+  [[nodiscard]] auto strerror() const -> std::string;
 
-  [[nodiscard]] bool is_success() const;
+  [[nodiscard]] auto is_success() const -> bool;
   /**
    *  Get error code.  This is either the rc_, or if that is LCB_SUCCESS,
    *  then the first error in the values (if any) see @ref subdoc_results
    */
   // [[nodiscard]]std::uint32_t error() const;
   template<typename OStream>
-  friend OStream& operator<<(OStream& os, const result& res)
+  friend auto operator<<(OStream& os, const result& res) -> OStream&
   {
     os << "result{";
     os << "rc:" << res.rc << ",";
@@ -259,12 +261,12 @@ struct result : result_base {
   }
 
   template<typename T>
-  T content_as() const
+  auto content_as() const -> T
   {
     return codec::tao_json_serializer::deserialize<T>(raw_value);
   }
 
-  [[nodiscard]] subdoc_result::status_type subdoc_status() const;
+  [[nodiscard]] auto subdoc_status() const -> subdoc_result::status_type;
 };
 } // namespace transactions
 } // namespace couchbase::core

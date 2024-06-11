@@ -35,7 +35,7 @@ public:
    * @param value If false, do not start the lost attempts cleanup threads.
    * @return reference to this, so calls can be chained.
    */
-  transactions_cleanup_config& cleanup_lost_attempts(bool value)
+  auto cleanup_lost_attempts(bool value) -> transactions_cleanup_config&
   {
     cleanup_lost_attempts_ = value;
     return *this;
@@ -46,7 +46,7 @@ public:
    *
    * @return If false, no lost attempts cleanup threads will be launched.
    */
-  [[nodiscard]] bool cleanup_lost_attempts() const
+  [[nodiscard]] auto cleanup_lost_attempts() const -> bool
   {
     return cleanup_lost_attempts_;
   }
@@ -58,7 +58,7 @@ public:
    * @param value If true, run the cleanup client attempts loop.
    * @return reference to this, so calls can be chained.
    */
-  transactions_cleanup_config& cleanup_client_attempts(bool value)
+  auto cleanup_client_attempts(bool value) -> transactions_cleanup_config&
   {
     cleanup_client_attempts_ = value;
     return *this;
@@ -72,7 +72,7 @@ public:
    *
    * @return true if the thread is enabled, false if not.
    */
-  [[nodiscard]] bool cleanup_client_attempts() const
+  [[nodiscard]] auto cleanup_client_attempts() const -> bool
   {
     return cleanup_client_attempts_;
   }
@@ -89,7 +89,7 @@ public:
    *
    * @return The cleanup window.
    */
-  [[nodiscard]] std::chrono::milliseconds cleanup_window() const
+  [[nodiscard]] auto cleanup_window() const -> std::chrono::milliseconds
   {
     return cleanup_window_;
   }
@@ -102,7 +102,7 @@ public:
    * @return reference to this, so calls can be chained.
    */
   template<typename T>
-  transactions_cleanup_config& cleanup_window(T duration)
+  auto cleanup_window(T duration) -> transactions_cleanup_config&
   {
     cleanup_window_ = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
     return *this;
@@ -114,8 +114,8 @@ public:
    * This can be called multiple times, to add several collections, if needed.
    *
    */
-  transactions_cleanup_config& add_collection(
-    const couchbase::transactions::transaction_keyspace& keyspace)
+  auto add_collection(const couchbase::transactions::transaction_keyspace& keyspace)
+    -> transactions_cleanup_config&
   {
     collections_.emplace_back(keyspace);
     return *this;

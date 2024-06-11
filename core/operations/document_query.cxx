@@ -30,8 +30,9 @@
 
 namespace couchbase::core::operations
 {
-std::error_code
-query_request::encode_to(query_request::encoded_request_type& encoded, http_context& context)
+auto
+query_request::encode_to(query_request::encoded_request_type& encoded,
+                         http_context& context) -> std::error_code
 {
   ctx_.emplace(context);
   tao::json::value body{
@@ -204,8 +205,9 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
   return {};
 }
 
-query_response
-query_request::make_response(error_context::query&& ctx, const encoded_response_type& encoded)
+auto
+query_request::make_response(error_context::query&& ctx,
+                             const encoded_response_type& encoded) -> query_response
 {
   query_response response{ std::move(ctx) };
   response.ctx.statement = statement;

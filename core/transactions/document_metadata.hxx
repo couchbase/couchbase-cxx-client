@@ -61,7 +61,7 @@ public:
    *
    * @return the CAS of the document, as a string.
    */
-  [[nodiscard]] std::optional<std::string> cas() const
+  [[nodiscard]] auto cas() const -> std::optional<std::string>
   {
     return cas_;
   }
@@ -71,7 +71,7 @@ public:
    *
    * @return the revid of the document, as a string.
    */
-  [[nodiscard]] std::optional<std::string> revid() const
+  [[nodiscard]] auto revid() const -> std::optional<std::string>
   {
     return revid_;
   }
@@ -82,7 +82,7 @@ public:
    * @return the expiry of the document, if one was set, and the request
    *         specified it.
    */
-  [[nodiscard]] std::optional<std::uint32_t> exptime() const
+  [[nodiscard]] auto exptime() const -> std::optional<std::uint32_t>
   {
     return exptime_;
   }
@@ -92,7 +92,7 @@ public:
    *
    * @return the crc-32 for the document, as a string
    */
-  [[nodiscard]] std::optional<std::string> crc32() const
+  [[nodiscard]] auto crc32() const -> std::optional<std::string>
   {
     return crc32_;
   }

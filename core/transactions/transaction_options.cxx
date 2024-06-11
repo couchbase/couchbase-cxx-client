@@ -22,8 +22,9 @@
 
 namespace couchbase::transactions
 {
-transactions_config::built
+auto
 transaction_options::apply(const transactions_config::built& conf) const
+  -> transactions_config::built
 {
   auto query_config = conf.query_config;
   if (scan_consistency_) {
@@ -38,56 +39,57 @@ transaction_options::apply(const transactions_config::built& conf) const
            conf.cleanup_config };
 }
 
-transaction_options&
+auto
 transaction_options::test_factories(
   std::shared_ptr<core::transactions::attempt_context_testing_hooks> hooks,
-  std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks)
+  std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks) -> transaction_options&
 {
   attempt_context_hooks_ = hooks;
   cleanup_hooks_ = cleanup_hooks;
   return *this;
 }
 
-std::optional<transaction_keyspace>
-transaction_options::metadata_collection() const
+auto
+transaction_options::metadata_collection() const -> std::optional<transaction_keyspace>
 {
   return metadata_collection_;
 }
 
-transaction_options&
-transaction_options::durability_level(couchbase::durability_level level)
+auto
+transaction_options::durability_level(couchbase::durability_level level) -> transaction_options&
 {
   durability_ = level;
   return *this;
 }
 
-std::optional<couchbase::durability_level>
-transaction_options::durability_level() const
+auto
+transaction_options::durability_level() const -> std::optional<couchbase::durability_level>
 {
   return durability_;
 }
 
-transaction_options&
+auto
 transaction_options::scan_consistency(query_scan_consistency scan_consistency)
+  -> transaction_options&
 {
   scan_consistency_ = scan_consistency;
   return *this;
 }
 
-std::optional<query_scan_consistency>
-transaction_options::scan_consistency() const
+auto
+transaction_options::scan_consistency() const -> std::optional<query_scan_consistency>
 {
   return scan_consistency_;
 }
 
-std::optional<std::chrono::nanoseconds>
-transaction_options::timeout()
+auto
+transaction_options::timeout() -> std::optional<std::chrono::nanoseconds>
 {
   return timeout_;
 }
 
-transaction_options&
-transaction_options::metadata_collection(const couchbase::collection& coll)
+auto
+transaction_options::metadata_collection(const couchbase::collection& coll) -> transaction_options&
 {
   metadata_collection_.emplace(coll.bucket_name(), coll.scope_name(), coll.name());
   return *this;

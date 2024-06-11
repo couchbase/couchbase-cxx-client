@@ -23,21 +23,21 @@
 
 namespace couchbase::core::utils::json
 {
-tao::json::value
-parse(std::string_view input);
+auto
+parse(std::string_view input) -> tao::json::value;
 
-tao::json::value
-parse(const json_string& input);
+auto
+parse(const json_string& input) -> tao::json::value;
 
-tao::json::value
-parse(const char* input, std::size_t size);
+auto
+parse(const char* input, std::size_t size) -> tao::json::value;
 
-std::string
-generate(const tao::json::value& object);
+auto
+generate(const tao::json::value& object) -> std::string;
 
-tao::json::value
-parse_binary(const std::vector<std::byte>& input);
+auto
+parse_binary(const std::vector<std::byte>& input) -> tao::json::value;
 
-std::vector<std::byte>
-generate_binary(const tao::json::value& object);
+auto
+generate_binary(const tao::json::value& object) -> std::vector<std::byte>;
 } // namespace couchbase::core::utils::json

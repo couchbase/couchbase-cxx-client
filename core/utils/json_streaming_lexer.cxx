@@ -34,8 +34,8 @@ noop_on_complete(std::error_code /* ec */,
 { /* do nothing */
 }
 
-static stream_control
-noop_on_row(std::string&& /* row */)
+static auto
+noop_on_row(std::string&& /* row */) -> stream_control
 {
   return stream_control::next_row;
 }
@@ -51,9 +51,9 @@ struct streaming_lexer_impl {
   }
 
   streaming_lexer_impl(streaming_lexer_impl& other) = delete;
-  const streaming_lexer_impl& operator=(const streaming_lexer_impl& other) = delete;
+  auto operator=(const streaming_lexer_impl& other) -> const streaming_lexer_impl& = delete;
   streaming_lexer_impl(streaming_lexer_impl&& other) noexcept = delete;
-  const streaming_lexer_impl& operator=(streaming_lexer_impl&& other) = delete;
+  auto operator=(streaming_lexer_impl&& other) -> const streaming_lexer_impl& = delete;
 
   ~streaming_lexer_impl()
   {
@@ -82,7 +82,8 @@ struct streaming_lexer_impl {
     state->data = STATE_MARKER_ROOT;
   }
 
-  [[nodiscard]] std::string_view get_buffer_region(std::size_t pos, std::size_t desired = 0) const
+  [[nodiscard]] auto get_buffer_region(std::size_t pos,
+                                       std::size_t desired = 0) const -> std::string_view
   {
     if (min_pos_ > pos) {
       /* swallowed */
@@ -140,8 +141,8 @@ struct streaming_lexer_impl {
 };
 } // namespace detail
 
-static std::error_code
-convert_status(jsonsl_error_t error)
+static auto
+convert_status(jsonsl_error_t error) -> std::error_code
 {
   switch (error) {
     case JSONSL_ERROR_SUCCESS:
@@ -231,11 +232,11 @@ convert_status(jsonsl_error_t error)
   return errc::streaming_json_lexer::generic;
 }
 
-static int
+static auto
 error_callback(jsonsl_t lexer,
                jsonsl_error_t error,
                struct jsonsl_state_st* /* state */,
-               jsonsl_char_t* /* at */)
+               jsonsl_char_t* /* at */) -> int
 {
   auto* impl = static_cast<detail::streaming_lexer_impl*>(lexer->data);
 

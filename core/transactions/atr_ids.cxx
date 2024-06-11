@@ -284,14 +284,14 @@ const std::vector<std::string> ATR_IDS({
   "_txn:atr-1020-#249", "_txn:atr-1021-#159",  "_txn:atr-1022-#cb",  "_txn:atr-1023-#10c2",
 });
 
-const std::vector<std::string>&
-atr_ids::all()
+auto
+atr_ids::all() -> const std::vector<std::string>&
 {
   return ATR_IDS;
 }
 
-const std::string&
-atr_ids::atr_id_for_vbucket(std::size_t vbucket_id)
+auto
+atr_ids::atr_id_for_vbucket(std::size_t vbucket_id) -> const std::string&
 {
   if (vbucket_id > ATR_IDS.size()) {
     throw std::invalid_argument(std::string("invalid vbucket_id: ") + std::to_string(vbucket_id));
@@ -299,8 +299,8 @@ atr_ids::atr_id_for_vbucket(std::size_t vbucket_id)
   return ATR_IDS[vbucket_id];
 }
 
-std::size_t
-atr_ids::vbucket_for_key(const std::string& key)
+auto
+atr_ids::vbucket_for_key(const std::string& key) -> std::size_t
 {
   static const int num_vbuckets = 1024;
   std::uint32_t digest = core::utils::hash_crc32(key.data(), key.size());

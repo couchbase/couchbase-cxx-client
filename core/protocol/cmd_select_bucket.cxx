@@ -23,14 +23,14 @@
 
 namespace couchbase::core::protocol
 {
-bool
+auto
 select_bucket_response_body::parse(key_value_status_code /* status */,
                                    const header_buffer& header,
                                    std::uint8_t /* framing_extras_size */,
                                    std::uint16_t /* key_size */,
                                    std::uint8_t /* extras_size */,
                                    const std::vector<std::byte>& /* body */,
-                                   const cmd_info& /* info */)
+                                   const cmd_info& /* info */) -> bool
 {
   Expects(header[1] == static_cast<std::byte>(opcode));
   return false;

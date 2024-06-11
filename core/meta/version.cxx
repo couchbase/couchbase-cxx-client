@@ -39,8 +39,8 @@
 
 namespace couchbase::core::meta
 {
-std::map<std::string, std::string>
-sdk_build_info()
+auto
+sdk_build_info() -> std::map<std::string, std::string>
 {
   std::map<std::string, std::string> info{};
   info["build_timestamp"] = COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP;
@@ -165,8 +165,8 @@ sdk_build_info()
   return info;
 }
 
-std::string
-sdk_build_info_json()
+auto
+sdk_build_info_json() -> std::string
 {
   tao::json::value info;
   for (const auto& [name, value] : sdk_build_info()) {
@@ -183,8 +183,8 @@ sdk_build_info_json()
   return utils::json::generate(info);
 }
 
-std::string
-sdk_build_info_short()
+auto
+sdk_build_info_short() -> std::string
 {
   return fmt::format(R"(rev="{}", compiler="{}", system="{}", date="{}")",
                      COUCHBASE_CXX_CLIENT_GIT_REVISION,
@@ -193,16 +193,16 @@ sdk_build_info_short()
                      COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP);
 }
 
-const std::string&
-sdk_id()
+auto
+sdk_id() -> const std::string&
 {
   static const std::string identifier{ sdk_version() + ";" + COUCHBASE_CXX_CLIENT_SYSTEM_NAME +
                                        "/" + COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR };
   return identifier;
 }
 
-std::string
-parse_git_describe_output(const std::string& git_describe_output)
+auto
+parse_git_describe_output(const std::string& git_describe_output) -> std::string
 {
   if (git_describe_output.empty() || git_describe_output == "unknown") {
     return "";
@@ -233,8 +233,8 @@ parse_git_describe_output(const std::string& git_describe_output)
   return "";
 }
 
-const std::string&
-sdk_semver()
+auto
+sdk_semver() -> const std::string&
 {
   static const std::string simple_version{
     std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MAJOR) + "." +
@@ -250,16 +250,16 @@ sdk_semver()
   return semantic_version;
 }
 
-const std::string&
-sdk_version()
+auto
+sdk_version() -> const std::string&
 {
   static const std::string version{ sdk_version_short() + "/" +
                                     COUCHBASE_CXX_CLIENT_GIT_REVISION_SHORT };
   return version;
 }
 
-const std::string&
-sdk_version_short()
+auto
+sdk_version_short() -> const std::string&
 {
   static const std::string version{ std::string("cxx/") +
                                     std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MAJOR) + "." +
@@ -268,8 +268,8 @@ sdk_version_short()
   return version;
 }
 
-const std::string&
-os()
+auto
+os() -> const std::string&
 {
   static const std::string system{ COUCHBASE_CXX_CLIENT_SYSTEM };
   return system;
@@ -283,10 +283,10 @@ constexpr const char* ssl_lib_id =
 #endif
   ;
 
-std::string
+auto
 user_agent_for_http(const std::string& client_id,
                     const std::string& session_id,
-                    const std::string& extra)
+                    const std::string& extra) -> std::string
 {
   auto user_agent = fmt::format("{};{}/0x{:x};client/{};session/{};{}",
                                 couchbase::core::meta::sdk_id(),
@@ -306,11 +306,11 @@ user_agent_for_http(const std::string& client_id,
   return user_agent;
 }
 
-std::string
+auto
 user_agent_for_mcbp(const std::string& client_id,
                     const std::string& session_id,
                     const std::string& extra,
-                    std::size_t max_length)
+                    std::size_t max_length) -> std::string
 {
   tao::json::value user_agent{
     { "i", fmt::format("{}/{}", client_id, session_id) },

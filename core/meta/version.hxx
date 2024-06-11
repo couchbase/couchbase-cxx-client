@@ -24,38 +24,38 @@
 
 namespace couchbase::core::meta
 {
-const std::string&
-sdk_id();
+auto
+sdk_id() -> const std::string&;
 
-const std::string&
-sdk_semver();
+auto
+sdk_semver() -> const std::string&;
 
-const std::string&
-sdk_version();
+auto
+sdk_version() -> const std::string&;
 
-const std::string&
-sdk_version_short();
+auto
+sdk_version_short() -> const std::string&;
 
-std::map<std::string, std::string>
-sdk_build_info();
+auto
+sdk_build_info() -> std::map<std::string, std::string>;
 
-std::string
-sdk_build_info_short();
+auto
+sdk_build_info_short() -> std::string;
 
-std::string
-sdk_build_info_json();
+auto
+sdk_build_info_json() -> std::string;
 
-const std::string&
-os();
+auto
+os() -> const std::string&;
 
-std::string
+auto
 user_agent_for_http(const std::string& client_id,
                     const std::string& session_id,
-                    const std::string& extra = "");
+                    const std::string& extra = "") -> std::string;
 
-std::string
+auto
 user_agent_for_mcbp(const std::string& client_id,
                     const std::string& session_id,
                     const std::string& extra = "",
-                    std::size_t max_length = 0);
+                    std::size_t max_length = 0) -> std::string;
 } // namespace couchbase::core::meta

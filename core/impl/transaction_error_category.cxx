@@ -22,12 +22,12 @@ namespace couchbase::core::impl
 {
 
 struct transaction_error_category : std::error_category {
-  [[nodiscard]] const char* name() const noexcept override
+  [[nodiscard]] auto name() const noexcept -> const char* override
   {
     return "couchbase.transaction";
   }
 
-  [[nodiscard]] std::string message(int ev) const noexcept override
+  [[nodiscard]] auto message(int ev) const noexcept -> std::string override
   {
     switch (static_cast<errc::transaction>(ev)) {
       case errc::transaction::failed:
@@ -46,8 +46,8 @@ struct transaction_error_category : std::error_category {
 
 const inline static transaction_error_category transaction_category_instance;
 
-const std::error_category&
-transaction_category() noexcept
+auto
+transaction_category() noexcept -> const std::error_category&
 {
   return transaction_category_instance;
 }

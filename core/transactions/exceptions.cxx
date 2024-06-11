@@ -20,8 +20,8 @@
 
 namespace couchbase::core::transactions
 {
-external_exception
-external_exception_from_error_class(error_class ec)
+auto
+external_exception_from_error_class(error_class ec) -> external_exception
 {
   switch (ec) {
     case FAIL_DOC_NOT_FOUND:
@@ -33,8 +33,9 @@ external_exception_from_error_class(error_class ec)
   }
 }
 
-couchbase::core::transactions::error_class
+auto
 error_class_from_external_exception(external_exception e)
+  -> couchbase::core::transactions::error_class
 {
   switch (e) {
     case DOCUMENT_NOT_FOUND_EXCEPTION:
@@ -46,8 +47,8 @@ error_class_from_external_exception(external_exception e)
   }
 }
 
-error_class
-error_class_from_result(const result& res)
+auto
+error_class_from_result(const result& res) -> error_class
 {
   subdoc_result::status_type subdoc_status = res.subdoc_status();
   assert(res.ec ||
@@ -110,8 +111,8 @@ transaction_exception::transaction_exception(const std::runtime_error& cause,
   }
 }
 
-errc::transaction_op
-transaction_op_errc_from_external_exception(external_exception e)
+auto
+transaction_op_errc_from_external_exception(external_exception e) -> errc::transaction_op
 {
   switch (e) {
     case external_exception::UNKNOWN:

@@ -32,33 +32,33 @@
 
 namespace couchbase::core::impl
 {
-error
-make_error(const core::error_context::query& core_ctx);
+auto
+make_error(const core::error_context::query& core_ctx) -> error;
 
-error
-make_error(const core::error_context::search& core_ctx);
+auto
+make_error(const core::error_context::search& core_ctx) -> error;
 
-error
-make_error(const core::error_context::analytics& core_ctx);
+auto
+make_error(const core::error_context::analytics& core_ctx) -> error;
 
-error
-make_error(const core::error_context::http& core_ctx);
+auto
+make_error(const core::error_context::http& core_ctx) -> error;
 
-error
-make_error(const couchbase::key_value_error_context& core_ctx);
+auto
+make_error(const couchbase::key_value_error_context& core_ctx) -> error;
 
-error
-make_error(const couchbase::subdocument_error_context& core_ctx);
+auto
+make_error(const couchbase::subdocument_error_context& core_ctx) -> error;
 
-error
-make_error(const couchbase::query_error_context& core_ctx);
+auto
+make_error(const couchbase::query_error_context& core_ctx) -> error;
 
-error
-make_error(const couchbase::transaction_error_context& core_ctx);
+auto
+make_error(const couchbase::transaction_error_context& core_ctx) -> error;
 
-error
-make_error(const couchbase::transaction_op_error_context& core_ctx);
+auto
+make_error(const couchbase::transaction_op_error_context& core_ctx) -> error;
 
-error
-make_error(const couchbase::core::transactions::transaction_operation_failed& core_tof);
+auto
+make_error(const couchbase::core::transactions::transaction_operation_failed& core_tof) -> error;
 } // namespace couchbase::core::impl

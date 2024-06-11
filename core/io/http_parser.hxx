@@ -41,15 +41,15 @@ struct http_parser {
 
   http_parser();
   http_parser(http_parser&& other) noexcept;
-  http_parser& operator=(http_parser&& other) noexcept;
+  auto operator=(http_parser&& other) noexcept -> http_parser&;
   http_parser(const http_parser& other) = delete;
-  http_parser& operator=(const http_parser& other) = delete;
+  auto operator=(const http_parser& other) -> http_parser& = delete;
 
   void reset();
 
-  [[nodiscard]] const char* error_message() const;
+  [[nodiscard]] auto error_message() const -> const char*;
 
-  feeding_result feed(const char* data, size_t data_len) const;
+  auto feed(const char* data, size_t data_len) const -> feeding_result;
 
 private:
   std::shared_ptr<http_parser_state> state_{};

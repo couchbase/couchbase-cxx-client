@@ -23,7 +23,7 @@
 namespace couchbase::core::utils
 {
 struct analytics {
-  static std::string uncompound_name(const std::string& name)
+  static auto uncompound_name(const std::string& name) -> std::string
   {
     std::stringstream ss;
     ss << '`';

@@ -35,27 +35,27 @@ queue_request::queue_request(protocol::magic magic,
 {
 }
 
-std::size_t
-queue_request::retry_attempts() const
+auto
+queue_request::retry_attempts() const -> std::size_t
 {
   std::scoped_lock lock(retry_mutex_);
   return retry_count_;
 }
 
-std::string
-queue_request::identifier() const
+auto
+queue_request::identifier() const -> std::string
 {
   return std::to_string(opaque_);
 }
 
-bool
-queue_request::idempotent() const
+auto
+queue_request::idempotent() const -> bool
 {
   return mcbp::is_idempotent(command_);
 }
 
-std::set<retry_reason>
-queue_request::retry_reasons() const
+auto
+queue_request::retry_reasons() const -> std::set<retry_reason>
 {
   std::scoped_lock lock(retry_mutex_);
   return retry_reasons_;

@@ -45,12 +45,14 @@
 namespace couchbase::core::impl
 {
 
-std::pair<couchbase::transaction_op_error_context,
-          couchbase::transactions::transaction_query_result>
-build_transaction_query_result(operations::query_response resp, std::error_code ec = {});
+auto
+build_transaction_query_result(operations::query_response resp, std::error_code ec = {})
+  -> std::pair<couchbase::transaction_op_error_context,
+               couchbase::transactions::transaction_query_result>;
 
-core::operations::query_request
-build_transaction_query_request(couchbase::query_options::built opts);
+auto
+build_transaction_query_request(couchbase::query_options::built opts)
+  -> core::operations::query_request;
 
 } // namespace couchbase::core::impl
 
@@ -89,18 +91,18 @@ private:
   // transaction_context needs access to the two functions below
   friend class transaction_context;
 
-  std::pair<couchbase::error, couchbase::transactions::transaction_get_result> insert_raw(
-    const couchbase::collection& coll,
-    const std::string& id,
-    std::vector<std::byte> content) override
+  auto insert_raw(const couchbase::collection& coll,
+                  const std::string& id,
+                  std::vector<std::byte> content)
+    -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result> override
   {
     return wrap_call_for_public_api([this, coll, &id, &content]() -> transaction_get_result {
       return insert_raw({ coll.bucket_name(), coll.scope_name(), coll.name(), id }, content);
     });
   }
 
-  transaction_get_result insert_raw(const core::document_id& id,
-                                    const std::vector<std::byte>& content) override;
+  auto insert_raw(const core::document_id& id,
+                  const std::vector<std::byte>& content) -> transaction_get_result override;
   void insert_raw(const collection& coll,
                   std::string id,
                   std::vector<std::byte> content,
@@ -117,12 +119,12 @@ private:
                   const std::vector<std::byte>& content,
                   Callback&& cb) override;
 
-  transaction_get_result replace_raw(const transaction_get_result& document,
-                                     const std::vector<std::byte>& content) override;
+  auto replace_raw(const transaction_get_result& document,
+                   const std::vector<std::byte>& content) -> transaction_get_result override;
 
-  std::pair<couchbase::error, couchbase::transactions::transaction_get_result> replace_raw(
-    const couchbase::transactions::transaction_get_result& doc,
-    std::vector<std::byte> content) override
+  auto replace_raw(const couchbase::transactions::transaction_get_result& doc,
+                   std::vector<std::byte> content)
+    -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result> override
   {
     return wrap_call_for_public_api([this, doc, &content]() -> transaction_get_result {
       return replace_raw(transaction_get_result(doc), content);
@@ -165,7 +167,7 @@ private:
                 const couchbase::transactions::transaction_query_options& opts,
                 std::optional<std::string> query_context,
                 QueryCallback&& cb);
-  std::exception_ptr handle_query_error(const core::operations::query_response& resp);
+  auto handle_query_error(const core::operations::query_response& resp) -> std::exception_ptr;
   void wrap_query(const std::string& statement,
                   const couchbase::transactions::transaction_query_options& opts,
                   const std::vector<core::json_string>& params,
@@ -360,16 +362,15 @@ private:
     }
   }
 
-  const core::cluster& cluster_ref() const;
+  auto cluster_ref() const -> const core::cluster&;
 
 public:
   explicit attempt_context_impl(transaction_context& transaction_ctx);
   ~attempt_context_impl() override;
 
-  transaction_get_result get(const core::document_id& id) override;
-  std::pair<couchbase::error, couchbase::transactions::transaction_get_result> get(
-    const couchbase::collection& coll,
-    const std::string& id) override
+  auto get(const core::document_id& id) -> transaction_get_result override;
+  auto get(const couchbase::collection& coll, const std::string& id)
+    -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result> override
   {
     auto [ctx, res] =
       wrap_call_for_public_api([this, coll, id]() mutable -> transaction_get_result {
@@ -399,11 +400,12 @@ public:
   }
   void get(const core::document_id& id, Callback&& cb) override;
 
-  std::optional<transaction_get_result> get_optional(const core::document_id& id) override;
+  auto get_optional(const core::document_id& id) -> std::optional<transaction_get_result> override;
   void get_optional(const core::document_id& id, Callback&& cb) override;
 
   void remove(const transaction_get_result& document) override;
-  couchbase::error remove(const couchbase::transactions::transaction_get_result& doc) override
+  auto remove(const couchbase::transactions::transaction_get_result& doc)
+    -> couchbase::error override
   {
     return wrap_void_call_for_public_api([this, doc]() {
       remove(transaction_get_result(doc));
@@ -419,15 +421,15 @@ public:
            });
   };
 
-  core::operations::query_response do_core_query(
-    const std::string& statement,
-    const couchbase::transactions::transaction_query_options& options,
-    std::optional<std::string> query_context) override;
+  auto do_core_query(const std::string& statement,
+                     const couchbase::transactions::transaction_query_options& options,
+                     std::optional<std::string> query_context)
+    -> core::operations::query_response override;
 
-  std::pair<couchbase::error, couchbase::transactions::transaction_query_result> do_public_query(
-    const std::string& statement,
-    const couchbase::transactions::transaction_query_options& opts,
-    std::optional<std::string> query_context) override;
+  auto do_public_query(const std::string& statement,
+                       const couchbase::transactions::transaction_query_options& opts,
+                       std::optional<std::string> query_context)
+    -> std::pair<couchbase::error, couchbase::transactions::transaction_query_result> override;
 
   void query(const std::string& statement,
              const couchbase::transactions::transaction_query_options& options,
@@ -474,27 +476,27 @@ public:
     }
   }
 
-  [[nodiscard]] bool is_done()
+  [[nodiscard]] auto is_done() -> bool
   {
     return is_done_;
   }
 
-  [[nodiscard]] transaction_context& overall()
+  [[nodiscard]] auto overall() -> transaction_context&
   {
     return overall_;
   }
 
-  [[nodiscard]] const std::string& transaction_id()
+  [[nodiscard]] auto transaction_id() -> const std::string&
   {
     return overall_.transaction_id();
   }
 
-  [[nodiscard]] const std::string& id()
+  [[nodiscard]] auto id() -> const std::string&
   {
     return overall_.current_attempt().id;
   }
 
-  [[nodiscard]] attempt_state state()
+  [[nodiscard]] auto state() -> attempt_state
   {
     return overall_.current_attempt().state;
   }
@@ -504,7 +506,7 @@ public:
     overall_.current_attempt_state(s);
   }
 
-  [[nodiscard]] const std::string atr_id()
+  [[nodiscard]] auto atr_id() -> const std::string
   {
     return overall_.atr_id();
   }
@@ -514,7 +516,7 @@ public:
     overall_.atr_id(atr_id);
   }
 
-  [[nodiscard]] const std::string atr_collection()
+  [[nodiscard]] auto atr_collection() -> const std::string
   {
     return overall_.atr_collection();
   }
@@ -524,12 +526,12 @@ public:
     overall_.atr_collection(coll);
   }
 
-  bool has_expired_client_side(std::string place, std::optional<const std::string> doc_id);
+  auto has_expired_client_side(std::string place, std::optional<const std::string> doc_id) -> bool;
 
 private:
   std::atomic<bool> expiry_overtime_mode_{ false };
 
-  bool check_expiry_pre_commit(std::string stage, std::optional<const std::string> doc_id);
+  auto check_expiry_pre_commit(std::string stage, std::optional<const std::string> doc_id) -> bool;
 
   void check_expiry_during_commit_or_rollback(const std::string& stage,
                                               std::optional<const std::string> doc_id);
@@ -539,11 +541,11 @@ private:
                               std::unique_lock<std::mutex>&& lock,
                               Handler&& cb);
 
-  std::optional<error_class> error_if_expired_and_not_in_overtime(
-    const std::string& stage,
-    std::optional<const std::string> doc_id);
+  auto error_if_expired_and_not_in_overtime(const std::string& stage,
+                                            std::optional<const std::string> doc_id)
+    -> std::optional<error_class>;
 
-  staged_mutation* check_for_own_write(const core::document_id& id);
+  auto check_for_own_write(const core::document_id& id) -> staged_mutation*;
 
   template<typename Handler>
   void check_and_handle_blocking_transactions(const transaction_get_result& doc,
@@ -582,12 +584,12 @@ private:
                                   std::optional<std::string>,
                                   std::optional<transaction_get_result>)>&& cb);
 
-  core::operations::mutate_in_request create_staging_request(
-    const core::document_id& in,
-    const transaction_get_result* document,
-    const std::string type,
-    const std::string op_id,
-    std::optional<std::vector<std::byte>> content = std::nullopt);
+  auto create_staging_request(const core::document_id& in,
+                              const transaction_get_result* document,
+                              const std::string type,
+                              const std::string op_id,
+                              std::optional<std::vector<std::byte>> content = std::nullopt)
+    -> core::operations::mutate_in_request;
 
   template<typename Handler, typename Delay>
   void create_staged_insert(const core::document_id& id,
@@ -613,8 +615,8 @@ private:
                                           error_class ec,
                                           const std::string& message);
 
-  std::pair<couchbase::error, couchbase::transactions::transaction_get_result>
-  wrap_call_for_public_api(std::function<transaction_get_result()>&& handler)
+  auto wrap_call_for_public_api(std::function<transaction_get_result()>&& handler)
+    -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result>
   {
     try {
       return { {}, handler().to_public_result() };
@@ -628,7 +630,7 @@ private:
     }
   }
 
-  couchbase::error wrap_void_call_for_public_api(std::function<void()>&& handler)
+  auto wrap_void_call_for_public_api(std::function<void()>&& handler) -> couchbase::error
   {
     try {
       handler();

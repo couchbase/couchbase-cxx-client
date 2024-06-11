@@ -23,12 +23,12 @@ namespace couchbase::core::impl
 {
 
 struct search_error_category : std::error_category {
-  [[nodiscard]] const char* name() const noexcept override
+  [[nodiscard]] auto name() const noexcept -> const char* override
   {
     return "couchbase.search";
   }
 
-  [[nodiscard]] std::string message(int ev) const noexcept override
+  [[nodiscard]] auto message(int ev) const noexcept -> std::string override
   {
     switch (static_cast<errc::search>(ev)) {
       case errc::search::index_not_ready:
@@ -43,8 +43,8 @@ struct search_error_category : std::error_category {
 
 const inline static search_error_category category_instance;
 
-const std::error_category&
-search_category() noexcept
+auto
+search_category() noexcept -> const std::error_category&
 {
   return category_instance;
 }

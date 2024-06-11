@@ -21,8 +21,8 @@
 
 namespace couchbase::core::transactions
 {
-constexpr std::string_view
-durability_level_to_string(durability_level level)
+constexpr auto
+durability_level_to_string(durability_level level) -> std::string_view
 {
   switch (level) {
     case durability_level::none:
@@ -37,8 +37,8 @@ durability_level_to_string(durability_level level)
   return "MAJORITY";
 }
 
-constexpr std::string_view
-durability_level_to_string_for_query(durability_level level)
+constexpr auto
+durability_level_to_string_for_query(durability_level level) -> std::string_view
 {
   switch (level) {
     case durability_level::none:
@@ -53,8 +53,8 @@ durability_level_to_string_for_query(durability_level level)
   return "majority";
 }
 
-constexpr std::string_view
-store_durability_level_to_string(durability_level level)
+constexpr auto
+store_durability_level_to_string(durability_level level) -> std::string_view
 {
   switch (level) {
     case durability_level::none:

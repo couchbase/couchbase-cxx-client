@@ -26,8 +26,8 @@ namespace couchbase::core::utils
  * Joins a list of strings together.
  */
 template<typename Range>
-std::string
-join_strings(const Range& values, const std::string& sep)
+auto
+join_strings(const Range& values, const std::string& sep) -> std::string
 {
   std::stringstream stream;
   auto sentinel = std::end(values);
@@ -47,8 +47,8 @@ join_strings(const Range& values, const std::string& sep)
  */
 template<typename Range>
 
-std::string
-join_strings_fmt(const Range& values, const std::string& sep)
+auto
+join_strings_fmt(const Range& values, const std::string& sep) -> std::string
 {
   std::stringstream stream;
   auto sentinel = std::end(values);

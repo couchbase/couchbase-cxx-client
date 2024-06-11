@@ -28,12 +28,13 @@
 
 namespace couchbase::core::impl
 {
-std::set<core::service_type>
-to_core_service_types(const std::set<couchbase::service_type>& service_types);
+auto
+to_core_service_types(const std::set<couchbase::service_type>& service_types)
+  -> std::set<core::service_type>;
 
-couchbase::ping_result
-build_result(const core::diag::ping_result& result);
+auto
+build_result(const core::diag::ping_result& result) -> couchbase::ping_result;
 
-couchbase::diagnostics_result
-build_result(const core::diag::diagnostics_result& result);
+auto
+build_result(const core::diag::diagnostics_result& result) -> couchbase::diagnostics_result;
 } // namespace couchbase::core::impl

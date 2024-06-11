@@ -29,7 +29,7 @@ struct transaction_keyspace {
 
   explicit transaction_keyspace(const std::string& bucket_name);
 
-  bool operator==(const transaction_keyspace& keyspace) const
+  auto operator==(const transaction_keyspace& keyspace) const -> bool
   {
     return bucket == keyspace.bucket && scope == keyspace.scope &&
            collection == keyspace.collection;
@@ -44,11 +44,11 @@ struct transaction_keyspace {
    *
    * @return true if valid.
    */
-  bool valid();
+  auto valid() -> bool;
 
   /** @private */
   template<typename OStream>
-  friend OStream& operator<<(OStream& os, const transaction_keyspace& keyspace)
+  friend auto operator<<(OStream& os, const transaction_keyspace& keyspace) -> OStream&
   {
     os << "transaction_keyspace{";
     os << "bucket: " << keyspace.bucket;

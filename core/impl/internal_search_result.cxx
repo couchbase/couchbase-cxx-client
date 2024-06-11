@@ -28,8 +28,9 @@
 
 namespace couchbase
 {
-static std::vector<couchbase::search_row>
+static auto
 map_rows(const std::vector<core::operations::search_response::search_row>& rows)
+  -> std::vector<couchbase::search_row>
 {
   std::vector<couchbase::search_row> result{};
   result.reserve(rows.size());
@@ -39,8 +40,9 @@ map_rows(const std::vector<core::operations::search_response::search_row>& rows)
   return result;
 }
 
-static std::map<std::string, std::shared_ptr<search_facet_result>>
+static auto
 map_facets(std::vector<core::operations::search_response::search_facet> facets)
+  -> std::map<std::string, std::shared_ptr<search_facet_result>>
 {
   std::map<std::string, std::shared_ptr<search_facet_result>> result;
 

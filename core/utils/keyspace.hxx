@@ -23,8 +23,8 @@
 namespace couchbase::core::utils
 {
 template<typename Request>
-static bool
-check_query_management_request(const Request& req)
+static auto
+check_query_management_request(const Request& req) -> bool
 {
   // if there is a query_context, then bucket and scope will be ignored
   if (req.query_ctx.has_value()) {
@@ -38,8 +38,8 @@ check_query_management_request(const Request& req)
 }
 
 template<typename Request>
-static std::string
-build_keyspace(const Request& req)
+static auto
+build_keyspace(const Request& req) -> std::string
 {
   // keyspace is just the collection if we have a query_context.
   if (req.query_ctx.has_value()) {

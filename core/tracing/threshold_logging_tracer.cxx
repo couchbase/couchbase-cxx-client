@@ -39,7 +39,7 @@ struct reported_span {
   std::chrono::microseconds duration;
   tao::json::value payload;
 
-  bool operator<(const reported_span& other) const
+  auto operator<(const reported_span& other) const -> bool
   {
     return duration < other.duration;
   }
@@ -89,32 +89,32 @@ public:
 
   void end() override;
 
-  [[nodiscard]] const auto& string_tags() const
+  [[nodiscard]] auto string_tags() const -> const auto&
   {
     return string_tags_;
   }
 
-  [[nodiscard]] std::chrono::microseconds duration() const
+  [[nodiscard]] auto duration() const -> std::chrono::microseconds
   {
     return duration_;
   }
 
-  [[nodiscard]] std::uint64_t last_server_duration_us() const
+  [[nodiscard]] auto last_server_duration_us() const -> std::uint64_t
   {
     return last_server_duration_us_;
   }
 
-  [[nodiscard]] std::uint64_t total_server_duration_us() const
+  [[nodiscard]] auto total_server_duration_us() const -> std::uint64_t
   {
     return total_server_duration_us_;
   }
 
-  [[nodiscard]] bool orphan() const
+  [[nodiscard]] auto orphan() const -> bool
   {
     return string_tags_.find(tracing::attributes::orphan) != string_tags_.end();
   }
 
-  [[nodiscard]] bool is_key_value() const
+  [[nodiscard]] auto is_key_value() const -> bool
   {
     auto service_tag = string_tags_.find(tracing::attributes::service);
     if (service_tag == string_tags_.end()) {
@@ -123,7 +123,7 @@ public:
     return service_tag->second == tracing::service::key_value;
   }
 
-  [[nodiscard]] std::optional<service_type> service() const
+  [[nodiscard]] auto service() const -> std::optional<service_type>
   {
     auto service_tag = string_tags_.find(tracing::attributes::service);
     if (service_tag == string_tags_.end()) {
@@ -190,13 +190,13 @@ public:
     data_.pop();
   }
 
-  size_type size()
+  auto size() -> size_type
   {
     std::unique_lock<std::mutex> lock(mutex_);
     return data_.size();
   }
 
-  bool empty()
+  auto empty() -> bool
   {
     std::unique_lock<std::mutex> lock(mutex_);
     return data_.empty();
@@ -211,7 +211,7 @@ public:
     }
   }
 
-  std::priority_queue<T> steal_data()
+  auto steal_data() -> std::priority_queue<T>
   {
     std::priority_queue<T> data;
     std::unique_lock<std::mutex> lock(mutex_);
@@ -222,8 +222,8 @@ public:
 
 using fixed_span_queue = concurrent_fixed_queue<reported_span>;
 
-reported_span
-convert(std::shared_ptr<threshold_logging_span> span)
+auto
+convert(std::shared_ptr<threshold_logging_span> span) -> reported_span
 {
   tao::json::value entry{
     { "operation_name", span->name() },
@@ -400,9 +400,10 @@ private:
   std::map<service_type, fixed_span_queue> threshold_queues_{};
 };
 
-std::shared_ptr<couchbase::tracing::request_span>
+auto
 threshold_logging_tracer::start_span(std::string name,
                                      std::shared_ptr<couchbase::tracing::request_span> parent)
+  -> std::shared_ptr<couchbase::tracing::request_span>
 {
   return std::make_shared<threshold_logging_span>(std::move(name), shared_from_this(), parent);
 }

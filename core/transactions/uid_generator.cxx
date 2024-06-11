@@ -20,8 +20,8 @@
 
 // TODO: Remove this, and just use client directly
 
-std::string
-couchbase::core::transactions::uid_generator::next()
+auto
+couchbase::core::transactions::uid_generator::next() -> std::string
 {
   return core::uuid::to_string(core::uuid::random());
 }

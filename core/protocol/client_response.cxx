@@ -24,8 +24,8 @@
 
 namespace couchbase::core::protocol
 {
-double
-parse_server_duration_us(const io::mcbp_message& msg)
+auto
+parse_server_duration_us(const io::mcbp_message& msg) -> double
 {
   if (msg.header.magic != static_cast<std::uint8_t>(magic::alt_client_response)) {
     return 0;
@@ -52,8 +52,8 @@ parse_server_duration_us(const io::mcbp_message& msg)
   return 0;
 }
 
-bool
-parse_enhanced_error(std::string_view str, key_value_extended_error_info& info)
+auto
+parse_enhanced_error(std::string_view str, key_value_extended_error_info& info) -> bool
 {
   if (auto error = utils::json::parse(str); error.is_object()) {
     if (const auto* err_obj = error.find("error"); err_obj != nullptr && err_obj->is_object()) {

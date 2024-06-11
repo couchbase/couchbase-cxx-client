@@ -22,12 +22,12 @@
 namespace couchbase::core::impl
 {
 struct analytics_error_category : std::error_category {
-  [[nodiscard]] const char* name() const noexcept override
+  [[nodiscard]] auto name() const noexcept -> const char* override
   {
     return "couchbase.analytics";
   }
 
-  [[nodiscard]] std::string message(int ev) const noexcept override
+  [[nodiscard]] auto message(int ev) const noexcept -> std::string override
   {
     switch (static_cast<errc::analytics>(ev)) {
       case errc::analytics::compilation_failure:
@@ -54,8 +54,8 @@ struct analytics_error_category : std::error_category {
 
 const inline static analytics_error_category category_instance;
 
-const std::error_category&
-analytics_category() noexcept
+auto
+analytics_category() noexcept -> const std::error_category&
 {
   return category_instance;
 }

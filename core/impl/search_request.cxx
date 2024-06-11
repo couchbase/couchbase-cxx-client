@@ -33,7 +33,7 @@ public:
   {
   }
 
-  static search_request_impl create(const search_query& query)
+  static auto create(const search_query& query) -> search_request_impl
   {
     auto encoded = query.encode();
     if (encoded.ec) {
@@ -42,7 +42,7 @@ public:
     return search_request_impl(encoded, {}, {});
   }
 
-  static search_request_impl create(const vector_search& search)
+  static auto create(const vector_search& search) -> search_request_impl
   {
     auto encoded = search.encode();
     if (encoded.ec) {
@@ -68,17 +68,17 @@ public:
     vector_search_options_ = search.options();
   }
 
-  [[nodiscard]] std::optional<encoded_search_query> search_query() const
+  [[nodiscard]] auto search_query() const -> std::optional<encoded_search_query>
   {
     return search_query_;
   }
 
-  [[nodiscard]] std::optional<encoded_search_query> vector_search() const
+  [[nodiscard]] auto vector_search() const -> std::optional<encoded_search_query>
   {
     return vector_search_;
   }
 
-  [[nodiscard]] std::optional<vector_search_options::built> vector_options() const
+  [[nodiscard]] auto vector_options() const -> std::optional<vector_search_options::built>
   {
     return vector_search_options_;
   }
@@ -119,20 +119,20 @@ search_request::vector_search(const couchbase::vector_search& vector_search) -> 
   return *this;
 }
 
-[[nodiscard]] std::optional<encoded_search_query>
-search_request::search_query() const
+[[nodiscard]] auto
+search_request::search_query() const -> std::optional<encoded_search_query>
 {
   return impl_->search_query();
 }
 
-[[nodiscard]] std::optional<encoded_search_query>
-search_request::vector_search() const
+[[nodiscard]] auto
+search_request::vector_search() const -> std::optional<encoded_search_query>
 {
   return impl_->vector_search();
 }
 
-[[nodiscard]] std::optional<couchbase::vector_search_options::built>
-search_request::vector_options()
+[[nodiscard]] auto
+search_request::vector_options() -> std::optional<couchbase::vector_search_options::built>
 {
   return impl_->vector_options();
 }

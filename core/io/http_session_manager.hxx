@@ -211,10 +211,10 @@ public:
     }
   }
 
-  std::pair<std::error_code, std::shared_ptr<http_session>> check_out(
-    service_type type,
-    const couchbase::core::cluster_credentials& credentials,
-    const std::string& preferred_node)
+  auto check_out(service_type type,
+                 const couchbase::core::cluster_credentials& credentials,
+                 const std::string& preferred_node)
+    -> std::pair<std::error_code, std::shared_ptr<http_session>>
   {
     std::scoped_lock lock(sessions_mutex_);
     idle_sessions_[type].remove_if([](const auto& s) {
@@ -353,11 +353,10 @@ public:
   }
 
 private:
-  std::shared_ptr<http_session> bootstrap_session(
-    service_type type,
-    const couchbase::core::cluster_credentials& credentials,
-    const std::string& hostname,
-    std::uint16_t port)
+  auto bootstrap_session(service_type type,
+                         const couchbase::core::cluster_credentials& credentials,
+                         const std::string& hostname,
+                         std::uint16_t port) -> std::shared_ptr<http_session>
   {
     std::shared_ptr<http_session> session;
     if (options_.enable_tls) {
@@ -394,7 +393,7 @@ private:
     return session;
   }
 
-  std::pair<std::string, std::uint16_t> next_node(service_type type)
+  auto next_node(service_type type) -> std::pair<std::string, std::uint16_t>
   {
     std::scoped_lock lock(config_mutex_);
     auto candidates = config_.nodes.size();
@@ -411,7 +410,7 @@ private:
     return { "", static_cast<std::uint16_t>(0U) };
   }
 
-  std::pair<std::string, std::uint16_t> split_host_port(const std::string& address)
+  auto split_host_port(const std::string& address) -> std::pair<std::string, std::uint16_t>
   {
     auto last_colon = address.find_last_of(':');
     if (last_colon == std::string::npos || address.size() - 1 == last_colon) {
@@ -422,8 +421,8 @@ private:
     return { hostname, port };
   }
 
-  std::pair<std::string, std::uint16_t> lookup_node(service_type type,
-                                                    const std::string& preferred_node)
+  auto lookup_node(service_type type,
+                   const std::string& preferred_node) -> std::pair<std::string, std::uint16_t>
   {
     std::scoped_lock lock(config_mutex_);
     auto [hostname, port] = split_host_port(preferred_node);

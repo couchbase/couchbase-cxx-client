@@ -73,7 +73,7 @@ private:
   friend couchbase::mutate_in_specs;
 #endif
 
-  counter(std::string path, std::int64_t value)
+  counter(std::string path, int64_t value)
     : path_(std::move(path))
     , delta_{ value }
   {
@@ -82,7 +82,7 @@ private:
   void encode(core::impl::subdoc::command_bundle& bundle) const;
 
   std::string path_;
-  std::int64_t delta_;
+  int64_t delta_;
   bool xattr_{ false };
   bool create_path_{ false };
 };

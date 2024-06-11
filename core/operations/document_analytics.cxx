@@ -27,9 +27,9 @@
 
 namespace couchbase::core::operations
 {
-std::error_code
+auto
 analytics_request::encode_to(analytics_request::encoded_request_type& encoded,
-                             http_context& context)
+                             http_context& context) -> std::error_code
 {
   tao::json::value body{ { "statement", statement },
                          { "client_context_id", encoded.client_context_id },
@@ -99,9 +99,9 @@ analytics_request::encode_to(analytics_request::encoded_request_type& encoded,
   return {};
 }
 
-analytics_response
+auto
 analytics_request::make_response(error_context::analytics&& ctx,
-                                 const encoded_response_type& encoded) const
+                                 const encoded_response_type& encoded) const -> analytics_response
 {
   analytics_response response{ std::move(ctx) };
   response.ctx.statement = statement;

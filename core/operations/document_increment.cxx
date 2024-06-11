@@ -22,9 +22,9 @@
 
 namespace couchbase::core::operations
 {
-std::error_code
+auto
 increment_request::encode_to(increment_request::encoded_request_type& encoded,
-                             mcbp_context&& /* context */) const
+                             mcbp_context&& /* context */) const -> std::error_code
 {
   encoded.opaque(opaque);
   encoded.partition(partition);
@@ -40,9 +40,9 @@ increment_request::encode_to(increment_request::encoded_request_type& encoded,
   return {};
 }
 
-increment_response
+auto
 increment_request::make_response(key_value_error_context&& ctx,
-                                 const encoded_response_type& encoded) const
+                                 const encoded_response_type& encoded) const -> increment_response
 {
   increment_response response{ std::move(ctx) };
   if (!response.ctx.ec()) {

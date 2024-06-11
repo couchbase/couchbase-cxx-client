@@ -25,9 +25,9 @@
 
 namespace couchbase::core::operations
 {
-std::error_code
+auto
 mutate_in_request::encode_to(mutate_in_request::encoded_request_type& encoded,
-                             mcbp_context&& context)
+                             mcbp_context&& context) -> std::error_code
 {
   if (store_semantics == couchbase::store_semantics::upsert && !cas.empty()) {
     return errc::common::invalid_argument;
@@ -63,9 +63,9 @@ mutate_in_request::encode_to(mutate_in_request::encoded_request_type& encoded,
   return {};
 }
 
-mutate_in_response
+auto
 mutate_in_request::make_response(key_value_error_context&& ctx,
-                                 const encoded_response_type& encoded) const
+                                 const encoded_response_type& encoded) const -> mutate_in_response
 {
   bool deleted = false;
   couchbase::cas response_cas{};

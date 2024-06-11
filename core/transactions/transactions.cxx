@@ -91,9 +91,10 @@ transactions::create(
   return create(std::move(cluster), config.build(), std::move(cb));
 }
 
-std::future<std::pair<std::error_code, std::shared_ptr<transactions>>>
+auto
 transactions::create(core::cluster cluster,
                      const couchbase::transactions::transactions_config::built& config)
+  -> std::future<std::pair<std::error_code, std::shared_ptr<transactions>>>
 {
   auto barrier =
     std::make_shared<std::promise<std::pair<std::error_code, std::shared_ptr<transactions>>>>();
@@ -103,19 +104,20 @@ transactions::create(core::cluster cluster,
   return barrier->get_future();
 }
 
-std::future<std::pair<std::error_code, std::shared_ptr<transactions>>>
+auto
 transactions::create(core::cluster cluster,
                      const couchbase::transactions::transactions_config& config)
+  -> std::future<std::pair<std::error_code, std::shared_ptr<transactions>>>
 {
   return create(std::move(cluster), config.build());
 }
 
 template<typename Handler>
-::couchbase::transactions::transaction_result
+auto
 wrap_run(transactions& txns,
          const couchbase::transactions::transaction_options& config,
          std::size_t max_attempts,
-         Handler&& fn)
+         Handler&& fn) -> ::couchbase::transactions::transaction_result
 {
   transaction_context overall(txns, config);
   std::size_t attempts{ 0 };
@@ -163,22 +165,24 @@ wrap_run(transactions& txns,
   return overall.get_transaction_result();
 }
 
-::couchbase::transactions::transaction_result
-transactions::run(logic&& code)
+auto
+transactions::run(logic&& code) -> ::couchbase::transactions::transaction_result
 {
   couchbase::transactions::transaction_options config;
   return wrap_run(*this, config, max_attempts_, std::move(code));
 }
 
-::couchbase::transactions::transaction_result
-transactions::run(const couchbase::transactions::transaction_options& config, logic&& code)
+auto
+transactions::run(const couchbase::transactions::transaction_options& config,
+                  logic&& code) -> ::couchbase::transactions::transaction_result
 {
   return wrap_run(*this, config, max_attempts_, std::move(code));
 }
 
-std::pair<error, couchbase::transactions::transaction_result>
+auto
 transactions::run(couchbase::transactions::txn_logic&& code,
                   const couchbase::transactions::transaction_options& config)
+  -> std::pair<error, couchbase::transactions::transaction_result>
 {
   try {
     return { {}, wrap_run(*this, config, max_attempts_, std::move(code)) };

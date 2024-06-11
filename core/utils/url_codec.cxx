@@ -28,8 +28,8 @@ namespace couchbase::core::utils::string_codec
 
 namespace priv
 {
-inline bool
-is_legal_uri_char(char c)
+inline auto
+is_legal_uri_char(char c) -> bool
 {
   auto uc = static_cast<unsigned char>(c);
   if ((isalpha(uc) != 0) || (isdigit(uc) != 0)) {
@@ -66,8 +66,8 @@ is_legal_uri_char(char c)
 }
 
 template<typename T>
-inline bool
-is_already_escape(T first, T last)
+inline auto
+is_already_escape(T first, T last) -> bool
 {
   ++first; // ignore '%'
   std::size_t jj = 0;
@@ -81,8 +81,8 @@ is_already_escape(T first, T last)
 } // namespace priv
 
 template<typename Ti, typename To>
-bool
-url_encode(Ti first, Ti last, To& o, bool check_encoded = true)
+auto
+url_encode(Ti first, Ti last, To& o, bool check_encoded = true) -> bool
 {
   // If re-encoding detection is enabled, this flag indicates not to
   // re-encode
@@ -127,14 +127,14 @@ url_encode(Ti first, Ti last, To& o, bool check_encoded = true)
 }
 
 template<typename Tin, typename Tout>
-bool
-url_encode(const Tin& in, Tout& out)
+auto
+url_encode(const Tin& in, Tout& out) -> bool
 {
   return url_encode(in.begin(), in.end(), out);
 }
 
-std::string
-url_encode(const std::string& src)
+auto
+url_encode(const std::string& src) -> std::string
 {
   std::string dst{};
   url_encode(src.begin(), src.end(), dst);
@@ -142,8 +142,8 @@ url_encode(const std::string& src)
 }
 
 template<typename Ti, typename To>
-bool
-url_decode(Ti first, Ti last, To out, std::size_t& nout)
+auto
+url_decode(Ti first, Ti last, To out, std::size_t& nout) -> bool
 {
   for (; first != last && *first != '\0'; ++first) {
     if (*first == '%') {
@@ -178,8 +178,8 @@ url_decode(Ti first, Ti last, To out, std::size_t& nout)
   return true;
 }
 
-std::string
-url_decode(const std::string& src)
+auto
+url_decode(const std::string& src) -> std::string
 {
   std::string dst(src.size(), '\0');
   std::size_t n = 0;
@@ -224,8 +224,8 @@ form_encode(Ti first, Ti last, To& out)
   }
 }
 
-std::string
-form_encode(const std::string& src)
+auto
+form_encode(const std::string& src) -> std::string
 {
   std::string dst;
   form_encode(src.begin(), src.end(), dst);
@@ -234,8 +234,8 @@ form_encode(const std::string& src)
 
 namespace v2
 {
-bool
-should_escape(char c, encoding mode)
+auto
+should_escape(char c, encoding mode) -> bool
 {
   // §2.3 Unreserved characters (alphanum)
   if (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9')) {
@@ -354,8 +354,8 @@ should_escape(char c, encoding mode)
 
 constexpr auto upper_hex = "0123456789ABCDEF";
 
-std::string
-escape(const std::string& s, encoding mode)
+auto
+escape(const std::string& s, encoding mode) -> std::string
 {
   std::size_t space_count{ 0 };
   std::size_t hex_count{ 0 };

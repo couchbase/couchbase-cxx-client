@@ -42,7 +42,7 @@ struct binary_header {
   std::uint32_t opaque;
   std::uint64_t cas;
 
-  [[nodiscard]] std::uint16_t status() const;
+  [[nodiscard]] auto status() const -> std::uint16_t;
 };
 
 struct mcbp_message {
@@ -51,11 +51,11 @@ struct mcbp_message {
 
   mcbp_message() = default;
   mcbp_message(const mcbp_message& other) = delete;
-  mcbp_message& operator=(const mcbp_message& other) = delete;
+  auto operator=(const mcbp_message& other) -> mcbp_message& = delete;
   mcbp_message(mcbp_message&& other) = default;
-  mcbp_message& operator=(mcbp_message&& other) = default;
+  auto operator=(mcbp_message&& other) -> mcbp_message& = default;
 
-  [[nodiscard]] protocol::header_buffer header_data() const;
+  [[nodiscard]] auto header_data() const -> protocol::header_buffer;
 };
 } // namespace io
 } // namespace couchbase::core

@@ -62,11 +62,13 @@ enum external_exception {
   TRANSACTION_ALREADY_COMMITTED,
 };
 
-couchbase::errc::transaction_op
-transaction_op_errc_from_external_exception(external_exception e);
+auto
+transaction_op_errc_from_external_exception(external_exception e)
+  -> couchbase::errc::transaction_op;
 
-couchbase::core::transactions::error_class
-error_class_from_external_exception(external_exception e);
+auto
+error_class_from_external_exception(external_exception e)
+  -> couchbase::core::transactions::error_class;
 
 /**
  * @brief Base class for all exceptions expected to be raised from a transaction.
@@ -97,8 +99,8 @@ public:
    *
    * @returns Internal state of transaction.
    */
-  std::pair<couchbase::transaction_error_context, couchbase::transactions::transaction_result>
-  get_transaction_result() const
+  auto get_transaction_result() const
+    -> std::pair<couchbase::transaction_error_context, couchbase::transactions::transaction_result>
   {
     return { error_context(), { result_.transaction_id, result_.unstaging_complete } };
   }
@@ -108,7 +110,7 @@ public:
    *
    * @returns The underlying cause for this exception.
    */
-  external_exception cause() const
+  auto cause() const -> external_exception
   {
     return cause_;
   }
@@ -116,12 +118,12 @@ public:
    * @brief The type of the exception - see @ref failure_type
    * @return The failure type.
    */
-  failure_type type() const
+  auto type() const -> failure_type
   {
     return type_;
   }
 
-  [[nodiscard]] transaction_error_context error_context() const
+  [[nodiscard]] auto error_context() const -> transaction_error_context
   {
     std::error_code ec{};
     switch (type_) {
@@ -153,12 +155,12 @@ public:
   {
   }
 
-  [[nodiscard]] external_exception cause() const
+  [[nodiscard]] auto cause() const -> external_exception
   {
     return cause_;
   }
 
-  [[nodiscard]] const transaction_op_error_context& ctx() const
+  [[nodiscard]] auto ctx() const -> const transaction_op_error_context&
   {
     return ctx_;
   }

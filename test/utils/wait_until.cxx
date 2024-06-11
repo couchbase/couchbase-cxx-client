@@ -38,8 +38,9 @@
 
 namespace test::utils
 {
-bool
-wait_until_bucket_healthy(const couchbase::core::cluster& cluster, const std::string& bucket_name)
+auto
+wait_until_bucket_healthy(const couchbase::core::cluster& cluster,
+                          const std::string& bucket_name) -> bool
 {
   return wait_until([cluster, bucket_name]() {
     couchbase::core::operations::management::bucket_get_request req{ bucket_name };
@@ -59,12 +60,12 @@ wait_until_bucket_healthy(const couchbase::core::cluster& cluster, const std::st
   });
 }
 
-bool
+auto
 wait_until_collection_manifest_propagated(const couchbase::core::cluster& cluster,
                                           const std::string& bucket_name,
                                           std::uint64_t current_manifest_uid,
                                           std::size_t successful_rounds,
-                                          std::chrono::seconds total_timeout)
+                                          std::chrono::seconds total_timeout) -> bool
 {
   std::size_t round = 0;
   auto deadline = std::chrono::system_clock::now() + total_timeout;
@@ -98,8 +99,9 @@ wait_until_collection_manifest_propagated(const couchbase::core::cluster& cluste
   return false;
 }
 
-bool
-wait_until_user_present(const couchbase::core::cluster& cluster, const std::string& username)
+auto
+wait_until_user_present(const couchbase::core::cluster& cluster,
+                        const std::string& username) -> bool
 {
   auto present = test::utils::wait_until([cluster, username]() {
     couchbase::core::operations::management::user_get_request req{};
@@ -114,10 +116,10 @@ wait_until_user_present(const couchbase::core::cluster& cluster, const std::stri
   return present;
 }
 
-bool
+auto
 wait_until_cluster_connected(const std::string& username,
                              const std::string& password,
-                             const std::string& connection_string)
+                             const std::string& connection_string) -> bool
 {
   auto cluster_options = couchbase::cluster_options(username, password);
 
@@ -149,8 +151,8 @@ to_string(std::optional<std::uint64_t> value) -> std::string
   return "(empty)";
 }
 
-static bool
-refresh_config_on_search_service(const couchbase::core::cluster& cluster)
+static auto
+refresh_config_on_search_service(const couchbase::core::cluster& cluster) -> bool
 {
   const couchbase::core::operations::management::freeform_request req{
     couchbase::core::service_type::search,
@@ -169,8 +171,8 @@ refresh_config_on_search_service(const couchbase::core::cluster& cluster)
  * and to update its runtime state to reflect the latest plan (by running the janitor,
  * if enabled).
  */
-static bool
-kick_manager_manager_on_search_service(const couchbase::core::cluster& cluster)
+static auto
+kick_manager_manager_on_search_service(const couchbase::core::cluster& cluster) -> bool
 {
   const couchbase::core::operations::management::freeform_request req{
     couchbase::core::service_type::search,
@@ -184,8 +186,8 @@ kick_manager_manager_on_search_service(const couchbase::core::cluster& cluster)
   return !resp.ctx.ec;
 }
 
-static bool
-starts_with(const std::string& str, const std::string& prefix)
+static auto
+starts_with(const std::string& str, const std::string& prefix) -> bool
 {
   if (str.length() < prefix.length()) {
     return false;
@@ -193,8 +195,8 @@ starts_with(const std::string& str, const std::string& prefix)
   return str.compare(0, prefix.length(), prefix) == 0;
 }
 
-static bool
-ends_with(const std::string& str, const std::string& suffix)
+static auto
+ends_with(const std::string& str, const std::string& suffix) -> bool
 {
   if (str.length() < suffix.length()) {
     return false;
@@ -202,10 +204,10 @@ ends_with(const std::string& str, const std::string& suffix)
   return str.compare(str.length() - suffix.length(), suffix.length(), suffix) == 0;
 }
 
-bool
+auto
 wait_for_search_pindexes_ready(const couchbase::core::cluster& cluster,
                                const std::string& bucket_name,
-                               const std::string& index_name)
+                               const std::string& index_name) -> bool
 {
   return test::utils::wait_until(
     [&]() {
@@ -253,10 +255,10 @@ wait_for_search_pindexes_ready(const couchbase::core::cluster& cluster,
     std::chrono::seconds{ 1 });
 }
 
-bool
+auto
 wait_until_indexed(const couchbase::core::cluster& cluster,
                    const std::string& index_name,
-                   std::uint64_t expected_count)
+                   std::uint64_t expected_count) -> bool
 {
   return test::utils::wait_until(
     [cluster = std::move(cluster), &index_name, &expected_count]() {
@@ -278,8 +280,9 @@ wait_until_indexed(const couchbase::core::cluster& cluster,
     std::chrono::seconds{ 5 });
 }
 
-bool
-create_primary_index(const couchbase::core::cluster& cluster, const std::string& bucket_name)
+auto
+create_primary_index(const couchbase::core::cluster& cluster,
+                     const std::string& bucket_name) -> bool
 {
   couchbase::core::operations::management::query_index_create_response resp;
   bool operation_completed = wait_until([&cluster, &bucket_name, &resp]() {
@@ -307,12 +310,13 @@ create_primary_index(const couchbase::core::cluster& cluster, const std::string&
   return operation_completed;
 }
 
-std::pair<bool, std::string>
+auto
 create_search_index(integration_test_guard& integration,
                     const std::string& bucket_name,
                     const std::string& index_name,
                     const std::string& index_params_file_name,
                     std::size_t expected_number_of_documents_indexed)
+  -> std::pair<bool, std::string>
 {
   auto params = read_test_data(index_params_file_name);
 
@@ -369,13 +373,13 @@ create_search_index(integration_test_guard& integration,
   return { operation_completed, actual_index_name };
 }
 
-bool
+auto
 wait_for_function_created(const couchbase::core::cluster& cluster,
                           const std::string& function_name,
                           const std::optional<std::string>& bucket_name,
                           const std::optional<std::string>& scope_name,
                           std::size_t successful_rounds,
-                          std::chrono::seconds total_timeout)
+                          std::chrono::seconds total_timeout) -> bool
 {
   std::size_t round = 0;
   auto deadline = std::chrono::system_clock::now() + total_timeout;
@@ -420,8 +424,8 @@ wait_for_function_created(const couchbase::core::cluster& cluster,
   return false;
 }
 
-bool
-drop_search_index(integration_test_guard& integration, const std::string& index_name)
+auto
+drop_search_index(integration_test_guard& integration, const std::string& index_name) -> bool
 {
   couchbase::core::operations::management::search_index_drop_request req{};
   req.index_name = index_name;

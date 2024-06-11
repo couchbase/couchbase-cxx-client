@@ -23,8 +23,8 @@
 
 namespace couchbase::core::protocol
 {
-std::string
-status_to_string(std::uint16_t code)
+auto
+status_to_string(std::uint16_t code) -> std::string
 {
   if (is_valid_status(code)) {
     return fmt::format("{} ({})", code, static_cast<key_value_status_code>(code));
@@ -32,8 +32,8 @@ status_to_string(std::uint16_t code)
   return fmt::format("{} (unknown)", code);
 }
 
-[[nodiscard]] std::error_code
-map_status_code(protocol::client_opcode opcode, std::uint16_t status)
+[[nodiscard]] auto
+map_status_code(protocol::client_opcode opcode, std::uint16_t status) -> std::error_code
 {
   switch (static_cast<key_value_status_code>(status)) {
     case key_value_status_code::success:

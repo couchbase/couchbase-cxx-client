@@ -61,10 +61,11 @@ struct lookup_in_replica_request {
   std::uint32_t opaque{};
   io::retry_context<false> retries{};
 
-  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context);
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded,
+                               mcbp_context&& context) -> std::error_code;
 
-  [[nodiscard]] lookup_in_replica_response make_response(
-    key_value_error_context&& ctx,
-    const encoded_response_type& encoded) const;
+  [[nodiscard]] auto make_response(key_value_error_context&& ctx,
+                                   const encoded_response_type& encoded) const
+    -> lookup_in_replica_response;
 };
 } // namespace couchbase::core::impl

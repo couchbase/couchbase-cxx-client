@@ -29,8 +29,8 @@ public:
   request_span() = default;
   request_span(const request_span& other) = default;
   request_span(request_span&& other) = default;
-  request_span& operator=(const request_span& other) = default;
-  request_span& operator=(request_span&& other) = default;
+  auto operator=(const request_span& other) -> request_span& = default;
+  auto operator=(request_span&& other) -> request_span& = default;
   virtual ~request_span() = default;
 
   explicit request_span(std::string name)
@@ -46,17 +46,17 @@ public:
   virtual void add_tag(const std::string& name, const std::string& value) = 0;
   virtual void end() = 0;
 
-  [[nodiscard]] const std::string& name() const
+  [[nodiscard]] auto name() const -> const std::string&
   {
     return name_;
   }
 
-  [[nodiscard]] std::shared_ptr<request_span> parent() const
+  [[nodiscard]] auto parent() const -> std::shared_ptr<request_span>
   {
     return parent_;
   }
 
-  virtual bool uses_tags() const
+  virtual auto uses_tags() const -> bool
   {
     return true;
   }

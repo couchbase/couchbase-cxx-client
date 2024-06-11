@@ -19,8 +19,9 @@
 
 namespace couchbase::core::transactions
 {
-transaction_get_result
+auto
 transaction_get_result::create_from(const core::operations::lookup_in_response& resp)
+  -> transaction_get_result
 {
   std::optional<std::string> atr_id;
   std::optional<std::string> transaction_id;
@@ -126,8 +127,9 @@ transaction_get_result::create_from(const core::operations::lookup_in_response& 
            std::make_optional(md) };
 }
 
-transaction_get_result
-transaction_get_result::create_from(const core::document_id& id, const result& res)
+auto
+transaction_get_result::create_from(const core::document_id& id,
+                                    const result& res) -> transaction_get_result
 {
   std::optional<std::string> atr_id;
   std::optional<std::string> transaction_id;

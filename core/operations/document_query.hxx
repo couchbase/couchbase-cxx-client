@@ -111,10 +111,11 @@ struct query_request {
   std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
   std::optional<std::string> send_to_node{};
 
-  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded,
+                               http_context& context) -> std::error_code;
 
-  [[nodiscard]] query_response make_response(error_context::query&& ctx,
-                                             const encoded_response_type& encoded);
+  [[nodiscard]] auto make_response(error_context::query&& ctx,
+                                   const encoded_response_type& encoded) -> query_response;
 
   std::optional<http_context> ctx_{};
   bool extract_encoded_plan_{ false };

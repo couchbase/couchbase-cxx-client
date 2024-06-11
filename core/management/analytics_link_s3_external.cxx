@@ -25,8 +25,8 @@
 
 namespace couchbase::core::management::analytics
 {
-std::error_code
-s3_external_link::validate() const
+auto
+s3_external_link::validate() const -> std::error_code
 {
   if (dataverse.empty() || link_name.empty() || access_key_id.empty() ||
       secret_access_key.empty() || region.empty()) {
@@ -35,8 +35,8 @@ s3_external_link::validate() const
   return {};
 }
 
-std::string
-s3_external_link::encode() const
+auto
+s3_external_link::encode() const -> std::string
 {
   std::map<std::string, std::string> values{
     { "type", "s3" },

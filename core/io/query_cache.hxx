@@ -54,7 +54,7 @@ public:
     store_.try_emplace(statement, entry{ name, encoded_plan });
   }
 
-  std::optional<entry> get(const std::string& statement)
+  auto get(const std::string& statement) -> std::optional<entry>
   {
     std::scoped_lock lock(store_mutex_);
     auto it = store_.find(statement);

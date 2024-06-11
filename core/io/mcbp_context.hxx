@@ -31,7 +31,7 @@ struct mcbp_context {
   const std::optional<topology::configuration>& config;
   const std::vector<protocol::hello_feature>& supported_features;
 
-  [[nodiscard]] bool supports_feature(protocol::hello_feature feature) const
+  [[nodiscard]] auto supports_feature(protocol::hello_feature feature) const -> bool
   {
     return std::find(supported_features.begin(), supported_features.end(), feature) !=
            supported_features.end();

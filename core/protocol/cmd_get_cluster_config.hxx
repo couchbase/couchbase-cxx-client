@@ -28,10 +28,10 @@
 namespace couchbase::core::protocol
 {
 
-topology::configuration
+auto
 parse_config(std::string_view input,
              std::string_view endpoint_address,
-             std::uint16_t endpoint_port);
+             std::uint16_t endpoint_port) -> topology::configuration;
 
 class get_cluster_config_response_body
 {
@@ -43,23 +43,23 @@ private:
   std::optional<std::string_view> config_text_;
 
 public:
-  [[nodiscard]] topology::configuration&& config()
+  [[nodiscard]] auto config() -> topology::configuration&&
   {
     return std::move(config_);
   }
 
-  [[nodiscard]] const std::optional<std::string_view>& config_text() const
+  [[nodiscard]] auto config_text() const -> const std::optional<std::string_view>&
   {
     return config_text_;
   }
 
-  bool parse(key_value_status_code status,
+  auto parse(key_value_status_code status,
              const header_buffer& header,
              std::uint8_t framing_extras_size,
              std::uint16_t key_size,
              std::uint8_t extras_size,
              const std::vector<std::byte>& body,
-             const cmd_info& info);
+             const cmd_info& info) -> bool;
 };
 
 class get_cluster_config_request_body
@@ -68,27 +68,27 @@ public:
   using response_body_type = get_cluster_config_response_body;
   static const inline client_opcode opcode = client_opcode::get_cluster_config;
 
-  [[nodiscard]] const std::string& key() const
+  [[nodiscard]] auto key() const -> const std::string&
   {
     return empty_string;
   }
 
-  [[nodiscard]] const auto& framing_extras() const
+  [[nodiscard]] auto framing_extras() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& extras() const
+  [[nodiscard]] auto extras() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& value() const
+  [[nodiscard]] auto value() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] std::size_t size() const
+  [[nodiscard]] auto size() const -> std::size_t
   {
     return 0;
   }

@@ -74,7 +74,7 @@ public:
     initialize_histogram();
   }
 
-  logging_value_recorder& operator=(const logging_value_recorder& other)
+  auto operator=(const logging_value_recorder& other) -> logging_value_recorder&
   {
     if (this == &other) {
       return *this;
@@ -85,7 +85,7 @@ public:
     return *this;
   }
 
-  logging_value_recorder& operator=(logging_value_recorder&& other) noexcept
+  auto operator=(logging_value_recorder&& other) noexcept -> logging_value_recorder&
   {
     if (this == &other) {
       return *this;
@@ -112,7 +112,7 @@ public:
     hdr_record_value_atomic(histogram_, value);
   }
 
-  [[nodiscard]] tao::json::value emit() const
+  [[nodiscard]] auto emit() const -> tao::json::value
   {
     auto total_count = histogram_->total_count;
     auto val_50_0 = hdr_value_at_percentile(histogram_, 50.0);
@@ -200,9 +200,10 @@ logging_meter::stop()
   emit_report_.cancel();
 }
 
-std::shared_ptr<couchbase::metrics::value_recorder>
+auto
 logging_meter::get_value_recorder(const std::string& name,
                                   const std::map<std::string, std::string>& tags)
+  -> std::shared_ptr<couchbase::metrics::value_recorder>
 {
   static std::shared_ptr<noop_value_recorder> noop_recorder{
     std::make_shared<noop_value_recorder>()

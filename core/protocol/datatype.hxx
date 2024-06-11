@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 namespace couchbase::core::protocol
 {
 enum class datatype : std::uint8_t {
@@ -26,8 +28,8 @@ enum class datatype : std::uint8_t {
   xattr = 0x04,
 };
 
-constexpr bool
-is_valid_datatype(std::uint8_t code)
+constexpr auto
+is_valid_datatype(std::uint8_t code) -> bool
 {
   switch (static_cast<datatype>(code)) {
     case datatype::raw:
@@ -39,8 +41,8 @@ is_valid_datatype(std::uint8_t code)
   return false;
 }
 
-constexpr bool
-has_json_datatype(std::uint8_t code)
+constexpr auto
+has_json_datatype(std::uint8_t code) -> bool
 {
   return (code & static_cast<std::uint8_t>(datatype::json)) != 0;
 }

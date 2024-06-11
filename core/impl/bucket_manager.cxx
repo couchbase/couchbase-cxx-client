@@ -34,8 +34,9 @@ namespace couchbase
 {
 namespace
 {
-couchbase::management::cluster::bucket_settings
+auto
 map_bucket_settings(const couchbase::core::management::cluster::bucket_settings& bucket)
+  -> couchbase::management::cluster::bucket_settings
 {
   couchbase::management::cluster::bucket_settings bucket_settings{};
   bucket_settings.name = bucket.name;
@@ -139,9 +140,9 @@ map_bucket_settings(const couchbase::core::management::cluster::bucket_settings&
   return bucket_settings;
 }
 
-std::vector<couchbase::management::cluster::bucket_settings>
-map_all_bucket_settings(
-  const std::vector<couchbase::core::management::cluster::bucket_settings>& buckets)
+auto
+map_all_bucket_settings(const std::vector<couchbase::core::management::cluster::bucket_settings>&
+                          buckets) -> std::vector<couchbase::management::cluster::bucket_settings>
 {
   std::vector<couchbase::management::cluster::bucket_settings> buckets_settings{};
   for (const auto& bucket : buckets) {
@@ -151,8 +152,9 @@ map_all_bucket_settings(
   return buckets_settings;
 }
 
-couchbase::core::management::cluster::bucket_settings
+auto
 map_bucket_settings(const couchbase::management::cluster::bucket_settings& bucket)
+  -> couchbase::core::management::cluster::bucket_settings
 {
 
   couchbase::core::management::cluster::bucket_settings bucket_settings{};

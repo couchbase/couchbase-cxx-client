@@ -74,7 +74,7 @@ struct analytics_link {
    *
    * @return the link type
    */
-  [[nodiscard]] virtual analytics_link_type link_type() const = 0;
+  [[nodiscard]] virtual auto link_type() const -> analytics_link_type = 0;
 
   analytics_link() = default;
   analytics_link(std::string name, std::string dataverse_name);
@@ -110,7 +110,7 @@ struct couchbase_remote_analytics_link : analytics_link {
   std::optional<std::string> username{};
   std::optional<std::string> password{};
 
-  [[nodiscard]] analytics_link_type link_type() const override
+  [[nodiscard]] auto link_type() const -> analytics_link_type override
   {
     return analytics_link_type::couchbase_remote;
   }
@@ -156,7 +156,7 @@ struct s3_external_analytics_link : analytics_link {
   std::optional<std::string> session_token{};
   std::optional<std::string> service_endpoint{};
 
-  [[nodiscard]] analytics_link_type link_type() const override
+  [[nodiscard]] auto link_type() const -> analytics_link_type override
   {
     return analytics_link_type::s3_external;
   }
@@ -200,7 +200,7 @@ struct azure_blob_external_analytics_link : analytics_link {
   std::optional<std::string> blob_endpoint{};
   std::optional<std::string> endpoint_suffix{};
 
-  [[nodiscard]] analytics_link_type link_type() const override
+  [[nodiscard]] auto link_type() const -> analytics_link_type override
   {
     return analytics_link_type::azure_external;
   }

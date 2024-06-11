@@ -11,8 +11,8 @@ transaction_get_result::transaction_get_result()
 {
 }
 
-const std::vector<std::byte>&
-transaction_get_result::content() const
+auto
+transaction_get_result::content() const -> const std::vector<std::byte>&
 {
   return base_->content();
 }
@@ -26,28 +26,28 @@ transaction_get_result::content(std::vector<std::byte>&& content)
 {
   return base_->content(content);
 }
-const std::string
-transaction_get_result::key() const
+auto
+transaction_get_result::key() const -> const std::string
 {
   return base_->key();
 }
-const std::string
-transaction_get_result::bucket() const
+auto
+transaction_get_result::bucket() const -> const std::string
 {
   return base_->bucket();
 }
-const std::string
-transaction_get_result::scope() const
+auto
+transaction_get_result::scope() const -> const std::string
 {
   return base_->scope();
 }
-const std::string
-transaction_get_result::collection() const
+auto
+transaction_get_result::collection() const -> const std::string
 {
   return base_->collection();
 }
-const couchbase::cas
-transaction_get_result::cas() const
+auto
+transaction_get_result::cas() const -> const couchbase::cas
 {
   return base_->cas();
 }

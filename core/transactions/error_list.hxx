@@ -33,7 +33,7 @@ private:
   std::atomic<std::size_t> size_{ 0 };
 
 public:
-  bool empty()
+  auto empty() -> bool
   {
     return size_.load() == 0;
   }

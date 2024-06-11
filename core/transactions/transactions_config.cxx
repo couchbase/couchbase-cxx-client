@@ -58,8 +58,8 @@ transactions_config::transactions_config(const transactions_config& config)
 {
 }
 
-transactions_config&
-transactions_config::operator=(const transactions_config& c)
+auto
+transactions_config::operator=(const transactions_config& c) -> transactions_config&
 {
   if (this != &c) {
     level_ = c.level_;
@@ -73,8 +73,8 @@ transactions_config::operator=(const transactions_config& c)
   return *this;
 }
 
-transactions_config::built
-transactions_config::build() const
+auto
+transactions_config::build() const -> transactions_config::built
 {
   return { level_,
            timeout_,

@@ -49,8 +49,9 @@ struct leb_128_no_throw {
  *          leb128 data.
  */
 template<class T>
-typename std::enable_if_t<std::is_unsigned_v<T>, std::pair<T, gsl::span<std::byte>>>
-decode_unsigned_leb128(gsl::span<std::byte> buf, struct leb_128_no_throw /* unused */)
+auto
+decode_unsigned_leb128(gsl::span<std::byte> buf, struct leb_128_no_throw /* unused */) ->
+  typename std::enable_if_t<std::is_unsigned_v<T>, std::pair<T, gsl::span<std::byte>>>
 {
   T rv = std::to_integer<T>(buf[0] & std::byte{ 0b0111'1111 });
   std::size_t end = 0;
@@ -86,8 +87,9 @@ decode_unsigned_leb128(gsl::span<std::byte> buf, struct leb_128_no_throw /* unus
  *         a stop byte.
  */
 template<class T>
-typename std::enable_if_t<std::is_unsigned_v<T>, std::pair<T, gsl::span<std::byte>>>
-decode_unsigned_leb128(gsl::span<std::byte> buf)
+auto
+decode_unsigned_leb128(gsl::span<std::byte> buf) ->
+  typename std::enable_if_t<std::is_unsigned_v<T>, std::pair<T, gsl::span<std::byte>>>
 {
   if (!buf.empty()) {
     auto rv = decode_unsigned_leb128<T>(buf, leb_128_no_throw{});
@@ -103,8 +105,9 @@ decode_unsigned_leb128(gsl::span<std::byte> buf)
  * @return a buffer to the data after the leb128 prefix
  */
 template<class T>
-typename std::enable_if_t<std::is_unsigned_v<T>, gsl::span<std::byte>>
-skip_unsigned_leb128(gsl::span<std::byte> buf)
+auto
+skip_unsigned_leb128(gsl::span<std::byte> buf) ->
+  typename std::enable_if_t<std::is_unsigned_v<T>, gsl::span<std::byte>>
 {
   return decode_unsigned_leb128<T>(buf).second;
 }
@@ -141,32 +144,32 @@ public:
     }
   }
 
-  [[nodiscard]] std::string get() const
+  [[nodiscard]] auto get() const -> std::string
   {
     return { begin(), end() };
   }
 
-  [[nodiscard]] const std::byte* begin() const
+  [[nodiscard]] auto begin() const -> const std::byte*
   {
     return encoded_data_.data();
   }
 
-  [[nodiscard]] const std::byte* end() const
+  [[nodiscard]] auto end() const -> const std::byte*
   {
     return encoded_data_.data() + encoded_size_;
   }
 
-  [[nodiscard]] const std::byte* data() const
+  [[nodiscard]] auto data() const -> const std::byte*
   {
     return encoded_data_.data();
   }
 
-  [[nodiscard]] std::size_t size() const
+  [[nodiscard]] auto size() const -> std::size_t
   {
     return encoded_size_;
   }
 
-  constexpr static std::size_t get_max_size()
+  constexpr static auto get_max_size() -> std::size_t
   {
     return max_size;
   }

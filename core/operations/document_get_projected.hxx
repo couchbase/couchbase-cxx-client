@@ -53,10 +53,12 @@ struct get_projected_request {
   io::retry_context<true> retries{};
   std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
-  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context);
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded,
+                               mcbp_context&& context) -> std::error_code;
 
-  [[nodiscard]] get_projected_response make_response(key_value_error_context&& ctx,
-                                                     const encoded_response_type& encoded) const;
+  [[nodiscard]] auto make_response(key_value_error_context&& ctx,
+                                   const encoded_response_type& encoded) const
+    -> get_projected_response;
 };
 
 } // namespace couchbase::core::operations

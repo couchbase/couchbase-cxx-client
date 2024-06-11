@@ -30,8 +30,8 @@ public:
   request_tracer() = default;
   request_tracer(const request_tracer& other) = default;
   request_tracer(request_tracer&& other) = default;
-  request_tracer& operator=(const request_tracer& other) = default;
-  request_tracer& operator=(request_tracer&& other) = default;
+  auto operator=(const request_tracer& other) -> request_tracer& = default;
+  auto operator=(request_tracer&& other) -> request_tracer& = default;
   virtual ~request_tracer() = default;
 
   /**
@@ -51,8 +51,8 @@ public:
     /* do nothing */
   }
 
-  virtual std::shared_ptr<request_span> start_span(std::string name,
-                                                   std::shared_ptr<request_span> parent = {}) = 0;
+  virtual auto start_span(std::string name, std::shared_ptr<request_span> parent = {})
+    -> std::shared_ptr<request_span> = 0;
 };
 
 } // namespace couchbase::tracing

@@ -28,8 +28,10 @@
 
 namespace couchbase::core::topology
 {
-std::uint16_t
-configuration::node::port_or(service_type type, bool is_tls, std::uint16_t default_value) const
+auto
+configuration::node::port_or(service_type type,
+                             bool is_tls,
+                             std::uint16_t default_value) const -> std::uint16_t
 {
   if (is_tls) {
     switch (type) {
@@ -80,8 +82,8 @@ configuration::node::port_or(service_type type, bool is_tls, std::uint16_t defau
   return default_value;
 }
 
-const std::string&
-configuration::node::hostname_for(const std::string& network) const
+auto
+configuration::node::hostname_for(const std::string& network) const -> const std::string&
 {
   if (network == "default") {
     return hostname;
@@ -94,11 +96,11 @@ configuration::node::hostname_for(const std::string& network) const
   return address->second.hostname;
 }
 
-std::uint16_t
+auto
 configuration::node::port_or(const std::string& network,
                              service_type type,
                              bool is_tls,
-                             std::uint16_t default_value) const
+                             std::uint16_t default_value) const -> std::uint16_t
 {
   if (network == "default") {
     return port_or(type, is_tls, default_value);
@@ -160,8 +162,10 @@ configuration::node::port_or(const std::string& network,
   return default_value;
 }
 
-std::optional<std::string>
-configuration::node::endpoint(const std::string& network, service_type type, bool is_tls) const
+auto
+configuration::node::endpoint(const std::string& network,
+                              service_type type,
+                              bool is_tls) const -> std::optional<std::string>
 {
   auto p = port_or(type, is_tls, 0);
   if (p == 0) {
@@ -170,12 +174,12 @@ configuration::node::endpoint(const std::string& network, service_type type, boo
   return fmt::format("{}:{}", hostname_for(network), p);
 }
 
-bool
+auto
 configuration::has_node(const std::string& network,
                         service_type type,
                         bool is_tls,
                         const std::string& hostname,
-                        const std::string& port) const
+                        const std::string& port) const -> bool
 {
   std::uint16_t port_number{ 0 };
   try {
@@ -191,8 +195,8 @@ configuration::has_node(const std::string& network,
   });
 }
 
-std::string
-configuration::select_network(const std::string& bootstrap_hostname) const
+auto
+configuration::select_network(const std::string& bootstrap_hostname) const -> std::string
 {
   for (const auto& n : nodes) {
     if (n.this_node) {
@@ -209,8 +213,8 @@ configuration::select_network(const std::string& bootstrap_hostname) const
   return "default";
 }
 
-std::string
-configuration::rev_str() const
+auto
+configuration::rev_str() const -> std::string
 {
   if (epoch) {
     return fmt::format("{}:{}", epoch.value(), rev.value_or(0));
@@ -218,8 +222,8 @@ configuration::rev_str() const
   return rev ? fmt::format("{}", *rev) : "(none)";
 }
 
-std::size_t
-configuration::index_for_this_node() const
+auto
+configuration::index_for_this_node() const -> std::size_t
 {
   for (const auto& n : nodes) {
     if (n.this_node) {
@@ -229,8 +233,9 @@ configuration::index_for_this_node() const
   throw std::runtime_error("no nodes marked as this_node");
 }
 
-std::optional<std::size_t>
-configuration::server_by_vbucket(std::uint16_t vbucket, std::size_t index) const
+auto
+configuration::server_by_vbucket(std::uint16_t vbucket,
+                                 std::size_t index) const -> std::optional<std::size_t>
 {
   if (!vbmap.has_value() || vbucket >= vbmap->size()) {
     return {};
@@ -241,8 +246,9 @@ configuration::server_by_vbucket(std::uint16_t vbucket, std::size_t index) const
   return {};
 }
 
-std::pair<std::uint16_t, std::optional<std::size_t>>
+auto
 configuration::map_key(const std::string& key, std::size_t index) const
+  -> std::pair<std::uint16_t, std::optional<std::size_t>>
 {
   if (!vbmap.has_value()) {
     return { 0, {} };
@@ -252,8 +258,9 @@ configuration::map_key(const std::string& key, std::size_t index) const
   return { vbucket, server_by_vbucket(vbucket, index) };
 }
 
-std::pair<std::uint16_t, std::optional<std::size_t>>
+auto
 configuration::map_key(const std::vector<std::byte>& key, std::size_t index) const
+  -> std::pair<std::uint16_t, std::optional<std::size_t>>
 {
   if (!vbmap.has_value()) {
     return { 0, {} };
@@ -263,10 +270,10 @@ configuration::map_key(const std::vector<std::byte>& key, std::size_t index) con
   return { vbucket, server_by_vbucket(vbucket, index) };
 }
 
-configuration
+auto
 make_blank_configuration(const std::string& hostname,
                          std::uint16_t plain_port,
-                         std::uint16_t tls_port)
+                         std::uint16_t tls_port) -> configuration
 {
   configuration result;
   result.id = couchbase::core::uuid::random();
@@ -280,10 +287,10 @@ make_blank_configuration(const std::string& hostname,
   return result;
 }
 
-configuration
+auto
 make_blank_configuration(const std::vector<std::pair<std::string, std::string>>& endpoints,
                          bool use_tls,
-                         bool force)
+                         bool force) -> configuration
 {
   configuration result;
   result.force = force;

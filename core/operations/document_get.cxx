@@ -21,9 +21,9 @@
 
 namespace couchbase::core::operations
 {
-std::error_code
+auto
 get_request::encode_to(get_request::encoded_request_type& encoded,
-                       mcbp_context&& /* context */) const
+                       mcbp_context&& /* context */) const -> std::error_code
 {
   encoded.opaque(opaque);
   encoded.partition(partition);
@@ -31,9 +31,9 @@ get_request::encode_to(get_request::encoded_request_type& encoded,
   return {};
 }
 
-get_response
+auto
 get_request::make_response(key_value_error_context&& ctx,
-                           const encoded_response_type& encoded) const
+                           const encoded_response_type& encoded) const -> get_response
 {
   get_response response{ std::move(ctx) };
   if (!response.ctx.ec()) {

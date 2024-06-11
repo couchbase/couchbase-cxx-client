@@ -18,8 +18,8 @@
 
 namespace couchbase::core::transactions
 {
-std::string
-to_string(const std::vector<std::byte>& input)
+auto
+to_string(const std::vector<std::byte>& input) -> std::string
 {
   return std::string(reinterpret_cast<const char*>(input.data()), input.size());
 }

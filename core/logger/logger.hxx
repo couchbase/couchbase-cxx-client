@@ -38,8 +38,8 @@ namespace couchbase::core::logger
 {
 struct configuration;
 
-level
-level_from_str(const std::string& str);
+auto
+level_from_str(const std::string& str) -> level;
 
 /**
  * Initialize the logger.
@@ -51,8 +51,8 @@ level_from_str(const std::string& str);
  * @param logger_settings the configuration for the logger
  * @return optional error message if something goes wrong
  */
-std::optional<std::string>
-create_file_logger(const configuration& logger_settings);
+auto
+create_file_logger(const configuration& logger_settings) -> std::optional<std::string>;
 
 /**
  * Protocol logger writes only communication logs with the nodes.
@@ -62,8 +62,8 @@ create_file_logger(const configuration& logger_settings);
  * @param logger_settings
  * @return
  */
-std::optional<std::string>
-create_protocol_logger(const configuration& logger_settings);
+auto
+create_protocol_logger(const configuration& logger_settings) -> std::optional<std::string>;
 
 /**
  * Initialize the logger with the blackhole logger object
@@ -102,8 +102,8 @@ create_console_logger();
  * - create_blackhole_logger()
  * - create_console_logger()
  */
-spdlog::logger*
-get();
+auto
+get() -> spdlog::logger*;
 
 /**
  * Reset the underlying logger object
@@ -138,8 +138,8 @@ unregister_spdlog_logger(const std::string& n);
  * @param log severity level
  * @return true if all registered loggers have the specified severity level
  */
-bool
-check_log_levels(level lvl);
+auto
+check_log_levels(level lvl) -> bool;
 
 /**
  * Set the log level of all registered spdLoggers
@@ -154,11 +154,11 @@ set_log_levels(level lvl);
  * @param level severity level to check
  * @return true if we should log at this level
  */
-bool
-should_log(level lvl);
+auto
+should_log(level lvl) -> bool;
 
-bool
-should_log_protocol();
+auto
+should_log_protocol() -> bool;
 
 namespace detail
 {
@@ -219,8 +219,8 @@ shutdown();
 /**
  * @return whether or not the logger has been initialized
  */
-bool
-is_initialized();
+auto
+is_initialized() -> bool;
 
 } // namespace couchbase::core::logger
 

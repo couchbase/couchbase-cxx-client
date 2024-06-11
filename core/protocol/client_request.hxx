@@ -33,8 +33,9 @@
 
 namespace couchbase::core::protocol
 {
-std::pair<bool, std::uint32_t>
-compress_value(const std::vector<std::byte>& value, std::vector<std::byte>::iterator& output);
+auto
+compress_value(const std::vector<std::byte>& value,
+               std::vector<std::byte>::iterator& output) -> std::pair<bool, std::uint32_t>;
 
 template<typename Body>
 class client_request
@@ -56,7 +57,7 @@ private:
   Body body_;
 
 public:
-  [[nodiscard]] client_opcode opcode() const
+  [[nodiscard]] auto opcode() const -> client_opcode
   {
     return opcode_;
   }
@@ -76,7 +77,7 @@ public:
     cas_ = utils::byte_swap(val.value());
   }
 
-  [[nodiscard]] std::uint32_t opaque() const
+  [[nodiscard]] auto opaque() const -> std::uint32_t
   {
     return utils::byte_swap(opaque_);
   }
@@ -96,12 +97,12 @@ public:
     return partition_;
   }
 
-  Body& body()
+  auto body() -> Body&
   {
     return body_;
   }
 
-  [[nodiscard]] std::vector<std::byte> data(bool try_to_compress = false)
+  [[nodiscard]] auto data(bool try_to_compress = false) -> std::vector<std::byte>
   {
     switch (opcode_) {
       case protocol::client_opcode::insert:
@@ -115,7 +116,7 @@ public:
   }
 
 private:
-  [[nodiscard]] std::vector<std::byte> generate_payload(bool try_to_compress)
+  [[nodiscard]] auto generate_payload(bool try_to_compress) -> std::vector<std::byte>
   {
     // SA: for some reason GCC 8.5.0 on CentOS 8 sees here null-pointer dereference
     // JC: BoringSSL changes, noticed the same when building w/ GCC 11.3.0; TODO:  is 12 okay?

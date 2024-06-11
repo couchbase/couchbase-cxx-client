@@ -30,15 +30,15 @@
 namespace couchbase::core
 {
 
-key_value_error_context
-make_key_value_error_context(std::error_code ec, const document_id& id);
+auto
+make_key_value_error_context(std::error_code ec, const document_id& id) -> key_value_error_context;
 
 template<typename Command, typename Response>
-key_value_error_context
+auto
 make_key_value_error_context(std::error_code ec,
                              std::uint16_t status_code,
                              const Command& command,
-                             const Response& response)
+                             const Response& response) -> key_value_error_context
 {
 
   const auto& key = command->request.id.key();
@@ -75,11 +75,11 @@ make_key_value_error_context(std::error_code ec,
            response.error_info() };
 }
 
-subdocument_error_context
+auto
 make_subdocument_error_context(const key_value_error_context& ctx,
                                std::error_code ec,
                                std::optional<std::string> first_error_path,
                                std::optional<std::uint64_t> first_error_index,
-                               bool deleted);
+                               bool deleted) -> subdocument_error_context;
 
 } // namespace couchbase::core

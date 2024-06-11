@@ -19,8 +19,9 @@
 
 namespace couchbase
 {
-static couchbase::search_metrics
+static auto
 map_metrics(const core::operations::search_response::search_metrics& metrics)
+  -> couchbase::search_metrics
 {
   return {
     metrics.took,

@@ -47,7 +47,7 @@ public:
    * @throws transaction_operation_failed which either should not be caught by the lambda, or
    *         rethrown if it is caught.
    */
-  virtual transaction_get_result get(const core::document_id& id) = 0;
+  virtual auto get(const core::document_id& id) -> transaction_get_result = 0;
 
   /**
    * Gets a document from the specified Couchbase collection matching the specified id.
@@ -61,7 +61,8 @@ public:
    * @throws transaction_operation_failed which either should not be caught by the lambda, or
    *         rethrown if it is caught.
    */
-  virtual std::optional<transaction_get_result> get_optional(const core::document_id& id) = 0;
+  virtual auto get_optional(const core::document_id& id)
+    -> std::optional<transaction_get_result> = 0;
 
   /**
    * Mutates the specified document with new content, using the document's last
@@ -83,7 +84,8 @@ public:
    *         rethrown if it is caught.
    */
   template<typename Content>
-  transaction_get_result replace(const transaction_get_result& document, const Content& content)
+  auto replace(const transaction_get_result& document,
+               const Content& content) -> transaction_get_result
   {
     if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
       return replace_raw(document, content);
@@ -110,7 +112,7 @@ public:
    *         rethrown if it is caught.
    */
   template<typename Content>
-  transaction_get_result insert(const core::document_id& id, const Content& content)
+  auto insert(const core::document_id& id, const Content& content) -> transaction_get_result
   {
     if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
       return insert_raw(id, content);
@@ -143,10 +145,9 @@ public:
    * @param query_context query context, if any.
    * @returns result of the query.
    */
-  core::operations::query_response query(
-    const std::string& statement,
-    const couchbase::transactions::transaction_query_options& opts,
-    std::optional<std::string> query_context = {})
+  auto query(const std::string& statement,
+             const couchbase::transactions::transaction_query_options& opts,
+             std::optional<std::string> query_context = {}) -> core::operations::query_response
   {
     return do_core_query(statement, opts, query_context);
   };
@@ -156,7 +157,7 @@ public:
    * @param statement query statement to execute.
    * @return result of the query
    */
-  core::operations::query_response query(const std::string& statement)
+  auto query(const std::string& statement) -> core::operations::query_response
   {
     couchbase::transactions::transaction_query_options opts;
     return query(statement, opts);
@@ -188,17 +189,17 @@ public:
 
 protected:
   /** @internal */
-  virtual transaction_get_result insert_raw(const core::document_id& id,
-                                            const std::vector<std::byte>& content) = 0;
+  virtual auto insert_raw(const core::document_id& id,
+                          const std::vector<std::byte>& content) -> transaction_get_result = 0;
 
   /** @internal */
-  virtual transaction_get_result replace_raw(const transaction_get_result& document,
-                                             const std::vector<std::byte>& content) = 0;
+  virtual auto replace_raw(const transaction_get_result& document,
+                           const std::vector<std::byte>& content) -> transaction_get_result = 0;
 
-  virtual core::operations::query_response do_core_query(
-    const std::string&,
-    const couchbase::transactions::transaction_query_options& opts,
-    std::optional<std::string> query_context) = 0;
+  virtual auto do_core_query(const std::string&,
+                             const couchbase::transactions::transaction_query_options& opts,
+                             std::optional<std::string> query_context)
+    -> core::operations::query_response = 0;
 };
 
 } // namespace couchbase::core::transactions

@@ -23,12 +23,12 @@ namespace couchbase::core::impl
 {
 
 struct field_level_encryption_error_category : std::error_category {
-  [[nodiscard]] const char* name() const noexcept override
+  [[nodiscard]] auto name() const noexcept -> const char* override
   {
     return "couchbase.field_level_encryption";
   }
 
-  [[nodiscard]] std::string message(int ev) const noexcept override
+  [[nodiscard]] auto message(int ev) const noexcept -> std::string override
   {
     switch (static_cast<errc::field_level_encryption>(ev)) {
       case errc::field_level_encryption::generic_cryptography_failure:
@@ -56,8 +56,8 @@ struct field_level_encryption_error_category : std::error_category {
 
 const inline static field_level_encryption_error_category category_instance;
 
-const std::error_category&
-field_level_encryption_category() noexcept
+auto
+field_level_encryption_category() noexcept -> const std::error_category&
 {
   return category_instance;
 }

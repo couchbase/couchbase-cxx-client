@@ -22,12 +22,12 @@
 namespace couchbase::core::impl
 {
 struct common_error_category : std::error_category {
-  [[nodiscard]] const char* name() const noexcept override
+  [[nodiscard]] auto name() const noexcept -> const char* override
   {
     return "couchbase.common";
   }
 
-  [[nodiscard]] std::string message(int ev) const noexcept override
+  [[nodiscard]] auto message(int ev) const noexcept -> std::string override
   {
     switch (static_cast<errc::common>(ev)) {
       case errc::common::unambiguous_timeout:
@@ -83,8 +83,8 @@ struct common_error_category : std::error_category {
 
 const inline static common_error_category category_instance;
 
-const std::error_category&
-common_category() noexcept
+auto
+common_category() noexcept -> const std::error_category&
 {
   return category_instance;
 }

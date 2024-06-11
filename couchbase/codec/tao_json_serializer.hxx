@@ -28,11 +28,11 @@ namespace couchbase
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace core::utils::json
 {
-std::vector<std::byte>
-generate_binary(const tao::json::value& object);
+auto
+generate_binary(const tao::json::value& object) -> std::vector<std::byte>;
 
-tao::json::value
-parse_binary(const std::vector<std::byte>& input);
+auto
+parse_binary(const std::vector<std::byte>& input) -> tao::json::value;
 } // namespace core::utils::json
 #endif
 

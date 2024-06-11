@@ -22,6 +22,6 @@
 
 namespace couchbase::core::utils
 {
-std::vector<std::string>
-split_string(const std::string& input, char delimiter);
+auto
+split_string(const std::string& input, char delimiter) -> std::vector<std::string>;
 } // namespace couchbase::core::utils

@@ -27,8 +27,8 @@
 
 namespace couchbase::core::protocol
 {
-constexpr bool
-is_valid_status(std::uint16_t code)
+constexpr auto
+is_valid_status(std::uint16_t code) -> bool
 {
   switch (static_cast<key_value_status_code>(code)) {
     case key_value_status_code::success:
@@ -111,10 +111,10 @@ is_valid_status(std::uint16_t code)
   return false;
 }
 
-[[nodiscard]] std::string
-status_to_string(std::uint16_t code);
+[[nodiscard]] auto
+status_to_string(std::uint16_t code) -> std::string;
 
-[[nodiscard]] std::error_code
-map_status_code(protocol::client_opcode opcode, std::uint16_t status);
+[[nodiscard]] auto
+map_status_code(protocol::client_opcode opcode, std::uint16_t status) -> std::error_code;
 
 } // namespace couchbase::core::protocol

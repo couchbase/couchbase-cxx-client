@@ -49,8 +49,8 @@ static std::shared_ptr<spdlog::logger> protocol_logger{};
 
 namespace couchbase::core::logger
 {
-spdlog::level::level_enum
-translate_level(level level)
+auto
+translate_level(level level) -> spdlog::level::level_enum
 {
   switch (level) {
     case level::trace:
@@ -71,8 +71,8 @@ translate_level(level level)
   return spdlog::level::level_enum::trace;
 }
 
-level
-level_from_str(const std::string& str)
+auto
+level_from_str(const std::string& str) -> level
 {
   switch (spdlog::level::from_str(str)) {
     case spdlog::level::level_enum::trace:
@@ -96,8 +96,8 @@ level_from_str(const std::string& str)
   return level::trace;
 }
 
-bool
-should_log(level lvl)
+auto
+should_log(level lvl) -> bool
 {
   if (is_initialized()) {
     return file_logger->should_log(translate_level(lvl));
@@ -146,14 +146,15 @@ shutdown()
   spdlog::details::registry::instance().shutdown();
 }
 
-bool
-is_initialized()
+auto
+is_initialized() -> bool
 {
   return file_logger != nullptr;
 }
 
-std::pair<std::optional<std::string>, std::shared_ptr<spdlog::logger>>
+auto
 create_file_logger_impl(const std::string logger_name, const configuration& logger_settings)
+  -> std::pair<std::optional<std::string>, std::shared_ptr<spdlog::logger>>
 {
   std::shared_ptr<spdlog::logger> logger{};
 
@@ -252,8 +253,8 @@ create_file_logger_impl(const std::string logger_name, const configuration& logg
  * Initialises the loggers. Called if the logger configuration is
  * specified in a separate settings object.
  */
-std::optional<std::string>
-create_file_logger(const configuration& logger_settings)
+auto
+create_file_logger(const configuration& logger_settings) -> std::optional<std::string>
 {
   auto [error, logger] = create_file_logger_impl(file_logger_name, logger_settings);
   if (error) {
@@ -263,8 +264,8 @@ create_file_logger(const configuration& logger_settings)
   return {};
 }
 
-std::optional<std::string>
-create_protocol_logger(const configuration& logger_settings)
+auto
+create_protocol_logger(const configuration& logger_settings) -> std::optional<std::string>
 {
   if (logger_settings.filename.empty()) {
     return "File name is missing";
@@ -279,8 +280,8 @@ create_protocol_logger(const configuration& logger_settings)
   return {};
 }
 
-bool
-should_log_protocol()
+auto
+should_log_protocol() -> bool
 {
   return protocol_logger != nullptr;
 }
@@ -297,8 +298,8 @@ log_protocol(const char* file, int line, const char* function, std::string_view 
 }
 } // namespace detail
 
-spdlog::logger*
-get()
+auto
+get() -> spdlog::logger*
 {
   return file_logger.get();
 }
@@ -364,8 +365,8 @@ unregister_spdlog_logger(const std::string& n)
   spdlog::drop(n);
 }
 
-bool
-check_log_levels(level lvl)
+auto
+check_log_levels(level lvl) -> bool
 {
   auto level = translate_level(lvl);
   bool correct = true;

@@ -28,8 +28,8 @@ namespace tao::json
 template<>
 struct traits<couchbase::core::management::rbac::user_and_metadata> {
   template<template<typename...> class Traits>
-  static couchbase::core::management::rbac::user_and_metadata as(
-    const tao::json::basic_value<Traits>& v)
+  static auto as(const tao::json::basic_value<Traits>& v)
+    -> couchbase::core::management::rbac::user_and_metadata
   {
     couchbase::core::management::rbac::user_and_metadata result;
     if (const std::string& domain = v.at("domain").get_string(); domain == "local") {
@@ -103,8 +103,8 @@ struct traits<couchbase::core::management::rbac::user_and_metadata> {
 template<>
 struct traits<couchbase::core::management::rbac::role_and_description> {
   template<template<typename...> class Traits>
-  static couchbase::core::management::rbac::role_and_description as(
-    const tao::json::basic_value<Traits>& v)
+  static auto as(const tao::json::basic_value<Traits>& v)
+    -> couchbase::core::management::rbac::role_and_description
   {
     couchbase::core::management::rbac::role_and_description result;
     result.name = v.at("role").get_string();
@@ -135,7 +135,8 @@ struct traits<couchbase::core::management::rbac::role_and_description> {
 template<>
 struct traits<couchbase::core::management::rbac::group> {
   template<template<typename...> class Traits>
-  static couchbase::core::management::rbac::group as(const tao::json::basic_value<Traits>& v)
+  static auto as(const tao::json::basic_value<Traits>& v)
+    -> couchbase::core::management::rbac::group
   {
     couchbase::core::management::rbac::group result;
     result.name = v.at("id").get_string();

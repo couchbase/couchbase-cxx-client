@@ -32,8 +32,9 @@ namespace couchbase::core::io::retry_orchestrator
 namespace priv
 {
 template<class Command>
-std::chrono::milliseconds
-cap_duration(std::chrono::milliseconds uncapped, std::shared_ptr<Command> command)
+auto
+cap_duration(std::chrono::milliseconds uncapped,
+             std::shared_ptr<Command> command) -> std::chrono::milliseconds
 {
   auto theoretical_deadline = std::chrono::steady_clock::now() + uncapped;
   auto absolute_deadline = command->deadline.expiry();

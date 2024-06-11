@@ -266,8 +266,8 @@ enum class subdoc_opcode : std::uint8_t {
   replace_body_with_xattr = 0xd3,
 };
 
-constexpr bool
-is_valid_client_opcode(std::uint8_t code)
+constexpr auto
+is_valid_client_opcode(std::uint8_t code) -> bool
 {
   switch (static_cast<client_opcode>(code)) {
     case client_opcode::get:
@@ -348,8 +348,8 @@ is_valid_client_opcode(std::uint8_t code)
   return false;
 }
 
-constexpr bool
-is_valid_subdoc_opcode(std::uint8_t code)
+constexpr auto
+is_valid_subdoc_opcode(std::uint8_t code) -> bool
 {
   switch (static_cast<subdoc_opcode>(code)) {
     case subdoc_opcode::get:

@@ -27,8 +27,8 @@
 
 namespace couchbase::core::mcbp
 {
-std::string
-packet::debug_string() const
+auto
+packet::debug_string() const -> std::string
 {
   std::vector<char> out;
   fmt::format_to(

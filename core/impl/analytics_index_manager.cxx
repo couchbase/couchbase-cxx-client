@@ -43,8 +43,9 @@ namespace couchbase
 {
 namespace
 {
-core::management::analytics::couchbase_remote_link
+auto
 to_core_couchbase_remote_link(const management::analytics_link& link)
+  -> core::management::analytics::couchbase_remote_link
 {
   auto cb_link = dynamic_cast<const management::couchbase_remote_analytics_link&>(link);
   core::management::analytics::couchbase_remote_link core_link{
@@ -77,8 +78,9 @@ to_core_couchbase_remote_link(const management::analytics_link& link)
   return core_link;
 }
 
-core::management::analytics::azure_blob_external_link
+auto
 to_core_azure_blob_external_link(const management::analytics_link& link)
+  -> core::management::analytics::azure_blob_external_link
 {
   auto azure_link = dynamic_cast<const management::azure_blob_external_analytics_link&>(link);
   return core::management::analytics::azure_blob_external_link{
@@ -88,8 +90,9 @@ to_core_azure_blob_external_link(const management::analytics_link& link)
   };
 }
 
-core::management::analytics::s3_external_link
+auto
 to_core_s3_external_link(const management::analytics_link& link)
+  -> core::management::analytics::s3_external_link
 {
   auto s3_link = dynamic_cast<const management::s3_external_analytics_link&>(link);
   return core::management::analytics::s3_external_link{

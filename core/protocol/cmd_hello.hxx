@@ -35,18 +35,18 @@ private:
   std::vector<hello_feature> supported_features_;
 
 public:
-  [[nodiscard]] const std::vector<hello_feature>& supported_features() const
+  [[nodiscard]] auto supported_features() const -> const std::vector<hello_feature>&
   {
     return supported_features_;
   }
 
-  bool parse(key_value_status_code status,
+  auto parse(key_value_status_code status,
              const header_buffer& header,
              std::uint8_t framing_extras_size,
              std::uint16_t key_size,
              std::uint8_t extras_size,
              const std::vector<std::byte>& body,
-             const cmd_info& info);
+             const cmd_info& info) -> bool;
 };
 
 class hello_request_body
@@ -103,27 +103,27 @@ public:
     features_.emplace_back(hello_feature::mutation_seqno);
   }
 
-  [[nodiscard]] const std::vector<hello_feature>& features() const
+  [[nodiscard]] auto features() const -> const std::vector<hello_feature>&
   {
     return features_;
   }
 
-  [[nodiscard]] const auto& key() const
+  [[nodiscard]] auto key() const -> const auto&
   {
     return key_;
   }
 
-  [[nodiscard]] const auto& framing_extras() const
+  [[nodiscard]] auto framing_extras() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& extras() const
+  [[nodiscard]] auto extras() const -> const auto&
   {
     return empty_buffer;
   }
 
-  [[nodiscard]] const auto& value()
+  [[nodiscard]] auto value() -> const auto&
   {
     if (value_.empty()) {
       fill_body();
@@ -131,7 +131,7 @@ public:
     return value_;
   }
 
-  [[nodiscard]] std::size_t size()
+  [[nodiscard]] auto size() -> std::size_t
   {
     if (value_.empty()) {
       fill_body();

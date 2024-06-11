@@ -35,8 +35,9 @@ namespace couchbase::core::impl
 {
 namespace
 {
-std::optional<core::search_highlight_style>
+auto
 map_highlight_style(const std::optional<couchbase::highlight_style>& style)
+  -> std::optional<core::search_highlight_style>
 {
   if (style) {
     switch (style.value()) {
@@ -49,8 +50,9 @@ map_highlight_style(const std::optional<couchbase::highlight_style>& style)
   return {};
 }
 
-static std::optional<core::search_scan_consistency>
+static auto
 map_scan_consistency(const std::optional<couchbase::search_scan_consistency>& scan_consistency)
+  -> std::optional<core::search_scan_consistency>
 {
   if (scan_consistency == couchbase::search_scan_consistency::not_bounded) {
     return core::search_scan_consistency::not_bounded;
@@ -58,9 +60,9 @@ map_scan_consistency(const std::optional<couchbase::search_scan_consistency>& sc
   return {};
 }
 
-static std::vector<std::string>
+static auto
 map_sort(const std::vector<std::shared_ptr<search_sort>>& sort,
-         const std::vector<std::string>& sort_string)
+         const std::vector<std::string>& sort_string) -> std::vector<std::string>
 {
   std::vector<std::string> sort_specs{};
   sort_specs.reserve(sort.size() + sort_string.size());
@@ -80,8 +82,9 @@ map_sort(const std::vector<std::shared_ptr<search_sort>>& sort,
   return sort_specs;
 }
 
-static std::map<std::string, std::string>
+static auto
 map_facets(const std::map<std::string, std::shared_ptr<search_facet>, std::less<>>& facets)
+  -> std::map<std::string, std::string>
 {
   std::map<std::string, std::string> core_facets{};
 
@@ -96,8 +99,9 @@ map_facets(const std::map<std::string, std::shared_ptr<search_facet>, std::less<
   return core_facets;
 }
 
-static std::map<std::string, couchbase::core::json_string>
+static auto
 map_raw(std::map<std::string, codec::binary, std::less<>>& raw)
+  -> std::map<std::string, couchbase::core::json_string>
 {
   std::map<std::string, couchbase::core::json_string> core_raw{};
   for (const auto& [name, value] : raw) {
@@ -106,8 +110,9 @@ map_raw(std::map<std::string, codec::binary, std::less<>>& raw)
   return core_raw;
 }
 
-static std::optional<core::vector_query_combination>
+static auto
 map_vector_query_combination(const std::optional<couchbase::vector_query_combination>& combination)
+  -> std::optional<core::vector_query_combination>
 {
   if (combination) {
     switch (combination.value()) {
@@ -122,12 +127,12 @@ map_vector_query_combination(const std::optional<couchbase::vector_query_combina
 
 } // namespace
 
-core::operations::search_request
+auto
 build_search_request(std::string index_name,
                      const search_query& query,
                      search_options::built options,
                      std::optional<std::string> bucket_name,
-                     std::optional<std::string> scope_name)
+                     std::optional<std::string> scope_name) -> core::operations::search_request
 {
   auto encoded = query.encode();
   if (encoded.ec) {
@@ -163,12 +168,12 @@ build_search_request(std::string index_name,
   return request;
 }
 
-core::operations::search_request
+auto
 build_search_request(std::string index_name,
                      couchbase::search_request request,
                      search_options::built options,
                      std::optional<std::string> bucket_name,
-                     std::optional<std::string> scope_name)
+                     std::optional<std::string> scope_name) -> core::operations::search_request
 {
   if (!request.search_query().has_value()) {
     request.search_query(couchbase::match_none_query{});

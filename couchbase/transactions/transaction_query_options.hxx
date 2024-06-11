@@ -51,7 +51,7 @@ public:
    * @return reference to this object, convenient for chaining calls.
    */
   template<typename Value>
-  transaction_query_options& raw(const std::string& key, const Value& value)
+  auto raw(const std::string& key, const Value& value) -> transaction_query_options&
   {
     opts_.raw(key, value);
     return *this;
@@ -66,7 +66,7 @@ public:
    * @param value if set to false this query will be turned into a prepared statement query.
    * @return reference to this object, convenient for chaining calls.
    */
-  transaction_query_options& ad_hoc(bool value)
+  auto ad_hoc(bool value) -> transaction_query_options&
   {
     opts_.adhoc(value);
     return *this;
@@ -80,7 +80,7 @@ public:
    * @param scan_consistency Desired scan consistency.
    * @return reference to this object, convenient for chaining calls.
    */
-  transaction_query_options& scan_consistency(query_scan_consistency scan_consistency)
+  auto scan_consistency(query_scan_consistency scan_consistency) -> transaction_query_options&
   {
     opts_.scan_consistency(scan_consistency);
     return *this;
@@ -94,7 +94,7 @@ public:
    * @param mode desired profile mode.
    * @return reference to this object, convenient for chaining calls.
    */
-  transaction_query_options& profile(query_profile mode)
+  auto profile(query_profile mode) -> transaction_query_options&
   {
     opts_.profile(mode);
     return *this;
@@ -108,7 +108,7 @@ public:
    * @param id Desired id
    * @return reference to this object, convenient for chaining calls.
    */
-  transaction_query_options& client_context_id(const std::string& id)
+  auto client_context_id(const std::string& id) -> transaction_query_options&
   {
     opts_.client_context_id(id);
     return *this;
@@ -122,7 +122,7 @@ public:
    * @param scan_wait Desired time for scan_wait.
    * @return reference to this object, convenient for chaining calls.
    */
-  transaction_query_options& scan_wait(std::chrono::milliseconds scan_wait)
+  auto scan_wait(std::chrono::milliseconds scan_wait) -> transaction_query_options&
   {
     opts_.scan_wait(scan_wait);
     return *this;
@@ -136,7 +136,7 @@ public:
    * @param readonly True if query doesn't mutate documents.
    * @return reference to this object, convenient for chaining calls.
    */
-  transaction_query_options& readonly(bool readonly)
+  auto readonly(bool readonly) -> transaction_query_options&
   {
     opts_.readonly(readonly);
     return *this;
@@ -150,7 +150,7 @@ public:
    * @param cap Desired cap.
    * @return reference to this object, convenient for chaining calls.
    */
-  transaction_query_options& scan_cap(std::uint64_t cap)
+  auto scan_cap(std::uint64_t cap) -> transaction_query_options&
   {
     opts_.scan_cap(cap);
     return *this;
@@ -164,7 +164,7 @@ public:
    * @param batch desired batch size.
    * @return reference to this object, convenient for chaining calls.
    */
-  transaction_query_options& pipeline_batch(std::uint64_t batch)
+  auto pipeline_batch(std::uint64_t batch) -> transaction_query_options&
   {
     opts_.pipeline_batch(batch);
     return *this;
@@ -178,7 +178,7 @@ public:
    * @param cap desired cap.
    * @return reference to this object, convenient for chaining calls.
    */
-  transaction_query_options& pipeline_cap(std::uint64_t cap)
+  auto pipeline_cap(std::uint64_t cap) -> transaction_query_options&
   {
     opts_.pipeline_cap(cap);
     return *this;
@@ -210,7 +210,7 @@ public:
    * @return reference to this object, convenient for chaining calls.
    */
   template<typename... Parameters>
-  transaction_query_options& named_parameters(const Parameters&... parameters)
+  auto named_parameters(const Parameters&... parameters) -> transaction_query_options&
   {
     opts_.named_parameters(parameters...);
     return *this;
@@ -226,7 +226,7 @@ public:
    * @param metrics True if metrics are desired.
    * @return reference to this object, convenient for chaining calls.
    */
-  transaction_query_options& metrics(bool metrics)
+  auto metrics(bool metrics) -> transaction_query_options&
   {
     opts_.metrics(metrics);
     return *this;
@@ -240,37 +240,38 @@ public:
    * @param max Desired max parallelism
    * @return reference to this object, convenient for chaining calls.
    */
-  transaction_query_options& max_parallelism(std::uint64_t max)
+  auto max_parallelism(std::uint64_t max) -> transaction_query_options&
   {
     opts_.max_parallelism(max);
     return *this;
   }
 
   /** @private */
-  transaction_query_options& encoded_raw_options(
-    std::map<std::string, codec::binary, std::less<>> options)
+  auto encoded_raw_options(std::map<std::string, codec::binary, std::less<>> options)
+    -> transaction_query_options&
   {
     opts_.encoded_raw_options(options);
     return *this;
   }
 
   /** @private */
-  transaction_query_options& encoded_positional_parameters(std::vector<codec::binary> parameters)
+  auto encoded_positional_parameters(std::vector<codec::binary> parameters)
+    -> transaction_query_options&
   {
     opts_.encoded_positional_parameters(parameters);
     return *this;
   }
 
   /** @private */
-  transaction_query_options& encoded_named_parameters(
-    std::map<std::string, codec::binary, std::less<>> parameters)
+  auto encoded_named_parameters(std::map<std::string, codec::binary, std::less<>> parameters)
+    -> transaction_query_options&
   {
     opts_.encoded_named_parameters(parameters);
     return *this;
   }
 
   /** @private */
-  const query_options& get_query_options() const
+  auto get_query_options() const -> const query_options&
   {
     return opts_;
   }

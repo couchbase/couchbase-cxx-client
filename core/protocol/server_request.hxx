@@ -17,14 +17,18 @@
 
 #pragma once
 
+#include "../io/mcbp_message.hxx"
 #include "cmd_info.hxx"
 #include "datatype.hxx"
 #include "magic.hxx"
 #include "server_opcode.hxx"
 #include "status.hxx"
 
-#include <cstring>
+#include <couchbase/cas.hxx>
+
 #include <gsl/assert>
+
+#include <cstring>
 
 namespace couchbase::core::protocol
 {
@@ -37,13 +41,13 @@ private:
 
   Body body_;
   server_opcode opcode_{ server_opcode::invalid };
-  header_buffer header_;
-  std::uint8_t data_type_;
+  header_buffer header_{};
+  std::uint8_t data_type_{};
   std::vector<std::byte> data_;
-  std::size_t body_size_;
-  std::uint32_t opaque_;
-  std::uint64_t cas_;
-  cmd_info info_;
+  std::size_t body_size_{};
+  std::uint32_t opaque_{};
+  std::uint64_t cas_{};
+  cmd_info info_{};
 
 public:
   server_request() = default;
@@ -61,32 +65,32 @@ public:
     parse_body();
   }
 
-  [[nodiscard]] server_opcode opcode() const
+  [[nodiscard]] auto opcode() const -> server_opcode
   {
     return opcode_;
   }
 
-  [[nodiscard]] std::size_t body_size() const
+  [[nodiscard]] auto body_size() const -> std::size_t
   {
     return body_size_;
   }
 
-  [[nodiscard]] couchbase::cas cas() const
+  [[nodiscard]] auto cas() const -> couchbase::cas
   {
     return couchbase::cas{ cas_ };
   }
 
-  [[nodiscard]] std::uint32_t opaque() const
+  [[nodiscard]] auto opaque() const -> std::uint32_t
   {
     return opaque_;
   }
 
-  Body& body()
+  [[nodiscard]] auto body() -> Body&
   {
     return body_;
   }
 
-  [[nodiscard]] header_buffer& header()
+  [[nodiscard]] auto header() -> header_buffer&
   {
     return header_;
   }
@@ -113,7 +117,7 @@ public:
     body_.parse(header_, data_, info_);
   }
 
-  [[nodiscard]] std::vector<std::byte>& data()
+  [[nodiscard]] auto data() -> std::vector<std::byte>&
   {
     return data_;
   }

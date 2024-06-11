@@ -30,32 +30,32 @@ struct completion_token {
   std::error_code ec{};
 
   template<std::size_t index>
-  auto&& get() &
+  auto get() & -> auto&&
   {
     return get_impl<index>(*this);
   }
 
   template<std::size_t index>
-  auto&& get() &&
+  auto get() && -> auto&&
   {
     return get_impl<index>(*this);
   }
 
   template<std::size_t index>
-  auto&& get() const&
+  auto get() const& -> auto&&
   {
     return get_impl<index>(*this);
   }
 
   template<std::size_t index>
-  auto&& get() const&&
+  auto get() const&& -> auto&&
   {
     return get_impl<index>(*this);
   }
 
 private:
   template<std::size_t index, typename T>
-  auto&& get_impl(T&& t)
+  auto get_impl(T&& t) -> auto&&
   {
     static_assert(index < 2, "index out of bounds for completion_token");
     if constexpr (index == 0) {

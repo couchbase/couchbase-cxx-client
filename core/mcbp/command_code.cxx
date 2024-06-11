@@ -42,8 +42,8 @@ is_idempotent(protocol::client_opcode opcode) -> bool
   return false;
 }
 
-bool
-supports_collection_id(protocol::client_opcode command)
+auto
+supports_collection_id(protocol::client_opcode command) -> bool
 {
   switch (command) {
     case protocol::client_opcode::get:

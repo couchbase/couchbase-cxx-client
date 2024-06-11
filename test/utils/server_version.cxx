@@ -21,8 +21,8 @@
 
 namespace test::utils
 {
-server_version
-server_version::parse(const std::string& str, const deployment_type deployment)
+auto
+server_version::parse(const std::string& str, const deployment_type deployment) -> server_version
 {
   std::regex version_regex(R"((\d+).(\d+).(\d+)(-(\d+))?(-(.+))?)");
   std::smatch version_match{};

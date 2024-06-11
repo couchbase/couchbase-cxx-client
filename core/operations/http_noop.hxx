@@ -40,10 +40,11 @@ struct http_noop_request {
   std::optional<std::string> client_context_id{};
   std::optional<std::chrono::milliseconds> timeout{};
 
-  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context);
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded,
+                               http_context& context) -> std::error_code;
 
-  [[nodiscard]] http_noop_response make_response(error_context::http&& ctx,
-                                                 const encoded_response_type& encoded) const;
+  [[nodiscard]] auto make_response(error_context::http&& ctx, const encoded_response_type& encoded)
+    const -> http_noop_response;
 };
 
 } // namespace couchbase::core::operations

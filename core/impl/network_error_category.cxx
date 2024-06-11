@@ -23,12 +23,12 @@ namespace couchbase::core::impl
 {
 
 struct network_error_category : std::error_category {
-  [[nodiscard]] const char* name() const noexcept override
+  [[nodiscard]] auto name() const noexcept -> const char* override
   {
     return "couchbase.network";
   }
 
-  [[nodiscard]] std::string message(int ev) const noexcept override
+  [[nodiscard]] auto message(int ev) const noexcept -> std::string override
   {
     switch (static_cast<errc::network>(ev)) {
       case errc::network::resolve_failure:
@@ -65,8 +65,8 @@ struct network_error_category : std::error_category {
 
 const inline static network_error_category network_category_instance;
 
-const std::error_category&
-network_category() noexcept
+auto
+network_category() noexcept -> const std::error_category&
 {
   return network_category_instance;
 }

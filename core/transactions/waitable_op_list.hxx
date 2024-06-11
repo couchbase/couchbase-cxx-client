@@ -45,7 +45,7 @@ struct attempt_mode {
   {
   }
 
-  bool is_query()
+  auto is_query() -> bool
   {
     return mode == modes::QUERY;
   }
@@ -79,7 +79,7 @@ public:
     // we have the lock.  Block all further ops
     allow_ops_ = false;
   }
-  attempt_mode get_mode()
+  auto get_mode() -> attempt_mode
   {
     std::unique_lock<std::mutex> lock(mutex_);
     if (mode_.mode == attempt_mode::modes::KV) {

@@ -16,8 +16,9 @@
 
 #include "transaction_links.hxx"
 
-std::ostream&
-couchbase::core::transactions::operator<<(std::ostream& os, const transaction_links& links)
+auto
+couchbase::core::transactions::operator<<(std::ostream& os,
+                                          const transaction_links& links) -> std::ostream&
 {
   os << "transaction_links{atr: " << links.atr_id_.value_or("none")
      << ", atr_bkt: " << links.atr_bucket_name_.value_or("none")

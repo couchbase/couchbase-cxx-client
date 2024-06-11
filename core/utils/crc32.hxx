@@ -44,8 +44,8 @@ static const std::uint32_t crc32tab[256] = {
   0xb3667a2e, 0xc4614ab8, 0x5d681b02, 0x2a6f2b94, 0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d,
 };
 
-static inline std::uint32_t
-hash_crc32(const char* key, size_t key_length)
+static inline auto
+hash_crc32(const char* key, std::size_t key_length) -> std::uint32_t
 {
   std::uint32_t crc = UINT32_MAX;
 
@@ -56,8 +56,8 @@ hash_crc32(const char* key, size_t key_length)
   return ((~crc) >> 16) & 0x7fff;
 }
 
-static inline std::uint32_t
-hash_crc32(const std::byte* key, size_t key_length)
+static inline auto
+hash_crc32(const std::byte* key, std::size_t key_length) -> std::uint32_t
 {
   return hash_crc32(reinterpret_cast<const char*>(key), key_length);
 }

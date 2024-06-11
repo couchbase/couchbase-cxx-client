@@ -24,9 +24,9 @@ namespace couchbase::core::transactions
 class atr_ids
 {
 public:
-  static const std::string& atr_id_for_vbucket(std::size_t vbucket_id);
-  static std::size_t vbucket_for_key(const std::string& key);
-  static const std::vector<std::string>& all();
+  static auto atr_id_for_vbucket(std::size_t vbucket_id) -> const std::string&;
+  static auto vbucket_for_key(const std::string& key) -> std::size_t;
+  static auto all() -> const std::vector<std::string>&;
 };
 
 } // namespace couchbase::core::transactions

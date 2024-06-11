@@ -25,8 +25,10 @@
 
 namespace couchbase::core::protocol
 {
-topology::configuration
-parse_config(std::string_view input, std::string_view endpoint_address, std::uint16_t endpoint_port)
+auto
+parse_config(std::string_view input,
+             std::string_view endpoint_address,
+             std::uint16_t endpoint_port) -> topology::configuration
 {
   auto config = utils::json::parse(input).as<topology::configuration>();
   for (auto& node : config.nodes) {
@@ -61,14 +63,14 @@ parse_config(std::string_view input, std::string_view endpoint_address, std::uin
   return config;
 }
 
-bool
+auto
 get_cluster_config_response_body::parse(key_value_status_code status,
                                         const header_buffer& header,
                                         std::uint8_t framing_extras_size,
                                         std::uint16_t key_size,
                                         std::uint8_t extras_size,
                                         const std::vector<std::byte>& body,
-                                        const cmd_info& info)
+                                        const cmd_info& info) -> bool
 {
   Expects(header[1] == static_cast<std::byte>(opcode));
   if (status == key_value_status_code::success) {

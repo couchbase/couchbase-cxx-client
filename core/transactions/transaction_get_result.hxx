@@ -87,7 +87,7 @@ public:
   {
   }
 
-  couchbase::transactions::transaction_get_result to_public_result()
+  auto to_public_result() -> couchbase::transactions::transaction_get_result
   {
     return couchbase::transactions::transaction_get_result(std::make_shared<transaction_get_result>(
       document_id_, std::move(content_), cas_.value(), links_, metadata_));
@@ -110,7 +110,7 @@ public:
     }
   }
 
-  transaction_get_result& operator=(const transaction_get_result& o)
+  auto operator=(const transaction_get_result& o) -> transaction_get_result&
   {
     if (this != &o) {
       document_id_ = o.document_id_;
@@ -123,7 +123,8 @@ public:
 
   /** @internal */
   template<typename Content>
-  static transaction_get_result create_from(const transaction_get_result& document, Content content)
+  static auto create_from(const transaction_get_result& document,
+                          Content content) -> transaction_get_result
   {
     transaction_links links(document.links().atr_id(),
                             document.links().atr_bucket_name(),
@@ -145,14 +146,15 @@ public:
   }
 
   /** @internal */
-  static transaction_get_result create_from(const core::document_id& id, const result& res);
+  static auto create_from(const core::document_id& id, const result& res) -> transaction_get_result;
 
   /** @internal */
-  static transaction_get_result create_from(const core::operations::lookup_in_response& resp);
+  static auto create_from(const core::operations::lookup_in_response& resp)
+    -> transaction_get_result;
 
   /** @internal */
   template<typename Content>
-  transaction_get_result& operator=(const transaction_get_result& other)
+  auto operator=(const transaction_get_result& other) -> transaction_get_result&
   {
     if (this != &other) {
       document_id_ = other.document_id_;
@@ -168,33 +170,33 @@ public:
    *
    * @return the id of this document.
    */
-  [[nodiscard]] const core::document_id& id() const
+  [[nodiscard]] auto id() const -> const core::document_id&
   {
     return document_id_;
   }
 
-  [[nodiscard]] const std::string& bucket() const
+  [[nodiscard]] auto bucket() const -> const std::string&
   {
     return document_id_.bucket();
   }
 
-  [[nodiscard]] const std::string& key() const
+  [[nodiscard]] auto key() const -> const std::string&
   {
     return document_id_.key();
   }
 
-  [[nodiscard]] const std::string& scope() const
+  [[nodiscard]] auto scope() const -> const std::string&
   {
     return document_id_.scope();
   }
 
-  [[nodiscard]] const std::string& collection() const
+  [[nodiscard]] auto collection() const -> const std::string&
   {
     return document_id_.collection();
   }
 
   /** @internal */
-  [[nodiscard]] transaction_links links() const
+  [[nodiscard]] auto links() const -> transaction_links
   {
     return links_;
   }
@@ -214,7 +216,7 @@ public:
    *
    * @return metadata for this document.
    */
-  [[nodiscard]] const std::optional<document_metadata>& metadata() const
+  [[nodiscard]] auto metadata() const -> const std::optional<document_metadata>&
   {
     return metadata_;
   }
@@ -224,14 +226,14 @@ public:
    *
    * @return the CAS for this document.
    */
-  [[nodiscard]] couchbase::cas cas() const
+  [[nodiscard]] auto cas() const -> couchbase::cas
   {
     return cas_;
   }
 
   /** @internal */
   template<typename OStream>
-  friend OStream& operator<<(OStream& os, const transaction_get_result document)
+  friend auto operator<<(OStream& os, const transaction_get_result document) -> OStream&
   {
     os << "transaction_get_result{id: " << document.id().key() << ", cas: " << document.cas_.value()
        << ", links_: " << document.links_ << "}";
@@ -244,7 +246,7 @@ public:
    * @return content of the document.
    */
   template<typename Content>
-  [[nodiscard]] Content content() const
+  [[nodiscard]] auto content() const -> Content
   {
     return codec::tao_json_serializer::deserialize<Content>(content_);
   }
@@ -254,7 +256,7 @@ public:
    *
    * @return content
    */
-  [[nodiscard]] const std::vector<std::byte>& content() const
+  [[nodiscard]] auto content() const -> const std::vector<std::byte>&
   {
     return content_;
   }

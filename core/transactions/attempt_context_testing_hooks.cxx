@@ -35,14 +35,14 @@ noop2(attempt_context*,
   return handler({});
 }
 
-inline std::optional<const std::string>
-noop3(attempt_context*)
+inline auto
+noop3(attempt_context*) -> std::optional<const std::string>
 {
   return {};
 }
 
-inline bool
-noop4(attempt_context*, const std::string&, std::optional<const std::string>)
+inline auto
+noop4(attempt_context*, const std::string&, std::optional<const std::string>) -> bool
 {
   return false;
 }

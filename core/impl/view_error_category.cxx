@@ -23,12 +23,12 @@ namespace couchbase::core::impl
 {
 
 struct view_error_category : std::error_category {
-  [[nodiscard]] const char* name() const noexcept override
+  [[nodiscard]] auto name() const noexcept -> const char* override
   {
     return "couchbase.view";
   }
 
-  [[nodiscard]] std::string message(int ev) const noexcept override
+  [[nodiscard]] auto message(int ev) const noexcept -> std::string override
   {
     switch (static_cast<errc::view>(ev)) {
       case errc::view::view_not_found:
@@ -42,8 +42,8 @@ struct view_error_category : std::error_category {
 };
 const inline static view_error_category category_instance;
 
-const std::error_category&
-view_category() noexcept
+auto
+view_category() noexcept -> const std::error_category&
 {
   return category_instance;
 }

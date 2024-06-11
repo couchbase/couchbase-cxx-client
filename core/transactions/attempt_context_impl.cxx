@@ -44,8 +44,8 @@ static const tao::json::value KV_TXDATA{ { "kv", true } };
 // the config may have nullptr for attempt context hooks, so we use the noop here in that case
 static auto noop_hooks = attempt_context_testing_hooks{};
 
-const core::cluster&
-attempt_context_impl::cluster_ref() const
+auto
+attempt_context_impl::cluster_ref() const -> const core::cluster&
 {
   return overall_.cluster_ref();
 }
@@ -104,8 +104,8 @@ attempt_context_impl::check_and_handle_blocking_transactions(const transaction_g
   return cb(std::nullopt);
 }
 
-transaction_get_result
-attempt_context_impl::get(const core::document_id& id)
+auto
+attempt_context_impl::get(const core::document_id& id) -> transaction_get_result
 {
   auto barrier = std::make_shared<std::promise<transaction_get_result>>();
   auto f = barrier->get_future();
@@ -187,8 +187,9 @@ attempt_context_impl::get(const core::document_id& id, Callback&& cb)
   });
 }
 
-std::optional<transaction_get_result>
+auto
 attempt_context_impl::get_optional(const core::document_id& id)
+  -> std::optional<transaction_get_result>
 {
   auto barrier = std::make_shared<std::promise<std::optional<transaction_get_result>>>();
   auto f = barrier->get_future();
@@ -276,12 +277,13 @@ attempt_context_impl::get_optional(const core::document_id& id, Callback&& cb)
   });
 }
 
-core::operations::mutate_in_request
+auto
 attempt_context_impl::create_staging_request(const core::document_id& id,
                                              const transaction_get_result* document,
                                              const std::string type,
                                              const std::string op_id,
                                              std::optional<std::vector<std::byte>> content)
+  -> core::operations::mutate_in_request
 {
   core::operations::mutate_in_request req{ id };
   tao::json::value txn;
@@ -498,9 +500,9 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
     });
 }
 
-transaction_get_result
+auto
 attempt_context_impl::replace_raw(const transaction_get_result& document,
-                                  const std::vector<std::byte>& content)
+                                  const std::vector<std::byte>& content) -> transaction_get_result
 {
   auto barrier = std::make_shared<std::promise<transaction_get_result>>();
   auto f = barrier->get_future();
@@ -515,8 +517,9 @@ attempt_context_impl::replace_raw(const transaction_get_result& document,
   return f.get();
 }
 
-transaction_get_result
-attempt_context_impl::insert_raw(const core::document_id& id, const std::vector<std::byte>& content)
+auto
+attempt_context_impl::insert_raw(const core::document_id& id,
+                                 const std::vector<std::byte>& content) -> transaction_get_result
 {
   auto barrier = std::make_shared<std::promise<transaction_get_result>>();
   auto f = barrier->get_future();
@@ -921,9 +924,9 @@ attempt_context_impl::remove(const transaction_get_result& document)
   f.get();
 }
 
-static core::operations::query_request
+static auto
 wrap_query_request(const couchbase::transactions::transaction_query_options& opts,
-                   const transaction_context& txn_context)
+                   const transaction_context& txn_context) -> core::operations::query_request
 {
   // build what we can directly from the options:
   auto req = core::impl::build_transaction_query_request(opts.get_query_options().build());
@@ -1023,8 +1026,8 @@ attempt_context_impl::query_begin_work(std::optional<std::string> query_context,
     });
 }
 
-tao::json::value
-choose_error(std::vector<tao::json::value>& errors)
+auto
+choose_error(std::vector<tao::json::value>& errors) -> tao::json::value
 {
   auto chosen_error = errors.front();
   if (errors.size() > 1) {
@@ -1048,8 +1051,9 @@ choose_error(std::vector<tao::json::value>& errors)
   return chosen_error;
 }
 
-std::exception_ptr
+auto
 attempt_context_impl::handle_query_error(const core::operations::query_response& resp)
+  -> std::exception_ptr
 {
   if (!resp.ctx.ec && !resp.meta.errors) {
     return {};
@@ -1168,8 +1172,8 @@ attempt_context_impl::do_query(const std::string& statement,
                                           std::optional<core::operations::query_response>(resp));
              });
 }
-std::string
-dump_request(const core::operations::query_request& req)
+auto
+dump_request(const core::operations::query_request& req) -> std::string
 {
   std::string raw = "{";
   for (const auto& x : req.raw) {
@@ -1298,11 +1302,11 @@ attempt_context_impl::query(const std::string& statement,
   });
 }
 
-core::operations::query_response
+auto
 attempt_context_impl::do_core_query(
   const std::string& statement,
   const couchbase::transactions::transaction_query_options& options,
-  std::optional<std::string> query_context)
+  std::optional<std::string> query_context) -> core::operations::query_response
 {
   auto barrier = std::make_shared<std::promise<core::operations::query_response>>();
   auto f = barrier->get_future();
@@ -1318,11 +1322,12 @@ attempt_context_impl::do_core_query(
   return f.get();
 }
 
-std::pair<couchbase::error, couchbase::transactions::transaction_query_result>
+auto
 attempt_context_impl::do_public_query(
   const std::string& statement,
   const couchbase::transactions::transaction_query_options& opts,
   std::optional<std::string> query_context)
+  -> std::pair<couchbase::error, couchbase::transactions::transaction_query_result>
 {
   try {
     auto result = do_core_query(statement, opts, query_context);
@@ -1338,8 +1343,9 @@ attempt_context_impl::do_public_query(
   }
 }
 
-std::vector<core::json_string>
-make_params(const core::document_id& id, std::optional<std::vector<std::byte>> content)
+auto
+make_params(const core::document_id& id,
+            std::optional<std::vector<std::byte>> content) -> std::vector<core::json_string>
 {
   std::vector<core::json_string> retval;
   auto keyspace = fmt::format("default:`{}`.`{}`.`{}`", id.bucket(), id.scope(), id.collection());
@@ -1354,8 +1360,8 @@ make_params(const core::document_id& id, std::optional<std::vector<std::byte>> c
   return retval;
 }
 
-tao::json::value
-make_kv_txdata(std::optional<transaction_get_result> doc = std::nullopt)
+auto
+make_kv_txdata(std::optional<transaction_get_result> doc = std::nullopt) -> tao::json::value
 {
   tao::json::value retval{ { "kv", true } };
   if (doc) {
@@ -2180,9 +2186,9 @@ attempt_context_impl::rollback()
   }
 }
 
-bool
+auto
 attempt_context_impl::has_expired_client_side(std::string place,
-                                              std::optional<const std::string> doc_id)
+                                              std::optional<const std::string> doc_id) -> bool
 {
   bool over = overall_.has_expired_client_side();
   bool hook = hooks_.has_expired_client_side(this, place, doc_id);
@@ -2195,9 +2201,9 @@ attempt_context_impl::has_expired_client_side(std::string place,
   return over || hook;
 }
 
-bool
+auto
 attempt_context_impl::check_expiry_pre_commit(std::string stage,
-                                              std::optional<const std::string> doc_id)
+                                              std::optional<const std::string> doc_id) -> bool
 {
   if (has_expired_client_side(stage, std::move(doc_id))) {
     CB_ATTEMPT_CTX_LOG_DEBUG(this,
@@ -2214,9 +2220,10 @@ attempt_context_impl::check_expiry_pre_commit(std::string stage,
   return false;
 }
 
-std::optional<error_class>
+auto
 attempt_context_impl::error_if_expired_and_not_in_overtime(const std::string& stage,
                                                            std::optional<const std::string> doc_id)
+  -> std::optional<error_class>
 {
   if (expiry_overtime_mode_.load()) {
     CB_ATTEMPT_CTX_LOG_DEBUG(
@@ -2400,8 +2407,8 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id,
   }
 }
 
-staged_mutation*
-attempt_context_impl::check_for_own_write(const core::document_id& id)
+auto
+attempt_context_impl::check_for_own_write(const core::document_id& id) -> staged_mutation*
 {
   staged_mutation* own_replace = staged_mutations_->find_replace(id);
   if (own_replace != nullptr) {

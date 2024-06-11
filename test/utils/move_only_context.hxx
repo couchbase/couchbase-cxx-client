@@ -31,15 +31,15 @@ public:
 
   move_only_context(move_only_context&& other) = default;
 
-  move_only_context& operator=(move_only_context&& other) = default;
+  auto operator=(move_only_context&& other) -> move_only_context& = default;
 
   ~move_only_context() = default;
 
   move_only_context(const move_only_context& other) = delete;
 
-  move_only_context& operator=(const move_only_context& other) = delete;
+  auto operator=(const move_only_context& other) -> move_only_context& = delete;
 
-  [[nodiscard]] const std::string& payload() const
+  [[nodiscard]] auto payload() const -> const std::string&
   {
     return payload_;
   }

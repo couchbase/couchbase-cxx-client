@@ -26,8 +26,8 @@ namespace tao::json
 template<>
 struct traits<couchbase::core::management::analytics::s3_external_link> {
   template<template<typename...> class Traits>
-  static couchbase::core::management::analytics::s3_external_link as(
-    const tao::json::basic_value<Traits>& v)
+  static auto as(const tao::json::basic_value<Traits>& v)
+    -> couchbase::core::management::analytics::s3_external_link
   {
     couchbase::core::management::analytics::s3_external_link result{};
 
