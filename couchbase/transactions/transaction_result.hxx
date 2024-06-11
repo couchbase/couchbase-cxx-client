@@ -28,7 +28,7 @@ namespace couchbase::transactions
  * returned by @ref couchbase::transactions::transactions::run()
  */
 struct transaction_result {
-    std::string transaction_id;
-    bool unstaging_complete;
+  std::string transaction_id;
+  bool unstaging_complete;
 };
 } // namespace couchbase::transactions

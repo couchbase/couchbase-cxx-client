@@ -26,46 +26,48 @@
 namespace couchbase
 {
 struct update_collection_options : public common_options<update_collection_options> {
-  public:
-    /**
-     * Immutable value object representing consistent options.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    struct built : public common_options<update_collection_options>::built {
-    };
+public:
+  /**
+   * Immutable value object representing consistent options.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  struct built : public common_options<update_collection_options>::built {
+  };
 
-    /**
-     * Validates the options and returns them as an immutable value.
-     *
-     * @return consistent options as an immutable value
-     *
-     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options() };
-    }
+  /**
+   * Validates the options and returns them as an immutable value.
+   *
+   * @return consistent options as an immutable value
+   *
+   * @exception std::system_error with code errc::common::invalid_argument if the options are not
+   * valid
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options() };
+  }
 };
 
 /**
  * The settings that should be updated for the collection
  */
 struct update_collection_settings {
-    /**
-     * The maximum expiry, in seconds, for documents in this collection. Values greater than or equal to -1 are valid.
-     * Value of 0 sets max_expiry to the bucket-level setting and value of -1 to set it as no-expiry.
-     */
-    std::optional<std::int32_t> max_expiry{};
+  /**
+   * The maximum expiry, in seconds, for documents in this collection. Values greater than or equal
+   * to -1 are valid. Value of 0 sets max_expiry to the bucket-level setting and value of -1 to set
+   * it as no-expiry.
+   */
+  std::optional<std::int32_t> max_expiry{};
 
-    /**
-     * Whether history retention should be enabled.
-     */
-    std::optional<bool> history{};
+  /**
+   * Whether history retention should be enabled.
+   */
+  std::optional<bool> history{};
 };
 
 using update_collection_handler = std::function<void(error)>;

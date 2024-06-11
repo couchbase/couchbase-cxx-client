@@ -30,28 +30,30 @@ namespace couchbase::core::operations
 {
 
 struct get_and_lock_response {
-    key_value_error_context ctx;
-    std::vector<std::byte> value{};
-    couchbase::cas cas{};
-    std::uint32_t flags{};
+  key_value_error_context ctx;
+  std::vector<std::byte> value{};
+  couchbase::cas cas{};
+  std::uint32_t flags{};
 };
 
 struct get_and_lock_request {
-    using response_type = get_and_lock_response;
-    using encoded_request_type = protocol::client_request<protocol::get_and_lock_request_body>;
-    using encoded_response_type = protocol::client_response<protocol::get_and_lock_response_body>;
+  using response_type = get_and_lock_response;
+  using encoded_request_type = protocol::client_request<protocol::get_and_lock_request_body>;
+  using encoded_response_type = protocol::client_response<protocol::get_and_lock_response_body>;
 
-    document_id id;
-    std::uint16_t partition{};
-    std::uint32_t opaque{};
-    std::uint32_t lock_time{};
-    std::optional<std::chrono::milliseconds> timeout{};
-    io::retry_context<false> retries{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
+  document_id id;
+  std::uint16_t partition{};
+  std::uint32_t opaque{};
+  std::uint32_t lock_time{};
+  std::optional<std::chrono::milliseconds> timeout{};
+  io::retry_context<false> retries{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          mcbp_context&& context) const;
 
-    [[nodiscard]] get_and_lock_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] get_and_lock_response make_response(key_value_error_context&& ctx,
+                                                    const encoded_response_type& encoded) const;
 };
 
 } // namespace couchbase::core::operations
@@ -59,6 +61,7 @@ struct get_and_lock_request {
 namespace couchbase::core::io::mcbp_traits
 {
 template<>
-struct supports_parent_span<couchbase::core::operations::get_and_lock_request> : public std::true_type {
+struct supports_parent_span<couchbase::core::operations::get_and_lock_request>
+  : public std::true_type {
 };
 } // namespace couchbase::core::io::mcbp_traits

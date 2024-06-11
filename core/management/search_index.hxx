@@ -22,18 +22,18 @@
 namespace couchbase::core::management::search
 {
 struct index {
-    std::string uuid;
-    std::string name;
-    std::string type;
-    std::string params_json;
+  std::string uuid;
+  std::string name;
+  std::string type;
+  std::string params_json;
 
-    std::string source_uuid;
-    std::string source_name;
-    std::string source_type;
-    std::string source_params_json;
+  std::string source_uuid;
+  std::string source_name;
+  std::string source_type;
+  std::string source_params_json;
 
-    std::string plan_params_json;
+  std::string plan_params_json;
 
-    [[nodiscard]] auto is_vector_index() const -> bool;
+  [[nodiscard]] auto is_vector_index() const -> bool;
 };
 } // namespace couchbase::core::management::search

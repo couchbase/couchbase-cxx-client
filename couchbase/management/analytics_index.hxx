@@ -25,24 +25,24 @@ namespace couchbase::management
  * Represents an index in the analytics service.
  */
 struct analytics_index {
-    /**
-     * The name of the analytics index
-     */
-    std::string name;
+  /**
+   * The name of the analytics index
+   */
+  std::string name;
 
-    /**
-     * The name of the dataset (collection) this index is part of
-     */
-    std::string dataset_name;
+  /**
+   * The name of the dataset (collection) this index is part of
+   */
+  std::string dataset_name;
 
-    /**
-     * The name of the dataverse (scope) this index is part of
-     */
-    std::string dataverse_name;
+  /**
+   * The name of the dataverse (scope) this index is part of
+   */
+  std::string dataverse_name;
 
-    /**
-     * Whether this index is a primary index
-     */
-    bool is_primary;
+  /**
+   * Whether this index is a primary index
+   */
+  bool is_primary;
 };
 } // namespace couchbase::management

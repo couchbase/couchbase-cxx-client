@@ -39,40 +39,41 @@ namespace couchbase::core
 {
 class view_query_options
 {
-  public:
-    std::string design_document_name{};
-    std::string view_name{};
-    std::string view_type{};
-    std::map<std::string, std::string> options{};
+public:
+  std::string design_document_name{};
+  std::string view_name{};
+  std::string view_type{};
+  std::map<std::string, std::string> options{};
 
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
-    std::chrono::milliseconds timeout{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{};
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
+  std::chrono::milliseconds timeout{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{};
 
-    struct {
-        std::string user{};
-    } internal{};
+  struct {
+    std::string user{};
+  } internal{};
 };
 
 class view_query_row_reader_impl;
 
 class view_query_row_reader
 {
-  public:
-    view_query_row_reader();
+public:
+  view_query_row_reader();
 
-    auto next_row() -> std::vector<std::byte>;
+  auto next_row() -> std::vector<std::byte>;
 
-    auto error() -> std::error_code;
+  auto error() -> std::error_code;
 
-    auto meta_data() -> std::optional<std::vector<std::byte>>;
+  auto meta_data() -> std::optional<std::vector<std::byte>>;
 
-    auto close() -> std::error_code;
+  auto close() -> std::error_code;
 
-  private:
-    std::shared_ptr<view_query_row_reader_impl> impl_;
+private:
+  std::shared_ptr<view_query_row_reader_impl> impl_;
 };
 
-using view_query_callback = utils::movable_function<void(view_query_row_reader reader, std::error_code ec)>;
+using view_query_callback =
+  utils::movable_function<void(view_query_row_reader reader, std::error_code ec)>;
 
 } // namespace couchbase::core

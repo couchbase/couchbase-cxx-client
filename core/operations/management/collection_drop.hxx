@@ -26,27 +26,29 @@
 namespace couchbase::core::operations::management
 {
 struct collection_drop_response {
-    error_context::http ctx;
-    std::uint64_t uid{ 0 };
+  error_context::http ctx;
+  std::uint64_t uid{ 0 };
 };
 
 struct collection_drop_request {
-    using response_type = collection_drop_response;
-    using encoded_request_type = io::http_request;
-    using encoded_response_type = io::http_response;
-    using error_context_type = error_context::http;
+  using response_type = collection_drop_response;
+  using encoded_request_type = io::http_request;
+  using encoded_response_type = io::http_response;
+  using error_context_type = error_context::http;
 
-    static const inline service_type type = service_type::management;
+  static const inline service_type type = service_type::management;
 
-    std::string bucket_name;
-    std::string scope_name;
-    std::string collection_name;
+  std::string bucket_name;
+  std::string scope_name;
+  std::string collection_name;
 
-    std::optional<std::string> client_context_id{};
-    std::optional<std::chrono::milliseconds> timeout{};
+  std::optional<std::string> client_context_id{};
+  std::optional<std::chrono::milliseconds> timeout{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          http_context& context) const;
 
-    [[nodiscard]] collection_drop_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] collection_drop_response make_response(error_context::http&& ctx,
+                                                       const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::operations::management

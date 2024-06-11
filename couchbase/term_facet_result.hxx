@@ -35,21 +35,21 @@ class internal_term_facet_result;
  */
 class term_facet_result : public search_facet_result
 {
-  public:
-    /**
-     * @since 1.0.0
-     * @internal
-     */
-    explicit term_facet_result(internal_term_facet_result internal);
+public:
+  /**
+   * @since 1.0.0
+   * @internal
+   */
+  explicit term_facet_result(internal_term_facet_result internal);
 
-    [[nodiscard]] auto name() const -> const std::string& override;
-    [[nodiscard]] auto field() const -> const std::string& override;
-    [[nodiscard]] auto total() const -> std::uint64_t override;
-    [[nodiscard]] auto missing() const -> std::uint64_t override;
-    [[nodiscard]] auto other() const -> std::uint64_t override;
-    [[nodiscard]] auto terms() const -> const std::vector<search_term_range>&;
+  [[nodiscard]] auto name() const -> const std::string& override;
+  [[nodiscard]] auto field() const -> const std::string& override;
+  [[nodiscard]] auto total() const -> std::uint64_t override;
+  [[nodiscard]] auto missing() const -> std::uint64_t override;
+  [[nodiscard]] auto other() const -> std::uint64_t override;
+  [[nodiscard]] auto terms() const -> const std::vector<search_term_range>&;
 
-  private:
-    std::unique_ptr<internal_term_facet_result> internal_;
+private:
+  std::unique_ptr<internal_term_facet_result> internal_;
 };
 } // namespace couchbase

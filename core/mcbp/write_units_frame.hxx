@@ -22,8 +22,9 @@
 
 namespace couchbase::core::mcbp
 {
-// write_units_frame allows the server to return information about the number of write units used by a command.
+// write_units_frame allows the server to return information about the number of write units used by
+// a command.
 struct write_units_frame {
-    std::uint16_t write_units;
+  std::uint16_t write_units;
 };
 } // namespace couchbase::core::mcbp

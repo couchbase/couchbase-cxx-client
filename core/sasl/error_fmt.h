@@ -23,48 +23,48 @@
 
 template<>
 struct fmt::formatter<couchbase::core::sasl::error> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(couchbase::core::sasl::error err, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (err) {
-            case couchbase::core::sasl::error::OK:
-                name = "ok";
-                break;
-            case couchbase::core::sasl::error::CONTINUE:
-                name = "continue";
-                break;
-            case couchbase::core::sasl::error::FAIL:
-                name = "fail";
-                break;
-            case couchbase::core::sasl::error::BAD_PARAM:
-                name = "bad_param";
-                break;
-            case couchbase::core::sasl::error::NO_MEM:
-                name = "no_mem";
-                break;
-            case couchbase::core::sasl::error::NO_MECH:
-                name = "no_mech";
-                break;
-            case couchbase::core::sasl::error::NO_USER:
-                name = "no_user";
-                break;
-            case couchbase::core::sasl::error::PASSWORD_ERROR:
-                name = "password_error";
-                break;
-            case couchbase::core::sasl::error::NO_RBAC_PROFILE:
-                name = "no_rbac_profile";
-                break;
-            case couchbase::core::sasl::error::AUTH_PROVIDER_DIED:
-                name = "auth_provider_died";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
+  template<typename FormatContext>
+  auto format(couchbase::core::sasl::error err, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (err) {
+      case couchbase::core::sasl::error::OK:
+        name = "ok";
+        break;
+      case couchbase::core::sasl::error::CONTINUE:
+        name = "continue";
+        break;
+      case couchbase::core::sasl::error::FAIL:
+        name = "fail";
+        break;
+      case couchbase::core::sasl::error::BAD_PARAM:
+        name = "bad_param";
+        break;
+      case couchbase::core::sasl::error::NO_MEM:
+        name = "no_mem";
+        break;
+      case couchbase::core::sasl::error::NO_MECH:
+        name = "no_mech";
+        break;
+      case couchbase::core::sasl::error::NO_USER:
+        name = "no_user";
+        break;
+      case couchbase::core::sasl::error::PASSWORD_ERROR:
+        name = "password_error";
+        break;
+      case couchbase::core::sasl::error::NO_RBAC_PROFILE:
+        name = "no_rbac_profile";
+        break;
+      case couchbase::core::sasl::error::AUTH_PROVIDER_DIED:
+        name = "auth_provider_died";
+        break;
     }
+    return format_to(ctx.out(), "{}", name);
+  }
 };

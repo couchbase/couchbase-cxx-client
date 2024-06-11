@@ -20,20 +20,20 @@
 namespace couchbase::core::protocol
 {
 enum class server_opcode : std::uint8_t {
-    cluster_map_change_notification = 0x01,
-    invalid = 0xff,
+  cluster_map_change_notification = 0x01,
+  invalid = 0xff,
 };
 
 constexpr bool
 is_valid_server_request_opcode(std::uint8_t code)
 {
-    switch (server_opcode(code)) {
-        case server_opcode::cluster_map_change_notification:
-            return true;
-        case server_opcode::invalid:
-            break;
-    }
-    return false;
+  switch (server_opcode(code)) {
+    case server_opcode::cluster_map_change_notification:
+      return true;
+    case server_opcode::invalid:
+      break;
+  }
+  return false;
 }
 
 } // namespace couchbase::core::protocol

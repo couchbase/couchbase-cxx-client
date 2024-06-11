@@ -29,30 +29,30 @@
  */
 template<>
 struct fmt::formatter<couchbase::durability_level> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(couchbase::durability_level value, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (value) {
-            case couchbase::durability_level::none:
-                name = "none";
-                break;
-            case couchbase::durability_level::majority:
-                name = "majority";
-                break;
-            case couchbase::durability_level::majority_and_persist_to_active:
-                name = "majority_and_persist_to_active";
-                break;
-            case couchbase::durability_level::persist_to_majority:
-                name = "persist_to_majority";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
+  template<typename FormatContext>
+  auto format(couchbase::durability_level value, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (value) {
+      case couchbase::durability_level::none:
+        name = "none";
+        break;
+      case couchbase::durability_level::majority:
+        name = "majority";
+        break;
+      case couchbase::durability_level::majority_and_persist_to_active:
+        name = "majority_and_persist_to_active";
+        break;
+      case couchbase::durability_level::persist_to_majority:
+        name = "persist_to_majority";
+        break;
     }
+    return format_to(ctx.out(), "{}", name);
+  }
 };

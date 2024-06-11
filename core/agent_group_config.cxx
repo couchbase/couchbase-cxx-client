@@ -24,12 +24,13 @@ namespace couchbase::core
 auto
 agent_group_config::to_string() const -> std::string
 {
-    return fmt::format(R"(#<agent_group_config:{} shim={}, user_agent="{}", default_retry_strategy={}, seed={}, key_value={}>)",
-                       static_cast<const void*>(this),
-                       shim.to_string(),
-                       user_agent,
-                       default_retry_strategy ? default_retry_strategy->to_string() : "(none)",
-                       seed.to_string(),
-                       key_value.to_string());
+  return fmt::format(
+    R"(#<agent_group_config:{} shim={}, user_agent="{}", default_retry_strategy={}, seed={}, key_value={}>)",
+    static_cast<const void*>(this),
+    shim.to_string(),
+    user_agent,
+    default_retry_strategy ? default_retry_strategy->to_string() : "(none)",
+    seed.to_string(),
+    key_value.to_string());
 }
 } // namespace couchbase::core

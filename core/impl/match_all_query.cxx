@@ -24,12 +24,12 @@ namespace couchbase
 auto
 match_all_query::encode() const -> encoded_search_query
 {
-    encoded_search_query built;
-    built.query = { { "match_all", tao::json::empty_object } };
-    if (boost_) {
-        built.query["boost"] = boost_.value();
-    }
+  encoded_search_query built;
+  built.query = { { "match_all", tao::json::empty_object } };
+  if (boost_) {
+    built.query["boost"] = boost_.value();
+  }
 
-    return built;
+  return built;
 }
 } // namespace couchbase

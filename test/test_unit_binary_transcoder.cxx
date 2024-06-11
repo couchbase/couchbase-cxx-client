@@ -23,45 +23,55 @@
 
 TEST_CASE("unit: binary_raw_transcoder sets flags", "[unit]")
 {
-    /*
-     * echo -n '"hello, world"' \
-     *  | ruby -e 'puts ARGF.read.chars.map{|c| format("std::byte{0x%02x}", c.ord)}.join(", ")'
-     */
-    std::vector<std::byte> data{
-        std::byte{ 0x22 }, std::byte{ 0x68 }, std::byte{ 0x65 }, std::byte{ 0x6c }, std::byte{ 0x6c }, std::byte{ 0x6f }, std::byte{ 0x2c },
-        std::byte{ 0x20 }, std::byte{ 0x77 }, std::byte{ 0x6f }, std::byte{ 0x72 }, std::byte{ 0x6c }, std::byte{ 0x64 }, std::byte{ 0x22 },
-    };
+  /*
+   * echo -n '"hello, world"' \
+   *  | ruby -e 'puts ARGF.read.chars.map{|c| format("std::byte{0x%02x}", c.ord)}.join(", ")'
+   */
+  std::vector<std::byte> data{
+    std::byte{ 0x22 }, std::byte{ 0x68 }, std::byte{ 0x65 }, std::byte{ 0x6c }, std::byte{ 0x6c },
+    std::byte{ 0x6f }, std::byte{ 0x2c }, std::byte{ 0x20 }, std::byte{ 0x77 }, std::byte{ 0x6f },
+    std::byte{ 0x72 }, std::byte{ 0x6c }, std::byte{ 0x64 }, std::byte{ 0x22 },
+  };
 
-    auto encoded = couchbase::codec::raw_binary_transcoder::encode(data);
-    REQUIRE(encoded.data == data);
-    REQUIRE(encoded.flags == couchbase::codec::codec_flags::binary_common_flags);
+  auto encoded = couchbase::codec::raw_binary_transcoder::encode(data);
+  REQUIRE(encoded.data == data);
+  REQUIRE(encoded.flags == couchbase::codec::codec_flags::binary_common_flags);
 
-    auto decoded = couchbase::codec::raw_binary_transcoder::decode(encoded);
-    REQUIRE(decoded == data);
+  auto decoded = couchbase::codec::raw_binary_transcoder::decode(encoded);
+  REQUIRE(decoded == data);
 }
 
 TEST_CASE("unit: binary_raw_transcoder checks flags", "[unit]")
 {
-    /*
-     * echo -n '"hello, world"' \
-     *  | ruby -e 'puts ARGF.read.chars.map{|c| format("std::byte{0x%02x}", c.ord)}.join(", ")'
-     */
-    std::vector<std::byte> expected_data{
-        std::byte{ 0x22 }, std::byte{ 0x68 }, std::byte{ 0x65 }, std::byte{ 0x6c }, std::byte{ 0x6c }, std::byte{ 0x6f }, std::byte{ 0x2c },
-        std::byte{ 0x20 }, std::byte{ 0x77 }, std::byte{ 0x6f }, std::byte{ 0x72 }, std::byte{ 0x6c }, std::byte{ 0x64 }, std::byte{ 0x22 },
-    };
-    auto encoded = couchbase::codec::default_json_transcoder::encode("hello, world");
-    REQUIRE(encoded.data == expected_data);
-    REQUIRE(encoded.flags == couchbase::codec::codec_flags::json_common_flags);
+  /*
+   * echo -n '"hello, world"' \
+   *  | ruby -e 'puts ARGF.read.chars.map{|c| format("std::byte{0x%02x}", c.ord)}.join(", ")'
+   */
+  std::vector<std::byte> expected_data{
+    std::byte{ 0x22 }, std::byte{ 0x68 }, std::byte{ 0x65 }, std::byte{ 0x6c }, std::byte{ 0x6c },
+    std::byte{ 0x6f }, std::byte{ 0x2c }, std::byte{ 0x20 }, std::byte{ 0x77 }, std::byte{ 0x6f },
+    std::byte{ 0x72 }, std::byte{ 0x6c }, std::byte{ 0x64 }, std::byte{ 0x22 },
+  };
+  auto encoded = couchbase::codec::default_json_transcoder::encode("hello, world");
+  REQUIRE(encoded.data == expected_data);
+  REQUIRE(encoded.flags == couchbase::codec::codec_flags::json_common_flags);
 
-    REQUIRE_THROWS_AS([](auto encoded) { couchbase::codec::raw_binary_transcoder::decode(encoded); }(encoded), std::system_error);
+  REQUIRE_THROWS_AS(
+    [](auto encoded) {
+      couchbase::codec::raw_binary_transcoder::decode(encoded);
+    }(encoded),
+    std::system_error);
 }
 
 TEST_CASE("unit: binary_raw_transcoder works with get result", "[unit]")
 {
-    std::vector<std::byte> data{ { std::byte{ 0xde }, std::byte{ 0xad }, std::byte{ 0xbe }, std::byte{ 0xef } } };
-    couchbase::get_result result({}, { data, couchbase::codec::codec_flags::binary_common_flags }, {});
+  std::vector<std::byte> data{
+    { std::byte{ 0xde }, std::byte{ 0xad }, std::byte{ 0xbe }, std::byte{ 0xef } }
+  };
+  couchbase::get_result result(
+    {}, { data, couchbase::codec::codec_flags::binary_common_flags }, {});
 
-    REQUIRE(result.content_as<couchbase::codec::raw_binary_transcoder>() == data);
-    REQUIRE(result.content_as<std::vector<std::byte>, couchbase::codec::raw_binary_transcoder>() == data);
+  REQUIRE(result.content_as<couchbase::codec::raw_binary_transcoder>() == data);
+  REQUIRE(result.content_as<std::vector<std::byte>, couchbase::codec::raw_binary_transcoder>() ==
+          data);
 }

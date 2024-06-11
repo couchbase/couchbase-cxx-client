@@ -21,21 +21,22 @@
 
 template<>
 struct fmt::formatter<couchbase::core::transactions::doc_record> {
-  public:
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+public:
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    constexpr auto format(const couchbase::core::transactions::doc_record& r, FormatContext& ctx) const
-    {
-        return format_to(ctx.out(),
-                         "doc_record:{{ bucket: {}, scope: {}, collection: {}, key: {} }}",
-                         r.document_id().bucket(),
-                         r.document_id().scope(),
-                         r.document_id().collection(),
-                         r.document_id().key());
-    }
+  template<typename FormatContext>
+  constexpr auto format(const couchbase::core::transactions::doc_record& r,
+                        FormatContext& ctx) const
+  {
+    return format_to(ctx.out(),
+                     "doc_record:{{ bucket: {}, scope: {}, collection: {}, key: {} }}",
+                     r.document_id().bucket(),
+                     r.document_id().scope(),
+                     r.document_id().collection(),
+                     r.document_id().key());
+  }
 };

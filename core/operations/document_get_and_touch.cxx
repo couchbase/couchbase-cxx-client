@@ -22,24 +22,26 @@
 namespace couchbase::core::operations
 {
 std::error_code
-get_and_touch_request::encode_to(get_and_touch_request::encoded_request_type& encoded, mcbp_context&& /* context */) const
+get_and_touch_request::encode_to(get_and_touch_request::encoded_request_type& encoded,
+                                 mcbp_context&& /* context */) const
 {
-    encoded.opaque(opaque);
-    encoded.partition(partition);
-    encoded.body().id(id);
-    encoded.body().expiry(expiry);
-    return {};
+  encoded.opaque(opaque);
+  encoded.partition(partition);
+  encoded.body().id(id);
+  encoded.body().expiry(expiry);
+  return {};
 }
 
 get_and_touch_response
-get_and_touch_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
+get_and_touch_request::make_response(key_value_error_context&& ctx,
+                                     const encoded_response_type& encoded) const
 {
-    get_and_touch_response response{ std::move(ctx) };
-    if (!response.ctx.ec()) {
-        response.value = encoded.body().value();
-        response.cas = encoded.cas();
-        response.flags = encoded.body().flags();
-    }
-    return response;
+  get_and_touch_response response{ std::move(ctx) };
+  if (!response.ctx.ec()) {
+    response.value = encoded.body().value();
+    response.cas = encoded.cas();
+    response.flags = encoded.body().flags();
+  }
+  return response;
 }
 } // namespace couchbase::core::operations

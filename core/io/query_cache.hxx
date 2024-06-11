@@ -26,46 +26,46 @@ namespace couchbase::core
 {
 class query_cache
 {
-  public:
-    struct entry {
-        std::string name;
-        std::optional<std::string> plan{};
-    };
+public:
+  struct entry {
+    std::string name;
+    std::optional<std::string> plan{};
+  };
 
-    void erase(const std::string& statement)
-    {
-        std::scoped_lock lock(store_mutex_);
-        auto it = store_.find(statement);
-        if (it == store_.end()) {
-            return;
-        }
-        store_.erase(it);
+  void erase(const std::string& statement)
+  {
+    std::scoped_lock lock(store_mutex_);
+    auto it = store_.find(statement);
+    if (it == store_.end()) {
+      return;
     }
+    store_.erase(it);
+  }
 
-    void put(const std::string& statement, const std::string& prepared)
-    {
-        std::scoped_lock lock(store_mutex_);
-        store_.try_emplace(statement, entry{ prepared });
+  void put(const std::string& statement, const std::string& prepared)
+  {
+    std::scoped_lock lock(store_mutex_);
+    store_.try_emplace(statement, entry{ prepared });
+  }
+
+  void put(const std::string& statement, const std::string& name, const std::string& encoded_plan)
+  {
+    std::scoped_lock lock(store_mutex_);
+    store_.try_emplace(statement, entry{ name, encoded_plan });
+  }
+
+  std::optional<entry> get(const std::string& statement)
+  {
+    std::scoped_lock lock(store_mutex_);
+    auto it = store_.find(statement);
+    if (it == store_.end()) {
+      return {};
     }
+    return it->second;
+  }
 
-    void put(const std::string& statement, const std::string& name, const std::string& encoded_plan)
-    {
-        std::scoped_lock lock(store_mutex_);
-        store_.try_emplace(statement, entry{ name, encoded_plan });
-    }
-
-    std::optional<entry> get(const std::string& statement)
-    {
-        std::scoped_lock lock(store_mutex_);
-        auto it = store_.find(statement);
-        if (it == store_.end()) {
-            return {};
-        }
-        return it->second;
-    }
-
-  private:
-    std::map<std::string, entry> store_;
-    std::mutex store_mutex_{};
+private:
+  std::map<std::string, entry> store_;
+  std::mutex store_mutex_{};
 };
 } // namespace couchbase::core

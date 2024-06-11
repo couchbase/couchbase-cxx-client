@@ -26,61 +26,61 @@ namespace couchbase
 {
 class security_options
 {
-  public:
-    auto enabled(bool enabled) -> security_options&
-    {
-        enabled_ = enabled;
-        return *this;
-    }
+public:
+  auto enabled(bool enabled) -> security_options&
+  {
+    enabled_ = enabled;
+    return *this;
+  }
 
-    auto tls_verify(tls_verify_mode mode) -> security_options&
-    {
-        tls_verify_ = mode;
-        return *this;
-    }
+  auto tls_verify(tls_verify_mode mode) -> security_options&
+  {
+    tls_verify_ = mode;
+    return *this;
+  }
 
-    auto trust_certificate(std::string certificate_path) -> security_options&
-    {
-        trust_certificate_ = certificate_path;
-        return *this;
-    }
+  auto trust_certificate(std::string certificate_path) -> security_options&
+  {
+    trust_certificate_ = certificate_path;
+    return *this;
+  }
 
-    auto trust_certificate_value(std::string certificate_value) -> security_options&
-    {
-        trust_certificate_value_ = certificate_value;
-        return *this;
-    }
+  auto trust_certificate_value(std::string certificate_value) -> security_options&
+  {
+    trust_certificate_value_ = certificate_value;
+    return *this;
+  }
 
-    struct built {
-        bool enabled;
-        tls_verify_mode tls_verify;
-        std::optional<std::string> trust_certificate;
-        std::optional<std::string> trust_certificate_value;
-        bool disable_mozilla_ca_certificates;
-        bool disable_deprecated_protocols;
-        bool disable_tls_v1_2;
+  struct built {
+    bool enabled;
+    tls_verify_mode tls_verify;
+    std::optional<std::string> trust_certificate;
+    std::optional<std::string> trust_certificate_value;
+    bool disable_mozilla_ca_certificates;
+    bool disable_deprecated_protocols;
+    bool disable_tls_v1_2;
+  };
+
+  [[nodiscard]] auto build() const -> built
+  {
+    return {
+      enabled_,
+      tls_verify_,
+      trust_certificate_,
+      trust_certificate_value_,
+      disable_mozilla_ca_certificates_,
+      disable_deprecated_protocols,
+      disable_tls_v1_2,
     };
+  }
 
-    [[nodiscard]] auto build() const -> built
-    {
-        return {
-            enabled_,
-            tls_verify_,
-            trust_certificate_,
-            trust_certificate_value_,
-            disable_mozilla_ca_certificates_,
-            disable_deprecated_protocols,
-            disable_tls_v1_2,
-        };
-    }
-
-  private:
-    bool enabled_{ true };
-    tls_verify_mode tls_verify_{ tls_verify_mode::peer };
-    std::optional<std::string> trust_certificate_{};
-    std::optional<std::string> trust_certificate_value_{};
-    bool disable_mozilla_ca_certificates_{ false };
-    bool disable_deprecated_protocols{ true };
-    bool disable_tls_v1_2{ false };
+private:
+  bool enabled_{ true };
+  tls_verify_mode tls_verify_{ tls_verify_mode::peer };
+  std::optional<std::string> trust_certificate_{};
+  std::optional<std::string> trust_certificate_value_{};
+  bool disable_mozilla_ca_certificates_{ false };
+  bool disable_deprecated_protocols{ true };
+  bool disable_tls_v1_2{ false };
 };
 } // namespace couchbase

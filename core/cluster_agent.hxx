@@ -25,10 +25,10 @@ class cluster_agent_impl;
 
 class cluster_agent
 {
-  public:
-    explicit cluster_agent(cluster_agent_config config);
+public:
+  explicit cluster_agent(cluster_agent_config config);
 
-  private:
-    std::shared_ptr<cluster_agent_impl> impl_;
+private:
+  std::shared_ptr<cluster_agent_impl> impl_;
 };
 } // namespace couchbase::core

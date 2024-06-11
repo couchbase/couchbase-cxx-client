@@ -28,7 +28,7 @@ namespace couchbase::core::protocol
 std::uint32_t
 get_replica_response_body::flags() const
 {
-    return flags_;
+  return flags_;
 }
 
 bool
@@ -40,32 +40,32 @@ get_replica_response_body::parse(key_value_status_code status,
                                  const std::vector<std::byte>& body,
                                  const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == key_value_status_code::success) {
-        std::vector<std::uint8_t>::difference_type offset = framing_extras_size;
-        if (extras_size == 4) {
-            memcpy(&flags_, body.data() + offset, sizeof(flags_));
-            flags_ = utils::byte_swap(flags_);
-            offset += 4;
-        } else {
-            offset += extras_size;
-        }
-        offset += key_size;
-        value_.assign(body.begin() + offset, body.end());
-        return true;
+  Expects(header[1] == static_cast<std::byte>(opcode));
+  if (status == key_value_status_code::success) {
+    std::vector<std::uint8_t>::difference_type offset = framing_extras_size;
+    if (extras_size == 4) {
+      memcpy(&flags_, body.data() + offset, sizeof(flags_));
+      flags_ = utils::byte_swap(flags_);
+      offset += 4;
+    } else {
+      offset += extras_size;
     }
-    return false;
+    offset += key_size;
+    value_.assign(body.begin() + offset, body.end());
+    return true;
+  }
+  return false;
 }
 
 void
 get_replica_request_body::id(const document_id& id)
 {
-    key_ = make_protocol_key(id);
+  key_ = make_protocol_key(id);
 }
 
 std::size_t
 get_replica_request_body::size() const
 {
-    return key_.size();
+  return key_.size();
 }
 } // namespace couchbase::core::protocol

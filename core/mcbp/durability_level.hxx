@@ -22,14 +22,15 @@
 namespace couchbase::core::mcbp
 {
 enum class durability_level : std::uint8_t {
-    // specifies that a change must be replicated to (held in memory) a majority of the nodes for the bucket.
-    majority = 0x01,
+  // specifies that a change must be replicated to (held in memory) a majority of the nodes for the
+  // bucket.
+  majority = 0x01,
 
-    // specifies that a change must be replicated to (held in memory) a majority of the nodes for the bucket and additionally persisted to
-    // disk on the active node.
-    majority_and_persist_to_active = 0x02,
+  // specifies that a change must be replicated to (held in memory) a majority of the nodes for the
+  // bucket and additionally persisted to disk on the active node.
+  majority_and_persist_to_active = 0x02,
 
-    // specifies that a change must be persisted to (written to disk) a majority for the bucket.
-    persist_to_majority = 0x03,
+  // specifies that a change must be persisted to (written to disk) a majority for the bucket.
+  persist_to_majority = 0x03,
 };
 } // namespace couchbase::core::mcbp

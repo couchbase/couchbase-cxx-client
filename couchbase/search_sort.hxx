@@ -34,25 +34,25 @@ struct encoded_search_sort;
  */
 class search_sort
 {
-  public:
-    virtual ~search_sort() = default;
+public:
+  virtual ~search_sort() = default;
 
-    /**
-     * @return encoded representation of the search facet.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] virtual auto encode() const -> encoded_search_sort = 0;
+  /**
+   * @return encoded representation of the search facet.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] virtual auto encode() const -> encoded_search_sort = 0;
 
-  protected:
-    search_sort() = default;
+protected:
+  search_sort() = default;
 
-    explicit search_sort(bool descending)
-      : descending_{ descending }
-    {
-    }
+  explicit search_sort(bool descending)
+    : descending_{ descending }
+  {
+  }
 
-    std::optional<bool> descending_{};
+  std::optional<bool> descending_{};
 };
 } // namespace couchbase

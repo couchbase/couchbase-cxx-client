@@ -26,15 +26,15 @@ namespace couchbase::management::search
 {
 struct index {
 
-    std::string name;
-    std::string type = "fulltext-index";
-    std::string source_name;
-    std::string source_type = "couchbase";
+  std::string name;
+  std::string type = "fulltext-index";
+  std::string source_name;
+  std::string source_type = "couchbase";
 
-    std::optional<std::string> uuid; // Must be empty on create, set on update
-    std::optional<std::string> params_json;
-    std::optional<std::string> source_uuid;
-    std::optional<std::string> source_params_json;
-    std::optional<std::string> plan_params_json;
+  std::optional<std::string> uuid; // Must be empty on create, set on update
+  std::optional<std::string> params_json;
+  std::optional<std::string> source_uuid;
+  std::optional<std::string> source_params_json;
+  std::optional<std::string> plan_params_json;
 };
 } // namespace couchbase::management::search

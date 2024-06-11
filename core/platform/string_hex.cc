@@ -26,76 +26,78 @@
 static inline std::uint8_t
 from_hex_digit(char c)
 {
-    if ('0' <= c && c <= '9') {
-        return static_cast<std::uint8_t>(c - '0');
-    }
-    if ('A' <= c && c <= 'F') {
-        return static_cast<std::uint8_t>(c + 10 - 'A');
-    }
-    if ('a' <= c && c <= 'f') {
-        return static_cast<std::uint8_t>(c + 10 - 'a');
-    }
-    throw std::invalid_argument("couchbase::core::from_hex_digit: character was not in hexadecimal range");
+  if ('0' <= c && c <= '9') {
+    return static_cast<std::uint8_t>(c - '0');
+  }
+  if ('A' <= c && c <= 'F') {
+    return static_cast<std::uint8_t>(c + 10 - 'A');
+  }
+  if ('a' <= c && c <= 'f') {
+    return static_cast<std::uint8_t>(c + 10 - 'a');
+  }
+  throw std::invalid_argument(
+    "couchbase::core::from_hex_digit: character was not in hexadecimal range");
 }
 
 std::uint64_t
 couchbase::core::from_hex(std::string_view buffer)
 {
-    std::uint64_t ret = 0;
-    if (buffer.size() > 16) {
-        throw std::overflow_error("couchbase::core::from_hex: input string too long: " + std::to_string(buffer.size()));
-    }
+  std::uint64_t ret = 0;
+  if (buffer.size() > 16) {
+    throw std::overflow_error("couchbase::core::from_hex: input string too long: " +
+                              std::to_string(buffer.size()));
+  }
 
-    for (char digit : buffer) {
-        ret = (ret << 4) | from_hex_digit(digit);
-    }
+  for (char digit : buffer) {
+    ret = (ret << 4) | from_hex_digit(digit);
+  }
 
-    return ret;
+  return ret;
 }
 
 std::string
 couchbase::core::to_hex(std::uint8_t val)
 {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "0x%02" PRIx8, val);
-    return std::string{ buf };
+  char buf[32];
+  snprintf(buf, sizeof(buf), "0x%02" PRIx8, val);
+  return std::string{ buf };
 }
 
 std::string
 couchbase::core::to_hex(std::uint16_t val)
 {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "0x%04" PRIx16, val);
-    return std::string{ buf };
+  char buf[32];
+  snprintf(buf, sizeof(buf), "0x%04" PRIx16, val);
+  return std::string{ buf };
 }
 
 std::string
 couchbase::core::to_hex(std::uint32_t val)
 {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "0x%08" PRIx32, val);
-    return std::string{ buf };
+  char buf[32];
+  snprintf(buf, sizeof(buf), "0x%08" PRIx32, val);
+  return std::string{ buf };
 }
 
 std::string
 couchbase::core::to_hex(std::uint64_t val)
 {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "0x%016" PRIx64, val);
-    return std::string{ buf };
+  char buf[32];
+  snprintf(buf, sizeof(buf), "0x%016" PRIx64, val);
+  return std::string{ buf };
 }
 
 std::string
 couchbase::core::to_hex(std::string_view buffer)
 {
-    if (buffer.empty()) {
-        return "";
-    }
-    std::stringstream ss;
-    for (const auto& c : buffer) {
-        ss << "0x" << std::hex << std::setfill('0') << std::setw(2) << std::uint32_t(c) << " ";
-    }
-    auto ret = ss.str();
-    ret.resize(ret.size() - 1);
-    return ret;
+  if (buffer.empty()) {
+    return "";
+  }
+  std::stringstream ss;
+  for (const auto& c : buffer) {
+    ss << "0x" << std::hex << std::setfill('0') << std::setw(2) << std::uint32_t(c) << " ";
+  }
+  auto ret = ss.str();
+  ret.resize(ret.size() - 1);
+  return ret;
 }

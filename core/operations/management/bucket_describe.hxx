@@ -27,61 +27,63 @@
 namespace couchbase::core::operations::management
 {
 struct server_node_address {
-    std::string hostname{};
-    std::uint16_t kv_plain{};
-    std::uint16_t kv_tls{};
+  std::string hostname{};
+  std::uint16_t kv_plain{};
+  std::uint16_t kv_tls{};
 };
 
 struct server_node {
-    std::string server_group_name{};
-    std::size_t server_index{};
-    server_node_address default_network{};
-    server_node_address external_network{};
-    std::set<std::uint16_t> active_vbuckets{};
-    std::set<std::uint16_t> replica_vbuckets{};
+  std::string server_group_name{};
+  std::size_t server_index{};
+  server_node_address default_network{};
+  server_node_address external_network{};
+  std::set<std::uint16_t> active_vbuckets{};
+  std::set<std::uint16_t> replica_vbuckets{};
 };
 
 struct server_group {
-    std::string name{};
-    std::vector<server_node> nodes{};
+  std::string name{};
+  std::vector<server_node> nodes{};
 };
 
 struct bucket_describe_response {
-    struct bucket_info {
-        std::string name{};
-        std::string uuid{};
-        std::size_t number_of_nodes{ 0 };
-        std::size_t number_of_replicas{ 0 };
-        std::vector<std::string> bucket_capabilities{};
-        std::map<std::string, server_group> server_groups{};
+  struct bucket_info {
+    std::string name{};
+    std::string uuid{};
+    std::size_t number_of_nodes{ 0 };
+    std::size_t number_of_replicas{ 0 };
+    std::vector<std::string> bucket_capabilities{};
+    std::map<std::string, server_group> server_groups{};
 
-        couchbase::core::management::cluster::bucket_storage_backend storage_backend{
-            couchbase::core::management::cluster::bucket_storage_backend::unknown
-        };
-        std::string config_json{};
-
-        [[nodiscard]] auto has_capability(const std::string& capability) const -> bool;
+    couchbase::core::management::cluster::bucket_storage_backend storage_backend{
+      couchbase::core::management::cluster::bucket_storage_backend::unknown
     };
+    std::string config_json{};
 
-    error_context::http ctx;
-    bucket_info info{};
+    [[nodiscard]] auto has_capability(const std::string& capability) const -> bool;
+  };
+
+  error_context::http ctx;
+  bucket_info info{};
 };
 
 struct bucket_describe_request {
-    using response_type = bucket_describe_response;
-    using encoded_request_type = io::http_request;
-    using encoded_response_type = io::http_response;
-    using error_context_type = error_context::http;
+  using response_type = bucket_describe_response;
+  using encoded_request_type = io::http_request;
+  using encoded_response_type = io::http_response;
+  using error_context_type = error_context::http;
 
-    std::string name;
+  std::string name;
 
-    static const inline service_type type = service_type::management;
+  static const inline service_type type = service_type::management;
 
-    std::optional<std::string> client_context_id{};
-    std::optional<std::chrono::milliseconds> timeout{};
+  std::optional<std::string> client_context_id{};
+  std::optional<std::chrono::milliseconds> timeout{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          http_context& context) const;
 
-    [[nodiscard]] bucket_describe_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] bucket_describe_response make_response(error_context::http&& ctx,
+                                                       const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::operations::management

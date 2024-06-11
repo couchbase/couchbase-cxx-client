@@ -22,8 +22,9 @@
 
 namespace couchbase::core::mcbp
 {
-// open_tracing_frame allows open tracing context information to be included along with a command which is being performed.
+// open_tracing_frame allows open tracing context information to be included along with a command
+// which is being performed.
 struct open_tracing_frame {
-    std::vector<std::byte> trace_context;
+  std::vector<std::byte> trace_context;
 };
 } // namespace couchbase::core::mcbp

@@ -26,44 +26,44 @@
 namespace couchbase::core::mcbp
 {
 struct completion_token {
-    std::shared_ptr<pending_operation> operation{};
-    std::error_code ec{};
+  std::shared_ptr<pending_operation> operation{};
+  std::error_code ec{};
 
-    template<std::size_t index>
-    auto&& get() &
-    {
-        return get_impl<index>(*this);
-    }
+  template<std::size_t index>
+  auto&& get() &
+  {
+    return get_impl<index>(*this);
+  }
 
-    template<std::size_t index>
-    auto&& get() &&
-    {
-        return get_impl<index>(*this);
-    }
+  template<std::size_t index>
+  auto&& get() &&
+  {
+    return get_impl<index>(*this);
+  }
 
-    template<std::size_t index>
-    auto&& get() const&
-    {
-        return get_impl<index>(*this);
-    }
+  template<std::size_t index>
+  auto&& get() const&
+  {
+    return get_impl<index>(*this);
+  }
 
-    template<std::size_t index>
-    auto&& get() const&&
-    {
-        return get_impl<index>(*this);
-    }
+  template<std::size_t index>
+  auto&& get() const&&
+  {
+    return get_impl<index>(*this);
+  }
 
-  private:
-    template<std::size_t index, typename T>
-    auto&& get_impl(T&& t)
-    {
-        static_assert(index < 2, "index out of bounds for completion_token");
-        if constexpr (index == 0) {
-            return std::forward<T>(t).name;
-        }
-        if constexpr (index == 1) {
-            return std::forward<T>(t).age;
-        }
+private:
+  template<std::size_t index, typename T>
+  auto&& get_impl(T&& t)
+  {
+    static_assert(index < 2, "index out of bounds for completion_token");
+    if constexpr (index == 0) {
+      return std::forward<T>(t).name;
     }
+    if constexpr (index == 1) {
+      return std::forward<T>(t).age;
+    }
+  }
 };
 } // namespace couchbase::core::mcbp

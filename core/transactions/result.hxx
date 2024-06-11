@@ -41,20 +41,20 @@ struct mutate_in_response;
 namespace transactions
 {
 struct result_base {
-    std::vector<std::byte> raw_value;
-    std::error_code ec;
+  std::vector<std::byte> raw_value;
+  std::error_code ec;
 
-    result_base() = default;
+  result_base() = default;
 
-    result_base(const std::vector<std::byte>& res)
-      : raw_value(res)
-    {
-    }
+  result_base(const std::vector<std::byte>& res)
+    : raw_value(res)
+  {
+  }
 
-    bool has_value() const
-    {
-        return !raw_value.empty();
-    }
+  bool has_value() const
+  {
+    return !raw_value.empty();
+  }
 };
 
 /**
@@ -63,63 +63,63 @@ struct result_base {
  * See @ref collection.lookup_in and @ref collection.mutate_in
  */
 struct subdoc_result : result_base {
-    enum class status_type : uint16_t {
-        success = 0x00,
-        subdoc_path_not_found = 0xc0,
-        subdoc_path_mismatch = 0xc1,
-        subdoc_path_invalid = 0xc2,
-        subdoc_path_too_big = 0xc3,
-        subdoc_doc_too_deep = 0xc4,
-        subdoc_value_cannot_insert = 0xc5,
-        subdoc_doc_not_json = 0xc6,
-        subdoc_num_range_error = 0xc7,
-        subdoc_delta_invalid = 0xc8,
-        subdoc_path_exists = 0xc9,
-        subdoc_value_too_deep = 0xca,
-        subdoc_invalid_combo = 0xcb,
-        subdoc_multi_path_failure = 0xcc,
-        subdoc_success_deleted = 0xcd,
-        subdoc_xattr_invalid_flag_combo = 0xce,
-        subdoc_xattr_invalid_key_combo = 0xcf,
-        subdoc_xattr_unknown_macro = 0xd0,
-        subdoc_xattr_unknown_vattr = 0xd1,
-        subdoc_xattr_cannot_modify_vattr = 0xd2,
-        subdoc_multi_path_failure_deleted = 0xd3,
-        subdoc_invalid_xattr_order = 0xd4,
-    };
+  enum class status_type : uint16_t {
+    success = 0x00,
+    subdoc_path_not_found = 0xc0,
+    subdoc_path_mismatch = 0xc1,
+    subdoc_path_invalid = 0xc2,
+    subdoc_path_too_big = 0xc3,
+    subdoc_doc_too_deep = 0xc4,
+    subdoc_value_cannot_insert = 0xc5,
+    subdoc_doc_not_json = 0xc6,
+    subdoc_num_range_error = 0xc7,
+    subdoc_delta_invalid = 0xc8,
+    subdoc_path_exists = 0xc9,
+    subdoc_value_too_deep = 0xca,
+    subdoc_invalid_combo = 0xcb,
+    subdoc_multi_path_failure = 0xcc,
+    subdoc_success_deleted = 0xcd,
+    subdoc_xattr_invalid_flag_combo = 0xce,
+    subdoc_xattr_invalid_key_combo = 0xcf,
+    subdoc_xattr_unknown_macro = 0xd0,
+    subdoc_xattr_unknown_vattr = 0xd1,
+    subdoc_xattr_cannot_modify_vattr = 0xd2,
+    subdoc_multi_path_failure_deleted = 0xd3,
+    subdoc_invalid_xattr_order = 0xd4,
+  };
 
-    status_type status;
+  status_type status;
 
-    subdoc_result()
-      : result_base()
-      , status(status_type::success)
-    {
-    }
+  subdoc_result()
+    : result_base()
+    , status(status_type::success)
+  {
+  }
 
-    subdoc_result(std::uint32_t s)
-      : status(static_cast<status_type>(s))
-    {
-    }
+  subdoc_result(std::uint32_t s)
+    : status(static_cast<status_type>(s))
+  {
+  }
 
-    subdoc_result(const std::vector<std::byte>& v, std::uint32_t s)
-      : result_base(v)
-      , status(static_cast<status_type>(s))
-    {
-    }
+  subdoc_result(const std::vector<std::byte>& v, std::uint32_t s)
+    : result_base(v)
+    , status(static_cast<status_type>(s))
+  {
+  }
 
-    template<typename T>
-    T content_as() const
-    {
-        // this will always be a json string.  To not have extraneous
-        // "" when asked to return as a string, we parse it first.
-        // NOTE: lets do better.
-        return codec::tao_json_serializer::deserialize<T>(raw_value);
-    }
+  template<typename T>
+  T content_as() const
+  {
+    // this will always be a json string.  To not have extraneous
+    // "" when asked to return as a string, we parse it first.
+    // NOTE: lets do better.
+    return codec::tao_json_serializer::deserialize<T>(raw_value);
+  }
 
-    [[nodiscard]] tao::json::value content_as() const
-    {
-        return core::utils::json::parse_binary(raw_value);
-    }
+  [[nodiscard]] tao::json::value content_as() const
+  {
+    return core::utils::json::parse_binary(raw_value);
+  }
 };
 
 /**
@@ -142,16 +142,16 @@ struct subdoc_result : result_base {
  *
  * @code{.cpp}
  * std::string key = "somekey";
- * result res = collection->lookup_in(key, {lookup_in_spec::get("name"), lookup_in_spec::get("address")});
- * if (res.is_success()) {
- *     auto name = res.values[0].value->get<std::string>();
- *     auto address = res.values[1].value->get<std::string>();
+ * result res = collection->lookup_in(key, {lookup_in_spec::get("name"),
+ * lookup_in_spec::get("address")}); if (res.is_success()) { auto name =
+ * res.values[0].value->get<std::string>(); auto address = res.values[1].value->get<std::string>();
  * } else {
  *     cerr << "error getting " << key << ":" << res.strerror();
  * }
  * @endcode
  *
- * If you define a to_json and from_json on an object, you can serialize/deserialize into it directly:
+ * If you define a to_json and from_json on an object, you can serialize/deserialize into it
+ * directly:
  *
  * @code{.cpp}
  * struct Person {
@@ -181,90 +181,90 @@ struct subdoc_result : result_base {
  */
 
 struct result : result_base {
-    /** @brief return code for operation */
-    std::uint32_t rc{ 0 };
-    /** @brief CAS for document, if any */
-    std::uint64_t cas{ 0 };
-    /** @brief datatype flag for content */
-    std::uint8_t datatype{ 0 };
-    std::uint32_t flags{ 0 };
-    /** @brief document key */
-    std::string key;
-    /** @brief results of subdoc spec operations */
-    std::vector<subdoc_result> values{};
-    bool is_deleted{ false };
-    bool ignore_subdoc_errors{ false };
+  /** @brief return code for operation */
+  std::uint32_t rc{ 0 };
+  /** @brief CAS for document, if any */
+  std::uint64_t cas{ 0 };
+  /** @brief datatype flag for content */
+  std::uint8_t datatype{ 0 };
+  std::uint32_t flags{ 0 };
+  /** @brief document key */
+  std::string key;
+  /** @brief results of subdoc spec operations */
+  std::vector<subdoc_result> values{};
+  bool is_deleted{ false };
+  bool ignore_subdoc_errors{ false };
 
-    template<typename Resp>
-    static result create_from_mutation_response(const Resp& resp)
-    {
-        result res{};
-        res.ec = resp.ctx.ec();
-        res.cas = resp.cas.value();
-        res.key = resp.ctx.id();
-        return res;
+  template<typename Resp>
+  static result create_from_mutation_response(const Resp& resp)
+  {
+    result res{};
+    res.ec = resp.ctx.ec();
+    res.cas = resp.cas.value();
+    res.key = resp.ctx.id();
+    return res;
+  }
+
+  template<typename Resp>
+  static result create_from_response(const Resp& resp)
+  {
+    result res{};
+    res.ec = resp.ctx.ec();
+    res.cas = resp.cas.value();
+    res.key = resp.ctx.id();
+    res.flags = resp.flags;
+    res.raw_value = resp.value;
+    return res;
+  }
+
+  static result create_from_subdoc_response(const core::operations::lookup_in_response& resp);
+
+  static result create_from_subdoc_response(const core::operations::mutate_in_response& resp);
+
+  result() = default;
+
+  /**
+   * Get description of error
+   *
+   * @return String describing the error code.
+   */
+  [[nodiscard]] std::string strerror() const;
+
+  [[nodiscard]] bool is_success() const;
+  /**
+   *  Get error code.  This is either the rc_, or if that is LCB_SUCCESS,
+   *  then the first error in the values (if any) see @ref subdoc_results
+   */
+  // [[nodiscard]]std::uint32_t error() const;
+  template<typename OStream>
+  friend OStream& operator<<(OStream& os, const result& res)
+  {
+    os << "result{";
+    os << "rc:" << res.rc << ",";
+    os << "strerror:" << res.strerror() << ",";
+    os << "cas:" << res.cas << ",";
+    os << "is_deleted:" << std::boolalpha << res.is_deleted << ",";
+    os << "datatype:" << res.datatype << ",";
+    os << "flags:" << res.flags << ",";
+    os << "raw_value" << to_string(res.raw_value);
+    if (!res.values.empty()) {
+      os << ",values:[";
+      for (const auto& v : res.values) {
+        os << "{" << to_string(v.raw_value) << "," << static_cast<std::uint32_t>(v.status) << "},";
+      }
+      os << "]";
     }
+    os << "}";
+    return os;
+  }
 
-    template<typename Resp>
-    static result create_from_response(const Resp& resp)
-    {
-        result res{};
-        res.ec = resp.ctx.ec();
-        res.cas = resp.cas.value();
-        res.key = resp.ctx.id();
-        res.flags = resp.flags;
-        res.raw_value = resp.value;
-        return res;
-    }
+  template<typename T>
+  T content_as() const
+  {
+    return codec::tao_json_serializer::deserialize<T>(raw_value);
+  }
 
-    static result create_from_subdoc_response(const core::operations::lookup_in_response& resp);
-
-    static result create_from_subdoc_response(const core::operations::mutate_in_response& resp);
-
-    result() = default;
-
-    /**
-     * Get description of error
-     *
-     * @return String describing the error code.
-     */
-    [[nodiscard]] std::string strerror() const;
-
-    [[nodiscard]] bool is_success() const;
-    /**
-     *  Get error code.  This is either the rc_, or if that is LCB_SUCCESS,
-     *  then the first error in the values (if any) see @ref subdoc_results
-     */
-    // [[nodiscard]]std::uint32_t error() const;
-    template<typename OStream>
-    friend OStream& operator<<(OStream& os, const result& res)
-    {
-        os << "result{";
-        os << "rc:" << res.rc << ",";
-        os << "strerror:" << res.strerror() << ",";
-        os << "cas:" << res.cas << ",";
-        os << "is_deleted:" << std::boolalpha << res.is_deleted << ",";
-        os << "datatype:" << res.datatype << ",";
-        os << "flags:" << res.flags << ",";
-        os << "raw_value" << to_string(res.raw_value);
-        if (!res.values.empty()) {
-            os << ",values:[";
-            for (const auto& v : res.values) {
-                os << "{" << to_string(v.raw_value) << "," << static_cast<std::uint32_t>(v.status) << "},";
-            }
-            os << "]";
-        }
-        os << "}";
-        return os;
-    }
-
-    template<typename T>
-    T content_as() const
-    {
-        return codec::tao_json_serializer::deserialize<T>(raw_value);
-    }
-
-    [[nodiscard]] subdoc_result::status_type subdoc_status() const;
+  [[nodiscard]] subdoc_result::status_type subdoc_status() const;
 };
 } // namespace transactions
 } // namespace couchbase::core

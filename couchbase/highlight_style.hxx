@@ -26,20 +26,20 @@ namespace couchbase
  * @committed
  */
 enum class highlight_style {
-    /**
-     * Use HTML tags `<mark>` and `</mark>` to indicate matches in the fields.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    html,
+  /**
+   * Use HTML tags `<mark>` and `</mark>` to indicate matches in the fields.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  html,
 
-    /**
-     * Use ANSI code sequences `\\x1b[43m>` and `\\x1b[0m` to indicate matches in the fields.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    ansi,
+  /**
+   * Use ANSI code sequences `\\x1b[43m>` and `\\x1b[0m` to indicate matches in the fields.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  ansi,
 };
 } // namespace couchbase

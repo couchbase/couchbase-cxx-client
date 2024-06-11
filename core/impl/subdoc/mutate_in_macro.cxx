@@ -26,52 +26,61 @@ namespace couchbase::subdoc
 auto
 to_mutate_in_macro(std::string_view input) -> std::optional<couchbase::subdoc::mutate_in_macro>
 {
-    if (input == "\"${Mutation.CAS}\"") {
-        return couchbase::subdoc::mutate_in_macro::cas;
-    }
-    if (input == "\"${Mutation.seqno}\"") {
-        return couchbase::subdoc::mutate_in_macro::sequence_number;
-    }
-    if (input == "\"${Mutation.value_crc32c}\"") {
-        return couchbase::subdoc::mutate_in_macro::value_crc32c;
-    }
-    return {};
+  if (input == "\"${Mutation.CAS}\"") {
+    return couchbase::subdoc::mutate_in_macro::cas;
+  }
+  if (input == "\"${Mutation.seqno}\"") {
+    return couchbase::subdoc::mutate_in_macro::sequence_number;
+  }
+  if (input == "\"${Mutation.value_crc32c}\"") {
+    return couchbase::subdoc::mutate_in_macro::value_crc32c;
+  }
+  return {};
 }
 
 auto
 to_binary(couchbase::subdoc::mutate_in_macro value) -> std::vector<std::byte>
 {
-    // echo -n '"${Mutation.CAS}"' | ruby -e 'puts ARGF.read.chars.map{|c| format("std::byte{0x%02x}", c.ord)}.join(", ")'
-    static std::vector cas_bytes{
-        std::byte{ 0x22 }, std::byte{ 0x24 }, std::byte{ 0x7b }, std::byte{ 0x4d }, std::byte{ 0x75 }, std::byte{ 0x74 },
-        std::byte{ 0x61 }, std::byte{ 0x74 }, std::byte{ 0x69 }, std::byte{ 0x6f }, std::byte{ 0x6e }, std::byte{ 0x2e },
-        std::byte{ 0x43 }, std::byte{ 0x41 }, std::byte{ 0x53 }, std::byte{ 0x7d }, std::byte{ 0x22 },
-    };
+  // echo -n '"${Mutation.CAS}"' | ruby -e 'puts ARGF.read.chars.map{|c| format("std::byte{0x%02x}",
+  // c.ord)}.join(", ")'
+  static std::vector cas_bytes{
+    std::byte{ 0x22 }, std::byte{ 0x24 }, std::byte{ 0x7b }, std::byte{ 0x4d }, std::byte{ 0x75 },
+    std::byte{ 0x74 }, std::byte{ 0x61 }, std::byte{ 0x74 }, std::byte{ 0x69 }, std::byte{ 0x6f },
+    std::byte{ 0x6e }, std::byte{ 0x2e }, std::byte{ 0x43 }, std::byte{ 0x41 }, std::byte{ 0x53 },
+    std::byte{ 0x7d }, std::byte{ 0x22 },
+  };
 
-    // echo -n '"${Mutation.seqno}"' | ruby -e 'puts ARGF.read.chars.map{|c| format("std::byte{0x%02x}", c.ord)}.join(", ")'
-    static std::vector seqno_bytes{
-        std::byte{ 0x22 }, std::byte{ 0x24 }, std::byte{ 0x7b }, std::byte{ 0x4d }, std::byte{ 0x75 }, std::byte{ 0x74 }, std::byte{ 0x61 },
-        std::byte{ 0x74 }, std::byte{ 0x69 }, std::byte{ 0x6f }, std::byte{ 0x6e }, std::byte{ 0x2e }, std::byte{ 0x73 }, std::byte{ 0x65 },
-        std::byte{ 0x71 }, std::byte{ 0x6e }, std::byte{ 0x6f }, std::byte{ 0x7d }, std::byte{ 0x22 },
-    };
+  // echo -n '"${Mutation.seqno}"' | ruby -e 'puts ARGF.read.chars.map{|c|
+  // format("std::byte{0x%02x}", c.ord)}.join(",
+  // ")'
+  static std::vector seqno_bytes{
+    std::byte{ 0x22 }, std::byte{ 0x24 }, std::byte{ 0x7b }, std::byte{ 0x4d }, std::byte{ 0x75 },
+    std::byte{ 0x74 }, std::byte{ 0x61 }, std::byte{ 0x74 }, std::byte{ 0x69 }, std::byte{ 0x6f },
+    std::byte{ 0x6e }, std::byte{ 0x2e }, std::byte{ 0x73 }, std::byte{ 0x65 }, std::byte{ 0x71 },
+    std::byte{ 0x6e }, std::byte{ 0x6f }, std::byte{ 0x7d }, std::byte{ 0x22 },
+  };
 
-    // echo -n '"${Mutation.value_crc32c}"' | ruby -e 'puts ARGF.read.chars.map{|c| format("std::byte{0x%02x}", c.ord)}.join(", ")'
-    static std::vector crc32_bytes{
-        std::byte{ 0x22 }, std::byte{ 0x24 }, std::byte{ 0x7b }, std::byte{ 0x4d }, std::byte{ 0x75 }, std::byte{ 0x74 }, std::byte{ 0x61 },
-        std::byte{ 0x74 }, std::byte{ 0x69 }, std::byte{ 0x6f }, std::byte{ 0x6e }, std::byte{ 0x2e }, std::byte{ 0x76 }, std::byte{ 0x61 },
-        std::byte{ 0x6c }, std::byte{ 0x75 }, std::byte{ 0x65 }, std::byte{ 0x5f }, std::byte{ 0x63 }, std::byte{ 0x72 }, std::byte{ 0x63 },
-        std::byte{ 0x33 }, std::byte{ 0x32 }, std::byte{ 0x63 }, std::byte{ 0x7d }, std::byte{ 0x22 },
-    };
+  // echo -n '"${Mutation.value_crc32c}"' | ruby -e 'puts ARGF.read.chars.map{|c|
+  // format("std::byte{0x%02x}", c.ord)}.join(", ")'
+  static std::vector crc32_bytes{
+    std::byte{ 0x22 }, std::byte{ 0x24 }, std::byte{ 0x7b }, std::byte{ 0x4d }, std::byte{ 0x75 },
+    std::byte{ 0x74 }, std::byte{ 0x61 }, std::byte{ 0x74 }, std::byte{ 0x69 }, std::byte{ 0x6f },
+    std::byte{ 0x6e }, std::byte{ 0x2e }, std::byte{ 0x76 }, std::byte{ 0x61 }, std::byte{ 0x6c },
+    std::byte{ 0x75 }, std::byte{ 0x65 }, std::byte{ 0x5f }, std::byte{ 0x63 }, std::byte{ 0x72 },
+    std::byte{ 0x63 }, std::byte{ 0x33 }, std::byte{ 0x32 }, std::byte{ 0x63 }, std::byte{ 0x7d },
+    std::byte{ 0x22 },
+  };
 
-    switch (value) {
-        case couchbase::subdoc::mutate_in_macro::cas:
-            return cas_bytes;
-        case couchbase::subdoc::mutate_in_macro::sequence_number:
-            return seqno_bytes;
-        case couchbase::subdoc::mutate_in_macro::value_crc32c:
-            return crc32_bytes;
-    }
-    throw std::system_error(errc::common::invalid_argument,
-                            "Unexpected mutate_in macro: " + std::to_string(static_cast<std::uint32_t>(value)));
+  switch (value) {
+    case couchbase::subdoc::mutate_in_macro::cas:
+      return cas_bytes;
+    case couchbase::subdoc::mutate_in_macro::sequence_number:
+      return seqno_bytes;
+    case couchbase::subdoc::mutate_in_macro::value_crc32c:
+      return crc32_bytes;
+  }
+  throw std::system_error(errc::common::invalid_argument,
+                          "Unexpected mutate_in macro: " +
+                            std::to_string(static_cast<std::uint32_t>(value)));
 }
 } // namespace couchbase::subdoc

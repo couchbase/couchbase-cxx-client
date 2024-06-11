@@ -25,48 +25,50 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-search_index_get_stats_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+search_index_get_stats_request::encode_to(encoded_request_type& encoded,
+                                          http_context& /* context */) const
 {
-    if (index_name.empty()) {
-        return errc::common::invalid_argument;
-    }
-    encoded.method = "GET";
-    encoded.path = fmt::format("/api/stats/index/{}", index_name);
-    return {};
+  if (index_name.empty()) {
+    return errc::common::invalid_argument;
+  }
+  encoded.method = "GET";
+  encoded.path = fmt::format("/api/stats/index/{}", index_name);
+  return {};
 }
 
 search_index_get_stats_response
-search_index_get_stats_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+search_index_get_stats_request::make_response(error_context::http&& ctx,
+                                              const encoded_response_type& encoded) const
 {
-    search_index_get_stats_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        switch (encoded.status_code) {
-            case 200:
-                response.stats = encoded.body.data();
-                return response;
-            case 400:
-            case 500: {
-                tao::json::value payload{};
-                try {
-                    payload = utils::json::parse(encoded.body.data());
-                } catch (const tao::pegtl::parse_error&) {
-                    response.ctx.ec = errc::common::parsing_failure;
-                    return response;
-                }
-                response.status = payload.at("status").get_string();
-                response.error = payload.at("error").get_string();
-                if (response.error.find("index not found") != std::string::npos) {
-                    response.ctx.ec = errc::common::index_not_found;
-                    return response;
-                }
-                if (response.error.find("no planPIndexes for indexName") != std::string::npos) {
-                    response.ctx.ec = errc::search::index_not_ready;
-                    return response;
-                }
-            } break;
+  search_index_get_stats_response response{ std::move(ctx) };
+  if (!response.ctx.ec) {
+    switch (encoded.status_code) {
+      case 200:
+        response.stats = encoded.body.data();
+        return response;
+      case 400:
+      case 500: {
+        tao::json::value payload{};
+        try {
+          payload = utils::json::parse(encoded.body.data());
+        } catch (const tao::pegtl::parse_error&) {
+          response.ctx.ec = errc::common::parsing_failure;
+          return response;
         }
-        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+        response.status = payload.at("status").get_string();
+        response.error = payload.at("error").get_string();
+        if (response.error.find("index not found") != std::string::npos) {
+          response.ctx.ec = errc::common::index_not_found;
+          return response;
+        }
+        if (response.error.find("no planPIndexes for indexName") != std::string::npos) {
+          response.ctx.ec = errc::search::index_not_ready;
+          return response;
+        }
+      } break;
     }
-    return response;
+    response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

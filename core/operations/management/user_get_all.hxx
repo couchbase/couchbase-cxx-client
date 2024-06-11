@@ -27,25 +27,29 @@
 namespace couchbase::core::operations::management
 {
 struct user_get_all_response {
-    error_context::http ctx;
-    std::vector<couchbase::core::management::rbac::user_and_metadata> users{};
+  error_context::http ctx;
+  std::vector<couchbase::core::management::rbac::user_and_metadata> users{};
 };
 
 struct user_get_all_request {
-    using response_type = user_get_all_response;
-    using encoded_request_type = io::http_request;
-    using encoded_response_type = io::http_response;
-    using error_context_type = error_context::http;
+  using response_type = user_get_all_response;
+  using encoded_request_type = io::http_request;
+  using encoded_response_type = io::http_response;
+  using error_context_type = error_context::http;
 
-    static const inline service_type type = service_type::management;
+  static const inline service_type type = service_type::management;
 
-    couchbase::core::management::rbac::auth_domain domain{ couchbase::core::management::rbac::auth_domain::local };
+  couchbase::core::management::rbac::auth_domain domain{
+    couchbase::core::management::rbac::auth_domain::local
+  };
 
-    std::optional<std::string> client_context_id{};
-    std::optional<std::chrono::milliseconds> timeout{};
+  std::optional<std::string> client_context_id{};
+  std::optional<std::chrono::milliseconds> timeout{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          http_context& context) const;
 
-    [[nodiscard]] user_get_all_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] user_get_all_response make_response(error_context::http&& ctx,
+                                                    const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::operations::management

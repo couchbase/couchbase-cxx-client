@@ -31,48 +31,48 @@ namespace couchbase::core::transactions
 //  only used in ambiguity resolution during atr_commit
 class retry_atr_commit : public std::runtime_error
 {
-  public:
-    retry_atr_commit(const std::string& what)
-      : std::runtime_error(what)
-    {
-    }
+public:
+  retry_atr_commit(const std::string& what)
+    : std::runtime_error(what)
+  {
+  }
 };
 
 class retry_operation : public std::runtime_error
 {
-  public:
-    retry_operation(const std::string& what)
-      : std::runtime_error(what)
-    {
-    }
+public:
+  retry_operation(const std::string& what)
+    : std::runtime_error(what)
+  {
+  }
 };
 
 class retry_operation_timeout : public std::runtime_error
 {
-  public:
-    retry_operation_timeout(const std::string& what)
-      : std::runtime_error(what)
-    {
-    }
+public:
+  retry_operation_timeout(const std::string& what)
+    : std::runtime_error(what)
+  {
+  }
 };
 
 class retry_operation_retries_exhausted : public std::runtime_error
 {
-  public:
-    retry_operation_retries_exhausted(const std::string& what)
-      : std::runtime_error(what)
-    {
-    }
+public:
+  retry_operation_retries_exhausted(const std::string& what)
+    : std::runtime_error(what)
+  {
+  }
 };
 
 external_exception
 external_exception_from_error_class(error_class ec);
 
 enum final_error {
-    FAILED,
-    EXPIRED,
-    FAILED_POST_COMMIT,
-    AMBIGUOUS
+  FAILED,
+  EXPIRED,
+  FAILED_POST_COMMIT,
+  AMBIGUOUS
 };
 
 error_class
@@ -80,40 +80,40 @@ error_class_from_result(const result& res);
 
 class client_error : public std::runtime_error
 {
-  private:
-    error_class ec_;
-    std::optional<result> res_;
+private:
+  error_class ec_;
+  std::optional<result> res_;
 
-  public:
-    explicit client_error(const result& res)
-      : runtime_error(res.strerror())
-      , ec_(error_class_from_result(res))
-      , res_(res)
-    {
-    }
-    explicit client_error(error_class ec, const std::string& what)
-      : runtime_error(what)
-      , ec_(ec)
-    {
-    }
-    error_class ec() const
-    {
-        return ec_;
-    }
-    std::optional<result> res() const
-    {
-        return res_;
-    }
+public:
+  explicit client_error(const result& res)
+    : runtime_error(res.strerror())
+    , ec_(error_class_from_result(res))
+    , res_(res)
+  {
+  }
+  explicit client_error(error_class ec, const std::string& what)
+    : runtime_error(what)
+    , ec_(ec)
+  {
+  }
+  error_class ec() const
+  {
+    return ec_;
+  }
+  std::optional<result> res() const
+  {
+    return res_;
+  }
 };
 
 // Prefer this as it reads better than throw client_error(FAIL_EXPIRY, ...)
 class attempt_expired : public client_error
 {
-  public:
-    attempt_expired(const std::string& what)
-      : client_error(FAIL_EXPIRY, what)
-    {
-    }
+public:
+  attempt_expired(const std::string& what)
+    : client_error(FAIL_EXPIRY, what)
+  {
+  }
 };
 
 /**
@@ -123,173 +123,173 @@ class attempt_expired : public client_error
  */
 class transaction_operation_failed : public std::runtime_error
 {
-  public:
-    explicit transaction_operation_failed(error_class ec, const std::string& what)
-      : std::runtime_error(what)
-      , ec_(ec)
-      , retry_(false)
-      , rollback_(true)
-      , to_raise_(FAILED)
-      , cause_(external_exception_from_error_class(ec))
-    {
-    }
-    explicit transaction_operation_failed(const client_error& client_err)
-      : std::runtime_error(client_err.what())
-      , ec_(client_err.ec())
-      , retry_(false)
-      , rollback_(true)
-      , to_raise_(FAILED)
-      , cause_(UNKNOWN)
-    {
-    }
+public:
+  explicit transaction_operation_failed(error_class ec, const std::string& what)
+    : std::runtime_error(what)
+    , ec_(ec)
+    , retry_(false)
+    , rollback_(true)
+    , to_raise_(FAILED)
+    , cause_(external_exception_from_error_class(ec))
+  {
+  }
+  explicit transaction_operation_failed(const client_error& client_err)
+    : std::runtime_error(client_err.what())
+    , ec_(client_err.ec())
+    , retry_(false)
+    , rollback_(true)
+    , to_raise_(FAILED)
+    , cause_(UNKNOWN)
+  {
+  }
 
-    static transaction_operation_failed merge_errors(std::list<transaction_operation_failed> errors,
-                                                     std::optional<external_exception> cause = {},
-                                                     bool do_throw = true)
-    {
-        // default would be to set retry false, rollback true.  If
-        // _all_ errors set retry to true, we set retry to true.  If _any_ errors
-        // set rollback to false, we set rollback to false.
-        // For now lets retain the ec, to_raise, and cause for the first of the
-        // retries (if they all are true), or the first of the rollbacks, if it
-        // is false.  Not rolling back takes precedence over retry.  Otherwise, we
-        // just retain the first.
-        assert(errors.size() > 0);
-        // start with first error that isn't previous_operation_failed
-        auto error_to_throw = *(std::find_if(errors.begin(), errors.end(), [](auto& err) {
-            return err.cause() != external_exception::PREVIOUS_OPERATION_FAILED;
-        }));
-        for (auto& ex : errors) {
-            if (ex.cause() == external_exception::PREVIOUS_OPERATION_FAILED) {
-                continue;
-            }
-            if (!ex.retry_) {
-                error_to_throw = ex;
-            }
-            if (!ex.rollback_) {
-                // this takes precedence, (no_rollback means no_retry as well), so just throw this
-                error_to_throw = ex;
-                break;
-            }
-        }
-        if (cause) {
-            error_to_throw.cause(*cause);
-        }
-        if (do_throw) {
-            throw error_to_throw;
-        }
-        return error_to_throw;
+  static transaction_operation_failed merge_errors(std::list<transaction_operation_failed> errors,
+                                                   std::optional<external_exception> cause = {},
+                                                   bool do_throw = true)
+  {
+    // default would be to set retry false, rollback true.  If
+    // _all_ errors set retry to true, we set retry to true.  If _any_ errors
+    // set rollback to false, we set rollback to false.
+    // For now lets retain the ec, to_raise, and cause for the first of the
+    // retries (if they all are true), or the first of the rollbacks, if it
+    // is false.  Not rolling back takes precedence over retry.  Otherwise, we
+    // just retain the first.
+    assert(errors.size() > 0);
+    // start with first error that isn't previous_operation_failed
+    auto error_to_throw = *(std::find_if(errors.begin(), errors.end(), [](auto& err) {
+      return err.cause() != external_exception::PREVIOUS_OPERATION_FAILED;
+    }));
+    for (auto& ex : errors) {
+      if (ex.cause() == external_exception::PREVIOUS_OPERATION_FAILED) {
+        continue;
+      }
+      if (!ex.retry_) {
+        error_to_throw = ex;
+      }
+      if (!ex.rollback_) {
+        // this takes precedence, (no_rollback means no_retry as well), so just throw this
+        error_to_throw = ex;
+        break;
+      }
     }
-    // Retry is false by default, this makes it true
-    transaction_operation_failed& retry()
-    {
-        retry_ = true;
-        return *this;
+    if (cause) {
+      error_to_throw.cause(*cause);
     }
-
-    // Rollback defaults to true, this sets it to false
-    transaction_operation_failed& no_rollback()
-    {
-        rollback_ = false;
-        return *this;
+    if (do_throw) {
+      throw error_to_throw;
     }
+    return error_to_throw;
+  }
+  // Retry is false by default, this makes it true
+  transaction_operation_failed& retry()
+  {
+    retry_ = true;
+    return *this;
+  }
 
-    // Defaults to FAILED, this sets it to EXPIRED
-    transaction_operation_failed& expired()
-    {
-        to_raise_ = EXPIRED;
-        return *this;
+  // Rollback defaults to true, this sets it to false
+  transaction_operation_failed& no_rollback()
+  {
+    rollback_ = false;
+    return *this;
+  }
+
+  // Defaults to FAILED, this sets it to EXPIRED
+  transaction_operation_failed& expired()
+  {
+    to_raise_ = EXPIRED;
+    return *this;
+  }
+
+  // Defaults to FAILED, sets to FAILED_POST_COMMIT
+  transaction_operation_failed& failed_post_commit()
+  {
+    to_raise_ = FAILED_POST_COMMIT;
+    return *this;
+  }
+
+  // Defaults to FAILED, sets AMBIGUOUS
+  transaction_operation_failed& ambiguous()
+  {
+    to_raise_ = AMBIGUOUS;
+    return *this;
+  }
+
+  transaction_operation_failed& cause(external_exception cause)
+  {
+    cause_ = cause;
+    return *this;
+  }
+
+  bool should_rollback() const
+  {
+    return rollback_;
+  }
+
+  bool should_retry() const
+  {
+    return retry_;
+  }
+
+  error_class ec() const
+  {
+    return ec_;
+  }
+
+  external_exception cause() const
+  {
+    return cause_;
+  }
+
+  final_error to_raise() const
+  {
+    return to_raise_;
+  }
+
+  void do_throw(const transaction_context& context) const
+  {
+    if (to_raise_ == FAILED_POST_COMMIT) {
+      return;
     }
-
-    // Defaults to FAILED, sets to FAILED_POST_COMMIT
-    transaction_operation_failed& failed_post_commit()
-    {
-        to_raise_ = FAILED_POST_COMMIT;
-        return *this;
+    switch (to_raise_) {
+      case EXPIRED:
+        throw transaction_exception(*this, context, failure_type::EXPIRY);
+      case AMBIGUOUS:
+        throw transaction_exception(*this, context, failure_type::COMMIT_AMBIGUOUS);
+      default:
+        throw transaction_exception(*this, context, failure_type::FAIL);
     }
+  }
 
-    // Defaults to FAILED, sets AMBIGUOUS
-    transaction_operation_failed& ambiguous()
+  std::optional<transaction_exception> get_final_exception(const transaction_context& context) const
+  {
     {
-        to_raise_ = AMBIGUOUS;
-        return *this;
+
+      switch (to_raise_) {
+        case EXPIRED:
+          return transaction_exception(*this, context, failure_type::EXPIRY);
+        case AMBIGUOUS:
+          return transaction_exception(*this, context, failure_type::COMMIT_AMBIGUOUS);
+        case FAILED_POST_COMMIT:
+          return std::nullopt;
+        default:
+          return transaction_exception(*this, context, failure_type::FAIL);
+      }
     }
+  }
 
-    transaction_operation_failed& cause(external_exception cause)
-    {
-        cause_ = cause;
-        return *this;
-    }
+  transaction_op_error_context get_error_ctx() const
+  {
+    errc::transaction_op ec = transaction_op_errc_from_external_exception(cause_);
+    return { ec };
+  }
 
-    bool should_rollback() const
-    {
-        return rollback_;
-    }
-
-    bool should_retry() const
-    {
-        return retry_;
-    }
-
-    error_class ec() const
-    {
-        return ec_;
-    }
-
-    external_exception cause() const
-    {
-        return cause_;
-    }
-
-    final_error to_raise() const
-    {
-        return to_raise_;
-    }
-
-    void do_throw(const transaction_context& context) const
-    {
-        if (to_raise_ == FAILED_POST_COMMIT) {
-            return;
-        }
-        switch (to_raise_) {
-            case EXPIRED:
-                throw transaction_exception(*this, context, failure_type::EXPIRY);
-            case AMBIGUOUS:
-                throw transaction_exception(*this, context, failure_type::COMMIT_AMBIGUOUS);
-            default:
-                throw transaction_exception(*this, context, failure_type::FAIL);
-        }
-    }
-
-    std::optional<transaction_exception> get_final_exception(const transaction_context& context) const
-    {
-        {
-
-            switch (to_raise_) {
-                case EXPIRED:
-                    return transaction_exception(*this, context, failure_type::EXPIRY);
-                case AMBIGUOUS:
-                    return transaction_exception(*this, context, failure_type::COMMIT_AMBIGUOUS);
-                case FAILED_POST_COMMIT:
-                    return std::nullopt;
-                default:
-                    return transaction_exception(*this, context, failure_type::FAIL);
-            }
-        }
-    }
-
-    transaction_op_error_context get_error_ctx() const
-    {
-        errc::transaction_op ec = transaction_op_errc_from_external_exception(cause_);
-        return { ec };
-    }
-
-  private:
-    error_class ec_;
-    bool retry_;
-    bool rollback_;
-    final_error to_raise_;
-    external_exception cause_;
+private:
+  error_class ec_;
+  bool retry_;
+  bool rollback_;
+  final_error to_raise_;
+  external_exception cause_;
 };
 
 namespace internal
@@ -306,11 +306,11 @@ namespace internal
  */
 class test_fail_hard : public client_error
 {
-  public:
-    explicit test_fail_hard()
-      : client_error(FAIL_HARD, "Injecting a FAIL_HARD error")
-    {
-    }
+public:
+  explicit test_fail_hard()
+    : client_error(FAIL_HARD, "Injecting a FAIL_HARD error")
+  {
+  }
 };
 
 /**
@@ -322,11 +322,11 @@ class test_fail_hard : public client_error
  */
 class test_fail_ambiguous : public client_error
 {
-  public:
-    explicit test_fail_ambiguous()
-      : client_error(FAIL_AMBIGUOUS, "Injecting a FAIL_AMBIGUOUS error")
-    {
-    }
+public:
+  explicit test_fail_ambiguous()
+    : client_error(FAIL_AMBIGUOUS, "Injecting a FAIL_AMBIGUOUS error")
+  {
+  }
 };
 
 /**
@@ -338,11 +338,11 @@ class test_fail_ambiguous : public client_error
  */
 class test_fail_transient : public client_error
 {
-  public:
-    explicit test_fail_transient()
-      : client_error(FAIL_TRANSIENT, "Injecting a FAIL_TRANSIENT error")
-    {
-    }
+public:
+  explicit test_fail_transient()
+    : client_error(FAIL_TRANSIENT, "Injecting a FAIL_TRANSIENT error")
+  {
+  }
 };
 
 /**
@@ -352,95 +352,95 @@ class test_fail_transient : public client_error
  */
 class test_fail_other : public client_error
 {
-  public:
-    explicit test_fail_other()
-      : client_error(FAIL_OTHER, "Injecting a FAIL_OTHER error")
-    {
-    }
+public:
+  explicit test_fail_other()
+    : client_error(FAIL_OTHER, "Injecting a FAIL_OTHER error")
+  {
+  }
 };
 } // namespace internal
 } // namespace couchbase::core::transactions
 
 template<>
 struct fmt::formatter<couchbase::core::transactions::error_class> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(couchbase::core::transactions::error_class ec, FormatContext& ctx) const
-    {
-        string_view name = "UNKNOWN ERROR CLASS";
-        switch (ec) {
-            case couchbase::core::transactions::FAIL_HARD:
-                name = "FAIL_HARD";
-                break;
-            case couchbase::core::transactions::FAIL_OTHER:
-                name = "FAIL_OTHER";
-                break;
-            case couchbase::core::transactions::FAIL_TRANSIENT:
-                name = "FAIL_TRANSIENT";
-                break;
-            case couchbase::core::transactions::FAIL_AMBIGUOUS:
-                name = "FAIL_AMBIGUOUS";
-                break;
-            case couchbase::core::transactions::FAIL_DOC_ALREADY_EXISTS:
-                name = "FAIL_DOC_ALREADY_EXISTS";
-                break;
-            case couchbase::core::transactions::FAIL_DOC_NOT_FOUND:
-                name = "FAIL_DOC_NOT_FOUND";
-                break;
-            case couchbase::core::transactions::FAIL_PATH_NOT_FOUND:
-                name = "FAIL_PATH_NOT_FOUND";
-                break;
-            case couchbase::core::transactions::FAIL_CAS_MISMATCH:
-                name = "FAIL_CAS_MISMATCH";
-                break;
-            case couchbase::core::transactions::FAIL_WRITE_WRITE_CONFLICT:
-                name = "FAIL_WRITE_WRITE_CONFLICT";
-                break;
-            case couchbase::core::transactions::FAIL_ATR_FULL:
-                name = "FAIL_ATR_FULL";
-                break;
-            case couchbase::core::transactions::FAIL_PATH_ALREADY_EXISTS:
-                name = "FAIL_PATH_ALREADY_EXISTS";
-                break;
-            case couchbase::core::transactions::FAIL_EXPIRY:
-                name = "FAIL_EXPIRY";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
+  template<typename FormatContext>
+  auto format(couchbase::core::transactions::error_class ec, FormatContext& ctx) const
+  {
+    string_view name = "UNKNOWN ERROR CLASS";
+    switch (ec) {
+      case couchbase::core::transactions::FAIL_HARD:
+        name = "FAIL_HARD";
+        break;
+      case couchbase::core::transactions::FAIL_OTHER:
+        name = "FAIL_OTHER";
+        break;
+      case couchbase::core::transactions::FAIL_TRANSIENT:
+        name = "FAIL_TRANSIENT";
+        break;
+      case couchbase::core::transactions::FAIL_AMBIGUOUS:
+        name = "FAIL_AMBIGUOUS";
+        break;
+      case couchbase::core::transactions::FAIL_DOC_ALREADY_EXISTS:
+        name = "FAIL_DOC_ALREADY_EXISTS";
+        break;
+      case couchbase::core::transactions::FAIL_DOC_NOT_FOUND:
+        name = "FAIL_DOC_NOT_FOUND";
+        break;
+      case couchbase::core::transactions::FAIL_PATH_NOT_FOUND:
+        name = "FAIL_PATH_NOT_FOUND";
+        break;
+      case couchbase::core::transactions::FAIL_CAS_MISMATCH:
+        name = "FAIL_CAS_MISMATCH";
+        break;
+      case couchbase::core::transactions::FAIL_WRITE_WRITE_CONFLICT:
+        name = "FAIL_WRITE_WRITE_CONFLICT";
+        break;
+      case couchbase::core::transactions::FAIL_ATR_FULL:
+        name = "FAIL_ATR_FULL";
+        break;
+      case couchbase::core::transactions::FAIL_PATH_ALREADY_EXISTS:
+        name = "FAIL_PATH_ALREADY_EXISTS";
+        break;
+      case couchbase::core::transactions::FAIL_EXPIRY:
+        name = "FAIL_EXPIRY";
+        break;
     }
+    return format_to(ctx.out(), "{}", name);
+  }
 };
 
 template<>
 struct fmt::formatter<couchbase::core::transactions::final_error> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(couchbase::core::transactions::final_error to_raise, FormatContext& ctx) const
-    {
-        string_view name = "UNKNOWN FINAL ERROR";
-        switch (to_raise) {
-            case couchbase::core::transactions::FAILED:
-                name = "FAILED";
-                break;
-            case couchbase::core::transactions::EXPIRED:
-                name = "EXPIRED";
-                break;
-            case couchbase::core::transactions::FAILED_POST_COMMIT:
-                name = "FAILED_POST_COMMIT";
-                break;
-            case couchbase::core::transactions::AMBIGUOUS:
-                name = "AMBIGUOUS";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
+  template<typename FormatContext>
+  auto format(couchbase::core::transactions::final_error to_raise, FormatContext& ctx) const
+  {
+    string_view name = "UNKNOWN FINAL ERROR";
+    switch (to_raise) {
+      case couchbase::core::transactions::FAILED:
+        name = "FAILED";
+        break;
+      case couchbase::core::transactions::EXPIRED:
+        name = "EXPIRED";
+        break;
+      case couchbase::core::transactions::FAILED_POST_COMMIT:
+        name = "FAILED_POST_COMMIT";
+        break;
+      case couchbase::core::transactions::AMBIGUOUS:
+        name = "AMBIGUOUS";
+        break;
     }
+    return format_to(ctx.out(), "{}", name);
+  }
 };

@@ -22,6 +22,7 @@ namespace couchbase::core
 auto
 core_sdk_shim::to_string() const -> std::string
 {
-    return fmt::format(R"(#<core_sdk_shim:{} cluster={}>)", static_cast<const void*>(this), cluster.to_string());
+  return fmt::format(
+    R"(#<core_sdk_shim:{} cluster={}>)", static_cast<const void*>(this), cluster.to_string());
 }
 } // namespace couchbase::core

@@ -19,14 +19,14 @@ namespace couchbase::core
 {
 class cluster_agent_impl
 {
-  public:
-    cluster_agent_impl(cluster_agent_config config)
-      : config_{ std::move(config) }
-    {
-    }
+public:
+  cluster_agent_impl(cluster_agent_config config)
+    : config_{ std::move(config) }
+  {
+  }
 
-  private:
-    const cluster_agent_config config_;
+private:
+  const cluster_agent_config config_;
 };
 
 core::cluster_agent::cluster_agent(cluster_agent_config config)

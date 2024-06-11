@@ -48,22 +48,24 @@ using GetPasswordCallback = std::function<std::string()>;
  */
 class MechanismBackend
 {
-  public:
-    explicit MechanismBackend(GetUsernameCallback user_cb, GetPasswordCallback password_cb, ClientContext& ctx)
-      : usernameCallback(std::move(user_cb))
-      , passwordCallback(std::move(password_cb))
-      , context(ctx)
-    {
-    }
-    virtual ~MechanismBackend() = default;
-    virtual std::pair<error, std::string_view> start() = 0;
-    virtual std::pair<error, std::string_view> step(std::string_view input) = 0;
-    [[nodiscard]] virtual std::string_view get_name() const = 0;
+public:
+  explicit MechanismBackend(GetUsernameCallback user_cb,
+                            GetPasswordCallback password_cb,
+                            ClientContext& ctx)
+    : usernameCallback(std::move(user_cb))
+    , passwordCallback(std::move(password_cb))
+    , context(ctx)
+  {
+  }
+  virtual ~MechanismBackend() = default;
+  virtual std::pair<error, std::string_view> start() = 0;
+  virtual std::pair<error, std::string_view> step(std::string_view input) = 0;
+  [[nodiscard]] virtual std::string_view get_name() const = 0;
 
-  protected:
-    const GetUsernameCallback usernameCallback;
-    const GetPasswordCallback passwordCallback;
-    ClientContext& context;
+protected:
+  const GetUsernameCallback usernameCallback;
+  const GetPasswordCallback passwordCallback;
+  ClientContext& context;
 };
 
 /**
@@ -71,57 +73,59 @@ class MechanismBackend
  */
 class ClientContext : public Context
 {
-  public:
-    /**
-     * Create a new instance of the ClientContext
-     *
-     * @param user_cb The callback method to fetch the username to
-     *                use in the authentication
-     * @param password_cb The callback method to fetch the password to
-     *                use in the authentication
-     * @param mechanisms The list of available mechanisms provided by
-     *                   the server. The client will pick the most
-     *                   secure method available
-     * @throws couchbase::core::sasl::no_such_mechanism if none of the mechanisms
-     *                   specified in the list of available mechanisms
-     *                   is supported
-     */
-    ClientContext(GetUsernameCallback user_cb, GetPasswordCallback password_cb, const std::vector<std::string>& mechanisms);
+public:
+  /**
+   * Create a new instance of the ClientContext
+   *
+   * @param user_cb The callback method to fetch the username to
+   *                use in the authentication
+   * @param password_cb The callback method to fetch the password to
+   *                use in the authentication
+   * @param mechanisms The list of available mechanisms provided by
+   *                   the server. The client will pick the most
+   *                   secure method available
+   * @throws couchbase::core::sasl::no_such_mechanism if none of the mechanisms
+   *                   specified in the list of available mechanisms
+   *                   is supported
+   */
+  ClientContext(GetUsernameCallback user_cb,
+                GetPasswordCallback password_cb,
+                const std::vector<std::string>& mechanisms);
 
-    /**
-     * Get the name of the mechanism in use by this backend.
-     *
-     * @return The name of the chosen authentication method
-     */
-    [[nodiscard]] std::string_view get_name() const
-    {
-        return backend->get_name();
-    }
+  /**
+   * Get the name of the mechanism in use by this backend.
+   *
+   * @return The name of the chosen authentication method
+   */
+  [[nodiscard]] std::string_view get_name() const
+  {
+    return backend->get_name();
+  }
 
-    /**
-     * Start the authentication
-     *
-     * @return The challenge to send to the server
-     */
-    std::pair<error, std::string_view> start()
-    {
-        return backend->start();
-    }
+  /**
+   * Start the authentication
+   *
+   * @return The challenge to send to the server
+   */
+  std::pair<error, std::string_view> start()
+  {
+    return backend->start();
+  }
 
-    /**
-     * Process the response received from the server and generate
-     * another challenge to send to the server.
-     *
-     * @param input The response from the server
-     * @return The challenge to send to the server
-     */
-    std::pair<error, std::string_view> step(std::string_view input)
-    {
-        return backend->step(input);
-    }
+  /**
+   * Process the response received from the server and generate
+   * another challenge to send to the server.
+   *
+   * @param input The response from the server
+   * @return The challenge to send to the server
+   */
+  std::pair<error, std::string_view> step(std::string_view input)
+  {
+    return backend->step(input);
+  }
 
-  private:
-    std::unique_ptr<MechanismBackend> backend;
+private:
+  std::unique_ptr<MechanismBackend> backend;
 };
 
 } // namespace couchbase::core::sasl

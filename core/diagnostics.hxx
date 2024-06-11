@@ -28,69 +28,69 @@
 namespace couchbase::core::diag
 {
 enum class cluster_state {
-    /** all nodes and their sockets are reachable */
-    online,
-    /** at least one socket per service is reachable */
-    degraded,
-    /** not even one socket per service is reachable */
-    offline,
+  /** all nodes and their sockets are reachable */
+  online,
+  /** at least one socket per service is reachable */
+  degraded,
+  /** not even one socket per service is reachable */
+  offline,
 };
 
 enum class endpoint_state {
-    /** the endpoint is not reachable */
-    disconnected,
-    /** currently connecting (includes auth, ...) */
-    connecting,
-    /** connected and ready */
-    connected,
-    /** disconnecting (after being connected) */
-    disconnecting,
+  /** the endpoint is not reachable */
+  disconnected,
+  /** currently connecting (includes auth, ...) */
+  connecting,
+  /** connected and ready */
+  connected,
+  /** disconnecting (after being connected) */
+  disconnecting,
 };
 
 struct endpoint_diag_info {
-    service_type type;
-    std::string id;
-    std::optional<std::chrono::microseconds> last_activity{};
-    std::string remote;
-    std::string local;
-    endpoint_state state;
-    /** serialized as "namespace" */
-    std::optional<std::string> bucket{};
-    std::optional<std::string> details{};
+  service_type type;
+  std::string id;
+  std::optional<std::chrono::microseconds> last_activity{};
+  std::string remote;
+  std::string local;
+  endpoint_state state;
+  /** serialized as "namespace" */
+  std::optional<std::string> bucket{};
+  std::optional<std::string> details{};
 };
 
 struct diagnostics_result {
-    std::string id;
-    std::string sdk;
-    std::map<service_type, std::vector<endpoint_diag_info>> services{};
+  std::string id;
+  std::string sdk;
+  std::map<service_type, std::vector<endpoint_diag_info>> services{};
 
-    int version{ 2 };
+  int version{ 2 };
 };
 
 enum class ping_state {
-    ok,
-    timeout,
-    error,
+  ok,
+  timeout,
+  error,
 };
 
 struct endpoint_ping_info {
-    service_type type;
-    std::string id;
-    std::chrono::microseconds latency;
-    std::string remote;
-    std::string local;
-    ping_state state;
-    /** serialized as "namespace" */
-    std::optional<std::string> bucket{};
-    /** if ping state is error, contains error message */
-    std::optional<std::string> error{};
+  service_type type;
+  std::string id;
+  std::chrono::microseconds latency;
+  std::string remote;
+  std::string local;
+  ping_state state;
+  /** serialized as "namespace" */
+  std::optional<std::string> bucket{};
+  /** if ping state is error, contains error message */
+  std::optional<std::string> error{};
 };
 
 struct ping_result {
-    std::string id;
-    std::string sdk;
-    std::map<service_type, std::vector<endpoint_ping_info>> services{};
+  std::string id;
+  std::string sdk;
+  std::map<service_type, std::vector<endpoint_ping_info>> services{};
 
-    int version{ 2 };
+  int version{ 2 };
 };
 } // namespace couchbase::core::diag

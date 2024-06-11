@@ -31,30 +31,30 @@ struct encoded_search_facet;
  */
 class search_facet
 {
-  public:
-    virtual ~search_facet() = default;
+public:
+  virtual ~search_facet() = default;
 
-    /**
-     * @return encoded representation of the search facet.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] virtual auto encode() const -> encoded_search_facet = 0;
+  /**
+   * @return encoded representation of the search facet.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] virtual auto encode() const -> encoded_search_facet = 0;
 
-  protected:
-    search_facet(std::string field, std::uint32_t size)
-      : field_{ std::move(field) }
-      , size_{ size }
-    {
-    }
+protected:
+  search_facet(std::string field, std::uint32_t size)
+    : field_{ std::move(field) }
+    , size_{ size }
+  {
+  }
 
-    search_facet(std::string field)
-      : field_{ std::move(field) }
-    {
-    }
+  search_facet(std::string field)
+    : field_{ std::move(field) }
+  {
+  }
 
-    std::string field_;
-    std::optional<std::uint32_t> size_{};
+  std::string field_;
+  std::optional<std::uint32_t> size_{};
 };
 } // namespace couchbase

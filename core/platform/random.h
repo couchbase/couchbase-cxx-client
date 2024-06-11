@@ -29,11 +29,11 @@ class RandomGeneratorProvider;
  */
 class RandomGenerator
 {
-  public:
-    RandomGenerator();
+public:
+  RandomGenerator();
 
-    std::uint64_t next();
+  std::uint64_t next();
 
-    bool getBytes(void* dest, size_t size);
+  bool getBytes(void* dest, size_t size);
 };
 } // namespace couchbase::core

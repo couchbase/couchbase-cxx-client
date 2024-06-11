@@ -20,7 +20,7 @@
 namespace couchbase::core
 {
 enum class analytics_scan_consistency {
-    not_bounded = 0,
-    request_plus,
+  not_bounded = 0,
+  request_plus,
 };
 } // namespace couchbase::core

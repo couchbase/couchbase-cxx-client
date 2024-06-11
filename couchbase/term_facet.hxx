@@ -26,23 +26,23 @@ namespace couchbase
  */
 class term_facet : public search_facet
 {
-  public:
-    explicit term_facet(std::string field)
-      : search_facet{ std::move(field) }
-    {
-    }
+public:
+  explicit term_facet(std::string field)
+    : search_facet{ std::move(field) }
+  {
+  }
 
-    term_facet(std::string field, std::uint32_t size)
-      : search_facet{ std::move(field), size }
-    {
-    }
+  term_facet(std::string field, std::uint32_t size)
+    : search_facet{ std::move(field), size }
+  {
+  }
 
-    /**
-     * @return encoded representation of the search facet.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto encode() const -> encoded_search_facet override;
+  /**
+   * @return encoded representation of the search facet.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto encode() const -> encoded_search_facet override;
 };
 } // namespace couchbase

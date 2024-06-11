@@ -21,8 +21,9 @@
 
 namespace couchbase::core::mcbp
 {
-// server_duration_frame allows the server to return information about the period of time an operation took to complete.
+// server_duration_frame allows the server to return information about the period of time an
+// operation took to complete.
 struct server_duration_frame {
-    std::chrono::microseconds server_duration;
+  std::chrono::microseconds server_duration;
 };
 } // namespace couchbase::core::mcbp

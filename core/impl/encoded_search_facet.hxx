@@ -22,8 +22,8 @@
 namespace couchbase
 {
 struct encoded_search_facet {
-    std::error_code ec{};
-    tao::json::value facet{};
+  std::error_code ec{};
+  tao::json::value facet{};
 };
 
 } // namespace couchbase

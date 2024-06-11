@@ -36,41 +36,42 @@ hello_response_body::parse(key_value_status_code status,
                            const std::vector<std::byte>& body,
                            const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == key_value_status_code::success) {
-        std::vector<std::uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
-        size_t value_size = body.size() - static_cast<std::size_t>(offset);
-        Expects(value_size % 2 == 0);
-        size_t num_features = value_size / 2;
-        supported_features_.reserve(num_features);
-        const auto* value = body.data() + offset;
-        for (size_t i = 0; i < num_features; i++) {
-            std::uint16_t field = 0;
-            std::memcpy(&field, value + i * 2, sizeof(std::uint16_t));
-            field = utils::byte_swap(field);
-            if (is_valid_hello_feature(field)) {
-                supported_features_.push_back(static_cast<hello_feature>(field));
-            }
-        }
-        return true;
+  Expects(header[1] == static_cast<std::byte>(opcode));
+  if (status == key_value_status_code::success) {
+    std::vector<std::uint8_t>::difference_type offset =
+      framing_extras_size + key_size + extras_size;
+    size_t value_size = body.size() - static_cast<std::size_t>(offset);
+    Expects(value_size % 2 == 0);
+    size_t num_features = value_size / 2;
+    supported_features_.reserve(num_features);
+    const auto* value = body.data() + offset;
+    for (size_t i = 0; i < num_features; i++) {
+      std::uint16_t field = 0;
+      std::memcpy(&field, value + i * 2, sizeof(std::uint16_t));
+      field = utils::byte_swap(field);
+      if (is_valid_hello_feature(field)) {
+        supported_features_.push_back(static_cast<hello_feature>(field));
+      }
     }
-    return false;
+    return true;
+  }
+  return false;
 }
 
 void
 hello_request_body::fill_body()
 {
-    value_.resize(2 * features_.size());
-    for (std::size_t idx = 0; idx < features_.size(); idx++) {
-        value_[idx * 2] = std::byte{ 0 }; // we don't need this byte while feature codes fit the 8-bit
-        value_[idx * 2 + 1] = static_cast<std::byte>(features_[idx]);
-    }
+  value_.resize(2 * features_.size());
+  for (std::size_t idx = 0; idx < features_.size(); idx++) {
+    value_[idx * 2] = std::byte{ 0 }; // we don't need this byte while feature codes fit the 8-bit
+    value_[idx * 2 + 1] = static_cast<std::byte>(features_[idx]);
+  }
 }
 
 void
 hello_request_body::user_agent(std::string_view val)
 {
-    key_.reserve(val.size());
-    utils::to_binary(val, std::back_insert_iterator(key_));
+  key_.reserve(val.size());
+  utils::to_binary(val, std::back_insert_iterator(key_));
 }
 } // namespace couchbase::core::protocol

@@ -37,13 +37,13 @@ class queue_request;
 
 class response_handler
 {
-  public:
-    virtual ~response_handler() = default;
-    virtual void handle_response(std::shared_ptr<mcbp::queue_request> request,
-                                 std::error_code error,
-                                 retry_reason reason,
-                                 io::mcbp_message msg,
-                                 std::optional<key_value_error_map_info> error_info) = 0;
+public:
+  virtual ~response_handler() = default;
+  virtual void handle_response(std::shared_ptr<mcbp::queue_request> request,
+                               std::error_code error,
+                               retry_reason reason,
+                               io::mcbp_message msg,
+                               std::optional<key_value_error_map_info> error_info) = 0;
 };
 
 } // namespace couchbase::core

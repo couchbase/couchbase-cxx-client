@@ -27,26 +27,28 @@
 namespace couchbase::core::operations::management
 {
 struct analytics_get_pending_mutations_response {
-    error_context::http ctx;
-    std::string status{};
-    std::vector<analytics_problem> errors{};
-    std::map<std::string, std::int64_t> stats{};
+  error_context::http ctx;
+  std::string status{};
+  std::vector<analytics_problem> errors{};
+  std::map<std::string, std::int64_t> stats{};
 };
 
 struct analytics_get_pending_mutations_request {
-    using response_type = analytics_get_pending_mutations_response;
-    using encoded_request_type = io::http_request;
-    using encoded_response_type = io::http_response;
-    using error_context_type = error_context::http;
+  using response_type = analytics_get_pending_mutations_response;
+  using encoded_request_type = io::http_request;
+  using encoded_response_type = io::http_response;
+  using error_context_type = error_context::http;
 
-    static const inline service_type type = service_type::analytics;
+  static const inline service_type type = service_type::analytics;
 
-    std::optional<std::string> client_context_id{};
-    std::optional<std::chrono::milliseconds> timeout{};
+  std::optional<std::string> client_context_id{};
+  std::optional<std::chrono::milliseconds> timeout{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          http_context& context) const;
 
-    [[nodiscard]] analytics_get_pending_mutations_response make_response(error_context::http&& ctx,
-                                                                         const encoded_response_type& encoded) const;
+  [[nodiscard]] analytics_get_pending_mutations_response make_response(
+    error_context::http&& ctx,
+    const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::operations::management

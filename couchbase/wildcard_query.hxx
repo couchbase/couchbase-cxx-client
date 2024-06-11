@@ -25,59 +25,60 @@
 namespace couchbase
 {
 /**
- * A wildcard query is a query in which term the character `*` will match `0..n` occurrences of any characters and `?` will match `1`
- * occurrence of any character.
+ * A wildcard query is a query in which term the character `*` will match `0..n` occurrences of any
+ * characters and `?` will match `1` occurrence of any character.
  *
  * Match documents where field `reviews.content` contains words starting with `"inter"`:
  * @snippet test_unit_search.cxx search-wildcard
  *
- * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-wildcard.html server documentation
+ * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-wildcard.html server
+ * documentation
  *
  * @since 1.0.0
  * @committed
  */
 class wildcard_query : public search_query
 {
-  public:
-    /**
-     * Create a new wildcard query.
-     *
-     * @param regexp the wildcard-containing term to be analyzed and searched
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    explicit wildcard_query(std::string regexp)
-      : wildcard_{ std::move(regexp) }
-    {
-    }
+public:
+  /**
+   * Create a new wildcard query.
+   *
+   * @param regexp the wildcard-containing term to be analyzed and searched
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  explicit wildcard_query(std::string regexp)
+    : wildcard_{ std::move(regexp) }
+  {
+  }
 
-    /**
-     * If a field is specified, only terms in that field will be matched.
-     *
-     * @param field_name name of the field to be matched
-     *
-     * @return this query for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto field(std::string field_name) -> wildcard_query&
-    {
-        field_ = std::move(field_name);
-        return *this;
-    }
+  /**
+   * If a field is specified, only terms in that field will be matched.
+   *
+   * @param field_name name of the field to be matched
+   *
+   * @return this query for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto field(std::string field_name) -> wildcard_query&
+  {
+    field_ = std::move(field_name);
+    return *this;
+  }
 
-    /**
-     * @return encoded representation of the query.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto encode() const -> encoded_search_query override;
+  /**
+   * @return encoded representation of the query.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto encode() const -> encoded_search_query override;
 
-  private:
-    std::string wildcard_;
-    std::optional<std::string> field_{};
+private:
+  std::string wildcard_;
+  std::optional<std::string> field_{};
 };
 } // namespace couchbase

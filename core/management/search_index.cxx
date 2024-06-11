@@ -24,30 +24,30 @@ namespace
 bool
 has_vector_mapping_properties(tao::json::value properties)
 {
-    if (!properties.is_object()) {
-        return false;
-    }
-    for (const auto& [_, prop] : properties.get_object()) {
-        if (const auto* nested_properties = prop.find("properties"); nested_properties != nullptr) {
-            if (has_vector_mapping_properties(*nested_properties)) {
-                return true;
-            }
-        }
-        const auto* fields = prop.find("fields");
-        if (fields == nullptr || !fields->is_array()) {
-            continue;
-        }
-        for (const auto& field : fields->get_array()) {
-            const auto* type = field.find("type");
-            if (type != nullptr && type->is_string()) {
-                auto t = type->get_string();
-                if (t == "vector" || t == "vector_base64") {
-                    return true;
-                }
-            }
-        }
-    };
+  if (!properties.is_object()) {
     return false;
+  }
+  for (const auto& [_, prop] : properties.get_object()) {
+    if (const auto* nested_properties = prop.find("properties"); nested_properties != nullptr) {
+      if (has_vector_mapping_properties(*nested_properties)) {
+        return true;
+      }
+    }
+    const auto* fields = prop.find("fields");
+    if (fields == nullptr || !fields->is_array()) {
+      continue;
+    }
+    for (const auto& field : fields->get_array()) {
+      const auto* type = field.find("type");
+      if (type != nullptr && type->is_string()) {
+        auto t = type->get_string();
+        if (t == "vector" || t == "vector_base64") {
+          return true;
+        }
+      }
+    }
+  };
+  return false;
 }
 } // namespace
 
@@ -56,24 +56,24 @@ namespace couchbase::core::management::search
 auto
 index::is_vector_index() const -> bool
 {
-    if (params_json.empty()) {
-        return false;
-    }
-    auto params = core::utils::json::parse(params_json);
-    const auto* mapping = params.find("mapping");
-    if (mapping == nullptr) {
-        return false;
-    }
-    const auto* types = mapping->find("types");
-    if (types == nullptr || !types->is_object()) {
-        return false;
-    }
-    for (const auto& [_, val] : types->get_object()) {
-        const auto* properties = val.find("properties");
-        if (properties != nullptr && has_vector_mapping_properties(*properties)) {
-            return true;
-        }
-    }
+  if (params_json.empty()) {
     return false;
+  }
+  auto params = core::utils::json::parse(params_json);
+  const auto* mapping = params.find("mapping");
+  if (mapping == nullptr) {
+    return false;
+  }
+  const auto* types = mapping->find("types");
+  if (types == nullptr || !types->is_object()) {
+    return false;
+  }
+  for (const auto& [_, val] : types->get_object()) {
+    const auto* properties = val.find("properties");
+    if (properties != nullptr && has_vector_mapping_properties(*properties)) {
+      return true;
+    }
+  }
+  return false;
 }
 } // namespace couchbase::core::management::search

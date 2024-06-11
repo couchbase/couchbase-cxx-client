@@ -27,13 +27,13 @@ retry_action::retry_action(std::chrono::milliseconds waiting_duration)
 auto
 retry_action::need_to_retry() const -> bool
 {
-    return waiting_duration_ != std::chrono::milliseconds::zero();
+  return waiting_duration_ != std::chrono::milliseconds::zero();
 }
 
 auto
 retry_action::do_not_retry() -> const retry_action&
 {
-    const static retry_action instance{ std::chrono::milliseconds::zero() };
-    return instance;
+  const static retry_action instance{ std::chrono::milliseconds::zero() };
+  return instance;
 }
 } // namespace couchbase

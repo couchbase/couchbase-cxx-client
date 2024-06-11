@@ -22,8 +22,8 @@
 namespace couchbase::management::bucket
 {
 struct scope_spec {
-    std::string name;
-    std::vector<collection_spec> collections;
+  std::string name;
+  std::vector<collection_spec> collections;
 };
 
 } // namespace couchbase::management::bucket

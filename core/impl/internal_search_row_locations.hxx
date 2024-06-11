@@ -27,19 +27,22 @@ class internal_search_row_location;
 
 class internal_search_row_locations
 {
-  public:
-    explicit internal_search_row_locations(const std::vector<core::operations::search_response::search_location>& locations);
+public:
+  explicit internal_search_row_locations(
+    const std::vector<core::operations::search_response::search_location>& locations);
 
-    [[nodiscard]] auto get(const std::string& field) const -> std::vector<search_row_location>;
-    [[nodiscard]] auto get(const std::string& field, const std::string& term) const -> std::vector<search_row_location>;
-    [[nodiscard]] auto get_all() const -> std::vector<search_row_location>;
-    [[nodiscard]] auto fields() const -> std::vector<std::string>;
-    [[nodiscard]] auto terms() const -> std::set<std::string>;
-    [[nodiscard]] auto terms_for(const std::string& field) const -> std::vector<std::string>;
+  [[nodiscard]] auto get(const std::string& field) const -> std::vector<search_row_location>;
+  [[nodiscard]] auto get(const std::string& field,
+                         const std::string& term) const -> std::vector<search_row_location>;
+  [[nodiscard]] auto get_all() const -> std::vector<search_row_location>;
+  [[nodiscard]] auto fields() const -> std::vector<std::string>;
+  [[nodiscard]] auto terms() const -> std::set<std::string>;
+  [[nodiscard]] auto terms_for(const std::string& field) const -> std::vector<std::string>;
 
-  private:
-    // field -> term -> location
-    std::map<std::string, std::map<std::string, std::vector<internal_search_row_location>>> locations_;
+private:
+  // field -> term -> location
+  std::map<std::string, std::map<std::string, std::vector<internal_search_row_location>>>
+    locations_;
 };
 
 } // namespace couchbase

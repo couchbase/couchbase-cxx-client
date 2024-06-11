@@ -23,9 +23,9 @@ namespace couchbase::core
 {
 class config_listener
 {
-  public:
-    virtual ~config_listener() = default;
+public:
+  virtual ~config_listener() = default;
 
-    virtual void update_config(topology::configuration config) = 0;
+  virtual void update_config(topology::configuration config) = 0;
 };
 } // namespace couchbase::core

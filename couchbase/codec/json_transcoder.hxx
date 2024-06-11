@@ -28,22 +28,24 @@ namespace couchbase::codec
 template<typename Serializer>
 class json_transcoder
 {
-  public:
-    template<typename Document>
-    static auto encode(Document document) -> encoded_value
-    {
-        return { Serializer::serialize(document), codec_flags::json_common_flags };
+public:
+  template<typename Document>
+  static auto encode(Document document) -> encoded_value
+  {
+    return { Serializer::serialize(document), codec_flags::json_common_flags };
+  }
+
+  template<typename Document>
+  static auto decode(const encoded_value& encoded) -> Document
+  {
+    if (encoded.flags != 0 &&
+        !codec_flags::has_common_flags(encoded.flags, codec_flags::json_common_flags)) {
+      throw std::system_error(errc::common::decoding_failure,
+                              "json_transcoder expects document to have JSON common flags, flags=" +
+                                std::to_string(encoded.flags));
     }
 
-    template<typename Document>
-    static auto decode(const encoded_value& encoded) -> Document
-    {
-        if (encoded.flags != 0 && !codec_flags::has_common_flags(encoded.flags, codec_flags::json_common_flags)) {
-            throw std::system_error(errc::common::decoding_failure,
-                                    "json_transcoder expects document to have JSON common flags, flags=" + std::to_string(encoded.flags));
-        }
-
-        return Serializer::template deserialize<Document>(encoded.data);
-    }
+    return Serializer::template deserialize<Document>(encoded.data);
+  }
 };
 } // namespace couchbase::codec

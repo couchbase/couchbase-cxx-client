@@ -28,17 +28,17 @@ namespace couchbase
  */
 class search_facet_result
 {
-  public:
-    virtual ~search_facet_result() = default;
+public:
+  virtual ~search_facet_result() = default;
 
-    /**
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] virtual auto name() const -> const std::string& = 0;
-    [[nodiscard]] virtual auto field() const -> const std::string& = 0;
-    [[nodiscard]] virtual auto total() const -> std::uint64_t = 0;
-    [[nodiscard]] virtual auto missing() const -> std::uint64_t = 0;
-    [[nodiscard]] virtual auto other() const -> std::uint64_t = 0;
+  /**
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] virtual auto name() const -> const std::string& = 0;
+  [[nodiscard]] virtual auto field() const -> const std::string& = 0;
+  [[nodiscard]] virtual auto total() const -> std::uint64_t = 0;
+  [[nodiscard]] virtual auto missing() const -> std::uint64_t = 0;
+  [[nodiscard]] virtual auto other() const -> std::uint64_t = 0;
 };
 } // namespace couchbase

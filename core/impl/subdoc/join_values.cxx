@@ -24,33 +24,33 @@ namespace couchbase::core::impl::subdoc
 std::vector<std::byte>
 join_values(const std::vector<std::vector<std::byte>>& values)
 {
-    if (values.empty()) {
-        return {};
-    }
-    if (values.size() == 1) {
-        return values.front();
-    }
-    constexpr std::byte comma{ ',' };
-    std::size_t total_length = values.size() - 1;
-    for (const auto& v : values) {
-        total_length += v.size();
-    }
+  if (values.empty()) {
+    return {};
+  }
+  if (values.size() == 1) {
+    return values.front();
+  }
+  constexpr std::byte comma{ ',' };
+  std::size_t total_length = values.size() - 1;
+  for (const auto& v : values) {
+    total_length += v.size();
+  }
 
-    std::vector<std::byte> result;
-    result.resize(total_length);
+  std::vector<std::byte> result;
+  result.resize(total_length);
 
-    auto sentinel = std::end(values);
-    auto output = result.begin();
-    if (auto it = std::begin(values); it != sentinel) {
-        output = std::copy(it->begin(), it->end(), output);
-        ++it;
-        while (it != sentinel) {
-            *output = comma;
-            ++output;
-            output = std::copy(it->begin(), it->end(), output);
-            ++it;
-        }
+  auto sentinel = std::end(values);
+  auto output = result.begin();
+  if (auto it = std::begin(values); it != sentinel) {
+    output = std::copy(it->begin(), it->end(), output);
+    ++it;
+    while (it != sentinel) {
+      *output = comma;
+      ++output;
+      output = std::copy(it->begin(), it->end(), output);
+      ++it;
     }
-    return result;
+  }
+  return result;
 }
 } // namespace couchbase::core::impl::subdoc

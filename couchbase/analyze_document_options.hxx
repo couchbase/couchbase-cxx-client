@@ -28,16 +28,16 @@
 namespace couchbase
 {
 struct analyze_document_options : public common_options<analyze_document_options> {
-  public:
-    struct built : public common_options<analyze_document_options>::built {
-    };
+public:
+  struct built : public common_options<analyze_document_options>::built {
+  };
 
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options() };
-    }
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options() };
+  }
 
-  private:
+private:
 };
 
 using analyze_document_handler = std::function<void(error, std::vector<std::string>)>;

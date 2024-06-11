@@ -25,16 +25,16 @@
 namespace couchbase
 {
 struct drop_scope_options : public common_options<drop_scope_options> {
-  public:
-    struct built : public common_options<drop_scope_options>::built {
-    };
+public:
+  struct built : public common_options<drop_scope_options>::built {
+  };
 
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options() };
-    }
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options() };
+  }
 
-  private:
+private:
 };
 
 using drop_scope_handler = std::function<void(error)>;

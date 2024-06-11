@@ -35,21 +35,21 @@ class internal_date_range_facet_result;
  */
 class date_range_facet_result : public search_facet_result
 {
-  public:
-    /**
-     * @since 1.0.0
-     * @internal
-     */
-    explicit date_range_facet_result(internal_date_range_facet_result internal);
+public:
+  /**
+   * @since 1.0.0
+   * @internal
+   */
+  explicit date_range_facet_result(internal_date_range_facet_result internal);
 
-    [[nodiscard]] auto name() const -> const std::string& override;
-    [[nodiscard]] auto field() const -> const std::string& override;
-    [[nodiscard]] auto total() const -> std::uint64_t override;
-    [[nodiscard]] auto missing() const -> std::uint64_t override;
-    [[nodiscard]] auto other() const -> std::uint64_t override;
-    [[nodiscard]] auto date_ranges() const -> const std::vector<search_date_range>&;
+  [[nodiscard]] auto name() const -> const std::string& override;
+  [[nodiscard]] auto field() const -> const std::string& override;
+  [[nodiscard]] auto total() const -> std::uint64_t override;
+  [[nodiscard]] auto missing() const -> std::uint64_t override;
+  [[nodiscard]] auto other() const -> std::uint64_t override;
+  [[nodiscard]] auto date_ranges() const -> const std::vector<search_date_range>&;
 
-  private:
-    std::unique_ptr<internal_date_range_facet_result> internal_;
+private:
+  std::unique_ptr<internal_date_range_facet_result> internal_;
 };
 } // namespace couchbase

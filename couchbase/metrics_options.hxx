@@ -27,45 +27,45 @@ namespace couchbase
 {
 class metrics_options
 {
-  public:
-    static constexpr std::chrono::milliseconds default_emit_interval{ std::chrono::minutes{ 10 } };
+public:
+  static constexpr std::chrono::milliseconds default_emit_interval{ std::chrono::minutes{ 10 } };
 
-    auto enable(bool enable) -> metrics_options&
-    {
-        enabled_ = enable;
-        return *this;
-    }
+  auto enable(bool enable) -> metrics_options&
+  {
+    enabled_ = enable;
+    return *this;
+  }
 
-    auto emit_interval(std::chrono::milliseconds interval) -> metrics_options&
-    {
-        emit_interval_ = interval;
-        return *this;
-    }
+  auto emit_interval(std::chrono::milliseconds interval) -> metrics_options&
+  {
+    emit_interval_ = interval;
+    return *this;
+  }
 
-    auto meter(std::shared_ptr<metrics::meter> custom_meter) -> metrics_options&
-    {
-        meter_ = std::move(custom_meter);
-        return *this;
-    }
+  auto meter(std::shared_ptr<metrics::meter> custom_meter) -> metrics_options&
+  {
+    meter_ = std::move(custom_meter);
+    return *this;
+  }
 
-    struct built {
-        bool enabled;
-        std::chrono::milliseconds emit_interval;
-        std::shared_ptr<metrics::meter> meter;
+  struct built {
+    bool enabled;
+    std::chrono::milliseconds emit_interval;
+    std::shared_ptr<metrics::meter> meter;
+  };
+
+  [[nodiscard]] auto build() const -> built
+  {
+    return {
+      enabled_,
+      emit_interval_,
+      meter_,
     };
+  }
 
-    [[nodiscard]] auto build() const -> built
-    {
-        return {
-            enabled_,
-            emit_interval_,
-            meter_,
-        };
-    }
-
-  private:
-    bool enabled_{ true };
-    std::chrono::milliseconds emit_interval_{ default_emit_interval };
-    std::shared_ptr<metrics::meter> meter_{ nullptr };
+private:
+  bool enabled_{ true };
+  std::chrono::milliseconds emit_interval_{ default_emit_interval };
+  std::shared_ptr<metrics::meter> meter_{ nullptr };
 };
 } // namespace couchbase

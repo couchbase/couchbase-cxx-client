@@ -37,31 +37,36 @@ class range_scan_orchestrator_impl;
 
 class scan_stream_manager
 {
-  public:
-    virtual ~scan_stream_manager() = default;
-    virtual void stream_start_failed_awaiting_retry(std::int16_t node_id, std::uint16_t vbucket_id) = 0;
-    virtual void stream_received_item(range_scan_item item) = 0;
-    virtual void stream_failed(std::int16_t node_id, std::uint16_t vbucket_id, std::error_code ec, bool fatal) = 0;
-    virtual void stream_completed(std::int16_t node_id, std::uint16_t vbucket_id) = 0;
+public:
+  virtual ~scan_stream_manager() = default;
+  virtual void stream_start_failed_awaiting_retry(std::int16_t node_id,
+                                                  std::uint16_t vbucket_id) = 0;
+  virtual void stream_received_item(range_scan_item item) = 0;
+  virtual void stream_failed(std::int16_t node_id,
+                             std::uint16_t vbucket_id,
+                             std::error_code ec,
+                             bool fatal) = 0;
+  virtual void stream_completed(std::int16_t node_id, std::uint16_t vbucket_id) = 0;
 };
 
 using scan_callback = utils::movable_function<void(std::error_code, scan_result result)>;
 
 class range_scan_orchestrator
 {
-  public:
-    range_scan_orchestrator(asio::io_context& io,
-                            agent kv_provider,
-                            topology::configuration::vbucket_map vbucket_map,
-                            std::string scope_name,
-                            std::string collection_name,
-                            std::variant<std::monostate, range_scan, prefix_scan, sampling_scan> scan_type,
-                            range_scan_orchestrator_options options);
+public:
+  range_scan_orchestrator(
+    asio::io_context& io,
+    agent kv_provider,
+    topology::configuration::vbucket_map vbucket_map,
+    std::string scope_name,
+    std::string collection_name,
+    std::variant<std::monostate, range_scan, prefix_scan, sampling_scan> scan_type,
+    range_scan_orchestrator_options options);
 
-    auto scan() -> tl::expected<scan_result, std::error_code>;
-    void scan(scan_callback&& cb);
+  auto scan() -> tl::expected<scan_result, std::error_code>;
+  void scan(scan_callback&& cb);
 
-  private:
-    std::shared_ptr<range_scan_orchestrator_impl> impl_;
+private:
+  std::shared_ptr<range_scan_orchestrator_impl> impl_;
 };
 } // namespace couchbase::core

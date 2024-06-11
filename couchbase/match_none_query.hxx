@@ -24,20 +24,21 @@ namespace couchbase
 /**
  * A query that matches nothing.
  *
- * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-match-none.html server documentation
+ * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-match-none.html server
+ * documentation
  *
  * @since 1.0.0
  * @committed
  */
 class match_none_query : public search_query
 {
-  public:
-    /**
-     * @return encoded representation of the query.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto encode() const -> encoded_search_query override;
+public:
+  /**
+   * @return encoded representation of the query.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto encode() const -> encoded_search_query override;
 };
 } // namespace couchbase

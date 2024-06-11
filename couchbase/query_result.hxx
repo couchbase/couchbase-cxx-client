@@ -36,67 +36,68 @@ namespace couchbase
  */
 class query_result
 {
-  public:
-    /**
-     * @since 1.0.0
-     * @internal
-     */
-    query_result() = default;
+public:
+  /**
+   * @since 1.0.0
+   * @internal
+   */
+  query_result() = default;
 
-    /**
-     * @since 1.0.0
-     * @volatile
-     */
-    query_result(query_meta_data meta_data, std::vector<codec::binary> rows)
-      : meta_data_{ std::move(meta_data) }
-      , rows_{ std::move(rows) }
-    {
+  /**
+   * @since 1.0.0
+   * @volatile
+   */
+  query_result(query_meta_data meta_data, std::vector<codec::binary> rows)
+    : meta_data_{ std::move(meta_data) }
+    , rows_{ std::move(rows) }
+  {
+  }
+
+  /**
+   * Returns the {@link query_meta_data} giving access to the additional metadata associated with
+   * this query.
+   *
+   * @return response metadata
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto meta_data() const -> const query_meta_data&
+  {
+    return meta_data_;
+  }
+
+  /**
+   * @return list of query results as binary strings
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto rows_as_binary() const -> const std::vector<codec::binary>&
+  {
+    return rows_;
+  }
+
+  template<typename Serializer,
+           typename Document = typename Serializer::document_type,
+           std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
+  [[nodiscard]] auto rows_as() const -> std::vector<Document>
+  {
+    std::vector<Document> rows;
+    rows.reserve(rows_.size());
+    for (const auto& row : rows_) {
+      rows.emplace_back(Serializer::template deserialize<Document>(row));
     }
+    return rows;
+  }
 
-    /**
-     * Returns the {@link query_meta_data} giving access to the additional metadata associated with this query.
-     *
-     * @return response metadata
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto meta_data() const -> const query_meta_data&
-    {
-        return meta_data_;
-    }
+  [[nodiscard]] auto rows_as_json() const -> std::vector<codec::tao_json_serializer::document_type>
+  {
+    return rows_as<codec::tao_json_serializer>();
+  }
 
-    /**
-     * @return list of query results as binary strings
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto rows_as_binary() const -> const std::vector<codec::binary>&
-    {
-        return rows_;
-    }
-
-    template<typename Serializer,
-             typename Document = typename Serializer::document_type,
-             std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
-    [[nodiscard]] auto rows_as() const -> std::vector<Document>
-    {
-        std::vector<Document> rows;
-        rows.reserve(rows_.size());
-        for (const auto& row : rows_) {
-            rows.emplace_back(Serializer::template deserialize<Document>(row));
-        }
-        return rows;
-    }
-
-    [[nodiscard]] auto rows_as_json() const -> std::vector<codec::tao_json_serializer::document_type>
-    {
-        return rows_as<codec::tao_json_serializer>();
-    }
-
-  private:
-    query_meta_data meta_data_{};
-    std::vector<codec::binary> rows_{};
+private:
+  query_meta_data meta_data_{};
+  std::vector<codec::binary> rows_{};
 };
 } // namespace couchbase

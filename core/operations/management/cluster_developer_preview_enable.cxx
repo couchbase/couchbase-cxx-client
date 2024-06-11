@@ -22,22 +22,24 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-cluster_developer_preview_enable_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+cluster_developer_preview_enable_request::encode_to(encoded_request_type& encoded,
+                                                    http_context& /* context */) const
 {
-    encoded.method = "POST";
-    encoded.headers["content-type"] = "application/x-www-form-urlencoded";
-    encoded.path = "/settings/developerPreview";
-    encoded.body = "enabled=true";
-    return {};
+  encoded.method = "POST";
+  encoded.headers["content-type"] = "application/x-www-form-urlencoded";
+  encoded.path = "/settings/developerPreview";
+  encoded.body = "enabled=true";
+  return {};
 }
 
 cluster_developer_preview_enable_response
-cluster_developer_preview_enable_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+cluster_developer_preview_enable_request::make_response(error_context::http&& ctx,
+                                                        const encoded_response_type& encoded) const
 {
-    cluster_developer_preview_enable_response response{ std::move(ctx) };
-    if (!response.ctx.ec && encoded.status_code != 200) {
-        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
-    }
-    return response;
+  cluster_developer_preview_enable_response response{ std::move(ctx) };
+  if (!response.ctx.ec && encoded.status_code != 200) {
+    response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

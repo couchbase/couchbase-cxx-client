@@ -25,59 +25,60 @@ namespace couchbase::core
 
 class query_context
 {
-  public:
-    query_context() = default;
+public:
+  query_context() = default;
 
-    query_context(std::string namespace_id, std::string bucket_name, std::string scope_name)
-      : namespace_id_(std::move(namespace_id))
-      , bucket_name_(std::move(bucket_name))
-      , scope_name_(std::move(scope_name))
-    {
+  query_context(std::string namespace_id, std::string bucket_name, std::string scope_name)
+    : namespace_id_(std::move(namespace_id))
+    , bucket_name_(std::move(bucket_name))
+    , scope_name_(std::move(scope_name))
+  {
+  }
+
+  query_context(std::string bucket_name, std::string scope_name)
+    : bucket_name_(std::move(bucket_name))
+    , scope_name_(std::move(scope_name))
+  {
+  }
+
+  bool has_value() const
+  {
+    return bucket_name_.has_value() && !bucket_name_->empty() && scope_name_.has_value() &&
+           !scope_name_->empty();
+  }
+
+  std::string value() const
+  {
+    if (has_value()) {
+      return fmt::format("{}:`{}`.`{}`", namespace_id_, bucket_name_.value(), scope_name_.value());
     }
+    return {};
+  }
 
-    query_context(std::string bucket_name, std::string scope_name)
-      : bucket_name_(std::move(bucket_name))
-      , scope_name_(std::move(scope_name))
-    {
+  std::string bucket_name() const
+  {
+    if (has_value()) {
+      return bucket_name_.value();
     }
+    return "";
+  }
 
-    bool has_value() const
-    {
-        return bucket_name_.has_value() && !bucket_name_->empty() && scope_name_.has_value() && !scope_name_->empty();
+  std::string scope_name() const
+  {
+    if (has_value()) {
+      return scope_name_.value();
     }
+    return "";
+  }
 
-    std::string value() const
-    {
-        if (has_value()) {
-            return fmt::format("{}:`{}`.`{}`", namespace_id_, bucket_name_.value(), scope_name_.value());
-        }
-        return {};
-    }
+  std::string namespace_id() const
+  {
+    return namespace_id_;
+  }
 
-    std::string bucket_name() const
-    {
-        if (has_value()) {
-            return bucket_name_.value();
-        }
-        return "";
-    }
-
-    std::string scope_name() const
-    {
-        if (has_value()) {
-            return scope_name_.value();
-        }
-        return "";
-    }
-
-    std::string namespace_id() const
-    {
-        return namespace_id_;
-    }
-
-  private:
-    std::string namespace_id_{ "default" };
-    std::optional<std::string> bucket_name_;
-    std::optional<std::string> scope_name_;
+private:
+  std::string namespace_id_{ "default" };
+  std::optional<std::string> bucket_name_;
+  std::optional<std::string> scope_name_;
 };
 } // namespace couchbase::core

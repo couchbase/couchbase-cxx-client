@@ -22,23 +22,25 @@
 namespace couchbase::core::impl
 {
 std::error_code
-get_replica_request::encode_to(get_replica_request::encoded_request_type& encoded, core::mcbp_context&& /* context */)
+get_replica_request::encode_to(get_replica_request::encoded_request_type& encoded,
+                               core::mcbp_context&& /* context */)
 {
-    encoded.opaque(opaque);
-    encoded.partition(partition);
-    encoded.body().id(id);
-    return {};
+  encoded.opaque(opaque);
+  encoded.partition(partition);
+  encoded.body().id(id);
+  return {};
 }
 
 get_replica_response
-get_replica_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
+get_replica_request::make_response(key_value_error_context&& ctx,
+                                   const encoded_response_type& encoded) const
 {
-    get_replica_response response{ std::move(ctx) };
-    if (!response.ctx.ec()) {
-        response.value = encoded.body().value();
-        response.cas = encoded.cas();
-        response.flags = encoded.body().flags();
-    }
-    return response;
+  get_replica_response response{ std::move(ctx) };
+  if (!response.ctx.ec()) {
+    response.value = encoded.body().value();
+    response.cas = encoded.cas();
+    response.flags = encoded.body().flags();
+  }
+  return response;
 }
 } // namespace couchbase::core::impl

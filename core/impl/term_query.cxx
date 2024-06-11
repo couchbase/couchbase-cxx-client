@@ -24,33 +24,33 @@ namespace couchbase
 auto
 term_query::encode() const -> encoded_search_query
 {
-    encoded_search_query built;
-    built.query = tao::json::empty_object;
-    if (boost_) {
-        built.query["boost"] = boost_.value();
-    }
+  encoded_search_query built;
+  built.query = tao::json::empty_object;
+  if (boost_) {
+    built.query["boost"] = boost_.value();
+  }
 
-    built.query["term"] = term_;
-    if (field_) {
-        built.query["field"] = field_.value();
+  built.query["term"] = term_;
+  if (field_) {
+    built.query["field"] = field_.value();
+  }
+  if (fuzziness_) {
+    built.query["fuzziness"] = fuzziness_.value();
+  }
+  if (prefix_length_) {
+    built.query["prefix_length"] = prefix_length_.value();
+  }
+  if (operator_) {
+    switch (operator_.value()) {
+      case match_operator::logical_or:
+        built.query["operator"] = "or";
+        break;
+      case match_operator::logical_and:
+        built.query["operator"] = "and";
+        break;
     }
-    if (fuzziness_) {
-        built.query["fuzziness"] = fuzziness_.value();
-    }
-    if (prefix_length_) {
-        built.query["prefix_length"] = prefix_length_.value();
-    }
-    if (operator_) {
-        switch (operator_.value()) {
-            case match_operator::logical_or:
-                built.query["operator"] = "or";
-                break;
-            case match_operator::logical_and:
-                built.query["operator"] = "and";
-                break;
-        }
-    }
+  }
 
-    return built;
+  return built;
 }
 } // namespace couchbase

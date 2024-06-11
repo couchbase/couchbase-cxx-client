@@ -26,32 +26,35 @@
 namespace couchbase::core::operations::management
 {
 struct analytics_link_connect_response {
-    struct problem {
-        std::uint32_t code;
-        std::string message;
-    };
+  struct problem {
+    std::uint32_t code;
+    std::string message;
+  };
 
-    error_context::http ctx;
-    std::string status{};
-    std::vector<problem> errors{};
+  error_context::http ctx;
+  std::string status{};
+  std::vector<problem> errors{};
 };
 
 struct analytics_link_connect_request {
-    using response_type = analytics_link_connect_response;
-    using encoded_request_type = io::http_request;
-    using encoded_response_type = io::http_response;
-    using error_context_type = error_context::http;
+  using response_type = analytics_link_connect_response;
+  using encoded_request_type = io::http_request;
+  using encoded_response_type = io::http_response;
+  using error_context_type = error_context::http;
 
-    static const inline service_type type = service_type::analytics;
+  static const inline service_type type = service_type::analytics;
 
-    std::string dataverse_name{ "Default" };
-    std::string link_name{ "Local" };
-    bool force{ false };
-    std::optional<std::string> client_context_id{};
-    std::optional<std::chrono::milliseconds> timeout{};
+  std::string dataverse_name{ "Default" };
+  std::string link_name{ "Local" };
+  bool force{ false };
+  std::optional<std::string> client_context_id{};
+  std::optional<std::chrono::milliseconds> timeout{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          http_context& context) const;
 
-    [[nodiscard]] analytics_link_connect_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] analytics_link_connect_response make_response(
+    error_context::http&& ctx,
+    const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::operations::management

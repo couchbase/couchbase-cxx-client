@@ -23,91 +23,91 @@
 
 template<>
 struct fmt::formatter<couchbase::core::diag::cluster_state> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
+
+  template<typename FormatContext>
+  auto format(couchbase::core::diag::cluster_state state, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (state) {
+      case couchbase::core::diag::cluster_state::online:
+        name = "online";
+        break;
+
+      case couchbase::core::diag::cluster_state::degraded:
+        name = "degraded";
+        break;
+
+      case couchbase::core::diag::cluster_state::offline:
+        name = "offline";
+        break;
     }
-
-    template<typename FormatContext>
-    auto format(couchbase::core::diag::cluster_state state, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (state) {
-            case couchbase::core::diag::cluster_state::online:
-                name = "online";
-                break;
-
-            case couchbase::core::diag::cluster_state::degraded:
-                name = "degraded";
-                break;
-
-            case couchbase::core::diag::cluster_state::offline:
-                name = "offline";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
-    }
+    return format_to(ctx.out(), "{}", name);
+  }
 };
 
 template<>
 struct fmt::formatter<couchbase::core::diag::endpoint_state> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
+
+  template<typename FormatContext>
+  auto format(couchbase::core::diag::endpoint_state state, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (state) {
+      case couchbase::core::diag::endpoint_state::disconnected:
+        name = "disconnected";
+        break;
+
+      case couchbase::core::diag::endpoint_state::connecting:
+        name = "connecting";
+        break;
+
+      case couchbase::core::diag::endpoint_state::connected:
+        name = "connected";
+        break;
+
+      case couchbase::core::diag::endpoint_state::disconnecting:
+        name = "disconnecting";
+        break;
     }
-
-    template<typename FormatContext>
-    auto format(couchbase::core::diag::endpoint_state state, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (state) {
-            case couchbase::core::diag::endpoint_state::disconnected:
-                name = "disconnected";
-                break;
-
-            case couchbase::core::diag::endpoint_state::connecting:
-                name = "connecting";
-                break;
-
-            case couchbase::core::diag::endpoint_state::connected:
-                name = "connected";
-                break;
-
-            case couchbase::core::diag::endpoint_state::disconnecting:
-                name = "disconnecting";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
-    }
+    return format_to(ctx.out(), "{}", name);
+  }
 };
 
 template<>
 struct fmt::formatter<couchbase::core::diag::ping_state> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
+
+  template<typename FormatContext>
+  auto format(couchbase::core::diag::ping_state state, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (state) {
+      case couchbase::core::diag::ping_state::ok:
+        name = "ok";
+        break;
+
+      case couchbase::core::diag::ping_state::timeout:
+        name = "timeout";
+        break;
+
+      case couchbase::core::diag::ping_state::error:
+        name = "error";
+        break;
     }
-
-    template<typename FormatContext>
-    auto format(couchbase::core::diag::ping_state state, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (state) {
-            case couchbase::core::diag::ping_state::ok:
-                name = "ok";
-                break;
-
-            case couchbase::core::diag::ping_state::timeout:
-                name = "timeout";
-                break;
-
-            case couchbase::core::diag::ping_state::error:
-                name = "error";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
-    }
+    return format_to(ctx.out(), "{}", name);
+  }
 };

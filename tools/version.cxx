@@ -26,48 +26,48 @@ namespace
 {
 class version_app : public CLI::App
 {
-  public:
-    version_app()
-      : CLI::App("Display version information.", "version")
-    {
-        add_flag("--json", "Dump version and build info in JSON format.");
-    }
+public:
+  version_app()
+    : CLI::App("Display version information.", "version")
+  {
+    add_flag("--json", "Dump version and build info in JSON format.");
+  }
 
-    void execute() const
-    {
-        if (count("--json") > 0) {
-            tao::json::value info;
-            for (const auto& [name, value] : couchbase::core::meta::sdk_build_info()) {
-                if (name == "version_major" || name == "version_minor" || name == "version_patch" || name == "version_build" ||
-                    name == "mozilla_ca_bundle_size") {
-                    info[name] = std::stoi(value);
-                } else if (name == "snapshot" || name == "static_stdlib" || name == "static_openssl" ||
-                           name == "mozilla_ca_bundle_embedded") {
-                    info[name] = value == "true";
-                } else {
-                    info[name] = value;
-                }
-            }
-            fmt::print(stdout, "{}\n", tao::json::to_string(info, 2));
-            return;
+  void execute() const
+  {
+    if (count("--json") > 0) {
+      tao::json::value info;
+      for (const auto& [name, value] : couchbase::core::meta::sdk_build_info()) {
+        if (name == "version_major" || name == "version_minor" || name == "version_patch" ||
+            name == "version_build" || name == "mozilla_ca_bundle_size") {
+          info[name] = std::stoi(value);
+        } else if (name == "snapshot" || name == "static_stdlib" || name == "static_openssl" ||
+                   name == "mozilla_ca_bundle_embedded") {
+          info[name] = value == "true";
+        } else {
+          info[name] = value;
         }
-
-        fmt::print(stdout, "Version: {}\n", couchbase::core::meta::sdk_semver());
-        auto info = couchbase::core::meta::sdk_build_info();
-        fmt::print(stdout, "Build date: {}\n", info["build_timestamp"]);
-        fmt::print(stdout, "Build type: {}\n", info["cmake_build_type"]);
-        fmt::print(stdout, "Platform: {}, {}\n", info["platform"], info["cpu"]);
-        fmt::print(stdout, "C compiler: {}\n", info["cc"]);
-        fmt::print(stdout, "C++ compiler: {}\n", info["cxx"]);
-        fmt::print(stdout, "CMake: {}\n", info["cmake_version"]);
-        fmt::print(stdout, "ASIO: {}\n", info["asio"]);
-        fmt::print(stdout, "Snappy: {}\n", info["snappy"]);
-        fmt::print(stdout, "OpenSSL:\n");
-        fmt::print(stdout, "  headers: {}\n", info["openssl_headers"]);
-        fmt::print(stdout, "  runtime: {}\n", info["openssl_runtime"]);
-        fmt::print(stdout, "  default certificate directory: {}\n", info["openssl_default_cert_dir"]);
-        fmt::print(stdout, "  default certificate file: {}\n", info["openssl_default_cert_file"]);
+      }
+      fmt::print(stdout, "{}\n", tao::json::to_string(info, 2));
+      return;
     }
+
+    fmt::print(stdout, "Version: {}\n", couchbase::core::meta::sdk_semver());
+    auto info = couchbase::core::meta::sdk_build_info();
+    fmt::print(stdout, "Build date: {}\n", info["build_timestamp"]);
+    fmt::print(stdout, "Build type: {}\n", info["cmake_build_type"]);
+    fmt::print(stdout, "Platform: {}, {}\n", info["platform"], info["cpu"]);
+    fmt::print(stdout, "C compiler: {}\n", info["cc"]);
+    fmt::print(stdout, "C++ compiler: {}\n", info["cxx"]);
+    fmt::print(stdout, "CMake: {}\n", info["cmake_version"]);
+    fmt::print(stdout, "ASIO: {}\n", info["asio"]);
+    fmt::print(stdout, "Snappy: {}\n", info["snappy"]);
+    fmt::print(stdout, "OpenSSL:\n");
+    fmt::print(stdout, "  headers: {}\n", info["openssl_headers"]);
+    fmt::print(stdout, "  runtime: {}\n", info["openssl_runtime"]);
+    fmt::print(stdout, "  default certificate directory: {}\n", info["openssl_default_cert_dir"]);
+    fmt::print(stdout, "  default certificate file: {}\n", info["openssl_default_cert_file"]);
+  }
 };
 } // namespace
 
@@ -76,16 +76,16 @@ namespace cbc
 auto
 make_version_command() -> std::shared_ptr<CLI::App>
 {
-    return std::make_shared<version_app>();
+  return std::make_shared<version_app>();
 }
 
 auto
 execute_version_command(const CLI::App* app) -> int
 {
-    if (const auto* version = dynamic_cast<const version_app*>(app); version != nullptr) {
-        version->execute();
-        return 0;
-    }
-    return 1;
+  if (const auto* version = dynamic_cast<const version_app*>(app); version != nullptr) {
+    version->execute();
+    return 0;
+  }
+  return 1;
 }
 } // namespace cbc

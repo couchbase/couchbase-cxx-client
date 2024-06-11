@@ -27,8 +27,8 @@
 namespace couchbase
 {
 /**
- * The numeric range query finds documents containing a numeric value in the specified field within the specified range. Either min or max
- * can be omitted, but not both.
+ * The numeric range query finds documents containing a numeric value in the specified field within
+ * the specified range. Either min or max can be omitted, but not both.
  *
  * By default, min is inclusive and max is exclusive.
  *
@@ -40,104 +40,106 @@ namespace couchbase
  */
 class numeric_range_query : public search_query
 {
-  public:
-    /**
-     * Set lower limit of the range. Whether to include limit into the range will be decided by server defaults (inclusive).
-     *
-     * @param value  lower limit of the range.
-     *
-     * @return this query for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto min(double value) -> numeric_range_query&
-    {
-        min_ = value;
-        return *this;
-    }
+public:
+  /**
+   * Set lower limit of the range. Whether to include limit into the range will be decided by server
+   * defaults (inclusive).
+   *
+   * @param value  lower limit of the range.
+   *
+   * @return this query for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto min(double value) -> numeric_range_query&
+  {
+    min_ = value;
+    return *this;
+  }
 
-    /**
-     * Set lower limit and specify whether to include it into the limit.
-     *
-     * @param value  lower limit of the range.
-     * @param inclusive whether to include limit value into the interval.
-     *
-     * @return this query for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto min(double value, bool inclusive) -> numeric_range_query&
-    {
-        min_ = value;
-        inclusive_min_ = inclusive;
-        return *this;
-    }
+  /**
+   * Set lower limit and specify whether to include it into the limit.
+   *
+   * @param value  lower limit of the range.
+   * @param inclusive whether to include limit value into the interval.
+   *
+   * @return this query for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto min(double value, bool inclusive) -> numeric_range_query&
+  {
+    min_ = value;
+    inclusive_min_ = inclusive;
+    return *this;
+  }
 
-    /**
-     * Set upper limit of the range. Whether to include limit into the range will be decided by server defaults (exclusive).
-     *
-     * @param value  upper limit of the range
-     *
-     * @return this query for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto max(double value) -> numeric_range_query&
-    {
-        max_ = value;
-        return *this;
-    }
+  /**
+   * Set upper limit of the range. Whether to include limit into the range will be decided by server
+   * defaults (exclusive).
+   *
+   * @param value  upper limit of the range
+   *
+   * @return this query for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto max(double value) -> numeric_range_query&
+  {
+    max_ = value;
+    return *this;
+  }
 
-    /**
-     * Set upper limit and specify whether to include it into the limit.
-     *
-     * @param value  upper limit of the range.
-     * @param inclusive whether to include limit value into the interval.
-     *
-     * @return this query for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto max(double value, bool inclusive) -> numeric_range_query&
-    {
-        max_ = value;
-        inclusive_max_ = inclusive;
-        return *this;
-    }
+  /**
+   * Set upper limit and specify whether to include it into the limit.
+   *
+   * @param value  upper limit of the range.
+   * @param inclusive whether to include limit value into the interval.
+   *
+   * @return this query for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto max(double value, bool inclusive) -> numeric_range_query&
+  {
+    max_ = value;
+    inclusive_max_ = inclusive;
+    return *this;
+  }
 
-    /**
-     * If a field is specified, only terms in that field will be matched.
-     *
-     * @param field_name name of the field to be matched
-     *
-     * @return this query for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto field(std::string field_name) -> numeric_range_query&
-    {
-        field_ = std::move(field_name);
-        return *this;
-    }
+  /**
+   * If a field is specified, only terms in that field will be matched.
+   *
+   * @param field_name name of the field to be matched
+   *
+   * @return this query for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto field(std::string field_name) -> numeric_range_query&
+  {
+    field_ = std::move(field_name);
+    return *this;
+  }
 
-    /**
-     * @return encoded representation of the query.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto encode() const -> encoded_search_query override;
+  /**
+   * @return encoded representation of the query.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto encode() const -> encoded_search_query override;
 
-  private:
-    std::optional<double> min_{};
-    std::optional<double> max_{};
-    std::optional<bool> inclusive_min_{};
-    std::optional<bool> inclusive_max_{};
-    std::optional<std::string> field_{};
+private:
+  std::optional<double> min_{};
+  std::optional<double> max_{};
+  std::optional<bool> inclusive_min_{};
+  std::optional<bool> inclusive_max_{};
+  std::optional<std::string> field_{};
 };
 } // namespace couchbase

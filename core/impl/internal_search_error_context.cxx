@@ -19,12 +19,14 @@
 
 namespace couchbase
 {
-internal_search_error_context::internal_search_error_context(internal_search_error_context&& other) noexcept = default;
+internal_search_error_context::internal_search_error_context(
+  internal_search_error_context&& other) noexcept = default;
 
 internal_search_error_context&
 internal_search_error_context::operator=(internal_search_error_context&& other) noexcept = default;
 
-internal_search_error_context::internal_search_error_context(core::operations::search_response& resp)
+internal_search_error_context::internal_search_error_context(
+  core::operations::search_response& resp)
   : ctx_{ std::move(resp.ctx) }
   , status_{ resp.status }
   , error_{ resp.error }
@@ -34,108 +36,108 @@ internal_search_error_context::internal_search_error_context(core::operations::s
 auto
 internal_search_error_context::ec() const -> std::error_code
 {
-    return ctx_.ec;
+  return ctx_.ec;
 }
 
 auto
 internal_search_error_context::last_dispatched_to() const -> const std::optional<std::string>&
 {
-    return ctx_.last_dispatched_to;
+  return ctx_.last_dispatched_to;
 }
 
 auto
 internal_search_error_context::last_dispatched_from() const -> const std::optional<std::string>&
 {
-    return ctx_.last_dispatched_from;
+  return ctx_.last_dispatched_from;
 }
 
 auto
 internal_search_error_context::retry_attempts() const -> std::size_t
 {
-    return ctx_.retry_attempts;
+  return ctx_.retry_attempts;
 }
 
 auto
 internal_search_error_context::retry_reasons() const -> const std::set<retry_reason>&
 {
-    return ctx_.retry_reasons;
+  return ctx_.retry_reasons;
 }
 
 auto
 internal_search_error_context::retried_because_of(retry_reason reason) const -> bool
 {
-    return ctx_.retry_reasons.count(reason) > 0;
+  return ctx_.retry_reasons.count(reason) > 0;
 }
 
 auto
 internal_search_error_context::index_name() const -> const std::string&
 {
-    return ctx_.index_name;
+  return ctx_.index_name;
 }
 
 auto
 internal_search_error_context::client_context_id() const -> const std::string&
 {
-    return ctx_.client_context_id;
+  return ctx_.client_context_id;
 }
 
 auto
 internal_search_error_context::query() const -> const std::string&
 {
-    return ctx_.query;
+  return ctx_.query;
 }
 
 auto
 internal_search_error_context::parameters() const -> const std::optional<std::string>&
 {
-    return ctx_.parameters;
+  return ctx_.parameters;
 }
 
 auto
 internal_search_error_context::method() const -> const std::string&
 {
-    return ctx_.method;
+  return ctx_.method;
 }
 
 auto
 internal_search_error_context::path() const -> const std::string&
 {
-    return ctx_.path;
+  return ctx_.path;
 }
 
 auto
 internal_search_error_context::http_status() const -> std::uint32_t
 {
-    return ctx_.http_status;
+  return ctx_.http_status;
 }
 
 auto
 internal_search_error_context::http_body() const -> const std::string&
 {
-    return ctx_.http_body;
+  return ctx_.http_body;
 }
 
 auto
 internal_search_error_context::hostname() const -> const std::string&
 {
-    return ctx_.hostname;
+  return ctx_.hostname;
 }
 
 auto
 internal_search_error_context::port() const -> std::uint16_t
 {
-    return ctx_.port;
+  return ctx_.port;
 }
 
 auto
 internal_search_error_context::error() const -> const std::string&
 {
-    return error_;
+  return error_;
 }
 
 auto
 internal_search_error_context::status() const -> const std::string&
 {
-    return status_;
+  return status_;
 }
 } // namespace couchbase

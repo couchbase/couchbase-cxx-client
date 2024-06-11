@@ -41,84 +41,86 @@ class request_span;
 namespace couchbase::core
 {
 struct subdoc_operation {
-    protocol::subdoc_opcode opcode{};
-    std::uint8_t flags{};
-    std::string path{};
-    std::vector<std::byte> value{};
+  protocol::subdoc_opcode opcode{};
+  std::uint8_t flags{};
+  std::string path{};
+  std::vector<std::byte> value{};
 };
 
 struct subdoc_result {
-    std::error_code error{};
-    std::vector<std::byte> value{};
+  std::error_code error{};
+  std::vector<std::byte> value{};
 };
 
 class lookup_in_options
 {
-  public:
-    std::vector<std::byte> key{};
-    std::uint8_t flags{};
-    std::vector<subdoc_operation> operations{};
-    std::string collection_name{};
-    std::string scope_name{};
-    std::uint32_t collection_id{};
+public:
+  std::vector<std::byte> key{};
+  std::uint8_t flags{};
+  std::vector<subdoc_operation> operations{};
+  std::string collection_name{};
+  std::string scope_name{};
+  std::uint32_t collection_id{};
 
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
-    std::chrono::milliseconds timeout{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{};
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
+  std::chrono::milliseconds timeout{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{};
 
-    struct {
-        std::string user{};
-    } internal{};
+  struct {
+    std::string user{};
+  } internal{};
 };
 
 class lookup_in_result
 {
-  public:
-    std::vector<subdoc_result> results{};
-    couchbase::cas cas{};
+public:
+  std::vector<subdoc_result> results{};
+  couchbase::cas cas{};
 
-    struct {
-        bool is_deleted{};
-        std::optional<resource_unit_result> resource_units{};
-    } internal{};
+  struct {
+    bool is_deleted{};
+    std::optional<resource_unit_result> resource_units{};
+  } internal{};
 };
 
-using lookup_in_callback = utils::movable_function<void(lookup_in_result result, std::error_code ec)>;
+using lookup_in_callback =
+  utils::movable_function<void(lookup_in_result result, std::error_code ec)>;
 
 class mutate_in_options
 {
-  public:
-    std::vector<std::byte> key{};
-    std::uint8_t flags{};
-    couchbase::cas cas{};
-    std::uint32_t expiry{};
-    std::vector<subdoc_operation> operations{};
-    std::string collection_name{};
-    std::string scope_name{};
-    std::uint32_t collection_id{};
-    couchbase::durability_level durability_level{};
-    std::chrono::milliseconds durability_level_timeout{};
+public:
+  std::vector<std::byte> key{};
+  std::uint8_t flags{};
+  couchbase::cas cas{};
+  std::uint32_t expiry{};
+  std::vector<subdoc_operation> operations{};
+  std::string collection_name{};
+  std::string scope_name{};
+  std::uint32_t collection_id{};
+  couchbase::durability_level durability_level{};
+  std::chrono::milliseconds durability_level_timeout{};
 
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
-    std::chrono::milliseconds timeout{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{};
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
+  std::chrono::milliseconds timeout{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{};
 
-    struct {
-        std::string user{};
-    } internal{};
+  struct {
+    std::string user{};
+  } internal{};
 };
 
 class mutate_in_result
 {
-  public:
-    std::vector<subdoc_result> results{};
-    couchbase::cas cas{};
-    mutation_token token{};
+public:
+  std::vector<subdoc_result> results{};
+  couchbase::cas cas{};
+  mutation_token token{};
 
-    struct {
-        std::optional<resource_unit_result> resource_units{};
-    } internal{};
+  struct {
+    std::optional<resource_unit_result> resource_units{};
+  } internal{};
 };
 
-using mutate_in_callback = utils::movable_function<void(mutate_in_result result, std::error_code ec)>;
+using mutate_in_callback =
+  utils::movable_function<void(mutate_in_result result, std::error_code ec)>;
 } // namespace couchbase::core

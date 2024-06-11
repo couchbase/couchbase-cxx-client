@@ -20,20 +20,20 @@
 namespace couchbase
 {
 enum class fork_event {
-    /**
-     * Notify the cluster that the process is about to fork.
-     */
-    prepare,
+  /**
+   * Notify the cluster that the process is about to fork.
+   */
+  prepare,
 
-    /**
-     * Notify the context that the process has forked and is the parent.
-     */
-    parent,
+  /**
+   * Notify the context that the process has forked and is the parent.
+   */
+  parent,
 
-    /**
-     * Notify the context that the process has forked and is the child.
-     */
-    child,
+  /**
+   * Notify the context that the process has forked and is the child.
+   */
+  child,
 };
 
 } // namespace couchbase

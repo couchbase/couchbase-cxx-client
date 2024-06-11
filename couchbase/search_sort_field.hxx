@@ -35,83 +35,89 @@ namespace couchbase
  */
 class search_sort_field : public search_sort
 {
-  public:
-    explicit search_sort_field(std::string field)
-      : field_{ std::move(field) }
-    {
-    }
+public:
+  explicit search_sort_field(std::string field)
+    : field_{ std::move(field) }
+  {
+  }
 
-    search_sort_field(std::string field, bool descending)
-      : search_sort{ descending }
-      , field_{ std::move(field) }
-    {
-    }
+  search_sort_field(std::string field, bool descending)
+    : search_sort{ descending }
+    , field_{ std::move(field) }
+  {
+  }
 
-    /**
-     * Set the sorting direction.
-     *
-     * @param desc `true` for descending order, `false` for ascending
-     * @return pointer to this
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto descending(bool desc) -> search_sort_field&;
+  /**
+   * Set the sorting direction.
+   *
+   * @param desc `true` for descending order, `false` for ascending
+   * @return pointer to this
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto descending(bool desc) -> search_sort_field&;
 
-    /**
-     * Specifies the type of the search-order field value.
-     *
-     * For example, @ref search_sort_field_type::string for text fields, @ref search_sort_field_type::date for DateTime fields,
-     * or @ref search_sort_field_type::number for numeric/geo fields.
-     *
-     * @param desc field type
-     * @return pointer to this
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto type(search_sort_field_type desc) -> search_sort_field&;
+  /**
+   * Specifies the type of the search-order field value.
+   *
+   * For example, @ref search_sort_field_type::string for text fields, @ref
+   * search_sort_field_type::date for DateTime fields, or @ref search_sort_field_type::number for
+   * numeric/geo fields.
+   *
+   * @param desc field type
+   * @return pointer to this
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto type(search_sort_field_type desc) -> search_sort_field&;
 
-    /**
-     * Specifies the search-order for index-fields that contain multiple values (in consequence of arrays or multi-token analyzer-output).
-     *
-     * The default order is undefined but deterministic, allowing the paging of results, with reliable ordering. To sort using the minimum
-     * or maximum value, the value of mode should be set to either @ref search_sort_field_mode::min or @ref search_sort_field_mode::max.
-     *
-     * @param value strategy for multi-value fields.
-     * @return pointer to this
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto mode(search_sort_field_mode value) -> search_sort_field&;
+  /**
+   * Specifies the search-order for index-fields that contain multiple values (in consequence of
+   * arrays or multi-token analyzer-output).
+   *
+   * The default order is undefined but deterministic, allowing the paging of results, with reliable
+   * ordering. To sort using the minimum or maximum value, the value of mode should be set to either
+   * @ref search_sort_field_mode::min or
+   * @ref search_sort_field_mode::max.
+   *
+   * @param value strategy for multi-value fields.
+   * @return pointer to this
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto mode(search_sort_field_mode value) -> search_sort_field&;
 
-    /**
-     * Specifies the sort-procedure for documents with a missing value in a field specified for sorting.
-     *
-     * The value of missing can be @ref search_sort_field_missing::first, in which case results with missing values appear before other
-     * results; or @ref search_sort_field_missing::last (the server default), in which case they appear after.
-     *
-     * @param value strategy for missing values
-     * @return pointer to this
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto missing(search_sort_field_missing value) -> search_sort_field&;
+  /**
+   * Specifies the sort-procedure for documents with a missing value in a field specified for
+   * sorting.
+   *
+   * The value of missing can be @ref search_sort_field_missing::first, in which case results with
+   * missing values appear before other results; or @ref search_sort_field_missing::last (the server
+   * default), in which case they appear after.
+   *
+   * @param value strategy for missing values
+   * @return pointer to this
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto missing(search_sort_field_missing value) -> search_sort_field&;
 
-    /**
-     * @return encoded representation of the search facet.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto encode() const -> encoded_search_sort override;
+  /**
+   * @return encoded representation of the search facet.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto encode() const -> encoded_search_sort override;
 
-  private:
-    std::string field_;
-    std::optional<search_sort_field_type> type_{};
-    std::optional<search_sort_field_mode> mode_{};
-    std::optional<search_sort_field_missing> missing_{};
+private:
+  std::string field_;
+  std::optional<search_sort_field_type> type_{};
+  std::optional<search_sort_field_mode> mode_{};
+  std::optional<search_sort_field_missing> missing_{};
 };
 } // namespace couchbase

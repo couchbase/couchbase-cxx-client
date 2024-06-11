@@ -26,11 +26,11 @@ namespace couchbase
 void
 subdoc::get::encode(core::impl::subdoc::command_bundle& bundle) const
 {
-    bundle.emplace_back({
-      path_.empty() ? core::impl::subdoc::opcode::get_doc : core::impl::subdoc::opcode::get,
-      path_,
-      {},
-      core::impl::subdoc::build_lookup_in_path_flags(xattr_),
-    });
+  bundle.emplace_back({
+    path_.empty() ? core::impl::subdoc::opcode::get_doc : core::impl::subdoc::opcode::get,
+    path_,
+    {},
+    core::impl::subdoc::build_lookup_in_path_flags(xattr_),
+  });
 }
 } // namespace couchbase

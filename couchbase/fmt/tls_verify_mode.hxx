@@ -29,24 +29,24 @@
  */
 template<>
 struct fmt::formatter<couchbase::tls_verify_mode> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(couchbase::tls_verify_mode mode, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (mode) {
-            case couchbase::tls_verify_mode::none:
-                name = "none";
-                break;
-            case couchbase::tls_verify_mode::peer:
-                name = "peer";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
+  template<typename FormatContext>
+  auto format(couchbase::tls_verify_mode mode, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (mode) {
+      case couchbase::tls_verify_mode::none:
+        name = "none";
+        break;
+      case couchbase::tls_verify_mode::peer:
+        name = "peer";
+        break;
     }
+    return format_to(ctx.out(), "{}", name);
+  }
 };

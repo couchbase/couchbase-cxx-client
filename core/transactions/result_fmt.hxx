@@ -22,25 +22,26 @@
 
 template<>
 struct fmt::formatter<couchbase::core::transactions::result> {
-  public:
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+public:
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    constexpr auto format(const couchbase::core::transactions::result& r, FormatContext& ctx) const
-    {
-        return format_to(ctx.out(),
-                         "result:{{ rc: {}, strerror: {}, cas: {}, is_deleted: {}, datatype: {}, flags: {}, raw_value: {:.{}} }}",
-                         r.rc,
-                         r.strerror(),
-                         r.cas,
-                         r.is_deleted,
-                         r.datatype,
-                         r.flags,
-                         couchbase::core::transactions::to_string(r.raw_value),
-                         r.raw_value.size() > 1024 ? 1024 : r.raw_value.size());
-    }
+  template<typename FormatContext>
+  constexpr auto format(const couchbase::core::transactions::result& r, FormatContext& ctx) const
+  {
+    return format_to(ctx.out(),
+                     "result:{{ rc: {}, strerror: {}, cas: {}, is_deleted: {}, datatype: {}, "
+                     "flags: {}, raw_value: {:.{}} }}",
+                     r.rc,
+                     r.strerror(),
+                     r.cas,
+                     r.is_deleted,
+                     r.datatype,
+                     r.flags,
+                     couchbase::core::transactions::to_string(r.raw_value),
+                     r.raw_value.size() > 1024 ? 1024 : r.raw_value.size());
+  }
 };

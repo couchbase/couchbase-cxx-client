@@ -20,8 +20,9 @@
 namespace couchbase::core
 {
 enum class view_on_error {
-    // "resume" is a slight deviation from the RFC continue but "continue" is a keyword, and we cannot use it.
-    resume = 0,
-    stop,
+  // "resume" is a slight deviation from the RFC continue but "continue" is a keyword, and we cannot
+  // use it.
+  resume = 0,
+  stop,
 };
 } // namespace couchbase::core

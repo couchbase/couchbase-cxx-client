@@ -23,5 +23,5 @@
 std::string
 couchbase::core::transactions::uid_generator::next()
 {
-    return core::uuid::to_string(core::uuid::random());
+  return core::uuid::to_string(core::uuid::random());
 }

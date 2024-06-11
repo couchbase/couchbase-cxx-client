@@ -25,52 +25,54 @@ namespace couchbase
 {
 class transaction_op_error_context
 {
-  public:
-    transaction_op_error_context() = default;
+public:
+  transaction_op_error_context() = default;
 
-    transaction_op_error_context(std::error_code ec)
-      : ec_(ec)
-    {
-    }
+  transaction_op_error_context(std::error_code ec)
+    : ec_(ec)
+  {
+  }
 
-    transaction_op_error_context(std::error_code ec, couchbase::key_value_error_context cause)
-      : ec_(ec)
-      , cause_(std::move(cause))
-    {
-    }
+  transaction_op_error_context(std::error_code ec, couchbase::key_value_error_context cause)
+    : ec_(ec)
+    , cause_(std::move(cause))
+  {
+  }
 
-    transaction_op_error_context(std::error_code ec, couchbase::query_error_context cause)
-      : ec_(ec)
-      , cause_(std::move(cause))
-    {
-    }
+  transaction_op_error_context(std::error_code ec, couchbase::query_error_context cause)
+    : ec_(ec)
+    , cause_(std::move(cause))
+  {
+  }
 
-    /**
-     * The error_code associated with this error context.
-     *
-     * Note that some query errors are not _transaction_ errors, so this error code will be 0, but there will be
-     * a @ref cause() with a @ref query_error_context in it.  These errors do not rollback a
-     * transaction.   If you want to roll it back, raise an exception.
-     *
-     * @return a error code, if any.
-     */
-    [[nodiscard]] std::error_code ec() const
-    {
-        return ec_;
-    }
+  /**
+   * The error_code associated with this error context.
+   *
+   * Note that some query errors are not _transaction_ errors, so this error code will be 0, but
+   * there will be a @ref cause() with a @ref query_error_context in it.  These errors do not
+   * rollback a transaction.   If you want to roll it back, raise an exception.
+   *
+   * @return a error code, if any.
+   */
+  [[nodiscard]] std::error_code ec() const
+  {
+    return ec_;
+  }
 
-    /**
-     * The underlying cause of this error.   This can be either a @ref key_value_error_context or a @ref query_error_context.
-     *
-     * @return the error_context associated with the underlying cause of this error.
-     */
-    [[nodiscard]] std::variant<std::monostate, key_value_error_context, query_error_context> cause() const
-    {
-        return cause_;
-    }
+  /**
+   * The underlying cause of this error.   This can be either a @ref key_value_error_context or a
+   * @ref query_error_context.
+   *
+   * @return the error_context associated with the underlying cause of this error.
+   */
+  [[nodiscard]] std::variant<std::monostate, key_value_error_context, query_error_context> cause()
+    const
+  {
+    return cause_;
+  }
 
-  private:
-    std::error_code ec_{}; // a transaction_op error_code
-    std::variant<std::monostate, key_value_error_context, query_error_context> cause_{};
+private:
+  std::error_code ec_{}; // a transaction_op error_code
+  std::variant<std::monostate, key_value_error_context, query_error_context> cause_{};
 };
 } // namespace couchbase

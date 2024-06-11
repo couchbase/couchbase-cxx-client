@@ -26,31 +26,31 @@ namespace couchbase
 {
 class internal_search_row
 {
-  public:
-    explicit internal_search_row(core::operations::search_response::search_row row);
+public:
+  explicit internal_search_row(core::operations::search_response::search_row row);
 
-    [[nodiscard]] auto index() const -> const std::string&;
+  [[nodiscard]] auto index() const -> const std::string&;
 
-    [[nodiscard]] auto id() const -> const std::string&;
+  [[nodiscard]] auto id() const -> const std::string&;
 
-    [[nodiscard]] auto score() const -> double;
+  [[nodiscard]] auto score() const -> double;
 
-    [[nodiscard]] auto fields() const -> const codec::binary&;
+  [[nodiscard]] auto fields() const -> const codec::binary&;
 
-    [[nodiscard]] auto explanation() const -> const codec::binary&;
+  [[nodiscard]] auto explanation() const -> const codec::binary&;
 
-    [[nodiscard]] auto fragments() const -> const std::map<std::string, std::vector<std::string>>&;
+  [[nodiscard]] auto fragments() const -> const std::map<std::string, std::vector<std::string>>&;
 
-    [[nodiscard]] auto locations() const -> const std::optional<search_row_locations>&;
+  [[nodiscard]] auto locations() const -> const std::optional<search_row_locations>&;
 
-  private:
-    core::operations::search_response::search_row row_;
+private:
+  core::operations::search_response::search_row row_;
 
-    // TODO(sergey): eliminate or defer copying of these fields
-    codec::binary fields_;
-    codec::binary explanation_;
-    std::map<std::string, std::vector<std::string>> fragments_;
-    std::optional<search_row_locations> locations_{};
+  // TODO(sergey): eliminate or defer copying of these fields
+  codec::binary fields_;
+  codec::binary explanation_;
+  std::map<std::string, std::vector<std::string>> fragments_;
+  std::optional<search_row_locations> locations_{};
 };
 
 } // namespace couchbase

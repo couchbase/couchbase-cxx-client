@@ -24,17 +24,17 @@ namespace couchbase
 auto
 vector_search::encode() const -> encoded_search_query
 {
-    encoded_search_query built;
+  encoded_search_query built;
 
-    built.query = tao::json::empty_array;
+  built.query = tao::json::empty_array;
 
-    for (const auto& query : vector_queries_) {
-        auto encoded = query.encode();
-        if (encoded.ec) {
-            return { encoded.ec };
-        }
-        built.query.push_back(encoded.query);
+  for (const auto& query : vector_queries_) {
+    auto encoded = query.encode();
+    if (encoded.ec) {
+      return { encoded.ec };
     }
-    return built;
+    built.query.push_back(encoded.query);
+  }
+  return built;
 }
 } // namespace couchbase

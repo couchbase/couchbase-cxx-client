@@ -28,76 +28,76 @@ namespace couchbase::core::protocol
 
 class get_error_map_response_body
 {
-  public:
-    static const inline client_opcode opcode = client_opcode::get_error_map;
+public:
+  static const inline client_opcode opcode = client_opcode::get_error_map;
 
-  private:
-    error_map errmap_{};
+private:
+  error_map errmap_{};
 
-  public:
-    [[nodiscard]] const couchbase::core::error_map& errmap() const
-    {
-        return errmap_;
-    }
+public:
+  [[nodiscard]] const couchbase::core::error_map& errmap() const
+  {
+    return errmap_;
+  }
 
-    bool parse(key_value_status_code status,
-               const header_buffer& header,
-               std::uint8_t framing_extras_size,
-               std::uint16_t key_size,
-               std::uint8_t extras_size,
-               const std::vector<std::byte>& body,
-               const cmd_info& info);
+  bool parse(key_value_status_code status,
+             const header_buffer& header,
+             std::uint8_t framing_extras_size,
+             std::uint16_t key_size,
+             std::uint8_t extras_size,
+             const std::vector<std::byte>& body,
+             const cmd_info& info);
 };
 
 class get_error_map_request_body
 {
-  public:
-    using response_body_type = get_error_map_response_body;
-    static const inline client_opcode opcode = client_opcode::get_error_map;
+public:
+  using response_body_type = get_error_map_response_body;
+  static const inline client_opcode opcode = client_opcode::get_error_map;
 
-  private:
-    std::uint16_t version_{ 2 };
-    std::vector<std::byte> value_;
+private:
+  std::uint16_t version_{ 2 };
+  std::vector<std::byte> value_;
 
-  public:
-    void version(std::uint16_t version)
-    {
-        version_ = version;
+public:
+  void version(std::uint16_t version)
+  {
+    version_ = version;
+  }
+
+  [[nodiscard]] const std::string& key() const
+  {
+    return empty_string;
+  }
+
+  [[nodiscard]] const auto& framing_extras() const
+  {
+    return empty_buffer;
+  }
+
+  [[nodiscard]] const auto& extras() const
+  {
+    return empty_buffer;
+  }
+
+  [[nodiscard]] const auto& value()
+  {
+    if (value_.empty()) {
+      fill_body();
     }
+    return value_;
+  }
 
-    [[nodiscard]] const std::string& key() const
-    {
-        return empty_string;
+  [[nodiscard]] std::size_t size()
+  {
+    if (value_.empty()) {
+      fill_body();
     }
+    return value_.size();
+  }
 
-    [[nodiscard]] const auto& framing_extras() const
-    {
-        return empty_buffer;
-    }
-
-    [[nodiscard]] const auto& extras() const
-    {
-        return empty_buffer;
-    }
-
-    [[nodiscard]] const auto& value()
-    {
-        if (value_.empty()) {
-            fill_body();
-        }
-        return value_;
-    }
-
-    [[nodiscard]] std::size_t size()
-    {
-        if (value_.empty()) {
-            fill_body();
-        }
-        return value_.size();
-    }
-
-  private:
-    void fill_body();
+private:
+  void fill_body();
 };
 
 } // namespace couchbase::core::protocol

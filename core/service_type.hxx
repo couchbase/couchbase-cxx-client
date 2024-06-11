@@ -20,12 +20,12 @@
 namespace couchbase::core
 {
 enum class service_type {
-    key_value = 0,
-    query,
-    analytics,
-    search,
-    view,
-    management,
-    eventing,
+  key_value = 0,
+  query,
+  analytics,
+  search,
+  view,
+  management,
+  eventing,
 };
 } // namespace couchbase::core

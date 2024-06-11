@@ -26,50 +26,50 @@ namespace couchbase
 auto
 query_error_context::to_json() const -> std::string
 {
-    tao::json::value json = {
-        {
-          "ec",
-          tao::json::value{
-            { "value", ec().value() },
-            { "message", ec().message() },
-          },
-        },
-        { "operation_id", operation_id() },
-        { "retry_attempts", retry_attempts() },
-        { "client_context_id", client_context_id_ },
-        { "statement", statement_ },
-        { "method", method_ },
-        { "path", path_ },
-        { "http_status", http_status_ },
-        { "http_body", http_body_ },
-        { "hostname", hostname_ },
-        { "port", port_ },
-    };
+  tao::json::value json = {
+    {
+      "ec",
+      tao::json::value{
+        { "value", ec().value() },
+        { "message", ec().message() },
+      },
+    },
+    { "operation_id", operation_id() },
+    { "retry_attempts", retry_attempts() },
+    { "client_context_id", client_context_id_ },
+    { "statement", statement_ },
+    { "method", method_ },
+    { "path", path_ },
+    { "http_status", http_status_ },
+    { "http_body", http_body_ },
+    { "hostname", hostname_ },
+    { "port", port_ },
+  };
 
-    if (const auto& val = parameters_; val.has_value()) {
-        json["parameters"] = val.value();
-    }
-    if (first_error_code_ > 0) {
-        json["first_error_code"] = first_error_code_;
-    }
-    if (!first_error_message_.empty()) {
-        json["first_error_message"] = first_error_message_;
-    }
+  if (const auto& val = parameters_; val.has_value()) {
+    json["parameters"] = val.value();
+  }
+  if (first_error_code_ > 0) {
+    json["first_error_code"] = first_error_code_;
+  }
+  if (!first_error_message_.empty()) {
+    json["first_error_message"] = first_error_message_;
+  }
 
-    if (const auto& reasons = retry_reasons(); !reasons.empty()) {
-        tao::json::value reasons_json = tao::json::empty_array;
-        for (const auto& reason : reasons) {
-            reasons_json.emplace_back(fmt::format("{}", reason));
-        }
-        json["retry_reasons"] = reasons_json;
+  if (const auto& reasons = retry_reasons(); !reasons.empty()) {
+    tao::json::value reasons_json = tao::json::empty_array;
+    for (const auto& reason : reasons) {
+      reasons_json.emplace_back(fmt::format("{}", reason));
     }
-    if (const auto& val = last_dispatched_from(); val.has_value()) {
-        json["last_dispatched_from"] = val.value();
-    }
-    if (const auto& val = last_dispatched_to(); val.has_value()) {
-        json["last_dispatched_to"] = val.value();
-    }
+    json["retry_reasons"] = reasons_json;
+  }
+  if (const auto& val = last_dispatched_from(); val.has_value()) {
+    json["last_dispatched_from"] = val.value();
+  }
+  if (const auto& val = last_dispatched_to(); val.has_value()) {
+    json["last_dispatched_to"] = val.value();
+  }
 
-    return tao::json::to_string(json, 2);
+  return tao::json::to_string(json, 2);
 }
 } // namespace couchbase

@@ -30,7 +30,7 @@ mcbp_noop_response_body::parse(key_value_status_code /* status */,
                                const std::vector<std::byte>& /* body */,
                                const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<std::byte>(opcode));
-    return false;
+  Expects(header[1] == static_cast<std::byte>(opcode));
+  return false;
 }
 } // namespace couchbase::core::protocol

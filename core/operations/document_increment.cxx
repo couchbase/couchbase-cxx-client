@@ -23,31 +23,34 @@
 namespace couchbase::core::operations
 {
 std::error_code
-increment_request::encode_to(increment_request::encoded_request_type& encoded, mcbp_context&& /* context */) const
+increment_request::encode_to(increment_request::encoded_request_type& encoded,
+                             mcbp_context&& /* context */) const
 {
-    encoded.opaque(opaque);
-    encoded.partition(partition);
-    encoded.body().id(id);
-    encoded.body().delta(delta);
-    if (initial_value) {
-        encoded.body().initial_value(initial_value.value());
-        encoded.body().expiry(expiry);
-    } else {
-        encoded.body().initial_value(0);
-        encoded.body().expiry(0xffff'ffff);
-    }
-    return {};
+  encoded.opaque(opaque);
+  encoded.partition(partition);
+  encoded.body().id(id);
+  encoded.body().delta(delta);
+  if (initial_value) {
+    encoded.body().initial_value(initial_value.value());
+    encoded.body().expiry(expiry);
+  } else {
+    encoded.body().initial_value(0);
+    encoded.body().expiry(0xffff'ffff);
+  }
+  return {};
 }
 
 increment_response
-increment_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
+increment_request::make_response(key_value_error_context&& ctx,
+                                 const encoded_response_type& encoded) const
 {
-    increment_response response{ std::move(ctx) };
-    if (!response.ctx.ec()) {
-        response.cas = encoded.cas();
-        response.content = encoded.body().content();
-        response.token = couchbase::utils::build_mutation_token(encoded.body().token(), partition, response.ctx.bucket());
-    }
-    return response;
+  increment_response response{ std::move(ctx) };
+  if (!response.ctx.ec()) {
+    response.cas = encoded.cas();
+    response.content = encoded.body().content();
+    response.token = couchbase::utils::build_mutation_token(
+      encoded.body().token(), partition, response.ctx.bucket());
+  }
+  return response;
 }
 } // namespace couchbase::core::operations

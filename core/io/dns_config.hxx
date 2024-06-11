@@ -26,22 +26,24 @@ namespace couchbase::core::io::dns
 {
 class dns_config
 {
-  public:
-    static constexpr auto default_nameserver = "8.8.8.8";
-    static constexpr std::uint16_t default_port = 53;
+public:
+  static constexpr auto default_nameserver = "8.8.8.8";
+  static constexpr std::uint16_t default_port = 53;
 
-    static const dns_config& system_config();
+  static const dns_config& system_config();
 
-    dns_config() = default;
-    dns_config(std::string nameserver, std::uint16_t port, std::chrono::milliseconds timeout = timeout_defaults::dns_srv_timeout);
+  dns_config() = default;
+  dns_config(std::string nameserver,
+             std::uint16_t port,
+             std::chrono::milliseconds timeout = timeout_defaults::dns_srv_timeout);
 
-    [[nodiscard]] std::uint16_t port() const;
-    [[nodiscard]] const std::string& nameserver() const;
-    [[nodiscard]] std::chrono::milliseconds timeout() const;
+  [[nodiscard]] std::uint16_t port() const;
+  [[nodiscard]] const std::string& nameserver() const;
+  [[nodiscard]] std::chrono::milliseconds timeout() const;
 
-  private:
-    std::string nameserver_{};
-    std::uint16_t port_{ default_port };
-    std::chrono::milliseconds timeout_{ timeout_defaults::dns_srv_timeout };
+private:
+  std::string nameserver_{};
+  std::uint16_t port_{ default_port };
+  std::chrono::milliseconds timeout_{ timeout_defaults::dns_srv_timeout };
 };
 } // namespace couchbase::core::io::dns

@@ -35,26 +35,26 @@ namespace couchbase::core
 {
 class stats_options
 {
-  public:
-    std::string key{};
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
-    std::chrono::milliseconds timeout{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{};
+public:
+  std::string key{};
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
+  std::chrono::milliseconds timeout{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{};
 
-    struct {
-        std::string user{};
-    } internal{};
+  struct {
+    std::string user{};
+  } internal{};
 };
 
 struct single_server_stats {
-    std::error_code error{};
-    std::map<std::string, std::string> stats{};
+  std::error_code error{};
+  std::map<std::string, std::string> stats{};
 };
 
 class stats_result
 {
-  public:
-    std::map<std::string, single_server_stats> servers{};
+public:
+  std::map<std::string, single_server_stats> servers{};
 };
 
 using stats_callback = utils::movable_function<void(stats_result result, std::error_code ec)>;

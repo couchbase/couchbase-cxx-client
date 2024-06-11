@@ -29,27 +29,27 @@
  */
 template<>
 struct fmt::formatter<couchbase::query_profile> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(couchbase::query_profile mode, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (mode) {
-            case couchbase::query_profile::off:
-                name = "off";
-                break;
-            case couchbase::query_profile::phases:
-                name = "phases";
-                break;
-            case couchbase::query_profile::timings:
-                name = "timings";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
+  template<typename FormatContext>
+  auto format(couchbase::query_profile mode, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (mode) {
+      case couchbase::query_profile::off:
+        name = "off";
+        break;
+      case couchbase::query_profile::phases:
+        name = "phases";
+        break;
+      case couchbase::query_profile::timings:
+        name = "timings";
+        break;
     }
+    return format_to(ctx.out(), "{}", name);
+  }
 };

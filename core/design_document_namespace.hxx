@@ -20,7 +20,7 @@
 namespace couchbase::core
 {
 enum class design_document_namespace {
-    development = 0,
-    production,
+  development = 0,
+  production,
 };
 } // namespace couchbase::core

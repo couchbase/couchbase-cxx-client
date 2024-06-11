@@ -23,7 +23,7 @@ namespace couchbase::core::transactions
 {
 class uid_generator
 {
-  public:
-    static std::string next();
+public:
+  static std::string next();
 };
 } // namespace couchbase::core::transactions

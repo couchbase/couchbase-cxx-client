@@ -35,35 +35,38 @@ static constexpr auto collection_name{ couchbase::collection::default_name };
 int
 main()
 {
-    couchbase::core::logger::create_console_logger();
-    couchbase::core::logger::set_log_levels(couchbase::core::logger::level::trace);
+  couchbase::core::logger::create_console_logger();
+  couchbase::core::logger::set_log_levels(couchbase::core::logger::level::trace);
 
-    asio::io_context io;
-    auto guard = asio::make_work_guard(io);
-    std::thread io_thread([&io]() { io.run(); });
+  asio::io_context io;
+  auto guard = asio::make_work_guard(io);
+  std::thread io_thread([&io]() {
+    io.run();
+  });
 
-    auto options = couchbase::cluster_options(username, password);
-    options.apply_profile("wan_development");
-    auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
-    if (connect_err) {
-        std::cout << "Unable to connect to the cluster. ec: " << fmt::format("{}", connect_err) << "\n";
-    } else {
-        auto collection = cluster.bucket(bucket_name).scope(scope_name).collection(collection_name);
+  auto options = couchbase::cluster_options(username, password);
+  options.apply_profile("wan_development");
+  auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+  if (connect_err) {
+    std::cout << "Unable to connect to the cluster. ec: " << fmt::format("{}", connect_err) << "\n";
+  } else {
+    auto collection = cluster.bucket(bucket_name).scope(scope_name).collection(collection_name);
 
-        const std::string document_id{ "minimal_example" };
-        const tao::json::value basic_doc{
-            { "a", 1.0 },
-            { "b", 2.0 },
-        };
+    const std::string document_id{ "minimal_example" };
+    const tao::json::value basic_doc{
+      { "a", 1.0 },
+      { "b", 2.0 },
+    };
 
-        auto [err, resp] = collection.upsert(document_id, basic_doc, {}).get();
-        std::cout << "ec: " << err.ec().message() << ", id: " << document_id << ", CAS: " << resp.cas().value() << "\n";
-    }
+    auto [err, resp] = collection.upsert(document_id, basic_doc, {}).get();
+    std::cout << "ec: " << err.ec().message() << ", id: " << document_id
+              << ", CAS: " << resp.cas().value() << "\n";
+  }
 
-    cluster.close();
-    guard.reset();
+  cluster.close();
+  guard.reset();
 
-    io_thread.join();
+  io_thread.join();
 
-    return 0;
+  return 0;
 }

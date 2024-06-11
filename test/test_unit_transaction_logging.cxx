@@ -29,102 +29,107 @@ using namespace couchbase::core::transactions;
 
 class TrivialFileSink : public spdlog::sinks::base_sink<std::mutex>
 {
-  public:
-    std::string output()
-    {
-        // prevent data race if sink_it_ is called
-        std::lock_guard<std::mutex> lock(mut_);
-        return out_.str();
-    }
+public:
+  std::string output()
+  {
+    // prevent data race if sink_it_ is called
+    std::lock_guard<std::mutex> lock(mut_);
+    return out_.str();
+  }
 
-  protected:
-    void sink_it_(const spdlog::details::log_msg& msg) override
-    {
-        spdlog::memory_buf_t formatted;
-        base_sink<std::mutex>::formatter_->format(msg, formatted);
-        // prevent data race when calling output()
-        std::lock_guard<std::mutex> lock(mut_);
-        out_ << formatted.data();
-    }
-    void flush_() override
-    {
-    }
+protected:
+  void sink_it_(const spdlog::details::log_msg& msg) override
+  {
+    spdlog::memory_buf_t formatted;
+    base_sink<std::mutex>::formatter_->format(msg, formatted);
+    // prevent data race when calling output()
+    std::lock_guard<std::mutex> lock(mut_);
+    out_ << formatted.data();
+  }
+  void flush_() override
+  {
+  }
 
-  private:
-    std::stringstream out_;
-    // needed since we examine the internal state of this object
-    std::mutex mut_;
+private:
+  std::stringstream out_;
+  // needed since we examine the internal state of this object
+  std::mutex mut_;
 };
 
 bool
 sink_has_output(std::shared_ptr<TrivialFileSink> sink)
 {
-    return test::utils::wait_until([&]() { return !sink->output().empty(); }, std::chrono::seconds(2), std::chrono::milliseconds(100));
+  return test::utils::wait_until(
+    [&]() {
+      return !sink->output().empty();
+    },
+    std::chrono::seconds(2),
+    std::chrono::milliseconds(100));
 }
 
 bool
 sink_is_empty(std::shared_ptr<TrivialFileSink> sink)
 {
-    // now, we need to be sure it is empty, and stays that way for some period of time,
-    // since async loggers don't flush immediately.   The logger is set to flush every
-    // second, so waiting 2 or 3 seems reasonable
-    if (sink->output().empty()) {
-        std::this_thread::sleep_for(std::chrono::seconds(2));
-        return sink->output().empty();
-    }
-    return false;
+  // now, we need to be sure it is empty, and stays that way for some period of time,
+  // since async loggers don't flush immediately.   The logger is set to flush every
+  // second, so waiting 2 or 3 seems reasonable
+  if (sink->output().empty()) {
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    return sink->output().empty();
+  }
+  return false;
 }
 
 bool
 sink_output_contains(std::shared_ptr<TrivialFileSink> sink, const std::string& msg)
 {
-    return std::string::npos != sink->output().find(msg);
+  return std::string::npos != sink->output().find(msg);
 }
 
 void
 create_logger(std::shared_ptr<TrivialFileSink> sink, couchbase::core::logger::level level)
 {
-    couchbase::core::logger::configuration conf{};
-    conf.log_level = level;
-    conf.sink = sink;
-    conf.console = false;
-    couchbase::core::logger::create_file_logger(conf);
+  couchbase::core::logger::configuration conf{};
+  conf.log_level = level;
+  conf.sink = sink;
+  conf.console = false;
+  couchbase::core::logger::create_file_logger(conf);
 }
 
 TEST_CASE("transactions: can use custom sink", "[unit]")
 {
-    std::string log_message = "I am a log";
-    auto sink = std::make_shared<TrivialFileSink>();
-    create_logger(sink, couchbase::core::logger::level::trace);
-    CB_TXN_LOG_DEBUG("{}", log_message);
-    couchbase::core::logger::flush();
-    // ASYNC logger, so flush returns immediately.   Gotta wait...
-    REQUIRE(sink_has_output(sink));
-    REQUIRE(sink_output_contains(sink, log_message));
+  std::string log_message = "I am a log";
+  auto sink = std::make_shared<TrivialFileSink>();
+  create_logger(sink, couchbase::core::logger::level::trace);
+  CB_TXN_LOG_DEBUG("{}", log_message);
+  couchbase::core::logger::flush();
+  // ASYNC logger, so flush returns immediately.   Gotta wait...
+  REQUIRE(sink_has_output(sink));
+  REQUIRE(sink_output_contains(sink, log_message));
 }
 
 TEST_CASE("transactions: custom sink respects log levels", "[unit]")
 {
-    std::string log_message = "I am a log";
-    std::string log_message2 = "I am also a log";
-    auto sink = std::make_shared<TrivialFileSink>();
-    create_logger(sink, couchbase::core::logger::level::info);
-    CB_TXN_LOG_DEBUG("{}", log_message);
-    couchbase::core::logger::flush();
-    REQUIRE(sink_is_empty(sink));
-    CB_TXN_LOG_INFO("{}", log_message2);
-    couchbase::core::logger::flush();
-    REQUIRE(sink_has_output(sink));
-    REQUIRE(sink_output_contains(sink, log_message2));
+  std::string log_message = "I am a log";
+  std::string log_message2 = "I am also a log";
+  auto sink = std::make_shared<TrivialFileSink>();
+  create_logger(sink, couchbase::core::logger::level::info);
+  CB_TXN_LOG_DEBUG("{}", log_message);
+  couchbase::core::logger::flush();
+  REQUIRE(sink_is_empty(sink));
+  CB_TXN_LOG_INFO("{}", log_message2);
+  couchbase::core::logger::flush();
+  REQUIRE(sink_has_output(sink));
+  REQUIRE(sink_output_contains(sink, log_message2));
 }
 
 TEST_CASE("transactions: custom sink respects log level changes", "[unit]")
 {
-    std::string log_message = "I am a log";
-    auto sink = std::make_shared<TrivialFileSink>();
-    create_logger(sink, couchbase::core::logger::level::trace);
-    couchbase::core::logger::set_log_levels(couchbase::core::logger::level::info);
-    CB_TXN_LOG_DEBUG("{}", log_message);
-    couchbase::core::logger::flush();
-    REQUIRE(sink_is_empty(sink));
+  std::string log_message = "I am a log";
+  auto sink = std::make_shared<TrivialFileSink>();
+  create_logger(sink, couchbase::core::logger::level::trace);
+  couchbase::core::logger::set_log_levels(couchbase::core::logger::level::info);
+  CB_TXN_LOG_DEBUG("{}", log_message);
+  couchbase::core::logger::flush();
+  REQUIRE(sink_is_empty(sink));
 }

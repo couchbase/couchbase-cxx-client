@@ -24,20 +24,20 @@ namespace couchbase
 auto
 geo_distance_query::encode() const -> encoded_search_query
 {
-    encoded_search_query built;
-    built.query = tao::json::empty_object;
-    if (boost_) {
-        built.query["boost"] = boost_.value();
-    }
-    if (field_) {
-        built.query["field"] = field_.value();
-    }
-    built.query["distance"] = distance_;
-    built.query["location"] = {
-        { "lat", location_.latitude },
-        { "lon", location_.longitude },
-    };
+  encoded_search_query built;
+  built.query = tao::json::empty_object;
+  if (boost_) {
+    built.query["boost"] = boost_.value();
+  }
+  if (field_) {
+    built.query["field"] = field_.value();
+  }
+  built.query["distance"] = distance_;
+  built.query["location"] = {
+    { "lat", location_.latitude },
+    { "lon", location_.longitude },
+  };
 
-    return built;
+  return built;
 }
 } // namespace couchbase

@@ -35,15 +35,15 @@ namespace fmt
  */
 template<>
 struct fmt::formatter<couchbase::cas> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(const couchbase::cas& cas, FormatContext& ctx) const
-    {
-        return format_to(ctx.out(), "{:016x}", cas.value());
-    }
+  template<typename FormatContext>
+  auto format(const couchbase::cas& cas, FormatContext& ctx) const
+  {
+    return format_to(ctx.out(), "{:016x}", cas.value());
+  }
 };

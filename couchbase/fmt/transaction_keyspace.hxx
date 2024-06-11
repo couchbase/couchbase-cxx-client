@@ -22,16 +22,20 @@
 
 template<>
 struct fmt::formatter<couchbase::transactions::transaction_keyspace> {
-  public:
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+public:
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(const couchbase::transactions::transaction_keyspace& k, FormatContext& ctx) const
-    {
-        return format_to(ctx.out(), "transaction_keyspace:{{ bucket: {}, scope: {}, collection: {} }}", k.bucket, k.scope, k.collection);
-    }
+  template<typename FormatContext>
+  auto format(const couchbase::transactions::transaction_keyspace& k, FormatContext& ctx) const
+  {
+    return format_to(ctx.out(),
+                     "transaction_keyspace:{{ bucket: {}, scope: {}, collection: {} }}",
+                     k.bucket,
+                     k.scope,
+                     k.collection);
+  }
 };

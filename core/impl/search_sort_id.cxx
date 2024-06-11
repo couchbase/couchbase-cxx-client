@@ -24,20 +24,20 @@ namespace couchbase
 auto
 search_sort_id::descending(bool desc) -> search_sort_id&
 {
-    descending_ = desc;
-    return *this;
+  descending_ = desc;
+  return *this;
 }
 
 auto
 search_sort_id::encode() const -> encoded_search_sort
 {
-    encoded_search_sort built;
-    built.sort = {
-        { "by", "id" },
-    };
-    if (const auto& desc = descending_; desc.has_value()) {
-        built.sort["desc"] = desc.value();
-    }
-    return built;
+  encoded_search_sort built;
+  built.sort = {
+    { "by", "id" },
+  };
+  if (const auto& desc = descending_; desc.has_value()) {
+    built.sort["desc"] = desc.value();
+  }
+  return built;
 }
 } // namespace couchbase

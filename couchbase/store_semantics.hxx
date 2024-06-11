@@ -28,36 +28,36 @@ namespace couchbase
  * @committed
  */
 enum class store_semantics {
-    /**
-     * Replace the document, fail if it does not exist. This is the default.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    replace,
+  /**
+   * Replace the document, fail if it does not exist. This is the default.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  replace,
 
-    /**
-     * Replace the document or create it if it does not exist.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    upsert,
+  /**
+   * Replace the document or create it if it does not exist.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  upsert,
 
-    /**
-     * Create the document, fail if it exists.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    insert,
+  /**
+   * Create the document, fail if it exists.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  insert,
 
-    /**
-     * Convert from a tombstone to a document.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    revive,
+  /**
+   * Convert from a tombstone to a document.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  revive,
 };
 } // namespace couchbase

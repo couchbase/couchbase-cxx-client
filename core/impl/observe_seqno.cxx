@@ -22,26 +22,28 @@
 namespace couchbase::core::impl
 {
 std::error_code
-observe_seqno_request::encode_to(observe_seqno_request::encoded_request_type& encoded, core::mcbp_context&& /* context */)
+observe_seqno_request::encode_to(observe_seqno_request::encoded_request_type& encoded,
+                                 core::mcbp_context&& /* context */)
 {
-    encoded.opaque(opaque);
-    encoded.partition(partition);
-    encoded.body().partition_uuid(partition_uuid);
-    return {};
+  encoded.opaque(opaque);
+  encoded.partition(partition);
+  encoded.body().partition_uuid(partition_uuid);
+  return {};
 }
 
 observe_seqno_response
-observe_seqno_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
+observe_seqno_request::make_response(key_value_error_context&& ctx,
+                                     const encoded_response_type& encoded) const
 {
-    observe_seqno_response response{ std::move(ctx), active };
-    if (!response.ctx.ec()) {
-        response.partition = encoded.body().partition_id();
-        response.partition_uuid = encoded.body().partition_uuid();
-        response.last_persisted_sequence_number = encoded.body().last_persisted_sequence_number();
-        response.current_sequence_number = encoded.body().current_sequence_number();
-        response.old_partition_uuid = encoded.body().old_partition_uuid();
-        response.last_received_sequence_number = encoded.body().last_persisted_sequence_number();
-    }
-    return response;
+  observe_seqno_response response{ std::move(ctx), active };
+  if (!response.ctx.ec()) {
+    response.partition = encoded.body().partition_id();
+    response.partition_uuid = encoded.body().partition_uuid();
+    response.last_persisted_sequence_number = encoded.body().last_persisted_sequence_number();
+    response.current_sequence_number = encoded.body().current_sequence_number();
+    response.old_partition_uuid = encoded.body().old_partition_uuid();
+    response.last_received_sequence_number = encoded.body().last_persisted_sequence_number();
+  }
+  return response;
 }
 } // namespace couchbase::core::impl

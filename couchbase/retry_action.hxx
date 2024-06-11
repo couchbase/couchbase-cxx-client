@@ -23,19 +23,19 @@ namespace couchbase
 {
 class retry_action
 {
-  public:
-    static auto do_not_retry() -> const retry_action&;
+public:
+  static auto do_not_retry() -> const retry_action&;
 
-    explicit retry_action(std::chrono::milliseconds waiting_duration);
+  explicit retry_action(std::chrono::milliseconds waiting_duration);
 
-    [[nodiscard]] auto need_to_retry() const -> bool;
+  [[nodiscard]] auto need_to_retry() const -> bool;
 
-    [[nodiscard]] auto duration() const -> std::chrono::milliseconds
-    {
-        return waiting_duration_;
-    }
+  [[nodiscard]] auto duration() const -> std::chrono::milliseconds
+  {
+    return waiting_duration_;
+  }
 
-  private:
-    std::chrono::milliseconds waiting_duration_;
+private:
+  std::chrono::milliseconds waiting_duration_;
 };
 } // namespace couchbase

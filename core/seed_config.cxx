@@ -23,17 +23,20 @@ namespace couchbase::core
 auto
 dns_srv_record::to_string() const -> std::string
 {
-    return fmt::format(
-      R"(#<dns_srv_record:{} protocol="{}", scheme="{}", hostname="{}">)", static_cast<const void*>(this), protocol, scheme, hostname);
+  return fmt::format(R"(#<dns_srv_record:{} protocol="{}", scheme="{}", hostname="{}">)",
+                     static_cast<const void*>(this),
+                     protocol,
+                     scheme,
+                     hostname);
 }
 
 auto
 seed_config::to_string() const -> std::string
 {
-    return fmt::format(R"(#<seed_config:{} mcpb_addresses={}, http_addresses={}, dns_srv_record={}>)",
-                       static_cast<const void*>(this),
-                       mcbp_addresses,
-                       http_addresses,
-                       srv_record ? srv_record->to_string() : "(none)");
+  return fmt::format(R"(#<seed_config:{} mcpb_addresses={}, http_addresses={}, dns_srv_record={}>)",
+                     static_cast<const void*>(this),
+                     mcbp_addresses,
+                     http_addresses,
+                     srv_record ? srv_record->to_string() : "(none)");
 }
 } // namespace couchbase::core

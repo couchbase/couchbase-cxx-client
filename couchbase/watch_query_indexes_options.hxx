@@ -27,49 +27,50 @@ namespace couchbase
 {
 class watch_query_indexes_options : public common_options<watch_query_indexes_options>
 {
-  public:
-    auto watch_primary(bool watch_primary) -> watch_query_indexes_options&
-    {
-        watch_primary_ = watch_primary;
-        return self();
-    }
+public:
+  auto watch_primary(bool watch_primary) -> watch_query_indexes_options&
+  {
+    watch_primary_ = watch_primary;
+    return self();
+  }
 
-    template<typename T>
-    auto polling_interval(T duration)
-    {
-        polling_interval_ = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
-        return self();
-    }
+  template<typename T>
+  auto polling_interval(T duration)
+  {
+    polling_interval_ = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
+    return self();
+  }
 
-    /**
-     * Immutable value object representing consistent options.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    struct built : public common_options<watch_query_indexes_options>::built {
-        bool watch_primary{};
-        std::chrono::milliseconds polling_interval;
-    };
+  /**
+   * Immutable value object representing consistent options.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  struct built : public common_options<watch_query_indexes_options>::built {
+    bool watch_primary{};
+    std::chrono::milliseconds polling_interval;
+  };
 
-    /**
-     * Validates options and returns them as an immutable value.
-     *
-     * @return consistent options as an immutable value
-     *
-     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options(), watch_primary_, polling_interval_ };
-    }
+  /**
+   * Validates options and returns them as an immutable value.
+   *
+   * @return consistent options as an immutable value
+   *
+   * @exception std::system_error with code errc::common::invalid_argument if the options are not
+   * valid
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options(), watch_primary_, polling_interval_ };
+  }
 
-  private:
-    bool watch_primary_{ false };
-    std::chrono::milliseconds polling_interval_{ 1000 };
+private:
+  bool watch_primary_{ false };
+  std::chrono::milliseconds polling_interval_{ 1000 };
 };
 
 /**

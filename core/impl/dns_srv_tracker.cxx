@@ -30,7 +30,10 @@
 
 namespace couchbase::core::impl
 {
-dns_srv_tracker::dns_srv_tracker(asio::io_context& ctx, std::string address, const io::dns::dns_config& config, bool use_tls)
+dns_srv_tracker::dns_srv_tracker(asio::io_context& ctx,
+                                 std::string address,
+                                 const io::dns::dns_config& config,
+                                 bool use_tls)
   : ctx_{ ctx }
   , dns_client_{ ctx_ }
   , address_{ std::move(address) }
@@ -41,112 +44,126 @@ dns_srv_tracker::dns_srv_tracker(asio::io_context& ctx, std::string address, con
 }
 
 void
-dns_srv_tracker::get_srv_nodes(utils::movable_function<void(origin::node_list, std::error_code)> callback)
+dns_srv_tracker::get_srv_nodes(
+  utils::movable_function<void(origin::node_list, std::error_code)> callback)
 {
-    CB_LOG_DEBUG(
-      "Query DNS-SRV: address=\"{}\", service=\"{}\", nameserver=\"{}:{}\"", address_, service_, config_.nameserver(), config_.port());
-    dns_client_.query_srv(
-      address_,
-      service_,
-      config_,
-      [self = shared_from_this(), callback = std::move(callback)](couchbase::core::io::dns::dns_srv_response&& resp) mutable {
-          origin::node_list nodes;
-          if (resp.ec) {
-              CB_LOG_WARNING("failed to fetch DNS SRV records for \"{}\" ({}), assuming that cluster is listening this address",
-                             self->address_,
-                             resp.ec.message());
-          } else if (resp.targets.empty() && self->address_ != "localhost") {
-              CB_LOG_WARNING("DNS SRV query returned 0 records for \"{}\", assuming that cluster is listening this address",
-                             self->address_);
-          } else {
-              nodes.reserve(resp.targets.size());
-              for (const auto& address : resp.targets) {
-                  origin::node_entry node;
-                  node.first = address.hostname;
-                  node.second = std::to_string(address.port);
-                  nodes.emplace_back(node);
-              }
-          }
-          return callback(nodes, resp.ec);
-      });
+  CB_LOG_DEBUG("Query DNS-SRV: address=\"{}\", service=\"{}\", nameserver=\"{}:{}\"",
+               address_,
+               service_,
+               config_.nameserver(),
+               config_.port());
+  dns_client_.query_srv(address_,
+                        service_,
+                        config_,
+                        [self = shared_from_this(), callback = std::move(callback)](
+                          couchbase::core::io::dns::dns_srv_response&& resp) mutable {
+                          origin::node_list nodes;
+                          if (resp.ec) {
+                            CB_LOG_WARNING("failed to fetch DNS SRV records for \"{}\" ({}), "
+                                           "assuming that cluster is listening this address",
+                                           self->address_,
+                                           resp.ec.message());
+                          } else if (resp.targets.empty() && self->address_ != "localhost") {
+                            CB_LOG_WARNING("DNS SRV query returned 0 records for \"{}\", assuming "
+                                           "that cluster is listening this address",
+                                           self->address_);
+                          } else {
+                            nodes.reserve(resp.targets.size());
+                            for (const auto& address : resp.targets) {
+                              origin::node_entry node;
+                              node.first = address.hostname;
+                              node.second = std::to_string(address.port);
+                              nodes.emplace_back(node);
+                            }
+                          }
+                          return callback(nodes, resp.ec);
+                        });
 }
 
 void
 dns_srv_tracker::do_dns_refresh()
 {
-    get_srv_nodes([self = shared_from_this()](origin::node_list nodes, std::error_code dns_ec) mutable {
-        bool expected_state{ true };
-        if (dns_ec || nodes.empty()) {
-            if (dns_ec) {
-                CB_LOG_WARNING("unable to perform DNS-SRV refresh: {}", dns_ec.message());
-            }
-            self->refresh_in_progress_.compare_exchange_strong(expected_state, false);
-            return;
-        }
-        std::set<std::shared_ptr<config_listener>> listeners;
-        {
-            std::scoped_lock lock(self->config_listeners_mutex_);
-            listeners = self->config_listeners_;
-        }
-
-        if (!listeners.empty()) {
-            auto config = topology::make_blank_configuration(nodes, self->use_tls_, true);
-            std::vector<std::string> endpoints;
-            endpoints.reserve(nodes.size());
-            for (const auto& [host, port] : nodes) {
-                endpoints.emplace_back(fmt::format("\"{}:{}\"", host, port));
-            }
-            CB_LOG_DEBUG(
-              "generated configuration from DNS-SRV response \"{}\": [{}]", self->address_, utils::join_strings(endpoints, ", "));
-            for (const auto& listener : listeners) {
-                listener->update_config(config);
-            }
+  get_srv_nodes(
+    [self = shared_from_this()](origin::node_list nodes, std::error_code dns_ec) mutable {
+      bool expected_state{ true };
+      if (dns_ec || nodes.empty()) {
+        if (dns_ec) {
+          CB_LOG_WARNING("unable to perform DNS-SRV refresh: {}", dns_ec.message());
         }
         self->refresh_in_progress_.compare_exchange_strong(expected_state, false);
+        return;
+      }
+      std::set<std::shared_ptr<config_listener>> listeners;
+      {
+        std::scoped_lock lock(self->config_listeners_mutex_);
+        listeners = self->config_listeners_;
+      }
+
+      if (!listeners.empty()) {
+        auto config = topology::make_blank_configuration(nodes, self->use_tls_, true);
+        std::vector<std::string> endpoints;
+        endpoints.reserve(nodes.size());
+        for (const auto& [host, port] : nodes) {
+          endpoints.emplace_back(fmt::format("\"{}:{}\"", host, port));
+        }
+        CB_LOG_DEBUG("generated configuration from DNS-SRV response \"{}\": [{}]",
+                     self->address_,
+                     utils::join_strings(endpoints, ", "));
+        for (const auto& listener : listeners) {
+          listener->update_config(config);
+        }
+      }
+      self->refresh_in_progress_.compare_exchange_strong(expected_state, false);
     });
 }
 
 void
 dns_srv_tracker::report_bootstrap_error(const std::string& endpoint, std::error_code ec)
 {
-    bool trigger_dns_srv_refresh = false;
+  bool trigger_dns_srv_refresh = false;
 
-    if (ec && ec != errc::common::request_canceled) {
-        std::scoped_lock lock(known_endpoints_mutex_);
-        known_endpoints_.erase(endpoint);
-        if (known_endpoints_.empty()) {
-            trigger_dns_srv_refresh = true;
-        }
-    } else {
-        return;
+  if (ec && ec != errc::common::request_canceled) {
+    std::scoped_lock lock(known_endpoints_mutex_);
+    known_endpoints_.erase(endpoint);
+    if (known_endpoints_.empty()) {
+      trigger_dns_srv_refresh = true;
     }
+  } else {
+    return;
+  }
 
-    bool expected_state{ false };
-    if (trigger_dns_srv_refresh && refresh_in_progress_.compare_exchange_strong(expected_state, true)) {
-        CB_LOG_DEBUG("all nodes failed to bootstrap, triggering DNS-SRV refresh, ec={}, last endpoint=\"{}\"", ec.message(), endpoint);
-        return asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() mutable { self->do_dns_refresh(); }));
-    }
+  bool expected_state{ false };
+  if (trigger_dns_srv_refresh &&
+      refresh_in_progress_.compare_exchange_strong(expected_state, true)) {
+    CB_LOG_DEBUG(
+      "all nodes failed to bootstrap, triggering DNS-SRV refresh, ec={}, last endpoint=\"{}\"",
+      ec.message(),
+      endpoint);
+    return asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() mutable {
+      self->do_dns_refresh();
+    }));
+  }
 }
 
 void
 dns_srv_tracker::report_bootstrap_success(const std::vector<std::string>& endpoints)
 {
-    std::set<std::string, std::less<>> known_endpoints{ endpoints.begin(), endpoints.end() };
-    std::scoped_lock lock(known_endpoints_mutex_);
-    std::swap(known_endpoints_, known_endpoints);
+  std::set<std::string, std::less<>> known_endpoints{ endpoints.begin(), endpoints.end() };
+  std::scoped_lock lock(known_endpoints_mutex_);
+  std::swap(known_endpoints_, known_endpoints);
 }
 
 void
 dns_srv_tracker::register_config_listener(std::shared_ptr<config_listener> listener)
 {
-    std::scoped_lock lock(config_listeners_mutex_);
-    config_listeners_.insert(listener);
+  std::scoped_lock lock(config_listeners_mutex_);
+  config_listeners_.insert(listener);
 }
 
 void
 dns_srv_tracker::unregister_config_listener(std::shared_ptr<config_listener> listener)
 {
-    std::scoped_lock lock(config_listeners_mutex_);
-    config_listeners_.erase(listener);
+  std::scoped_lock lock(config_listeners_mutex_);
+  config_listeners_.erase(listener);
 }
 } // namespace couchbase::core::impl

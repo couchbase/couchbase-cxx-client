@@ -22,27 +22,31 @@
 
 namespace couchbase::transactions
 {
-transaction_keyspace::transaction_keyspace(std::string bucket_name, std::string scope_name, std::string collection_name)
+transaction_keyspace::transaction_keyspace(std::string bucket_name,
+                                           std::string scope_name,
+                                           std::string collection_name)
   : bucket(std::move(bucket_name))
   , scope(std::move(scope_name))
   , collection(std::move(collection_name))
 {
-    if (scope.empty()) {
-        scope = couchbase::scope::default_name;
-    }
-    if (collection.empty()) {
-        collection = couchbase::collection::default_name;
-    }
+  if (scope.empty()) {
+    scope = couchbase::scope::default_name;
+  }
+  if (collection.empty()) {
+    collection = couchbase::collection::default_name;
+  }
 }
 
 transaction_keyspace::transaction_keyspace(const std::string& bucket_name)
-  : transaction_keyspace{ bucket_name, couchbase::scope::default_name, couchbase::collection::default_name }
+  : transaction_keyspace{ bucket_name,
+                          couchbase::scope::default_name,
+                          couchbase::collection::default_name }
 {
 }
 
 bool
 transaction_keyspace::valid()
 {
-    return !bucket.empty() && !scope.empty() && !collection.empty();
+  return !bucket.empty() && !scope.empty() && !collection.empty();
 }
 } // namespace couchbase::transactions

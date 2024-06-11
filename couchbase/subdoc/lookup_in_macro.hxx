@@ -27,24 +27,25 @@ namespace couchbase::subdoc
  * @volatile
  */
 enum class lookup_in_macro {
-    document,
-    expiry_time,
-    cas,
-    sequence_number,
-    vbucket_uuid,
-    last_modified,
-    is_deleted,
-    value_size_bytes,
-    revision_id,
-    flags,
-    vbucket,
+  document,
+  expiry_time,
+  cas,
+  sequence_number,
+  vbucket_uuid,
+  last_modified,
+  is_deleted,
+  value_size_bytes,
+  revision_id,
+  flags,
+  vbucket,
 };
 
 /**
  * Parses string as lookup_in macro.
  *
  * @param input string
- * @return empty `optional` if the string does not contain macro, corresponding enum value otherwise.
+ * @return empty `optional` if the string does not contain macro, corresponding enum value
+ * otherwise.
  *
  * @since 1.0.0
  * @volatile

@@ -37,22 +37,22 @@ namespace couchbase
  * @see https://docs.couchbase.com/server/current/manage/manage-groups/manage-groups.html
  */
 enum class read_preference {
-    /**
-     * Do not enforce any filtering for replica set.
-     */
-    no_preference,
+  /**
+   * Do not enforce any filtering for replica set.
+   */
+  no_preference,
 
-    /**
-     * Exclude any nodes that do not belong to local group selected during
-     * cluster instantiation with network_options::preferred_server_group().
-     */
-    selected_server_group,
+  /**
+   * Exclude any nodes that do not belong to local group selected during
+   * cluster instantiation with network_options::preferred_server_group().
+   */
+  selected_server_group,
 
-    /**
-     * The same as read_preference::selected_server_group, but if the filtered
-     * replica set is empty, expand it to all available nodes (fall back to
-     * read_preference::no_preference effectively).
-     */
-    selected_server_group_or_all_available,
+  /**
+   * The same as read_preference::selected_server_group, but if the filtered
+   * replica set is empty, expand it to all available nodes (fall back to
+   * read_preference::no_preference effectively).
+   */
+  selected_server_group_or_all_available,
 };
 } // namespace couchbase

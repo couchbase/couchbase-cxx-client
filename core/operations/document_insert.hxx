@@ -34,30 +34,32 @@ namespace couchbase::core::operations
 {
 
 struct insert_response {
-    key_value_error_context ctx;
-    couchbase::cas cas{};
-    mutation_token token{};
+  key_value_error_context ctx;
+  couchbase::cas cas{};
+  mutation_token token{};
 };
 
 struct insert_request {
-    using response_type = insert_response;
-    using encoded_request_type = protocol::client_request<protocol::insert_request_body>;
-    using encoded_response_type = protocol::client_response<protocol::insert_response_body>;
+  using response_type = insert_response;
+  using encoded_request_type = protocol::client_request<protocol::insert_request_body>;
+  using encoded_response_type = protocol::client_response<protocol::insert_response_body>;
 
-    document_id id;
-    std::vector<std::byte> value;
-    std::uint16_t partition{};
-    std::uint32_t opaque{};
-    std::uint32_t flags{ 0 };
-    std::uint32_t expiry{ 0 };
-    couchbase::durability_level durability_level{ durability_level::none };
-    std::optional<std::chrono::milliseconds> timeout{};
-    io::retry_context<false> retries{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
+  document_id id;
+  std::vector<std::byte> value;
+  std::uint16_t partition{};
+  std::uint32_t opaque{};
+  std::uint32_t flags{ 0 };
+  std::uint32_t expiry{ 0 };
+  couchbase::durability_level durability_level{ durability_level::none };
+  std::optional<std::chrono::milliseconds> timeout{};
+  io::retry_context<false> retries{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          mcbp_context&& context) const;
 
-    [[nodiscard]] insert_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] insert_response make_response(key_value_error_context&& ctx,
+                                              const encoded_response_type& encoded) const;
 };
 
 using insert_request_with_legacy_durability = impl::with_legacy_durability<insert_request>;

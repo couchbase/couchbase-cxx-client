@@ -30,26 +30,28 @@ namespace couchbase::core::operations
 {
 
 struct unlock_response {
-    key_value_error_context ctx;
-    couchbase::cas cas{};
+  key_value_error_context ctx;
+  couchbase::cas cas{};
 };
 
 struct unlock_request {
-    using response_type = unlock_response;
-    using encoded_request_type = protocol::client_request<protocol::unlock_request_body>;
-    using encoded_response_type = protocol::client_response<protocol::unlock_response_body>;
+  using response_type = unlock_response;
+  using encoded_request_type = protocol::client_request<protocol::unlock_request_body>;
+  using encoded_response_type = protocol::client_response<protocol::unlock_response_body>;
 
-    document_id id;
-    std::uint16_t partition{};
-    std::uint32_t opaque{};
-    couchbase::cas cas{};
-    std::optional<std::chrono::milliseconds> timeout{};
-    io::retry_context<false> retries{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
+  document_id id;
+  std::uint16_t partition{};
+  std::uint32_t opaque{};
+  couchbase::cas cas{};
+  std::optional<std::chrono::milliseconds> timeout{};
+  io::retry_context<false> retries{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, mcbp_context&& context) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          mcbp_context&& context) const;
 
-    [[nodiscard]] unlock_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] unlock_response make_response(key_value_error_context&& ctx,
+                                              const encoded_response_type& encoded) const;
 };
 
 } // namespace couchbase::core::operations

@@ -23,43 +23,43 @@ namespace couchbase
 {
 class compression_options
 {
-  public:
-    auto enabled(bool enabled) -> compression_options&
-    {
-        enabled_ = enabled;
-        return *this;
-    }
+public:
+  auto enabled(bool enabled) -> compression_options&
+  {
+    enabled_ = enabled;
+    return *this;
+  }
 
-    auto min_size(std::size_t size) -> compression_options&
-    {
-        min_size_ = size;
-        return *this;
-    }
+  auto min_size(std::size_t size) -> compression_options&
+  {
+    min_size_ = size;
+    return *this;
+  }
 
-    auto min_ratio(double ratio) -> compression_options&
-    {
-        min_ratio_ = ratio;
-        return *this;
-    }
+  auto min_ratio(double ratio) -> compression_options&
+  {
+    min_ratio_ = ratio;
+    return *this;
+  }
 
-    struct built {
-        bool enabled;
-        std::size_t min_size;
-        double min_ratio;
+  struct built {
+    bool enabled;
+    std::size_t min_size;
+    double min_ratio;
+  };
+
+  [[nodiscard]] auto build() const -> built
+  {
+    return {
+      enabled_,
+      min_size_,
+      min_ratio_,
     };
+  }
 
-    [[nodiscard]] auto build() const -> built
-    {
-        return {
-            enabled_,
-            min_size_,
-            min_ratio_,
-        };
-    }
-
-  private:
-    bool enabled_{ true };
-    std::size_t min_size_{ 32 };
-    double min_ratio_{ 0.83 };
+private:
+  bool enabled_{ true };
+  std::size_t min_size_{ 32 };
+  double min_ratio_{ 0.83 };
 };
 } // namespace couchbase

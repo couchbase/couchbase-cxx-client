@@ -19,36 +19,36 @@ namespace couchbase::core
 {
 class n1ql_query_row_reader_impl
 {
-  public:
-    auto next_row() -> std::vector<std::byte>
-    {
-        return {};
-    }
+public:
+  auto next_row() -> std::vector<std::byte>
+  {
+    return {};
+  }
 
-    auto error() -> std::error_code
-    {
-        return {};
-    }
+  auto error() -> std::error_code
+  {
+    return {};
+  }
 
-    auto meta_data() -> std::optional<std::vector<std::byte>>
-    {
-        return {};
-    }
+  auto meta_data() -> std::optional<std::vector<std::byte>>
+  {
+    return {};
+  }
 
-    auto close() -> std::error_code
-    {
-        return {};
-    }
+  auto close() -> std::error_code
+  {
+    return {};
+  }
 
-    auto prepared_name() -> std::optional<std::string>
-    {
-        return {};
-    }
+  auto prepared_name() -> std::optional<std::string>
+  {
+    return {};
+  }
 
-    auto endpoint() -> std::string
-    {
-        return {};
-    }
+  auto endpoint() -> std::string
+  {
+    return {};
+  }
 };
 
 n1ql_query_row_reader::n1ql_query_row_reader()
@@ -59,36 +59,36 @@ n1ql_query_row_reader::n1ql_query_row_reader()
 auto
 n1ql_query_row_reader::next_row() -> std::vector<std::byte>
 {
-    return impl_->next_row();
+  return impl_->next_row();
 }
 
 auto
 n1ql_query_row_reader::error() -> std::error_code
 {
-    return impl_->error();
+  return impl_->error();
 }
 
 auto
 n1ql_query_row_reader::meta_data() -> std::optional<std::vector<std::byte>>
 {
-    return impl_->meta_data();
+  return impl_->meta_data();
 }
 
 auto
 n1ql_query_row_reader::close() -> std::error_code
 {
-    return impl_->close();
+  return impl_->close();
 }
 
 auto
 n1ql_query_row_reader::prepared_name() -> std::optional<std::string>
 {
-    return impl_->prepared_name();
+  return impl_->prepared_name();
 }
 
 auto
 n1ql_query_row_reader::endpoint() -> std::string
 {
-    return impl_->endpoint();
+  return impl_->endpoint();
 }
 } // namespace couchbase::core

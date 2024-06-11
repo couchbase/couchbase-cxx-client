@@ -32,14 +32,14 @@ select_bucket_response_body::parse(key_value_status_code /* status */,
                                    const std::vector<std::byte>& /* body */,
                                    const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<std::byte>(opcode));
-    return false;
+  Expects(header[1] == static_cast<std::byte>(opcode));
+  return false;
 }
 
 void
 select_bucket_request_body::bucket_name(std::string_view name)
 {
-    key_.reserve(name.size());
-    utils::to_binary(name, std::back_insert_iterator(key_));
+  key_.reserve(name.size());
+  utils::to_binary(name, std::back_insert_iterator(key_));
 }
 } // namespace couchbase::core::protocol

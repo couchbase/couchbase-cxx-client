@@ -38,12 +38,12 @@ numeric_range::numeric_range(std::string name, std::optional<double> min, std::o
 numeric_range
 numeric_range::with_min(std::string name, double start)
 {
-    return { std::move(name), start, {} };
+  return { std::move(name), start, {} };
 }
 
 numeric_range
 numeric_range::with_max(std::string name, double end)
 {
-    return { std::move(name), {}, end };
+  return { std::move(name), {}, end };
 }
 } // namespace couchbase

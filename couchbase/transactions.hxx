@@ -37,39 +37,49 @@ using async_txn_complete_logic = std::function<void(error, transaction_result)>;
  */
 class transactions
 {
-  public:
-    virtual ~transactions() = default;
+public:
+  virtual ~transactions() = default;
 
-    /**
-     * Run a blocking transaction.
-     *
-     * You can supply a lambda or function which uses a yielded {@link attempt_context} to perform a transaction, where each transaction
-     * operation is blocking.  A simple usage would be to get a document and replace the contents:
-     *
-     * @snippet{trimleft} test/test_transaction_examples.cxx simple-blocking-txn
-     *
-     * @param logic a lambda or function which uses the yielded {@link attempt_context} to perform the desired transactional operations.
-     * @param cfg if passed in, these options override the defaults, or those set in the {@link cluster_options}.
-     * @return an {@link transaction_error_context}, and a {@link transaction_result} representing the results of the transaction.
-     */
-    virtual std::pair<error, transaction_result> run(txn_logic&& logic, const transaction_options& cfg = transaction_options()) = 0;
-    /**
-     * Run an asynchronous transaction.
-     *
-     * You can supply a lambda or function which uses a yielded {@link async_attempt_context} to perform a transaction, where each
-     * transaction operation is asynchronous.  A simple usage would be to get 3 document and replace the contents of each.   In the example
-     * below, we get the 3 documents in parallel, and update each when the get returns the document.   This can be significantly faster than
-     * getting each document in serial, and updating it using the blocking api:
-     *
-     * @snippet{trimleft} test/test_transaction_examples.cxx simple-async-txn
-     *
-     * @param logic a lambda or function which uses the yielded {@link async_attempt_context} to perform the desired transactional
-     * operations.
-     * @param complete_callback a lambda or function to which is yielded a {transaction_error_context} and {transaction_result}.
-     * @param cfg if passed in, these options override the defaults, or those set in the {@link cluster_options}.
-     */
-    virtual void run(async_txn_logic&& logic,
-                     async_txn_complete_logic&& complete_callback,
-                     const transaction_options& cfg = transaction_options()) = 0;
+  /**
+   * Run a blocking transaction.
+   *
+   * You can supply a lambda or function which uses a yielded {@link attempt_context} to perform a
+   * transaction, where each transaction operation is blocking.  A simple usage would be to get a
+   * document and replace the contents:
+   *
+   * @snippet{trimleft} test/test_transaction_examples.cxx simple-blocking-txn
+   *
+   * @param logic a lambda or function which uses the yielded {@link attempt_context} to perform the
+   * desired transactional operations.
+   * @param cfg if passed in, these options override the defaults, or those set in the {@link
+   * cluster_options}.
+   * @return an {@link transaction_error_context}, and a {@link transaction_result} representing the
+   * results of the transaction.
+   */
+  virtual std::pair<error, transaction_result> run(
+    txn_logic&& logic,
+    const transaction_options& cfg = transaction_options()) = 0;
+  /**
+   * Run an asynchronous transaction.
+   *
+   * You can supply a lambda or function which uses a yielded {@link async_attempt_context} to
+   * perform a transaction, where each transaction operation is asynchronous.  A simple usage would
+   * be to get 3 document and replace the contents of each.   In the example below, we get the 3
+   * documents in parallel, and update each when the get returns the document.   This can be
+   * significantly faster than getting each document in serial, and updating it using the blocking
+   * api:
+   *
+   * @snippet{trimleft} test/test_transaction_examples.cxx simple-async-txn
+   *
+   * @param logic a lambda or function which uses the yielded {@link async_attempt_context} to
+   * perform the desired transactional operations.
+   * @param complete_callback a lambda or function to which is yielded a {transaction_error_context}
+   * and {transaction_result}.
+   * @param cfg if passed in, these options override the defaults, or those set in the {@link
+   * cluster_options}.
+   */
+  virtual void run(async_txn_logic&& logic,
+                   async_txn_complete_logic&& complete_callback,
+                   const transaction_options& cfg = transaction_options()) = 0;
 };
 } // namespace couchbase::transactions

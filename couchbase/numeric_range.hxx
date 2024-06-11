@@ -28,31 +28,31 @@ namespace couchbase
  */
 class numeric_range
 {
-  public:
-    numeric_range(std::string name, double min, double max);
-    static numeric_range with_min(std::string name, double start);
-    static numeric_range with_max(std::string name, double end);
+public:
+  numeric_range(std::string name, double min, double max);
+  static numeric_range with_min(std::string name, double start);
+  static numeric_range with_max(std::string name, double end);
 
-    [[nodiscard]] auto name() const -> const std::string&
-    {
-        return name_;
-    }
+  [[nodiscard]] auto name() const -> const std::string&
+  {
+    return name_;
+  }
 
-    [[nodiscard]] auto min() const -> const std::optional<double>&
-    {
-        return min_;
-    }
+  [[nodiscard]] auto min() const -> const std::optional<double>&
+  {
+    return min_;
+  }
 
-    [[nodiscard]] auto max() const -> const std::optional<double>&
-    {
-        return max_;
-    }
+  [[nodiscard]] auto max() const -> const std::optional<double>&
+  {
+    return max_;
+  }
 
-  private:
-    numeric_range(std::string name, std::optional<double> min, std::optional<double> max);
+private:
+  numeric_range(std::string name, std::optional<double> min, std::optional<double> max);
 
-    std::string name_;
-    std::optional<double> min_{};
-    std::optional<double> max_{};
+  std::string name_;
+  std::optional<double> min_{};
+  std::optional<double> max_{};
 };
 } // namespace couchbase

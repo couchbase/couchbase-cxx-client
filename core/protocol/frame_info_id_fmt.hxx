@@ -23,57 +23,57 @@
 
 template<>
 struct fmt::formatter<couchbase::core::protocol::request_frame_info_id> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(couchbase::core::protocol::request_frame_info_id opcode, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (opcode) {
-            case couchbase::core::protocol::request_frame_info_id::barrier:
-                name = "barrier";
-                break;
-            case couchbase::core::protocol::request_frame_info_id::durability_requirement:
-                name = "durability_requirement";
-                break;
-            case couchbase::core::protocol::request_frame_info_id::dcp_stream_id:
-                name = "dcp_stream_id";
-                break;
-            case couchbase::core::protocol::request_frame_info_id::open_tracing_context:
-                name = "open_tracing_context";
-                break;
-            case couchbase::core::protocol::request_frame_info_id::impersonate_user:
-                name = "impersonate_user";
-                break;
-            case couchbase::core::protocol::request_frame_info_id::preserve_ttl:
-                name = "preserve_ttl";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
+  template<typename FormatContext>
+  auto format(couchbase::core::protocol::request_frame_info_id opcode, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (opcode) {
+      case couchbase::core::protocol::request_frame_info_id::barrier:
+        name = "barrier";
+        break;
+      case couchbase::core::protocol::request_frame_info_id::durability_requirement:
+        name = "durability_requirement";
+        break;
+      case couchbase::core::protocol::request_frame_info_id::dcp_stream_id:
+        name = "dcp_stream_id";
+        break;
+      case couchbase::core::protocol::request_frame_info_id::open_tracing_context:
+        name = "open_tracing_context";
+        break;
+      case couchbase::core::protocol::request_frame_info_id::impersonate_user:
+        name = "impersonate_user";
+        break;
+      case couchbase::core::protocol::request_frame_info_id::preserve_ttl:
+        name = "preserve_ttl";
+        break;
     }
+    return format_to(ctx.out(), "{}", name);
+  }
 };
 
 template<>
 struct fmt::formatter<couchbase::core::protocol::response_frame_info_id> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(couchbase::core::protocol::response_frame_info_id opcode, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (opcode) {
-            case couchbase::core::protocol::response_frame_info_id::server_duration:
-                name = "server_duration";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
+  template<typename FormatContext>
+  auto format(couchbase::core::protocol::response_frame_info_id opcode, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (opcode) {
+      case couchbase::core::protocol::response_frame_info_id::server_duration:
+        name = "server_duration";
+        break;
     }
+    return format_to(ctx.out(), "{}", name);
+  }
 };

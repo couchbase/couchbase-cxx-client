@@ -28,24 +28,24 @@ namespace couchbase
  */
 class search_term_range
 {
-  public:
-    search_term_range(std::string name, std::uint64_t count)
-      : name_{ std::move(name) }
-      , count_{ count }
-    {
-    }
+public:
+  search_term_range(std::string name, std::uint64_t count)
+    : name_{ std::move(name) }
+    , count_{ count }
+  {
+  }
 
-    [[nodiscard]] auto name() const -> const std::string&
-    {
-        return name_;
-    }
-    [[nodiscard]] auto count() const -> std::uint64_t
-    {
-        return count_;
-    }
+  [[nodiscard]] auto name() const -> const std::string&
+  {
+    return name_;
+  }
+  [[nodiscard]] auto count() const -> std::uint64_t
+  {
+    return count_;
+  }
 
-  private:
-    std::string name_;
-    std::uint64_t count_;
+private:
+  std::string name_;
+  std::uint64_t count_;
 };
 } // namespace couchbase

@@ -23,25 +23,25 @@
 
 template<>
 struct fmt::formatter<couchbase::core::design_document_namespace> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(couchbase::core::design_document_namespace ns, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (ns) {
-            case couchbase::core::design_document_namespace::development:
-                name = "development";
-                break;
+  template<typename FormatContext>
+  auto format(couchbase::core::design_document_namespace ns, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (ns) {
+      case couchbase::core::design_document_namespace::development:
+        name = "development";
+        break;
 
-            case couchbase::core::design_document_namespace::production:
-                name = "production";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
+      case couchbase::core::design_document_namespace::production:
+        name = "production";
+        break;
     }
+    return format_to(ctx.out(), "{}", name);
+  }
 };

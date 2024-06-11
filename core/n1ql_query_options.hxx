@@ -38,41 +38,42 @@ namespace couchbase::core
 {
 class n1ql_query_options
 {
-  public:
-    std::vector<std::byte> payload{};
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
-    std::chrono::milliseconds timeout{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{};
+public:
+  std::vector<std::byte> payload{};
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
+  std::chrono::milliseconds timeout{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{};
 
-    struct {
-        std::string user{};
-    } internal{};
-    std::string endpoint_{};
+  struct {
+    std::string user{};
+  } internal{};
+  std::string endpoint_{};
 };
 
 class n1ql_query_row_reader_impl;
 
 class n1ql_query_row_reader
 {
-  public:
-    n1ql_query_row_reader();
+public:
+  n1ql_query_row_reader();
 
-    auto next_row() -> std::vector<std::byte>;
+  auto next_row() -> std::vector<std::byte>;
 
-    auto error() -> std::error_code;
+  auto error() -> std::error_code;
 
-    auto meta_data() -> std::optional<std::vector<std::byte>>;
+  auto meta_data() -> std::optional<std::vector<std::byte>>;
 
-    auto close() -> std::error_code;
+  auto close() -> std::error_code;
 
-    auto prepared_name() -> std::optional<std::string>;
+  auto prepared_name() -> std::optional<std::string>;
 
-    auto endpoint() -> std::string;
+  auto endpoint() -> std::string;
 
-  private:
-    std::shared_ptr<n1ql_query_row_reader_impl> impl_;
+private:
+  std::shared_ptr<n1ql_query_row_reader_impl> impl_;
 };
 
-using n1ql_query_callback = utils::movable_function<void(n1ql_query_row_reader reader, std::error_code ec)>;
+using n1ql_query_callback =
+  utils::movable_function<void(n1ql_query_row_reader reader, std::error_code ec)>;
 
 } // namespace couchbase::core

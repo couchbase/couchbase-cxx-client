@@ -32,41 +32,41 @@ namespace couchbase
  */
 class exists_result : public result
 {
-  public:
-    /**
-     * @since 1.0.0
-     * @internal
-     */
-    exists_result() = default;
+public:
+  /**
+   * @since 1.0.0
+   * @internal
+   */
+  exists_result() = default;
 
-    /**
-     * Constructs result for get_any_replica operation, or an entry for get_all_replicas operation.
-     *
-     * @param cas
-     * @param exists true if the document exists, false otherwise
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    exists_result(couchbase::cas cas, bool exists)
-      : result{ cas }
-      , exists_{ exists }
-    {
-    }
+  /**
+   * Constructs result for get_any_replica operation, or an entry for get_all_replicas operation.
+   *
+   * @param cas
+   * @param exists true if the document exists, false otherwise
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  exists_result(couchbase::cas cas, bool exists)
+    : result{ cas }
+    , exists_{ exists }
+  {
+  }
 
-    /**
-     * @return true if the docuement exists, false otherwise
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto exists() const -> bool
-    {
-        return exists_;
-    }
+  /**
+   * @return true if the docuement exists, false otherwise
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto exists() const -> bool
+  {
+    return exists_;
+  }
 
-  private:
-    bool exists_{};
+private:
+  bool exists_{};
 };
 
 } // namespace couchbase

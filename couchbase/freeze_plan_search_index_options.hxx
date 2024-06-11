@@ -27,16 +27,16 @@
 namespace couchbase
 {
 struct freeze_plan_search_index_options : public common_options<freeze_plan_search_index_options> {
-  public:
-    struct built : public common_options<freeze_plan_search_index_options>::built {
-    };
+public:
+  struct built : public common_options<freeze_plan_search_index_options>::built {
+  };
 
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options() };
-    }
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options() };
+  }
 
-  private:
+private:
 };
 
 using freeze_plan_search_index_handler = std::function<void(error)>;

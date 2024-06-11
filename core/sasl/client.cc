@@ -25,26 +25,30 @@
 namespace couchbase::core::sasl
 {
 
-ClientContext::ClientContext(GetUsernameCallback user_cb, GetPasswordCallback password_cb, const std::vector<std::string>& mechanisms)
+ClientContext::ClientContext(GetUsernameCallback user_cb,
+                             GetPasswordCallback password_cb,
+                             const std::vector<std::string>& mechanisms)
 {
-    switch (select_mechanism(mechanisms)) {
-        case Mechanism::SCRAM_SHA512:
-            backend = std::make_unique<mechanism::scram::Sha512ClientBackend>(user_cb, password_cb, *this);
-            break;
-        case Mechanism::SCRAM_SHA256:
-            backend = std::make_unique<mechanism::scram::Sha256ClientBackend>(user_cb, password_cb, *this);
-            break;
-        case Mechanism::SCRAM_SHA1:
-            backend = std::make_unique<mechanism::scram::Sha1ClientBackend>(user_cb, password_cb, *this);
-            break;
-        case Mechanism::PLAIN:
-            backend = std::make_unique<mechanism::plain::ClientBackend>(user_cb, password_cb, *this);
-    }
+  switch (select_mechanism(mechanisms)) {
+    case Mechanism::SCRAM_SHA512:
+      backend =
+        std::make_unique<mechanism::scram::Sha512ClientBackend>(user_cb, password_cb, *this);
+      break;
+    case Mechanism::SCRAM_SHA256:
+      backend =
+        std::make_unique<mechanism::scram::Sha256ClientBackend>(user_cb, password_cb, *this);
+      break;
+    case Mechanism::SCRAM_SHA1:
+      backend = std::make_unique<mechanism::scram::Sha1ClientBackend>(user_cb, password_cb, *this);
+      break;
+    case Mechanism::PLAIN:
+      backend = std::make_unique<mechanism::plain::ClientBackend>(user_cb, password_cb, *this);
+  }
 
-    if (!backend) {
-        throw unknown_mechanism("cb::sasl::client::ClientContext(): Failed to create "
-                                "mechanism");
-    }
+  if (!backend) {
+    throw unknown_mechanism("cb::sasl::client::ClientContext(): Failed to create "
+                            "mechanism");
+  }
 }
 
 } // namespace couchbase::core::sasl

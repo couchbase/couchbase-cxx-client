@@ -23,28 +23,28 @@
 int
 main()
 {
-    asio::io_context io;
+  asio::io_context io;
 
-    asio::experimental::concurrent_channel<void(std::error_code, int)> ch{ io, 1 };
+  asio::experimental::concurrent_channel<void(std::error_code, int)> ch{ io, 1 };
 
-    ch.async_send(std::error_code(), 42, [](std::error_code error) {
-        if (!error) {
-            std::cout << "Sent "
-                      << "\n";
-        } else {
-            std::cout << "send error " << error << ", " << error.message() << "\n";
-        }
-    });
+  ch.async_send(std::error_code(), 42, [](std::error_code error) {
+    if (!error) {
+      std::cout << "Sent "
+                << "\n";
+    } else {
+      std::cout << "send error " << error << ", " << error.message() << "\n";
+    }
+  });
 
-    ch.async_receive([](std::error_code error, int i) {
-        if (!error) {
-            std::cout << "Received " << i << "\n";
-        } else {
-            std::cout << "receive error " << error << ", " << error.message() << "\n";
-        }
-    });
+  ch.async_receive([](std::error_code error, int i) {
+    if (!error) {
+      std::cout << "Received " << i << "\n";
+    } else {
+      std::cout << "receive error " << error << ", " << error.message() << "\n";
+    }
+  });
 
-    io.run();
+  io.run();
 
-    return 0;
+  return 0;
 }

@@ -31,23 +31,28 @@ sasl_list_mechs_response_body::parse(key_value_status_code status,
                                      const std::vector<std::byte>& body,
                                      const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == key_value_status_code::success) {
-        auto previous = body.begin();
-        auto current = std::find(body.begin() + framing_extras_size + extras_size + key_size, body.end(), std::byte{ ' ' });
-        std::string mech;
-        while (current != body.end()) {
-            mech.resize(static_cast<std::size_t>(std::distance(previous, current)));
-            std::transform(previous, current, mech.begin(), [](auto b) { return static_cast<char>(b); });
-            supported_mechs_.emplace_back(mech);
-            previous = current + 1;
-            current = std::find(previous, body.end(), std::byte{ ' ' });
-        }
-        mech.resize(static_cast<std::size_t>(std::distance(previous, current)));
-        std::transform(previous, current, mech.begin(), [](auto b) { return static_cast<char>(b); });
-        supported_mechs_.emplace_back(mech);
-        return true;
+  Expects(header[1] == static_cast<std::byte>(opcode));
+  if (status == key_value_status_code::success) {
+    auto previous = body.begin();
+    auto current = std::find(
+      body.begin() + framing_extras_size + extras_size + key_size, body.end(), std::byte{ ' ' });
+    std::string mech;
+    while (current != body.end()) {
+      mech.resize(static_cast<std::size_t>(std::distance(previous, current)));
+      std::transform(previous, current, mech.begin(), [](auto b) {
+        return static_cast<char>(b);
+      });
+      supported_mechs_.emplace_back(mech);
+      previous = current + 1;
+      current = std::find(previous, body.end(), std::byte{ ' ' });
     }
-    return false;
+    mech.resize(static_cast<std::size_t>(std::distance(previous, current)));
+    std::transform(previous, current, mech.begin(), [](auto b) {
+      return static_cast<char>(b);
+    });
+    supported_mechs_.emplace_back(mech);
+    return true;
+  }
+  return false;
 }
 } // namespace couchbase::core::protocol

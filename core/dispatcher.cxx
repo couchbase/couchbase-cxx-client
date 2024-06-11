@@ -27,11 +27,12 @@ dispatcher::dispatcher(std::string bucket_name, core_sdk_shim shim)
 auto
 dispatcher::direct_dispatch(std::shared_ptr<mcbp::queue_request> req) const -> std::error_code
 {
-    return shim_.cluster.direct_dispatch(bucket_name_, std::move(req));
+  return shim_.cluster.direct_dispatch(bucket_name_, std::move(req));
 }
 auto
-dispatcher::direct_re_queue(std::shared_ptr<mcbp::queue_request> req, bool is_retry) const -> std::error_code
+dispatcher::direct_re_queue(std::shared_ptr<mcbp::queue_request> req,
+                            bool is_retry) const -> std::error_code
 {
-    return shim_.cluster.direct_re_queue(bucket_name_, std::move(req), is_retry);
+  return shim_.cluster.direct_re_queue(bucket_name_, std::move(req), is_retry);
 }
 } // namespace couchbase::core

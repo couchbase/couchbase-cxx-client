@@ -24,41 +24,41 @@ namespace couchbase::transactions
  */
 class transactions_query_config
 {
-  public:
-    /**
-     * Set scan consistency for transactions.  @see query_options::scan_consistency for details.
-     *
-     * @param consistency the query_scan_consistency to use.
-     * @return reference to this, so calls can be chained.
-     */
-    transactions_query_config& scan_consistency(query_scan_consistency consistency)
-    {
-        scan_consistency_ = consistency;
-        return *this;
-    }
+public:
+  /**
+   * Set scan consistency for transactions.  @see query_options::scan_consistency for details.
+   *
+   * @param consistency the query_scan_consistency to use.
+   * @return reference to this, so calls can be chained.
+   */
+  transactions_query_config& scan_consistency(query_scan_consistency consistency)
+  {
+    scan_consistency_ = consistency;
+    return *this;
+  }
 
-    /**
-     * Get the scan consistency
-     *
-     * @return the query_scan_consistency
-     */
-    [[nodiscard]] query_scan_consistency scan_consistency() const
-    {
-        return scan_consistency_;
-    }
+  /**
+   * Get the scan consistency
+   *
+   * @return the query_scan_consistency
+   */
+  [[nodiscard]] query_scan_consistency scan_consistency() const
+  {
+    return scan_consistency_;
+  }
 
-    /** @private */
-    struct built {
-        query_scan_consistency scan_consistency;
-    };
+  /** @private */
+  struct built {
+    query_scan_consistency scan_consistency;
+  };
 
-    /** @private */
-    [[nodiscard]] auto build() const -> built
-    {
-        return { scan_consistency_ };
-    }
+  /** @private */
+  [[nodiscard]] auto build() const -> built
+  {
+    return { scan_consistency_ };
+  }
 
-  private:
-    query_scan_consistency scan_consistency_{ query_scan_consistency::request_plus };
+private:
+  query_scan_consistency scan_consistency_{ query_scan_consistency::request_plus };
 };
 } // namespace couchbase::transactions

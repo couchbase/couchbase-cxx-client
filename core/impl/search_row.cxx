@@ -33,42 +33,42 @@ search_row::search_row(internal_search_row internal)
 auto
 search_row::index() const -> const std::string&
 {
-    return internal_->index();
+  return internal_->index();
 }
 
 auto
 search_row::id() const -> const std::string&
 {
-    return internal_->id();
+  return internal_->id();
 }
 
 auto
 search_row::score() const -> double
 {
-    return internal_->score();
+  return internal_->score();
 }
 
 auto
 search_row::fields() const -> const codec::binary&
 {
-    return internal_->fields();
+  return internal_->fields();
 }
 
 auto
 search_row::explanation() const -> const codec::binary&
 {
-    return internal_->explanation();
+  return internal_->explanation();
 }
 
 auto
 search_row::locations() const -> const std::optional<search_row_locations>&
 {
-    return internal_->locations();
+  return internal_->locations();
 }
 
 auto
 search_row::fragments() const -> const std::map<std::string, std::vector<std::string>>&
 {
-    return internal_->fragments();
+  return internal_->fragments();
 }
 } // namespace couchbase

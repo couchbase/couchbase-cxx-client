@@ -32,10 +32,10 @@ namespace couchbase::core::impl::subdoc
  * @internal
  */
 struct command {
-    opcode opcode_;
-    std::string path_;
-    std::vector<std::byte> value_;
-    std::byte flags_;
-    std::size_t original_index_{};
+  opcode opcode_;
+  std::string path_;
+  std::vector<std::byte> value_;
+  std::byte flags_;
+  std::size_t original_index_{};
 };
 } // namespace couchbase::core::impl::subdoc

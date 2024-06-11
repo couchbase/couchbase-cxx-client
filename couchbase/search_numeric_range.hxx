@@ -28,42 +28,42 @@ namespace couchbase
  */
 class search_numeric_range
 {
-  public:
-    search_numeric_range(std::string name,
-                         std::variant<std::monostate, std::uint64_t, double> min,
-                         std::variant<std::monostate, std::uint64_t, double> max,
-                         std::uint64_t count)
-      : name_{ std::move(name) }
-      , min_{ min }
-      , max_{ max }
-      , count_{ count }
-    {
-    }
+public:
+  search_numeric_range(std::string name,
+                       std::variant<std::monostate, std::uint64_t, double> min,
+                       std::variant<std::monostate, std::uint64_t, double> max,
+                       std::uint64_t count)
+    : name_{ std::move(name) }
+    , min_{ min }
+    , max_{ max }
+    , count_{ count }
+  {
+  }
 
-    [[nodiscard]] auto name() const -> const std::string&
-    {
-        return name_;
-    }
+  [[nodiscard]] auto name() const -> const std::string&
+  {
+    return name_;
+  }
 
-    [[nodiscard]] auto min() const -> const std::variant<std::monostate, std::uint64_t, double>&
-    {
-        return min_;
-    }
+  [[nodiscard]] auto min() const -> const std::variant<std::monostate, std::uint64_t, double>&
+  {
+    return min_;
+  }
 
-    [[nodiscard]] auto max() const -> const std::variant<std::monostate, std::uint64_t, double>&
-    {
-        return max_;
-    }
+  [[nodiscard]] auto max() const -> const std::variant<std::monostate, std::uint64_t, double>&
+  {
+    return max_;
+  }
 
-    [[nodiscard]] auto count() const -> std::uint64_t
-    {
-        return count_;
-    }
+  [[nodiscard]] auto count() const -> std::uint64_t
+  {
+    return count_;
+  }
 
-  private:
-    std::string name_;
-    std::variant<std::monostate, std::uint64_t, double> min_{};
-    std::variant<std::monostate, std::uint64_t, double> max_{};
-    std::uint64_t count_;
+private:
+  std::string name_;
+  std::variant<std::monostate, std::uint64_t, double> min_{};
+  std::variant<std::monostate, std::uint64_t, double> max_{};
+  std::uint64_t count_;
 };
 } // namespace couchbase

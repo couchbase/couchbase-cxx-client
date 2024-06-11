@@ -24,8 +24,8 @@ namespace couchbase::core
 class cluster;
 
 struct core_sdk_shim {
-    core::cluster cluster;
+  core::cluster cluster;
 
-    [[nodiscard]] auto to_string() const -> std::string;
+  [[nodiscard]] auto to_string() const -> std::string;
 };
 } // namespace couchbase::core

@@ -23,39 +23,43 @@ namespace couchbase::transactions
  * @brief  Offline, serializable representation of a bucket, scope, and collection
  */
 struct transaction_keyspace {
-    transaction_keyspace(std::string bucket_name, std::string scope_name, std::string collection_name);
+  transaction_keyspace(std::string bucket_name,
+                       std::string scope_name,
+                       std::string collection_name);
 
-    explicit transaction_keyspace(const std::string& bucket_name);
+  explicit transaction_keyspace(const std::string& bucket_name);
 
-    bool operator==(const transaction_keyspace& keyspace) const
-    {
-        return bucket == keyspace.bucket && scope == keyspace.scope && collection == keyspace.collection;
-    }
+  bool operator==(const transaction_keyspace& keyspace) const
+  {
+    return bucket == keyspace.bucket && scope == keyspace.scope &&
+           collection == keyspace.collection;
+  }
 
-    /**
-     * Check if a keyspace is valid.
-     *
-     * A valid transaction_keyspace must have the bucket, scope, and collection all set.   Note that both the scope and collection default
-     * to _default, but there is no default for the bucket so it must be set.
-     *
-     * @return true if valid.
-     */
-    bool valid();
+  /**
+   * Check if a keyspace is valid.
+   *
+   * A valid transaction_keyspace must have the bucket, scope, and collection all set.   Note that
+   * both the scope and collection default to _default, but there is no default for the bucket so it
+   * must be set.
+   *
+   * @return true if valid.
+   */
+  bool valid();
 
-    /** @private */
-    template<typename OStream>
-    friend OStream& operator<<(OStream& os, const transaction_keyspace& keyspace)
-    {
-        os << "transaction_keyspace{";
-        os << "bucket: " << keyspace.bucket;
-        os << ", scope: " << keyspace.scope;
-        os << ", collection: " << keyspace.collection;
-        os << "}";
-        return os;
-    }
+  /** @private */
+  template<typename OStream>
+  friend OStream& operator<<(OStream& os, const transaction_keyspace& keyspace)
+  {
+    os << "transaction_keyspace{";
+    os << "bucket: " << keyspace.bucket;
+    os << ", scope: " << keyspace.scope;
+    os << ", collection: " << keyspace.collection;
+    os << "}";
+    return os;
+  }
 
-    std::string bucket;
-    std::string scope;
-    std::string collection;
+  std::string bucket;
+  std::string scope;
+  std::string collection;
 };
 } // namespace couchbase::transactions

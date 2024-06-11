@@ -23,16 +23,16 @@
 namespace couchbase::core::mcbp
 {
 struct buffer_writer {
-    explicit buffer_writer(std::size_t size);
+  explicit buffer_writer(std::size_t size);
 
-    void write_byte(std::byte val);
-    void write_uint16(std::uint16_t val);
-    void write_uint32(std::uint32_t val);
-    void write_uint64(std::uint64_t val);
-    void write_frame_header(std::uint8_t type, std::size_t length);
-    void write(const std::vector<std::byte>& val);
+  void write_byte(std::byte val);
+  void write_uint16(std::uint16_t val);
+  void write_uint32(std::uint32_t val);
+  void write_uint64(std::uint64_t val);
+  void write_frame_header(std::uint8_t type, std::size_t length);
+  void write(const std::vector<std::byte>& val);
 
-    std::vector<std::byte> store_;
-    std::size_t offset_{ 0 };
+  std::vector<std::byte> store_;
+  std::size_t offset_{ 0 };
 };
 } // namespace couchbase::core::mcbp

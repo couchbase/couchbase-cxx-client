@@ -25,13 +25,13 @@ namespace couchbase::core::mcbp
 {
 class queue_response : public packet
 {
-  public:
-    explicit queue_response(packet&& pkt)
-      : packet{ pkt }
-    {
-    }
+public:
+  explicit queue_response(packet&& pkt)
+    : packet{ pkt }
+  {
+  }
 
-    std::string source_address_{};
-    std::string source_connection_id_{};
+  std::string source_address_{};
+  std::string source_connection_id_{};
 };
 } // namespace couchbase::core::mcbp

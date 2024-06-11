@@ -25,87 +25,87 @@
 namespace couchbase
 {
 /**
- * A doc_id query is a query that directly matches the documents whose ID have been provided. It can be combined within a conjunction_query
- * to restrict matches on the set of documents.
+ * A doc_id query is a query that directly matches the documents whose ID have been provided. It can
+ * be combined within a conjunction_query to restrict matches on the set of documents.
  *
  * @since 1.0.0
  * @committed
  */
 class doc_id_query : public search_query
 {
-  public:
-    doc_id_query() = default;
+public:
+  doc_id_query() = default;
 
-    /**
-     * Create a new doc_id query.
-     *
-     * @param ids the list of document IDs to be restricted against.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    explicit doc_id_query(std::vector<std::string> ids)
-      : ids_{ std::move(ids) }
-    {
+  /**
+   * Create a new doc_id query.
+   *
+   * @param ids the list of document IDs to be restricted against.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  explicit doc_id_query(std::vector<std::string> ids)
+    : ids_{ std::move(ids) }
+  {
+  }
+
+  /**
+   * Create a new doc_id query.
+   *
+   * @param ids the list of document IDs to be restricted against.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  doc_id_query(std::initializer_list<std::string> ids)
+  {
+    ids_.reserve(ids.size());
+    doc_ids(ids);
+  }
+
+  /**
+   * Add IDs to the query.
+   *
+   * @param ids  the list of document identifiers to add
+   *
+   * @return this query for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto doc_ids(const std::vector<std::string>& ids) -> doc_id_query&
+  {
+    for (const auto& id : ids) {
+      ids_.push_back(id);
     }
+    return *this;
+  }
 
-    /**
-     * Create a new doc_id query.
-     *
-     * @param ids the list of document IDs to be restricted against.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    doc_id_query(std::initializer_list<std::string> ids)
-    {
-        ids_.reserve(ids.size());
-        doc_ids(ids);
-    }
+  /**
+   * Add ID to the query.
+   *
+   * @param id  the document identifier to add
+   *
+   * @return this query for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto doc_id(const std::string& id) -> doc_id_query&
+  {
+    ids_.push_back(id);
+    return *this;
+  }
 
-    /**
-     * Add IDs to the query.
-     *
-     * @param ids  the list of document identifiers to add
-     *
-     * @return this query for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto doc_ids(const std::vector<std::string>& ids) -> doc_id_query&
-    {
-        for (const auto& id : ids) {
-            ids_.push_back(id);
-        }
-        return *this;
-    }
+  /**
+   * @return encoded representation of the query.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto encode() const -> encoded_search_query override;
 
-    /**
-     * Add ID to the query.
-     *
-     * @param id  the document identifier to add
-     *
-     * @return this query for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto doc_id(const std::string& id) -> doc_id_query&
-    {
-        ids_.push_back(id);
-        return *this;
-    }
-
-    /**
-     * @return encoded representation of the query.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto encode() const -> encoded_search_query override;
-
-  private:
-    std::vector<std::string> ids_{};
+private:
+  std::vector<std::string> ids_{};
 };
 } // namespace couchbase

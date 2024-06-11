@@ -41,36 +41,36 @@ search_row_location::operator=(couchbase::search_row_location&&) noexcept = defa
 auto
 search_row_location::field() const -> const std::string&
 {
-    return internal_->location.field;
+  return internal_->location.field;
 }
 
 auto
 search_row_location::term() const -> const std::string&
 {
-    return internal_->location.term;
+  return internal_->location.term;
 }
 
 auto
 search_row_location::position() const -> const std::uint64_t&
 {
-    return internal_->location.position;
+  return internal_->location.position;
 }
 
 auto
 search_row_location::start_offset() const -> const std::uint64_t&
 {
-    return internal_->location.start_offset;
+  return internal_->location.start_offset;
 }
 
 auto
 search_row_location::end_offset() const -> const std::uint64_t&
 {
-    return internal_->location.end_offset;
+  return internal_->location.end_offset;
 }
 
 auto
 search_row_location::array_positions() const -> const std::optional<std::vector<std::uint64_t>>&
 {
-    return internal_->location.array_positions;
+  return internal_->location.array_positions;
 }
 } // namespace couchbase

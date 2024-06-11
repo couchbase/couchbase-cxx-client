@@ -35,27 +35,28 @@ namespace couchbase
  */
 class build_query_index_options : public common_options<build_query_index_options>
 {
-  public:
-    struct built : public common_options<build_query_index_options>::built {
-        const std::optional<std::string> scope_name{};
-        const std::optional<std::string> collection_name{};
-    };
+public:
+  struct built : public common_options<build_query_index_options>::built {
+    const std::optional<std::string> scope_name{};
+    const std::optional<std::string> collection_name{};
+  };
 
-    /**
-     * Validates options and returns them as an immutable value.
-     *
-     * @return consistent options as an immutable value
-     *
-     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto build() const -> built
-    {
+  /**
+   * Validates options and returns them as an immutable value.
+   *
+   * @return consistent options as an immutable value
+   *
+   * @exception std::system_error with code errc::common::invalid_argument if the options are not
+   * valid
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto build() const -> built
+  {
 
-        return { build_common_options() };
-    }
+    return { build_common_options() };
+  }
 };
 
 /**

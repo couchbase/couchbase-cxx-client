@@ -22,19 +22,21 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-collections_manifest_get_request::encode_to(encoded_request_type& encoded, mcbp_context&& /* context */) const
+collections_manifest_get_request::encode_to(encoded_request_type& encoded,
+                                            mcbp_context&& /* context */) const
 {
-    encoded.opaque(opaque);
-    return {};
+  encoded.opaque(opaque);
+  return {};
 }
 
 collections_manifest_get_response
-collections_manifest_get_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
+collections_manifest_get_request::make_response(key_value_error_context&& ctx,
+                                                const encoded_response_type& encoded) const
 {
-    collections_manifest_get_response response{ std::move(ctx) };
-    if (!response.ctx.ec()) {
-        response.manifest = encoded.body().manifest();
-    }
-    return response;
+  collections_manifest_get_response response{ std::move(ctx) };
+  if (!response.ctx.ec()) {
+    response.manifest = encoded.body().manifest();
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

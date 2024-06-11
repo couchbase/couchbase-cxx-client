@@ -30,31 +30,31 @@ namespace couchbase
  */
 class search_sort_id : public search_sort
 {
-  public:
-    search_sort_id() = default;
+public:
+  search_sort_id() = default;
 
-    explicit search_sort_id(bool descending)
-      : search_sort{ descending }
-    {
-    }
+  explicit search_sort_id(bool descending)
+    : search_sort{ descending }
+  {
+  }
 
-    /**
-     * Set the sorting direction.
-     *
-     * @param desc `true` for descending order, `false` for ascending
-     * @return pointer to this
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto descending(bool desc) -> search_sort_id&;
+  /**
+   * Set the sorting direction.
+   *
+   * @param desc `true` for descending order, `false` for ascending
+   * @return pointer to this
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto descending(bool desc) -> search_sort_id&;
 
-    /**
-     * @return encoded representation of the search facet.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto encode() const -> encoded_search_sort override;
+  /**
+   * @return encoded representation of the search facet.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto encode() const -> encoded_search_sort override;
 };
 } // namespace couchbase

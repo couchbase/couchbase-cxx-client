@@ -37,54 +37,54 @@ namespace subdoc
  */
 class counter
 {
-  public:
-    /**
-     * Sets that this is an extended attribute (xattr) field.
-     *
-     * @param value new value for the option
-     * @return this, for chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto xattr(bool value = true) -> counter&
-    {
-        xattr_ = value;
-        return *this;
-    }
+public:
+  /**
+   * Sets that this is an extended attribute (xattr) field.
+   *
+   * @param value new value for the option
+   * @return this, for chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto xattr(bool value = true) -> counter&
+  {
+    xattr_ = value;
+    return *this;
+  }
 
-    /**
-     * Sets that this parent fields should be created automatically.
-     *
-     * @param value new value for the option
-     * @return this, for chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto create_path(bool value = true) -> counter&
-    {
-        create_path_ = value;
-        return *this;
-    }
+  /**
+   * Sets that this parent fields should be created automatically.
+   *
+   * @param value new value for the option
+   * @return this, for chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto create_path(bool value = true) -> counter&
+  {
+    create_path_ = value;
+    return *this;
+  }
 
-  private:
+private:
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-    friend couchbase::mutate_in_specs;
+  friend couchbase::mutate_in_specs;
 #endif
 
-    counter(std::string path, std::int64_t value)
-      : path_(std::move(path))
-      , delta_{ value }
-    {
-    }
+  counter(std::string path, std::int64_t value)
+    : path_(std::move(path))
+    , delta_{ value }
+  {
+  }
 
-    void encode(core::impl::subdoc::command_bundle& bundle) const;
+  void encode(core::impl::subdoc::command_bundle& bundle) const;
 
-    std::string path_;
-    std::int64_t delta_;
-    bool xattr_{ false };
-    bool create_path_{ false };
+  std::string path_;
+  std::int64_t delta_;
+  bool xattr_{ false };
+  bool create_path_{ false };
 };
 } // namespace subdoc
 } // namespace couchbase

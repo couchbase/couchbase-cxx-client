@@ -20,8 +20,8 @@
 namespace couchbase::core
 {
 enum class view_scan_consistency {
-    not_bounded = 0,
-    update_after,
-    request_plus,
+  not_bounded = 0,
+  update_after,
+  request_plus,
 };
 } // namespace couchbase::core

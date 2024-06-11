@@ -49,18 +49,18 @@ search_result::search_result(search_result&&) noexcept = default;
 auto
 search_result::meta_data() const -> const search_meta_data&
 {
-    return internal_->meta_data();
+  return internal_->meta_data();
 }
 
 auto
 search_result::rows() const -> const std::vector<search_row>&
 {
-    return internal_->rows();
+  return internal_->rows();
 }
 
 auto
 search_result::facets() const -> const std::map<std::string, std::shared_ptr<search_facet_result>>&
 {
-    return internal_->facets();
+  return internal_->facets();
 }
 } // namespace couchbase

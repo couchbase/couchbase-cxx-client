@@ -20,15 +20,16 @@
 namespace couchbase
 {
 enum class search_scan_consistency {
-    /**
-     * This is the default, the indexer does not wait for certain index updates until it returns the current hits.
-     *
-     * This is also the fastest mode, because we avoid the cost of obtaining the vector,
-     * and we also avoid any wait for the index to catch up to the vector.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    not_bounded = 0,
+  /**
+   * This is the default, the indexer does not wait for certain index updates until it returns the
+   * current hits.
+   *
+   * This is also the fastest mode, because we avoid the cost of obtaining the vector,
+   * and we also avoid any wait for the index to catch up to the vector.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  not_bounded = 0,
 };
 } // namespace couchbase

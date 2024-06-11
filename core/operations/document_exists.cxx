@@ -22,29 +22,31 @@
 namespace couchbase::core::operations
 {
 std::error_code
-exists_request::encode_to(exists_request::encoded_request_type& encoded, mcbp_context&& /* context */) const
+exists_request::encode_to(exists_request::encoded_request_type& encoded,
+                          mcbp_context&& /* context */) const
 {
-    encoded.opaque(opaque);
-    encoded.partition(partition);
-    encoded.body().id(id);
-    return {};
+  encoded.opaque(opaque);
+  encoded.partition(partition);
+  encoded.body().id(id);
+  return {};
 }
 
 exists_response
-exists_request::make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const
+exists_request::make_response(key_value_error_context&& ctx,
+                              const encoded_response_type& encoded) const
 {
-    exists_response response{ std::move(ctx) };
-    if (!response.ctx.ec()) {
-        response.cas = encoded.cas();
-        response.deleted = encoded.body().is_deleted();
-        response.flags = encoded.body().flags();
-        response.expiry = encoded.body().expiry();
-        response.sequence_number = encoded.body().sequence_number();
-        response.datatype = encoded.body().datatype();
-        response.document_exists = !response.deleted;
-    } else if (response.ctx.ec() == errc::key_value::document_not_found) {
-        response.ctx.override_ec({});
-    }
-    return response;
+  exists_response response{ std::move(ctx) };
+  if (!response.ctx.ec()) {
+    response.cas = encoded.cas();
+    response.deleted = encoded.body().is_deleted();
+    response.flags = encoded.body().flags();
+    response.expiry = encoded.body().expiry();
+    response.sequence_number = encoded.body().sequence_number();
+    response.datatype = encoded.body().datatype();
+    response.document_exists = !response.deleted;
+  } else if (response.ctx.ec() == errc::key_value::document_not_found) {
+    response.ctx.override_ec({});
+  }
+  return response;
 }
 } // namespace couchbase::core::operations

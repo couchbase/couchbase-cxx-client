@@ -35,40 +35,44 @@ make_key_value_error_context(std::error_code ec, const document_id& id);
 
 template<typename Command, typename Response>
 key_value_error_context
-make_key_value_error_context(std::error_code ec, std::uint16_t status_code, const Command& command, const Response& response)
+make_key_value_error_context(std::error_code ec,
+                             std::uint16_t status_code,
+                             const Command& command,
+                             const Response& response)
 {
 
-    const auto& key = command->request.id.key();
-    const auto& collection = command->request.id.collection();
-    const auto& scope = command->request.id.scope();
-    const auto& bucket = command->request.id.bucket();
-    std::uint32_t opaque = (ec && response.opaque() == 0) ? command->request.opaque : response.opaque();
-    std::optional<key_value_status_code> status{};
-    std::optional<key_value_error_map_info> error_map_info{};
-    if (status_code != 0xffffU) {
-        status = response.status();
-        if (command->session_ && status_code > 0) {
-            error_map_info = command->session_->decode_error_code(status_code);
-        }
+  const auto& key = command->request.id.key();
+  const auto& collection = command->request.id.collection();
+  const auto& scope = command->request.id.scope();
+  const auto& bucket = command->request.id.bucket();
+  std::uint32_t opaque =
+    (ec && response.opaque() == 0) ? command->request.opaque : response.opaque();
+  std::optional<key_value_status_code> status{};
+  std::optional<key_value_error_map_info> error_map_info{};
+  if (status_code != 0xffffU) {
+    status = response.status();
+    if (command->session_ && status_code > 0) {
+      error_map_info = command->session_->decode_error_code(status_code);
     }
-    auto retry_attempts = command->request.retries.retry_attempts();
-    auto retry_reasons = command->request.retries.retry_reasons();
+  }
+  auto retry_attempts = command->request.retries.retry_attempts();
+  auto retry_reasons = command->request.retries.retry_reasons();
 
-    return { command->id_,
-             ec,
-             command->last_dispatched_to_,
-             command->last_dispatched_from_,
-             retry_attempts,
-             std::move(retry_reasons),
-             key,
-             bucket,
-             scope,
-             collection,
-             opaque,
-             status,
-             response.cas(),
-             std::move(error_map_info),
-             response.error_info() };
+  return { command->id_,
+           ec,
+           command->last_dispatched_to_,
+           command->last_dispatched_from_,
+           retry_attempts,
+           std::move(retry_reasons),
+           key,
+           bucket,
+           scope,
+           collection,
+           opaque,
+           status,
+           response.cas(),
+           std::move(error_map_info),
+           response.error_info() };
 }
 
 subdocument_error_context

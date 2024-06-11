@@ -21,20 +21,20 @@
 namespace couchbase::transactions
 {
 /**
- * Transactional queries will return a transaction_query_result.   Note that this is currently identical
- * to a @ref query_result.   See @ref query_result for details.
+ * Transactional queries will return a transaction_query_result.   Note that this is currently
+ * identical to a @ref query_result.   See @ref query_result for details.
  */
 class transaction_query_result : public query_result
 {
-  public:
-    transaction_query_result(query_meta_data meta_data, std::vector<codec::binary> rows)
-      : query_result(std::move(meta_data), std::move(rows))
-    {
-    }
+public:
+  transaction_query_result(query_meta_data meta_data, std::vector<codec::binary> rows)
+    : query_result(std::move(meta_data), std::move(rows))
+  {
+  }
 
-    transaction_query_result()
-      : query_result()
-    {
-    }
+  transaction_query_result()
+    : query_result()
+  {
+  }
 };
 } // namespace couchbase::transactions

@@ -52,26 +52,26 @@ template<class T>
 typename std::enable_if_t<std::is_unsigned_v<T>, std::pair<T, gsl::span<std::byte>>>
 decode_unsigned_leb128(gsl::span<std::byte> buf, struct leb_128_no_throw /* unused */)
 {
-    T rv = std::to_integer<T>(buf[0] & std::byte{ 0b0111'1111 });
-    std::size_t end = 0;
-    if ((buf[0] & std::byte{ 0b1000'0000 }) == std::byte{ 0b1000'0000 }) {
-        T shift = 7;
-        // shift in the remaining data
-        for (end = 1; end < buf.size(); end++) {
-            rv |= std::to_integer<T>(buf[end] & std::byte{ 0b0111'1111 }) << shift;
-            if ((buf[end] & std::byte{ 0b1000'0000 }) == std::byte{ 0 }) {
-                break; // no more
-            }
-            shift += 7;
-        }
-
-        // We should be stopped for a stop byte, not the end of the buffer
-        if (end == buf.size()) {
-            return { 0U, {} };
-        }
+  T rv = std::to_integer<T>(buf[0] & std::byte{ 0b0111'1111 });
+  std::size_t end = 0;
+  if ((buf[0] & std::byte{ 0b1000'0000 }) == std::byte{ 0b1000'0000 }) {
+    T shift = 7;
+    // shift in the remaining data
+    for (end = 1; end < buf.size(); end++) {
+      rv |= std::to_integer<T>(buf[end] & std::byte{ 0b0111'1111 }) << shift;
+      if ((buf[end] & std::byte{ 0b1000'0000 }) == std::byte{ 0 }) {
+        break; // no more
+      }
+      shift += 7;
     }
-    // Return the decoded value and a buffer for any remaining data
-    return { rv, { buf.data() + end + 1, buf.size() - (end + 1) } };
+
+    // We should be stopped for a stop byte, not the end of the buffer
+    if (end == buf.size()) {
+      return { 0U, {} };
+    }
+  }
+  // Return the decoded value and a buffer for any remaining data
+  return { rv, { buf.data() + end + 1, buf.size() - (end + 1) } };
 }
 
 /**
@@ -89,13 +89,14 @@ template<class T>
 typename std::enable_if_t<std::is_unsigned_v<T>, std::pair<T, gsl::span<std::byte>>>
 decode_unsigned_leb128(gsl::span<std::byte> buf)
 {
-    if (!buf.empty()) {
-        auto rv = decode_unsigned_leb128<T>(buf, leb_128_no_throw{});
-        if (rv.second.data()) {
-            return rv;
-        }
+  if (!buf.empty()) {
+    auto rv = decode_unsigned_leb128<T>(buf, leb_128_no_throw{});
+    if (rv.second.data()) {
+      return rv;
     }
-    throw std::invalid_argument("decode_unsigned_leb128: invalid buf size:" + std::to_string(buf.size()));
+  }
+  throw std::invalid_argument("decode_unsigned_leb128: invalid buf size:" +
+                              std::to_string(buf.size()));
 }
 
 /**
@@ -105,7 +106,7 @@ template<class T>
 typename std::enable_if_t<std::is_unsigned_v<T>, gsl::span<std::byte>>
 skip_unsigned_leb128(gsl::span<std::byte> buf)
 {
-    return decode_unsigned_leb128<T>(buf).second;
+  return decode_unsigned_leb128<T>(buf).second;
 }
 
 // Empty, non-specialised version of the decoder class
@@ -121,63 +122,63 @@ class unsigned_leb128
 template<class T>
 class unsigned_leb128<T, typename std::enable_if_t<std::is_unsigned_v<T>>>
 {
-  public:
-    explicit unsigned_leb128(T in)
-    {
-        while (in > 0) {
-            auto byte = gsl::narrow_cast<std::byte>(in) & std::byte{ 0b0111'1111 };
-            in >>= 7;
+public:
+  explicit unsigned_leb128(T in)
+  {
+    while (in > 0) {
+      auto byte = gsl::narrow_cast<std::byte>(in) & std::byte{ 0b0111'1111 };
+      in >>= 7;
 
-            // In has more data?
-            if (in > 0) {
-                byte |= std::byte{ 0b1000'0000 };
-                encoded_data_[encoded_size_ - 1U] = byte;
-                // Increase the size
-                encoded_size_++;
-            } else {
-                encoded_data_[encoded_size_ - 1U] = byte;
-            }
-        }
+      // In has more data?
+      if (in > 0) {
+        byte |= std::byte{ 0b1000'0000 };
+        encoded_data_[encoded_size_ - 1U] = byte;
+        // Increase the size
+        encoded_size_++;
+      } else {
+        encoded_data_[encoded_size_ - 1U] = byte;
+      }
     }
+  }
 
-    [[nodiscard]] std::string get() const
-    {
-        return { begin(), end() };
-    }
+  [[nodiscard]] std::string get() const
+  {
+    return { begin(), end() };
+  }
 
-    [[nodiscard]] const std::byte* begin() const
-    {
-        return encoded_data_.data();
-    }
+  [[nodiscard]] const std::byte* begin() const
+  {
+    return encoded_data_.data();
+  }
 
-    [[nodiscard]] const std::byte* end() const
-    {
-        return encoded_data_.data() + encoded_size_;
-    }
+  [[nodiscard]] const std::byte* end() const
+  {
+    return encoded_data_.data() + encoded_size_;
+  }
 
-    [[nodiscard]] const std::byte* data() const
-    {
-        return encoded_data_.data();
-    }
+  [[nodiscard]] const std::byte* data() const
+  {
+    return encoded_data_.data();
+  }
 
-    [[nodiscard]] std::size_t size() const
-    {
-        return encoded_size_;
-    }
+  [[nodiscard]] std::size_t size() const
+  {
+    return encoded_size_;
+  }
 
-    constexpr static std::size_t get_max_size()
-    {
-        return max_size;
-    }
+  constexpr static std::size_t get_max_size()
+  {
+    return max_size;
+  }
 
-  private:
-    // Larger T may need a larger array
-    static_assert(sizeof(T) <= 8, "Class is only valid for uint 8/16/64");
+private:
+  // Larger T may need a larger array
+  static_assert(sizeof(T) <= 8, "Class is only valid for uint 8/16/64");
 
-    // value is large enough to store ~0 as leb128
-    static constexpr std::size_t max_size = sizeof(T) + (((sizeof(T) + 1) / 8) + 1);
-    std::array<std::byte, max_size> encoded_data_{};
-    std::size_t encoded_size_{ 1 };
+  // value is large enough to store ~0 as leb128
+  static constexpr std::size_t max_size = sizeof(T) + (((sizeof(T) + 1) / 8) + 1);
+  std::array<std::byte, max_size> encoded_data_{};
+  std::size_t encoded_size_{ 1 };
 };
 
 } // namespace couchbase::core::utils

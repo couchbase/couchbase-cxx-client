@@ -24,16 +24,16 @@
 namespace couchbase::management
 {
 struct query_index {
-    bool is_primary{ false };
-    std::string name;
-    std::string state;
-    std::string type;
-    std::vector<std::string> index_key{};
-    std::optional<std::string> partition{};
-    std::optional<std::string> condition{};
-    std::string bucket_name;
-    std::optional<std::string> scope_name{};
-    std::optional<std::string> collection_name{};
+  bool is_primary{ false };
+  std::string name;
+  std::string state;
+  std::string type;
+  std::vector<std::string> index_key{};
+  std::optional<std::string> partition{};
+  std::optional<std::string> condition{};
+  std::string bucket_name;
+  std::optional<std::string> scope_name{};
+  std::optional<std::string> collection_name{};
 };
 
 } // namespace couchbase::management

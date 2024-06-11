@@ -26,11 +26,11 @@ namespace couchbase
 void
 subdoc::insert::encode(core::impl::subdoc::command_bundle& bundle) const
 {
-    bundle.emplace_back({
-      core::impl::subdoc::opcode::dict_add,
-      path_,
-      value_,
-      core::impl::subdoc::build_mutate_in_path_flags(xattr_, create_path_, expand_macro_),
-    });
+  bundle.emplace_back({
+    core::impl::subdoc::opcode::dict_add,
+    path_,
+    value_,
+    core::impl::subdoc::build_mutate_in_path_flags(xattr_, create_path_, expand_macro_),
+  });
 }
 } // namespace couchbase

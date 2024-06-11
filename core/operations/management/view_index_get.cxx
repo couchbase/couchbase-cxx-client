@@ -27,49 +27,54 @@ namespace couchbase::core::operations::management
 std::error_code
 view_index_get_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
-    encoded.method = "GET";
-    encoded.path = fmt::format("/{}/_design/{}{}", bucket_name, ns == design_document_namespace::development ? "dev_" : "", document_name);
-    return {};
+  encoded.method = "GET";
+  encoded.path = fmt::format("/{}/_design/{}{}",
+                             bucket_name,
+                             ns == design_document_namespace::development ? "dev_" : "",
+                             document_name);
+  return {};
 }
 
 view_index_get_response
-view_index_get_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+view_index_get_request::make_response(error_context::http&& ctx,
+                                      const encoded_response_type& encoded) const
 {
-    view_index_get_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        if (encoded.status_code == 200) {
-            response.document.name = document_name;
-            response.document.ns = ns;
+  view_index_get_response response{ std::move(ctx) };
+  if (!response.ctx.ec) {
+    if (encoded.status_code == 200) {
+      response.document.name = document_name;
+      response.document.ns = ns;
 
-            tao::json::value payload{};
-            try {
-                payload = utils::json::parse(encoded.body.data());
-            } catch (const tao::pegtl::parse_error&) {
-                response.ctx.ec = errc::common::parsing_failure;
-                return response;
+      tao::json::value payload{};
+      try {
+        payload = utils::json::parse(encoded.body.data());
+      } catch (const tao::pegtl::parse_error&) {
+        response.ctx.ec = errc::common::parsing_failure;
+        return response;
+      }
+      const auto* views = payload.find("views");
+      if (views != nullptr && views->is_object()) {
+        for (const auto& [name, view_entry] : views->get_object()) {
+          couchbase::core::management::views::design_document::view view;
+          view.name = name;
+          if (view_entry.is_object()) {
+            if (const auto* map = view_entry.find("map"); map != nullptr && map->is_string()) {
+              view.map = map->get_string();
             }
-            const auto* views = payload.find("views");
-            if (views != nullptr && views->is_object()) {
-                for (const auto& [name, view_entry] : views->get_object()) {
-                    couchbase::core::management::views::design_document::view view;
-                    view.name = name;
-                    if (view_entry.is_object()) {
-                        if (const auto* map = view_entry.find("map"); map != nullptr && map->is_string()) {
-                            view.map = map->get_string();
-                        }
-                        if (const auto* reduce = view_entry.find("reduce"); reduce != nullptr && reduce->is_string()) {
-                            view.reduce = reduce->get_string();
-                        }
-                    }
-                    response.document.views[view.name] = view;
-                }
+            if (const auto* reduce = view_entry.find("reduce");
+                reduce != nullptr && reduce->is_string()) {
+              view.reduce = reduce->get_string();
             }
-        } else if (encoded.status_code == 404) {
-            response.ctx.ec = errc::view::design_document_not_found;
-        } else {
-            response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+          }
+          response.document.views[view.name] = view;
         }
+      }
+    } else if (encoded.status_code == 404) {
+      response.ctx.ec = errc::view::design_document_not_found;
+    } else {
+      response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
     }
-    return response;
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

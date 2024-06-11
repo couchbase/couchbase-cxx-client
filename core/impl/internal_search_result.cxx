@@ -31,30 +31,35 @@ namespace couchbase
 static std::vector<couchbase::search_row>
 map_rows(const std::vector<core::operations::search_response::search_row>& rows)
 {
-    std::vector<couchbase::search_row> result{};
-    result.reserve(rows.size());
-    for (const auto& row : rows) {
-        result.emplace_back(couchbase::search_row{ internal_search_row{ row } });
-    }
-    return result;
+  std::vector<couchbase::search_row> result{};
+  result.reserve(rows.size());
+  for (const auto& row : rows) {
+    result.emplace_back(couchbase::search_row{ internal_search_row{ row } });
+  }
+  return result;
 }
 
 static std::map<std::string, std::shared_ptr<search_facet_result>>
 map_facets(std::vector<core::operations::search_response::search_facet> facets)
 {
-    std::map<std::string, std::shared_ptr<search_facet_result>> result;
+  std::map<std::string, std::shared_ptr<search_facet_result>> result;
 
-    for (const auto& facet : facets) {
-        if (!facet.date_ranges.empty()) {
-            result.try_emplace(facet.name, std::make_shared<date_range_facet_result>(internal_date_range_facet_result{ facet }));
-        } else if (!facet.numeric_ranges.empty()) {
-            result.try_emplace(facet.name, std::make_shared<numeric_range_facet_result>(internal_numeric_range_facet_result{ facet }));
-        } else if (!facet.terms.empty()) {
-            result.try_emplace(facet.name, std::make_shared<term_facet_result>(internal_term_facet_result{ facet }));
-        }
+  for (const auto& facet : facets) {
+    if (!facet.date_ranges.empty()) {
+      result.try_emplace(
+        facet.name,
+        std::make_shared<date_range_facet_result>(internal_date_range_facet_result{ facet }));
+    } else if (!facet.numeric_ranges.empty()) {
+      result.try_emplace(
+        facet.name,
+        std::make_shared<numeric_range_facet_result>(internal_numeric_range_facet_result{ facet }));
+    } else if (!facet.terms.empty()) {
+      result.try_emplace(facet.name,
+                         std::make_shared<term_facet_result>(internal_term_facet_result{ facet }));
     }
+  }
 
-    return result;
+  return result;
 }
 
 internal_search_result::internal_search_result(const core::operations::search_response& response)
@@ -67,18 +72,19 @@ internal_search_result::internal_search_result(const core::operations::search_re
 auto
 internal_search_result::meta_data() const -> const search_meta_data&
 {
-    return meta_data_;
+  return meta_data_;
 }
 
 auto
 internal_search_result::rows() const -> const std::vector<search_row>&
 {
-    return rows_;
+  return rows_;
 }
 
 auto
-internal_search_result::facets() const -> const std::map<std::string, std::shared_ptr<search_facet_result>>&
+internal_search_result::facets() const
+  -> const std::map<std::string, std::shared_ptr<search_facet_result>>&
 {
-    return facets_;
+  return facets_;
 }
 } // namespace couchbase

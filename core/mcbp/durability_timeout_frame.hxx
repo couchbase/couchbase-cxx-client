@@ -21,9 +21,10 @@
 
 namespace couchbase::core::mcbp
 {
-// durability_timeout_frame allows you to specify a specific timeout for durability operations to timeout.  Note that this frame is actually
-// an extension of durability_level_frame and requires that frame to also be used in order to function.
+// durability_timeout_frame allows you to specify a specific timeout for durability operations to
+// timeout.  Note that this frame is actually an extension of durability_level_frame and requires
+// that frame to also be used in order to function.
 struct durability_timeout_frame {
-    std::chrono::milliseconds timeout;
+  std::chrono::milliseconds timeout;
 };
 } // namespace couchbase::core::mcbp

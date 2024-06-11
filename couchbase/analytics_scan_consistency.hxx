@@ -20,27 +20,30 @@
 namespace couchbase
 {
 enum class analytics_scan_consistency {
-    /**
-     * The indexer will return whatever state it has to the query engine at the time of query.
-     *
-     * This is the default (for single-statement requests). No timestamp vector is used in the index scan. This is also the fastest mode,
-     * because we avoid the cost of obtaining the vector, and we also avoid any wait for the index to catch up to the vector.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    not_bounded = 0,
+  /**
+   * The indexer will return whatever state it has to the query engine at the time of query.
+   *
+   * This is the default (for single-statement requests). No timestamp vector is used in the index
+   * scan. This is also the fastest mode, because we avoid the cost of obtaining the vector, and we
+   * also avoid any wait for the index to catch up to the vector.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  not_bounded = 0,
 
-    /**
-     * The indexer will wait until all mutations have been processed at the time of request before returning to the query engine.
-     *
-     * This implements strong consistency per request. Before processing the request, a current vector is obtained. The vector is used as a
-     * lower bound for the statements in the request. If there are DML statements in the request, RYOW ("read your own write") is also
-     * applied within the request.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    request_plus,
+  /**
+   * The indexer will wait until all mutations have been processed at the time of request before
+   * returning to the query engine.
+   *
+   * This implements strong consistency per request. Before processing the request, a current vector
+   * is obtained. The vector is used as a lower bound for the statements in the request. If there
+   * are DML statements in the request, RYOW
+   * ("read your own write") is also applied within the request.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  request_plus,
 };
 } // namespace couchbase

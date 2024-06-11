@@ -36,25 +36,25 @@ get_collection_id_response_body::parse(key_value_status_code status,
                                        const std::vector<std::byte>& body,
                                        const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == key_value_status_code::success && extras_size == 12) {
-        std::vector<std::uint8_t>::difference_type offset = framing_extras_size + key_size;
+  Expects(header[1] == static_cast<std::byte>(opcode));
+  if (status == key_value_status_code::success && extras_size == 12) {
+    std::vector<std::uint8_t>::difference_type offset = framing_extras_size + key_size;
 
-        std::memcpy(&manifest_uid_, body.data() + offset, sizeof(manifest_uid_));
-        manifest_uid_ = utils::byte_swap(manifest_uid_);
-        offset += 8;
+    std::memcpy(&manifest_uid_, body.data() + offset, sizeof(manifest_uid_));
+    manifest_uid_ = utils::byte_swap(manifest_uid_);
+    offset += 8;
 
-        std::memcpy(&collection_uid_, body.data() + offset, sizeof(collection_uid_));
-        collection_uid_ = utils::byte_swap(collection_uid_);
-        return true;
-    }
-    return false;
+    std::memcpy(&collection_uid_, body.data() + offset, sizeof(collection_uid_));
+    collection_uid_ = utils::byte_swap(collection_uid_);
+    return true;
+  }
+  return false;
 }
 
 void
 get_collection_id_request_body::collection_path(const std::string_view& path)
 {
-    value_.reserve(path.size());
-    utils::to_binary(path, std::back_insert_iterator(value_));
+  value_.reserve(path.size());
+  utils::to_binary(path, std::back_insert_iterator(value_));
 }
 } // namespace couchbase::core::protocol

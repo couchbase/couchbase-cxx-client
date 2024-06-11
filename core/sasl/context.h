@@ -28,25 +28,25 @@ namespace couchbase::core::sasl
  */
 class Context
 {
-  public:
-    virtual ~Context() = default;
+public:
+  virtual ~Context() = default;
 
-    /**
-     * Get the UUID used for errors by this connection. If none
-     * is created a new one is generated.
-     */
-    [[nodiscard]] const std::string& get_uuid();
+  /**
+   * Get the UUID used for errors by this connection. If none
+   * is created a new one is generated.
+   */
+  [[nodiscard]] const std::string& get_uuid();
 
-    /**
-     * Do this context contain a UUID?
-     */
-    [[nodiscard]] bool contains_uuid() const
-    {
-        return !uuid.empty();
-    }
+  /**
+   * Do this context contain a UUID?
+   */
+  [[nodiscard]] bool contains_uuid() const
+  {
+    return !uuid.empty();
+  }
 
-  private:
-    std::string uuid;
+private:
+  std::string uuid;
 };
 
 } // namespace couchbase::core::sasl

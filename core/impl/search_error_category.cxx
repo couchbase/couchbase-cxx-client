@@ -23,21 +23,22 @@ namespace couchbase::core::impl
 {
 
 struct search_error_category : std::error_category {
-    [[nodiscard]] const char* name() const noexcept override
-    {
-        return "couchbase.search";
-    }
+  [[nodiscard]] const char* name() const noexcept override
+  {
+    return "couchbase.search";
+  }
 
-    [[nodiscard]] std::string message(int ev) const noexcept override
-    {
-        switch (static_cast<errc::search>(ev)) {
-            case errc::search::index_not_ready:
-                return "index_not_ready (401)";
-            case errc::search::consistency_mismatch:
-                return "consistency_mismatch (402)";
-        }
-        return "FIXME: unknown error code (recompile with newer library): couchbase.search." + std::to_string(ev);
+  [[nodiscard]] std::string message(int ev) const noexcept override
+  {
+    switch (static_cast<errc::search>(ev)) {
+      case errc::search::index_not_ready:
+        return "index_not_ready (401)";
+      case errc::search::consistency_mismatch:
+        return "consistency_mismatch (402)";
     }
+    return "FIXME: unknown error code (recompile with newer library): couchbase.search." +
+           std::to_string(ev);
+  }
 };
 
 const inline static search_error_category category_instance;
@@ -45,7 +46,7 @@ const inline static search_error_category category_instance;
 const std::error_category&
 search_category() noexcept
 {
-    return category_instance;
+  return category_instance;
 }
 
 } // namespace couchbase::core::impl

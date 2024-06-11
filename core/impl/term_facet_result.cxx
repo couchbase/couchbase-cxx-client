@@ -29,36 +29,36 @@ term_facet_result::term_facet_result(internal_term_facet_result internal)
 auto
 term_facet_result::name() const -> const std::string&
 {
-    return internal_->name();
+  return internal_->name();
 }
 
 auto
 term_facet_result::field() const -> const std::string&
 {
-    return internal_->field();
+  return internal_->field();
 }
 
 auto
 term_facet_result::total() const -> std::uint64_t
 {
-    return internal_->total();
+  return internal_->total();
 }
 
 auto
 term_facet_result::missing() const -> std::uint64_t
 {
-    return internal_->missing();
+  return internal_->missing();
 }
 
 auto
 term_facet_result::other() const -> std::uint64_t
 {
-    return internal_->other();
+  return internal_->other();
 }
 
 auto
 term_facet_result::terms() const -> const std::vector<search_term_range>&
 {
-    return internal_->terms();
+  return internal_->terms();
 }
 } // namespace couchbase

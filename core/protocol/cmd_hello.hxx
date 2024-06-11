@@ -28,119 +28,119 @@ namespace couchbase::core::protocol
 
 class hello_response_body
 {
-  public:
-    static const inline client_opcode opcode = client_opcode::hello;
+public:
+  static const inline client_opcode opcode = client_opcode::hello;
 
-  private:
-    std::vector<hello_feature> supported_features_;
+private:
+  std::vector<hello_feature> supported_features_;
 
-  public:
-    [[nodiscard]] const std::vector<hello_feature>& supported_features() const
-    {
-        return supported_features_;
-    }
+public:
+  [[nodiscard]] const std::vector<hello_feature>& supported_features() const
+  {
+    return supported_features_;
+  }
 
-    bool parse(key_value_status_code status,
-               const header_buffer& header,
-               std::uint8_t framing_extras_size,
-               std::uint16_t key_size,
-               std::uint8_t extras_size,
-               const std::vector<std::byte>& body,
-               const cmd_info& info);
+  bool parse(key_value_status_code status,
+             const header_buffer& header,
+             std::uint8_t framing_extras_size,
+             std::uint16_t key_size,
+             std::uint8_t extras_size,
+             const std::vector<std::byte>& body,
+             const cmd_info& info);
 };
 
 class hello_request_body
 {
-  public:
-    using response_body_type = hello_response_body;
-    static const inline client_opcode opcode = client_opcode::hello;
+public:
+  using response_body_type = hello_response_body;
+  static const inline client_opcode opcode = client_opcode::hello;
 
-  private:
-    std::vector<std::byte> key_;
-    std::vector<hello_feature> features_{
-        hello_feature::tcp_nodelay,
-        hello_feature::xattr,
-        hello_feature::xerror,
-        hello_feature::select_bucket,
-        hello_feature::json,
-        hello_feature::duplex,
-        hello_feature::alt_request_support,
-        hello_feature::tracing,
-        hello_feature::sync_replication,
-        hello_feature::vattr,
-        hello_feature::collections,
-        hello_feature::subdoc_create_as_deleted,
-        hello_feature::preserve_ttl,
-        hello_feature::subdoc_replica_read,
-    };
-    std::vector<std::byte> value_;
+private:
+  std::vector<std::byte> key_;
+  std::vector<hello_feature> features_{
+    hello_feature::tcp_nodelay,
+    hello_feature::xattr,
+    hello_feature::xerror,
+    hello_feature::select_bucket,
+    hello_feature::json,
+    hello_feature::duplex,
+    hello_feature::alt_request_support,
+    hello_feature::tracing,
+    hello_feature::sync_replication,
+    hello_feature::vattr,
+    hello_feature::collections,
+    hello_feature::subdoc_create_as_deleted,
+    hello_feature::preserve_ttl,
+    hello_feature::subdoc_replica_read,
+  };
+  std::vector<std::byte> value_;
 
-  public:
-    void user_agent(std::string_view val);
+public:
+  void user_agent(std::string_view val);
 
-    void enable_unordered_execution()
-    {
-        features_.emplace_back(hello_feature::unordered_execution);
+  void enable_unordered_execution()
+  {
+    features_.emplace_back(hello_feature::unordered_execution);
+  }
+
+  void enable_clustermap_change_notification()
+  {
+    features_.emplace_back(hello_feature::clustermap_change_notification);
+  }
+
+  void enable_deduplicate_not_my_vbucket_clustermap()
+  {
+    features_.emplace_back(hello_feature::deduplicate_not_my_vbucket_clustermap);
+  }
+
+  void enable_compression()
+  {
+    features_.emplace_back(hello_feature::snappy);
+  }
+
+  void enable_mutation_tokens()
+  {
+    features_.emplace_back(hello_feature::mutation_seqno);
+  }
+
+  [[nodiscard]] const std::vector<hello_feature>& features() const
+  {
+    return features_;
+  }
+
+  [[nodiscard]] const auto& key() const
+  {
+    return key_;
+  }
+
+  [[nodiscard]] const auto& framing_extras() const
+  {
+    return empty_buffer;
+  }
+
+  [[nodiscard]] const auto& extras() const
+  {
+    return empty_buffer;
+  }
+
+  [[nodiscard]] const auto& value()
+  {
+    if (value_.empty()) {
+      fill_body();
     }
+    return value_;
+  }
 
-    void enable_clustermap_change_notification()
-    {
-        features_.emplace_back(hello_feature::clustermap_change_notification);
+  [[nodiscard]] std::size_t size()
+  {
+    if (value_.empty()) {
+      fill_body();
     }
+    return key_.size() + value_.size();
+  }
 
-    void enable_deduplicate_not_my_vbucket_clustermap()
-    {
-        features_.emplace_back(hello_feature::deduplicate_not_my_vbucket_clustermap);
-    }
-
-    void enable_compression()
-    {
-        features_.emplace_back(hello_feature::snappy);
-    }
-
-    void enable_mutation_tokens()
-    {
-        features_.emplace_back(hello_feature::mutation_seqno);
-    }
-
-    [[nodiscard]] const std::vector<hello_feature>& features() const
-    {
-        return features_;
-    }
-
-    [[nodiscard]] const auto& key() const
-    {
-        return key_;
-    }
-
-    [[nodiscard]] const auto& framing_extras() const
-    {
-        return empty_buffer;
-    }
-
-    [[nodiscard]] const auto& extras() const
-    {
-        return empty_buffer;
-    }
-
-    [[nodiscard]] const auto& value()
-    {
-        if (value_.empty()) {
-            fill_body();
-        }
-        return value_;
-    }
-
-    [[nodiscard]] std::size_t size()
-    {
-        if (value_.empty()) {
-            fill_body();
-        }
-        return key_.size() + value_.size();
-    }
-
-  private:
-    void fill_body();
+private:
+  void fill_body();
 };
 
 } // namespace couchbase::core::protocol

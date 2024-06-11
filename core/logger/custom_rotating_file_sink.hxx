@@ -47,29 +47,31 @@ class file_helper;
 template<class Mutex>
 class custom_rotating_file_sink : public spdlog::sinks::base_sink<Mutex>
 {
-  public:
-    custom_rotating_file_sink(const spdlog::filename_t& base_filename, std::size_t max_size, const std::string& log_pattern);
+public:
+  custom_rotating_file_sink(const spdlog::filename_t& base_filename,
+                            std::size_t max_size,
+                            const std::string& log_pattern);
 
-    ~custom_rotating_file_sink() override;
+  ~custom_rotating_file_sink() override;
 
-  protected:
-    void sink_it_(const spdlog::details::log_msg& msg) override;
-    void flush_() override;
+protected:
+  void sink_it_(const spdlog::details::log_msg& msg) override;
+  void flush_() override;
 
-  private:
-    void add_hook(const std::string& hook);
-    // Calculate the full filename to use the next time
-    std::unique_ptr<spdlog::details::file_helper> open_file();
+private:
+  void add_hook(const std::string& hook);
+  // Calculate the full filename to use the next time
+  std::unique_ptr<spdlog::details::file_helper> open_file();
 
-    const spdlog::filename_t base_filename_;
-    const std::size_t max_size_;
-    std::size_t current_size_{ 0 };
-    std::unique_ptr<spdlog::details::file_helper> file_helper_;
-    std::unique_ptr<spdlog::pattern_formatter> formatter;
-    unsigned long next_file_id_;
+  const spdlog::filename_t base_filename_;
+  const std::size_t max_size_;
+  std::size_t current_size_{ 0 };
+  std::unique_ptr<spdlog::details::file_helper> file_helper_;
+  std::unique_ptr<spdlog::pattern_formatter> formatter;
+  unsigned long next_file_id_;
 
-    const std::string opening_log_file_{ "---------- Opening logfile: " };
-    const std::string closing_log_file_{ "---------- Closing logfile" };
+  const std::string opening_log_file_{ "---------- Opening logfile: " };
+  const std::string closing_log_file_{ "---------- Closing logfile" };
 };
 
 using custom_rotating_file_sink_mt = custom_rotating_file_sink<std::mutex>;

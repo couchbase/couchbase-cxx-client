@@ -22,5 +22,15 @@ namespace couchbase
 /**
  * Enumeration of units for geo_distance sorting
  */
-enum class search_geo_distance_units { meters, miles, centimeters, millimeters, nautical_miles, kilometers, feet, yards, inch };
+enum class search_geo_distance_units {
+  meters,
+  miles,
+  centimeters,
+  millimeters,
+  nautical_miles,
+  kilometers,
+  feet,
+  yards,
+  inch
+};
 } // namespace couchbase

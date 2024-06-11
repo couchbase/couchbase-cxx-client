@@ -29,101 +29,103 @@
 namespace couchbase::core
 {
 struct scan_term {
-    std::string term;
-    bool exclusive{ false };
+  std::string term;
+  bool exclusive{ false };
 };
 
 struct range_scan {
-    std::optional<scan_term> from{};
-    std::optional<scan_term> to{};
+  std::optional<scan_term> from{};
+  std::optional<scan_term> to{};
 };
 
 struct prefix_scan {
-    std::string prefix{};
+  std::string prefix{};
 
-    [[nodiscard]] auto to_range_scan() const -> range_scan;
+  [[nodiscard]] auto to_range_scan() const -> range_scan;
 };
 
 struct sampling_scan {
-    std::size_t limit{};
-    std::optional<std::uint64_t> seed{};
+  std::size_t limit{};
+  std::optional<std::uint64_t> seed{};
 };
 
 struct range_snapshot_requirements {
-    std::uint64_t vbucket_uuid{};
-    std::uint64_t sequence_number{};
-    bool sequence_number_exists{ false };
+  std::uint64_t vbucket_uuid{};
+  std::uint64_t sequence_number{};
+  bool sequence_number_exists{ false };
 };
 
 struct range_scan_create_options {
-    std::string scope_name{};
-    std::string collection_name{};
-    std::variant<std::monostate, range_scan, prefix_scan, sampling_scan> scan_type{};
-    std::chrono::milliseconds timeout{};
-    std::uint32_t collection_id{ 0 };
-    std::optional<range_snapshot_requirements> snapshot_requirements{};
-    bool ids_only{ false };
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
+  std::string scope_name{};
+  std::string collection_name{};
+  std::variant<std::monostate, range_scan, prefix_scan, sampling_scan> scan_type{};
+  std::chrono::milliseconds timeout{};
+  std::uint32_t collection_id{ 0 };
+  std::optional<range_snapshot_requirements> snapshot_requirements{};
+  bool ids_only{ false };
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
 
-    struct {
-        std::string user{};
-    } internal{};
+  struct {
+    std::string user{};
+  } internal{};
 };
 
 struct range_scan_create_result {
-    std::vector<std::byte> scan_uuid;
-    bool ids_only;
+  std::vector<std::byte> scan_uuid;
+  bool ids_only;
 };
 
-using range_scan_create_callback = utils::movable_function<void(range_scan_create_result, std::error_code)>;
+using range_scan_create_callback =
+  utils::movable_function<void(range_scan_create_result, std::error_code)>;
 
 struct range_scan_continue_options {
-    static constexpr std::uint32_t default_batch_item_limit{ 50 };
-    static constexpr std::uint32_t default_batch_byte_limit{ 15000 };
-    static constexpr std::chrono::milliseconds default_batch_time_limit{ 0 };
+  static constexpr std::uint32_t default_batch_item_limit{ 50 };
+  static constexpr std::uint32_t default_batch_byte_limit{ 15000 };
+  static constexpr std::chrono::milliseconds default_batch_time_limit{ 0 };
 
-    std::uint32_t batch_item_limit{ default_batch_item_limit };
-    std::uint32_t batch_byte_limit{ default_batch_byte_limit };
-    std::chrono::milliseconds timeout{};
-    std::chrono::milliseconds batch_time_limit{ default_batch_time_limit };
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
+  std::uint32_t batch_item_limit{ default_batch_item_limit };
+  std::uint32_t batch_byte_limit{ default_batch_byte_limit };
+  std::chrono::milliseconds timeout{};
+  std::chrono::milliseconds batch_time_limit{ default_batch_time_limit };
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
 
-    struct {
-        std::string user{};
-    } internal{};
+  struct {
+    std::string user{};
+  } internal{};
 };
 
 struct range_scan_continue_result {
-    bool more;
-    bool complete;
-    bool ids_only;
+  bool more;
+  bool complete;
+  bool ids_only;
 };
 
-using range_scan_continue_callback = utils::movable_function<void(range_scan_continue_result, std::error_code)>;
+using range_scan_continue_callback =
+  utils::movable_function<void(range_scan_continue_result, std::error_code)>;
 
 struct range_scan_cancel_options {
-    std::chrono::milliseconds timeout;
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
+  std::chrono::milliseconds timeout;
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
 
-    struct {
-        std::string user{};
-    } internal{};
+  struct {
+    std::string user{};
+  } internal{};
 };
 
 struct range_scan_item_body {
-    std::uint32_t flags{};
-    std::uint32_t expiry{};
-    couchbase::cas cas{};
-    std::uint64_t sequence_number{};
-    std::byte datatype{};
-    std::vector<std::byte> value{};
+  std::uint32_t flags{};
+  std::uint32_t expiry{};
+  couchbase::cas cas{};
+  std::uint64_t sequence_number{};
+  std::byte datatype{};
+  std::vector<std::byte> value{};
 
-    [[nodiscard]] auto expiry_time() const -> std::chrono::system_clock::time_point;
+  [[nodiscard]] auto expiry_time() const -> std::chrono::system_clock::time_point;
 };
 
 struct range_scan_item {
-    std::string key{};
-    std::optional<range_scan_item_body> body{};
+  std::string key{};
+  std::optional<range_scan_item_body> body{};
 };
 
 using range_scan_item_callback = utils::movable_function<void(range_scan_item item)>;
@@ -131,5 +133,6 @@ using range_scan_item_callback = utils::movable_function<void(range_scan_item it
 struct range_scan_cancel_result {
 };
 
-using range_scan_cancel_callback = utils::movable_function<void(range_scan_cancel_result, std::error_code)>;
+using range_scan_cancel_callback =
+  utils::movable_function<void(range_scan_cancel_result, std::error_code)>;
 } // namespace couchbase::core

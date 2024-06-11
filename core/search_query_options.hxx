@@ -38,37 +38,38 @@ namespace couchbase::core
 {
 class search_query_options
 {
-  public:
-    std::string index_name{};
-    std::vector<std::byte> payload{};
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
-    std::chrono::milliseconds timeout{};
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{};
+public:
+  std::string index_name{};
+  std::vector<std::byte> payload{};
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
+  std::chrono::milliseconds timeout{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{};
 
-    struct {
-        std::string user{};
-    } internal{};
+  struct {
+    std::string user{};
+  } internal{};
 };
 
 class search_query_row_reader_impl;
 
 class search_query_row_reader
 {
-  public:
-    search_query_row_reader();
+public:
+  search_query_row_reader();
 
-    auto next_row() -> std::vector<std::byte>;
+  auto next_row() -> std::vector<std::byte>;
 
-    auto error() -> std::error_code;
+  auto error() -> std::error_code;
 
-    auto meta_data() -> std::optional<std::vector<std::byte>>;
+  auto meta_data() -> std::optional<std::vector<std::byte>>;
 
-    auto close() -> std::error_code;
+  auto close() -> std::error_code;
 
-  private:
-    std::shared_ptr<search_query_row_reader_impl> impl_;
+private:
+  std::shared_ptr<search_query_row_reader_impl> impl_;
 };
 
-using search_query_callback = utils::movable_function<void(search_query_row_reader reader, std::error_code ec)>;
+using search_query_callback =
+  utils::movable_function<void(search_query_row_reader reader, std::error_code ec)>;
 
 } // namespace couchbase::core

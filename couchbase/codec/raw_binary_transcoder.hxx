@@ -28,25 +28,27 @@ namespace couchbase::codec
 {
 class raw_binary_transcoder
 {
-  public:
-    using document_type = std::vector<std::byte>;
+public:
+  using document_type = std::vector<std::byte>;
 
-    static auto encode(document_type document) -> encoded_value
-    {
-        return { std::move(document), codec_flags::binary_common_flags };
+  static auto encode(document_type document) -> encoded_value
+  {
+    return { std::move(document), codec_flags::binary_common_flags };
+  }
+
+  template<typename Document = document_type,
+           std::enable_if_t<std::is_same_v<Document, document_type>, bool> = true>
+  static auto decode(const encoded_value& encoded) -> Document
+  {
+    if (!codec_flags::has_common_flags(encoded.flags, codec_flags::binary_common_flags)) {
+      throw std::system_error(
+        errc::common::decoding_failure,
+        "raw_binary_transcoder expects document to have BINARY common flags, flags=" +
+          std::to_string(encoded.flags));
     }
 
-    template<typename Document = document_type, std::enable_if_t<std::is_same_v<Document, document_type>, bool> = true>
-    static auto decode(const encoded_value& encoded) -> Document
-    {
-        if (!codec_flags::has_common_flags(encoded.flags, codec_flags::binary_common_flags)) {
-            throw std::system_error(errc::common::decoding_failure,
-                                    "raw_binary_transcoder expects document to have BINARY common flags, flags=" +
-                                      std::to_string(encoded.flags));
-        }
-
-        return encoded.data;
-    }
+    return encoded.data;
+  }
 };
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN

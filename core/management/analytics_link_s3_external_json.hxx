@@ -25,23 +25,25 @@ namespace tao::json
 {
 template<>
 struct traits<couchbase::core::management::analytics::s3_external_link> {
-    template<template<typename...> class Traits>
-    static couchbase::core::management::analytics::s3_external_link as(const tao::json::basic_value<Traits>& v)
-    {
-        couchbase::core::management::analytics::s3_external_link result{};
+  template<template<typename...> class Traits>
+  static couchbase::core::management::analytics::s3_external_link as(
+    const tao::json::basic_value<Traits>& v)
+  {
+    couchbase::core::management::analytics::s3_external_link result{};
 
-        result.link_name = v.at("name").get_string();
-        if (const auto* dataverse = v.find("dataverse"); dataverse != nullptr) {
-            result.dataverse = dataverse->get_string();
-        } else {
-            result.dataverse = v.at("scope").get_string();
-        }
-        result.access_key_id = v.at("accessKeyId").get_string();
-        result.region = v.at("region").get_string();
-        if (const auto* service_endpoint = v.find("serviceEndpoint"); service_endpoint != nullptr && service_endpoint->is_string()) {
-            result.service_endpoint.emplace(service_endpoint->get_string());
-        }
-        return result;
+    result.link_name = v.at("name").get_string();
+    if (const auto* dataverse = v.find("dataverse"); dataverse != nullptr) {
+      result.dataverse = dataverse->get_string();
+    } else {
+      result.dataverse = v.at("scope").get_string();
     }
+    result.access_key_id = v.at("accessKeyId").get_string();
+    result.region = v.at("region").get_string();
+    if (const auto* service_endpoint = v.find("serviceEndpoint");
+        service_endpoint != nullptr && service_endpoint->is_string()) {
+      result.service_endpoint.emplace(service_endpoint->get_string());
+    }
+    return result;
+  }
 };
 } // namespace tao::json

@@ -31,39 +31,41 @@ struct encoded_search_query;
  */
 class search_query
 {
-  public:
-    virtual ~search_query() = default;
+public:
+  virtual ~search_query() = default;
 
-    /**
-     * The boost parameter is used to increase the relative weight of a clause (with a boost greater than 1) or decrease the relative weight
-     * (with a boost between 0 and 1).
-     *
-     * @param boost boost value
-     * @tparam derived_query by default it returns `this` as @ref search_query, but it can also down-cast to derived query class.
-     *
-     * @return this query for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    template<typename derived_query = search_query, std::enable_if_t<std::is_base_of_v<search_query, derived_query>, bool> = true>
-    auto boost(double boost) -> derived_query&
-    {
-        boost_ = boost;
-        return *static_cast<derived_query*>(this);
-    }
+  /**
+   * The boost parameter is used to increase the relative weight of a clause (with a boost greater
+   * than 1) or decrease the relative weight (with a boost between 0 and 1).
+   *
+   * @param boost boost value
+   * @tparam derived_query by default it returns `this` as @ref search_query, but it can also
+   * down-cast to derived query class.
+   *
+   * @return this query for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  template<typename derived_query = search_query,
+           std::enable_if_t<std::is_base_of_v<search_query, derived_query>, bool> = true>
+  auto boost(double boost) -> derived_query&
+  {
+    boost_ = boost;
+    return *static_cast<derived_query*>(this);
+  }
 
-    /**
-     * @return encoded representation of the query.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] virtual auto encode() const -> encoded_search_query = 0;
+  /**
+   * @return encoded representation of the query.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] virtual auto encode() const -> encoded_search_query = 0;
 
-  protected:
-    search_query() = default;
+protected:
+  search_query() = default;
 
-    std::optional<double> boost_{};
+  std::optional<double> boost_{};
 };
 } // namespace couchbase

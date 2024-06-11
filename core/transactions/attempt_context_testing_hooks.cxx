@@ -24,25 +24,27 @@ namespace
 inline void
 noop1(attempt_context*, utils::movable_function<void(std::optional<error_class>)>&& handler)
 {
-    return handler({});
+  return handler({});
 }
 
 inline void
-noop2(attempt_context*, const std::string&, utils::movable_function<void(std::optional<error_class>)>&& handler)
+noop2(attempt_context*,
+      const std::string&,
+      utils::movable_function<void(std::optional<error_class>)>&& handler)
 {
-    return handler({});
+  return handler({});
 }
 
 inline std::optional<const std::string>
 noop3(attempt_context*)
 {
-    return {};
+  return {};
 }
 
 inline bool
 noop4(attempt_context*, const std::string&, std::optional<const std::string>)
 {
-    return false;
+  return false;
 }
 } // namespace
 

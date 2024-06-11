@@ -26,51 +26,52 @@ namespace couchbase
 {
 class create_dataverse_analytics_options : public common_options<create_dataverse_analytics_options>
 {
-  public:
-    /**
-     * Ignore error if the dataverse already exists.
-     *
-     * defaults to `false`
-     *
-     * @param ignore_if_exists
-     * @return reference to this object, for use in chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto ignore_if_exists(bool ignore_if_exists) -> create_dataverse_analytics_options&
-    {
-        ignore_if_exists_ = ignore_if_exists;
-        return self();
-    }
+public:
+  /**
+   * Ignore error if the dataverse already exists.
+   *
+   * defaults to `false`
+   *
+   * @param ignore_if_exists
+   * @return reference to this object, for use in chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto ignore_if_exists(bool ignore_if_exists) -> create_dataverse_analytics_options&
+  {
+    ignore_if_exists_ = ignore_if_exists;
+    return self();
+  }
 
-    /**
-     * Immutable value object representing consistent options.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    struct built : public common_options<create_dataverse_analytics_options>::built {
-        bool ignore_if_exists{};
-    };
+  /**
+   * Immutable value object representing consistent options.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  struct built : public common_options<create_dataverse_analytics_options>::built {
+    bool ignore_if_exists{};
+  };
 
-    /**
-     * Validates options and returns them as an immutable value.
-     *
-     * @return consistent options as an immutable value
-     *
-     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options(), ignore_if_exists_ };
-    }
+  /**
+   * Validates options and returns them as an immutable value.
+   *
+   * @return consistent options as an immutable value
+   *
+   * @exception std::system_error with code errc::common::invalid_argument if the options are not
+   * valid
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options(), ignore_if_exists_ };
+  }
 
-  private:
-    bool ignore_if_exists_{ false };
+private:
+  bool ignore_if_exists_{ false };
 };
 
 /**

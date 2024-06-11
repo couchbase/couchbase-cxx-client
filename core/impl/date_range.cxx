@@ -30,7 +30,9 @@ date_range::date_range(std::string name, std::string start, std::string end)
 {
 }
 
-date_range::date_range(std::string name, std::chrono::system_clock::time_point start, std::chrono::system_clock::time_point end)
+date_range::date_range(std::string name,
+                       std::chrono::system_clock::time_point start,
+                       std::chrono::system_clock::time_point end)
   : name_{ std::move(name) }
   , start_{ fmt::format(iso_8601_format, start) }
   , end_{ fmt::format(iso_8601_format, end) }
@@ -44,7 +46,9 @@ date_range::date_range(std::string name, std::tm start, std::tm end)
 {
 }
 
-date_range::date_range(std::string name, std::optional<std::string> start, std::optional<std::string> end)
+date_range::date_range(std::string name,
+                       std::optional<std::string> start,
+                       std::optional<std::string> end)
   : name_{ std::move(name) }
   , start_{ std::move(start) }
   , end_{ std::move(end) }
@@ -54,36 +58,36 @@ date_range::date_range(std::string name, std::optional<std::string> start, std::
 date_range
 date_range::with_start(std::string name, std::string start)
 {
-    return { std::move(name), std::move(start), {} };
+  return { std::move(name), std::move(start), {} };
 }
 
 date_range
 date_range::with_start(std::string name, std::chrono::system_clock::time_point start)
 {
-    return { std::move(name), fmt::format(iso_8601_format, start), {} };
+  return { std::move(name), fmt::format(iso_8601_format, start), {} };
 }
 
 date_range
 date_range::with_start(std::string name, std::tm start)
 {
-    return { std::move(name), fmt::format(iso_8601_format, start), {} };
+  return { std::move(name), fmt::format(iso_8601_format, start), {} };
 }
 
 date_range
 date_range::with_end(std::string name, std::string end)
 {
-    return { std::move(name), {}, std::move(end) };
+  return { std::move(name), {}, std::move(end) };
 }
 
 date_range
 date_range::with_end(std::string name, std::chrono::system_clock::time_point end)
 {
-    return { std::move(name), {}, fmt::format(iso_8601_format, end) };
+  return { std::move(name), {}, fmt::format(iso_8601_format, end) };
 }
 
 date_range
 date_range::with_end(std::string name, std::tm end)
 {
-    return { std::move(name), {}, fmt::format(iso_8601_format, end) };
+  return { std::move(name), {}, fmt::format(iso_8601_format, end) };
 }
 } // namespace couchbase

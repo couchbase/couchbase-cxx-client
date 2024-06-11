@@ -27,7 +27,9 @@
 
 namespace couchbase::core::mcbp
 {
-queue_request::queue_request(protocol::magic magic, protocol::client_opcode opcode, queue_callback&& callback)
+queue_request::queue_request(protocol::magic magic,
+                             protocol::client_opcode opcode,
+                             queue_callback&& callback)
   : mcbp::packet{ magic, opcode }
   , callback_{ std::move(callback) }
 {
@@ -36,139 +38,140 @@ queue_request::queue_request(protocol::magic magic, protocol::client_opcode opco
 std::size_t
 queue_request::retry_attempts() const
 {
-    std::scoped_lock lock(retry_mutex_);
-    return retry_count_;
+  std::scoped_lock lock(retry_mutex_);
+  return retry_count_;
 }
 
 std::string
 queue_request::identifier() const
 {
-    return std::to_string(opaque_);
+  return std::to_string(opaque_);
 }
 
 bool
 queue_request::idempotent() const
 {
-    return mcbp::is_idempotent(command_);
+  return mcbp::is_idempotent(command_);
 }
 
 std::set<retry_reason>
 queue_request::retry_reasons() const
 {
-    std::scoped_lock lock(retry_mutex_);
-    return retry_reasons_;
+  std::scoped_lock lock(retry_mutex_);
+  return retry_reasons_;
 }
 
 void
 queue_request::record_retry_attempt(retry_reason reason)
 {
-    std::scoped_lock lock(retry_mutex_);
-    ++retry_count_;
-    retry_reasons_.insert(reason);
+  std::scoped_lock lock(retry_mutex_);
+  ++retry_count_;
+  retry_reasons_.insert(reason);
 }
 
 auto
 queue_request::retries() const -> std::pair<std::size_t, std::set<retry_reason>>
 {
-    std::scoped_lock lock(retry_mutex_);
-    return { retry_count_, retry_reasons_ };
+  std::scoped_lock lock(retry_mutex_);
+  return { retry_count_, retry_reasons_ };
 }
 
 auto
 queue_request::connection_info() const -> queue_request_connection_info
 {
-    std::scoped_lock lock(connection_info_mutex_);
-    return connection_info_;
+  std::scoped_lock lock(connection_info_mutex_);
+  return connection_info_;
 }
 
 auto
 queue_request::is_cancelled() const -> bool
 {
-    return is_completed_.load();
+  return is_completed_.load();
 }
 
 static inline void
 cancel_timer(std::shared_ptr<asio::steady_timer> timer)
 {
-    if (auto t = std::move(timer); t) {
-        t->cancel();
-    }
+  if (auto t = std::move(timer); t) {
+    t->cancel();
+  }
 }
 
 auto
 queue_request::internal_cancel() -> bool
 {
-    std::scoped_lock lock(processing_mutex_);
+  std::scoped_lock lock(processing_mutex_);
 
-    if (bool expected_state{ false }; !is_completed_.compare_exchange_strong(expected_state, true)) {
-        // someone already completed this request
-        return false;
-    }
+  if (bool expected_state{ false }; !is_completed_.compare_exchange_strong(expected_state, true)) {
+    // someone already completed this request
+    return false;
+  }
 
-    cancel_timer(deadline_);
-    cancel_timer(retry_backoff_);
+  cancel_timer(deadline_);
+  cancel_timer(retry_backoff_);
 
-    if (auto* queued_with = queued_with_.load(); queued_with) {
-        queued_with->remove(shared_from_this());
-    }
-    if (auto* waiting_in = waiting_in_.load(); waiting_in) {
-        waiting_in->remove_request(shared_from_this());
-    }
+  if (auto* queued_with = queued_with_.load(); queued_with) {
+    queued_with->remove(shared_from_this());
+  }
+  if (auto* waiting_in = waiting_in_.load(); waiting_in) {
+    waiting_in->remove_request(shared_from_this());
+  }
 
-    return true;
+  return true;
 }
 
 void
 queue_request::cancel(std::error_code error)
 {
-    if (internal_cancel()) {
-        callback_({}, shared_from_this(), error);
-    }
+  if (internal_cancel()) {
+    callback_({}, shared_from_this(), error);
+  }
 }
 
 void
 queue_request::set_deadline(std::shared_ptr<asio::steady_timer> timer)
 {
-    deadline_ = std::move(timer);
+  deadline_ = std::move(timer);
 }
 
 void
 queue_request::set_retry_backoff(std::shared_ptr<asio::steady_timer> timer)
 {
-    retry_backoff_ = std::move(timer);
+  retry_backoff_ = std::move(timer);
 }
 
 void
 queue_request::try_callback(std::shared_ptr<queue_response> response, std::error_code error)
 {
-    cancel_timer(deadline_);
-    cancel_timer(retry_backoff_);
+  cancel_timer(deadline_);
+  cancel_timer(retry_backoff_);
 
-    if (persistent_) {
-        if (error) {
-            if (internal_cancel()) {
-                return callback_(std::move(response), shared_from_this(), error);
-            }
-        } else if (!is_completed_) {
-            return callback_(std::move(response), shared_from_this(), error);
-        }
-        return;
-    }
-    if (bool expected_state{ false }; is_completed_.compare_exchange_strong(expected_state, true)) {
+  if (persistent_) {
+    if (error) {
+      if (internal_cancel()) {
         return callback_(std::move(response), shared_from_this(), error);
+      }
+    } else if (!is_completed_) {
+      return callback_(std::move(response), shared_from_this(), error);
     }
+    return;
+  }
+  if (bool expected_state{ false }; is_completed_.compare_exchange_strong(expected_state, true)) {
+    return callback_(std::move(response), shared_from_this(), error);
+  }
 }
 
 void
 queue_request::cancel()
 {
-    // Try to perform the cancellation, if it succeeds, we call the callback immediately on the user's behalf.
-    return cancel(errc::common::request_canceled);
+  // Try to perform the cancellation, if it succeeds, we call the callback immediately on the user's
+  // behalf.
+  return cancel(errc::common::request_canceled);
 }
 
 auto
 queue_request::retry_strategy() const -> std::shared_ptr<couchbase::retry_strategy>
 {
-    return retry_strategy_;
+  return retry_strategy_;
 }
 } // namespace couchbase::core::mcbp

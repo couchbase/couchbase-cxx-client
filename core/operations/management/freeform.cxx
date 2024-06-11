@@ -24,31 +24,32 @@ namespace couchbase::core::operations::management
 std::error_code
 freeform_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
-    switch (type) {
-        case service_type::query:
-        case service_type::analytics:
-        case service_type::search:
-        case service_type::view:
-        case service_type::management:
-        case service_type::eventing:
-            break;
-        default:
-            return errc::common::invalid_argument;
-    }
-    encoded.method = method;
-    encoded.headers = headers;
-    encoded.path = path;
-    encoded.body = body;
-    return {};
+  switch (type) {
+    case service_type::query:
+    case service_type::analytics:
+    case service_type::search:
+    case service_type::view:
+    case service_type::management:
+    case service_type::eventing:
+      break;
+    default:
+      return errc::common::invalid_argument;
+  }
+  encoded.method = method;
+  encoded.headers = headers;
+  encoded.path = path;
+  encoded.body = body;
+  return {};
 }
 
 freeform_response
-freeform_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+freeform_request::make_response(error_context::http&& ctx,
+                                const encoded_response_type& encoded) const
 {
-    freeform_response response{ std::move(ctx) };
-    response.status = encoded.status_code;
-    response.headers = encoded.headers;
-    response.body = encoded.body.data();
-    return response;
+  freeform_response response{ std::move(ctx) };
+  response.status = encoded.status_code;
+  response.headers = encoded.headers;
+  response.body = encoded.body.data();
+  return response;
 }
 } // namespace couchbase::core::operations::management

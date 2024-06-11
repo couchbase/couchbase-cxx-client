@@ -31,30 +31,31 @@ namespace couchbase
 {
 class get_all_query_indexes_options : public common_options<get_all_query_indexes_options>
 {
-  public:
-    /**
-     * Immutable value object representing consistent options.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    struct built : public common_options<get_all_query_indexes_options>::built {
-    };
+public:
+  /**
+   * Immutable value object representing consistent options.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  struct built : public common_options<get_all_query_indexes_options>::built {
+  };
 
-    /**
-     * Validates options and returns them as an immutable value.
-     *
-     * @return consistent options as an immutable value
-     *
-     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto build() const -> built
-    {
-        return { build_common_options() };
-    }
+  /**
+   * Validates options and returns them as an immutable value.
+   *
+   * @return consistent options as an immutable value
+   *
+   * @exception std::system_error with code errc::common::invalid_argument if the options are not
+   * valid
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto build() const -> built
+  {
+    return { build_common_options() };
+  }
 };
 
 /**
@@ -64,5 +65,6 @@ class get_all_query_indexes_options : public common_options<get_all_query_indexe
  * @uncommitted
  */
 
-using get_all_query_indexes_handler = std::function<void(error, std::vector<management::query_index>)>;
+using get_all_query_indexes_handler =
+  std::function<void(error, std::vector<management::query_index>)>;
 } // namespace couchbase

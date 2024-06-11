@@ -25,48 +25,57 @@ namespace test::utils
 void
 open_cluster(const couchbase::core::cluster& cluster, const couchbase::core::origin& origin)
 {
-    auto barrier = std::make_shared<std::promise<std::error_code>>();
-    auto f = barrier->get_future();
-    cluster.open(origin, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
-    auto rc = f.get();
-    if (rc) {
-        CB_LOG_CRITICAL(
-          "unable to connect to the cluster: {}, nodes={}", rc.message(), couchbase::core::utils::join_strings(origin.get_nodes(), ", "));
-        throw std::system_error(rc);
-    }
+  auto barrier = std::make_shared<std::promise<std::error_code>>();
+  auto f = barrier->get_future();
+  cluster.open(origin, [barrier](std::error_code ec) mutable {
+    barrier->set_value(ec);
+  });
+  auto rc = f.get();
+  if (rc) {
+    CB_LOG_CRITICAL("unable to connect to the cluster: {}, nodes={}",
+                    rc.message(),
+                    couchbase::core::utils::join_strings(origin.get_nodes(), ", "));
+    throw std::system_error(rc);
+  }
 }
 void
 close_cluster(const couchbase::core::cluster& cluster)
 {
-    auto barrier = std::make_shared<std::promise<void>>();
-    auto f = barrier->get_future();
-    cluster.close([barrier]() { barrier->set_value(); });
-    f.get();
+  auto barrier = std::make_shared<std::promise<void>>();
+  auto f = barrier->get_future();
+  cluster.close([barrier]() {
+    barrier->set_value();
+  });
+  f.get();
 }
 
 void
 open_bucket(const couchbase::core::cluster& cluster, const std::string& bucket_name)
 {
-    auto barrier = std::make_shared<std::promise<std::error_code>>();
-    auto f = barrier->get_future();
-    cluster.open_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
-    auto rc = f.get();
-    if (rc) {
-        CB_LOG_CRITICAL("unable to open bucket: {}, name={}", rc.message(), bucket_name);
-        throw std::system_error(rc);
-    }
+  auto barrier = std::make_shared<std::promise<std::error_code>>();
+  auto f = barrier->get_future();
+  cluster.open_bucket(bucket_name, [barrier](std::error_code ec) mutable {
+    barrier->set_value(ec);
+  });
+  auto rc = f.get();
+  if (rc) {
+    CB_LOG_CRITICAL("unable to open bucket: {}, name={}", rc.message(), bucket_name);
+    throw std::system_error(rc);
+  }
 }
 
 void
 close_bucket(const couchbase::core::cluster& cluster, const std::string& bucket_name)
 {
-    auto barrier = std::make_shared<std::promise<std::error_code>>();
-    auto f = barrier->get_future();
-    cluster.close_bucket(bucket_name, [barrier](std::error_code ec) mutable { barrier->set_value(ec); });
-    auto rc = f.get();
-    if (rc) {
-        CB_LOG_CRITICAL("unable to close bucket: {}, name={}", rc.message(), bucket_name);
-        throw std::system_error(rc);
-    }
+  auto barrier = std::make_shared<std::promise<std::error_code>>();
+  auto f = barrier->get_future();
+  cluster.close_bucket(bucket_name, [barrier](std::error_code ec) mutable {
+    barrier->set_value(ec);
+  });
+  auto rc = f.get();
+  if (rc) {
+    CB_LOG_CRITICAL("unable to close bucket: {}, name={}", rc.message(), bucket_name);
+    throw std::system_error(rc);
+  }
 }
 } // namespace test::utils

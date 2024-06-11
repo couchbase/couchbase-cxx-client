@@ -35,50 +35,50 @@ namespace couchbase::core
 {
 class ping_options
 {
-  public:
-    std::chrono::milliseconds key_value_timeout{};
-    std::chrono::milliseconds analytics_timeout{};
-    std::chrono::milliseconds n1ql_timeout{};
-    std::chrono::milliseconds search_timeout{};
-    std::chrono::milliseconds capi_timeout{};
-    std::chrono::milliseconds management_timeout{};
+public:
+  std::chrono::milliseconds key_value_timeout{};
+  std::chrono::milliseconds analytics_timeout{};
+  std::chrono::milliseconds n1ql_timeout{};
+  std::chrono::milliseconds search_timeout{};
+  std::chrono::milliseconds capi_timeout{};
+  std::chrono::milliseconds management_timeout{};
 
-    std::vector<service_type> services{
-        service_type::query,
-        service_type::analytics,
-        service_type::search,
-        service_type::management,
-    };
+  std::vector<service_type> services{
+    service_type::query,
+    service_type::analytics,
+    service_type::search,
+    service_type::management,
+  };
 
-    bool ignore_missing_services{ false };
+  bool ignore_missing_services{ false };
 
-    std::shared_ptr<couchbase::tracing::request_span> parent_span{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{};
 
-    struct {
-        std::string user{};
-    } internal{};
+  struct {
+    std::string user{};
+  } internal{};
 };
 
 enum class ping_state {
-    ok,
-    timeout,
-    error,
+  ok,
+  timeout,
+  error,
 };
 
 struct endpoint_ping_result {
-    std::string endpoint;
-    std::error_code error;
-    std::chrono::milliseconds latency;
-    std::string id;
-    std::string scope;
-    ping_state state;
+  std::string endpoint;
+  std::error_code error;
+  std::chrono::milliseconds latency;
+  std::string id;
+  std::string scope;
+  ping_state state;
 };
 
 class ping_result
 {
-  public:
-    std::uint64_t config_revision;
-    std::map<service_type, std::vector<endpoint_ping_result>> services;
+public:
+  std::uint64_t config_revision;
+  std::map<service_type, std::vector<endpoint_ping_result>> services;
 };
 
 using ping_callback = utils::movable_function<void(ping_result result, std::error_code ec)>;

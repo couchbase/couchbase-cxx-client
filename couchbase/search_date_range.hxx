@@ -30,39 +30,42 @@ namespace couchbase
  */
 class search_date_range
 {
-  public:
-    search_date_range(std::string name, std::optional<std::string> start, std::optional<std::string> end, std::uint64_t count)
-      : name_{ std::move(name) }
-      , start_{ std::move(start) }
-      , end_{ std::move(end) }
-      , count_{ count }
-    {
-    }
+public:
+  search_date_range(std::string name,
+                    std::optional<std::string> start,
+                    std::optional<std::string> end,
+                    std::uint64_t count)
+    : name_{ std::move(name) }
+    , start_{ std::move(start) }
+    , end_{ std::move(end) }
+    , count_{ count }
+  {
+  }
 
-    [[nodiscard]] auto name() const -> const std::string&
-    {
-        return name_;
-    }
+  [[nodiscard]] auto name() const -> const std::string&
+  {
+    return name_;
+  }
 
-    [[nodiscard]] auto start() const -> const std::optional<std::string>&
-    {
-        return start_;
-    }
+  [[nodiscard]] auto start() const -> const std::optional<std::string>&
+  {
+    return start_;
+  }
 
-    [[nodiscard]] auto end() const -> const std::optional<std::string>&
-    {
-        return end_;
-    }
+  [[nodiscard]] auto end() const -> const std::optional<std::string>&
+  {
+    return end_;
+  }
 
-    [[nodiscard]] auto count() const -> std::uint64_t
-    {
-        return count_;
-    }
+  [[nodiscard]] auto count() const -> std::uint64_t
+  {
+    return count_;
+  }
 
-  private:
-    std::string name_;
-    std::optional<std::string> start_;
-    std::optional<std::string> end_;
-    std::uint64_t count_;
+private:
+  std::string name_;
+  std::optional<std::string> start_;
+  std::optional<std::string> end_;
+  std::uint64_t count_;
 };
 } // namespace couchbase

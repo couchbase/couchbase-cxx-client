@@ -47,42 +47,46 @@ class agent_group_impl;
 
 class agent_group
 {
-  public:
-    agent_group(asio::io_context& io, agent_group_config config);
+public:
+  agent_group(asio::io_context& io, agent_group_config config);
 
-    auto open_bucket(const std::string& bucket_name) -> std::error_code;
+  auto open_bucket(const std::string& bucket_name) -> std::error_code;
 
-    auto get_agent(const std::string& bucket_name) -> tl::expected<agent, std::error_code>;
+  auto get_agent(const std::string& bucket_name) -> tl::expected<agent, std::error_code>;
 
-    auto close() -> std::error_code;
+  auto close() -> std::error_code;
 
-    auto n1ql_query(n1ql_query_options options, n1ql_query_callback&& callback)
-      -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto n1ql_query(n1ql_query_options options, n1ql_query_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-    auto prepared_n1ql_query(n1ql_query_options options, n1ql_query_callback&& callback)
-      -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto prepared_n1ql_query(n1ql_query_options options, n1ql_query_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-    auto analytics_query(analytics_query_options options, analytics_query_callback&& callback)
-      -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto analytics_query(analytics_query_options options, analytics_query_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-    auto search_query(search_query_options options, search_query_callback&& callback)
-      -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto search_query(search_query_options options, search_query_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-    auto free_form_http_request(http_request request, free_form_http_request_callback&& callback)
-      -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto free_form_http_request(http_request request, free_form_http_request_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-    auto wait_until_ready(std::chrono::milliseconds timeout, wait_until_ready_options options, wait_until_ready_callback&& callback)
-      -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto wait_until_ready(std::chrono::milliseconds timeout,
+                        wait_until_ready_options options,
+                        wait_until_ready_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-    auto ping(ping_options options, ping_callback&& callback) -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto ping(ping_options options, ping_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-    auto diagnostics(diagnostics_options options) -> tl::expected<diagnostic_info, std::error_code>;
+  auto diagnostics(diagnostics_options options) -> tl::expected<diagnostic_info, std::error_code>;
 
-  private:
-    std::shared_ptr<agent_group_impl> impl_;
+private:
+  std::shared_ptr<agent_group_impl> impl_;
 };
 
-// FIXME: temporary solution for the core API migration. FIT performer needs to access core for KV range APIs
+// FIXME: temporary solution for the core API migration. FIT performer needs to access core for KV
+// range APIs
 auto
 make_agent_group(couchbase::cluster public_api_cluster) -> agent_group;
 } // namespace couchbase::core

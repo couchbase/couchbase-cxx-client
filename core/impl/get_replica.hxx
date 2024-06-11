@@ -28,25 +28,29 @@
 namespace couchbase::core::impl
 {
 struct get_replica_response {
-    key_value_error_context ctx{};
-    std::vector<std::byte> value{};
-    couchbase::cas cas{};
-    std::uint32_t flags{};
+  key_value_error_context ctx{};
+  std::vector<std::byte> value{};
+  couchbase::cas cas{};
+  std::uint32_t flags{};
 };
 
 struct get_replica_request {
-    using response_type = get_replica_response;
-    using encoded_request_type = core::protocol::client_request<core::protocol::get_replica_request_body>;
-    using encoded_response_type = core::protocol::client_response<core::protocol::get_replica_response_body>;
+  using response_type = get_replica_response;
+  using encoded_request_type =
+    core::protocol::client_request<core::protocol::get_replica_request_body>;
+  using encoded_response_type =
+    core::protocol::client_response<core::protocol::get_replica_response_body>;
 
-    core::document_id id;
-    std::optional<std::chrono::milliseconds> timeout{};
-    std::uint16_t partition{};
-    std::uint32_t opaque{};
-    io::retry_context<true> retries{};
+  core::document_id id;
+  std::optional<std::chrono::milliseconds> timeout{};
+  std::uint16_t partition{};
+  std::uint32_t opaque{};
+  io::retry_context<true> retries{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, core::mcbp_context&& context);
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          core::mcbp_context&& context);
 
-    [[nodiscard]] get_replica_response make_response(key_value_error_context&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] get_replica_response make_response(key_value_error_context&& ctx,
+                                                   const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::impl

@@ -35,78 +35,78 @@ namespace couchbase
 template<typename derived_class>
 class common_options
 {
-  public:
-    /**
-     * Specifies a custom per-operation timeout.
-     *
-     * @note: if a custom timeout is provided through this builder, it will override the default set
-     * on the environment.
-     *
-     * @param timeout the timeout to use for this operation.
-     * @return this options builder for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto timeout(const std::chrono::milliseconds timeout) -> derived_class&
-    {
-        timeout_ = timeout;
-        return self();
-    }
+public:
+  /**
+   * Specifies a custom per-operation timeout.
+   *
+   * @note: if a custom timeout is provided through this builder, it will override the default set
+   * on the environment.
+   *
+   * @param timeout the timeout to use for this operation.
+   * @return this options builder for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto timeout(const std::chrono::milliseconds timeout) -> derived_class&
+  {
+    timeout_ = timeout;
+    return self();
+  }
 
-    /**
-     * Specifies a custom {@link couchbase::retry_strategy} for this operation.
-     *
-     * @param strategy the retry strategy to use for this operation.
-     * @return this options builder for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto retry_strategy(const std::shared_ptr<retry_strategy> strategy) -> derived_class&
-    {
-        retry_strategy_ = strategy;
-        return self();
-    }
+  /**
+   * Specifies a custom {@link couchbase::retry_strategy} for this operation.
+   *
+   * @param strategy the retry strategy to use for this operation.
+   * @return this options builder for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto retry_strategy(const std::shared_ptr<retry_strategy> strategy) -> derived_class&
+  {
+    retry_strategy_ = strategy;
+    return self();
+  }
 
-    /**
-     * Immutable value object representing consistent options.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    struct built {
-        const std::optional<std::chrono::milliseconds> timeout;
-        const std::shared_ptr<couchbase::retry_strategy> retry_strategy;
-    };
+  /**
+   * Immutable value object representing consistent options.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  struct built {
+    const std::optional<std::chrono::milliseconds> timeout;
+    const std::shared_ptr<couchbase::retry_strategy> retry_strategy;
+  };
 
-  protected:
-    /**
-     * @return immutable representation of the common options
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto build_common_options() const -> built
-    {
-        return { timeout_, retry_strategy_ };
-    }
+protected:
+  /**
+   * @return immutable representation of the common options
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto build_common_options() const -> built
+  {
+    return { timeout_, retry_strategy_ };
+  }
 
-    /**
-     * Allows to return the right options builder instance for child implementations.
-     *
-     * @return derived_class
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    auto self() -> derived_class&
-    {
-        return *static_cast<derived_class*>(this);
-    }
+  /**
+   * Allows to return the right options builder instance for child implementations.
+   *
+   * @return derived_class
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  auto self() -> derived_class&
+  {
+    return *static_cast<derived_class*>(this);
+  }
 
-  private:
-    std::optional<std::chrono::milliseconds> timeout_{};
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy_{ nullptr };
+private:
+  std::optional<std::chrono::milliseconds> timeout_{};
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy_{ nullptr };
 };
 
 } // namespace couchbase

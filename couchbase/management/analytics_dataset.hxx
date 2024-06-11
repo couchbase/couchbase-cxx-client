@@ -25,24 +25,24 @@ namespace couchbase::management
  * Represents a dataset (collection) in the analytics service
  */
 struct analytics_dataset {
-    /**
-     * The name of the dataset (collection)
-     */
-    std::string name;
+  /**
+   * The name of the dataset (collection)
+   */
+  std::string name;
 
-    /**
-     * The name of the dataverse (scope) the dataset is stored in
-     */
-    std::string dataverse_name;
+  /**
+   * The name of the dataverse (scope) the dataset is stored in
+   */
+  std::string dataverse_name;
 
-    /**
-     * The name of the analytics link that is associated with the dataset
-     */
-    std::string link_name;
+  /**
+   * The name of the analytics link that is associated with the dataset
+   */
+  std::string link_name;
 
-    /**
-     * The name of the bucket that the dataset includes
-     */
-    std::string bucket_name;
+  /**
+   * The name of the bucket that the dataset includes
+   */
+  std::string bucket_name;
 };
 } // namespace couchbase::management

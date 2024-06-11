@@ -24,11 +24,11 @@
 namespace couchbase::core
 {
 struct http_context {
-    const topology::configuration& config;
-    const cluster_options& options;
-    query_cache& cache;
-    std::string hostname;
-    std::uint16_t port;
+  const topology::configuration& config;
+  const cluster_options& options;
+  query_cache& cache;
+  std::string hostname;
+  std::uint16_t port;
 };
 
 namespace priv

@@ -32,13 +32,13 @@ unlock_response_body::parse(key_value_status_code /* status */,
                             const std::vector<std::byte>& /* body */,
                             const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<std::byte>(opcode));
-    return false;
+  Expects(header[1] == static_cast<std::byte>(opcode));
+  return false;
 }
 
 void
 unlock_request_body::id(const document_id& id)
 {
-    key_ = make_protocol_key(id);
+  key_ = make_protocol_key(id);
 }
 } // namespace couchbase::core::protocol

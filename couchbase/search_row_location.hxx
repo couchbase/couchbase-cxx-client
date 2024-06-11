@@ -34,32 +34,32 @@ class internal_search_row_location;
  */
 class search_row_location
 {
-  public:
-    /**
-     * @since 1.0.0
-     * @internal
-     */
-    explicit search_row_location(internal_search_row_location location);
+public:
+  /**
+   * @since 1.0.0
+   * @internal
+   */
+  explicit search_row_location(internal_search_row_location location);
 
-    search_row_location();
+  search_row_location();
 
-    ~search_row_location();
+  ~search_row_location();
 
-    search_row_location(const search_row_location&) = delete;
-    search_row_location& operator=(const search_row_location&) = delete;
+  search_row_location(const search_row_location&) = delete;
+  search_row_location& operator=(const search_row_location&) = delete;
 
-    search_row_location(search_row_location&&) noexcept;
-    search_row_location& operator=(search_row_location&&) noexcept;
+  search_row_location(search_row_location&&) noexcept;
+  search_row_location& operator=(search_row_location&&) noexcept;
 
-    [[nodiscard]] auto field() const -> const std::string&;
-    [[nodiscard]] auto term() const -> const std::string&;
-    [[nodiscard]] auto position() const -> const std::uint64_t&;
-    [[nodiscard]] auto start_offset() const -> const std::uint64_t&;
-    [[nodiscard]] auto end_offset() const -> const std::uint64_t&;
-    [[nodiscard]] auto array_positions() const -> const std::optional<std::vector<std::uint64_t>>&;
+  [[nodiscard]] auto field() const -> const std::string&;
+  [[nodiscard]] auto term() const -> const std::string&;
+  [[nodiscard]] auto position() const -> const std::uint64_t&;
+  [[nodiscard]] auto start_offset() const -> const std::uint64_t&;
+  [[nodiscard]] auto end_offset() const -> const std::uint64_t&;
+  [[nodiscard]] auto array_positions() const -> const std::optional<std::vector<std::uint64_t>>&;
 
-  private:
-    std::unique_ptr<internal_search_row_location> internal_;
+private:
+  std::unique_ptr<internal_search_row_location> internal_;
 };
 
 } // namespace couchbase

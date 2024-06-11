@@ -28,48 +28,48 @@ namespace couchbase::core::protocol
 
 class mcbp_noop_response_body
 {
-  public:
-    static const inline client_opcode opcode = client_opcode::noop;
+public:
+  static const inline client_opcode opcode = client_opcode::noop;
 
-    bool parse(key_value_status_code status,
-               const header_buffer& header,
-               std::uint8_t framing_extras_size,
-               std::uint16_t key_size,
-               std::uint8_t extras_size,
-               const std::vector<std::byte>& body,
-               const cmd_info& info);
+  bool parse(key_value_status_code status,
+             const header_buffer& header,
+             std::uint8_t framing_extras_size,
+             std::uint16_t key_size,
+             std::uint8_t extras_size,
+             const std::vector<std::byte>& body,
+             const cmd_info& info);
 };
 
 class mcbp_noop_request_body
 {
-  public:
-    using response_body_type = mcbp_noop_response_body;
-    static const inline client_opcode opcode = client_opcode::noop;
+public:
+  using response_body_type = mcbp_noop_response_body;
+  static const inline client_opcode opcode = client_opcode::noop;
 
-    [[nodiscard]] const std::string& key() const
-    {
-        return empty_string;
-    }
+  [[nodiscard]] const std::string& key() const
+  {
+    return empty_string;
+  }
 
-    [[nodiscard]] const auto& framing_extras() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& framing_extras() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] const auto& extras() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& extras() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] const auto& value() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& value() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] std::size_t size() const
-    {
-        return 0;
-    }
+  [[nodiscard]] std::size_t size() const
+  {
+    return 0;
+  }
 };
 
 } // namespace couchbase::core::protocol

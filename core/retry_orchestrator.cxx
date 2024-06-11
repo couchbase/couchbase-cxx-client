@@ -26,27 +26,35 @@
 namespace couchbase::core
 {
 auto
-retry_orchestrator::should_retry(std::shared_ptr<mcbp::queue_request> request, retry_reason reason) -> retry_action
+retry_orchestrator::should_retry(std::shared_ptr<mcbp::queue_request> request,
+                                 retry_reason reason) -> retry_action
 {
-    if (always_retry(reason)) {
-        auto duration = controlled_backoff(request->retry_attempts());
-        CB_LOG_DEBUG("will retry request. backoff={}, operation_id={}, reason={}", duration, request->identifier(), reason);
-        request->record_retry_attempt(reason);
-        return retry_action{ duration };
-    }
-
-    auto strategy = request->retry_strategy();
-    if (strategy == nullptr) {
-        return retry_action::do_not_retry();
-    }
-
-    auto action = strategy->retry_after(*request, reason);
-    if (!action.need_to_retry()) {
-        CB_LOG_DEBUG("will not retry request. operation_id={}, reason={}", request->identifier(), reason);
-        return retry_action::do_not_retry();
-    }
-    CB_LOG_DEBUG("will retry request. backoff={}, operation_id={}, reason={}", action.duration(), request->identifier(), reason);
+  if (always_retry(reason)) {
+    auto duration = controlled_backoff(request->retry_attempts());
+    CB_LOG_DEBUG("will retry request. backoff={}, operation_id={}, reason={}",
+                 duration,
+                 request->identifier(),
+                 reason);
     request->record_retry_attempt(reason);
-    return action;
+    return retry_action{ duration };
+  }
+
+  auto strategy = request->retry_strategy();
+  if (strategy == nullptr) {
+    return retry_action::do_not_retry();
+  }
+
+  auto action = strategy->retry_after(*request, reason);
+  if (!action.need_to_retry()) {
+    CB_LOG_DEBUG(
+      "will not retry request. operation_id={}, reason={}", request->identifier(), reason);
+    return retry_action::do_not_retry();
+  }
+  CB_LOG_DEBUG("will retry request. backoff={}, operation_id={}, reason={}",
+               action.duration(),
+               request->identifier(),
+               reason);
+  request->record_retry_attempt(reason);
+  return action;
 }
 } // namespace couchbase::core

@@ -42,104 +42,104 @@ using scan_item_handler = std::function<void(error, std::optional<scan_result_it
 
 class scan_result
 {
+public:
+  /**
+   * Constructs an empty scan result.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  scan_result() = default;
+
+  /**
+   * Constructs a scan result from an internal scan result.
+   *
+   * @param internal the internal scan result
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  explicit scan_result(std::shared_ptr<internal_scan_result> internal);
+
+  /**
+   * Fetches the next scan result item.
+   *
+   * @param handler callable that implements @ref scan_handler
+   *
+   * @since 1.0.0
+   * @volatile
+   */
+  void next(scan_item_handler&& handler) const;
+
+  /**
+   * Fetches the next scan result item.
+   *
+   * @return future object that carries the result of the operation
+   *
+   * @since 1.0.0
+   * @volatile
+   */
+  auto next() const -> std::future<std::pair<error, std::optional<scan_result_item>>>;
+
+  /**
+   * Cancels the scan.
+   *
+   * @since 1.0.0
+   * @volatile
+   */
+  void cancel();
+
+  /**
+   * An iterator that can be used to iterate through all the {@link scan_result_item}s.
+   *
+   * @since 1.0.0
+   * @volatile
+   */
+  class iterator
+  {
   public:
-    /**
-     * Constructs an empty scan result.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    scan_result() = default;
+    auto operator==(const iterator& other) const -> bool;
+    auto operator!=(const iterator& other) const -> bool;
+    auto operator*() -> std::pair<error, scan_result_item>;
+    auto operator++() -> iterator&;
 
-    /**
-     * Constructs a scan result from an internal scan result.
-     *
-     * @param internal the internal scan result
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    explicit scan_result(std::shared_ptr<internal_scan_result> internal);
+    explicit iterator(std::shared_ptr<internal_scan_result> internal);
+    explicit iterator(std::pair<error, scan_result_item> item);
 
-    /**
-     * Fetches the next scan result item.
-     *
-     * @param handler callable that implements @ref scan_handler
-     *
-     * @since 1.0.0
-     * @volatile
-     */
-    void next(scan_item_handler&& handler) const;
-
-    /**
-     * Fetches the next scan result item.
-     *
-     * @return future object that carries the result of the operation
-     *
-     * @since 1.0.0
-     * @volatile
-     */
-    auto next() const -> std::future<std::pair<error, std::optional<scan_result_item>>>;
-
-    /**
-     * Cancels the scan.
-     *
-     * @since 1.0.0
-     * @volatile
-     */
-    void cancel();
-
-    /**
-     * An iterator that can be used to iterate through all the {@link scan_result_item}s.
-     *
-     * @since 1.0.0
-     * @volatile
-     */
-    class iterator
-    {
-      public:
-        auto operator==(const iterator& other) const -> bool;
-        auto operator!=(const iterator& other) const -> bool;
-        auto operator*() -> std::pair<error, scan_result_item>;
-        auto operator++() -> iterator&;
-
-        explicit iterator(std::shared_ptr<internal_scan_result> internal);
-        explicit iterator(std::pair<error, scan_result_item> item);
-
-        using difference_type = std::ptrdiff_t;
-        using value_type = scan_result_item;
-        using pointer = const scan_result_item*;
-        using reference = const scan_result_item&;
-        using iterator_category = std::input_iterator_tag;
-
-      private:
-        void fetch_item();
-
-        std::shared_ptr<internal_scan_result> internal_{};
-        std::pair<error, scan_result_item> item_{};
-    };
-
-    /**
-     * Returns an iterator to the beginning.
-     *
-     * @return iterator to the beginning
-     *
-     * @since 1.0.0
-     * @volatile
-     */
-    auto begin() -> iterator;
-
-    /**
-     * Returns an iterator to the end.
-     *
-     * @return iterator to the end
-     *
-     * @since 1.0.0
-     * @volatile
-     */
-    auto end() -> iterator;
+    using difference_type = std::ptrdiff_t;
+    using value_type = scan_result_item;
+    using pointer = const scan_result_item*;
+    using reference = const scan_result_item&;
+    using iterator_category = std::input_iterator_tag;
 
   private:
+    void fetch_item();
+
     std::shared_ptr<internal_scan_result> internal_{};
+    std::pair<error, scan_result_item> item_{};
+  };
+
+  /**
+   * Returns an iterator to the beginning.
+   *
+   * @return iterator to the beginning
+   *
+   * @since 1.0.0
+   * @volatile
+   */
+  auto begin() -> iterator;
+
+  /**
+   * Returns an iterator to the end.
+   *
+   * @return iterator to the end
+   *
+   * @since 1.0.0
+   * @volatile
+   */
+  auto end() -> iterator;
+
+private:
+  std::shared_ptr<internal_scan_result> internal_{};
 };
 } // namespace couchbase

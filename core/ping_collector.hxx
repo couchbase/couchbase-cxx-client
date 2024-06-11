@@ -25,8 +25,8 @@ namespace couchbase::core::diag
 {
 class ping_collector
 {
-  public:
-    virtual ~ping_collector() = default;
-    virtual auto build_reporter() -> std::shared_ptr<ping_reporter> = 0;
+public:
+  virtual ~ping_collector() = default;
+  virtual auto build_reporter() -> std::shared_ptr<ping_reporter> = 0;
 };
 } // namespace couchbase::core::diag

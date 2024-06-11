@@ -25,10 +25,10 @@ namespace couchbase::core::sasl
 const std::string&
 Context::get_uuid()
 {
-    if (uuid.empty()) {
-        uuid = uuid::to_string(uuid::random());
-    }
+  if (uuid.empty()) {
+    uuid = uuid::to_string(uuid::random());
+  }
 
-    return uuid;
+  return uuid;
 }
 } // namespace couchbase::core::sasl

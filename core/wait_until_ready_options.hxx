@@ -32,21 +32,22 @@ namespace couchbase::core
 {
 class wait_until_ready_options
 {
-  public:
-    cluster_state desired_state{ cluster_state::online };
-    std::vector<service_type> services{
-        service_type::query,
-        service_type::analytics,
-        service_type::search,
-        service_type::management,
-    };
-    std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
+public:
+  cluster_state desired_state{ cluster_state::online };
+  std::vector<service_type> services{
+    service_type::query,
+    service_type::analytics,
+    service_type::search,
+    service_type::management,
+  };
+  std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
 };
 
 class wait_until_ready_result
 {
 };
 
-using wait_until_ready_callback = utils::movable_function<void(wait_until_ready_result result, std::error_code ec)>;
+using wait_until_ready_callback =
+  utils::movable_function<void(wait_until_ready_result result, std::error_code ec)>;
 
 } // namespace couchbase::core

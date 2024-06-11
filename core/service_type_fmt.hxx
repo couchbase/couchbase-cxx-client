@@ -23,39 +23,39 @@
 
 template<>
 struct fmt::formatter<couchbase::core::service_type> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(couchbase::core::service_type type, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (type) {
-            case couchbase::core::service_type::key_value:
-                name = "kv";
-                break;
-            case couchbase::core::service_type::query:
-                name = "query";
-                break;
-            case couchbase::core::service_type::analytics:
-                name = "analytics";
-                break;
-            case couchbase::core::service_type::search:
-                name = "search";
-                break;
-            case couchbase::core::service_type::view:
-                name = "views";
-                break;
-            case couchbase::core::service_type::management:
-                name = "mgmt";
-                break;
-            case couchbase::core::service_type::eventing:
-                name = "eventing";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
+  template<typename FormatContext>
+  auto format(couchbase::core::service_type type, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (type) {
+      case couchbase::core::service_type::key_value:
+        name = "kv";
+        break;
+      case couchbase::core::service_type::query:
+        name = "query";
+        break;
+      case couchbase::core::service_type::analytics:
+        name = "analytics";
+        break;
+      case couchbase::core::service_type::search:
+        name = "search";
+        break;
+      case couchbase::core::service_type::view:
+        name = "views";
+        break;
+      case couchbase::core::service_type::management:
+        name = "mgmt";
+        break;
+      case couchbase::core::service_type::eventing:
+        name = "eventing";
+        break;
     }
+    return format_to(ctx.out(), "{}", name);
+  }
 };

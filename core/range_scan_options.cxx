@@ -22,12 +22,12 @@ namespace couchbase::core
 auto
 prefix_scan::to_range_scan() const -> range_scan
 {
-    return { scan_term{ prefix, false }, scan_term{ prefix + "\xf4\x8f\xfb\xfb" } };
+  return { scan_term{ prefix, false }, scan_term{ prefix + "\xf4\x8f\xfb\xfb" } };
 }
 
 auto
 range_scan_item_body::expiry_time() const -> std::chrono::system_clock::time_point
 {
-    return std::chrono::system_clock::time_point(std::chrono::seconds{ expiry });
+  return std::chrono::system_clock::time_point(std::chrono::seconds{ expiry });
 }
 } // namespace couchbase::core

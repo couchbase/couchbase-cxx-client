@@ -22,6 +22,6 @@ namespace couchbase::core::utils
 binary
 to_binary(std::string_view value) noexcept
 {
-    return to_binary(value.data(), value.size());
+  return to_binary(value.data(), value.size());
 }
 } // namespace couchbase::core::utils

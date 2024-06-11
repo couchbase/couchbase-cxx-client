@@ -25,18 +25,18 @@ namespace couchbase::core::impl::subdoc
 {
 class command_bundle
 {
-  public:
-    void emplace_back(command&& cmd)
-    {
-        store_.emplace_back(std::move(cmd));
-    }
+public:
+  void emplace_back(command&& cmd)
+  {
+    store_.emplace_back(std::move(cmd));
+  }
 
-    [[nodiscard]] auto specs() const -> const std::vector<command>&
-    {
-        return store_;
-    }
+  [[nodiscard]] auto specs() const -> const std::vector<command>&
+  {
+    return store_;
+  }
 
-  private:
-    std::vector<command> store_{};
+private:
+  std::vector<command> store_{};
 };
 } // namespace couchbase::core::impl::subdoc

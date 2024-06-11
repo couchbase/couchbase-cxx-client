@@ -37,24 +37,30 @@ class collections_component;
 class crud_component_impl;
 class crud_component
 {
-  public:
-    crud_component(asio::io_context& io, collections_component collections, std::shared_ptr<retry_strategy> default_retry_strategy);
+public:
+  crud_component(asio::io_context& io,
+                 collections_component collections,
+                 std::shared_ptr<retry_strategy> default_retry_strategy);
 
-    auto range_scan_create(std::uint16_t vbucket_id, range_scan_create_options options, range_scan_create_callback&& callback)
-      -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto range_scan_create(std::uint16_t vbucket_id,
+                         range_scan_create_options options,
+                         range_scan_create_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-    auto range_scan_continue(std::vector<std::byte> scan_uuid,
-                             std::uint16_t vbucket_id,
-                             range_scan_continue_options options,
-                             range_scan_item_callback&& item_callback,
-                             range_scan_continue_callback&& callback) -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
-
-    auto range_scan_cancel(std::vector<std::byte> scan_uuid,
+  auto range_scan_continue(std::vector<std::byte> scan_uuid,
                            std::uint16_t vbucket_id,
-                           range_scan_cancel_options options,
-                           range_scan_cancel_callback&& callback) -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+                           range_scan_continue_options options,
+                           range_scan_item_callback&& item_callback,
+                           range_scan_continue_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  private:
-    std::shared_ptr<crud_component_impl> impl_;
+  auto range_scan_cancel(std::vector<std::byte> scan_uuid,
+                         std::uint16_t vbucket_id,
+                         range_scan_cancel_options options,
+                         range_scan_cancel_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+private:
+  std::shared_ptr<crud_component_impl> impl_;
 };
 } // namespace couchbase::core

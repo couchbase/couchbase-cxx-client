@@ -36,63 +36,63 @@ increment_response_body::parse(key_value_status_code status,
                                const std::vector<std::byte>& body,
                                const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == key_value_status_code::success) {
-        using offset_type = std::vector<std::byte>::difference_type;
-        offset_type offset = framing_extras_size;
-        if (extras_size == 16) {
-            std::uint64_t partition_uuid{};
-            memcpy(&partition_uuid, body.data() + offset, sizeof(partition_uuid));
-            partition_uuid = utils::byte_swap(partition_uuid);
-            offset += 8;
+  Expects(header[1] == static_cast<std::byte>(opcode));
+  if (status == key_value_status_code::success) {
+    using offset_type = std::vector<std::byte>::difference_type;
+    offset_type offset = framing_extras_size;
+    if (extras_size == 16) {
+      std::uint64_t partition_uuid{};
+      memcpy(&partition_uuid, body.data() + offset, sizeof(partition_uuid));
+      partition_uuid = utils::byte_swap(partition_uuid);
+      offset += 8;
 
-            std::uint64_t sequence_number{};
-            memcpy(&sequence_number, body.data() + offset, sizeof(sequence_number));
-            sequence_number = utils::byte_swap(sequence_number);
+      std::uint64_t sequence_number{};
+      memcpy(&sequence_number, body.data() + offset, sizeof(sequence_number));
+      sequence_number = utils::byte_swap(sequence_number);
 
-            token_ = couchbase::utils::build_mutation_token(partition_uuid, sequence_number);
-            offset += 8;
-        }
-        offset += key_size;
-        memcpy(&content_, body.data() + offset, sizeof(content_));
-        content_ = utils::byte_swap(content_);
-        return true;
+      token_ = couchbase::utils::build_mutation_token(partition_uuid, sequence_number);
+      offset += 8;
     }
-    return false;
+    offset += key_size;
+    memcpy(&content_, body.data() + offset, sizeof(content_));
+    content_ = utils::byte_swap(content_);
+    return true;
+  }
+  return false;
 }
 
 void
 increment_request_body::id(const document_id& id)
 {
-    key_ = make_protocol_key(id);
+  key_ = make_protocol_key(id);
 }
 
 void
 increment_request_body::durability(durability_level level, std::optional<std::uint16_t> timeout)
 {
-    if (level == durability_level::none) {
-        return;
-    }
+  if (level == durability_level::none) {
+    return;
+  }
 
-    add_durability_frame_info(framing_extras_, level, timeout);
+  add_durability_frame_info(framing_extras_, level, timeout);
 }
 
 void
 increment_request_body::fill_extras()
 {
-    extras_.resize(sizeof(delta_) + sizeof(initial_value_) + sizeof(expiry_));
-    using offset_type = std::vector<std::byte>::difference_type;
-    offset_type offset = 0;
+  extras_.resize(sizeof(delta_) + sizeof(initial_value_) + sizeof(expiry_));
+  using offset_type = std::vector<std::byte>::difference_type;
+  offset_type offset = 0;
 
-    std::uint64_t num = utils::byte_swap(delta_);
-    memcpy(extras_.data() + offset, &num, sizeof(num));
-    offset += static_cast<offset_type>(sizeof(delta_));
+  std::uint64_t num = utils::byte_swap(delta_);
+  memcpy(extras_.data() + offset, &num, sizeof(num));
+  offset += static_cast<offset_type>(sizeof(delta_));
 
-    num = utils::byte_swap(initial_value_);
-    memcpy(extras_.data() + offset, &num, sizeof(num));
-    offset += static_cast<offset_type>(sizeof(initial_value_));
+  num = utils::byte_swap(initial_value_);
+  memcpy(extras_.data() + offset, &num, sizeof(num));
+  offset += static_cast<offset_type>(sizeof(initial_value_));
 
-    std::uint32_t ttl = utils::byte_swap(expiry_);
-    memcpy(extras_.data() + offset, &ttl, sizeof(ttl));
+  std::uint32_t ttl = utils::byte_swap(expiry_);
+  memcpy(extras_.data() + offset, &ttl, sizeof(ttl));
 }
 } // namespace couchbase::core::protocol

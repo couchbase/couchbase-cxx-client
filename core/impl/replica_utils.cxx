@@ -29,38 +29,38 @@ effective_nodes(const document_id& id,
                 const read_preference& preference,
                 const std::string& preferred_server_group) -> std::vector<readable_node>
 {
-    if (preference != read_preference::no_preference && preferred_server_group.empty()) {
-        CB_LOG_WARNING("Preferred server group is required for zone-aware replica reads");
-        return {};
+  if (preference != read_preference::no_preference && preferred_server_group.empty()) {
+    CB_LOG_WARNING("Preferred server group is required for zone-aware replica reads");
+    return {};
+  }
+
+  std::vector<readable_node> available_nodes{};
+  std::vector<readable_node> local_nodes{};
+
+  for (std::size_t idx = 0U; idx <= config.num_replicas.value_or(0U); ++idx) {
+    bool is_replica = idx != 0;
+    auto [vbid, server] = config.map_key(id.key(), idx);
+    if (server.has_value() && server.value() < config.nodes.size()) {
+      available_nodes.emplace_back(readable_node{ is_replica, idx });
+      if (preferred_server_group == config.nodes[server.value()].server_group) {
+        local_nodes.emplace_back(readable_node{ is_replica, idx });
+      }
     }
+  }
 
-    std::vector<readable_node> available_nodes{};
-    std::vector<readable_node> local_nodes{};
+  switch (preference) {
+    case read_preference::no_preference:
+      return available_nodes;
 
-    for (std::size_t idx = 0U; idx <= config.num_replicas.value_or(0U); ++idx) {
-        bool is_replica = idx != 0;
-        auto [vbid, server] = config.map_key(id.key(), idx);
-        if (server.has_value() && server.value() < config.nodes.size()) {
-            available_nodes.emplace_back(readable_node{ is_replica, idx });
-            if (preferred_server_group == config.nodes[server.value()].server_group) {
-                local_nodes.emplace_back(readable_node{ is_replica, idx });
-            }
-        }
-    }
+    case read_preference::selected_server_group:
+      return local_nodes;
 
-    switch (preference) {
-        case read_preference::no_preference:
-            return available_nodes;
-
-        case read_preference::selected_server_group:
-            return local_nodes;
-
-        case read_preference::selected_server_group_or_all_available:
-            if (local_nodes.empty()) {
-                return available_nodes;
-            }
-            return local_nodes;
-    }
-    return available_nodes;
+    case read_preference::selected_server_group_or_all_available:
+      if (local_nodes.empty()) {
+        return available_nodes;
+      }
+      return local_nodes;
+  }
+  return available_nodes;
 }
 } // namespace couchbase::core::impl

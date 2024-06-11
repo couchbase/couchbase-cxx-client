@@ -39,69 +39,69 @@ namespace subdoc
  */
 class upsert
 {
-  public:
-    /**
-     * Sets that this is an extended attribute (xattr) field.
-     *
-     * @param value new value for the option
-     * @return this, for chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto xattr(bool value = true) -> upsert&
-    {
-        xattr_ = value;
-        return *this;
-    }
+public:
+  /**
+   * Sets that this is an extended attribute (xattr) field.
+   *
+   * @param value new value for the option
+   * @return this, for chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto xattr(bool value = true) -> upsert&
+  {
+    xattr_ = value;
+    return *this;
+  }
 
-    /**
-     * Sets that this parent fields should be created automatically.
-     *
-     * @param value new value for the option
-     * @return this, for chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto create_path(bool value = true) -> upsert&
-    {
-        create_path_ = value;
-        return *this;
-    }
+  /**
+   * Sets that this parent fields should be created automatically.
+   *
+   * @param value new value for the option
+   * @return this, for chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto create_path(bool value = true) -> upsert&
+  {
+    create_path_ = value;
+    return *this;
+  }
 
-  private:
+private:
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-    friend couchbase::mutate_in_specs;
+  friend couchbase::mutate_in_specs;
 #endif
 
-    upsert(std::string path, std::vector<std::byte> value)
-      : path_(std::move(path))
-      , value_(std::move(value))
-    {
-    }
+  upsert(std::string path, std::vector<std::byte> value)
+    : path_(std::move(path))
+    , value_(std::move(value))
+  {
+  }
 
-    upsert(std::string path, std::vector<std::byte> value, bool expand_macro)
-      : path_(std::move(path))
-      , value_(std::move(value))
-      , expand_macro_{ expand_macro }
-    {
-    }
+  upsert(std::string path, std::vector<std::byte> value, bool expand_macro)
+    : path_(std::move(path))
+    , value_(std::move(value))
+    , expand_macro_{ expand_macro }
+  {
+  }
 
-    upsert(std::string path, mutate_in_macro value)
-      : path_(std::move(path))
-      , value_(to_binary(value))
-      , expand_macro_{ true }
-    {
-    }
+  upsert(std::string path, mutate_in_macro value)
+    : path_(std::move(path))
+    , value_(to_binary(value))
+    , expand_macro_{ true }
+  {
+  }
 
-    void encode(core::impl::subdoc::command_bundle& bundle) const;
+  void encode(core::impl::subdoc::command_bundle& bundle) const;
 
-    std::string path_;
-    std::vector<std::byte> value_;
-    bool xattr_{ false };
-    bool expand_macro_{ false };
-    bool create_path_{ false };
+  std::string path_;
+  std::vector<std::byte> value_;
+  bool xattr_{ false };
+  bool expand_macro_{ false };
+  bool create_path_{ false };
 };
 } // namespace subdoc
 } // namespace couchbase

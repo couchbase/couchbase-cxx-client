@@ -39,69 +39,69 @@ namespace subdoc
  */
 class insert
 {
-  public:
-    /**
-     * Sets that this is an extended attribute (xattr) field.
-     *
-     * @param value new value for the option
-     * @return this, for chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto xattr(bool value = true) -> insert&
-    {
-        xattr_ = value;
-        return *this;
-    }
+public:
+  /**
+   * Sets that this is an extended attribute (xattr) field.
+   *
+   * @param value new value for the option
+   * @return this, for chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto xattr(bool value = true) -> insert&
+  {
+    xattr_ = value;
+    return *this;
+  }
 
-    /**
-     * Sets that this parent fields should be created automatically.
-     *
-     * @param value new value for the option
-     * @return this, for chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto create_path(bool value = true) -> insert&
-    {
-        create_path_ = value;
-        return *this;
-    }
+  /**
+   * Sets that this parent fields should be created automatically.
+   *
+   * @param value new value for the option
+   * @return this, for chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto create_path(bool value = true) -> insert&
+  {
+    create_path_ = value;
+    return *this;
+  }
 
-  private:
+private:
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-    friend couchbase::mutate_in_specs;
+  friend couchbase::mutate_in_specs;
 #endif
 
-    insert(std::string path, std::vector<std::byte> value)
-      : path_(std::move(path))
-      , value_(std::move(value))
-    {
-    }
+  insert(std::string path, std::vector<std::byte> value)
+    : path_(std::move(path))
+    , value_(std::move(value))
+  {
+  }
 
-    insert(std::string path, std::vector<std::byte> value, bool expand_macro)
-      : path_(std::move(path))
-      , value_(std::move(value))
-      , expand_macro_(expand_macro)
-    {
-    }
+  insert(std::string path, std::vector<std::byte> value, bool expand_macro)
+    : path_(std::move(path))
+    , value_(std::move(value))
+    , expand_macro_(expand_macro)
+  {
+  }
 
-    insert(std::string path, mutate_in_macro value)
-      : path_(std::move(path))
-      , value_(to_binary(value))
-      , expand_macro_(true)
-    {
-    }
+  insert(std::string path, mutate_in_macro value)
+    : path_(std::move(path))
+    , value_(to_binary(value))
+    , expand_macro_(true)
+  {
+  }
 
-    void encode(core::impl::subdoc::command_bundle& bundle) const;
+  void encode(core::impl::subdoc::command_bundle& bundle) const;
 
-    std::string path_;
-    std::vector<std::byte> value_;
-    bool xattr_{ false };
-    bool expand_macro_{ false };
-    bool create_path_{ false };
+  std::string path_;
+  std::vector<std::byte> value_;
+  bool xattr_{ false };
+  bool expand_macro_{ false };
+  bool create_path_{ false };
 };
 } // namespace subdoc
 } // namespace couchbase

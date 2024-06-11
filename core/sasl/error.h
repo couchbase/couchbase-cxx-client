@@ -23,6 +23,17 @@ namespace couchbase::core::sasl
 /**
  * The error values used in CBSASL
  */
-enum class error { OK, CONTINUE, FAIL, BAD_PARAM, NO_MEM, NO_MECH, NO_USER, PASSWORD_ERROR, NO_RBAC_PROFILE, AUTH_PROVIDER_DIED };
+enum class error {
+  OK,
+  CONTINUE,
+  FAIL,
+  BAD_PARAM,
+  NO_MEM,
+  NO_MECH,
+  NO_USER,
+  PASSWORD_ERROR,
+  NO_RBAC_PROFILE,
+  AUTH_PROVIDER_DIED
+};
 
 } // namespace couchbase::core::sasl

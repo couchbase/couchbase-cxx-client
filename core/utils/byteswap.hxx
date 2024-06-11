@@ -24,26 +24,26 @@ namespace couchbase::core::utils
 static constexpr std::uint16_t
 byte_swap(std::uint16_t value)
 {
-    auto hi = static_cast<std::uint16_t>(value << 8U);
-    auto lo = static_cast<std::uint16_t>(value >> 8U);
-    return hi | lo;
+  auto hi = static_cast<std::uint16_t>(value << 8U);
+  auto lo = static_cast<std::uint16_t>(value >> 8U);
+  return hi | lo;
 }
 
 static constexpr std::uint32_t
 byte_swap(std::uint32_t value)
 {
-    std::uint32_t byte0 = value & 0x000000ffU;
-    std::uint32_t byte1 = value & 0x0000ff00U;
-    std::uint32_t byte2 = value & 0x00ff0000U;
-    std::uint32_t byte3 = value & 0xff000000U;
-    return (byte0 << 24) | (byte1 << 8) | (byte2 >> 8) | (byte3 >> 24);
+  std::uint32_t byte0 = value & 0x000000ffU;
+  std::uint32_t byte1 = value & 0x0000ff00U;
+  std::uint32_t byte2 = value & 0x00ff0000U;
+  std::uint32_t byte3 = value & 0xff000000U;
+  return (byte0 << 24) | (byte1 << 8) | (byte2 >> 8) | (byte3 >> 24);
 }
 
 static constexpr std::uint64_t
 byte_swap(std::uint64_t value)
 {
-    std::uint64_t hi = byte_swap(static_cast<std::uint32_t>(value));
-    std::uint32_t lo = byte_swap(static_cast<std::uint32_t>(value >> 32));
-    return (hi << 32) | lo;
+  std::uint64_t hi = byte_swap(static_cast<std::uint32_t>(value));
+  std::uint32_t lo = byte_swap(static_cast<std::uint32_t>(value >> 32));
+  return (hi << 32) | lo;
 }
 } // namespace couchbase::core::utils

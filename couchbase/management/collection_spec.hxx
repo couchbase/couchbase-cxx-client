@@ -20,10 +20,10 @@
 namespace couchbase::management::bucket
 {
 struct collection_spec {
-    std::string name;
-    std::string scope_name;
-    std::int32_t max_expiry{};
-    std::optional<bool> history{};
+  std::string name;
+  std::string scope_name;
+  std::int32_t max_expiry{};
+  std::optional<bool> history{};
 };
 
 } // namespace couchbase::management::bucket

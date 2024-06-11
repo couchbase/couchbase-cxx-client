@@ -26,14 +26,14 @@ namespace couchbase::core::io
 std::uint16_t
 binary_header::status() const
 {
-    return utils::byte_swap(specific);
+  return utils::byte_swap(specific);
 }
 
 protocol::header_buffer
 mcbp_message::header_data() const
 {
-    protocol::header_buffer buf;
-    std::memcpy(buf.data(), &header, sizeof(header));
-    return buf;
+  protocol::header_buffer buf;
+  std::memcpy(buf.data(), &header, sizeof(header));
+  return buf;
 }
 } // namespace couchbase::core::io

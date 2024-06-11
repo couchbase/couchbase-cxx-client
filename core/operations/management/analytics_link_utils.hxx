@@ -29,9 +29,11 @@ template<typename analytics_link_type>
 std::string
 endpoint_from_analytics_link(const analytics_link_type& link)
 {
-    if (std::count(link.dataverse.begin(), link.dataverse.end(), '/') > 0) {
-        return fmt::format("/analytics/link/{}/{}", utils::string_codec::v2::path_escape(link.dataverse), link.link_name);
-    }
-    return "/analytics/link";
+  if (std::count(link.dataverse.begin(), link.dataverse.end(), '/') > 0) {
+    return fmt::format("/analytics/link/{}/{}",
+                       utils::string_codec::v2::path_escape(link.dataverse),
+                       link.link_name);
+  }
+  return "/analytics/link";
 }
 } // namespace couchbase::core::operations::management

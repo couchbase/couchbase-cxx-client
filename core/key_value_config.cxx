@@ -23,13 +23,13 @@ namespace couchbase::core
 auto
 key_value_config::to_string() const -> std::string
 {
-    return fmt::format(
-      R"(#<key_value_config:{} connect_timeout={}, reconnect_wait_backoff={}, pool_size={}, max_queue_size={}, connection_buffer_size={}>)",
-      static_cast<const void*>(this),
-      connect_timeout,
-      reconnect_wait_backoff,
-      pool_size,
-      max_queue_size,
-      connection_buffer_size);
+  return fmt::format(
+    R"(#<key_value_config:{} connect_timeout={}, reconnect_wait_backoff={}, pool_size={}, max_queue_size={}, connection_buffer_size={}>)",
+    static_cast<const void*>(this),
+    connect_timeout,
+    reconnect_wait_backoff,
+    pool_size,
+    max_queue_size,
+    connection_buffer_size);
 }
 } // namespace couchbase::core

@@ -25,6 +25,6 @@ namespace couchbase::core::mcbp
 // user_impersonation_frame is used to indicate a user to impersonate.
 // @internal This should never be used and is not supported.
 struct user_impersonation_frame {
-    std::vector<std::byte> user;
+  std::vector<std::byte> user;
 };
 } // namespace couchbase::core::mcbp

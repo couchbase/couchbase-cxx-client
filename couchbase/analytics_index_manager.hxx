@@ -52,412 +52,430 @@ class analytics_index_manager_impl;
 
 class analytics_index_manager
 {
-  public:
-    /**
-     * Creates a new dataset (analytics scope).
-     *
-     * @param dataverse_name the name of the dataverse to create
-     * @param options optional parameters
-     * @param handler the handler that implements @ref create_dataverse_analytics_handler
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void create_dataverse(std::string dataverse_name,
-                          const create_dataverse_analytics_options& options,
-                          create_dataverse_analytics_handler&& handler) const;
+public:
+  /**
+   * Creates a new dataset (analytics scope).
+   *
+   * @param dataverse_name the name of the dataverse to create
+   * @param options optional parameters
+   * @param handler the handler that implements @ref create_dataverse_analytics_handler
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  void create_dataverse(std::string dataverse_name,
+                        const create_dataverse_analytics_options& options,
+                        create_dataverse_analytics_handler&& handler) const;
 
-    /**
-     * Creates a new dataset (analytics scope).
-     *
-     * @param dataverse_name the name of the dataverse to create
-     * @param options optional parameters
-     * @return future object that carries the result of the operation
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto create_dataverse(std::string dataverse_name,
-                                        const create_dataverse_analytics_options& options) const -> std::future<error>;
+  /**
+   * Creates a new dataset (analytics scope).
+   *
+   * @param dataverse_name the name of the dataverse to create
+   * @param options optional parameters
+   * @return future object that carries the result of the operation
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto create_dataverse(std::string dataverse_name,
+                                      const create_dataverse_analytics_options& options) const
+    -> std::future<error>;
 
-    /**
-     * Drops (deletes) a dataverse.
-     *
-     * @param dataverse_name the name of the dataverse to drop
-     * @param options optional parameters
-     * @param handler the handler that implements @ref drop_dataverse_analytics_handler
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void drop_dataverse(std::string dataverse_name,
-                        const drop_dataverse_analytics_options& options,
-                        drop_dataverse_analytics_handler&& handler) const;
+  /**
+   * Drops (deletes) a dataverse.
+   *
+   * @param dataverse_name the name of the dataverse to drop
+   * @param options optional parameters
+   * @param handler the handler that implements @ref drop_dataverse_analytics_handler
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  void drop_dataverse(std::string dataverse_name,
+                      const drop_dataverse_analytics_options& options,
+                      drop_dataverse_analytics_handler&& handler) const;
 
-    /**
-     * Drops (deletes) a dataverse.
-     *
-     * @param dataverse_name the name of the dataverse to drop
-     * @param options optional parameters
-     * @return future object that carries the result of the operation
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto drop_dataverse(std::string dataverse_name,
-                                      const drop_dataverse_analytics_options& options) const -> std::future<error>;
+  /**
+   * Drops (deletes) a dataverse.
+   *
+   * @param dataverse_name the name of the dataverse to drop
+   * @param options optional parameters
+   * @return future object that carries the result of the operation
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto drop_dataverse(std::string dataverse_name,
+                                    const drop_dataverse_analytics_options& options) const
+    -> std::future<error>;
 
-    /**
-     * Creates a new dataset (analytics collection).
-     *
-     * @param dataset_name the name of the dataset to create
-     * @param bucket_name the name of the bucket where the dataset should be stored into
-     * @param options optional parameters
-     * @param handler the handler that implements @ref create_dataset_analytics_handler
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void create_dataset(std::string dataset_name,
-                        std::string bucket_name,
-                        const create_dataset_analytics_options& options,
-                        create_dataset_analytics_handler&& handler) const;
+  /**
+   * Creates a new dataset (analytics collection).
+   *
+   * @param dataset_name the name of the dataset to create
+   * @param bucket_name the name of the bucket where the dataset should be stored into
+   * @param options optional parameters
+   * @param handler the handler that implements @ref create_dataset_analytics_handler
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  void create_dataset(std::string dataset_name,
+                      std::string bucket_name,
+                      const create_dataset_analytics_options& options,
+                      create_dataset_analytics_handler&& handler) const;
 
-    /**
-     * Creates a new dataset (analytics collection).
-     *
-     * @param dataset_name the name of the dataset to create
-     * @param bucket_name the name of the bucket where the dataset should be stored into
-     * @param options optional parameters
-     * @return future object that carries the result of the operation
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto create_dataset(std::string dataset_name,
-                                      std::string bucket_name,
-                                      const create_dataset_analytics_options& options) const -> std::future<error>;
+  /**
+   * Creates a new dataset (analytics collection).
+   *
+   * @param dataset_name the name of the dataset to create
+   * @param bucket_name the name of the bucket where the dataset should be stored into
+   * @param options optional parameters
+   * @return future object that carries the result of the operation
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto create_dataset(std::string dataset_name,
+                                    std::string bucket_name,
+                                    const create_dataset_analytics_options& options) const
+    -> std::future<error>;
 
-    /**
-     * Drops (deletes) a dataset.
-     *
-     * @param dataset_name the name of the dataset to drop
-     * @param options optional parameters
-     * @param handler the handler that implements @ref drop_dataset_analytics_handler
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void drop_dataset(std::string dataset_name,
-                      const drop_dataset_analytics_options& options,
-                      drop_dataset_analytics_handler&& handler) const;
+  /**
+   * Drops (deletes) a dataset.
+   *
+   * @param dataset_name the name of the dataset to drop
+   * @param options optional parameters
+   * @param handler the handler that implements @ref drop_dataset_analytics_handler
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  void drop_dataset(std::string dataset_name,
+                    const drop_dataset_analytics_options& options,
+                    drop_dataset_analytics_handler&& handler) const;
 
-    /**
-     * Drops (deletes) a dataset.
-     *
-     * @param dataset_name the name of the dataset to drop
-     * @param options optional parameters
-     * @return future object that carries the result of the operation
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto drop_dataset(std::string dataset_name, const drop_dataset_analytics_options& options) const -> std::future<error>;
+  /**
+   * Drops (deletes) a dataset.
+   *
+   * @param dataset_name the name of the dataset to drop
+   * @param options optional parameters
+   * @return future object that carries the result of the operation
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto drop_dataset(std::string dataset_name,
+                                  const drop_dataset_analytics_options& options) const
+    -> std::future<error>;
 
-    /**
-     * Fetches all datasets (analytics collections) from the analytics service.
-     *
-     * @param options optional parameters
-     * @param handler the handler that implements @ref get_all_datasets_analytics_handler
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void get_all_datasets(const get_all_datasets_analytics_options& options, get_all_datasets_analytics_handler&& handler) const;
+  /**
+   * Fetches all datasets (analytics collections) from the analytics service.
+   *
+   * @param options optional parameters
+   * @param handler the handler that implements @ref get_all_datasets_analytics_handler
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  void get_all_datasets(const get_all_datasets_analytics_options& options,
+                        get_all_datasets_analytics_handler&& handler) const;
 
-    /**
-     * Fetches all datasets (analytics collections) from the analytics service.
-     *
-     * @param options optional parameters
-     * @return future object that carries the result of the operation
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto get_all_datasets(const get_all_datasets_analytics_options& options) const
-      -> std::future<std::pair<error, std::vector<management::analytics_dataset>>>;
+  /**
+   * Fetches all datasets (analytics collections) from the analytics service.
+   *
+   * @param options optional parameters
+   * @return future object that carries the result of the operation
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto get_all_datasets(const get_all_datasets_analytics_options& options) const
+    -> std::future<std::pair<error, std::vector<management::analytics_dataset>>>;
 
-    /**
-     * Creates a new analytics index.
-     *
-     * @param index_name the name of the index to create
-     * @param dataset_name the name of the dataset where the index should be created
-     * @param fields the fields that should be indexed
-     * @param options optional parameters
-     * @param handler the handler that implements @ref create_index_analytics_handler
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void create_index(std::string index_name,
-                      std::string dataset_name,
-                      std::map<std::string, std::string> fields,
-                      const create_index_analytics_options& options,
-                      create_index_analytics_handler&& handler) const;
-
-    /**
-     * Creates a new analytics index.
-     *
-     * @param index_name the name of the index to create
-     * @param dataset_name the name of the dataset where the index should be created
-     * @param fields the fields that should be indexed
-     * @param options optional parameters
-     * @return future object that carries the result of the operation
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto create_index(std::string index_name,
-                                    std::string dataset_name,
-                                    std::map<std::string, std::string> fields,
-                                    const create_index_analytics_options& options) const -> std::future<error>;
-
-    /**
-     * Drops (removes) an analytics index.
-     *
-     * @param index_name the name of the index to drop
-     * @param dataset_name the dataset where the index exists
-     * @param options optional parameters
-     * @param handler the handler that implements @ref drop_index_analytics_handler
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void drop_index(std::string index_name,
+  /**
+   * Creates a new analytics index.
+   *
+   * @param index_name the name of the index to create
+   * @param dataset_name the name of the dataset where the index should be created
+   * @param fields the fields that should be indexed
+   * @param options optional parameters
+   * @param handler the handler that implements @ref create_index_analytics_handler
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  void create_index(std::string index_name,
                     std::string dataset_name,
-                    const drop_index_analytics_options& options,
-                    drop_index_analytics_handler&& handler) const;
+                    std::map<std::string, std::string> fields,
+                    const create_index_analytics_options& options,
+                    create_index_analytics_handler&& handler) const;
 
-    /**
-     * Drops (removes) an analytics index.
-     *
-     * @param index_name the name of the index to drop
-     * @param dataset_name the dataset where the index exists
-     * @param options optional parameters
-     * @return future object that carries the result of the operation
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto drop_index(std::string index_name,
+  /**
+   * Creates a new analytics index.
+   *
+   * @param index_name the name of the index to create
+   * @param dataset_name the name of the dataset where the index should be created
+   * @param fields the fields that should be indexed
+   * @param options optional parameters
+   * @return future object that carries the result of the operation
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto create_index(std::string index_name,
                                   std::string dataset_name,
-                                  const drop_index_analytics_options& options) const -> std::future<error>;
+                                  std::map<std::string, std::string> fields,
+                                  const create_index_analytics_options& options) const
+    -> std::future<error>;
 
-    /**
-     * Fetches all analytics indexes.
-     *
-     * @param options optional parameters
-     * @param handler the handler that implements @ref get_all_indexes_analytics_handler
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void get_all_indexes(const get_all_indexes_analytics_options& options, get_all_indexes_analytics_handler&& handler) const;
+  /**
+   * Drops (removes) an analytics index.
+   *
+   * @param index_name the name of the index to drop
+   * @param dataset_name the dataset where the index exists
+   * @param options optional parameters
+   * @param handler the handler that implements @ref drop_index_analytics_handler
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  void drop_index(std::string index_name,
+                  std::string dataset_name,
+                  const drop_index_analytics_options& options,
+                  drop_index_analytics_handler&& handler) const;
 
-    /**
-     * Fetches all analytics indexes.
-     *
-     * @param options optional parameters
-     * @return future object that carries the result of the operation
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto get_all_indexes(const get_all_indexes_analytics_options& options) const
-      -> std::future<std::pair<error, std::vector<management::analytics_index>>>;
+  /**
+   * Drops (removes) an analytics index.
+   *
+   * @param index_name the name of the index to drop
+   * @param dataset_name the dataset where the index exists
+   * @param options optional parameters
+   * @return future object that carries the result of the operation
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto drop_index(std::string index_name,
+                                std::string dataset_name,
+                                const drop_index_analytics_options& options) const
+    -> std::future<error>;
 
-    /**
-     * Connects a not yet connected link.
-     *
-     * @param options optional parameters
-     * @param handler the handler that implements @ref connect_link_analytics_handler
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void connect_link(const connect_link_analytics_options& options, connect_link_analytics_handler&& handler) const;
+  /**
+   * Fetches all analytics indexes.
+   *
+   * @param options optional parameters
+   * @param handler the handler that implements @ref get_all_indexes_analytics_handler
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  void get_all_indexes(const get_all_indexes_analytics_options& options,
+                       get_all_indexes_analytics_handler&& handler) const;
 
-    /**
-     * Connects a not yet connected link.
-     *
-     * @param options optional parameters
-     * @return future object that carries the result of the operation
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto connect_link(const connect_link_analytics_options& options) const -> std::future<error>;
+  /**
+   * Fetches all analytics indexes.
+   *
+   * @param options optional parameters
+   * @return future object that carries the result of the operation
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto get_all_indexes(const get_all_indexes_analytics_options& options) const
+    -> std::future<std::pair<error, std::vector<management::analytics_index>>>;
 
-    /**
-     * Disconnects a currently connected link.
-     *
-     * @param options optional parameters
-     * @param handler the handler that implements @ref disconnect_link_analytics_handler
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void disconnect_link(const disconnect_link_analytics_options& options, disconnect_link_analytics_handler&& handler) const;
+  /**
+   * Connects a not yet connected link.
+   *
+   * @param options optional parameters
+   * @param handler the handler that implements @ref connect_link_analytics_handler
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  void connect_link(const connect_link_analytics_options& options,
+                    connect_link_analytics_handler&& handler) const;
 
-    /**
-     * Disconnects a currently connected link.
-     *
-     * @param options optional parameters
-     * @return future object that carries the result of the operation
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto disconnect_link(const disconnect_link_analytics_options& options) const -> std::future<error>;
+  /**
+   * Connects a not yet connected link.
+   *
+   * @param options optional parameters
+   * @return future object that carries the result of the operation
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto connect_link(const connect_link_analytics_options& options) const
+    -> std::future<error>;
 
-    /**
-     * Returns the pending mutations for different dataverses.
-     *
-     * @param options optional parameters
-     * @param handler the handler that implements @ref get_pending_mutations_analytics_handler
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void get_pending_mutations(const get_pending_mutations_analytics_options& options,
-                               get_pending_mutations_analytics_handler&& handler) const;
+  /**
+   * Disconnects a currently connected link.
+   *
+   * @param options optional parameters
+   * @param handler the handler that implements @ref disconnect_link_analytics_handler
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  void disconnect_link(const disconnect_link_analytics_options& options,
+                       disconnect_link_analytics_handler&& handler) const;
 
-    /**
-     * Returns the pending mutations for different dataverses.
-     *
-     * @param options optional parameters
-     * @return future object that carries the result of the operation
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto get_pending_mutations(const get_pending_mutations_analytics_options& options) const
-      -> std::future<std::pair<error, std::map<std::string, std::map<std::string, std::int64_t>>>>;
+  /**
+   * Disconnects a currently connected link.
+   *
+   * @param options optional parameters
+   * @return future object that carries the result of the operation
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto disconnect_link(const disconnect_link_analytics_options& options) const
+    -> std::future<error>;
 
-    /**
-     * Creates a new analytics remote link.
-     *
-     * @param link the settings for the link to be created
-     * @param options optional parameters
-     * @param handler the handler that implements @ref create_link_analytics_handler
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void create_link(const management::analytics_link& link,
-                     const create_link_analytics_options& options,
-                     create_link_analytics_handler&& handler) const;
+  /**
+   * Returns the pending mutations for different dataverses.
+   *
+   * @param options optional parameters
+   * @param handler the handler that implements @ref get_pending_mutations_analytics_handler
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  void get_pending_mutations(const get_pending_mutations_analytics_options& options,
+                             get_pending_mutations_analytics_handler&& handler) const;
 
-    /**
-     * Creates a new analytics remote link.
-     *
-     * @param link the settings for the link to be created
-     * @param options optional parameters
-     * @return future object that carries the result of the operation
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto create_link(const management::analytics_link& link,
-                                   const create_link_analytics_options& options) const -> std::future<error>;
+  /**
+   * Returns the pending mutations for different dataverses.
+   *
+   * @param options optional parameters
+   * @return future object that carries the result of the operation
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto get_pending_mutations(
+    const get_pending_mutations_analytics_options& options) const
+    -> std::future<std::pair<error, std::map<std::string, std::map<std::string, std::int64_t>>>>;
 
-    /**
-     * Replaces an existing analytics remote link.
-     *
-     * @param link the settings for the updated link
-     * @param options optional parameters
-     * @param handler the handler that implements @ref replace_link_analytics_handler
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void replace_link(const management::analytics_link& link,
-                      const replace_link_analytics_options& options,
-                      replace_link_analytics_handler&& handler) const;
+  /**
+   * Creates a new analytics remote link.
+   *
+   * @param link the settings for the link to be created
+   * @param options optional parameters
+   * @param handler the handler that implements @ref create_link_analytics_handler
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  void create_link(const management::analytics_link& link,
+                   const create_link_analytics_options& options,
+                   create_link_analytics_handler&& handler) const;
 
-    /**
-     * Replaces an existing analytics remote link.
-     *
-     * @param link the settings for the updated link
-     * @param options optional parameters
-     * @return future object that carries the result of the operation
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto replace_link(const management::analytics_link& link,
-                                    const replace_link_analytics_options& options) const -> std::future<error>;
+  /**
+   * Creates a new analytics remote link.
+   *
+   * @param link the settings for the link to be created
+   * @param options optional parameters
+   * @return future object that carries the result of the operation
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto create_link(const management::analytics_link& link,
+                                 const create_link_analytics_options& options) const
+    -> std::future<error>;
 
-    /**
-     * Drops an existing analytics remote link.
-     *
-     * @param link_name the name of the link to drop
-     * @param dataverse_name the name of the dataverse containing the link to be dropped
-     * @param options optional parameters
-     * @param handler the handler that implements @ref drop_link_analytics_handler
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void drop_link(std::string link_name,
-                   std::string dataverse_name,
-                   const drop_link_analytics_options& options,
-                   drop_link_analytics_handler&& handler) const;
+  /**
+   * Replaces an existing analytics remote link.
+   *
+   * @param link the settings for the updated link
+   * @param options optional parameters
+   * @param handler the handler that implements @ref replace_link_analytics_handler
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  void replace_link(const management::analytics_link& link,
+                    const replace_link_analytics_options& options,
+                    replace_link_analytics_handler&& handler) const;
 
-    /**
-     * Drops an existing analytics remote link.
-     *
-     * @param link_name the name of the link to drop
-     * @param dataverse_name the name of the dataverse containing the link to be dropped
-     * @param options optional parameters
-     * @return future object that carries the result of the operation
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto drop_link(std::string link_name,
-                                 std::string dataverse_name,
-                                 const drop_link_analytics_options& options) const -> std::future<error>;
+  /**
+   * Replaces an existing analytics remote link.
+   *
+   * @param link the settings for the updated link
+   * @param options optional parameters
+   * @return future object that carries the result of the operation
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto replace_link(const management::analytics_link& link,
+                                  const replace_link_analytics_options& options) const
+    -> std::future<error>;
 
-    /**
-     * Fetches the existing analytics remote links.
-     *
-     * @param options optional parameters
-     * @param handler the handler that implemenets @ref get_links_analytics_handler
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    void get_links(const get_links_analytics_options& options, get_links_analytics_handler&& handler) const;
+  /**
+   * Drops an existing analytics remote link.
+   *
+   * @param link_name the name of the link to drop
+   * @param dataverse_name the name of the dataverse containing the link to be dropped
+   * @param options optional parameters
+   * @param handler the handler that implements @ref drop_link_analytics_handler
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  void drop_link(std::string link_name,
+                 std::string dataverse_name,
+                 const drop_link_analytics_options& options,
+                 drop_link_analytics_handler&& handler) const;
 
-    /**
-     * Fetches the existing analytics remote links.
-     *
-     * @param options optional parameters
-     * @return future object that carries the result of the operation
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto get_links(const get_links_analytics_options& options) const
-      -> std::future<std::pair<error, std::vector<std::unique_ptr<management::analytics_link>>>>;
+  /**
+   * Drops an existing analytics remote link.
+   *
+   * @param link_name the name of the link to drop
+   * @param dataverse_name the name of the dataverse containing the link to be dropped
+   * @param options optional parameters
+   * @return future object that carries the result of the operation
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto drop_link(std::string link_name,
+                               std::string dataverse_name,
+                               const drop_link_analytics_options& options) const
+    -> std::future<error>;
 
-  private:
-    friend class cluster;
+  /**
+   * Fetches the existing analytics remote links.
+   *
+   * @param options optional parameters
+   * @param handler the handler that implemenets @ref get_links_analytics_handler
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  void get_links(const get_links_analytics_options& options,
+                 get_links_analytics_handler&& handler) const;
 
-    explicit analytics_index_manager(core::cluster core);
+  /**
+   * Fetches the existing analytics remote links.
+   *
+   * @param options optional parameters
+   * @return future object that carries the result of the operation
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto get_links(const get_links_analytics_options& options) const
+    -> std::future<std::pair<error, std::vector<std::unique_ptr<management::analytics_link>>>>;
 
-    std::shared_ptr<analytics_index_manager_impl> impl_;
+private:
+  friend class cluster;
+
+  explicit analytics_index_manager(core::cluster core);
+
+  std::shared_ptr<analytics_index_manager_impl> impl_;
 };
 
 } // namespace couchbase

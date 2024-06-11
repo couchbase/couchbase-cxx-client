@@ -31,94 +31,94 @@ namespace couchbase
 {
 class diagnostics_result
 {
-  public:
-    /**
-     * @since 1.0.0
-     * @internal
-     */
-    diagnostics_result() = default;
+public:
+  /**
+   * @since 1.0.0
+   * @internal
+   */
+  diagnostics_result() = default;
 
-    /**
-     * @since 1.0.0
-     * @internal
-     */
-    diagnostics_result(std::string id,
-                       std::uint16_t version,
-                       std::string sdk,
-                       std::map<service_type, std::vector<endpoint_diagnostics>> endpoints)
-      : id_{ std::move(id) }
-      , version_{ version }
-      , sdk_{ std::move(sdk) }
-      , endpoints_{ std::move(endpoints) }
-    {
-    }
+  /**
+   * @since 1.0.0
+   * @internal
+   */
+  diagnostics_result(std::string id,
+                     std::uint16_t version,
+                     std::string sdk,
+                     std::map<service_type, std::vector<endpoint_diagnostics>> endpoints)
+    : id_{ std::move(id) }
+    , version_{ version }
+    , sdk_{ std::move(sdk) }
+    , endpoints_{ std::move(endpoints) }
+  {
+  }
 
-    /**
-     * Returns the ID of this report.
-     *
-     * @return the report ID.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto id() const -> std::string
-    {
-        return id_;
-    }
+  /**
+   * Returns the ID of this report.
+   *
+   * @return the report ID.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto id() const -> std::string
+  {
+    return id_;
+  }
 
-    /**
-     * Returns the version of this report (useful when exporting to JSON).
-     *
-     * @return the report version
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto version() const -> std::uint16_t
-    {
-        return version_;
-    }
+  /**
+   * Returns the version of this report (useful when exporting to JSON).
+   *
+   * @return the report version
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto version() const -> std::uint16_t
+  {
+    return version_;
+  }
 
-    /**
-     * Returns the identifier of this SDK (useful when exporting to JSON).
-     *
-     * @return the SDK identifier.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto sdk() const -> std::string
-    {
-        return sdk_;
-    }
+  /**
+   * Returns the identifier of this SDK (useful when exporting to JSON).
+   *
+   * @return the SDK identifier.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto sdk() const -> std::string
+  {
+    return sdk_;
+  }
 
-    /**
-     * Returns the diagnostics for each individual endpoint, organised by service type.
-     *
-     * @return the service type to endpoint diagnostics reports map.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto endpoints() const -> std::map<service_type, std::vector<endpoint_diagnostics>>
-    {
-        return endpoints_;
-    }
+  /**
+   * Returns the diagnostics for each individual endpoint, organised by service type.
+   *
+   * @return the service type to endpoint diagnostics reports map.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto endpoints() const -> std::map<service_type, std::vector<endpoint_diagnostics>>
+  {
+    return endpoints_;
+  }
 
-    /**
-     * Exports the diagnostics report as JSON.
-     *
-     * @return the JSON report.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto as_json() const -> codec::tao_json_serializer::document_type;
+  /**
+   * Exports the diagnostics report as JSON.
+   *
+   * @return the JSON report.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto as_json() const -> codec::tao_json_serializer::document_type;
 
-  private:
-    std::string id_{};
-    std::uint16_t version_{};
-    std::string sdk_{};
-    std::map<service_type, std::vector<endpoint_diagnostics>> endpoints_{};
+private:
+  std::string id_{};
+  std::uint16_t version_{};
+  std::string sdk_{};
+  std::map<service_type, std::vector<endpoint_diagnostics>> endpoints_{};
 };
 } // namespace couchbase

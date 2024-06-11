@@ -36,30 +36,33 @@ namespace couchbase::core::impl
  */
 class get_any_replica_request
 {
-  public:
-    explicit get_any_replica_request(std::string bucket_name,
-                                     std::string scope_name,
-                                     std::string collection_name,
-                                     std::string document_key,
-                                     std::optional<std::chrono::milliseconds> timeout)
-      : id_{ std::move(bucket_name), std::move(scope_name), std::move(collection_name), std::move(document_key) }
-      , timeout_{ timeout }
-    {
-    }
+public:
+  explicit get_any_replica_request(std::string bucket_name,
+                                   std::string scope_name,
+                                   std::string collection_name,
+                                   std::string document_key,
+                                   std::optional<std::chrono::milliseconds> timeout)
+    : id_{ std::move(bucket_name),
+           std::move(scope_name),
+           std::move(collection_name),
+           std::move(document_key) }
+    , timeout_{ timeout }
+  {
+  }
 
-    [[nodiscard]] const auto& id() const
-    {
-        return id_;
-    }
+  [[nodiscard]] const auto& id() const
+  {
+    return id_;
+  }
 
-    [[nodiscard]] const auto& timeout() const
-    {
-        return timeout_;
-    }
+  [[nodiscard]] const auto& timeout() const
+  {
+    return timeout_;
+  }
 
-  private:
-    core::document_id id_;
-    std::optional<std::chrono::milliseconds> timeout_{};
+private:
+  core::document_id id_;
+  std::optional<std::chrono::milliseconds> timeout_{};
 };
 
 using movable_get_any_replica_handler = utils::movable_function<void(error, get_replica_result)>;

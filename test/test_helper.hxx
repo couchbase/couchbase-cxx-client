@@ -23,11 +23,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#define REQUIRE_SUCCESS(ec)                                                                                                                \
-    INFO((ec).message());                                                                                                                  \
-    REQUIRE_FALSE(ec)
-#define EXPECT_SUCCESS(result)                                                                                                             \
-    if (!result) {                                                                                                                         \
-        INFO(result.error().message());                                                                                                    \
-    }                                                                                                                                      \
-    REQUIRE(result)
+#define REQUIRE_SUCCESS(ec)                                                                        \
+  INFO((ec).message());                                                                            \
+  REQUIRE_FALSE(ec)
+#define EXPECT_SUCCESS(result)                                                                     \
+  if (!result) {                                                                                   \
+    INFO(result.error().message());                                                                \
+  }                                                                                                \
+  REQUIRE(result)

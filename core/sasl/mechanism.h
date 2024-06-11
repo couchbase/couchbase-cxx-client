@@ -26,12 +26,17 @@
 namespace couchbase::core::sasl
 {
 
-enum class Mechanism { SCRAM_SHA512, SCRAM_SHA256, SCRAM_SHA1, PLAIN };
+enum class Mechanism {
+  SCRAM_SHA512,
+  SCRAM_SHA256,
+  SCRAM_SHA1,
+  PLAIN
+};
 
 class unknown_mechanism : public std::invalid_argument
 {
-  public:
-    using std::invalid_argument::invalid_argument;
+public:
+  using std::invalid_argument::invalid_argument;
 };
 
 /**

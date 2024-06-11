@@ -42,31 +42,38 @@ namespace codec
 {
 class raw_json_transcoder
 {
-  public:
-    template<typename Document, std::enable_if_t<std::is_same_v<Document, std::string> || std::is_same_v<Document, binary>, bool> = true>
-    static auto encode(const Document& document) -> encoded_value
-    {
-        if constexpr (std::is_same_v<Document, std::string>) {
-            return { core::utils::to_binary(document), codec_flags::json_common_flags };
-        } else {
-            return { std::move(document), codec_flags::json_common_flags };
-        }
+public:
+  template<
+    typename Document,
+    std::enable_if_t<std::is_same_v<Document, std::string> || std::is_same_v<Document, binary>,
+                     bool> = true>
+  static auto encode(const Document& document) -> encoded_value
+  {
+    if constexpr (std::is_same_v<Document, std::string>) {
+      return { core::utils::to_binary(document), codec_flags::json_common_flags };
+    } else {
+      return { std::move(document), codec_flags::json_common_flags };
     }
+  }
 
-    template<typename Document, std::enable_if_t<std::is_same_v<Document, std::string> || std::is_same_v<Document, binary>, bool> = true>
-    static auto decode(const encoded_value& encoded) -> Document
-    {
-        if (!codec_flags::has_common_flags(encoded.flags, codec_flags::json_common_flags)) {
-            throw std::system_error(errc::common::decoding_failure,
-                                    "raw_json_transcoder expects document to have JSON common flags, flags=" +
-                                      std::to_string(encoded.flags));
-        }
-        if constexpr (std::is_same_v<Document, std::string>) {
-            return std::string{ reinterpret_cast<const char*>(encoded.data.data()), encoded.data.size() };
-        } else {
-            return encoded.data;
-        }
+  template<
+    typename Document,
+    std::enable_if_t<std::is_same_v<Document, std::string> || std::is_same_v<Document, binary>,
+                     bool> = true>
+  static auto decode(const encoded_value& encoded) -> Document
+  {
+    if (!codec_flags::has_common_flags(encoded.flags, codec_flags::json_common_flags)) {
+      throw std::system_error(
+        errc::common::decoding_failure,
+        "raw_json_transcoder expects document to have JSON common flags, flags=" +
+          std::to_string(encoded.flags));
     }
+    if constexpr (std::is_same_v<Document, std::string>) {
+      return std::string{ reinterpret_cast<const char*>(encoded.data.data()), encoded.data.size() };
+    } else {
+      return encoded.data;
+    }
+  }
 };
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN

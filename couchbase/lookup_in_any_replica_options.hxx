@@ -43,55 +43,56 @@ namespace couchbase
  * @committed
  */
 struct lookup_in_any_replica_options : common_options<lookup_in_any_replica_options> {
-    /**
-     * Immutable value object representing consistent options.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    struct built : public common_options<lookup_in_any_replica_options>::built {
-        couchbase::read_preference read_preference;
+  /**
+   * Immutable value object representing consistent options.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  struct built : public common_options<lookup_in_any_replica_options>::built {
+    couchbase::read_preference read_preference;
+  };
+
+  /**
+   * Choose how the replica nodes will be selected. By default it has no
+   * preference and will select any available replica, but it is possible to
+   * prioritize or restrict to only nodes in local server group.
+   *
+   * @param preference
+   * @return this options builder for chaining purposes.
+   *
+   * @since 1.0.0
+   * @volatile
+   */
+  auto read_preference(read_preference preference) -> lookup_in_any_replica_options&
+  {
+    read_preference_ = preference;
+    return self();
+  }
+
+  /**
+   * Validates options and returns them as an immutable value.
+   *
+   * @return consistent options as an immutable value
+   *
+   * @exception std::system_error with code errc::common::invalid_argument if the options are not
+   * valid
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto build() const -> built
+  {
+    return {
+      build_common_options(),
+      read_preference_,
     };
+  }
 
-    /**
-     * Choose how the replica nodes will be selected. By default it has no
-     * preference and will select any available replica, but it is possible to
-     * prioritize or restrict to only nodes in local server group.
-     *
-     * @param preference
-     * @return this options builder for chaining purposes.
-     *
-     * @since 1.0.0
-     * @volatile
-     */
-    auto read_preference(read_preference preference) -> lookup_in_any_replica_options&
-    {
-        read_preference_ = preference;
-        return self();
-    }
-
-    /**
-     * Validates options and returns them as an immutable value.
-     *
-     * @return consistent options as an immutable value
-     *
-     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto build() const -> built
-    {
-        return {
-            build_common_options(),
-            read_preference_,
-        };
-    }
-
-  private:
-    enum read_preference read_preference_ {
-        read_preference::no_preference
-    };
+private:
+  enum read_preference read_preference_ {
+    read_preference::no_preference
+  };
 };
 
 /**
@@ -114,14 +115,15 @@ namespace impl
  * @internal
  */
 void
-initiate_lookup_in_any_replica_operation(std::shared_ptr<couchbase::core::cluster> core,
-                                         const std::string& bucket_name,
-                                         const std::string& scope_name,
-                                         const std::string& collection_name,
-                                         std::string document_key,
-                                         const std::vector<couchbase::core::impl::subdoc::command>& specs,
-                                         lookup_in_any_replica_options::built options,
-                                         lookup_in_any_replica_handler&& handler);
+initiate_lookup_in_any_replica_operation(
+  std::shared_ptr<couchbase::core::cluster> core,
+  const std::string& bucket_name,
+  const std::string& scope_name,
+  const std::string& collection_name,
+  std::string document_key,
+  const std::vector<couchbase::core::impl::subdoc::command>& specs,
+  lookup_in_any_replica_options::built options,
+  lookup_in_any_replica_handler&& handler);
 #endif
 } // namespace impl
 } // namespace core

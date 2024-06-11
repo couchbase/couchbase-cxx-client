@@ -26,31 +26,33 @@ namespace couchbase::tracing
 {
 class request_tracer
 {
-  public:
-    request_tracer() = default;
-    request_tracer(const request_tracer& other) = default;
-    request_tracer(request_tracer&& other) = default;
-    request_tracer& operator=(const request_tracer& other) = default;
-    request_tracer& operator=(request_tracer&& other) = default;
-    virtual ~request_tracer() = default;
+public:
+  request_tracer() = default;
+  request_tracer(const request_tracer& other) = default;
+  request_tracer(request_tracer&& other) = default;
+  request_tracer& operator=(const request_tracer& other) = default;
+  request_tracer& operator=(request_tracer&& other) = default;
+  virtual ~request_tracer() = default;
 
-    /**
-     * SDK invokes this method when cluster is ready to trace. Override it as NO-OP if no action is necessary.
-     */
-    virtual void start()
-    {
-        /* do nothing */
-    }
+  /**
+   * SDK invokes this method when cluster is ready to trace. Override it as NO-OP if no action is
+   * necessary.
+   */
+  virtual void start()
+  {
+    /* do nothing */
+  }
 
-    /**
-     * SDK invokes this method when cluster is closed. Override it as NO-OP if no action is necessary.
-     */
-    virtual void stop()
-    {
-        /* do nothing */
-    }
+  /**
+   * SDK invokes this method when cluster is closed. Override it as NO-OP if no action is necessary.
+   */
+  virtual void stop()
+  {
+    /* do nothing */
+  }
 
-    virtual std::shared_ptr<request_span> start_span(std::string name, std::shared_ptr<request_span> parent = {}) = 0;
+  virtual std::shared_ptr<request_span> start_span(std::string name,
+                                                   std::shared_ptr<request_span> parent = {}) = 0;
 };
 
 } // namespace couchbase::tracing

@@ -25,71 +25,72 @@ namespace couchbase::transactions
 transactions_config::built
 transaction_options::apply(const transactions_config::built& conf) const
 {
-    auto query_config = conf.query_config;
-    if (scan_consistency_) {
-        query_config.scan_consistency = *scan_consistency_;
-    }
-    return { durability_.value_or(conf.level),
-             timeout_.value_or(conf.timeout),
-             attempt_context_hooks_ ? attempt_context_hooks_ : conf.attempt_context_hooks,
-             cleanup_hooks_ ? cleanup_hooks_ : conf.cleanup_hooks,
-             metadata_collection_ ? metadata_collection_ : conf.metadata_collection,
-             query_config,
-             conf.cleanup_config };
+  auto query_config = conf.query_config;
+  if (scan_consistency_) {
+    query_config.scan_consistency = *scan_consistency_;
+  }
+  return { durability_.value_or(conf.level),
+           timeout_.value_or(conf.timeout),
+           attempt_context_hooks_ ? attempt_context_hooks_ : conf.attempt_context_hooks,
+           cleanup_hooks_ ? cleanup_hooks_ : conf.cleanup_hooks,
+           metadata_collection_ ? metadata_collection_ : conf.metadata_collection,
+           query_config,
+           conf.cleanup_config };
 }
 
 transaction_options&
-transaction_options::test_factories(std::shared_ptr<core::transactions::attempt_context_testing_hooks> hooks,
-                                    std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks)
+transaction_options::test_factories(
+  std::shared_ptr<core::transactions::attempt_context_testing_hooks> hooks,
+  std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks)
 {
-    attempt_context_hooks_ = hooks;
-    cleanup_hooks_ = cleanup_hooks;
-    return *this;
+  attempt_context_hooks_ = hooks;
+  cleanup_hooks_ = cleanup_hooks;
+  return *this;
 }
 
 std::optional<transaction_keyspace>
 transaction_options::metadata_collection() const
 {
-    return metadata_collection_;
+  return metadata_collection_;
 }
 
 transaction_options&
 transaction_options::durability_level(couchbase::durability_level level)
 {
-    durability_ = level;
-    return *this;
+  durability_ = level;
+  return *this;
 }
 
 std::optional<couchbase::durability_level>
 transaction_options::durability_level() const
 {
-    return durability_;
+  return durability_;
 }
 
 transaction_options&
 transaction_options::scan_consistency(query_scan_consistency scan_consistency)
 {
-    scan_consistency_ = scan_consistency;
-    return *this;
+  scan_consistency_ = scan_consistency;
+  return *this;
 }
 
 std::optional<query_scan_consistency>
 transaction_options::scan_consistency() const
 {
-    return scan_consistency_;
+  return scan_consistency_;
 }
 
 std::optional<std::chrono::nanoseconds>
 transaction_options::timeout()
 {
-    return timeout_;
+  return timeout_;
 }
 
 transaction_options&
 transaction_options::metadata_collection(const couchbase::collection& coll)
 {
-    metadata_collection_.emplace(coll.bucket_name(), coll.scope_name(), coll.name());
-    return *this;
+  metadata_collection_.emplace(coll.bucket_name(), coll.scope_name(), coll.name());
+  return *this;
 }
 
 } // namespace couchbase::transactions

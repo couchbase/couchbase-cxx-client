@@ -25,78 +25,78 @@
 void
 couchbase::core::uuid::random(couchbase::core::uuid::uuid_t& uuid)
 {
-    static thread_local std::mt19937_64 gen{ std::random_device()() };
-    std::uniform_int_distribution<std::uint64_t> dis;
+  static thread_local std::mt19937_64 gen{ std::random_device()() };
+  std::uniform_int_distribution<std::uint64_t> dis;
 
-    // The uuid is 16 bytes, which is the same as two 64-bit integers
-    auto* ptr = reinterpret_cast<std::uint64_t*>(uuid.data());
-    ptr[0] = dis(gen);
-    ptr[1] = dis(gen);
+  // The uuid is 16 bytes, which is the same as two 64-bit integers
+  auto* ptr = reinterpret_cast<std::uint64_t*>(uuid.data());
+  ptr[0] = dis(gen);
+  ptr[1] = dis(gen);
 
-    // Make sure that it looks like a version 4
-    uuid[6] &= 0x0f;
-    uuid[6] |= 0x40;
+  // Make sure that it looks like a version 4
+  uuid[6] &= 0x0f;
+  uuid[6] |= 0x40;
 }
 
 couchbase::core::uuid::uuid_t
 couchbase::core::uuid::random()
 {
-    uuid_t ret;
-    random(ret);
-    return ret;
+  uuid_t ret;
+  random(ret);
+  return ret;
 }
 
 couchbase::core::uuid::uuid_t
 couchbase::core::uuid::from_string(std::string_view str)
 {
-    uuid_t ret;
-    if (str.size() != 36) {
-        throw std::invalid_argument("couchbase::core::uuid::from_string: string was wrong size got: " + std::to_string(str.size()) +
-                                    " (expected: 36)");
-    }
+  uuid_t ret;
+  if (str.size() != 36) {
+    throw std::invalid_argument("couchbase::core::uuid::from_string: string was wrong size got: " +
+                                std::to_string(str.size()) + " (expected: 36)");
+  }
 
-    std::size_t jj = 0;
-    for (std::size_t ii = 0; ii < 36; ii += 2) {
-        switch (ii) {
-            case 8:
-            case 13:
-            case 18:
-            case 23:
-                if (str[ii] != '-') {
-                    throw std::invalid_argument("couchbase::core::uuid::from_string: hyphen not found where "
-                                                "expected");
-                }
-                ++ii; // fall-through
-            default:
-                ret[jj++] = std::uint8_t(from_hex({ str.data() + ii, 2 }));
+  std::size_t jj = 0;
+  for (std::size_t ii = 0; ii < 36; ii += 2) {
+    switch (ii) {
+      case 8:
+      case 13:
+      case 18:
+      case 23:
+        if (str[ii] != '-') {
+          throw std::invalid_argument("couchbase::core::uuid::from_string: hyphen not found where "
+                                      "expected");
         }
+        ++ii; // fall-through
+      default:
+        ret[jj++] = std::uint8_t(from_hex({ str.data() + ii, 2 }));
     }
-    return ret;
+  }
+  return ret;
 }
 
 inline char
 to_char(std::uint8_t c)
 {
-    if (c <= 9) {
-        return static_cast<char>('0' + c);
-    }
-    return static_cast<char>('a' + (c - 10));
+  if (c <= 9) {
+    return static_cast<char>('0' + c);
+  }
+  return static_cast<char>('a' + (c - 10));
 }
 
 std::string
 couchbase::core::uuid::to_string(const couchbase::core::uuid::uuid_t& uuid)
 {
-    std::string ret(36, '-');
-    std::size_t i = 0;
+  std::string ret(36, '-');
+  std::size_t i = 0;
 
-    for (const auto& byte : uuid) {
-        ret[i] = to_char(static_cast<std::uint8_t>(byte >> 4U) & 0x0fU);
-        ++i;
-        ret[i] = to_char(byte & 0x0fU);
-        ++i;
-        if (i == 6 || i == 11 || i == 16 || i == 21) {
-            ++i;
-        }
+  for (const auto& byte : uuid) {
+    ret[i] = to_char(static_cast<std::uint8_t>(byte >> 4U) & 0x0fU);
+    ++i;
+    ret[i] = to_char(byte & 0x0fU);
+    ++i;
+    if (i == 6 || i == 11 || i == 16 || i == 21) {
+      ++i;
     }
-    return ret;
+  }
+  return ret;
 }

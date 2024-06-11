@@ -24,38 +24,39 @@ namespace couchbase::core::tracing
 
 class noop_span : public couchbase::tracing::request_span
 {
-    void add_tag(const std::string& /* name */, std::uint64_t /* value */) override
-    {
-        /* do nothing */
-    }
+  void add_tag(const std::string& /* name */, std::uint64_t /* value */) override
+  {
+    /* do nothing */
+  }
 
-    void add_tag(const std::string& /* name */, const std::string& /* value */) override
-    {
-        /* do nothing */
-    }
+  void add_tag(const std::string& /* name */, const std::string& /* value */) override
+  {
+    /* do nothing */
+  }
 
-    void end() override
-    {
-        /* do nothing */
-    }
+  void end() override
+  {
+    /* do nothing */
+  }
 
-    bool uses_tags() const override
-    {
-        return false;
-    }
+  bool uses_tags() const override
+  {
+    return false;
+  }
 };
 
 class noop_tracer : public couchbase::tracing::request_tracer
 {
-  private:
-    std::shared_ptr<noop_span> instance_{ std::make_shared<noop_span>() };
+private:
+  std::shared_ptr<noop_span> instance_{ std::make_shared<noop_span>() };
 
-  public:
-    std::shared_ptr<couchbase::tracing::request_span> start_span(std::string /* name */,
-                                                                 std::shared_ptr<couchbase::tracing::request_span> /* parent */) override
-    {
-        return instance_;
-    }
+public:
+  std::shared_ptr<couchbase::tracing::request_span> start_span(
+    std::string /* name */,
+    std::shared_ptr<couchbase::tracing::request_span> /* parent */) override
+  {
+    return instance_;
+  }
 };
 
 } // namespace couchbase::core::tracing

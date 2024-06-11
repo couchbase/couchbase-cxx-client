@@ -24,63 +24,63 @@ namespace couchbase
 /**
  * Represents extended error information returned by the server in some cases.
  *
- * For instance, it might contain unique identifier used by the server in its logs (reference), or detailed explanation of the cause of the
- * error (context).
+ * For instance, it might contain unique identifier used by the server in its logs (reference), or
+ * detailed explanation of the cause of the error (context).
  *
  * @since 1.0.0
  * @committed
  */
 class key_value_extended_error_info
 {
-  public:
-    /**
-     * Constructs empty error info.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    key_value_extended_error_info() = default;
+public:
+  /**
+   * Constructs empty error info.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  key_value_extended_error_info() = default;
 
-    /**
-     * Constructs error info with given reference and context.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    key_value_extended_error_info(std::string reference, std::string context)
-      : reference_(std::move(reference))
-      , context_(std::move(context))
-    {
-    }
+  /**
+   * Constructs error info with given reference and context.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  key_value_extended_error_info(std::string reference, std::string context)
+    : reference_(std::move(reference))
+    , context_(std::move(context))
+  {
+  }
 
-    /**
-     * Returns error reference, that could be used to match the operation in server logs.
-     *
-     * @return error reference, or empty string
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto reference() const -> const std::string&
-    {
-        return reference_;
-    }
+  /**
+   * Returns error reference, that could be used to match the operation in server logs.
+   *
+   * @return error reference, or empty string
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto reference() const -> const std::string&
+  {
+    return reference_;
+  }
 
-    /**
-     * Returns error context, human readable message explaining cause of the error condition.
-     *
-     * @return error context, or empty string
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    [[nodiscard]] auto context() const -> const std::string&
-    {
-        return context_;
-    }
+  /**
+   * Returns error context, human readable message explaining cause of the error condition.
+   *
+   * @return error context, or empty string
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  [[nodiscard]] auto context() const -> const std::string&
+  {
+    return context_;
+  }
 
-  private:
-    std::string reference_{};
-    std::string context_{};
+private:
+  std::string reference_{};
+  std::string context_{};
 };
 } // namespace couchbase

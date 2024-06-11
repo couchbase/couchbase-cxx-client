@@ -28,27 +28,30 @@
 namespace couchbase::core::operations::management
 {
 struct eventing_get_all_functions_response {
-    error_context::http ctx;
-    std::vector<couchbase::core::management::eventing::function> functions{};
-    std::optional<eventing_problem> error{};
+  error_context::http ctx;
+  std::vector<couchbase::core::management::eventing::function> functions{};
+  std::optional<eventing_problem> error{};
 };
 
 struct eventing_get_all_functions_request {
-    using response_type = eventing_get_all_functions_response;
-    using encoded_request_type = io::http_request;
-    using encoded_response_type = io::http_response;
-    using error_context_type = error_context::http;
+  using response_type = eventing_get_all_functions_response;
+  using encoded_request_type = io::http_request;
+  using encoded_response_type = io::http_response;
+  using error_context_type = error_context::http;
 
-    std::optional<std::string> bucket_name{};
-    std::optional<std::string> scope_name{};
+  std::optional<std::string> bucket_name{};
+  std::optional<std::string> scope_name{};
 
-    static const inline service_type type = service_type::eventing;
+  static const inline service_type type = service_type::eventing;
 
-    std::optional<std::string> client_context_id{};
-    std::optional<std::chrono::milliseconds> timeout{};
+  std::optional<std::string> client_context_id{};
+  std::optional<std::chrono::milliseconds> timeout{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          http_context& context) const;
 
-    [[nodiscard]] eventing_get_all_functions_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] eventing_get_all_functions_response make_response(
+    error_context::http&& ctx,
+    const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::operations::management

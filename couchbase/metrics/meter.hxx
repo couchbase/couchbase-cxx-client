@@ -25,44 +25,47 @@ namespace couchbase::metrics
 {
 class value_recorder
 {
-  public:
-    value_recorder() = default;
-    value_recorder(const value_recorder& other) = default;
-    value_recorder(value_recorder&& other) = default;
-    value_recorder& operator=(const value_recorder& other) = default;
-    value_recorder& operator=(value_recorder&& other) = default;
-    virtual ~value_recorder() = default;
+public:
+  value_recorder() = default;
+  value_recorder(const value_recorder& other) = default;
+  value_recorder(value_recorder&& other) = default;
+  value_recorder& operator=(const value_recorder& other) = default;
+  value_recorder& operator=(value_recorder&& other) = default;
+  virtual ~value_recorder() = default;
 
-    virtual void record_value(std::int64_t value) = 0;
+  virtual void record_value(std::int64_t value) = 0;
 };
 
 class meter
 {
-  public:
-    meter() = default;
-    meter(const meter& other) = default;
-    meter(meter&& other) = default;
-    meter& operator=(const meter& other) = default;
-    meter& operator=(meter&& other) = default;
-    virtual ~meter() = default;
+public:
+  meter() = default;
+  meter(const meter& other) = default;
+  meter(meter&& other) = default;
+  meter& operator=(const meter& other) = default;
+  meter& operator=(meter&& other) = default;
+  virtual ~meter() = default;
 
-    /**
-     * SDK invokes this method when cluster is ready to emit metrics. Override it as NO-OP if no action is necessary.
-     */
-    virtual void start()
-    {
-        /* do nothing */
-    }
+  /**
+   * SDK invokes this method when cluster is ready to emit metrics. Override it as NO-OP if no
+   * action is necessary.
+   */
+  virtual void start()
+  {
+    /* do nothing */
+  }
 
-    /**
-     * SDK invokes this method when cluster is closed. Override it as NO-OP if no action is necessary.
-     */
-    virtual void stop()
-    {
-        /* do nothing */
-    }
+  /**
+   * SDK invokes this method when cluster is closed. Override it as NO-OP if no action is necessary.
+   */
+  virtual void stop()
+  {
+    /* do nothing */
+  }
 
-    virtual std::shared_ptr<value_recorder> get_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags) = 0;
+  virtual std::shared_ptr<value_recorder> get_value_recorder(
+    const std::string& name,
+    const std::map<std::string, std::string>& tags) = 0;
 };
 
 } // namespace couchbase::metrics

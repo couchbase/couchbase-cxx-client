@@ -29,24 +29,24 @@
  */
 template<>
 struct fmt::formatter<couchbase::key_value_extended_error_info> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(const couchbase::key_value_extended_error_info& error, FormatContext& ctx) const
-    {
-        if (!error.reference().empty() && !error.context().empty()) {
-            return format_to(ctx.out(), R"((ref: "{}", ctx: "{}"))", error.reference(), error.context());
-        }
-        if (!error.reference().empty()) {
-            return format_to(ctx.out(), R"((ref: "{}"))", error.reference());
-        }
-        if (!error.context().empty()) {
-            return format_to(ctx.out(), R"((ctx: "{}"))", error.context());
-        }
-        return format_to(ctx.out(), "");
+  template<typename FormatContext>
+  auto format(const couchbase::key_value_extended_error_info& error, FormatContext& ctx) const
+  {
+    if (!error.reference().empty() && !error.context().empty()) {
+      return format_to(ctx.out(), R"((ref: "{}", ctx: "{}"))", error.reference(), error.context());
     }
+    if (!error.reference().empty()) {
+      return format_to(ctx.out(), R"((ref: "{}"))", error.reference());
+    }
+    if (!error.context().empty()) {
+      return format_to(ctx.out(), R"((ctx: "{}"))", error.context());
+    }
+    return format_to(ctx.out(), "");
+  }
 };

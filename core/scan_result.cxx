@@ -24,34 +24,34 @@ namespace couchbase::core
 
 class scan_result_impl
 {
-  public:
-    explicit scan_result_impl(std::shared_ptr<range_scan_item_iterator> iterator)
-      : iterator_{ std::move(iterator) }
-    {
-    }
+public:
+  explicit scan_result_impl(std::shared_ptr<range_scan_item_iterator> iterator)
+    : iterator_{ std::move(iterator) }
+  {
+  }
 
-    [[nodiscard]] auto next() const -> tl::expected<range_scan_item, std::error_code>
-    {
-        return iterator_->next().get();
-    }
+  [[nodiscard]] auto next() const -> tl::expected<range_scan_item, std::error_code>
+  {
+    return iterator_->next().get();
+  }
 
-    void next(utils::movable_function<void(range_scan_item, std::error_code)> callback) const
-    {
-        return iterator_->next(std::move(callback));
-    }
+  void next(utils::movable_function<void(range_scan_item, std::error_code)> callback) const
+  {
+    return iterator_->next(std::move(callback));
+  }
 
-    void cancel()
-    {
-        return iterator_->cancel();
-    }
+  void cancel()
+  {
+    return iterator_->cancel();
+  }
 
-    [[nodiscard]] auto is_cancelled() -> bool
-    {
-        return iterator_->is_cancelled();
-    }
+  [[nodiscard]] auto is_cancelled() -> bool
+  {
+    return iterator_->is_cancelled();
+  }
 
-  private:
-    std::shared_ptr<range_scan_item_iterator> iterator_;
+private:
+  std::shared_ptr<range_scan_item_iterator> iterator_;
 };
 
 scan_result::scan_result(std::shared_ptr<range_scan_item_iterator> iterator)
@@ -62,35 +62,35 @@ scan_result::scan_result(std::shared_ptr<range_scan_item_iterator> iterator)
 auto
 scan_result::next() const -> tl::expected<range_scan_item, std::error_code>
 {
-    if (impl_) {
-        return impl_->next();
-    }
-    return tl::unexpected{ errc::common::request_canceled };
+  if (impl_) {
+    return impl_->next();
+  }
+  return tl::unexpected{ errc::common::request_canceled };
 }
 
 void
 scan_result::next(utils::movable_function<void(range_scan_item, std::error_code)> callback) const
 {
-    if (impl_) {
-        return impl_->next(std::move(callback));
-    }
-    callback({}, errc::common::request_canceled);
+  if (impl_) {
+    return impl_->next(std::move(callback));
+  }
+  callback({}, errc::common::request_canceled);
 }
 
 void
 scan_result::cancel()
 {
-    if (impl_) {
-        return impl_->cancel();
-    }
+  if (impl_) {
+    return impl_->cancel();
+  }
 }
 
 auto
 scan_result::is_cancelled() -> bool
 {
-    if (impl_) {
-        return impl_->is_cancelled();
-    }
-    return true;
+  if (impl_) {
+    return impl_->is_cancelled();
+  }
+  return true;
 }
 } // namespace couchbase::core

@@ -31,39 +31,41 @@ namespace couchbase
  */
 class date_range
 {
-  public:
-    date_range(std::string name, std::string start, std::string end);
-    date_range(std::string name, std::chrono::system_clock::time_point start, std::chrono::system_clock::time_point end);
-    date_range(std::string name, std::tm start, std::tm end);
+public:
+  date_range(std::string name, std::string start, std::string end);
+  date_range(std::string name,
+             std::chrono::system_clock::time_point start,
+             std::chrono::system_clock::time_point end);
+  date_range(std::string name, std::tm start, std::tm end);
 
-    static date_range with_start(std::string name, std::string start);
-    static date_range with_start(std::string name, std::chrono::system_clock::time_point start);
-    static date_range with_start(std::string name, std::tm start);
+  static date_range with_start(std::string name, std::string start);
+  static date_range with_start(std::string name, std::chrono::system_clock::time_point start);
+  static date_range with_start(std::string name, std::tm start);
 
-    static date_range with_end(std::string name, std::string end);
-    static date_range with_end(std::string name, std::chrono::system_clock::time_point end);
-    static date_range with_end(std::string name, std::tm end);
+  static date_range with_end(std::string name, std::string end);
+  static date_range with_end(std::string name, std::chrono::system_clock::time_point end);
+  static date_range with_end(std::string name, std::tm end);
 
-    [[nodiscard]] auto name() const -> const std::string&
-    {
-        return name_;
-    }
+  [[nodiscard]] auto name() const -> const std::string&
+  {
+    return name_;
+  }
 
-    [[nodiscard]] auto start() const -> const std::optional<std::string>&
-    {
-        return start_;
-    }
+  [[nodiscard]] auto start() const -> const std::optional<std::string>&
+  {
+    return start_;
+  }
 
-    [[nodiscard]] auto end() const -> const std::optional<std::string>&
-    {
-        return end_;
-    }
+  [[nodiscard]] auto end() const -> const std::optional<std::string>&
+  {
+    return end_;
+  }
 
-  private:
-    date_range(std::string name, std::optional<std::string> start, std::optional<std::string> end);
+private:
+  date_range(std::string name, std::optional<std::string> start, std::optional<std::string> end);
 
-    std::string name_;
-    std::optional<std::string> start_{};
-    std::optional<std::string> end_{};
+  std::string name_;
+  std::optional<std::string> start_{};
+  std::optional<std::string> end_{};
 };
 } // namespace couchbase

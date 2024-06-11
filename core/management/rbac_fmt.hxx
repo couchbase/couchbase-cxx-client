@@ -23,27 +23,27 @@
 
 template<>
 struct fmt::formatter<couchbase::core::management::rbac::auth_domain> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(couchbase::core::management::rbac::auth_domain domain, FormatContext& ctx) const
-    {
-        string_view name = "unknown";
-        switch (domain) {
-            case couchbase::core::management::rbac::auth_domain::unknown:
-                name = "unknown";
-                break;
-            case couchbase::core::management::rbac::auth_domain::local:
-                name = "local";
-                break;
-            case couchbase::core::management::rbac::auth_domain::external:
-                name = "external";
-                break;
-        }
-        return format_to(ctx.out(), "{}", name);
+  template<typename FormatContext>
+  auto format(couchbase::core::management::rbac::auth_domain domain, FormatContext& ctx) const
+  {
+    string_view name = "unknown";
+    switch (domain) {
+      case couchbase::core::management::rbac::auth_domain::unknown:
+        name = "unknown";
+        break;
+      case couchbase::core::management::rbac::auth_domain::local:
+        name = "local";
+        break;
+      case couchbase::core::management::rbac::auth_domain::external:
+        name = "external";
+        break;
     }
+    return format_to(ctx.out(), "{}", name);
+  }
 };

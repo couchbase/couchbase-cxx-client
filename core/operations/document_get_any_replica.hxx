@@ -32,118 +32,128 @@
 namespace couchbase::core::operations
 {
 struct get_any_replica_response {
-    key_value_error_context ctx{};
-    std::vector<std::byte> value{};
-    couchbase::cas cas{};
-    std::uint32_t flags{};
-    bool replica{ true };
+  key_value_error_context ctx{};
+  std::vector<std::byte> value{};
+  couchbase::cas cas{};
+  std::uint32_t flags{};
+  bool replica{ true };
 };
 
 struct get_any_replica_request {
-    using response_type = get_any_replica_response;
-    using encoded_request_type = core::protocol::client_request<core::protocol::get_replica_request_body>;
-    using encoded_response_type = core::protocol::client_response<core::protocol::get_replica_response_body>;
+  using response_type = get_any_replica_response;
+  using encoded_request_type =
+    core::protocol::client_request<core::protocol::get_replica_request_body>;
+  using encoded_response_type =
+    core::protocol::client_response<core::protocol::get_replica_response_body>;
 
-    core::document_id id;
-    std::optional<std::chrono::milliseconds> timeout{};
-    couchbase::read_preference read_preference{ couchbase::read_preference::no_preference };
+  core::document_id id;
+  std::optional<std::chrono::milliseconds> timeout{};
+  couchbase::read_preference read_preference{ couchbase::read_preference::no_preference };
 
-    template<typename Core, typename Handler>
-    void execute(Core core, Handler handler)
-    {
-        core->with_bucket_configuration(
-          id.bucket(),
-          [core, id = id, timeout = timeout, read_preference = read_preference, h = std::forward<Handler>(handler)](
-            std::error_code ec, const topology::configuration& config) mutable {
-              const auto [e, origin] = core->origin();
-              if (e && !ec) {
-                  ec = e;
-              }
+  template<typename Core, typename Handler>
+  void execute(Core core, Handler handler)
+  {
+    core->with_bucket_configuration(
+      id.bucket(),
+      [core,
+       id = id,
+       timeout = timeout,
+       read_preference = read_preference,
+       h = std::forward<Handler>(handler)](std::error_code ec,
+                                           const topology::configuration& config) mutable {
+        const auto [e, origin] = core->origin();
+        if (e && !ec) {
+          ec = e;
+        }
 
-              auto nodes = impl::effective_nodes(id, config, read_preference, origin.options().server_group);
-              if (nodes.empty()) {
-                  CB_LOG_DEBUG("Unable to retrieve replicas for \"{}\", server_group={}, number_of_replicas={}",
-                               id,
-                               origin.options().server_group,
-                               config.num_replicas.value_or(0));
-                  ec = errc::key_value::document_irretrievable;
-              }
+        auto nodes =
+          impl::effective_nodes(id, config, read_preference, origin.options().server_group);
+        if (nodes.empty()) {
+          CB_LOG_DEBUG(
+            "Unable to retrieve replicas for \"{}\", server_group={}, number_of_replicas={}",
+            id,
+            origin.options().server_group,
+            config.num_replicas.value_or(0));
+          ec = errc::key_value::document_irretrievable;
+        }
 
-              if (ec) {
-                  return h(response_type{ make_key_value_error_context(ec, id) });
-              }
-              using handler_type = utils::movable_function<void(response_type)>;
+        if (ec) {
+          return h(response_type{ make_key_value_error_context(ec, id) });
+        }
+        using handler_type = utils::movable_function<void(response_type)>;
 
-              struct replica_context {
-                  replica_context(handler_type&& handler, std::size_t expected_responses)
-                    : handler_(std::move(handler))
-                    , expected_responses_(expected_responses)
-                  {
+        struct replica_context {
+          replica_context(handler_type&& handler, std::size_t expected_responses)
+            : handler_(std::move(handler))
+            , expected_responses_(expected_responses)
+          {
+          }
+
+          handler_type handler_;
+          std::size_t expected_responses_;
+          bool done_{ false };
+          std::mutex mutex_{};
+        };
+        auto ctx = std::make_shared<replica_context>(std::move(h), nodes.size());
+
+        for (const auto& node : nodes) {
+          if (node.is_replica) {
+            document_id replica_id{ id };
+            replica_id.node_index(node.index);
+            core->execute(
+              impl::get_replica_request{ std::move(replica_id), timeout }, [ctx](auto&& resp) {
+                handler_type local_handler;
+                {
+                  std::scoped_lock lock(ctx->mutex_);
+                  if (ctx->done_) {
+                    return;
                   }
-
-                  handler_type handler_;
-                  std::size_t expected_responses_;
-                  bool done_{ false };
-                  std::mutex mutex_{};
-              };
-              auto ctx = std::make_shared<replica_context>(std::move(h), nodes.size());
-
-              for (const auto& node : nodes) {
-                  if (node.is_replica) {
-                      document_id replica_id{ id };
-                      replica_id.node_index(node.index);
-                      core->execute(impl::get_replica_request{ std::move(replica_id), timeout }, [ctx](auto&& resp) {
-                          handler_type local_handler;
-                          {
-                              std::scoped_lock lock(ctx->mutex_);
-                              if (ctx->done_) {
-                                  return;
-                              }
-                              --ctx->expected_responses_;
-                              if (resp.ctx.ec()) {
-                                  if (ctx->expected_responses_ > 0) {
-                                      // just ignore the response
-                                      return;
-                                  }
-                                  // consider document irretrievable and give up
-                                  resp.ctx.override_ec(errc::key_value::document_irretrievable);
-                              }
-                              ctx->done_ = true;
-                              std::swap(local_handler, ctx->handler_);
-                          }
-                          if (local_handler) {
-                              return local_handler(response_type{ std::move(resp.ctx), std::move(resp.value), resp.cas, resp.flags, true });
-                          }
-                      });
-                  } else {
-                      core->execute(get_request{ id, {}, {}, timeout }, [ctx](auto&& resp) {
-                          handler_type local_handler{};
-                          {
-                              std::scoped_lock lock(ctx->mutex_);
-                              if (ctx->done_) {
-                                  return;
-                              }
-                              --ctx->expected_responses_;
-                              if (resp.ctx.ec()) {
-                                  if (ctx->expected_responses_ > 0) {
-                                      // just ignore the response
-                                      return;
-                                  }
-                                  // consider document irretrievable and give up
-                                  resp.ctx.override_ec(errc::key_value::document_irretrievable);
-                              }
-                              ctx->done_ = true;
-                              std::swap(local_handler, ctx->handler_);
-                          }
-                          if (local_handler) {
-                              return local_handler(
-                                response_type{ std::move(resp.ctx), std::move(resp.value), resp.cas, resp.flags, false });
-                          }
-                      });
+                  --ctx->expected_responses_;
+                  if (resp.ctx.ec()) {
+                    if (ctx->expected_responses_ > 0) {
+                      // just ignore the response
+                      return;
+                    }
+                    // consider document irretrievable and give up
+                    resp.ctx.override_ec(errc::key_value::document_irretrievable);
                   }
+                  ctx->done_ = true;
+                  std::swap(local_handler, ctx->handler_);
+                }
+                if (local_handler) {
+                  return local_handler(response_type{
+                    std::move(resp.ctx), std::move(resp.value), resp.cas, resp.flags, true });
+                }
+              });
+          } else {
+            core->execute(get_request{ id, {}, {}, timeout }, [ctx](auto&& resp) {
+              handler_type local_handler{};
+              {
+                std::scoped_lock lock(ctx->mutex_);
+                if (ctx->done_) {
+                  return;
+                }
+                --ctx->expected_responses_;
+                if (resp.ctx.ec()) {
+                  if (ctx->expected_responses_ > 0) {
+                    // just ignore the response
+                    return;
+                  }
+                  // consider document irretrievable and give up
+                  resp.ctx.override_ec(errc::key_value::document_irretrievable);
+                }
+                ctx->done_ = true;
+                std::swap(local_handler, ctx->handler_);
               }
-          });
-    }
+              if (local_handler) {
+                return local_handler(response_type{
+                  std::move(resp.ctx), std::move(resp.value), resp.cas, resp.flags, false });
+              }
+            });
+          }
+        }
+      });
+  }
 };
 
 template<>

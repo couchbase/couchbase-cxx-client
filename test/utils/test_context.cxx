@@ -26,107 +26,108 @@ namespace test::utils
 test_context
 test_context::load_from_environment()
 {
-    test_context ctx{};
+  test_context ctx{};
 
-    if (auto var = spdlog::details::os::getenv("TEST_CONNECTION_STRING"); !var.empty()) {
-        ctx.connection_string = var;
+  if (auto var = spdlog::details::os::getenv("TEST_CONNECTION_STRING"); !var.empty()) {
+    ctx.connection_string = var;
+  }
+
+  if (auto var = spdlog::details::os::getenv("TEST_USERNAME"); !var.empty()) {
+    ctx.username = var;
+  }
+
+  if (auto var = spdlog::details::os::getenv("TEST_PASSWORD"); !var.empty()) {
+    ctx.password = var;
+  }
+
+  if (auto var = spdlog::details::os::getenv("TEST_CERTIFICATE_PATH"); !var.empty()) {
+    ctx.certificate_path = var;
+  }
+
+  if (auto var = spdlog::details::os::getenv("TEST_KEY_PATH"); !var.empty()) {
+    ctx.key_path = var;
+  }
+
+  if (auto var = spdlog::details::os::getenv("TEST_BUCKET"); !var.empty()) {
+    ctx.bucket = var;
+  }
+
+  if (auto var = spdlog::details::os::getenv("OTHER_TEST_BUCKET"); !var.empty()) {
+    ctx.other_bucket = var;
+  }
+
+  if (auto var = spdlog::details::os::getenv("TEST_DNS_NAMESERVER"); !var.empty()) {
+    ctx.dns_nameserver = var;
+  }
+
+  if (auto var = spdlog::details::os::getenv("TEST_DNS_PORT"); !var.empty()) {
+    ctx.dns_port = std::stol(var);
+  }
+
+  if (auto var = spdlog::details::os::getenv("TEST_DEPLOYMENT_TYPE"); !var.empty()) {
+    if (var == "on_prem") {
+      ctx.deployment = deployment_type::on_prem;
+    } else if (var == "capella") {
+      ctx.deployment = deployment_type::capella;
+    } else if (var == "elixir") {
+      ctx.deployment = deployment_type::elixir;
     }
+  }
 
-    if (auto var = spdlog::details::os::getenv("TEST_USERNAME"); !var.empty()) {
-        ctx.username = var;
+  // TODO: I believe this + TEST_DEVELOPER_PREVIEW will conflict
+
+  if (auto var = spdlog::details::os::getenv("TEST_SERVER_VERSION"); !var.empty()) {
+    ctx.version = server_version::parse(var, ctx.deployment);
+  }
+
+  if (auto var = spdlog::details::os::getenv("TEST_DEVELOPER_PREVIEW"); !var.empty()) {
+    if (var == "true" || var == "yes" || var == "1") {
+      ctx.version.developer_preview = true;
+    } else if (var == "false" || var == "no" || var == "0") {
+      ctx.version.developer_preview = false;
     }
+  }
 
-    if (auto var = spdlog::details::os::getenv("TEST_PASSWORD"); !var.empty()) {
-        ctx.password = var;
+  if (auto var = spdlog::details::os::getenv("TEST_NUMBER_OF_IO_THREADS"); !var.empty()) {
+    ctx.number_of_io_threads = std::stoul(var);
+  }
+
+  if (auto var = spdlog::details::os::getenv("TEST_USE_GOCAVES"); !var.empty()) {
+    if (var == "true" || var == "yes" || var == "1") {
+      ctx.version.use_gocaves = true;
+    } else if (var == "false" || var == "no" || var == "0") {
+      ctx.version.use_gocaves = false;
     }
+  }
 
-    if (auto var = spdlog::details::os::getenv("TEST_CERTIFICATE_PATH"); !var.empty()) {
-        ctx.certificate_path = var;
+  if (auto var = spdlog::details::os::getenv("TEST_USE_WAN_DEVELOPMENT_PROFILE"); !var.empty()) {
+    if (var == "true" || var == "yes" || var == "1") {
+      ctx.use_wan_development_profile = true;
+    } else if (var == "false" || var == "no" || var == "0") {
+      ctx.use_wan_development_profile = false;
     }
+  }
 
-    if (auto var = spdlog::details::os::getenv("TEST_KEY_PATH"); !var.empty()) {
-        ctx.key_path = var;
-    }
+  // Always use WAN profile for Capella or Elixir setups
+  if (ctx.deployment == deployment_type::capella ||
+      ctx.deployment == test::utils::deployment_type::elixir) {
+    ctx.use_wan_development_profile = true;
+  }
 
-    if (auto var = spdlog::details::os::getenv("TEST_BUCKET"); !var.empty()) {
-        ctx.bucket = var;
-    }
-
-    if (auto var = spdlog::details::os::getenv("OTHER_TEST_BUCKET"); !var.empty()) {
-        ctx.other_bucket = var;
-    }
-
-    if (auto var = spdlog::details::os::getenv("TEST_DNS_NAMESERVER"); !var.empty()) {
-        ctx.dns_nameserver = var;
-    }
-
-    if (auto var = spdlog::details::os::getenv("TEST_DNS_PORT"); !var.empty()) {
-        ctx.dns_port = std::stol(var);
-    }
-
-    if (auto var = spdlog::details::os::getenv("TEST_DEPLOYMENT_TYPE"); !var.empty()) {
-        if (var == "on_prem") {
-            ctx.deployment = deployment_type::on_prem;
-        } else if (var == "capella") {
-            ctx.deployment = deployment_type::capella;
-        } else if (var == "elixir") {
-            ctx.deployment = deployment_type::elixir;
-        }
-    }
-
-    // TODO: I believe this + TEST_DEVELOPER_PREVIEW will conflict
-
-    if (auto var = spdlog::details::os::getenv("TEST_SERVER_VERSION"); !var.empty()) {
-        ctx.version = server_version::parse(var, ctx.deployment);
-    }
-
-    if (auto var = spdlog::details::os::getenv("TEST_DEVELOPER_PREVIEW"); !var.empty()) {
-        if (var == "true" || var == "yes" || var == "1") {
-            ctx.version.developer_preview = true;
-        } else if (var == "false" || var == "no" || var == "0") {
-            ctx.version.developer_preview = false;
-        }
-    }
-
-    if (auto var = spdlog::details::os::getenv("TEST_NUMBER_OF_IO_THREADS"); !var.empty()) {
-        ctx.number_of_io_threads = std::stoul(var);
-    }
-
-    if (auto var = spdlog::details::os::getenv("TEST_USE_GOCAVES"); !var.empty()) {
-        if (var == "true" || var == "yes" || var == "1") {
-            ctx.version.use_gocaves = true;
-        } else if (var == "false" || var == "no" || var == "0") {
-            ctx.version.use_gocaves = false;
-        }
-    }
-
-    if (auto var = spdlog::details::os::getenv("TEST_USE_WAN_DEVELOPMENT_PROFILE"); !var.empty()) {
-        if (var == "true" || var == "yes" || var == "1") {
-            ctx.use_wan_development_profile = true;
-        } else if (var == "false" || var == "no" || var == "0") {
-            ctx.use_wan_development_profile = false;
-        }
-    }
-
-    // Always use WAN profile for Capella or Elixir setups
-    if (ctx.deployment == deployment_type::capella || ctx.deployment == test::utils::deployment_type::elixir) {
-        ctx.use_wan_development_profile = true;
-    }
-
-    return ctx;
+  return ctx;
 }
 
 couchbase::core::cluster_credentials
 test_context::build_auth() const
 {
-    couchbase::core::cluster_credentials auth{};
-    if (certificate_path.empty()) {
-        auth.username = username;
-        auth.password = password;
-    } else {
-        auth.certificate_path = certificate_path;
-        auth.key_path = key_path;
-    }
-    return auth;
+  couchbase::core::cluster_credentials auth{};
+  if (certificate_path.empty()) {
+    auth.username = username;
+    auth.password = password;
+  } else {
+    auth.certificate_path = certificate_path;
+    auth.key_path = key_path;
+  }
+  return auth;
 }
 } // namespace test::utils

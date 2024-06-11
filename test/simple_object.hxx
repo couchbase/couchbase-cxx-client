@@ -21,33 +21,33 @@
 #include <string>
 
 struct SimpleObject {
-    std::string name{};
-    std::uint64_t number{};
+  std::string name{};
+  std::uint64_t number{};
 
-    bool operator==(const SimpleObject& other) const
-    {
-        return (name == other.name) && (number == other.number);
-    }
+  bool operator==(const SimpleObject& other) const
+  {
+    return (name == other.name) && (number == other.number);
+  }
 };
 
 template<>
 struct tao::json::traits<SimpleObject> {
-    template<template<typename...> class Traits>
-    static void assign(tao::json::basic_value<Traits>& v, const SimpleObject& p)
-    {
-        v = {
-            { "name", p.name },
-            { "number", p.number },
-        };
-    }
+  template<template<typename...> class Traits>
+  static void assign(tao::json::basic_value<Traits>& v, const SimpleObject& p)
+  {
+    v = {
+      { "name", p.name },
+      { "number", p.number },
+    };
+  }
 
-    template<template<typename...> class Traits>
-    static SimpleObject as(const tao::json::basic_value<Traits>& v)
-    {
-        SimpleObject result;
-        const auto& object = v.get_object();
-        result.name = object.at("name").template as<std::string>();
-        result.number = object.at("number").template as<std::uint64_t>();
-        return result;
-    }
+  template<template<typename...> class Traits>
+  static SimpleObject as(const tao::json::basic_value<Traits>& v)
+  {
+    SimpleObject result;
+    const auto& object = v.get_object();
+    result.name = object.at("name").template as<std::string>();
+    result.number = object.at("number").template as<std::uint64_t>();
+    return result;
+  }
 };

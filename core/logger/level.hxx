@@ -16,6 +16,14 @@ namespace couchbase::core::logger
 /**
  * the various severity levels we can log at
  */
-enum class level { trace, debug, info, warn, err, critical, off };
+enum class level {
+  trace,
+  debug,
+  info,
+  warn,
+  err,
+  critical,
+  off
+};
 
 } // namespace couchbase::core::logger

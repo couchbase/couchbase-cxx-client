@@ -34,20 +34,20 @@ touch_response_body::parse(key_value_status_code /* status */,
                            const std::vector<std::byte>& /* body */,
                            const cmd_info& /* info */)
 {
-    Expects(header[1] == static_cast<std::byte>(opcode));
-    return false;
+  Expects(header[1] == static_cast<std::byte>(opcode));
+  return false;
 }
 
 void
 touch_request_body::id(const document_id& id)
 {
-    key_ = make_protocol_key(id);
+  key_ = make_protocol_key(id);
 }
 void
 touch_request_body::expiry(std::uint32_t seconds)
 {
-    extras_.resize(sizeof(seconds));
-    seconds = utils::byte_swap(seconds);
-    memcpy(extras_.data(), &seconds, sizeof(seconds));
+  extras_.resize(sizeof(seconds));
+  seconds = utils::byte_swap(seconds);
+  memcpy(extras_.data(), &seconds, sizeof(seconds));
 }
 } // namespace couchbase::core::protocol

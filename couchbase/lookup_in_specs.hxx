@@ -32,116 +32,116 @@ namespace couchbase
 {
 class lookup_in_specs
 {
-  public:
-    lookup_in_specs() = default;
+public:
+  lookup_in_specs() = default;
 
-    template<typename... Operation>
-    explicit lookup_in_specs(Operation... args)
-    {
-        push_back(args...);
-    }
+  template<typename... Operation>
+  explicit lookup_in_specs(Operation... args)
+  {
+    push_back(args...);
+  }
 
-    /**
-     * Fetches the content from a field (if present) at the given path.
-     *
-     * @param path the path identifying where to get the value.
-     * @return the created spec
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    static auto get(std::string path) -> subdoc::get
-    {
-        return subdoc::get{ std::move(path) };
-    }
+  /**
+   * Fetches the content from a field (if present) at the given path.
+   *
+   * @param path the path identifying where to get the value.
+   * @return the created spec
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  static auto get(std::string path) -> subdoc::get
+  {
+    return subdoc::get{ std::move(path) };
+  }
 
-    /**
-     * Fetches the content from a field represented by given virtual attribute (macro).
-     *
-     * @param macro the path identifying where to get the value.
-     * @return the created spec
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    static auto get(subdoc::lookup_in_macro macro) -> subdoc::get
-    {
-        return subdoc::get{ macro };
-    }
+  /**
+   * Fetches the content from a field represented by given virtual attribute (macro).
+   *
+   * @param macro the path identifying where to get the value.
+   * @return the created spec
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  static auto get(subdoc::lookup_in_macro macro) -> subdoc::get
+  {
+    return subdoc::get{ macro };
+  }
 
-    /**
-     * Checks if a value at the given path exists in the document.
-     *
-     * @param path the path to check if the field exists.
-     * @return the created spec
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    static auto exists(std::string path) -> subdoc::exists
-    {
-        return subdoc::exists{ std::move(path) };
-    }
+  /**
+   * Checks if a value at the given path exists in the document.
+   *
+   * @param path the path to check if the field exists.
+   * @return the created spec
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  static auto exists(std::string path) -> subdoc::exists
+  {
+    return subdoc::exists{ std::move(path) };
+  }
 
-    /**
-     * Counts the number of values at a given path in the document.
-     *
-     * @param path the path identifying where to count the values.
-     * @return the created spec
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    static auto count(std::string path) -> subdoc::count
-    {
-        return subdoc::count{ std::move(path) };
-    }
+  /**
+   * Counts the number of values at a given path in the document.
+   *
+   * @param path the path identifying where to count the values.
+   * @return the created spec
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  static auto count(std::string path) -> subdoc::count
+  {
+    return subdoc::count{ std::move(path) };
+  }
 
-    /**
-     * Add subdocument operation to list of specs
-     *
-     * @tparam Operation type of the subdocument operation
-     * @param operation operation to execute
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    template<typename Operation>
-    void push_back(const Operation& operation)
-    {
-        operation.encode(bundle());
-    }
+  /**
+   * Add subdocument operation to list of specs
+   *
+   * @tparam Operation type of the subdocument operation
+   * @param operation operation to execute
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  template<typename Operation>
+  void push_back(const Operation& operation)
+  {
+    operation.encode(bundle());
+  }
 
-    /**
-     * Add subdocument operations to list of specs
-     *
-     * @tparam Operation type of the subdocument operation
-     * @tparam Rest types of the rest of the operations
-     * @param operation operation to execute
-     * @param args the rest of the arguments
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    template<typename Operation, typename... Rest>
-    void push_back(const Operation& operation, Rest... args)
-    {
-        push_back(operation);
-        push_back(args...);
-    }
+  /**
+   * Add subdocument operations to list of specs
+   *
+   * @tparam Operation type of the subdocument operation
+   * @tparam Rest types of the rest of the operations
+   * @param operation operation to execute
+   * @param args the rest of the arguments
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  template<typename Operation, typename... Rest>
+  void push_back(const Operation& operation, Rest... args)
+  {
+    push_back(operation);
+    push_back(args...);
+  }
 
-    /**
-     * Returns internal representation of the specs.
-     * @return specs
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto specs() const -> const std::vector<core::impl::subdoc::command>&;
+  /**
+   * Returns internal representation of the specs.
+   * @return specs
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto specs() const -> const std::vector<core::impl::subdoc::command>&;
 
-  private:
-    [[nodiscard]] auto bundle() -> core::impl::subdoc::command_bundle&;
+private:
+  [[nodiscard]] auto bundle() -> core::impl::subdoc::command_bundle&;
 
-    std::shared_ptr<core::impl::subdoc::command_bundle> specs_{};
+  std::shared_ptr<core::impl::subdoc::command_bundle> specs_{};
 };
 } // namespace couchbase

@@ -25,92 +25,93 @@
 namespace couchbase::core
 {
 struct document_id {
-    document_id() = default;
-    document_id(std::string bucket, std::string key);
-    document_id(std::string bucket, std::string scope, std::string collection, std::string key);
+  document_id() = default;
+  document_id(std::string bucket, std::string key);
+  document_id(std::string bucket, std::string scope, std::string collection, std::string key);
 
-    [[nodiscard]] const std::string& bucket() const
-    {
-        return bucket_;
-    }
+  [[nodiscard]] const std::string& bucket() const
+  {
+    return bucket_;
+  }
 
-    [[nodiscard]] const std::string& scope() const
-    {
-        return scope_;
-    }
+  [[nodiscard]] const std::string& scope() const
+  {
+    return scope_;
+  }
 
-    [[nodiscard]] const std::string& collection() const
-    {
-        return collection_;
-    }
+  [[nodiscard]] const std::string& collection() const
+  {
+    return collection_;
+  }
 
-    [[nodiscard]] const std::string& collection_path() const
-    {
-        return collection_path_;
-    }
+  [[nodiscard]] const std::string& collection_path() const
+  {
+    return collection_path_;
+  }
 
-    [[nodiscard]] const std::string& key() const
-    {
-        return key_;
-    }
+  [[nodiscard]] const std::string& key() const
+  {
+    return key_;
+  }
 
-    [[nodiscard]] bool has_default_collection() const;
+  [[nodiscard]] bool has_default_collection() const;
 
-    [[nodiscard]] bool is_collection_resolved() const
-    {
-        return collection_uid_.has_value();
-    }
+  [[nodiscard]] bool is_collection_resolved() const
+  {
+    return collection_uid_.has_value();
+  }
 
-    [[nodiscard]] std::uint32_t collection_uid() const
-    {
-        return collection_uid_.value();
-    }
+  [[nodiscard]] std::uint32_t collection_uid() const
+  {
+    return collection_uid_.value();
+  }
 
-    void collection_uid(std::uint32_t value)
-    {
-        collection_uid_ = value;
-    }
+  void collection_uid(std::uint32_t value)
+  {
+    collection_uid_ = value;
+  }
 
-    [[nodiscard]] bool use_collections() const
-    {
-        return use_collections_;
-    }
+  [[nodiscard]] bool use_collections() const
+  {
+    return use_collections_;
+  }
 
-    void use_collections(bool value)
-    {
-        use_collections_ = value;
-    }
+  void use_collections(bool value)
+  {
+    use_collections_ = value;
+  }
 
-    [[nodiscard]] bool use_any_session() const
-    {
-        return use_any_session_;
-    }
+  [[nodiscard]] bool use_any_session() const
+  {
+    return use_any_session_;
+  }
 
-    void use_any_session(bool value)
-    {
-        use_any_session_ = value;
-    }
+  void use_any_session(bool value)
+  {
+    use_any_session_ = value;
+  }
 
-    [[nodiscard]] std::size_t node_index() const
-    {
-        return node_index_;
-    }
+  [[nodiscard]] std::size_t node_index() const
+  {
+    return node_index_;
+  }
 
-    void node_index(std::size_t index)
-    {
-        node_index_ = index;
-    }
+  void node_index(std::size_t index)
+  {
+    node_index_ = index;
+  }
 
-  private:
-    std::string bucket_{};
-    std::string scope_{};
-    std::string collection_{};
-    std::string key_{};
-    std::string collection_path_{};
-    std::optional<std::uint32_t> collection_uid_{}; // filled with resolved UID during request lifetime
-    bool use_collections_{ true };
-    bool use_any_session_{ false };
-    std::size_t node_index_{ 0 };
+private:
+  std::string bucket_{};
+  std::string scope_{};
+  std::string collection_{};
+  std::string key_{};
+  std::string collection_path_{};
+  std::optional<std::uint32_t>
+    collection_uid_{}; // filled with resolved UID during request lifetime
+  bool use_collections_{ true };
+  bool use_any_session_{ false };
+  std::size_t node_index_{ 0 };
 };
 
 [[nodiscard]] std::vector<std::byte>

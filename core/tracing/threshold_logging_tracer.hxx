@@ -35,18 +35,19 @@ class threshold_logging_tracer
   : public couchbase::tracing::request_tracer
   , public std::enable_shared_from_this<threshold_logging_tracer>
 {
-  public:
-    threshold_logging_tracer(asio::io_context& ctx, threshold_logging_options options);
+public:
+  threshold_logging_tracer(asio::io_context& ctx, threshold_logging_options options);
 
-    std::shared_ptr<couchbase::tracing::request_span> start_span(std::string name,
-                                                                 std::shared_ptr<couchbase::tracing::request_span> parent) override;
-    void report(std::shared_ptr<threshold_logging_span> span);
-    void start() override;
-    void stop() override;
+  std::shared_ptr<couchbase::tracing::request_span> start_span(
+    std::string name,
+    std::shared_ptr<couchbase::tracing::request_span> parent) override;
+  void report(std::shared_ptr<threshold_logging_span> span);
+  void start() override;
+  void stop() override;
 
-  private:
-    threshold_logging_options options_;
-    std::shared_ptr<threshold_logging_tracer_impl> impl_{};
+private:
+  threshold_logging_options options_;
+  std::shared_ptr<threshold_logging_tracer_impl> impl_{};
 };
 
 } // namespace couchbase::core::tracing

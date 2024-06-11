@@ -20,7 +20,7 @@
 namespace couchbase
 {
 enum class search_sort_field_missing {
-    last,
-    first,
+  last,
+  first,
 };
 } // namespace couchbase

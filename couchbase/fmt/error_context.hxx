@@ -29,15 +29,15 @@
  */
 template<>
 struct fmt::formatter<couchbase::error_context> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(const couchbase::error_context& err_ctx, FormatContext& ctx) const
-    {
-        return format_to(ctx.out(), err_ctx.to_json());
-    }
+  template<typename FormatContext>
+  auto format(const couchbase::error_context& err_ctx, FormatContext& ctx) const
+  {
+    return format_to(ctx.out(), err_ctx.to_json());
+  }
 };

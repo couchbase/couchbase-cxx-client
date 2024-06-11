@@ -49,8 +49,8 @@ class queue_request;
 } // namespace mcbp
 
 struct collections_component_options {
-    std::size_t max_queue_size;
-    std::shared_ptr<retry_strategy> default_retry_strategy;
+  std::size_t max_queue_size;
+  std::shared_ptr<retry_strategy> default_retry_strategy;
 };
 
 constexpr std::uint32_t unknown_collection_id{ 0xffff'ffffU };
@@ -61,21 +61,25 @@ class collections_component_unit_test_api;
 
 class collections_component
 {
-  public:
-    collections_component(asio::io_context& io, dispatcher dispatcher, collections_component_options options);
+public:
+  collections_component(asio::io_context& io,
+                        dispatcher dispatcher,
+                        collections_component_options options);
 
-    auto get_collection_id(std::string scope_name,
-                           std::string collection_name,
-                           get_collection_id_options options,
-                           get_collection_id_callback callback) -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto get_collection_id(std::string scope_name,
+                         std::string collection_name,
+                         get_collection_id_options options,
+                         get_collection_id_callback callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-    auto dispatch(std::shared_ptr<mcbp::queue_request> request) -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto dispatch(std::shared_ptr<mcbp::queue_request> request)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-    /// Integration point for unit testing. Not for public usage.
-    [[nodiscard]] auto unit_test_api() -> collections_component_unit_test_api;
+  /// Integration point for unit testing. Not for public usage.
+  [[nodiscard]] auto unit_test_api() -> collections_component_unit_test_api;
 
-  private:
-    std::shared_ptr<collections_component_impl> impl_;
+private:
+  std::shared_ptr<collections_component_impl> impl_;
 };
 
 } // namespace couchbase::core

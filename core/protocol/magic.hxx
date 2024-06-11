@@ -22,32 +22,32 @@
 namespace couchbase::core::protocol
 {
 enum class magic : std::uint8_t {
-    /// Request packet from client to server
-    client_request = 0x80,
-    /// The alternative request packet containing frame extras
-    alt_client_request = 0x08,
-    /// Response packet from server to client
-    client_response = 0x81,
-    /// The alternative response packet containing frame extras
-    alt_client_response = 0x18,
-    /// Request packet from server to client
-    server_request = 0x82,
-    /// Response packet from client to server
-    server_response = 0x83
+  /// Request packet from client to server
+  client_request = 0x80,
+  /// The alternative request packet containing frame extras
+  alt_client_request = 0x08,
+  /// Response packet from server to client
+  client_response = 0x81,
+  /// The alternative response packet containing frame extras
+  alt_client_response = 0x18,
+  /// Request packet from server to client
+  server_request = 0x82,
+  /// Response packet from client to server
+  server_response = 0x83
 };
 
 constexpr bool
 is_valid_magic(std::uint8_t code)
 {
-    switch (magic(code)) {
-        case magic::client_request:
-        case magic::alt_client_request:
-        case magic::client_response:
-        case magic::alt_client_response:
-        case magic::server_request:
-        case magic::server_response:
-            return true;
-    }
-    return false;
+  switch (magic(code)) {
+    case magic::client_request:
+    case magic::alt_client_request:
+    case magic::client_response:
+    case magic::alt_client_response:
+    case magic::server_request:
+    case magic::server_response:
+      return true;
+  }
+  return false;
 }
 } // namespace couchbase::core::protocol

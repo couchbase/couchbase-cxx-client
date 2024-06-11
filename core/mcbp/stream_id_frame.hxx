@@ -21,8 +21,9 @@
 
 namespace couchbase::core::mcbp
 {
-// stream_id_frame provides information about which stream this particular operation is related to (used for DCP streams).
+// stream_id_frame provides information about which stream this particular operation is related to
+// (used for DCP streams).
 struct stream_id_frame {
-    std::uint16_t stream_id;
+  std::uint16_t stream_id;
 };
 } // namespace couchbase::core::mcbp

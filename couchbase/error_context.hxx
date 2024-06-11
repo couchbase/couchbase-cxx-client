@@ -28,38 +28,40 @@ namespace couchbase
 using internal_error_context = tao::json::value;
 
 enum class error_context_json_format {
-    compact = 0,
-    pretty,
+  compact = 0,
+  pretty,
 };
 
 class error_context
 {
-  public:
-    error_context() = default;
-    explicit error_context(internal_error_context internal);
-    error_context(internal_error_context internal, internal_error_context internal_metadata);
+public:
+  error_context() = default;
+  explicit error_context(internal_error_context internal);
+  error_context(internal_error_context internal, internal_error_context internal_metadata);
 
-    explicit operator bool() const;
+  explicit operator bool() const;
 
-    [[nodiscard]] auto to_json(error_context_json_format format = error_context_json_format::compact) const -> std::string;
+  [[nodiscard]] auto to_json(
+    error_context_json_format format = error_context_json_format::compact) const -> std::string;
 
-    template<typename T>
-    T as() const
-    {
-        if constexpr (std::is_same_v<T, internal_error_context>) {
-            return internal_;
-        } else {
-            return internal_.as<T>();
-        }
+  template<typename T>
+  T as() const
+  {
+    if constexpr (std::is_same_v<T, internal_error_context>) {
+      return internal_;
+    } else {
+      return internal_.as<T>();
     }
+  }
 
-    /**
-     * @internal
-     */
-    [[nodiscard]] auto internal_metadata(error_context_json_format format = error_context_json_format::compact) const -> std::string;
+  /**
+   * @internal
+   */
+  [[nodiscard]] auto internal_metadata(
+    error_context_json_format format = error_context_json_format::compact) const -> std::string;
 
-  private:
-    internal_error_context internal_;
-    internal_error_context internal_metadata_;
+private:
+  internal_error_context internal_;
+  internal_error_context internal_metadata_;
 };
 } // namespace couchbase

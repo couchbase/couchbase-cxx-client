@@ -23,28 +23,29 @@ namespace couchbase::core::impl
 {
 
 struct view_error_category : std::error_category {
-    [[nodiscard]] const char* name() const noexcept override
-    {
-        return "couchbase.view";
-    }
+  [[nodiscard]] const char* name() const noexcept override
+  {
+    return "couchbase.view";
+  }
 
-    [[nodiscard]] std::string message(int ev) const noexcept override
-    {
-        switch (static_cast<errc::view>(ev)) {
-            case errc::view::view_not_found:
-                return "view_not_found (501)";
-            case errc::view::design_document_not_found:
-                return "design_document_not_found (502)";
-        }
-        return "FIXME: unknown error code (recompile with newer library): couchbase.view." + std::to_string(ev);
+  [[nodiscard]] std::string message(int ev) const noexcept override
+  {
+    switch (static_cast<errc::view>(ev)) {
+      case errc::view::view_not_found:
+        return "view_not_found (501)";
+      case errc::view::design_document_not_found:
+        return "design_document_not_found (502)";
     }
+    return "FIXME: unknown error code (recompile with newer library): couchbase.view." +
+           std::to_string(ev);
+  }
 };
 const inline static view_error_category category_instance;
 
 const std::error_category&
 view_category() noexcept
 {
-    return category_instance;
+  return category_instance;
 }
 
 } // namespace couchbase::core::impl

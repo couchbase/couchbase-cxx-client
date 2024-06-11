@@ -22,18 +22,18 @@
 namespace couchbase::core
 {
 struct dns_srv_record {
-    std::string protocol{};
-    std::string scheme{};
-    std::string hostname{};
+  std::string protocol{};
+  std::string scheme{};
+  std::string hostname{};
 
-    [[nodiscard]] auto to_string() const -> std::string;
+  [[nodiscard]] auto to_string() const -> std::string;
 };
 
 struct seed_config {
-    std::vector<std::string> mcbp_addresses{};
-    std::vector<std::string> http_addresses{};
-    std::optional<dns_srv_record> srv_record{};
+  std::vector<std::string> mcbp_addresses{};
+  std::vector<std::string> http_addresses{};
+  std::optional<dns_srv_record> srv_record{};
 
-    [[nodiscard]] auto to_string() const -> std::string;
+  [[nodiscard]] auto to_string() const -> std::string;
 };
 } // namespace couchbase::core

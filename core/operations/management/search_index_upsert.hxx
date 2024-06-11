@@ -27,31 +27,34 @@
 namespace couchbase::core::operations::management
 {
 struct search_index_upsert_response {
-    error_context::http ctx;
-    std::string status{};
-    std::string name{};
-    std::string uuid{};
-    std::string error{};
+  error_context::http ctx;
+  std::string status{};
+  std::string name{};
+  std::string uuid{};
+  std::string error{};
 };
 
 struct search_index_upsert_request {
-    using response_type = search_index_upsert_response;
-    using encoded_request_type = io::http_request;
-    using encoded_response_type = io::http_response;
-    using error_context_type = error_context::http;
+  using response_type = search_index_upsert_response;
+  using encoded_request_type = io::http_request;
+  using encoded_response_type = io::http_response;
+  using error_context_type = error_context::http;
 
-    static const inline service_type type = service_type::search;
+  static const inline service_type type = service_type::search;
 
-    couchbase::core::management::search::index index;
+  couchbase::core::management::search::index index;
 
-    std::optional<std::string> bucket_name;
-    std::optional<std::string> scope_name;
+  std::optional<std::string> bucket_name;
+  std::optional<std::string> scope_name;
 
-    std::optional<std::string> client_context_id{};
-    std::optional<std::chrono::milliseconds> timeout{};
+  std::optional<std::string> client_context_id{};
+  std::optional<std::chrono::milliseconds> timeout{};
 
-    [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded, http_context& context) const;
+  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
+                                          http_context& context) const;
 
-    [[nodiscard]] search_index_upsert_response make_response(error_context::http&& ctx, const encoded_response_type& encoded) const;
+  [[nodiscard]] search_index_upsert_response make_response(
+    error_context::http&& ctx,
+    const encoded_response_type& encoded) const;
 };
 } // namespace couchbase::core::operations::management

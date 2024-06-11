@@ -106,181 +106,181 @@ constexpr auto eventing = "eventing";
 constexpr auto
 span_name_for_http_service(service_type type)
 {
-    switch (type) {
-        case service_type::query:
-            return operation::http_query;
+  switch (type) {
+    case service_type::query:
+      return operation::http_query;
 
-        case service_type::analytics:
-            return operation::http_analytics;
+    case service_type::analytics:
+      return operation::http_analytics;
 
-        case service_type::search:
-            return operation::http_search;
+    case service_type::search:
+      return operation::http_search;
 
-        case service_type::view:
-            return operation::http_views;
+    case service_type::view:
+      return operation::http_views;
 
-        case service_type::management:
-            return operation::http_manager;
+    case service_type::management:
+      return operation::http_manager;
 
-        case service_type::eventing:
-            return operation::http_eventing;
+    case service_type::eventing:
+      return operation::http_eventing;
 
-        case service_type::key_value:
-            return "unexpected_http_service";
-    }
-    return "unknown_http_service";
+    case service_type::key_value:
+      return "unexpected_http_service";
+  }
+  return "unknown_http_service";
 }
 
 constexpr auto
 service_name_for_http_service(service_type type)
 {
-    switch (type) {
-        case service_type::query:
-            return service::query;
+  switch (type) {
+    case service_type::query:
+      return service::query;
 
-        case service_type::analytics:
-            return service::analytics;
+    case service_type::analytics:
+      return service::analytics;
 
-        case service_type::search:
-            return service::search;
+    case service_type::search:
+      return service::search;
 
-        case service_type::view:
-            return service::view;
+    case service_type::view:
+      return service::view;
 
-        case service_type::management:
-            return service::management;
+    case service_type::management:
+      return service::management;
 
-        case service_type::eventing:
-            return service::eventing;
+    case service_type::eventing:
+      return service::eventing;
 
-        case service_type::key_value:
-            return "unexpected_http_service";
-    }
-    return "unknown_http_service";
+    case service_type::key_value:
+      return "unexpected_http_service";
+  }
+  return "unknown_http_service";
 }
 
 constexpr auto
 span_name_for_mcbp_command(protocol::client_opcode opcode)
 {
-    switch (opcode) {
-        case protocol::client_opcode::get:
-            return operation::mcbp_get;
+  switch (opcode) {
+    case protocol::client_opcode::get:
+      return operation::mcbp_get;
 
-        case protocol::client_opcode::upsert:
-            return operation::mcbp_upsert;
+    case protocol::client_opcode::upsert:
+      return operation::mcbp_upsert;
 
-        case protocol::client_opcode::insert:
-            return operation::mcbp_insert;
+    case protocol::client_opcode::insert:
+      return operation::mcbp_insert;
 
-        case protocol::client_opcode::replace:
-            return operation::mcbp_replace;
+    case protocol::client_opcode::replace:
+      return operation::mcbp_replace;
 
-        case protocol::client_opcode::remove:
-            return operation::mcbp_remove;
+    case protocol::client_opcode::remove:
+      return operation::mcbp_remove;
 
-        case protocol::client_opcode::increment:
-            return operation::mcbp_increment;
+    case protocol::client_opcode::increment:
+      return operation::mcbp_increment;
 
-        case protocol::client_opcode::decrement:
-            return operation::mcbp_decrement;
+    case protocol::client_opcode::decrement:
+      return operation::mcbp_decrement;
 
-        case protocol::client_opcode::append:
-            return operation::mcbp_append;
+    case protocol::client_opcode::append:
+      return operation::mcbp_append;
 
-        case protocol::client_opcode::prepend:
-            return operation::mcbp_prepend;
+    case protocol::client_opcode::prepend:
+      return operation::mcbp_prepend;
 
-        case protocol::client_opcode::touch:
-            return operation::mcbp_touch;
+    case protocol::client_opcode::touch:
+      return operation::mcbp_touch;
 
-        case protocol::client_opcode::get_and_touch:
-            return operation::mcbp_get_and_touch;
+    case protocol::client_opcode::get_and_touch:
+      return operation::mcbp_get_and_touch;
 
-        case protocol::client_opcode::get_replica:
-            return operation::mcbp_get_replica;
+    case protocol::client_opcode::get_replica:
+      return operation::mcbp_get_replica;
 
-        case protocol::client_opcode::get_and_lock:
-            return operation::mcbp_get_and_lock;
+    case protocol::client_opcode::get_and_lock:
+      return operation::mcbp_get_and_lock;
 
-        case protocol::client_opcode::unlock:
-            return operation::mcbp_unlock;
+    case protocol::client_opcode::unlock:
+      return operation::mcbp_unlock;
 
-        case protocol::client_opcode::subdoc_multi_lookup:
-            return operation::mcbp_lookup_in;
+    case protocol::client_opcode::subdoc_multi_lookup:
+      return operation::mcbp_lookup_in;
 
-        case protocol::client_opcode::subdoc_multi_mutation:
-            return operation::mcbp_mutate_in;
+    case protocol::client_opcode::subdoc_multi_mutation:
+      return operation::mcbp_mutate_in;
 
-        case protocol::client_opcode::observe:
-            return operation::mcbp_exists;
+    case protocol::client_opcode::observe:
+      return operation::mcbp_exists;
 
-        case protocol::client_opcode::range_scan_create:
-            return operation::mcbp_range_scan_create;
+    case protocol::client_opcode::range_scan_create:
+      return operation::mcbp_range_scan_create;
 
-        case protocol::client_opcode::range_scan_continue:
-            return operation::mcbp_range_scan_continue;
+    case protocol::client_opcode::range_scan_continue:
+      return operation::mcbp_range_scan_continue;
 
-        case protocol::client_opcode::range_scan_cancel:
-            return operation::mcbp_range_scan_cancel;
+    case protocol::client_opcode::range_scan_cancel:
+      return operation::mcbp_range_scan_cancel;
 
-        case protocol::client_opcode::noop:
-        case protocol::client_opcode::version:
-        case protocol::client_opcode::stat:
-        case protocol::client_opcode::verbosity:
-        case protocol::client_opcode::hello:
-        case protocol::client_opcode::sasl_list_mechs:
-        case protocol::client_opcode::sasl_auth:
-        case protocol::client_opcode::sasl_step:
-        case protocol::client_opcode::get_all_vbucket_seqnos:
-        case protocol::client_opcode::dcp_open:
-        case protocol::client_opcode::dcp_add_stream:
-        case protocol::client_opcode::dcp_close_stream:
-        case protocol::client_opcode::dcp_stream_request:
-        case protocol::client_opcode::dcp_get_failover_log:
-        case protocol::client_opcode::dcp_stream_end:
-        case protocol::client_opcode::dcp_snapshot_marker:
-        case protocol::client_opcode::dcp_mutation:
-        case protocol::client_opcode::dcp_deletion:
-        case protocol::client_opcode::dcp_expiration:
-        case protocol::client_opcode::dcp_set_vbucket_state:
-        case protocol::client_opcode::dcp_noop:
-        case protocol::client_opcode::dcp_buffer_acknowledgement:
-        case protocol::client_opcode::dcp_control:
-        case protocol::client_opcode::dcp_system_event:
-        case protocol::client_opcode::dcp_prepare:
-        case protocol::client_opcode::dcp_seqno_acknowledged:
-        case protocol::client_opcode::dcp_commit:
-        case protocol::client_opcode::dcp_abort:
-        case protocol::client_opcode::dcp_seqno_advanced:
-        case protocol::client_opcode::dcp_oso_snapshot:
-        case protocol::client_opcode::list_buckets:
-        case protocol::client_opcode::select_bucket:
-        case protocol::client_opcode::observe_seqno:
-        case protocol::client_opcode::evict_key:
-        case protocol::client_opcode::get_failover_log:
-        case protocol::client_opcode::last_closed_checkpoint:
-        case protocol::client_opcode::get_meta:
-        case protocol::client_opcode::upsert_with_meta:
-        case protocol::client_opcode::insert_with_meta:
-        case protocol::client_opcode::remove_with_meta:
-        case protocol::client_opcode::create_checkpoint:
-        case protocol::client_opcode::checkpoint_persistence:
-        case protocol::client_opcode::return_meta:
-        case protocol::client_opcode::get_random_key:
-        case protocol::client_opcode::seqno_persistence:
-        case protocol::client_opcode::get_keys:
-        case protocol::client_opcode::set_collections_manifest:
-        case protocol::client_opcode::get_collections_manifest:
-        case protocol::client_opcode::get_collection_id:
-        case protocol::client_opcode::get_scope_id:
-        case protocol::client_opcode::get_cluster_config:
-        case protocol::client_opcode::get_error_map:
-            return operation::mcbp_internal;
+    case protocol::client_opcode::noop:
+    case protocol::client_opcode::version:
+    case protocol::client_opcode::stat:
+    case protocol::client_opcode::verbosity:
+    case protocol::client_opcode::hello:
+    case protocol::client_opcode::sasl_list_mechs:
+    case protocol::client_opcode::sasl_auth:
+    case protocol::client_opcode::sasl_step:
+    case protocol::client_opcode::get_all_vbucket_seqnos:
+    case protocol::client_opcode::dcp_open:
+    case protocol::client_opcode::dcp_add_stream:
+    case protocol::client_opcode::dcp_close_stream:
+    case protocol::client_opcode::dcp_stream_request:
+    case protocol::client_opcode::dcp_get_failover_log:
+    case protocol::client_opcode::dcp_stream_end:
+    case protocol::client_opcode::dcp_snapshot_marker:
+    case protocol::client_opcode::dcp_mutation:
+    case protocol::client_opcode::dcp_deletion:
+    case protocol::client_opcode::dcp_expiration:
+    case protocol::client_opcode::dcp_set_vbucket_state:
+    case protocol::client_opcode::dcp_noop:
+    case protocol::client_opcode::dcp_buffer_acknowledgement:
+    case protocol::client_opcode::dcp_control:
+    case protocol::client_opcode::dcp_system_event:
+    case protocol::client_opcode::dcp_prepare:
+    case protocol::client_opcode::dcp_seqno_acknowledged:
+    case protocol::client_opcode::dcp_commit:
+    case protocol::client_opcode::dcp_abort:
+    case protocol::client_opcode::dcp_seqno_advanced:
+    case protocol::client_opcode::dcp_oso_snapshot:
+    case protocol::client_opcode::list_buckets:
+    case protocol::client_opcode::select_bucket:
+    case protocol::client_opcode::observe_seqno:
+    case protocol::client_opcode::evict_key:
+    case protocol::client_opcode::get_failover_log:
+    case protocol::client_opcode::last_closed_checkpoint:
+    case protocol::client_opcode::get_meta:
+    case protocol::client_opcode::upsert_with_meta:
+    case protocol::client_opcode::insert_with_meta:
+    case protocol::client_opcode::remove_with_meta:
+    case protocol::client_opcode::create_checkpoint:
+    case protocol::client_opcode::checkpoint_persistence:
+    case protocol::client_opcode::return_meta:
+    case protocol::client_opcode::get_random_key:
+    case protocol::client_opcode::seqno_persistence:
+    case protocol::client_opcode::get_keys:
+    case protocol::client_opcode::set_collections_manifest:
+    case protocol::client_opcode::get_collections_manifest:
+    case protocol::client_opcode::get_collection_id:
+    case protocol::client_opcode::get_scope_id:
+    case protocol::client_opcode::get_cluster_config:
+    case protocol::client_opcode::get_error_map:
+      return operation::mcbp_internal;
 
-        case protocol::client_opcode::invalid:
-            return "invalid_command";
-    }
-    return "unknown_command";
+    case protocol::client_opcode::invalid:
+      return "invalid_command";
+  }
+  return "unknown_command";
 }
 
 } // namespace couchbase::core::tracing

@@ -26,59 +26,64 @@
 namespace couchbase::core::operations::management
 {
 std::error_code
-analytics_dataset_drop_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+analytics_dataset_drop_request::encode_to(encoded_request_type& encoded,
+                                          http_context& /* context */) const
 {
-    std::string if_exists_clause = ignore_if_does_not_exist ? "IF EXISTS" : "";
+  std::string if_exists_clause = ignore_if_does_not_exist ? "IF EXISTS" : "";
 
-    tao::json::value body{
-        { "statement",
-          fmt::format("DROP DATASET {}.`{}` {}", utils::analytics::uncompound_name(dataverse_name), dataset_name, if_exists_clause) },
-    };
-    encoded.headers["content-type"] = "application/json";
-    encoded.method = "POST";
-    encoded.path = "/analytics/service";
-    encoded.body = utils::json::generate(body);
-    return {};
+  tao::json::value body{
+    { "statement",
+      fmt::format("DROP DATASET {}.`{}` {}",
+                  utils::analytics::uncompound_name(dataverse_name),
+                  dataset_name,
+                  if_exists_clause) },
+  };
+  encoded.headers["content-type"] = "application/json";
+  encoded.method = "POST";
+  encoded.path = "/analytics/service";
+  encoded.body = utils::json::generate(body);
+  return {};
 }
 
 analytics_dataset_drop_response
-analytics_dataset_drop_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+analytics_dataset_drop_request::make_response(error_context::http&& ctx,
+                                              const encoded_response_type& encoded) const
 {
-    analytics_dataset_drop_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        tao::json::value payload{};
-        try {
-            payload = utils::json::parse(encoded.body.data());
-        } catch (const tao::pegtl::parse_error&) {
-            response.ctx.ec = errc::common::parsing_failure;
-            return response;
-        }
-        response.status = payload.optional<std::string>("status").value_or("unknown");
-
-        if (response.status != "success") {
-            bool dataset_does_not_exist = false;
-
-            if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
-                for (const auto& error : errors->get_array()) {
-                    analytics_problem err{
-                        error.at("code").as<std::uint32_t>(),
-                        error.at("msg").get_string(),
-                    };
-                    switch (err.code) {
-                        case 24025: /* Cannot find dataset with name [string] in dataverse [string] */
-                            dataset_does_not_exist = true;
-                            break;
-                    }
-                    response.errors.emplace_back(err);
-                }
-            }
-            if (dataset_does_not_exist) {
-                response.ctx.ec = errc::analytics::dataset_not_found;
-            } else {
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
-            }
-        }
+  analytics_dataset_drop_response response{ std::move(ctx) };
+  if (!response.ctx.ec) {
+    tao::json::value payload{};
+    try {
+      payload = utils::json::parse(encoded.body.data());
+    } catch (const tao::pegtl::parse_error&) {
+      response.ctx.ec = errc::common::parsing_failure;
+      return response;
     }
-    return response;
+    response.status = payload.optional<std::string>("status").value_or("unknown");
+
+    if (response.status != "success") {
+      bool dataset_does_not_exist = false;
+
+      if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
+        for (const auto& error : errors->get_array()) {
+          analytics_problem err{
+            error.at("code").as<std::uint32_t>(),
+            error.at("msg").get_string(),
+          };
+          switch (err.code) {
+            case 24025: /* Cannot find dataset with name [string] in dataverse [string] */
+              dataset_does_not_exist = true;
+              break;
+          }
+          response.errors.emplace_back(err);
+        }
+      }
+      if (dataset_does_not_exist) {
+        response.ctx.ec = errc::analytics::dataset_not_found;
+      } else {
+        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+      }
+    }
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

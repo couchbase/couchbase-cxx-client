@@ -29,9 +29,10 @@ class queue_request;
 
 class collection_id_cache_entry
 {
-  public:
-    virtual ~collection_id_cache_entry() = default;
-    [[nodiscard]] virtual auto dispatch(std::shared_ptr<mcbp::queue_request> req) -> std::error_code = 0;
-    virtual void reset_id() = 0;
+public:
+  virtual ~collection_id_cache_entry() = default;
+  [[nodiscard]] virtual auto dispatch(std::shared_ptr<mcbp::queue_request> req)
+    -> std::error_code = 0;
+  virtual void reset_id() = 0;
 };
 } // namespace couchbase::core

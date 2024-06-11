@@ -34,27 +34,30 @@ struct streaming_lexer_impl;
 } // namespace detail
 
 /**
- * The streaming JSON lexer consumes chunks of data, and invokes given handler for each "row", and "complete".
+ * The streaming JSON lexer consumes chunks of data, and invokes given handler for each "row", and
+ * "complete".
  *
  * It is guaranteed that on_complete callback will be invoked exactly once.
  */
 class streaming_lexer
 {
-  public:
-    /**
-     * @param pointer_expression expression that describes where the "row" objects are located.
-     * @param depth stop emitting JSON events starting from this depth. Level 1 is root of the object.
-     *
-     * @throws std::invalid_argument if pointer cannot be created from the expression.
-     */
-    streaming_lexer(const std::string& pointer_expression, std::uint32_t depth);
+public:
+  /**
+   * @param pointer_expression expression that describes where the "row" objects are located.
+   * @param depth stop emitting JSON events starting from this depth. Level 1 is root of the object.
+   *
+   * @throws std::invalid_argument if pointer cannot be created from the expression.
+   */
+  streaming_lexer(const std::string& pointer_expression, std::uint32_t depth);
 
-    void feed(std::string_view data);
+  void feed(std::string_view data);
 
-    void on_complete(std::function<void(std::error_code ec, std::size_t number_of_rows, std::string&& meta)> handler);
-    void on_row(std::function<stream_control(std::string&& row)> handler);
+  void on_complete(
+    std::function<void(std::error_code ec, std::size_t number_of_rows, std::string&& meta)>
+      handler);
+  void on_row(std::function<stream_control(std::string&& row)> handler);
 
-  private:
-    std::shared_ptr<detail::streaming_lexer_impl> impl_{};
+private:
+  std::shared_ptr<detail::streaming_lexer_impl> impl_{};
 };
 } // namespace couchbase::core::utils::json

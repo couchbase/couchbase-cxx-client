@@ -36,101 +36,104 @@ namespace couchbase
  * @committed
  */
 struct decrement_options : public common_durability_options<decrement_options> {
-    /**
-     * Immutable value object representing consistent options.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    struct built : public common_durability_options<decrement_options>::built {
-        const std::uint32_t expiry;
-        const std::uint64_t delta;
-        const std::optional<std::uint64_t> initial_value;
-    };
+  /**
+   * Immutable value object representing consistent options.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  struct built : public common_durability_options<decrement_options>::built {
+    const std::uint32_t expiry;
+    const std::uint64_t delta;
+    const std::optional<std::uint64_t> initial_value;
+  };
 
-    /**
-     * Validates options and returns them as an immutable value.
-     *
-     * @return consistent options as an immutable value
-     *
-     * @exception std::system_error with code errc::common::invalid_argument if the options are not valid
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto build() const -> built
-    {
-        auto base = build_common_durability_options();
-        return { base, expiry_, delta_, initial_value_ };
-    }
+  /**
+   * Validates options and returns them as an immutable value.
+   *
+   * @return consistent options as an immutable value
+   *
+   * @exception std::system_error with code errc::common::invalid_argument if the options are not
+   * valid
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto build() const -> built
+  {
+    auto base = build_common_durability_options();
+    return { base, expiry_, delta_, initial_value_ };
+  }
 
-    /**
-     * Sets the expiry for the document. By default the document will never expire.
-     *
-     * The duration must be less than 50 years. For expiry further in the future, use
-     * {@link #expiry(std::chrono::system_clock::time_point)}.
-     *
-     * @param duration the duration after which the document will expire (zero duration means never expire).
-     * @return this options class for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto expiry(std::chrono::seconds duration) -> decrement_options&
-    {
-        expiry_ = core::impl::expiry_relative(duration);
-        return self();
-    }
+  /**
+   * Sets the expiry for the document. By default the document will never expire.
+   *
+   * The duration must be less than 50 years. For expiry further in the future, use
+   * {@link #expiry(std::chrono::system_clock::time_point)}.
+   *
+   * @param duration the duration after which the document will expire (zero duration means never
+   * expire).
+   * @return this options class for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto expiry(std::chrono::seconds duration) -> decrement_options&
+  {
+    expiry_ = core::impl::expiry_relative(duration);
+    return self();
+  }
 
-    /**
-     * Sets the expiry for the document. By default the document will never expire.
-     *
-     * @param time_point the point in time when the document will expire (epoch second zero means never expire).
-     * @return this options class for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto expiry(std::chrono::system_clock::time_point time_point) -> decrement_options&
-    {
-        expiry_ = core::impl::expiry_absolute(time_point);
-        return self();
-    }
+  /**
+   * Sets the expiry for the document. By default the document will never expire.
+   *
+   * @param time_point the point in time when the document will expire (epoch second zero means
+   * never expire).
+   * @return this options class for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto expiry(std::chrono::system_clock::time_point time_point) -> decrement_options&
+  {
+    expiry_ = core::impl::expiry_absolute(time_point);
+    return self();
+  }
 
-    /**
-     * The amount of which the document value should be decremented.
-     *
-     * @param delta the amount to decrement.
-     * @return this options class for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto delta(std::uint64_t delta) -> decrement_options&
-    {
-        delta_ = delta;
-        return self();
-    }
+  /**
+   * The amount of which the document value should be decremented.
+   *
+   * @param delta the amount to decrement.
+   * @return this options class for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto delta(std::uint64_t delta) -> decrement_options&
+  {
+    delta_ = delta;
+    return self();
+  }
 
-    /**
-     * The initial value that should be used if the document has not been created yet.
-     *
-     * @param value the initial value to use.
-     * @return this options class for chaining purposes.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto initial(std::uint64_t value) -> decrement_options&
-    {
-        initial_value_ = value;
-        return self();
-    }
+  /**
+   * The initial value that should be used if the document has not been created yet.
+   *
+   * @param value the initial value to use.
+   * @return this options class for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto initial(std::uint64_t value) -> decrement_options&
+  {
+    initial_value_ = value;
+    return self();
+  }
 
-  private:
-    std::uint32_t expiry_{ 0 };
-    std::uint64_t delta_{ 1 };
-    std::optional<std::uint64_t> initial_value_{};
+private:
+  std::uint32_t expiry_{ 0 };
+  std::uint64_t delta_{ 1 };
+  std::optional<std::uint64_t> initial_value_{};
 };
 
 /**

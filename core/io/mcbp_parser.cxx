@@ -33,56 +33,65 @@ namespace couchbase::core::io
 mcbp_parser::result
 mcbp_parser::next(mcbp_message& msg)
 {
-    static const std::size_t header_size = 24;
-    if (buf.size() < header_size) {
-        return result::need_data;
-    }
-    std::memcpy(&msg.header, buf.data(), header_size);
-    std::uint32_t body_size = utils::byte_swap(msg.header.bodylen);
-    if (body_size > 0 && buf.size() - header_size < body_size) {
-        return result::need_data;
-    }
-    msg.body.clear();
-    msg.body.reserve(body_size);
-    std::uint32_t key_size = utils::byte_swap(msg.header.keylen);
-    std::uint32_t prefix_size = static_cast<std::uint32_t>(msg.header.extlen) + key_size;
-    if (msg.header.magic == static_cast<std::uint8_t>(protocol::magic::alt_client_response)) {
-        std::uint8_t framing_extras_size = msg.header.keylen & 0xffU;
-        key_size = static_cast<std::uint32_t>(msg.header.keylen >> 8U);
-        prefix_size = static_cast<std::uint32_t>(framing_extras_size) + static_cast<std::uint32_t>(msg.header.extlen) + key_size;
-    }
-    msg.body.insert(msg.body.end(), buf.begin() + header_size, buf.begin() + header_size + prefix_size);
+  static const std::size_t header_size = 24;
+  if (buf.size() < header_size) {
+    return result::need_data;
+  }
+  std::memcpy(&msg.header, buf.data(), header_size);
+  std::uint32_t body_size = utils::byte_swap(msg.header.bodylen);
+  if (body_size > 0 && buf.size() - header_size < body_size) {
+    return result::need_data;
+  }
+  msg.body.clear();
+  msg.body.reserve(body_size);
+  std::uint32_t key_size = utils::byte_swap(msg.header.keylen);
+  std::uint32_t prefix_size = static_cast<std::uint32_t>(msg.header.extlen) + key_size;
+  if (msg.header.magic == static_cast<std::uint8_t>(protocol::magic::alt_client_response)) {
+    std::uint8_t framing_extras_size = msg.header.keylen & 0xffU;
+    key_size = static_cast<std::uint32_t>(msg.header.keylen >> 8U);
+    prefix_size = static_cast<std::uint32_t>(framing_extras_size) +
+                  static_cast<std::uint32_t>(msg.header.extlen) + key_size;
+  }
+  msg.body.insert(
+    msg.body.end(), buf.begin() + header_size, buf.begin() + header_size + prefix_size);
 
-    bool is_compressed = (msg.header.datatype & static_cast<std::uint8_t>(protocol::datatype::snappy)) != 0;
-    bool use_raw_value = true;
-    if (is_compressed) {
-        std::string uncompressed;
-        std::size_t offset = header_size + prefix_size;
-        if (snappy::Uncompress(reinterpret_cast<const char*>(buf.data() + offset), body_size - prefix_size, &uncompressed)) {
-            msg.body.insert(msg.body.end(),
-                            reinterpret_cast<std::byte*>(&uncompressed.data()[0]),
-                            reinterpret_cast<std::byte*>(&uncompressed.data()[uncompressed.size()]));
-            use_raw_value = false;
-            // patch header with new body size
-            msg.header.bodylen = utils::byte_swap(static_cast<std::uint32_t>(prefix_size + uncompressed.size()));
-        }
+  bool is_compressed =
+    (msg.header.datatype & static_cast<std::uint8_t>(protocol::datatype::snappy)) != 0;
+  bool use_raw_value = true;
+  if (is_compressed) {
+    std::string uncompressed;
+    std::size_t offset = header_size + prefix_size;
+    if (snappy::Uncompress(reinterpret_cast<const char*>(buf.data() + offset),
+                           body_size - prefix_size,
+                           &uncompressed)) {
+      msg.body.insert(msg.body.end(),
+                      reinterpret_cast<std::byte*>(&uncompressed.data()[0]),
+                      reinterpret_cast<std::byte*>(&uncompressed.data()[uncompressed.size()]));
+      use_raw_value = false;
+      // patch header with new body size
+      msg.header.bodylen =
+        utils::byte_swap(static_cast<std::uint32_t>(prefix_size + uncompressed.size()));
     }
-    if (use_raw_value) {
-        msg.body.insert(msg.body.end(), buf.begin() + header_size + prefix_size, buf.begin() + header_size + body_size);
-    }
-    buf.erase(buf.begin(), buf.begin() + header_size + body_size);
-    if (!buf.empty() && !protocol::is_valid_magic(std::to_integer<std::uint8_t>(buf[0]))) {
-        CB_LOG_WARNING("parsed frame for magic={:x}, opcode={:x}, opaque={}, body_len={}. Invalid magic of the next frame: {:x}, {} "
-                       "bytes to parse{}",
-                       msg.header.magic,
-                       msg.header.opcode,
-                       msg.header.opaque,
-                       body_size,
-                       buf[0],
-                       buf.size(),
-                       spdlog::to_hex(buf));
-        reset();
-    }
-    return result::ok;
+  }
+  if (use_raw_value) {
+    msg.body.insert(msg.body.end(),
+                    buf.begin() + header_size + prefix_size,
+                    buf.begin() + header_size + body_size);
+  }
+  buf.erase(buf.begin(), buf.begin() + header_size + body_size);
+  if (!buf.empty() && !protocol::is_valid_magic(std::to_integer<std::uint8_t>(buf[0]))) {
+    CB_LOG_WARNING("parsed frame for magic={:x}, opcode={:x}, opaque={}, body_len={}. Invalid "
+                   "magic of the next frame: {:x}, {} "
+                   "bytes to parse{}",
+                   msg.header.magic,
+                   msg.header.opcode,
+                   msg.header.opaque,
+                   body_size,
+                   buf[0],
+                   buf.size(),
+                   spdlog::to_hex(buf));
+    reset();
+  }
+  return result::ok;
 }
 } // namespace couchbase::core::io

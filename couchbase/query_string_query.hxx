@@ -26,47 +26,52 @@ namespace couchbase
 /**
  * The query string query allows humans to describe complex queries using a simple syntax.
  *
- * 1. When you specify multiple query-clauses, you can specify the relative importance to a given clause by suffixing it with the `^`
- * operator, followed by a number or by specifying the boost parameter with the number to boost the search. For example perform
- * @ref match_query for pool in both the name and description fields, but documents having the term in the name field score higher.
+ * 1. When you specify multiple query-clauses, you can specify the relative importance to a given
+ * clause by suffixing it with the `^` operator, followed by a number or by specifying the boost
+ * parameter with the number to boost the search. For example perform
+ * @ref match_query for pool in both the name and description fields, but documents having the term
+ * in the name field score higher.
  * @snippet test_unit_search.cxx search-query-string-boosting
  *
- * 2. You can perform date or numeric range searches by using the `>`, `>=`, `<`, and `<=` operators, followed by a date value in quotes.
- * For example, perform a @ref date_range_query on the created field for values after September 21, 2016.
+ * 2. You can perform date or numeric range searches by using the `>`, `>=`, `<`, and `<=`
+ * operators, followed by a date value in quotes. For example, perform a @ref date_range_query on
+ * the created field for values after September 21, 2016.
  * @snippet test_unit_search.cxx search-query-string-date-range
- * Or, perform a @ref numeric_range_query  on the `reviews.ratings.Cleanliness` field, for values greater than 4.
+ * Or, perform a @ref numeric_range_query  on the `reviews.ratings.Cleanliness` field, for values
+ * greater than 4.
  * @snippet test_unit_search.cxx search-query-string-numeric-range
  *
- * @see https://docs.couchbase.com/server/current/fts/fts-query-string-syntax.html definition of query syntax
+ * @see https://docs.couchbase.com/server/current/fts/fts-query-string-syntax.html definition of
+ * query syntax
  *
  * @since 1.0.0
  * @committed
  */
 class query_string_query : public search_query
 {
-  public:
-    /**
-     * Create a new query string query.
-     *
-     * @param query the query string to be analyzed and used against
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    explicit query_string_query(std::string query)
-      : query_{ std::move(query) }
-    {
-    }
+public:
+  /**
+   * Create a new query string query.
+   *
+   * @param query the query string to be analyzed and used against
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  explicit query_string_query(std::string query)
+    : query_{ std::move(query) }
+  {
+  }
 
-    /**
-     * @return encoded representation of the query.
-     *
-     * @since 1.0.0
-     * @internal
-     */
-    [[nodiscard]] auto encode() const -> encoded_search_query override;
+  /**
+   * @return encoded representation of the query.
+   *
+   * @since 1.0.0
+   * @internal
+   */
+  [[nodiscard]] auto encode() const -> encoded_search_query override;
 
-  private:
-    std::string query_;
+private:
+  std::string query_;
 };
 } // namespace couchbase

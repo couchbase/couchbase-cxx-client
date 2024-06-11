@@ -23,29 +23,29 @@ namespace test::utils
 {
 
 struct move_only_context {
-  public:
-    explicit move_only_context(std::string input)
-      : payload_(std::move(input))
-    {
-    }
+public:
+  explicit move_only_context(std::string input)
+    : payload_(std::move(input))
+  {
+  }
 
-    move_only_context(move_only_context&& other) = default;
+  move_only_context(move_only_context&& other) = default;
 
-    move_only_context& operator=(move_only_context&& other) = default;
+  move_only_context& operator=(move_only_context&& other) = default;
 
-    ~move_only_context() = default;
+  ~move_only_context() = default;
 
-    move_only_context(const move_only_context& other) = delete;
+  move_only_context(const move_only_context& other) = delete;
 
-    move_only_context& operator=(const move_only_context& other) = delete;
+  move_only_context& operator=(const move_only_context& other) = delete;
 
-    [[nodiscard]] const std::string& payload() const
-    {
-        return payload_;
-    }
+  [[nodiscard]] const std::string& payload() const
+  {
+    return payload_;
+  }
 
-  private:
-    std::string payload_;
+private:
+  std::string payload_;
 };
 
 } // namespace test::utils

@@ -28,73 +28,74 @@ namespace tao::json
 {
 template<>
 struct traits<couchbase::core::diag::diagnostics_result> {
-    template<template<typename...> class Traits>
-    static void assign(tao::json::basic_value<Traits>& v, const couchbase::core::diag::diagnostics_result& r)
-    {
-        tao::json::value services = tao::json::empty_object;
-        for (const auto& [service_type, endpoints] : r.services) {
-            tao::json::value service{};
-            for (const auto& endpoint : endpoints) {
-                tao::json::value e = tao::json::empty_object;
-                if (endpoint.last_activity) {
-                    e["last_activity_us"] = endpoint.last_activity->count();
-                }
-                e["remote"] = endpoint.remote;
-                e["local"] = endpoint.local;
-                e["id"] = endpoint.id;
-                e["state"] = fmt::format("{}", endpoint.state);
-                if (endpoint.bucket) {
-                    e["namespace"] = endpoint.bucket.value();
-                }
-                if (endpoint.details) {
-                    e["details"] = endpoint.details.value();
-                }
-                service.push_back(e);
-            }
-            services[fmt::format("{}", service_type)] = service;
+  template<template<typename...> class Traits>
+  static void assign(tao::json::basic_value<Traits>& v,
+                     const couchbase::core::diag::diagnostics_result& r)
+  {
+    tao::json::value services = tao::json::empty_object;
+    for (const auto& [service_type, endpoints] : r.services) {
+      tao::json::value service{};
+      for (const auto& endpoint : endpoints) {
+        tao::json::value e = tao::json::empty_object;
+        if (endpoint.last_activity) {
+          e["last_activity_us"] = endpoint.last_activity->count();
         }
-
-        v = {
-            { "version", r.version },
-            { "id", r.id },
-            { "sdk", r.sdk },
-            { "services", services },
-        };
+        e["remote"] = endpoint.remote;
+        e["local"] = endpoint.local;
+        e["id"] = endpoint.id;
+        e["state"] = fmt::format("{}", endpoint.state);
+        if (endpoint.bucket) {
+          e["namespace"] = endpoint.bucket.value();
+        }
+        if (endpoint.details) {
+          e["details"] = endpoint.details.value();
+        }
+        service.push_back(e);
+      }
+      services[fmt::format("{}", service_type)] = service;
     }
+
+    v = {
+      { "version", r.version },
+      { "id", r.id },
+      { "sdk", r.sdk },
+      { "services", services },
+    };
+  }
 };
 
 template<>
 struct traits<couchbase::core::diag::ping_result> {
-    template<template<typename...> class Traits>
-    static void assign(tao::json::basic_value<Traits>& v, const couchbase::core::diag::ping_result& r)
-    {
-        tao::json::value services{};
-        for (const auto& entry : r.services) {
-            tao::json::value service{};
-            for (const auto& endpoint : entry.second) {
-                tao::json::value e{};
-                e["latency_us"] = endpoint.latency.count();
-                e["remote"] = endpoint.remote;
-                e["local"] = endpoint.local;
-                e["id"] = endpoint.id;
-                e["state"] = fmt::format("{}", endpoint.state);
-                if (endpoint.bucket) {
-                    e["namespace"] = endpoint.bucket.value();
-                }
-                if (endpoint.state == couchbase::core::diag::ping_state::error && endpoint.error) {
-                    e["error"] = endpoint.error.value();
-                }
-                service.push_back(e);
-            }
-            services[fmt::format("{}", entry.first)] = service;
+  template<template<typename...> class Traits>
+  static void assign(tao::json::basic_value<Traits>& v, const couchbase::core::diag::ping_result& r)
+  {
+    tao::json::value services{};
+    for (const auto& entry : r.services) {
+      tao::json::value service{};
+      for (const auto& endpoint : entry.second) {
+        tao::json::value e{};
+        e["latency_us"] = endpoint.latency.count();
+        e["remote"] = endpoint.remote;
+        e["local"] = endpoint.local;
+        e["id"] = endpoint.id;
+        e["state"] = fmt::format("{}", endpoint.state);
+        if (endpoint.bucket) {
+          e["namespace"] = endpoint.bucket.value();
         }
-
-        v = {
-            { "version", r.version },
-            { "id", r.id },
-            { "sdk", r.sdk },
-            { "services", services },
-        };
+        if (endpoint.state == couchbase::core::diag::ping_state::error && endpoint.error) {
+          e["error"] = endpoint.error.value();
+        }
+        service.push_back(e);
+      }
+      services[fmt::format("{}", entry.first)] = service;
     }
+
+    v = {
+      { "version", r.version },
+      { "id", r.id },
+      { "sdk", r.sdk },
+      { "services", services },
+    };
+  }
 };
 } // namespace tao::json

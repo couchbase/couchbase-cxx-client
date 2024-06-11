@@ -28,57 +28,57 @@ namespace couchbase::core::protocol
 
 class touch_response_body
 {
-  public:
-    static const inline client_opcode opcode = client_opcode::touch;
+public:
+  static const inline client_opcode opcode = client_opcode::touch;
 
-    bool parse(key_value_status_code status,
-               const header_buffer& header,
-               std::uint8_t framing_extras_size,
-               std::uint16_t key_size,
-               std::uint8_t extras_size,
-               const std::vector<std::byte>& body,
-               const cmd_info& info);
+  bool parse(key_value_status_code status,
+             const header_buffer& header,
+             std::uint8_t framing_extras_size,
+             std::uint16_t key_size,
+             std::uint8_t extras_size,
+             const std::vector<std::byte>& body,
+             const cmd_info& info);
 };
 
 class touch_request_body
 {
-  public:
-    using response_body_type = touch_response_body;
-    static const inline client_opcode opcode = client_opcode::touch;
+public:
+  using response_body_type = touch_response_body;
+  static const inline client_opcode opcode = client_opcode::touch;
 
-  private:
-    std::vector<std::byte> key_;
-    std::vector<std::byte> extras_{};
+private:
+  std::vector<std::byte> key_;
+  std::vector<std::byte> extras_{};
 
-  public:
-    void id(const document_id& id);
+public:
+  void id(const document_id& id);
 
-    void expiry(std::uint32_t seconds);
+  void expiry(std::uint32_t seconds);
 
-    [[nodiscard]] const auto& key() const
-    {
-        return key_;
-    }
+  [[nodiscard]] const auto& key() const
+  {
+    return key_;
+  }
 
-    [[nodiscard]] const auto& framing_extras() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& framing_extras() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] const auto& extras() const
-    {
-        return extras_;
-    }
+  [[nodiscard]] const auto& extras() const
+  {
+    return extras_;
+  }
 
-    [[nodiscard]] const auto& value() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& value() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] std::size_t size() const
-    {
-        return key_.size() + extras_.size();
-    }
+  [[nodiscard]] std::size_t size() const
+  {
+    return key_.size() + extras_.size();
+  }
 };
 
 } // namespace couchbase::core::protocol

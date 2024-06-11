@@ -29,7 +29,7 @@ namespace test::utils
 std::string
 uniq_id(const std::string& prefix)
 {
-    return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
+  return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
 }
 
 namespace
@@ -37,33 +37,34 @@ namespace
 auto
 read_all(const std::string& path) -> std::string
 {
-    const auto file_size = std::filesystem::file_size(path);
-    std::ifstream input_file(path);
-    std::string content;
-    content.resize(file_size);
-    input_file.read(content.data(), static_cast<std::streamsize>(file_size));
-    return content;
+  const auto file_size = std::filesystem::file_size(path);
+  std::ifstream input_file(path);
+  std::string content;
+  content.resize(file_size);
+  input_file.read(content.data(), static_cast<std::streamsize>(file_size));
+  return content;
 }
 } // namespace
 
 std::string
 read_test_data(const std::string& file)
 {
-    std::vector candidates{
-        file,
-        fmt::format("data/{}", file),
-        fmt::format("test/data/{}", file),
-        fmt::format("../test/data/{}", file),
-        fmt::format("../../test/data/{}", file),
-        fmt::format("../../../test/data/{}", file),
-    };
-    for (const auto& path : candidates) {
-        if (std::error_code ec{}; std::filesystem::exists(path, ec) && !ec) {
-            return read_all(path);
-        }
+  std::vector candidates{
+    file,
+    fmt::format("data/{}", file),
+    fmt::format("test/data/{}", file),
+    fmt::format("../test/data/{}", file),
+    fmt::format("../../test/data/{}", file),
+    fmt::format("../../../test/data/{}", file),
+  };
+  for (const auto& path : candidates) {
+    if (std::error_code ec{}; std::filesystem::exists(path, ec) && !ec) {
+      return read_all(path);
     }
-    throw std::runtime_error(fmt::format("unable to load test_data.\nCurrent directory: {}\ncandidates: {}",
-                                         std::filesystem::current_path().string(),
-                                         fmt::join(candidates, ",\n\t")));
+  }
+  throw std::runtime_error(
+    fmt::format("unable to load test_data.\nCurrent directory: {}\ncandidates: {}",
+                std::filesystem::current_path().string(),
+                fmt::join(candidates, ",\n\t")));
 }
 } // namespace test::utils

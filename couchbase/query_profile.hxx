@@ -20,33 +20,36 @@
 namespace couchbase
 {
 enum class query_profile {
-    /**
-     * No profiling information is added to the query response.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    off = 0,
+  /**
+   * No profiling information is added to the query response.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  off = 0,
 
-    /**
-     * The query response includes a profile section with stats and details about various phases of the query plan and execution.
-     *
-     * Three phase times will be included in the system:active_requests and system:completed_requests monitoring keyspaces.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    phases,
+  /**
+   * The query response includes a profile section with stats and details about various phases of
+   * the query plan and execution.
+   *
+   * Three phase times will be included in the system:active_requests and system:completed_requests
+   * monitoring keyspaces.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  phases,
 
-    /**
-     * Besides the phase times, the profile section of the query response document will include a full query plan with timing and
-     * information about the number of processed documents at each phase.
-     *
-     * This information will be included in the system:active_requests and system:completed_requests keyspaces.
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    timings,
+  /**
+   * Besides the phase times, the profile section of the query response document will include a full
+   * query plan with timing and information about the number of processed documents at each phase.
+   *
+   * This information will be included in the system:active_requests and system:completed_requests
+   * keyspaces.
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  timings,
 };
 } // namespace couchbase

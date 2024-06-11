@@ -23,10 +23,10 @@ namespace couchbase::core::transactions
 {
 class atr_ids
 {
-  public:
-    static const std::string& atr_id_for_vbucket(std::size_t vbucket_id);
-    static std::size_t vbucket_for_key(const std::string& key);
-    static const std::vector<std::string>& all();
+public:
+  static const std::string& atr_id_for_vbucket(std::size_t vbucket_id);
+  static std::size_t vbucket_for_key(const std::string& key);
+  static const std::vector<std::string>& all();
 };
 
 } // namespace couchbase::core::transactions

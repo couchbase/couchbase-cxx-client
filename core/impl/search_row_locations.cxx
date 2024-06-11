@@ -31,36 +31,37 @@ search_row_locations::search_row_locations(internal_search_row_locations interna
 auto
 search_row_locations::get(const std::string& field) const -> std::vector<search_row_location>
 {
-    return internal_->get(field);
+  return internal_->get(field);
 }
 
 auto
-search_row_locations::get(const std::string& field, const std::string& term) const -> std::vector<search_row_location>
+search_row_locations::get(const std::string& field,
+                          const std::string& term) const -> std::vector<search_row_location>
 {
-    return internal_->get(field, term);
+  return internal_->get(field, term);
 }
 
 auto
 search_row_locations::get_all() const -> std::vector<search_row_location>
 {
-    return internal_->get_all();
+  return internal_->get_all();
 }
 
 auto
 search_row_locations::fields() const -> std::vector<std::string>
 {
-    return internal_->fields();
+  return internal_->fields();
 }
 
 auto
 search_row_locations::terms() const -> std::set<std::string>
 {
-    return internal_->terms();
+  return internal_->terms();
 }
 
 auto
 search_row_locations::terms_for(const std::string& field) const -> std::vector<std::string>
 {
-    return internal_->terms_for(field);
+  return internal_->terms_for(field);
 }
 } // namespace couchbase

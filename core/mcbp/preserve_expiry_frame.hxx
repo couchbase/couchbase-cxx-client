@@ -19,8 +19,10 @@
 
 namespace couchbase::core::mcbp
 {
-// preserve_expiry_frame is used to indicate that the server should preserve the expiry time for existing document.
+// preserve_expiry_frame is used to indicate that the server should preserve the expiry time for
+// existing document.
 struct preserve_expiry_frame {
-    // Preserve Expiry frames have no extra configuration, but their existence triggers the preserve expiry behaviour.
+  // Preserve Expiry frames have no extra configuration, but their existence triggers the preserve
+  // expiry behaviour.
 };
 } // namespace couchbase::core::mcbp

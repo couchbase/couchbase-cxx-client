@@ -35,16 +35,18 @@ template<class Command>
 std::chrono::milliseconds
 cap_duration(std::chrono::milliseconds uncapped, std::shared_ptr<Command> command)
 {
-    auto theoretical_deadline = std::chrono::steady_clock::now() + uncapped;
-    auto absolute_deadline = command->deadline.expiry();
-    if (auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(theoretical_deadline - absolute_deadline); delta.count() > 0) {
-        auto capped = uncapped - delta;
-        if (capped.count() < 0) {
-            return uncapped; // something went wrong, return the uncapped one as a safety net
-        }
-        return capped;
+  auto theoretical_deadline = std::chrono::steady_clock::now() + uncapped;
+  auto absolute_deadline = command->deadline.expiry();
+  if (auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(theoretical_deadline -
+                                                                         absolute_deadline);
+      delta.count() > 0) {
+    auto capped = uncapped - delta;
+    if (capped.count() < 0) {
+      return uncapped; // something went wrong, return the uncapped one as a safety net
     }
-    return uncapped;
+    return capped;
+  }
+  return uncapped;
 }
 
 template<class Manager, class Command>
@@ -54,46 +56,53 @@ retry_with_duration(std::shared_ptr<Manager> manager,
                     retry_reason reason,
                     std::chrono::milliseconds duration)
 {
-    command->request.retries.record_retry_attempt(reason);
-    CB_LOG_TRACE(R"({} retrying operation {} (duration={}ms, id="{}", vbucket_id={}, reason={}, attempts={}, last_dispatched_to="{}"))",
-                 manager->log_prefix(),
-                 decltype(command->request)::encoded_request_type::body_type::opcode,
-                 duration.count(),
-                 command->id_,
-                 command->request.partition,
-                 reason,
-                 command->request.retries.retry_attempts(),
-                 command->session_ ? command->session_->remote_address() : "");
-    manager->schedule_for_retry(command, duration);
+  command->request.retries.record_retry_attempt(reason);
+  CB_LOG_TRACE(
+    R"({} retrying operation {} (duration={}ms, id="{}", vbucket_id={}, reason={}, attempts={}, last_dispatched_to="{}"))",
+    manager->log_prefix(),
+    decltype(command->request)::encoded_request_type::body_type::opcode,
+    duration.count(),
+    command->id_,
+    command->request.partition,
+    reason,
+    command->request.retries.retry_attempts(),
+    command->session_ ? command->session_->remote_address() : "");
+  manager->schedule_for_retry(command, duration);
 }
 
 } // namespace priv
 
 template<class Manager, class Command>
 void
-maybe_retry(std::shared_ptr<Manager> manager, std::shared_ptr<Command> command, retry_reason reason, std::error_code ec)
+maybe_retry(std::shared_ptr<Manager> manager,
+            std::shared_ptr<Command> command,
+            retry_reason reason,
+            std::error_code ec)
 {
-    if (always_retry(reason)) {
-        return priv::retry_with_duration(manager, command, reason, controlled_backoff(command->request.retries.retry_attempts()));
-    }
+  if (always_retry(reason)) {
+    return priv::retry_with_duration(
+      manager, command, reason, controlled_backoff(command->request.retries.retry_attempts()));
+  }
 
-    auto retry_strategy = command->request.retries.strategy();
-    if (retry_strategy == nullptr) {
-        retry_strategy = manager->default_retry_strategy();
-    }
-    if (retry_action action = retry_strategy->retry_after(command->request.retries, reason); action.need_to_retry()) {
-        return priv::retry_with_duration(manager, command, reason, priv::cap_duration(action.duration(), command));
-    }
+  auto retry_strategy = command->request.retries.strategy();
+  if (retry_strategy == nullptr) {
+    retry_strategy = manager->default_retry_strategy();
+  }
+  if (retry_action action = retry_strategy->retry_after(command->request.retries, reason);
+      action.need_to_retry()) {
+    return priv::retry_with_duration(
+      manager, command, reason, priv::cap_duration(action.duration(), command));
+  }
 
-    CB_LOG_TRACE(R"({} not retrying operation {} (id="{}", reason={}, attempts={}, ec={} ({})))",
-                 manager->log_prefix(),
-                 decltype(command->request)::encoded_request_type::body_type::opcode,
-                 command->id_,
-                 reason,
-                 command->request.retries.retry_attempts(),
-                 ec.value(),
-                 ec.message());
-    return command->invoke_handler(ec);
+  CB_LOG_TRACE(R"({} not retrying operation {} (id="{}", reason={}, attempts={}, ec={} ({})))",
+               manager->log_prefix(),
+               decltype(command->request)::encoded_request_type::body_type::opcode,
+               command->id_,
+               reason,
+               command->request.retries.retry_attempts(),
+               ec.value(),
+               ec.message());
+  return command->invoke_handler(ec);
 }
 
 } // namespace couchbase::core::io::retry_orchestrator

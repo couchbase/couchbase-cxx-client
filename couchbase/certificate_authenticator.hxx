@@ -23,17 +23,17 @@ namespace couchbase
 {
 class certificate_authenticator
 {
-  public:
-    certificate_authenticator(std::string certificate_path, std::string key_path)
-      : certificate_path_{ std::move(certificate_path) }
-      , key_path_{ std::move(key_path) }
-    {
-    }
+public:
+  certificate_authenticator(std::string certificate_path, std::string key_path)
+    : certificate_path_{ std::move(certificate_path) }
+    , key_path_{ std::move(key_path) }
+  {
+  }
 
-  private:
-    std::string certificate_path_;
-    std::string key_path_;
+private:
+  std::string certificate_path_;
+  std::string key_path_;
 
-    friend class cluster_options;
+  friend class cluster_options;
 };
 } // namespace couchbase

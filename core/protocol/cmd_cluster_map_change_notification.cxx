@@ -27,28 +27,31 @@
 namespace couchbase::core::protocol
 {
 bool
-cluster_map_change_notification_request_body::parse(const header_buffer& header, const std::vector<std::byte>& body, const cmd_info& info)
+cluster_map_change_notification_request_body::parse(const header_buffer& header,
+                                                    const std::vector<std::byte>& body,
+                                                    const cmd_info& info)
 {
-    Expects(header[1] == static_cast<std::byte>(opcode));
-    using offset_type = std::vector<std::byte>::difference_type;
+  Expects(header[1] == static_cast<std::byte>(opcode));
+  using offset_type = std::vector<std::byte>::difference_type;
 
-    auto ext_size = std::to_integer<std::uint8_t>(header[4]);
-    offset_type offset = ext_size;
-    if (ext_size == 4) {
-        memcpy(&protocol_revision_, body.data(), sizeof(protocol_revision_));
-        protocol_revision_ = utils::byte_swap(protocol_revision_);
-    }
-    std::uint16_t key_size = 0;
-    memcpy(&key_size, header.data() + 2, sizeof(key_size));
-    key_size = utils::byte_swap(key_size);
-    const auto* data_ptr = reinterpret_cast<const char*>(body.data());
-    bucket_.assign(data_ptr + offset, data_ptr + offset + key_size);
-    offset += key_size;
-    if (body.size() > static_cast<std::size_t>(offset)) {
-        std::string_view config_text{ data_ptr + offset, body.size() - static_cast<std::size_t>(offset) };
-        config_ = parse_config(config_text, info.endpoint_address, info.endpoint_port);
-        config_text_.emplace(config_text);
-    }
-    return true;
+  auto ext_size = std::to_integer<std::uint8_t>(header[4]);
+  offset_type offset = ext_size;
+  if (ext_size == 4) {
+    memcpy(&protocol_revision_, body.data(), sizeof(protocol_revision_));
+    protocol_revision_ = utils::byte_swap(protocol_revision_);
+  }
+  std::uint16_t key_size = 0;
+  memcpy(&key_size, header.data() + 2, sizeof(key_size));
+  key_size = utils::byte_swap(key_size);
+  const auto* data_ptr = reinterpret_cast<const char*>(body.data());
+  bucket_.assign(data_ptr + offset, data_ptr + offset + key_size);
+  offset += key_size;
+  if (body.size() > static_cast<std::size_t>(offset)) {
+    std::string_view config_text{ data_ptr + offset,
+                                  body.size() - static_cast<std::size_t>(offset) };
+    config_ = parse_config(config_text, info.endpoint_address, info.endpoint_port);
+    config_text_.emplace(config_text);
+  }
+  return true;
 }
 } // namespace couchbase::core::protocol

@@ -22,9 +22,9 @@
 namespace couchbase::core::management::analytics
 {
 struct dataset {
-    std::string name;
-    std::string dataverse_name;
-    std::string link_name;
-    std::string bucket_name;
+  std::string name;
+  std::string dataverse_name;
+  std::string link_name;
+  std::string bucket_name;
 };
 } // namespace couchbase::core::management::analytics

@@ -29,89 +29,91 @@ namespace couchbase::core::protocol
 
 class get_meta_response_body
 {
-  public:
-    static const inline client_opcode opcode = client_opcode::get_meta;
+public:
+  static const inline client_opcode opcode = client_opcode::get_meta;
 
-  private:
-    std::uint32_t deleted_{};
-    std::uint32_t flags_{};
-    std::uint32_t expiry_{};
-    std::uint64_t sequence_number_{};
-    std::uint8_t datatype_{};
+private:
+  std::uint32_t deleted_{};
+  std::uint32_t flags_{};
+  std::uint32_t expiry_{};
+  std::uint64_t sequence_number_{};
+  std::uint8_t datatype_{};
 
-  public:
-    [[nodiscard]] bool is_deleted() const
-    {
-        return deleted_ != 0;
-    }
+public:
+  [[nodiscard]] bool is_deleted() const
+  {
+    return deleted_ != 0;
+  }
 
-    [[nodiscard]] std::uint32_t flags() const
-    {
-        return flags_;
-    }
+  [[nodiscard]] std::uint32_t flags() const
+  {
+    return flags_;
+  }
 
-    [[nodiscard]] std::uint32_t expiry() const
-    {
-        return expiry_;
-    }
+  [[nodiscard]] std::uint32_t expiry() const
+  {
+    return expiry_;
+  }
 
-    [[nodiscard]] std::uint64_t sequence_number() const
-    {
-        return sequence_number_;
-    }
+  [[nodiscard]] std::uint64_t sequence_number() const
+  {
+    return sequence_number_;
+  }
 
-    [[nodiscard]] std::uint8_t datatype() const
-    {
-        return datatype_;
-    }
+  [[nodiscard]] std::uint8_t datatype() const
+  {
+    return datatype_;
+  }
 
-    bool parse(key_value_status_code status,
-               const header_buffer& header,
-               std::uint8_t framing_extras_size,
-               std::uint16_t key_size,
-               std::uint8_t extras_size,
-               const std::vector<std::byte>& body,
-               const cmd_info& info);
+  bool parse(key_value_status_code status,
+             const header_buffer& header,
+             std::uint8_t framing_extras_size,
+             std::uint16_t key_size,
+             std::uint8_t extras_size,
+             const std::vector<std::byte>& body,
+             const cmd_info& info);
 };
 
 class get_meta_request_body
 {
-  public:
-    using response_body_type = get_meta_response_body;
-    static const inline client_opcode opcode = client_opcode::get_meta;
+public:
+  using response_body_type = get_meta_response_body;
+  static const inline client_opcode opcode = client_opcode::get_meta;
 
-  private:
-    std::vector<std::byte> key_;
-    std::vector<std::byte> extras_{ std::byte{ 0x02 },
-                                    /* format version, supported since Couchbase Server 5.0, includes datatype into response */ };
+private:
+  std::vector<std::byte> key_;
+  std::vector<std::byte> extras_{
+    std::byte{ 0x02 },
+    /* format version, supported since Couchbase Server 5.0, includes datatype into response */
+  };
 
-  public:
-    void id(const document_id& id);
+public:
+  void id(const document_id& id);
 
-    [[nodiscard]] const auto& key() const
-    {
-        return key_;
-    }
+  [[nodiscard]] const auto& key() const
+  {
+    return key_;
+  }
 
-    [[nodiscard]] const auto& framing_extras() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& framing_extras() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] const auto& extras() const
-    {
-        return extras_;
-    }
+  [[nodiscard]] const auto& extras() const
+  {
+    return extras_;
+  }
 
-    [[nodiscard]] const auto& value()
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& value()
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] std::size_t size()
-    {
-        return extras_.size() + key_.size();
-    }
+  [[nodiscard]] std::size_t size()
+  {
+    return extras_.size() + key_.size();
+  }
 };
 
 } // namespace couchbase::core::protocol

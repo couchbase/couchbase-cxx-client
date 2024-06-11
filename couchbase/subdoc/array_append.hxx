@@ -39,53 +39,53 @@ namespace subdoc
  */
 class array_append
 {
-  public:
-    /**
-     * Sets that this is an extended attribute (XATTR) field.
-     *
-     * @return this, for chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto xattr(bool value = true) -> array_append&
-    {
-        xattr_ = value;
-        return *this;
-    }
+public:
+  /**
+   * Sets that this is an extended attribute (XATTR) field.
+   *
+   * @return this, for chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto xattr(bool value = true) -> array_append&
+  {
+    xattr_ = value;
+    return *this;
+  }
 
-    /**
-     * Sets that this parent fields should be created automatically.
-     *
-     * @param value new value for the option
-     * @return this, for chaining
-     *
-     * @since 1.0.0
-     * @committed
-     */
-    auto create_path(bool value = true) -> array_append&
-    {
-        create_path_ = value;
-        return *this;
-    }
+  /**
+   * Sets that this parent fields should be created automatically.
+   *
+   * @param value new value for the option
+   * @return this, for chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto create_path(bool value = true) -> array_append&
+  {
+    create_path_ = value;
+    return *this;
+  }
 
-  private:
+private:
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-    friend couchbase::mutate_in_specs;
+  friend couchbase::mutate_in_specs;
 #endif
 
-    array_append(std::string path, std::vector<std::vector<std::byte>> values)
-      : path_(std::move(path))
-      , values_(std::move(values))
-    {
-    }
+  array_append(std::string path, std::vector<std::vector<std::byte>> values)
+    : path_(std::move(path))
+    , values_(std::move(values))
+  {
+  }
 
-    void encode(core::impl::subdoc::command_bundle& bundle) const;
+  void encode(core::impl::subdoc::command_bundle& bundle) const;
 
-    std::string path_;
-    std::vector<std::vector<std::byte>> values_;
-    bool xattr_{ false };
-    bool create_path_{ false };
+  std::string path_;
+  std::vector<std::vector<std::byte>> values_;
+  bool xattr_{ false };
+  bool create_path_{ false };
 };
 } // namespace subdoc
 } // namespace couchbase

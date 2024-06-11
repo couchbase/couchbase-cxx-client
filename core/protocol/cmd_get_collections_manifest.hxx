@@ -28,57 +28,57 @@ namespace couchbase::core::protocol
 
 class get_collections_manifest_response_body
 {
-  public:
-    static const inline client_opcode opcode = client_opcode::get_collections_manifest;
+public:
+  static const inline client_opcode opcode = client_opcode::get_collections_manifest;
 
-  private:
-    topology::collections_manifest manifest_;
+private:
+  topology::collections_manifest manifest_;
 
-  public:
-    [[nodiscard]] const couchbase::core::topology::collections_manifest& manifest() const
-    {
-        return manifest_;
-    }
+public:
+  [[nodiscard]] const couchbase::core::topology::collections_manifest& manifest() const
+  {
+    return manifest_;
+  }
 
-    bool parse(key_value_status_code status,
-               const header_buffer& header,
-               std::uint8_t framing_extras_size,
-               std::uint16_t key_size,
-               std::uint8_t extras_size,
-               const std::vector<std::byte>& body,
-               const cmd_info& info);
+  bool parse(key_value_status_code status,
+             const header_buffer& header,
+             std::uint8_t framing_extras_size,
+             std::uint16_t key_size,
+             std::uint8_t extras_size,
+             const std::vector<std::byte>& body,
+             const cmd_info& info);
 };
 
 class get_collections_manifest_request_body
 {
-  public:
-    using response_body_type = get_collections_manifest_response_body;
-    static const inline client_opcode opcode = client_opcode::get_collections_manifest;
+public:
+  using response_body_type = get_collections_manifest_response_body;
+  static const inline client_opcode opcode = client_opcode::get_collections_manifest;
 
-    [[nodiscard]] const std::string& key() const
-    {
-        return empty_string;
-    }
+  [[nodiscard]] const std::string& key() const
+  {
+    return empty_string;
+  }
 
-    [[nodiscard]] const auto& framing_extras() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& framing_extras() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] const auto& extras() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& extras() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] const auto& value() const
-    {
-        return empty_buffer;
-    }
+  [[nodiscard]] const auto& value() const
+  {
+    return empty_buffer;
+  }
 
-    [[nodiscard]] std::size_t size() const
-    {
-        return 0;
-    }
+  [[nodiscard]] std::size_t size() const
+  {
+    return 0;
+  }
 };
 
 } // namespace couchbase::core::protocol

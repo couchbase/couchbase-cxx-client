@@ -29,43 +29,44 @@ namespace couchbase::core::operations::management
 std::error_code
 scope_drop_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
 {
-    encoded.method = "DELETE";
-    encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}", bucket_name, scope_name);
-    return {};
+  encoded.method = "DELETE";
+  encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}", bucket_name, scope_name);
+  return {};
 }
 
 scope_drop_response
-scope_drop_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded) const
+scope_drop_request::make_response(error_context::http&& ctx,
+                                  const encoded_response_type& encoded) const
 {
-    scope_drop_response response{ std::move(ctx) };
-    if (!response.ctx.ec) {
-        switch (encoded.status_code) {
-            case 400:
-                response.ctx.ec = errc::common::unsupported_operation;
-                break;
-            case 404: {
-                std::regex scope_not_found("Scope with name .+ is not found");
-                if (std::regex_search(encoded.body.data(), scope_not_found)) {
-                    response.ctx.ec = errc::common::scope_not_found;
-                } else {
-                    response.ctx.ec = errc::common::bucket_not_found;
-                }
-            } break;
-            case 200: {
-                tao::json::value payload{};
-                try {
-                    payload = utils::json::parse(encoded.body.data());
-                } catch (const tao::pegtl::parse_error&) {
-                    response.ctx.ec = errc::common::parsing_failure;
-                    return response;
-                }
-                response.uid = std::stoull(payload.at("uid").get_string(), nullptr, 16);
-            } break;
-            default:
-                response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
-                break;
+  scope_drop_response response{ std::move(ctx) };
+  if (!response.ctx.ec) {
+    switch (encoded.status_code) {
+      case 400:
+        response.ctx.ec = errc::common::unsupported_operation;
+        break;
+      case 404: {
+        std::regex scope_not_found("Scope with name .+ is not found");
+        if (std::regex_search(encoded.body.data(), scope_not_found)) {
+          response.ctx.ec = errc::common::scope_not_found;
+        } else {
+          response.ctx.ec = errc::common::bucket_not_found;
         }
+      } break;
+      case 200: {
+        tao::json::value payload{};
+        try {
+          payload = utils::json::parse(encoded.body.data());
+        } catch (const tao::pegtl::parse_error&) {
+          response.ctx.ec = errc::common::parsing_failure;
+          return response;
+        }
+        response.uid = std::stoull(payload.at("uid").get_string(), nullptr, 16);
+      } break;
+      default:
+        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+        break;
     }
-    return response;
+  }
+  return response;
 }
 } // namespace couchbase::core::operations::management

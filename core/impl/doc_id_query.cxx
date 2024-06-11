@@ -27,16 +27,16 @@ namespace couchbase
 auto
 doc_id_query::encode() const -> encoded_search_query
 {
-    if (ids_.empty()) {
-        return { errc::common::invalid_argument };
-    }
+  if (ids_.empty()) {
+    return { errc::common::invalid_argument };
+  }
 
-    encoded_search_query built;
-    built.query = tao::json::value{ { "ids", ids_ } };
+  encoded_search_query built;
+  built.query = tao::json::value{ { "ids", ids_ } };
 
-    if (boost_.has_value()) {
-        built.query["boost"] = boost_.value();
-    }
-    return built;
+  if (boost_.has_value()) {
+    built.query["boost"] = boost_.value();
+  }
+  return built;
 }
 } // namespace couchbase

@@ -24,26 +24,26 @@ namespace couchbase
 {
 class transaction_error_context
 {
-  public:
-    transaction_error_context() = default;
-    transaction_error_context(std::error_code ec, std::error_code cause)
-      : ec_(ec)
-      , cause_(cause)
-    {
-    }
+public:
+  transaction_error_context() = default;
+  transaction_error_context(std::error_code ec, std::error_code cause)
+    : ec_(ec)
+    , cause_(cause)
+  {
+  }
 
-    [[nodiscard]] std::error_code ec() const
-    {
-        return ec_;
-    }
+  [[nodiscard]] std::error_code ec() const
+  {
+    return ec_;
+  }
 
-    [[nodiscard]] std::error_code cause() const
-    {
-        return cause_;
-    }
+  [[nodiscard]] std::error_code cause() const
+  {
+    return cause_;
+  }
 
-  private:
-    std::error_code ec_{};    // a transaction error_code
-    std::error_code cause_{}; // a transaction_op error_code
+private:
+  std::error_code ec_{};    // a transaction error_code
+  std::error_code cause_{}; // a transaction_op error_code
 };
 } // namespace couchbase

@@ -28,36 +28,37 @@ namespace couchbase::core::protocol
 topology::configuration
 parse_config(std::string_view input, std::string_view endpoint_address, std::uint16_t endpoint_port)
 {
-    auto config = utils::json::parse(input).as<topology::configuration>();
-    for (auto& node : config.nodes) {
-        if (node.hostname == "$HOST") {
-            node.hostname = endpoint_address;
-        }
+  auto config = utils::json::parse(input).as<topology::configuration>();
+  for (auto& node : config.nodes) {
+    if (node.hostname == "$HOST") {
+      node.hostname = endpoint_address;
+    }
+  }
+
+  // workaround for servers which don't specify this_node
+  {
+    bool has_this_node = false;
+    for (const auto& node : config.nodes) {
+      if (node.this_node) {
+        has_this_node = true;
+        break;
+      }
     }
 
-    // workaround for servers which don't specify this_node
-    {
-        bool has_this_node = false;
-        for (const auto& node : config.nodes) {
-            if (node.this_node) {
-                has_this_node = true;
-                break;
-            }
+    if (!has_this_node) {
+      for (auto& node : config.nodes) {
+        auto kv_port = node.port_or(couchbase::core::service_type::key_value, false, 0);
+        auto kv_tls_port = node.port_or(couchbase::core::service_type::key_value, true, 0);
+        if (node.hostname == endpoint_address &&
+            (kv_port == endpoint_port || kv_tls_port == endpoint_port)) {
+          node.this_node = true;
+          break;
         }
-
-        if (!has_this_node) {
-            for (auto& node : config.nodes) {
-                auto kv_port = node.port_or(couchbase::core::service_type::key_value, false, 0);
-                auto kv_tls_port = node.port_or(couchbase::core::service_type::key_value, true, 0);
-                if (node.hostname == endpoint_address && (kv_port == endpoint_port || kv_tls_port == endpoint_port)) {
-                    node.this_node = true;
-                    break;
-                }
-            }
-        }
+      }
     }
+  }
 
-    return config;
+  return config;
 }
 
 bool
@@ -69,18 +70,21 @@ get_cluster_config_response_body::parse(key_value_status_code status,
                                         const std::vector<std::byte>& body,
                                         const cmd_info& info)
 {
-    Expects(header[1] == static_cast<std::byte>(opcode));
-    if (status == key_value_status_code::success) {
-        std::vector<std::uint8_t>::difference_type offset = framing_extras_size + key_size + extras_size;
-        std::string_view config_text{ reinterpret_cast<const char*>(body.data()) + offset, body.size() - static_cast<std::size_t>(offset) };
-        try {
-            config_ = parse_config(config_text, info.endpoint_address, info.endpoint_port);
-            config_text_.emplace(config_text);
-        } catch (const tao::pegtl::parse_error& e) {
-            CB_LOG_DEBUG("unable to parse cluster configuration as JSON: {}, {}", e.message(), config_text);
-        }
-        return true;
+  Expects(header[1] == static_cast<std::byte>(opcode));
+  if (status == key_value_status_code::success) {
+    std::vector<std::uint8_t>::difference_type offset =
+      framing_extras_size + key_size + extras_size;
+    std::string_view config_text{ reinterpret_cast<const char*>(body.data()) + offset,
+                                  body.size() - static_cast<std::size_t>(offset) };
+    try {
+      config_ = parse_config(config_text, info.endpoint_address, info.endpoint_port);
+      config_text_.emplace(config_text);
+    } catch (const tao::pegtl::parse_error& e) {
+      CB_LOG_DEBUG(
+        "unable to parse cluster configuration as JSON: {}, {}", e.message(), config_text);
     }
-    return false;
+    return true;
+  }
+  return false;
 }
 } // namespace couchbase::core::protocol

@@ -29,16 +29,20 @@
  */
 template<>
 struct fmt::formatter<couchbase::mutation_token> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx)
-    {
-        return ctx.begin();
-    }
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
 
-    template<typename FormatContext>
-    auto format(const couchbase::mutation_token& token, FormatContext& ctx) const
-    {
-        return format_to(
-          ctx.out(), "{}:{}:{}:{}", token.bucket_name(), token.partition_id(), token.partition_uuid(), token.sequence_number());
-    }
+  template<typename FormatContext>
+  auto format(const couchbase::mutation_token& token, FormatContext& ctx) const
+  {
+    return format_to(ctx.out(),
+                     "{}:{}:{}:{}",
+                     token.bucket_name(),
+                     token.partition_id(),
+                     token.partition_uuid(),
+                     token.sequence_number());
+  }
 };
