@@ -58,7 +58,7 @@ TEST_CASE("unit: binary_raw_transcoder checks flags", "[unit]")
 
   REQUIRE_THROWS_AS(
     [](auto encoded) {
-      couchbase::codec::raw_binary_transcoder::decode(encoded);
+      return couchbase::codec::raw_binary_transcoder::decode(encoded);
     }(encoded),
     std::system_error);
 }
