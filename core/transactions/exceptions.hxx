@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include "core/error_context/query.hxx"
 #include "error_class.hxx"
 
 #include <couchbase/error_codes.hxx>
@@ -71,9 +70,11 @@ error_class_from_external_exception(external_exception e)
   -> couchbase::core::transactions::error_class;
 
 /**
- * @brief Base class for all exceptions expected to be raised from a transaction.
+ * @brief Base class for all exceptions expected to be raised from a
+ * transaction.
  *
- * Subclasses of this are the only exceptions that are raised out of the transaction lambda.
+ * Subclasses of this are the only exceptions that are raised out of the
+ * transaction lambda.
  */
 class transaction_exception : public std::runtime_error
 {
@@ -88,7 +89,8 @@ public:
    * @brief Construct from underlying exception.
    *
    * @param cause Underlying cause for this exception.
-   * @param context The internal state of the transaction at the time of the exception.
+   * @param context The internal state of the transaction at the time of the
+   * exception.
    */
   explicit transaction_exception(const std::runtime_error& cause,
                                  const transaction_context& context,
@@ -99,7 +101,7 @@ public:
    *
    * @returns Internal state of transaction.
    */
-  auto get_transaction_result() const
+  [[nodiscard]] auto get_transaction_result() const
     -> std::pair<couchbase::transaction_error_context, couchbase::transactions::transaction_result>
   {
     return { error_context(), { result_.transaction_id, result_.unstaging_complete } };
@@ -110,7 +112,7 @@ public:
    *
    * @returns The underlying cause for this exception.
    */
-  auto cause() const -> external_exception
+  [[nodiscard]] auto cause() const -> external_exception
   {
     return cause_;
   }
@@ -118,7 +120,7 @@ public:
    * @brief The type of the exception - see @ref failure_type
    * @return The failure type.
    */
-  auto type() const -> failure_type
+  [[nodiscard]] auto type() const -> failure_type
   {
     return type_;
   }

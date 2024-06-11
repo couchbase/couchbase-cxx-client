@@ -42,12 +42,20 @@ constexpr std::byte path_flag_xattr{ 0b0000'0100U };
  */
 constexpr std::byte path_flag_expand_macros{ 0b0001'0000U };
 
+/**
+ * The value is binary, and not JSON or text.
+ */
+constexpr std::byte path_flag_binary_value{ 0b0010'0000U };
+
 constexpr std::byte
-build_mutate_in_path_flags(bool xattr, bool create_path, bool expand_macro)
+build_mutate_in_path_flags(bool xattr, bool create_path, bool expand_macro, bool binary)
 {
   std::byte flags{ 0 };
   if (xattr) {
     flags |= path_flag_xattr;
+    if (binary) {
+      flags |= path_flag_binary_value;
+    }
   }
   if (create_path) {
     flags |= path_flag_create_parents;
@@ -59,11 +67,14 @@ build_mutate_in_path_flags(bool xattr, bool create_path, bool expand_macro)
 }
 
 constexpr std::byte
-build_lookup_in_path_flags(bool xattr)
+build_lookup_in_path_flags(bool xattr, bool binary)
 {
   std::byte flags{ 0U };
   if (xattr) {
     flags |= path_flag_xattr;
+    if (binary) {
+      flags |= path_flag_binary_value;
+    }
   }
   return flags;
 }
@@ -72,6 +83,18 @@ constexpr bool
 has_xattr_path_flag(std::byte flags)
 {
   return (flags & path_flag_xattr) == path_flag_xattr;
+}
+
+constexpr bool
+has_binary_value_path_flag(std::byte flags)
+{
+  return (flags & path_flag_binary_value) == path_flag_binary_value;
+}
+
+constexpr void
+reset_binary_value_path_flag(std::byte& flags)
+{
+  flags &= ~path_flag_binary_value;
 }
 
 } // namespace couchbase::core::impl::subdoc

@@ -28,9 +28,11 @@ namespace couchbase::core::utils::json
  *
  * This transformer is necessary to handle invalid JSON sent by the server.
  *
- * 1) For some reason "projector" field gets duplicated in the configuration JSON
+ * 1) For some reason "projector" field gets duplicated in the configuration
+ * JSON
  *
- * 2) CXXCBC-13, ns_server sends response to list buckets request with duplicated keys.
+ * 2) CXXCBC-13, ns_server sends response to list buckets request with
+ * duplicated keys.
  */
 template<typename Consumer>
 struct last_key_wins : Consumer {
@@ -58,7 +60,8 @@ parse(const json_string& input) -> tao::json::value
 {
   if (input.is_string()) {
     return parse(input.str());
-  } else if (input.is_binary()) {
+  }
+  if (input.is_binary()) {
     return parse_binary(input.bytes());
   }
   return {};

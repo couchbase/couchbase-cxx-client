@@ -72,6 +72,7 @@ private:
     hello_feature::subdoc_create_as_deleted,
     hello_feature::preserve_ttl,
     hello_feature::subdoc_replica_read,
+    hello_feature::subdoc_binary_xattr,
   };
   std::vector<std::byte> value_;
 

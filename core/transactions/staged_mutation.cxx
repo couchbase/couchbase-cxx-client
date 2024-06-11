@@ -20,6 +20,8 @@
 #include "attempt_context_testing_hooks.hxx"
 #include "core/cluster.hxx"
 
+#include "core/logger/logger.hxx"
+#include "core/transactions/internal/logging.hxx"
 #include "internal/transaction_fields.hxx"
 #include "internal/utils.hxx"
 #include "result.hxx"
@@ -30,7 +32,6 @@
 
 namespace couchbase::core::transactions
 {
-
 auto
 unstaging_state::wait_until_unstage_possible() -> bool
 {
@@ -470,6 +471,7 @@ staged_mutation_queue::rollback_remove_or_replace(
             }
               .specs();
           req.cas = item.doc().cas();
+          req.flags = item.doc().content().flags;
           wrap_durable_request(req, ctx->overall().config());
           return ctx->cluster_ref().execute(
             req,
@@ -538,12 +540,12 @@ staged_mutation_queue::commit_doc(attempt_context_impl* ctx,
           CB_ATTEMPT_CTX_LOG_TRACE(ctx,
                                    "commit doc id {}, content {}, cas {}",
                                    item.doc().id(),
-                                   to_string(item.content()),
+                                   to_string(item.content().data),
                                    item.doc().cas().value());
 
           if (item.type() == staged_mutation_type::INSERT && !cas_zero_mode) {
-            core::operations::insert_request req{ item.doc().id(), item.content() };
-            req.flags = couchbase::codec::codec_flags::json_common_flags;
+            core::operations::insert_request req{ item.doc().id(), item.content().data };
+            req.flags = item.content().flags;
             wrap_durable_request(req, ctx->overall().config());
             return ctx->cluster_ref().execute(
               req,
@@ -571,13 +573,21 @@ staged_mutation_queue::commit_doc(attempt_context_impl* ctx,
             core::operations::mutate_in_request req{ item.doc().id() };
             req.specs =
               couchbase::mutate_in_specs{
+                // TODO(SA): upsert null to "txn" to match Java implementation
+                //
+                // from CoreTransactionAttemptContext.java:
+                // > Upsert this field to better handle illegal doc mutation.
+                // > E.g. run shadowDocSameTxnKVInsert without this, fails
+                // > at this point as path has been removed. Could also handle
+                // > with a spec change to handle that.
                 couchbase::mutate_in_specs::remove(TRANSACTION_INTERFACE_PREFIX_ONLY).xattr(),
                 // subdoc::opcode::set_doc used in replace w/ empty path
-                couchbase::mutate_in_specs::replace_raw("", item.content()),
+                couchbase::mutate_in_specs::replace_raw("", std::move(item.content().data)),
               }
                 .specs();
             req.store_semantics = couchbase::store_semantics::replace;
             req.cas = couchbase::cas(cas_zero_mode ? 0 : item.doc().cas().value());
+            req.flags = item.content().flags;
             wrap_durable_request(req, ctx->overall().config());
             return ctx->cluster_ref().execute(
               req,
@@ -932,5 +942,12 @@ staged_mutation_queue::handle_rollback_remove_or_replace_error(
   } catch (const transaction_operation_failed&) {
     callback(std::current_exception());
   }
+}
+
+auto
+staged_mutation::is_staged_binary() const -> bool
+{
+  return codec::codec_flags::has_common_flags(content_.flags,
+                                              codec::codec_flags::binary_common_flags);
 }
 } // namespace couchbase::core::transactions

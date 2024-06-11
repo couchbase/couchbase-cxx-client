@@ -100,12 +100,13 @@ TEST_CASE("exponential backoff with timeout: will timeout", "[unit]")
                     retry_operation_timeout);
   // sleep_for is only guaranteed to sleep for _at_least_ the time requested.
   // so lets make sure the total elapsed time is at least what we wanted.
-  // TODO: notice that timings are the times that the function is _called_.  The actual start time
-  // for the exponential backoff
-  //       is _before_ that call, so we could be slightly under 100ms in this test.  A very rare
-  //       fail in this tests is possible. So we kept track of the time right before we called the
-  //       function and added that to the elapsed time.  Not perfect, but should prevent the
-  //       occasional spurious failure.
+  // TODO: notice that timings are the times that the function is _called_.  The
+  // actual start time for the exponential backoff
+  //       is _before_ that call, so we could be slightly under 100ms in this
+  //       test.  A very rare fail in this tests is possible. So we kept track
+  //       of the time right before we called the function and added that to the
+  //       elapsed time.  Not perfect, but should prevent the occasional
+  //       spurious failure.
   REQUIRE(state.timings.size() > 0);
   auto extra = chrono::duration_cast<chrono::milliseconds>(state.first_timing() - start);
   REQUIRE(state.elapsed_ms() + extra >= hundred_ms);
@@ -124,11 +125,12 @@ TEST_CASE("exponential backoff with timeout: retry count in range", "[unit]")
   // should be 1+2+4+8+10+10+10+...
   // +/- 10% jitter RECALCULATE if jitter fraction changes!
   // Consider solving exactly if we allow user-supplied jitter fraction.
-  // So retries should be less than or equal 0.9+1.8+3.6+7.2+9+9.. = 13.5 + 9+...(9 times)+ 5.5 = 14
-  // and greater than or equal 1.1+2.2+4.4+8.8+11+... = 16.5 + 11+11...(7 times)+ 6.5 = 12
-  // the # times it will be called is one higher than this.  Also - since sleep_for can be _longer_
-  // than you ask for, we could be significantly under the 12 above.  Let's just make sure they are
-  // not more frequent than the max
+  // So retries should be less than or equal 0.9+1.8+3.6+7.2+9+9.. = 13.5 +
+  // 9+...(9 times)+ 5.5 = 14 and greater than or equal 1.1+2.2+4.4+8.8+11+...
+  // = 16.5 + 11+11...(7 times)+ 6.5 = 12 the # times it will be called is one
+  // higher than this.  Also - since sleep_for can be _longer_ than you ask for,
+  // we could be significantly under the 12 above.  Let's just make sure they
+  // are not more frequent than the max
   REQUIRE(state.timings.size() < 15);
 }
 
@@ -184,7 +186,8 @@ TEST_CASE("exponential backoff with max attempts: will stop at max", "[unit]")
                                                          state.function();
                                                        }),
                     retry_operation_retries_exhausted);
-  // this will delay 1+2+4+8+16+32+128+128+128... = 255+128+128... = 7(to get to 255)+13*128
+  // this will delay 1+2+4+8+16+32+128+128+128... = 255+128+128... = 7(to get to
+  // 255)+13*128
   REQUIRE(21 == state.timings.size());
 }
 
@@ -210,7 +213,8 @@ TEST_CASE("exponential backoff with max attempts: retry timing reasonable", "[un
                                                          state.function();
                                                        }),
                     retry_operation_retries_exhausted);
-  // expect 0,1,2,4,8,16,32,64,128,128..... +/-10% with last one being the remainder
+  // expect 0,1,2,4,8,16,32,64,128,128..... +/-10% with last one being the
+  // remainder
   size_t count = 0;
   auto last = state.timings.size() - 1;
   for (const auto& t : state.timing_differences()) {
@@ -263,12 +267,12 @@ TEST_CASE("retryable op: can have constant delay", "[unit]")
   }
 }
 
-TEST_CASE(
-  "transaction_get_result: can convert core transaction_get_result to public, and visa-versa",
-  "[unit]")
+TEST_CASE("transaction_get_result: can convert core transaction_get_result to "
+          "public, and visa-versa",
+          "[unit]")
 {
   const tao::json::value content{ { "some_number", 0 } };
-  const auto binary_content = couchbase::core::utils::json::generate_binary(content);
+  const auto json_content = couchbase::codec::default_json_transcoder::encode(content);
   const std::string bucket = "bucket";
   const std::string scope = "scope";
   const std::string collection = "collection";
@@ -282,7 +286,8 @@ TEST_CASE(
                                                                "txn_id",
                                                                "attempt_id",
                                                                "op_id",
-                                                               binary_content,
+                                                               json_content,
+                                                               {} /* binary_content */,
                                                                "cas_pre_txn",
                                                                "rev_pre_txn",
                                                                0,
@@ -295,42 +300,42 @@ TEST_CASE(
   SECTION("core->public")
   {
     couchbase::core::transactions::transaction_get_result core_result(
-      { bucket, scope, collection, key }, binary_content, cas.value(), links, metadata);
+      { bucket, scope, collection, key }, json_content, cas.value(), links, metadata);
     auto public_result = core_result.to_public_result();
     REQUIRE(public_result.collection() == collection);
     REQUIRE(public_result.bucket() == bucket);
     REQUIRE(public_result.scope() == scope);
     REQUIRE(public_result.cas() == cas);
     REQUIRE(public_result.key() == key);
-    REQUIRE(public_result.content() == binary_content);
+    REQUIRE(public_result.content() == json_content);
     REQUIRE(public_result.content<tao::json::value>() == content);
     REQUIRE(core_result.collection() == collection);
     REQUIRE(core_result.bucket() == bucket);
     REQUIRE(core_result.scope() == scope);
     REQUIRE(core_result.cas() == cas);
     REQUIRE(core_result.key() == key);
-    // the content is _moved_ when creating the public_result, so lets not touch the
-    // core_result.content() since it can be anything.  The std::vector is _valid_, so we
-    // can manipulate it, but the contents are not guaranteed.
+    // the content is _moved_ when creating the public_result, so lets not touch
+    // the core_result.content() since it can be anything.  The std::vector is
+    // _valid_, so we can manipulate it, but the contents are not guaranteed.
   }
   SECTION("core->public->core")
   {
     couchbase::core::transactions::transaction_get_result core_result(
-      { bucket, scope, collection, key }, binary_content, cas.value(), links, metadata);
+      { bucket, scope, collection, key }, json_content, cas.value(), links, metadata);
     auto public_result = core_result.to_public_result();
     couchbase::core::transactions::transaction_get_result final_core_result(public_result);
     REQUIRE(core_result.collection() == final_core_result.collection());
     REQUIRE(core_result.bucket() == final_core_result.bucket());
     REQUIRE(core_result.scope() == final_core_result.scope());
     REQUIRE(core_result.cas() == final_core_result.cas());
-    REQUIRE(final_core_result.content() == binary_content);
+    REQUIRE(final_core_result.content() == json_content);
     REQUIRE(core_result.key() == final_core_result.key());
     REQUIRE(final_core_result.cas() == cas);
     REQUIRE(final_core_result.bucket() == bucket);
     REQUIRE(final_core_result.scope() == scope);
     REQUIRE(final_core_result.collection() == collection);
     REQUIRE(final_core_result.key() == key);
-    REQUIRE(final_core_result.content() == binary_content);
+    REQUIRE(final_core_result.content() == json_content);
     REQUIRE(final_core_result.links().staged_operation_id() == links.staged_operation_id());
     REQUIRE(final_core_result.links().staged_attempt_id() == links.staged_attempt_id());
     REQUIRE(final_core_result.links().crc32_of_staging() == links.crc32_of_staging());
@@ -344,7 +349,7 @@ TEST_CASE(
     REQUIRE(final_core_result.links().exptime_pre_txn() == links.exptime_pre_txn());
     REQUIRE(final_core_result.links().op() == links.op());
     REQUIRE(final_core_result.links().revid_pre_txn() == links.revid_pre_txn());
-    REQUIRE(final_core_result.links().staged_content() == links.staged_content());
+    REQUIRE(final_core_result.links().staged_content_json() == links.staged_content_json());
     REQUIRE(final_core_result.links().staged_transaction_id() == links.staged_transaction_id());
     REQUIRE(final_core_result.metadata()->cas() == metadata.cas());
     REQUIRE(final_core_result.metadata()->crc32() == metadata.crc32());

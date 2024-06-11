@@ -30,7 +30,7 @@ subdoc::get::encode(core::impl::subdoc::command_bundle& bundle) const
     path_.empty() ? core::impl::subdoc::opcode::get_doc : core::impl::subdoc::opcode::get,
     path_,
     {},
-    core::impl::subdoc::build_lookup_in_path_flags(xattr_),
+    core::impl::subdoc::build_lookup_in_path_flags(xattr_, binary_),
   });
 }
 } // namespace couchbase

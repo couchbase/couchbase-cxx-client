@@ -384,6 +384,7 @@ set(couchbase_cxx_client_FILES
     core/transactions/binary.cxx
     core/transactions/cleanup_testing_hooks.cxx
     core/transactions/exceptions.cxx
+    core/transactions/forward_compat.cxx
     core/transactions/internal/doc_record.cxx
     core/transactions/result.cxx
     core/transactions/staged_mutation.cxx

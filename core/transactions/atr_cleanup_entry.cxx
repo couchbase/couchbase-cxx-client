@@ -24,6 +24,7 @@
 #include "internal/atr_cleanup_entry.hxx"
 #include "internal/doc_record_fmt.hxx"
 #include "internal/exceptions_internal.hxx"
+#include "internal/exceptions_internal_fmt.hxx"
 #include "internal/logging.hxx"
 #include "internal/transactions_cleanup.hxx"
 #include "internal/utils.hxx"
@@ -130,7 +131,7 @@ atr_cleanup_entry::check_atr_and_cleanup(transactions_cleanup_attempt* result)
     result->state(atr_entry_->state());
   }
   auto err =
-    forward_compat::check(forward_compat_stage::CLEANUP_ENTRY, atr_entry_->forward_compat());
+    check_forward_compat(forward_compat_stage::CLEANUP_ENTRY, atr_entry_->forward_compat());
   if (err) {
     throw *err;
   }
@@ -183,44 +184,43 @@ atr_cleanup_entry::do_per_doc(std::vector<doc_record> docs,
       core::operations::lookup_in_request req{ dr.document_id() };
       req.specs =
         lookup_in_specs{
-          lookup_in_specs::get(ATR_ID).xattr(),
-          lookup_in_specs::get(TRANSACTION_ID).xattr(),
-          lookup_in_specs::get(ATTEMPT_ID).xattr(),
-          lookup_in_specs::get(OPERATION_ID).xattr(),
-          lookup_in_specs::get(STAGED_DATA).xattr(),
-          lookup_in_specs::get(ATR_BUCKET_NAME).xattr(),
-          lookup_in_specs::get(ATR_SCOPE_NAME).xattr(),
-          lookup_in_specs::get(ATR_COLL_NAME).xattr(),
-          lookup_in_specs::get(TRANSACTION_RESTORE_PREFIX_ONLY).xattr(),
-          lookup_in_specs::get(TYPE).xattr(),
+          lookup_in_specs::get("txn.id").xattr(),
+          lookup_in_specs::get("txn.atr").xattr(),
+          lookup_in_specs::get("txn.op.type").xattr(),
+          lookup_in_specs::get("txn.op.stgd").xattr(),
+          lookup_in_specs::get("txn.op.crc32").xattr(),
+          lookup_in_specs::get("txn.restore").xattr(),
+          lookup_in_specs::get("txn.fc").xattr(),
           lookup_in_specs::get(subdoc::lookup_in_macro::document).xattr(),
-          lookup_in_specs::get(CRC32_OF_STAGING).xattr(),
-          lookup_in_specs::get(FORWARD_COMPAT).xattr(),
+          lookup_in_specs::get("txn.op.bin").xattr().binary(),
+          lookup_in_specs::get("txn.aux").xattr(),
           lookup_in_specs::get(""),
         }
           .specs();
       req.access_deleted = true;
       // now a blocking lookup_in...
-      auto barrier = std::make_shared<std::promise<result>>();
+      auto barrier = std::make_shared<std::promise<core::operations::lookup_in_response>>();
       cleanup_->cluster_ref().execute(req, [barrier](core::operations::lookup_in_response resp) {
-        barrier->set_value(result::create_from_subdoc_response(resp));
+        barrier->set_value(std::move(resp));
       });
       auto f = barrier->get_future();
-      auto res = wrap_operation_future(f);
+      auto res = f.get();
 
-      if (res.values.empty()) {
-        CB_ATTEMPT_CLEANUP_LOG_TRACE("cannot create a transaction document from {}, ignoring", res);
+      if (res.ctx.ec() || res.fields.empty()) {
+        CB_ATTEMPT_CLEANUP_LOG_TRACE("cannot create a transaction document for {}, ec={}, ignoring",
+                                     dr.document_id(),
+                                     res.ctx.ec().message());
         continue;
       }
-      auto doc = transaction_get_result::create_from(dr.document_id(), res);
+      auto doc = transaction_get_result::create_from(res);
       // now let's decide if we call the function or not
-      if (!(doc.links().has_staged_content() || doc.links().is_document_being_removed()) ||
-          !doc.links().has_staged_write()) {
+      if (!doc.links().is_document_in_transaction() || !doc.links().has_staged_write()) {
         CB_ATTEMPT_CLEANUP_LOG_TRACE("document {} has no staged content - assuming it was "
                                      "committed and skipping",
                                      dr.id());
         continue;
-      } else if (doc.links().staged_attempt_id() != attempt_id_) {
+      }
+      if (doc.links().staged_attempt_id() != attempt_id_) {
         CB_ATTEMPT_CLEANUP_LOG_TRACE("document {} staged for different attempt {}, skipping",
                                      dr.id(),
                                      doc.links().staged_attempt_id().value_or("<none>)"));
@@ -237,7 +237,7 @@ atr_cleanup_entry::do_per_doc(std::vector<doc_record> docs,
           continue;
         }
       }
-      call(doc, res.is_deleted);
+      call(doc, res.deleted);
     } catch (const client_error& e) {
       error_class ec = e.ec();
       switch (ec) {
@@ -258,7 +258,7 @@ atr_cleanup_entry::commit_docs(std::optional<std::vector<doc_record>> docs, dura
   if (docs) {
     do_per_doc(*docs, true, [&](transaction_get_result& doc, bool) {
       if (doc.links().has_staged_content()) {
-        auto content = doc.links().staged_content();
+        auto content = doc.links().staged_content_json_or_binary();
         auto ec = wait_for_hook([this, key = doc.id().key()](auto handler) {
           return cleanup_->config().cleanup_hooks->before_commit_doc(key, std::move(handler));
         });
@@ -266,7 +266,8 @@ atr_cleanup_entry::commit_docs(std::optional<std::vector<doc_record>> docs, dura
           throw client_error(*ec, "before_commit_doc hook threw error");
         }
         if (doc.links().is_deleted()) {
-          core::operations::insert_request req{ doc.id(), content };
+          core::operations::insert_request req{ doc.id(), content.data };
+          req.flags = content.flags;
           auto barrier = std::make_shared<std::promise<result>>();
           auto f = barrier->get_future();
           cleanup_->cluster_ref().execute(
@@ -279,11 +280,12 @@ atr_cleanup_entry::commit_docs(std::optional<std::vector<doc_record>> docs, dura
           req.specs =
             couchbase::mutate_in_specs{
               couchbase::mutate_in_specs::remove(TRANSACTION_INTERFACE_PREFIX_ONLY).xattr(),
-              couchbase::mutate_in_specs::replace_raw({}, content),
+              couchbase::mutate_in_specs::replace_raw({}, content.data),
             }
               .specs();
           req.cas = doc.cas();
           req.store_semantics = couchbase::store_semantics::replace;
+          req.flags = content.flags;
           wrap_durable_request(req, dl);
           auto barrier = std::make_shared<std::promise<result>>();
           auto f = barrier->get_future();
@@ -294,7 +296,7 @@ atr_cleanup_entry::commit_docs(std::optional<std::vector<doc_record>> docs, dura
           wrap_operation_future(f);
         }
         CB_ATTEMPT_CLEANUP_LOG_TRACE(
-          "commit_docs replaced content of doc {} with {}", doc.id(), to_string(content));
+          "commit_docs replaced content of doc {} with {}", doc.id(), to_string(content.data));
       } else {
         CB_ATTEMPT_CLEANUP_LOG_TRACE("commit_docs skipping document {}, no staged content",
                                      doc.id());
@@ -321,6 +323,7 @@ atr_cleanup_entry::remove_docs(std::optional<std::vector<doc_record>> docs, dura
           }
             .specs();
         req.cas = doc.cas();
+        req.flags = doc.content().flags;
         req.access_deleted = true;
         wrap_durable_request(req, dl);
         auto barrier = std::make_shared<std::promise<result>>();
@@ -398,6 +401,7 @@ atr_cleanup_entry::remove_txn_links(std::optional<std::vector<doc_record>> docs,
           .specs();
       req.access_deleted = true;
       req.cas = doc.cas();
+      req.flags = doc.content().flags;
       wrap_durable_request(req, dl);
       auto barrier = std::make_shared<std::promise<result>>();
       auto f = barrier->get_future();

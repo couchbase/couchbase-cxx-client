@@ -18,7 +18,10 @@
 #include <couchbase/transactions/transaction_query_result.hxx>
 #include <couchbase/transactions/transactions_config.hxx>
 
+#include "core/document_id.hxx"
+#include "core/operations/document_lookup_in.hxx"
 #include "core/transactions/result.hxx"
+#include "core/utils/movable_function.hxx"
 #include "exceptions_internal.hxx"
 
 #include <chrono>
@@ -34,7 +37,10 @@
 #include <asio/steady_timer.hpp>
 #include <utility>
 
-namespace couchbase::core::transactions
+namespace couchbase::core
+{
+class cluster;
+namespace transactions
 {
 // returns the parsed server time from the result of a
 // lookup_in_spec::get(subdoc::lookup_in_macro::vbucket).xattr() call
@@ -144,10 +150,13 @@ error_class_from_response(const Resp& resp)
   if (resp.ctx.ec() == couchbase::errc::key_value::path_exists) {
     return FAIL_PATH_ALREADY_EXISTS;
   }
+  if (auto ec = error_class_from_response_extras(resp); ec) {
+    return ec;
+  }
   if (resp.ctx.ec()) {
     return FAIL_OTHER;
   }
-  return error_class_from_response_extras(resp);
+  return {};
 }
 
 static constexpr std::chrono::milliseconds DEFAULT_RETRY_OP_DELAY{ 3 };
@@ -413,4 +422,5 @@ atr_id_from_bucket_and_key(const couchbase::transactions::transactions_config::b
                            const std::string& bucket,
                            const std::string& key);
 
-} // namespace couchbase::core::transactions
+} // namespace transactions
+} // namespace couchbase::core

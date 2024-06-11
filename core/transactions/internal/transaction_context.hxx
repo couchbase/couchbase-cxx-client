@@ -146,11 +146,11 @@ public:
   void get_optional(const core::document_id& id, async_attempt_context::Callback&& cb);
 
   void insert(const core::document_id& id,
-              const std::vector<std::byte>& content,
+              codec::encoded_value content,
               async_attempt_context::Callback&& cb);
 
   void replace(const transaction_get_result& doc,
-               const std::vector<std::byte>& content,
+               codec::encoded_value content,
                async_attempt_context::Callback&& cb);
 
   void remove(const transaction_get_result& doc, async_attempt_context::VoidCallback&& cb);
@@ -187,9 +187,9 @@ private:
   couchbase::transactions::transactions_config::built config_;
 
   /**
-   * Will be non-zero only when resuming a deferred transaction. It records how much time has
-   * elapsed in total in the deferred transaction, including the time spent in the original
-   * transaction plus any time spent while deferred.
+   * Will be non-zero only when resuming a deferred transaction. It records how
+   * much time has elapsed in total in the deferred transaction, including the
+   * time spent in the original transaction plus any time spent while deferred.
    */
   const std::chrono::nanoseconds deferred_elapsed_;
 

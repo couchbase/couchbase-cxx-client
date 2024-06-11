@@ -18,6 +18,7 @@
 #include "core/document_id.hxx"
 #include "core/operations.hxx"
 #include "core/utils/json.hxx"
+#include "couchbase/codec/encoded_value.hxx"
 #include "document_metadata.hxx"
 #include "transaction_links.hxx"
 #include <couchbase/fmt/cas.hxx>
@@ -39,10 +40,10 @@ private:
   couchbase::cas cas_{};
   core::document_id document_id_{};
   transaction_links links_{};
-  std::vector<std::byte> content_;
+  codec::encoded_value content_{};
 
-  /** This is needed for provide {BACKUP-FIELDS}.  It is only needed from the get to the staged
-   * mutation, hence Optional. */
+  /** This is needed for provide {BACKUP-FIELDS}.  It is only needed from the
+   * get to the staged mutation, hence Optional. */
   std::optional<document_metadata> metadata_{};
 
 public:
@@ -55,7 +56,7 @@ public:
 
   /** @internal */
   transaction_get_result(const transaction_get_result& doc) = default;
-  transaction_get_result(transaction_get_result&& doc) = default;
+  transaction_get_result(transaction_get_result&& doc) noexcept = default;
 
   /*
   transaction_get_result(const transaction_op_error_context& ctx)
@@ -64,14 +65,13 @@ public:
   }*/
 
   /** @internal */
-  template<typename Content>
   transaction_get_result(core::document_id id,
-                         Content content,
+                         codec::encoded_value content,
                          std::uint64_t cas,
                          transaction_links links,
                          std::optional<document_metadata> metadata)
     : cas_(cas)
-    , document_id_(id)
+    , document_id_(std::move(id))
     , links_(std::move(links))
     , content_(std::move(content))
     , metadata_(std::move(metadata))
@@ -94,7 +94,7 @@ public:
   }
 
   transaction_get_result(core::document_id id, const tao::json::value& json)
-    : document_id_(id)
+    : document_id_(std::move(id))
     , links_(json)
     , metadata_(json.optional<std::string>("scas").value_or(""))
   {
@@ -106,7 +106,8 @@ public:
       cas_ = couchbase::cas(stoull(cas->as<std::string>()));
     }
     if (const auto* doc = json.find("doc"); doc != nullptr) {
-      content_ = core::utils::json::generate_binary(doc->get_object());
+      content_ = { core::utils::json::generate_binary(doc->get_object()),
+                   codec::codec_flags::json_common_flags };
     }
   }
 
@@ -122,48 +123,12 @@ public:
   }
 
   /** @internal */
-  template<typename Content>
-  static auto create_from(const transaction_get_result& document,
-                          Content content) -> transaction_get_result
-  {
-    transaction_links links(document.links().atr_id(),
-                            document.links().atr_bucket_name(),
-                            document.links().atr_scope_name(),
-                            document.links().atr_collection_name(),
-                            document.links().staged_transaction_id(),
-                            document.links().staged_attempt_id(),
-                            document.links().staged_operation_id(),
-                            document.links().staged_content(),
-                            document.links().cas_pre_txn(),
-                            document.links().revid_pre_txn(),
-                            document.links().exptime_pre_txn(),
-                            document.links().crc32_of_staging(),
-                            document.links().op(),
-                            document.links().forward_compat(),
-                            document.links().is_deleted());
-
-    return { document.id(), content, document.cas().value(), links, document.metadata() };
-  }
-
-  /** @internal */
-  static auto create_from(const core::document_id& id, const result& res) -> transaction_get_result;
+  static transaction_get_result create_from(const transaction_get_result& document,
+                                            codec::encoded_value content);
 
   /** @internal */
   static auto create_from(const core::operations::lookup_in_response& resp)
     -> transaction_get_result;
-
-  /** @internal */
-  template<typename Content>
-  auto operator=(const transaction_get_result& other) -> transaction_get_result&
-  {
-    if (this != &other) {
-      document_id_ = other.document_id_;
-      content_ = other.content_;
-      cas_ = other.cas_;
-      links_ = other.links_;
-    }
-    return *this;
-  }
 
   /**
    * @brief Get document id.
@@ -245,10 +210,19 @@ public:
    *
    * @return content of the document.
    */
-  template<typename Content>
-  [[nodiscard]] auto content() const -> Content
+  template<typename Document,
+           typename Transcoder = codec::default_json_transcoder,
+           std::enable_if_t<!codec::is_transcoder_v<Document>, bool> = true,
+           std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
+  [[nodiscard]] auto content() const -> Document
   {
-    return codec::tao_json_serializer::deserialize<Content>(content_);
+    return Transcoder::template decode<Document>(content_);
+  }
+
+  template<typename Transcoder, std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
+  [[nodiscard]] auto content() const -> typename Transcoder::document_type
+  {
+    return Transcoder::decode(content_);
   }
 
   /**
@@ -256,7 +230,7 @@ public:
    *
    * @return content
    */
-  [[nodiscard]] auto content() const -> const std::vector<std::byte>&
+  [[nodiscard]] auto content() const -> const codec::encoded_value&
   {
     return content_;
   }
@@ -264,16 +238,16 @@ public:
    * Copy content into document
    * @param content
    */
-  void content(std::vector<std::byte> content)
+  void content(const codec::encoded_value& content)
   {
-    content_ = std::move(content);
+    content_ = content;
   }
   /**
    * Move content into document
    *
    * @param content
    */
-  void content(std::vector<std::byte>&& content)
+  void content(codec::encoded_value&& content)
   {
     content_ = std::move(content);
   }

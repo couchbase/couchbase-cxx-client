@@ -16,11 +16,14 @@
 
 #pragma once
 
+#include <couchbase/codec/encoded_value.hxx>
+
 #include <fmt/format.h>
+#include <tao/json/value.hpp>
+
 #include <optional>
 #include <ostream>
 #include <string>
-#include <tao/json/value.hpp>
 
 namespace couchbase::core::transactions
 {
@@ -36,7 +39,8 @@ private:
   std::optional<std::string> staged_transaction_id_;
   std::optional<std::string> staged_attempt_id_;
   std::optional<std::string> staged_operation_id_;
-  std::optional<std::vector<std::byte>> staged_content_;
+  std::optional<codec::encoded_value> staged_content_json_;
+  std::optional<codec::encoded_value> staged_content_binary_;
 
   // for {BACKUP_FIELDS}
   std::optional<std::string> cas_pre_txn_;
@@ -56,7 +60,8 @@ public:
                     std::optional<std::string> staged_transaction_id,
                     std::optional<std::string> staged_attempt_id,
                     std::optional<std::string> staged_operation_id,
-                    std::optional<std::vector<std::byte>> staged_content,
+                    std::optional<codec::encoded_value> staged_content_json,
+                    std::optional<codec::encoded_value> staged_content_binary,
                     std::optional<std::string> cas_pre_txn,
                     std::optional<std::string> revid_pre_txn,
                     std::optional<std::uint32_t> exptime_pre_txn,
@@ -71,7 +76,8 @@ public:
     , staged_transaction_id_(std::move(staged_transaction_id))
     , staged_attempt_id_(std::move(staged_attempt_id))
     , staged_operation_id_(std::move(staged_operation_id))
-    , staged_content_(std::move(staged_content))
+    , staged_content_json_(std::move(staged_content_json))
+    , staged_content_binary_(std::move(staged_content_binary))
     , cas_pre_txn_(std::move(cas_pre_txn))
     , revid_pre_txn_(std::move(revid_pre_txn))
     , exptime_pre_txn_(exptime_pre_txn)
@@ -132,17 +138,14 @@ public:
   }
 
   /**
-   * Note this doesn't guarantee an active transaction, as it may have expired and need rolling
-   * back.
+   * Note this doesn't guarantee an active transaction, as it may have expired
+   * and need rolling back.
    */
   [[nodiscard]] auto is_document_in_transaction() const -> bool
   {
     return !!(atr_id_);
   }
-  [[nodiscard]] auto has_staged_content() const -> bool
-  {
-    return !!(staged_content_);
-  }
+
   [[nodiscard]] auto is_document_being_removed() const -> bool
   {
     return (!!op_ && *op_ == "remove");
@@ -218,9 +221,24 @@ public:
     return crc32_of_staging_;
   }
 
-  [[nodiscard]] auto staged_content() const -> std::vector<std::byte>
+  [[nodiscard]] auto has_staged_content() const -> bool
   {
-    return staged_content_.value_or(std::vector<std::byte>{});
+    return staged_content_json_ || staged_content_binary_;
+  }
+
+  [[nodiscard]] codec::encoded_value staged_content_json_or_binary() const
+  {
+    return staged_content_json_.value_or(staged_content_binary_.value_or(codec::encoded_value{}));
+  }
+
+  [[nodiscard]] codec::encoded_value staged_content_json() const
+  {
+    return staged_content_json_.value_or(codec::encoded_value{});
+  }
+
+  [[nodiscard]] codec::encoded_value staged_content_binary() const
+  {
+    return staged_content_binary_.value_or(codec::encoded_value{});
   }
 
   [[nodiscard]] auto forward_compat() const -> std::optional<tao::json::value>

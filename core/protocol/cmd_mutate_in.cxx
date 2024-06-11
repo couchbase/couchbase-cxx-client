@@ -115,10 +115,16 @@ mutate_in_request_body::preserve_expiry()
 void
 mutate_in_request_body::fill_extras()
 {
-  if (expiry_ != 0) {
+  if (expiry_ != 0 || user_flags_) {
     extras_.resize(sizeof(expiry_));
     std::uint32_t field = utils::byte_swap(expiry_);
     memcpy(extras_.data(), &field, sizeof(field));
+  }
+  if (user_flags_) {
+    std::size_t offset = extras_.size();
+    extras_.resize(offset + sizeof(std::uint32_t));
+    std::uint32_t field = utils::byte_swap(user_flags_.value());
+    memcpy(extras_.data() + offset, &field, sizeof(field));
   }
   if (flags_ != std::byte{ 0U }) {
     std::size_t offset = extras_.size();

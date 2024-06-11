@@ -27,6 +27,7 @@
 #include "core/error_context/query_public_json.hxx"
 #include "core/error_context/search_json.hxx"
 #include "core/error_context/subdocument_json.hxx"
+#include "core/transactions/internal/exceptions_internal_fmt.hxx"
 #include "error.hxx"
 
 #include <memory>
@@ -162,10 +163,9 @@ auto
 make_error(const couchbase::core::transactions::transaction_operation_failed& core_tof)
   -> couchbase::error
 {
-
   return { couchbase::errc::transaction_op::transaction_op_failed,
-           "",
-           couchbase::error_context({}, internal_error_context(core_tof)),
+           core_tof.what(),
+           couchbase::error_context(tao::json::empty_object, internal_error_context(core_tof)),
            error(errc::make_error_code(
              transaction_op_errc_from_external_exception(core_tof.cause()))) };
 }

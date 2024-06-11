@@ -39,6 +39,11 @@ mutate_in_request::encode_to(mutate_in_request::encoded_request_type& encoded,
   for (std::size_t i = 0; i < specs.size(); ++i) {
     auto& entry = specs[i];
     entry.original_index_ = i;
+
+    if (impl::subdoc::has_binary_value_path_flag(specs[i].flags_) &&
+        !context.supports_feature(protocol::hello_feature::subdoc_binary_xattr)) {
+      impl::subdoc::reset_binary_value_path_flag(specs[i].flags_);
+    }
   }
   std::stable_sort(specs.begin(), specs.end(), [](const auto& lhs, const auto& rhs) {
     /* move XATTRs to the beginning of the vector */
@@ -60,6 +65,11 @@ mutate_in_request::encode_to(mutate_in_request::encoded_request_type& encoded,
   if (preserve_expiry) {
     encoded.body().preserve_expiry();
   }
+
+  if (context.supports_feature(protocol::hello_feature::subdoc_binary_xattr) && flags) {
+    encoded.body().user_flags(flags.value());
+  }
+
   return {};
 }
 

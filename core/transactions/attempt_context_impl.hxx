@@ -22,6 +22,7 @@
 #include <couchbase/transactions/transaction_query_options.hxx>
 
 #include "attempt_context_testing_hooks.hxx"
+#include "couchbase/codec/encoded_value.hxx"
 #include "error_list.hxx"
 #include "waitable_op_list.hxx"
 
@@ -34,11 +35,9 @@
 #include "internal/transaction_context.hxx"
 #include "transaction_get_result.hxx"
 
-#include <chrono>
-#include <list>
+#include <cstdint>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <utility>
 
 // implemented in core::impl::query, to take advantage of the statics over there
@@ -59,8 +58,8 @@ build_transaction_query_request(couchbase::query_options::built opts)
 namespace couchbase::core::transactions
 {
 /**
- * Provides methods to allow an application's transaction logic to read, mutate, insert and delete
- * documents, as well as commit or rollback the transaction.
+ * Provides methods to allow an application's transaction logic to read, mutate,
+ * insert and delete documents, as well as commit or rollback the transaction.
  */
 class transactions;
 enum class forward_compat_stage;
@@ -91,69 +90,43 @@ private:
   // transaction_context needs access to the two functions below
   friend class transaction_context;
 
-  auto insert_raw(const couchbase::collection& coll,
-                  const std::string& id,
-                  std::vector<std::byte> content)
-    -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result> override
-  {
-    return wrap_call_for_public_api([this, coll, &id, &content]() -> transaction_get_result {
-      return insert_raw({ coll.bucket_name(), coll.scope_name(), coll.name(), id }, content);
-    });
-  }
+  auto insert_raw(const collection& coll, const std::string& id, codec::encoded_value content)
+    -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result> override;
+  auto insert_raw(const core::document_id& id, codec::encoded_value content)
+    -> core::transactions::transaction_get_result override;
 
-  auto insert_raw(const core::document_id& id,
-                  const std::vector<std::byte>& content) -> transaction_get_result override;
   void insert_raw(const collection& coll,
                   std::string id,
-                  std::vector<std::byte> content,
-                  couchbase::transactions::async_result_handler&& handler) override
-  {
-    insert_raw({ coll.bucket_name(), coll.scope_name(), coll.name(), std::move(id) },
-               content,
-               [this, handler = std::move(handler)](
-                 std::exception_ptr err, std::optional<transaction_get_result> res) mutable {
-                 wrap_callback_for_async_public_api(err, res, std::move(handler));
-               });
-  }
+                  codec::encoded_value content,
+                  couchbase::transactions::async_result_handler&& handler) override;
+
   void insert_raw(const core::document_id& id,
-                  const std::vector<std::byte>& content,
+                  codec::encoded_value content,
                   Callback&& cb) override;
 
-  auto replace_raw(const transaction_get_result& document,
-                   const std::vector<std::byte>& content) -> transaction_get_result override;
-
   auto replace_raw(const couchbase::transactions::transaction_get_result& doc,
-                   std::vector<std::byte> content)
-    -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result> override
-  {
-    return wrap_call_for_public_api([this, doc, &content]() -> transaction_get_result {
-      return replace_raw(transaction_get_result(doc), content);
-    });
-  }
+                   codec::encoded_value content)
+    -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result> override;
+
+  auto replace_raw(const transaction_get_result& document,
+                   codec::encoded_value content) -> transaction_get_result override;
 
   void replace_raw(couchbase::transactions::transaction_get_result doc,
-                   std::vector<std::byte> content,
-                   couchbase::transactions::async_result_handler&& handler) override
-  {
-    replace_raw(core::transactions::transaction_get_result(doc),
-                content,
-                [this, handler = std::move(handler)](
-                  std::exception_ptr err, std::optional<transaction_get_result> res) mutable {
-                  wrap_callback_for_async_public_api(err, res, std::move(handler));
-                });
-  }
+                   codec::encoded_value content,
+                   couchbase::transactions::async_result_handler&& handler) override;
+
   void replace_raw(const transaction_get_result& document,
-                   const std::vector<std::byte>& content,
+                   codec::encoded_value content,
                    Callback&& cb) override;
 
   void remove_staged_insert(const core::document_id& id, VoidCallback&& cb);
 
   void get_with_query(const core::document_id& id, bool optional, Callback&& cb);
   void insert_raw_with_query(const core::document_id& id,
-                             const std::vector<std::byte>& content,
+                             codec::encoded_value content,
                              Callback&& cb);
   void replace_raw_with_query(const transaction_get_result& document,
-                              const std::vector<std::byte>& content,
+                              codec::encoded_value content,
                               Callback&& cb);
   void remove_with_query(const transaction_get_result& document, VoidCallback&& cb);
 
@@ -170,7 +143,7 @@ private:
   auto handle_query_error(const core::operations::query_response& resp) -> std::exception_ptr;
   void wrap_query(const std::string& statement,
                   const couchbase::transactions::transaction_query_options& opts,
-                  const std::vector<core::json_string>& params,
+                  std::vector<core::json_string> params,
                   const tao::json::value& txdata,
                   const std::string& hook_point,
                   bool check_expiry,
@@ -192,10 +165,10 @@ private:
       CB_ATTEMPT_CTX_LOG_ERROR(
         this, "op callback called a txn operation that threw exception {}", op_ex.what());
     } catch (const op_exception& op_ex) {
-      CB_ATTEMPT_CTX_LOG_WARNING(
-        this,
-        "op callback called a txn operation that threw (and didn't handle) a op_exception {}",
-        op_ex.what());
+      CB_ATTEMPT_CTX_LOG_WARNING(this,
+                                 "op callback called a txn operation that "
+                                 "threw (and didn't handle) a op_exception {}",
+                                 op_ex.what());
       errors_.push_back(transaction_operation_failed(
                           error_class_from_external_exception(op_ex.cause()), op_ex.what())
                           .cause(op_ex.cause()));
@@ -248,7 +221,8 @@ private:
     try {
       std::rethrow_exception(err);
     } catch (const transaction_operation_failed& e) {
-      // if this is a transaction_operation_failed, we need to cache it before moving on...
+      // if this is a transaction_operation_failed, we need to cache it before
+      // moving on...
       errors_.push_back(e);
       try {
         op_list_.decrement_in_flight();
@@ -282,7 +256,8 @@ private:
     try {
       std::rethrow_exception(err);
     } catch (const transaction_operation_failed& e) {
-      // if this is a transaction_operation_failed, we need to cache it before moving on...
+      // if this is a transaction_operation_failed, we need to cache it before
+      // moving on...
       errors_.push_back(e);
       try {
         op_list_.decrement_in_flight();
@@ -331,8 +306,10 @@ private:
       existing_error();
       return func();
     } catch (const async_operation_conflict& e) {
-      CB_ATTEMPT_CTX_LOG_ERROR(
-        this, "Attempted to perform txn operation after commit/rollback started: {}", e.what());
+      CB_ATTEMPT_CTX_LOG_ERROR(this,
+                               "Attempted to perform txn operation after "
+                               "commit/rollback started: {}",
+                               e.what());
       // you cannot call op_completed_with_error, as it tries to decrement
       // the op count, however it didn't successfully increment it, so...
       auto err = transaction_operation_failed(FAIL_OTHER, "async operation conflict");
@@ -350,9 +327,10 @@ private:
       }
       op_completed_with_error_no_cache(std::move(cb), std::make_exception_ptr(err));
     } catch (const transaction_operation_failed& e) {
-      // thrown only from call_func when previous error exists, so eat it, unless
-      // it has PREVIOUS_OP_FAILED cause
-      if (e.cause() == PREVIOUS_OPERATION_FAILED) {
+      // thrown only from call_func when previous error exists, so eat it,
+      // unless it has PREVIOUS_OP_FAILED or FEATURE_NOT_AVAILABLE_EXCEPTION
+      // cause
+      if (e.cause() == PREVIOUS_OPERATION_FAILED || e.cause() == FEATURE_NOT_AVAILABLE_EXCEPTION) {
         op_completed_with_error(std::move(cb), e);
       }
     } catch (const op_exception& e) {
@@ -584,16 +562,14 @@ private:
                                   std::optional<std::string>,
                                   std::optional<transaction_get_result>)>&& cb);
 
-  auto create_staging_request(const core::document_id& in,
-                              const transaction_get_result* document,
-                              const std::string type,
-                              const std::string op_id,
-                              std::optional<std::vector<std::byte>> content = std::nullopt)
-    -> core::operations::mutate_in_request;
+  auto create_document_metadata(const std::string& operation_type,
+                                const std::string& operation_id,
+                                const std::optional<document_metadata>& document_metadata,
+                                std::uint32_t user_flags_to_stage) -> tao::json::value;
 
   template<typename Handler, typename Delay>
   void create_staged_insert(const core::document_id& id,
-                            const std::vector<std::byte>& content,
+                            codec::encoded_value content,
                             uint64_t cas,
                             Delay&& delay,
                             const std::string& op_id,
@@ -601,18 +577,19 @@ private:
 
   template<typename Handler>
   void create_staged_replace(const transaction_get_result& document,
-                             const std::vector<std::byte>& content,
+                             codec::encoded_value content,
                              const std::string& op_id,
                              Handler&& cb);
 
   template<typename Handler, typename Delay>
   void create_staged_insert_error_handler(const core::document_id& id,
-                                          const std::vector<std::byte>& content,
+                                          codec::encoded_value content,
                                           uint64_t cas,
                                           Delay&& delay,
                                           const std::string& op_id,
                                           Handler&& cb,
                                           error_class ec,
+                                          external_exception cause,
                                           const std::string& message);
 
   auto wrap_call_for_public_api(std::function<transaction_get_result()>&& handler)

@@ -30,7 +30,7 @@ subdoc::replace::encode(core::impl::subdoc::command_bundle& bundle) const
     path_.empty() ? core::impl::subdoc::opcode::set_doc : core::impl::subdoc::opcode::replace,
     path_,
     value_,
-    core::impl::subdoc::build_mutate_in_path_flags(xattr_, false, expand_macro_),
+    core::impl::subdoc::build_mutate_in_path_flags(xattr_, false, expand_macro_, binary_),
   });
 }
 } // namespace couchbase

@@ -42,9 +42,9 @@ class transaction_get_result
 private:
   std::shared_ptr<couchbase::core::transactions::transaction_get_result> base_{};
 
-  transaction_get_result(
+  explicit transaction_get_result(
     std::shared_ptr<couchbase::core::transactions::transaction_get_result> base)
-    : base_(base)
+    : base_(std::move(base))
   {
   }
 
@@ -57,10 +57,19 @@ public:
    *
    * @return content of the document.
    */
-  template<typename Content>
-  [[nodiscard]] auto content() const -> Content
+  template<typename Document,
+           typename Transcoder = codec::default_json_transcoder,
+           std::enable_if_t<!codec::is_transcoder_v<Document>, bool> = true,
+           std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
+  [[nodiscard]] auto content() const -> Document
   {
-    return codec::tao_json_serializer::deserialize<Content>(content());
+    return Transcoder::template decode<Document>(content());
+  }
+
+  template<typename Transcoder, std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
+  [[nodiscard]] auto content() const -> typename Transcoder::document_type
+  {
+    return Transcoder::decode(content());
   }
 
   /**
@@ -68,54 +77,54 @@ public:
    *
    * @return content
    */
-  [[nodiscard]] auto content() const -> const std::vector<std::byte>&;
+  [[nodiscard]] auto content() const -> const codec::encoded_value&;
 
   /**
    * Copy content into document
    * @param content
    */
-  void content(std::vector<std::byte> content);
+  void content(const codec::encoded_value& content);
 
   /**
    * Move content into document
    *
    * @param content
    */
-  void content(std::vector<std::byte>&& content);
+  void content(codec::encoded_value&& content);
 
   /**
    * Get document id.
    *
    * @return the id of this document.
    */
-  [[nodiscard]] auto key() const -> const std::string;
+  [[nodiscard]] auto key() const -> const std::string&;
 
   /**
    * Get the name of the bucket this document is in.
    *
    * @return name of the bucket which contains the document.
    */
-  [[nodiscard]] auto bucket() const -> const std::string;
+  [[nodiscard]] auto bucket() const -> const std::string&;
 
   /**
    * Get the name of the scope this document is in.
    *
    * @return name of the scope which contains the document.
    */
-  [[nodiscard]] auto scope() const -> const std::string;
+  [[nodiscard]] auto scope() const -> const std::string&;
 
   /**
    * Get the name of the collection this document is in.
    *
    * @return name of the collection which contains the document.
    */
-  [[nodiscard]] auto collection() const -> const std::string;
+  [[nodiscard]] auto collection() const -> const std::string&;
 
   /**
    * Get the CAS fot this document
    *
    * @return the CAS of the document.
    */
-  [[nodiscard]] auto cas() const -> const couchbase::cas;
+  [[nodiscard]] auto cas() const -> couchbase::cas;
 };
 } // namespace couchbase::transactions

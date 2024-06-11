@@ -19,6 +19,8 @@
 #include <couchbase/transactions/transaction_query_options.hxx>
 #include <couchbase/transactions/transaction_query_result.hxx>
 
+#include <stdexcept>
+
 namespace couchbase
 {
 class collection;
@@ -40,12 +42,14 @@ public:
   /**
    * Get a document from a collection.
    *
-   * Fetch the document contents, in the form of a @ref transaction_get_result.   This can be used
-   * in subsequent calls to @ref attempt_context::replace or @ref attempt_context::remove
+   * Fetch the document contents, in the form of a @ref transaction_get_result.
+   * This can be used in subsequent calls to @ref attempt_context::replace or
+   * @ref attempt_context::remove
    *
    * @param coll The collection which contains the document.
    * @param id The unique id of the document.
-   * @return The result of the operation, which is an @ref error and a @ref transaction_get_result.
+   * @return The result of the operation, which is an @ref error and a @ref
+   * transaction_get_result.
    */
   virtual auto get(const couchbase::collection& coll,
                    const std::string& id) -> std::pair<error, transaction_get_result> = 0;
@@ -53,56 +57,73 @@ public:
   /**
    * Insert a document into a collection.
    *
-   * Given an id and the content, this inserts a new document into a collection.   Note that
-   * currently this content can be either a <std::vector<std::byte>> or an object which can be
-   * serialized with the @ref codec::tao_json_serializer.
+   * Given an id and the content, this inserts a new document into a collection.
+   * Note that currently this content can be either a <std::vector<std::byte>>
+   * or an object which can be serialized with the @ref
+   * codec::tao_json_serializer.
    *
-   * @tparam Content Type of the contents of the document.
+   * @tparam Document Type of the contents of the document.
    * @param coll Collection in which to insert document.
    * @param id The unique id of the document.
    * @param content The content of the document.
-   * @return The result of the operation, which is an @ref error and a @ref transaction_get_result.
+   * @return The result of the operation, which is an @ref error and a @ref
+   * transaction_get_result.
    */
-  template<typename Content>
+  template<typename Transcoder = codec::default_json_transcoder,
+           typename Document,
+           std::enable_if_t<!std::is_same_v<codec::encoded_value, Document>, bool> = true>
   auto insert(const couchbase::collection& coll,
               const std::string& id,
-              const Content& content) -> std::pair<error, transaction_get_result>
+              const Document& content) -> std::pair<error, transaction_get_result>
   {
-    if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
-      return insert_raw(coll, id, content);
-    } else {
-      return insert_raw(coll, id, codec::tao_json_serializer::serialize(content));
+    codec::encoded_value data;
+    try {
+      data = Transcoder::encode(content);
+    } catch (std::system_error& e) {
+      return { error(e.code(), e.what()), {} };
+    } catch (std::runtime_error& e) {
+      return { error(errc::common::encoding_failure, e.what()), {} };
     }
+    return insert_raw(coll, id, data);
   }
 
   /**
    * Replace the contents of a document in a collection.
    *
-   * Replaces the contents of an existing document. Note that currently this content can be either a
+   * Replaces the contents of an existing document. Note that currently this
+   content can be either a
    * <std::vector<std::byte>> or an object which can be serialized with the @ref
    codec::tao_json_serializer.
 
    * @tparam Content Type of the contents of the document.
-   * @param doc Document whose content will be replaced.  This is gotten from a call to @ref
-   attempt_context::get
+   * @param doc Document whose content will be replaced.  This is gotten from a
+   call to @ref attempt_context::get
    * @param content New content of the document.
-   * @return The result of the operation, which is an @ref error and a @ref transaction_get_result.
+   * @return The result of the operation, which is an @ref error and a @ref
+   transaction_get_result.
    */
-  template<typename Content>
+  template<typename Transcoder = codec::default_json_transcoder,
+           typename Document,
+           std::enable_if_t<!std::is_same_v<codec::encoded_value, Document>, bool> = true>
   auto replace(const transaction_get_result& doc,
-               const Content& content) -> std::pair<error, transaction_get_result>
+               const Document& content) -> std::pair<error, transaction_get_result>
   {
-    if constexpr (std::is_same_v<Content, std::vector<std::byte>>) {
-      return replace_raw(doc, content);
-    } else {
-      return replace_raw(doc, codec::tao_json_serializer::serialize(content));
+    codec::encoded_value data;
+    try {
+      data = Transcoder::encode(content);
+    } catch (std::system_error& e) {
+      return { error(e.code(), e.what()), {} };
+    } catch (std::runtime_error& e) {
+      return { error(errc::common::encoding_failure, e.what()), {} };
     }
+    return replace_raw(doc, data);
   }
 
   /**
    * Remove a document.
    *
-   * Removes a document from a collection, where the document was gotten from a previous call to
+   * Removes a document from a collection, where the document was gotten from a
+   * previous call to
    * @ref attempt_context::get
    *
    * @param doc The document to remove.
@@ -115,7 +136,8 @@ public:
    *
    * @param statement The query statement.
    * @param options Options for the query.
-   * @return The result of the operation, with is an @ref error and a @ref transaction_query_result.
+   * @return The result of the operation, with is an @ref error and a @ref
+   * transaction_query_result.
    */
   auto query(const std::string& statement, const transaction_query_options& options = {})
     -> std::pair<error, transaction_query_result>;
@@ -126,7 +148,8 @@ public:
    * @param scope Scope for the query.
    * @param statement The query statement.
    * @param opts Options for the query.
-   * @return The result of the operation, with is an @ref error and a @ref transaction_query_result.
+   * @return The result of the operation, with is an @ref error and a @ref
+   * transaction_query_result.
    */
   auto query(const scope& scope,
              const std::string& statement,
@@ -137,12 +160,12 @@ public:
 
 protected:
   /** @private */
-  virtual auto replace_raw(const transaction_get_result& doc, std::vector<std::byte> content)
+  virtual auto replace_raw(const transaction_get_result& doc, codec::encoded_value content)
     -> std::pair<error, transaction_get_result> = 0;
   /** @private */
   virtual auto insert_raw(const couchbase::collection& coll,
                           const std::string& id,
-                          std::vector<std::byte> content)
+                          codec::encoded_value document)
     -> std::pair<error, transaction_get_result> = 0;
   /** @private */
   virtual auto do_public_query(const std::string& statement,

@@ -30,7 +30,7 @@ subdoc::count::encode(core::impl::subdoc::command_bundle& bundle) const
     core::impl::subdoc::opcode::get_count,
     path_,
     {},
-    core::impl::subdoc::build_lookup_in_path_flags(xattr_),
+    core::impl::subdoc::build_lookup_in_path_flags(xattr_, false),
   });
 }
 } // namespace couchbase

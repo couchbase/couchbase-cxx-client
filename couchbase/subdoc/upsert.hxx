@@ -56,7 +56,7 @@ public:
   }
 
   /**
-   * Sets that this parent fields should be created automatically.
+   * Sets that parent fields should be created automatically.
    *
    * @param value new value for the option
    * @return this, for chaining
@@ -67,6 +67,21 @@ public:
   auto create_path(bool value = true) -> upsert&
   {
     create_path_ = value;
+    return *this;
+  }
+
+  /**
+   * Sets whether the value should be treated as a binary.
+   *
+   * @param value new value for the option
+   * @return this, for chaining
+   *
+   * @since 1.0.0
+   * @committed
+   */
+  auto binary(bool value = true) -> upsert&
+  {
+    binary_ = value;
     return *this;
   }
 
@@ -102,6 +117,7 @@ private:
   bool xattr_{ false };
   bool expand_macro_{ false };
   bool create_path_{ false };
+  bool binary_{ false };
 };
 } // namespace subdoc
 } // namespace couchbase

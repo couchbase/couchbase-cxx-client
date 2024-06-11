@@ -17,6 +17,7 @@
 
 #include "document_lookup_in.hxx"
 #include "core/impl/subdoc/path_flags.hxx"
+#include "core/protocol/hello_feature.hxx"
 
 #include <couchbase/error_codes.hxx>
 
@@ -24,11 +25,17 @@ namespace couchbase::core::operations
 {
 auto
 lookup_in_request::encode_to(lookup_in_request::encoded_request_type& encoded,
-                             mcbp_context&& /* context */) -> std::error_code
+                             mcbp_context&& context) -> std::error_code
 {
   for (std::size_t i = 0; i < specs.size(); ++i) {
     specs[i].original_index_ = i;
+
+    if (impl::subdoc::has_binary_value_path_flag(specs[i].flags_) &&
+        !context.supports_feature(protocol::hello_feature::subdoc_binary_xattr)) {
+      impl::subdoc::reset_binary_value_path_flag(specs[i].flags_);
+    }
   }
+
   std::stable_sort(specs.begin(), specs.end(), [](const auto& lhs, const auto& rhs) {
     /* move XATTRs to the beginning of the vector */
     return core::impl::subdoc::has_xattr_path_flag(lhs.flags_) &&
