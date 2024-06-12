@@ -20,6 +20,8 @@
 #include "atr_ids.hxx"
 #include "attempt_context_testing_hooks.hxx"
 #include "attempt_state.hxx"
+#include "core/cluster.hxx"
+#include "core/impl/error.hxx"
 #include "core/operations/document_mutate_in.hxx"
 #include "durability_level.hxx"
 #include "exceptions.hxx"
@@ -47,6 +49,78 @@ static const tao::json::value KV_TXDATA{ { "kv", true } };
 // here in that case
 static auto noop_hooks = attempt_context_testing_hooks{};
 
+namespace
+{
+void
+wrap_err_callback_for_async_api(std::exception_ptr err, std::function<void(couchbase::error)>&& cb)
+{
+  if (err) {
+    try {
+      std::rethrow_exception(std::move(err));
+    } catch (const transaction_operation_failed& e) {
+      return cb(core::impl::make_error(e));
+    } catch (...) {
+      return cb({ errc::transaction_op::unknown });
+    }
+  }
+  return cb({});
+}
+
+auto
+wrap_void_call_for_public_api(std::function<void()>&& handler) -> couchbase::error
+{
+  try {
+    handler();
+    return {};
+  } catch (const transaction_operation_failed& e) {
+    return core::impl::make_error(e);
+  } catch (...) {
+    // the handler should catch everything else, but just in case...
+    return { errc::transaction_op::unknown };
+  }
+}
+
+auto
+wrap_call_for_public_api(std::function<transaction_get_result()>&& handler)
+  -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result>
+{
+  try {
+    return { {}, handler().to_public_result() };
+  } catch (const transaction_operation_failed& e) {
+    return { core::impl::make_error(e), {} };
+  } catch (const op_exception& ex) {
+    return { core::impl::make_error(ex.ctx()), {} };
+  } catch (...) {
+    // the handler should catch everything else, but just in case...
+    return { { errc::transaction_op::unknown }, {} };
+  }
+}
+
+void
+wrap_callback_for_async_public_api(
+  std::exception_ptr err,
+  std::optional<transaction_get_result> res,
+  std::function<void(couchbase::error, couchbase::transactions::transaction_get_result)>&& cb)
+{
+  if (res) {
+    return cb({}, res->to_public_result());
+  }
+  if (err) {
+    try {
+      std::rethrow_exception(std::move(err));
+    } catch (const op_exception& e) {
+      return cb(core::impl::make_error(e.ctx()), {});
+    } catch (const transaction_operation_failed& e) {
+      return cb(core::impl::make_error(e), {});
+    } catch (...) {
+      return cb({ errc::transaction_op::unknown }, {});
+    }
+  }
+  return cb({ errc::transaction_op::unknown }, {});
+}
+
+} // namespace
+
 auto
 attempt_context_impl::cluster_ref() const -> const core::cluster&
 {
@@ -70,11 +144,11 @@ attempt_context_impl::attempt_context_impl(transaction_context& transaction_ctx)
 
 attempt_context_impl::~attempt_context_impl() = default;
 
-template<typename Handler>
 void
-attempt_context_impl::check_and_handle_blocking_transactions(const transaction_get_result& doc,
-                                                             forward_compat_stage stage,
-                                                             Handler&& cb)
+attempt_context_impl::check_and_handle_blocking_transactions(
+  const transaction_get_result& doc,
+  forward_compat_stage stage,
+  std::function<void(std::optional<transaction_operation_failed>)>&& cb)
 {
   // The main reason to require doc to be fetched inside the transaction is we
   // can detect this on the client side
@@ -114,7 +188,7 @@ attempt_context_impl::get(const core::document_id& id) -> transaction_get_result
   auto f = barrier->get_future();
   get(id, [barrier](std::exception_ptr err, std::optional<transaction_get_result> res) {
     if (err) {
-      barrier->set_exception(err);
+      barrier->set_exception(std::move(err));
     } else {
       barrier->set_value(*res);
     }
@@ -122,7 +196,9 @@ attempt_context_impl::get(const core::document_id& id) -> transaction_get_result
   return f.get();
 }
 void
-attempt_context_impl::get(const core::document_id& id, Callback&& cb)
+attempt_context_impl::get(
+  const core::document_id& id,
+  std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb)
 {
   if (op_list_.get_mode().is_query()) {
     return get_with_query(id, false, std::move(cb));
@@ -200,15 +276,17 @@ attempt_context_impl::get_optional(const core::document_id& id)
   auto f = barrier->get_future();
   get_optional(id, [barrier](std::exception_ptr err, std::optional<transaction_get_result> res) {
     if (err) {
-      return barrier->set_exception(err);
+      return barrier->set_exception(std::move(err));
     }
-    return barrier->set_value(res);
+    return barrier->set_value(std::move(res));
   });
   return f.get();
 }
 
 void
-attempt_context_impl::get_optional(const core::document_id& id, Callback&& cb)
+attempt_context_impl::get_optional(
+  const core::document_id& id,
+  std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb)
 {
 
   if (op_list_.get_mode().is_query()) {
@@ -346,9 +424,10 @@ attempt_context_impl::create_document_metadata(
 }
 
 void
-attempt_context_impl::replace_raw(const transaction_get_result& document,
-                                  codec::encoded_value content,
-                                  Callback&& cb)
+attempt_context_impl::replace_raw(
+  const transaction_get_result& document,
+  codec::encoded_value content,
+  std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb)
 {
 
   if (op_list_.get_mode().is_query()) {
@@ -394,12 +473,8 @@ attempt_context_impl::replace_raw(const transaction_get_result& document,
           check_and_handle_blocking_transactions(
             document,
             forward_compat_stage::WWC_REPLACING,
-            [this,
-             existing_sm = std::move(existing_sm),
-             document = std::move(document),
-             cb = std::move(cb),
-             op_id,
-             content = std::move(content)](std::optional<transaction_operation_failed> e1) mutable {
+            [this, existing_sm, document, cb = std::move(cb), op_id, content = std::move(content)](
+              std::optional<transaction_operation_failed> e1) mutable {
               if (e1) {
                 return op_completed_with_error(std::move(cb), *e1);
               }
@@ -410,8 +485,8 @@ attempt_context_impl::replace_raw(const transaction_get_result& document,
               select_atr_if_needed_unlocked(
                 tmp_doc,
                 [this,
-                 existing_sm = std::move(existing_sm),
-                 document = std::move(document),
+                 existing_sm,
+                 document,
                  cb = std::move(cb),
                  op_id,
                  content =
@@ -506,18 +581,19 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
         case FAIL_CAS_MISMATCH:
         case FAIL_TRANSIENT:
         case FAIL_AMBIGUOUS:
-          return op_completed_with_error(std::move(cb), err.retry());
+          return op_completed_with_error(std::forward<Handler>(cb), err.retry());
         case FAIL_HARD:
-          return op_completed_with_error(std::move(cb), err.no_rollback());
+          return op_completed_with_error(std::forward<Handler>(cb), err.no_rollback());
         default:
-          return op_completed_with_error(std::move(cb), err);
+          return op_completed_with_error(std::forward<Handler>(cb), err);
       }
     };
   auto ec = wait_for_hook([this, key = document.id().key()](auto handler) mutable {
     return hooks_.before_staged_replace(this, key, std::move(handler));
   });
   if (ec) {
-    return error_handler(*ec, UNKNOWN, "before_staged_replace hook raised error", std::move(cb));
+    return error_handler(
+      *ec, UNKNOWN, "before_staged_replace hook raised error", std::forward<Handler>(cb));
   }
   CB_ATTEMPT_CTX_LOG_TRACE(this,
                            "about to replace doc {} with cas {} in txn {}",
@@ -530,14 +606,14 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
      operation_id = op_id,
      document,
      content = std::move(content),
-     cb = std::move(cb),
+     cb = std::forward<Handler>(cb),
      error_handler = std::move(error_handler)](core::operations::mutate_in_response resp) mutable {
       if (auto ec2 = error_class_from_response(resp); ec2) {
         return error_handler(
           *ec2,
-          external_exception_from_response(resp),
+          external_exception_from_response(std::move(resp)),
           fmt::format("unable to create staged replace ec=\"{}\"", resp.ctx.ec().message()),
-          std::move(cb));
+          std::forward<Handler>(cb));
       }
       return hooks_.after_staged_replace_complete(
         this,
@@ -547,11 +623,13 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
          document,
          content = std::move(content),
          error_handler = std::move(error_handler),
-         cb = std::move(cb),
+         cb = std::forward<Handler>(cb),
          resp = std::move(resp)](auto ec) mutable {
           if (ec) {
-            return error_handler(
-              *ec, UNKNOWN, "after_staged_replace_commit hook returned error", std::move(cb));
+            return error_handler(*ec,
+                                 UNKNOWN,
+                                 "after_staged_replace_commit hook returned error",
+                                 std::forward<Handler>(cb));
           }
 
           std::optional<codec::encoded_value> staged_content_json{};
@@ -596,7 +674,7 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
             out.links().staged_content_json_or_binary(),
             staged_mutation_type::REPLACE,
           });
-          return op_completed_with_callback(std::move(cb), std::optional(out));
+          return op_completed_with_callback(std::forward<Handler>(cb), std::optional(out));
         });
     });
 }
@@ -611,7 +689,7 @@ attempt_context_impl::replace_raw(const transaction_get_result& document,
               std::move(content),
               [barrier](std::exception_ptr err, std::optional<transaction_get_result> res) {
                 if (err) {
-                  return barrier->set_exception(err);
+                  return barrier->set_exception(std::move(err));
                 }
                 barrier->set_value(*res);
               });
@@ -625,9 +703,10 @@ attempt_context_impl::replace_raw(couchbase::transactions::transaction_get_resul
 {
   replace_raw(core::transactions::transaction_get_result(std::move(doc)),
               std::move(content),
-              [this, handler = std::move(handler)](
-                std::exception_ptr err, std::optional<transaction_get_result> res) mutable {
-                wrap_callback_for_async_public_api(err, res, std::move(handler));
+              [handler = std::move(handler)](std::exception_ptr err,
+                                             std::optional<transaction_get_result> res) mutable {
+                wrap_callback_for_async_public_api(
+                  std::move(err), std::move(res), std::move(handler));
               });
 }
 
@@ -660,13 +739,13 @@ attempt_context_impl::insert_raw(const collection& coll,
                                  codec::encoded_value content,
                                  couchbase::transactions::async_result_handler&& handler)
 {
-  insert_raw(
-    { coll.bucket_name(), coll.scope_name(), coll.name(), std::move(id) },
-    std::move(content),
-    [this, handler = std::move(handler)](std::exception_ptr err,
-                                         std::optional<transaction_get_result> res) mutable {
-      wrap_callback_for_async_public_api(std::move(err), std::move(res), std::move(handler));
-    });
+  insert_raw({ coll.bucket_name(), coll.scope_name(), coll.name(), std::move(id) },
+             std::move(content),
+             [handler = std::move(handler)](std::exception_ptr err,
+                                            std::optional<transaction_get_result> res) mutable {
+               wrap_callback_for_async_public_api(
+                 std::move(err), std::move(res), std::move(handler));
+             });
 }
 
 auto
@@ -687,9 +766,10 @@ attempt_context_impl::insert_raw(const core::document_id& id,
 }
 
 void
-attempt_context_impl::insert_raw(const core::document_id& id,
-                                 codec::encoded_value content,
-                                 Callback&& cb)
+attempt_context_impl::insert_raw(
+  const core::document_id& id,
+  codec::encoded_value content,
+  std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb)
 {
   if (op_list_.get_mode().is_query()) {
     return insert_raw_with_query(id, std::move(content), std::move(cb));
@@ -748,7 +828,7 @@ attempt_context_impl::insert_raw(const core::document_id& id,
 
 void
 attempt_context_impl::select_atr_if_needed_unlocked(
-  const core::document_id id,
+  const core::document_id& id,
   std::function<void(std::optional<transaction_operation_failed>)>&& cb)
 {
   try {
@@ -795,7 +875,7 @@ attempt_context_impl::check_atr_entry_for_blocking_document(const transaction_ge
     return hooks_.before_check_atr_entry_for_blocking_doc(
       this,
       doc.id().key(),
-      [this, delay = std::move(delay), cb = std::move(cb), doc = std::move(doc)](auto ec) mutable {
+      [this, delay = std::move(delay), cb = std::forward<Handler>(cb), doc](auto ec) mutable {
         if (ec) {
           return cb(transaction_operation_failed(FAIL_WRITE_WRITE_CONFLICT,
                                                  "document is in another transaction")
@@ -809,7 +889,7 @@ attempt_context_impl::check_atr_entry_for_blocking_document(const transaction_ge
         return active_transaction_record::get_atr(
           cluster_ref(),
           atr_id,
-          [this, delay = std::move(delay), cb = std::move(cb), doc = std::move(doc)](
+          [this, delay = std::move(delay), cb = std::move(cb), doc](
             std::error_code err, std::optional<active_transaction_record> atr) mutable {
             if (!err) {
               if (atr) {
@@ -869,25 +949,24 @@ attempt_context_impl::remove(const transaction_get_result& document, VoidCallbac
                                          transaction_operation_failed(FAIL_OTHER, ec.message()));
         }
         staged_mutation* existing_sm = staged_mutations_->find_any(document.id());
-        auto error_handler =
-          [this](error_class ec, const std::string msg, VoidCallback&& cb) mutable {
-            transaction_operation_failed err(ec, msg);
-            switch (ec) {
-              case FAIL_EXPIRY:
-                expiry_overtime_mode_ = true;
-                return op_completed_with_error(std::move(cb), err.expired());
-              case FAIL_DOC_NOT_FOUND:
-              case FAIL_DOC_ALREADY_EXISTS:
-              case FAIL_CAS_MISMATCH:
-              case FAIL_TRANSIENT:
-              case FAIL_AMBIGUOUS:
-                return op_completed_with_error(std::move(cb), err.retry());
-              case FAIL_HARD:
-                return op_completed_with_error(std::move(cb), err.no_rollback());
-              default:
-                return op_completed_with_error(std::move(cb), err);
-            }
-          };
+        auto error_handler = [this](error_class ec, std::string msg, VoidCallback&& cb) mutable {
+          transaction_operation_failed err(ec, std::move(msg));
+          switch (ec) {
+            case FAIL_EXPIRY:
+              expiry_overtime_mode_ = true;
+              return op_completed_with_error(std::move(cb), err.expired());
+            case FAIL_DOC_NOT_FOUND:
+            case FAIL_DOC_ALREADY_EXISTS:
+            case FAIL_CAS_MISMATCH:
+            case FAIL_TRANSIENT:
+            case FAIL_AMBIGUOUS:
+              return op_completed_with_error(std::move(cb), err.retry());
+            case FAIL_HARD:
+              return op_completed_with_error(std::move(cb), err.no_rollback());
+            default:
+              return op_completed_with_error(std::move(cb), err);
+          }
+        };
         if (check_expiry_pre_commit(STAGE_REMOVE, document.id().key())) {
           return error_handler(FAIL_EXPIRY, "transaction expired", std::move(cb));
         }
@@ -1085,7 +1164,7 @@ attempt_context_impl::remove(const transaction_get_result& document)
   auto f = barrier->get_future();
   remove(document, [barrier](std::exception_ptr err) {
     if (err) {
-      return barrier->set_exception(err);
+      return barrier->set_exception(std::move(err));
     }
     barrier->set_value();
   });
@@ -1191,7 +1270,7 @@ attempt_context_impl::query_begin_work(std::optional<std::string> query_context,
                                     .no_rollback()
                                     .expired()));
       }
-      return cb(err);
+      return cb(std::move(err));
     });
 }
 
@@ -1202,9 +1281,9 @@ choose_error(std::vector<tao::json::value>& errors) -> tao::json::value
   if (errors.size() > 1) {
     // if there's one with a "reason":{"cause", ...} field, choose it
     for (const auto& e : errors) {
-      auto reason = e.find("reason");
-      auto cause = e.find("cause");
-      if (reason && !reason->is_null() && cause && !cause->is_null()) {
+      const auto* reason = e.find("reason");
+      const auto* cause = e.find("cause");
+      if (reason != nullptr && !reason->is_null() && cause != nullptr && !cause->is_null()) {
         return e;
       }
     }
@@ -1339,11 +1418,11 @@ attempt_context_impl::do_query(const std::string& statement,
              txdata,
              STAGE_QUERY,
              true,
-             query_context,
+             std::move(query_context),
              [this, cb = std::move(cb)](std::exception_ptr err,
                                         core::operations::query_response resp) mutable {
                if (err) {
-                 return op_completed_with_error(std::move(cb), err);
+                 return op_completed_with_error(std::move(cb), std::move(err));
                }
                op_completed_with_callback(std::move(cb),
                                           std::optional<core::operations::query_response>(resp));
@@ -1485,7 +1564,7 @@ attempt_context_impl::query(const std::string& statement,
                          [this, statement, query_context, options, cb = std::move(cb)](
                            std::exception_ptr err) mutable {
                            if (err) {
-                             return op_completed_with_error(std::move(cb), err);
+                             return op_completed_with_error(std::move(cb), std::move(err));
                            }
                            return do_query(statement, options, query_context, std::move(cb));
                          });
@@ -1509,7 +1588,7 @@ attempt_context_impl::do_core_query(
         query_context,
         [barrier](std::exception_ptr err, std::optional<core::operations::query_response> resp) {
           if (err) {
-            return barrier->set_exception(err);
+            return barrier->set_exception(std::move(err));
           }
           barrier->set_value(*resp);
         });
@@ -1550,14 +1629,14 @@ make_params(const core::document_id& id,
 
   std::vector<core::json_string> retval;
   auto keyspace = fmt::format("default:`{}`.`{}`.`{}`", id.bucket(), id.scope(), id.collection());
-  retval.push_back(jsonify(keyspace));
+  retval.emplace_back(jsonify(keyspace));
   if (!id.key().empty()) {
-    retval.push_back(jsonify(id.key()));
+    retval.emplace_back(jsonify(id.key()));
   }
   if (content) {
-    retval.push_back(
+    retval.emplace_back(
       std::string(reinterpret_cast<const char*>(content->data.data()), content->data.size()));
-    retval.push_back(core::utils::json::generate(tao::json::empty_object));
+    retval.emplace_back(core::utils::json::generate(tao::json::empty_object));
   }
   return retval;
 }
@@ -1574,7 +1653,10 @@ make_kv_txdata(std::optional<transaction_get_result> doc = std::nullopt) -> tao:
 }
 
 void
-attempt_context_impl::get_with_query(const core::document_id& id, bool optional, Callback&& cb)
+attempt_context_impl::get_with_query(
+  const core::document_id& id,
+  bool optional,
+  std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb)
 {
   cache_error_async(cb, [&]() {
     couchbase::transactions::transaction_query_options opts;
@@ -1617,7 +1699,7 @@ attempt_context_impl::get_with_query(const core::document_id& id, bool optional,
         // for get_optional.   <sigh>
         if (optional) {
           try {
-            std::rethrow_exception(err);
+            std::rethrow_exception(std::move(err));
           } catch (const document_not_found&) {
             return op_completed_with_callback(std::move(cb),
                                               std::optional<transaction_get_result>());
@@ -1625,15 +1707,16 @@ attempt_context_impl::get_with_query(const core::document_id& id, bool optional,
             return op_completed_with_error(std::move(cb), std::current_exception());
           }
         }
-        return op_completed_with_error(std::move(cb), err);
+        return op_completed_with_error(std::move(cb), std::move(err));
       });
   });
 }
 
 void
-attempt_context_impl::insert_raw_with_query(const core::document_id& id,
-                                            codec::encoded_value content,
-                                            Callback&& cb)
+attempt_context_impl::insert_raw_with_query(
+  const core::document_id& id,
+  codec::encoded_value content,
+  std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb)
 {
   cache_error_async(cb, [&]() {
     couchbase::transactions::transaction_query_options opts;
@@ -1678,9 +1761,10 @@ attempt_context_impl::insert_raw_with_query(const core::document_id& id,
 }
 
 void
-attempt_context_impl::replace_raw_with_query(const transaction_get_result& document,
-                                             codec::encoded_value content,
-                                             Callback&& cb)
+attempt_context_impl::replace_raw_with_query(
+  const transaction_get_result& document,
+  codec::encoded_value content,
+  std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb)
 {
   cache_error_async(cb, [&]() {
     couchbase::transactions::transaction_query_options opts;
@@ -1696,7 +1780,7 @@ attempt_context_impl::replace_raw_with_query(const transaction_get_result& docum
         std::exception_ptr err, core::operations::query_response resp) mutable {
         if (err) {
           try {
-            std::rethrow_exception(err);
+            std::rethrow_exception(std::move(err));
           } catch (const query_cas_mismatch& e) {
             return op_completed_with_error(
               std::move(cb), transaction_operation_failed(FAIL_CAS_MISMATCH, e.what()).retry());
@@ -1745,7 +1829,7 @@ attempt_context_impl::remove_with_query(const transaction_get_result& document, 
         std::exception_ptr err, core::operations::query_response /* resp */) mutable {
         if (err) {
           try {
-            std::rethrow_exception(err);
+            std::rethrow_exception(std::move(err));
           } catch (const transaction_operation_failed& e) {
             return op_completed_with_error(std::move(cb), e);
           } catch (const document_not_found& e) {
@@ -1787,7 +1871,7 @@ attempt_context_impl::commit_with_query(VoidCallback&& cb)
       is_done_ = true;
       if (err) {
         try {
-          std::rethrow_exception(err);
+          std::rethrow_exception(std::move(err));
         } catch (const transaction_operation_failed&) {
           return cb(std::current_exception());
         } catch (const query_attempt_expired& e) {
@@ -1829,7 +1913,7 @@ attempt_context_impl::rollback_with_query(VoidCallback&& cb)
                is_done_ = true;
                if (err) {
                  try {
-                   std::rethrow_exception(err);
+                   std::rethrow_exception(std::move(err));
                  } catch (const transaction_operation_failed&) {
                    return cb(std::current_exception());
                  } catch (const query_attempt_not_found& e) {
@@ -1888,7 +1972,7 @@ attempt_context_impl::atr_commit(bool ambiguity_resolution_mode)
                                req.id,
                                attempt_state_name(attempt_state::COMMITTED));
       overall_.cluster_ref().execute(req, [barrier](core::operations::mutate_in_response resp) {
-        barrier->set_value(result::create_from_subdoc_response(resp));
+        barrier->set_value(result::create_from_subdoc_response(std::move(resp)));
       });
       auto res = wrap_operation_future(f, false);
       ec = wait_for_hook([this](auto handler) mutable {
@@ -2000,7 +2084,7 @@ attempt_context_impl::atr_commit_ambiguity_resolution()
     auto barrier = std::make_shared<std::promise<result>>();
     auto f = barrier->get_future();
     overall_.cluster_ref().execute(req, [barrier](core::operations::lookup_in_response resp) {
-      barrier->set_value(result::create_from_subdoc_response(resp));
+      barrier->set_value(result::create_from_subdoc_response(std::move(resp)));
     });
     auto res = wrap_operation_future(f);
     auto atr_status_raw = res.values[0].content_as<std::string>();
@@ -2058,7 +2142,8 @@ attempt_context_impl::atr_complete()
     }
     // if we have expired (and not in overtime mode), just raise the final
     // error.
-    if (!!(ec = error_if_expired_and_not_in_overtime(STAGE_ATR_COMPLETE, {}))) {
+    ec = error_if_expired_and_not_in_overtime(STAGE_ATR_COMPLETE, {});
+    if (ec) {
       throw client_error(*ec, "atr_complete threw error");
     }
     CB_ATTEMPT_CTX_LOG_DEBUG(this, "removing attempt {} from atr", atr_id_.value());
@@ -2388,7 +2473,7 @@ attempt_context_impl::has_expired_client_side(std::string place,
                                               std::optional<const std::string> doc_id) -> bool
 {
   bool over = overall_.has_expired_client_side();
-  bool hook = hooks_.has_expired_client_side(this, place, doc_id);
+  bool hook = hooks_.has_expired_client_side(this, place, std::move(doc_id));
   if (over) {
     CB_ATTEMPT_CTX_LOG_DEBUG(this, "{} expired in {}", id(), place);
   }
@@ -2455,11 +2540,12 @@ attempt_context_impl::check_expiry_during_commit_or_rollback(
       this, "{} ignoring expiry in stage {}  as in expiry-overtime mode", id(), stage);
   }
 }
-template<typename Handler>
+
 void
-attempt_context_impl::set_atr_pending_locked(const core::document_id& id,
-                                             std::unique_lock<std::mutex>&& lock,
-                                             Handler&& fn)
+attempt_context_impl::set_atr_pending_locked(
+  const core::document_id& id,
+  std::unique_lock<std::mutex>&& lock,
+  std::function<void(std::optional<transaction_operation_failed>)>&& fn)
 {
   try {
     if (staged_mutations_->empty()) {
@@ -2471,52 +2557,50 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id,
       if (auto ec = error_if_expired_and_not_in_overtime(STAGE_ATR_PENDING, {})) {
         return fn(transaction_operation_failed(*ec, "transaction expired setting ATR").expired());
       }
-      auto error_handler = [this, &lock](error_class ec,
-                                         const std::string& message,
-                                         const core::document_id& doc_id,
-                                         Handler&& fn) mutable {
-        transaction_operation_failed err(ec, message);
-        CB_ATTEMPT_CTX_LOG_TRACE(this, "got {} trying to set atr to pending", message);
-        if (expiry_overtime_mode_.load()) {
-          return fn(err.no_rollback().expired());
-        }
-        switch (ec) {
-          case FAIL_EXPIRY:
-            expiry_overtime_mode_ = true;
-            // this should trigger rollback (unlike the above when already in
-            // overtime mode)
-            return fn(err.expired());
-          case FAIL_ATR_FULL:
-            return fn(err);
-          case FAIL_PATH_ALREADY_EXISTS:
-            // assuming this got resolved, moving on as if ok
-            return fn(std::nullopt);
-          case FAIL_AMBIGUOUS:
-            // Retry just this
-            CB_ATTEMPT_CTX_LOG_DEBUG(this, "got FAIL_AMBIGUOUS, retrying set atr pending", ec);
-            return overall_.after_delay(
-              std::chrono::milliseconds(1), [this, doc_id, &lock, fn = std::move(fn)]() {
-                set_atr_pending_locked(doc_id, std::move(lock), std::move(fn));
-              });
-          case FAIL_TRANSIENT:
-            // Retry txn
-            return fn(err.retry());
-          case FAIL_HARD:
-            return fn(err.no_rollback());
-          default:
-            return fn(err);
-        }
-      };
+      auto error_handler =
+        [this,
+         &lock](error_class ec,
+                const std::string& message,
+                const core::document_id& doc_id,
+                std::function<void(std::optional<transaction_operation_failed>)>&& fn) mutable {
+          transaction_operation_failed err(ec, message);
+          CB_ATTEMPT_CTX_LOG_TRACE(this, "got {} trying to set atr to pending", message);
+          if (expiry_overtime_mode_.load()) {
+            return fn(err.no_rollback().expired());
+          }
+          switch (ec) {
+            case FAIL_EXPIRY:
+              expiry_overtime_mode_ = true;
+              // this should trigger rollback (unlike the above when already in
+              // overtime mode)
+              return fn(err.expired());
+            case FAIL_ATR_FULL:
+              return fn(err);
+            case FAIL_PATH_ALREADY_EXISTS:
+              // assuming this got resolved, moving on as if ok
+              return fn(std::nullopt);
+            case FAIL_AMBIGUOUS:
+              // Retry just this
+              CB_ATTEMPT_CTX_LOG_DEBUG(this, "got FAIL_AMBIGUOUS, retrying set atr pending", ec);
+              return overall_.after_delay(
+                std::chrono::milliseconds(1), [this, doc_id, &lock, fn = std::move(fn)]() mutable {
+                  set_atr_pending_locked(doc_id, std::move(lock), std::move(fn));
+                });
+            case FAIL_TRANSIENT:
+              // Retry txn
+              return fn(err.retry());
+            case FAIL_HARD:
+              return fn(err.no_rollback());
+            default:
+              return fn(err);
+          }
+        };
       return hooks_.before_atr_pending(
         this,
-        [this,
-         id,
-         prefix,
-         fn = std::forward<Handler>(fn),
-         error_handler = std::move(error_handler)](auto ec) mutable {
+        [this, id, prefix, fn = std::move(fn), error_handler = std::move(error_handler)](
+          auto ec) mutable {
           if (ec) {
-            return error_handler(
-              *ec, "before_atr_pending hook raised error", id, std::forward<Handler>(fn));
+            return error_handler(*ec, "before_atr_pending hook raised error", id, std::move(fn));
           }
 
           CB_ATTEMPT_CTX_LOG_DEBUG(this, "updating atr {}", atr_id_.value());
@@ -2567,7 +2651,7 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id,
           wrap_durable_request(req, overall_.config());
           return overall_.cluster_ref().execute(
             req,
-            [this, fn = std::forward<Handler>(fn), error_handler = std::move(error_handler)](
+            [this, fn = std::move(fn), error_handler = std::move(error_handler)](
               core::operations::mutate_in_response resp) mutable {
               auto ec = error_class_from_response(resp);
               if (ec) {
@@ -2575,12 +2659,12 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id,
                   *ec,
                   resp.ctx.ec().message(),
                   { resp.ctx.bucket(), resp.ctx.scope(), resp.ctx.collection(), resp.ctx.id() },
-                  std::forward<Handler>(fn));
+                  std::move(fn));
               }
               return hooks_.after_atr_pending(
                 this,
                 [this,
-                 fn = std::forward<Handler>(fn),
+                 fn = std::move(fn),
                  error_handler = std::move(error_handler),
                  resp = std::move(resp)](auto ec) mutable {
                   if (ec) {
@@ -2588,7 +2672,7 @@ attempt_context_impl::set_atr_pending_locked(const core::document_id& id,
                       *ec,
                       fmt::format("after_atr_pending returned hook raised {}", *ec),
                       { resp.ctx.bucket(), resp.ctx.scope(), resp.ctx.collection(), resp.ctx.id() },
-                      std::forward<Handler>(fn));
+                      std::move(fn));
                   }
 
                   state(attempt_state::PENDING);
@@ -2765,14 +2849,12 @@ attempt_context_impl::do_get(const core::document_id& id,
                       return cb(std::nullopt,
                                 std::nullopt,
                                 transaction_get_result::create_from(*doc, content));
-
-                    } else {
-                      // failed to get the ATR
-                      CB_ATTEMPT_CTX_LOG_DEBUG(this,
-                                               "could not get ATR, checking again with {}",
-                                               doc->links().staged_attempt_id().value_or("-"));
-                      return do_get(id, doc->links().staged_attempt_id(), cb);
                     }
+                    // failed to get the ATR
+                    CB_ATTEMPT_CTX_LOG_DEBUG(this,
+                                             "could not get ATR, checking again with {}",
+                                             doc->links().staged_attempt_id().value_or("-"));
+                    return do_get(id, doc->links().staged_attempt_id(), cb);
                   });
               } else {
                 if (doc->links().is_deleted()) {
@@ -3180,4 +3262,165 @@ attempt_context_impl::create_staged_insert(const core::document_id& id,
     });
 }
 
+void
+attempt_context_impl::ensure_open_bucket(const std::string& bucket_name,
+                                         std::function<void(std::error_code)>&& handler)
+{
+  if (bucket_name.empty()) {
+    CB_LOG_DEBUG("ensure_open_bucket called with empty bucket_name");
+    return handler(couchbase::errc::common::bucket_not_found);
+  }
+  cluster_ref().open_bucket(bucket_name, [handler = std::move(handler)](std::error_code ec) {
+    handler(ec);
+  });
+}
+
+void
+attempt_context_impl::remove(couchbase::transactions::transaction_get_result doc,
+                             couchbase::transactions::async_err_handler&& handler)
+{
+  remove(transaction_get_result(doc), [handler = std::move(handler)](std::exception_ptr e) mutable {
+    wrap_err_callback_for_async_api(std::move(e), std::move(handler));
+  });
+}
+
+auto
+attempt_context_impl::remove(const couchbase::transactions::transaction_get_result& doc)
+  -> couchbase::error
+{
+  return wrap_void_call_for_public_api([this, doc]() {
+    remove(transaction_get_result(doc));
+  });
+}
+
+auto
+attempt_context_impl::get(const couchbase::collection& coll, const std::string& id)
+  -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result>
+{
+  auto [ctx, res] = wrap_call_for_public_api([this, coll, id]() mutable -> transaction_get_result {
+    auto ret = get_optional({ coll.bucket_name(), coll.scope_name(), coll.name(), id });
+    if (ret) {
+      return ret.value();
+    }
+    return {};
+  });
+  if (!ctx.ec() && res.cas().empty()) {
+    return { { errc::transaction_op::document_not_found_exception }, res };
+  }
+  return { ctx, res };
+}
+void
+attempt_context_impl::get(const couchbase::collection& coll,
+                          std::string id,
+                          couchbase::transactions::async_result_handler&& handler)
+{
+  get_optional({ coll.bucket_name(), coll.scope_name(), coll.name(), std::move(id) },
+               [handler = std::move(handler)](std::exception_ptr err,
+                                              std::optional<transaction_get_result> res) mutable {
+                 if (!res) {
+                   return handler({ errc::transaction_op::document_not_found_exception }, {});
+                 }
+                 return wrap_callback_for_async_public_api(
+                   std::move(err), std::move(res), std::move(handler));
+               });
+}
+void
+attempt_context_impl::query(std::string statement,
+                            couchbase::transactions::transaction_query_options opts,
+                            std::optional<std::string> query_context,
+                            couchbase::transactions::async_query_handler&& handler)
+{
+  query(statement,
+        opts,
+        query_context,
+        [handler = std::move(handler)](std::exception_ptr err,
+                                       std::optional<core::operations::query_response> resp) {
+          if (err) {
+            try {
+              std::rethrow_exception(std::move(err));
+            } catch (const transaction_operation_failed& e) {
+              return handler(core::impl::make_error(e), {});
+            } catch (const op_exception& ex) {
+              return handler(core::impl::make_error(ex.ctx()), {});
+            } catch (...) {
+              // just in case...
+              return handler({ couchbase::errc::transaction_op::unknown }, {});
+            }
+          }
+          auto [ctx, res] = core::impl::build_transaction_query_result(*resp);
+          handler(core::impl::make_error(ctx), res);
+        });
+}
+void
+attempt_context_impl::existing_error(bool prev_op_failed)
+{
+  if (!errors_.empty()) {
+    errors_.do_throw(
+      (prev_op_failed ? std::make_optional(PREVIOUS_OPERATION_FAILED) : std::nullopt));
+  }
+}
+void
+attempt_context_impl::handle_err_from_callback(std::exception_ptr e)
+{
+  try {
+    std::rethrow_exception(std::move(e));
+  } catch (const transaction_operation_failed& ex) {
+    CB_ATTEMPT_CTX_LOG_ERROR(
+      this, "op callback called a txn operation that threw exception {}", ex.what());
+    op_list_.decrement_ops();
+    // presumably that op called op_completed_with_error already, so
+    // don't do anything here but swallow it.
+  } catch (const async_operation_conflict& op_ex) {
+    // the count isn't changed when this is thrown, so just swallow it and log
+    CB_ATTEMPT_CTX_LOG_ERROR(
+      this, "op callback called a txn operation that threw exception {}", op_ex.what());
+  } catch (const op_exception& op_ex) {
+    CB_ATTEMPT_CTX_LOG_WARNING(this,
+                               "op callback called a txn operation that "
+                               "threw (and didn't handle) a op_exception {}",
+                               op_ex.what());
+    errors_.push_back(
+      transaction_operation_failed(error_class_from_external_exception(op_ex.cause()), op_ex.what())
+        .cause(op_ex.cause()));
+    op_list_.decrement_ops();
+  } catch (const std::exception& std_ex) {
+    // if the callback throws something which wasn't handled
+    // we just want to handle as a rollback
+    CB_ATTEMPT_CTX_LOG_ERROR(this, "op callback threw exception {}", std_ex.what());
+    errors_.push_back(transaction_operation_failed(FAIL_OTHER, std_ex.what()));
+    op_list_.decrement_ops();
+  } catch (...) {
+    // could be something really arbitrary, still...
+    CB_ATTEMPT_CTX_LOG_ERROR(this, "op callback threw unexpected exception");
+    errors_.push_back(transaction_operation_failed(FAIL_OTHER, "unexpected error"));
+    op_list_.decrement_ops();
+  }
+}
+void
+attempt_context_impl::op_completed_with_error(std::function<void(std::exception_ptr)>&& cb,
+                                              std::exception_ptr err)
+{
+  try {
+    std::rethrow_exception(std::move(err));
+  } catch (const transaction_operation_failed& e) {
+    // if this is a transaction_operation_failed, we need to cache it before
+    // moving on...
+    errors_.push_back(e);
+    try {
+      op_list_.decrement_in_flight();
+      cb(std::current_exception());
+      op_list_.decrement_ops();
+    } catch (...) {
+      handle_err_from_callback(std::current_exception());
+    }
+  } catch (...) {
+    try {
+      op_list_.decrement_in_flight();
+      cb(std::current_exception());
+      op_list_.decrement_ops();
+    } catch (...) {
+      handle_err_from_callback(std::current_exception());
+    }
+  }
+}
 } // namespace couchbase::core::transactions

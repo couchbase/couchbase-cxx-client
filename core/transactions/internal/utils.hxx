@@ -263,8 +263,8 @@ struct exp_delay {
   std::chrono::nanoseconds initial_delay;
   std::chrono::nanoseconds max_delay;
   std::chrono::nanoseconds timeout;
-  mutable std::uint32_t retries;
-  mutable std::optional<std::chrono::time_point<std::chrono::steady_clock>> end_time;
+  mutable std::uint32_t retries{ 0 };
+  mutable std::optional<std::chrono::time_point<std::chrono::steady_clock>> end_time{};
   std::size_t max_retries{ 100 };
 
   template<typename R1, typename P1, typename R2, typename P2, typename R3, typename P3>
@@ -274,8 +274,6 @@ struct exp_delay {
     : initial_delay(std::chrono::duration_cast<std::chrono::nanoseconds>(initial))
     , max_delay(std::chrono::duration_cast<std::chrono::nanoseconds>(max))
     , timeout(std::chrono::duration_cast<std::chrono::nanoseconds>(limit))
-    , retries(0)
-    , end_time()
   {
   }
   void operator()() const
@@ -307,13 +305,12 @@ template<typename R, typename P>
 struct constant_delay {
   std::chrono::duration<R, P> delay;
   std::size_t max_retries;
-  std::size_t retries;
+  std::size_t retries{ 0 };
 
   constant_delay(std::chrono::duration<R, P> d = DEFAULT_RETRY_OP_DELAY,
                  std::size_t max = DEFAULT_RETRY_OP_MAX_RETRIES)
     : delay(d)
     , max_retries(max)
-    , retries(0)
   {
   }
   void operator()()

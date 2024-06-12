@@ -107,7 +107,7 @@ public:
     atr_id_ = id;
   }
 
-  [[nodiscard]] std::string atr_collection() const
+  [[nodiscard]] auto atr_collection() const -> const std::string&
   {
     return atr_collection_;
   }

@@ -19,6 +19,7 @@
 
 #include <couchbase/ip_protocol.hxx>
 
+#include <chrono>
 #include <cstdint>
 #include <optional>
 #include <string>
