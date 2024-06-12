@@ -20,9 +20,11 @@
 
 namespace couchbase::core::transactions
 {
+namespace
+{
+template<typename LookupInResponse>
 auto
-transaction_get_result::create_from(const core::operations::lookup_in_response& resp)
-  -> transaction_get_result
+create_from_subdoc(const LookupInResponse& resp) -> transaction_get_result
 {
   // "txn.id"
   std::optional<std::string> transaction_id{};
@@ -30,9 +32,9 @@ transaction_get_result::create_from(const core::operations::lookup_in_response& 
   std::optional<std::string> operation_id{};
   if (resp.fields[0].status == key_value_status_code::success) {
     auto id = codec::tao_json_serializer::deserialize<tao::json::value>(resp.fields[0].value);
-    transaction_id = id.optional<std::string>("txn");
-    attempt_id = id.optional<std::string>("atmpt");
-    operation_id = id.optional<std::string>("op");
+    transaction_id = id.template optional<std::string>("txn");
+    attempt_id = id.template optional<std::string>("atmpt");
+    operation_id = id.template optional<std::string>("op");
   }
 
   // "txn.atr"
@@ -42,10 +44,10 @@ transaction_get_result::create_from(const core::operations::lookup_in_response& 
   std::optional<std::string> atr_collection_name{};
   if (resp.fields[1].status == key_value_status_code::success) {
     auto atr = codec::tao_json_serializer::deserialize<tao::json::value>(resp.fields[1].value);
-    atr_id = atr.optional<std::string>("id");
-    atr_bucket_name = atr.optional<std::string>("bkt");
-    atr_scope_name = atr.optional<std::string>("scp");
-    atr_collection_name = atr.optional<std::string>("coll");
+    atr_id = atr.template optional<std::string>("id");
+    atr_bucket_name = atr.template optional<std::string>("bkt");
+    atr_scope_name = atr.template optional<std::string>("scp");
+    atr_collection_name = atr.template optional<std::string>("coll");
   }
 
   // "txn.op.type"
@@ -75,10 +77,10 @@ transaction_get_result::create_from(const core::operations::lookup_in_response& 
   std::optional<std::uint32_t> exptime_pre_txn{};
   if (resp.fields[5].status == key_value_status_code::success) {
     auto restore = codec::tao_json_serializer::deserialize<tao::json::value>(resp.fields[5].value);
-    cas_pre_txn = restore.optional<std::string>("CAS");
+    cas_pre_txn = restore.template optional<std::string>("CAS");
     // only present in 6.5+
-    revid_pre_txn = restore.optional<std::string>("revid");
-    exptime_pre_txn = restore.optional<std::uint32_t>("exptime");
+    revid_pre_txn = restore.template optional<std::string>("revid");
+    exptime_pre_txn = restore.template optional<std::uint32_t>("exptime");
   }
 
   // "txn.fc"
@@ -96,12 +98,12 @@ transaction_get_result::create_from(const core::operations::lookup_in_response& 
   codec::encoded_value content{};
   if (resp.fields[7].status == key_value_status_code::success) {
     auto document = codec::tao_json_serializer::deserialize<tao::json::value>(resp.fields[7].value);
-    cas_from_doc = document["CAS"].as<std::string>();
+    cas_from_doc = document["CAS"].template as<std::string>();
     // only present in 6.5+
-    revid_from_doc = document["revid"].as<std::string>();
-    exptime_from_doc = document["exptime"].as<std::uint32_t>();
-    crc32_from_doc = document["value_crc32c"].as<std::string>();
-    content.flags = document["flags"].as<std::uint32_t>();
+    revid_from_doc = document["revid"].template as<std::string>();
+    exptime_from_doc = document["exptime"].template as<std::uint32_t>();
+    crc32_from_doc = document["value_crc32c"].template as<std::string>();
+    content.flags = document["flags"].template as<std::uint32_t>();
   } else {
     // TODO(SA): throw exception here like Java SDK does
   }
@@ -118,7 +120,7 @@ transaction_get_result::create_from(const core::operations::lookup_in_response& 
   // "txn.aux"
   if (resp.fields[9].status == key_value_status_code::success) {
     auto aux = codec::tao_json_serializer::deserialize<tao::json::value>(resp.fields[9].value);
-    auto staged_user_flags = aux.optional<std::uint32_t>("uf");
+    auto staged_user_flags = aux.template optional<std::uint32_t>("uf");
     if (staged_user_flags && staged_content_binary) {
       staged_content_binary->flags = staged_user_flags.value();
     }
@@ -164,6 +166,21 @@ transaction_get_result::create_from(const core::operations::lookup_in_response& 
       },
     },
   };
+}
+} // namespace
+
+auto
+transaction_get_result::create_from(const core::operations::lookup_in_response& resp)
+  -> transaction_get_result
+{
+  return create_from_subdoc(resp);
+}
+
+auto
+transaction_get_result::create_from(const core::operations::lookup_in_any_replica_response& resp)
+  -> transaction_get_result
+{
+  return create_from_subdoc(resp);
 }
 
 auto

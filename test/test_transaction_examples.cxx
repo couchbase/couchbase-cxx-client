@@ -22,6 +22,7 @@
 #include <couchbase/fmt/error.hxx>
 
 #include <tao/json.hpp>
+#include <tao/json/to_string.hpp>
 
 namespace blocking_txn
 {
@@ -219,4 +220,158 @@ TEST_CASE("example: basic transaction", "[integration]")
   };
 
   REQUIRE(blocking_txn::main(4, argv) == 0);
+}
+
+namespace read_local_txn
+{
+//! [read-local-txn]
+#include <couchbase/cluster.hxx>
+#include <couchbase/fmt/cas.hxx>
+#include <couchbase/transactions/attempt_context.hxx>
+
+#include <tao/json.hpp>
+#include <tao/json/to_string.hpp>
+
+int
+main(int argc, const char* argv[])
+{
+  if (argc != 4) {
+    fmt::println("USAGE: ./read-local-txn couchbase://127.0.0.1 Administrator password");
+    return 1;
+  }
+
+  int retval = 0;
+
+  const std::string connection_string{ argv[1] };
+  const std::string username{ argv[2] };
+  const std::string password{ argv[3] };
+
+  asio::io_context io;
+  auto guard = asio::make_work_guard(io);
+  std::thread io_thread([&io]() {
+    io.run();
+  });
+
+  auto options = couchbase::cluster_options(username, password);
+  options.apply_profile("wan_development");
+
+  auto [connect_err, cluster] = couchbase::cluster::connect(io, connection_string, options).get();
+  if (connect_err) {
+    fmt::println("unable to connect to the cluster: {}", connect_err);
+    return 1;
+  }
+
+  auto collection = cluster.bucket("default").default_collection();
+  constexpr auto id = "my-doc_1";
+  const tao::json::value content = {
+    { "some", "content" },
+  };
+
+  if (auto [upsert_err, res] = collection.upsert(id, content).get(); upsert_err.ec()) {
+    fmt::println(stderr,
+                 "upsert \"{}\" failed before starting transaction: {}",
+                 id,
+                 upsert_err.ec().message());
+    return 1;
+  }
+
+  {
+    auto [tx_err, tx_res] = cluster.transactions()->run(
+      [=](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+        auto [err_ctx, doc] = ctx->get_replica_from_preferred_server_group(collection, id);
+        if (err_ctx.ec()) {
+          fmt::println(stderr, "failed to get document \"{}\": {}", id, err_ctx.ec().message());
+          return;
+        }
+        fmt::println("document content: {}",
+                     tao::json::to_string(doc.template content<tao::json::value>()));
+      });
+
+    if (tx_err.ec()) {
+      fmt::println(stderr,
+                   "error in transaction {}, cause: {}",
+                   tx_err.ec().message(),
+                   tx_err.cause().has_value() ? tx_err.cause().value().ec().message() : "");
+      retval = 1;
+    } else {
+      fmt::println("transaction {} completed successfully", tx_res.transaction_id);
+    }
+  }
+
+  {
+    auto barrier = std::make_shared<std::promise<std::error_code>>();
+    auto f = barrier->get_future();
+    cluster.transactions()->run(
+      // transaction logic
+      [=](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) {
+        ctx->get_replica_from_preferred_server_group(collection, id, [=](auto err_ctx, auto doc) {
+          if (err_ctx.ec()) {
+            fmt::print(stderr, "failed to get document \"{}\": {}\n", id, err_ctx.ec().message());
+            return;
+          }
+          fmt::println("document content: {}",
+                       tao::json::to_string(doc.template content<tao::json::value>()));
+        });
+      },
+      // completion logic
+      [barrier](auto tx_err, auto tx_res) {
+        if (tx_err.ec()) {
+          fmt::print(stderr,
+                     "error in async transaction {}, {}\n",
+                     tx_res.transaction_id,
+                     tx_err.ec().message());
+        }
+        barrier->set_value(tx_err.ec());
+      });
+    if (auto async_err = f.get()) {
+      fmt::print(stderr, "received async error from future: message - {}\n", async_err.message());
+      retval = 1;
+    }
+  }
+
+  cluster.close();
+  guard.reset();
+
+  io_thread.join();
+  return retval;
+}
+
+//! [read-local-txn]
+} // namespace read_local_txn
+
+TEST_CASE("example: read from local server group in transaction", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (integration.cluster_version().is_mock()) {
+    SKIP("GOCAVES does not support server groups");
+  }
+  if (!integration.cluster_version().supports_collections()) {
+    SKIP("cluster does not support collections");
+  }
+  const auto number_of_replicas = integration.number_of_replicas();
+  if (number_of_replicas == 0) {
+    SKIP("bucket has zero replicas");
+  }
+  if (integration.number_of_nodes() <= number_of_replicas) {
+    SKIP(fmt::format("number of nodes ({}) is less or equal to number of replicas ({})",
+                     integration.number_of_nodes(),
+                     number_of_replicas));
+  }
+
+  const auto server_groups = integration.server_groups();
+  if (server_groups.size() != 2) {
+    SKIP(fmt::format("This test expects exactly 2 server groups and at least one replica, "
+                     "but found {} server groups",
+                     integration.server_groups().size()));
+  }
+
+  const auto env = test::utils::test_context::load_from_environment();
+  const char* argv[] = {
+    "read-local-txn", // name of the "executable"
+    env.connection_string.c_str(),
+    env.username.c_str(),
+    env.password.c_str(),
+  };
+
+  REQUIRE(read_local_txn::main(4, argv) == 0);
 }

@@ -55,6 +55,26 @@ public:
                    const std::string& id) -> std::pair<error, transaction_get_result> = 0;
 
   /**
+   * Get a document copy from the selected server group.
+   *
+   * Fetch the document contents, in the form of a @ref transaction_get_result.
+   * It might be either replica or active copy of the document. One of the use
+   * cases for this method is to save on network costs by deploying SDK in the
+   * same availability zone as corresponding server group of the nodes.
+   *
+   * @param coll The collection which contains the document.
+   * @param id The unique id of the document.
+   * @return The result of the operation, which is an @ref error and a @ref
+   * transaction_get_result.
+   *
+   * @see network_options::preferred_server_group
+   * @see https://docs.couchbase.com/server/current/manage/manage-groups/manage-groups.html
+   */
+  virtual auto get_replica_from_preferred_server_group(const couchbase::collection& coll,
+                                                       const std::string& id)
+    -> std::pair<error, transaction_get_result> = 0;
+
+  /**
    * Insert a document into a collection.
    *
    * Given an id and the content, this inserts a new document into a collection.

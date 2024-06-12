@@ -129,6 +129,8 @@ public:
   /** @internal */
   static auto create_from(const core::operations::lookup_in_response& resp)
     -> transaction_get_result;
+  static auto create_from(const core::operations::lookup_in_any_replica_response& resp)
+    -> transaction_get_result;
 
   /**
    * @brief Get document id.

@@ -93,6 +93,8 @@ public:
    * @see collection::get_any_replica
    * @see collection::lookup_in_all_replicas
    * @see collection::lookup_in_any_replica
+   * @see transactions::async_attempt_context::get_replica_from_preferred_server_group
+   * @see transactions::attempt_context::get_replica_from_preferred_server_group
    *
    * @see https://docs.couchbase.com/server/current/manage/manage-groups/manage-groups.html
    */
