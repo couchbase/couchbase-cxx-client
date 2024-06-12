@@ -22,27 +22,30 @@ namespace couchbase::core::transactions
 namespace
 {
 inline void
-noop1(attempt_context*, utils::movable_function<void(std::optional<error_class>)>&& handler)
+noop1(std::shared_ptr<attempt_context> /* ctx */,
+      utils::movable_function<void(std::optional<error_class>)>&& handler)
 {
   return handler({});
 }
 
 inline void
-noop2(attempt_context*,
-      const std::string&,
+noop2(std::shared_ptr<attempt_context> /* ctx */,
+      const std::string& /* param */,
       utils::movable_function<void(std::optional<error_class>)>&& handler)
 {
   return handler({});
 }
 
 inline auto
-noop3(attempt_context*) -> std::optional<const std::string>
+noop3(std::shared_ptr<attempt_context> /* ctx */) -> std::optional<const std::string>
 {
   return {};
 }
 
 inline auto
-noop4(attempt_context*, const std::string&, std::optional<const std::string>) -> bool
+noop4(std::shared_ptr<attempt_context> /* ctx */,
+      const std::string& /* param1 */,
+      std::optional<const std::string> /* param2 */) -> bool
 {
   return false;
 }

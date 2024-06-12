@@ -117,7 +117,7 @@ wrap_run(transactions& txns,
          std::size_t max_attempts,
          Handler&& fn) -> ::couchbase::transactions::transaction_result
 {
-  transaction_context overall(txns, config);
+  auto overall = transaction_context::create(txns, config);
   std::size_t attempts{ 0 };
   while (attempts++ < max_attempts) {
     // NOTE: new_attempt_context has the exponential backoff built in.  So, after
@@ -125,7 +125,7 @@ wrap_run(transactions& txns,
     // until (for now) a timeout is reached (2x the timeout).   Soon, will build in
     // a max attempts instead.  In any case, the timeout occurs in the logic - adding
     // a max attempts or timeout is just in case a bug prevents timeout, etc...
-    overall.new_attempt_context();
+    overall->new_attempt_context();
     auto barrier =
       std::make_shared<std::promise<std::optional<couchbase::transactions::transaction_result>>>();
     auto f = barrier->get_future();
@@ -133,34 +133,30 @@ wrap_run(transactions& txns,
       [&, barrier](std::optional<transaction_exception> err,
                    std::optional<couchbase::transactions::transaction_result> result) {
         if (result) {
-          return barrier->set_value(result);
-        } else if (err) {
+          return barrier->set_value(std::move(result));
+        }
+        if (err) {
           return barrier->set_exception(std::make_exception_ptr(*err));
         }
         barrier->set_value({});
       };
     try {
-      auto ctx = overall.current_attempt_context();
-      fn(*ctx);
+      fn(overall->current_attempt_context());
     } catch (...) {
-      overall.handle_error(std::current_exception(), finalize_handler);
-      auto retval = f.get();
-      if (retval) {
+      overall->handle_error(std::current_exception(), finalize_handler);
+      if (auto retval = f.get(); retval) {
         // no return value, no exception means retry.
         return *retval;
       }
       continue;
     }
-    overall.finalize(finalize_handler);
-    auto retval = f.get();
-    if (retval) {
+    overall->finalize(finalize_handler);
+    if (auto retval = f.get(); retval) {
       return *retval;
     }
-    continue;
   }
   // only thing to do here is return, but we really exceeded the max attempts
-  assert(true);
-  return overall.get_transaction_result();
+  return overall->get_transaction_result();
 }
 
 auto

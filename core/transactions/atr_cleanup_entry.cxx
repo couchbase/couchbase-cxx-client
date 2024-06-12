@@ -83,7 +83,7 @@ atr_cleanup_entry::atr_cleanup_entry(attempt_context& ctx)
               ctx_impl.atr_id_.value().collection(),
               ctx_impl.atr_id_.value().key() };
   attempt_id_ = ctx_impl.id();
-  cleanup_ = &ctx_impl.overall_.cleanup();
+  cleanup_ = &ctx_impl.overall_->cleanup();
 }
 
 void

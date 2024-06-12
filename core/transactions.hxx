@@ -31,12 +31,8 @@
 #include "core/logger/logger.hxx"
 #include "core/utils/movable_function.hxx"
 
-#include <spdlog/common.h>
-
-#include <cmath>
 #include <functional>
 #include <system_error>
-#include <thread>
 
 // workaround for MSVC define overlap with log levels
 #undef ERROR
@@ -57,10 +53,10 @@ namespace transactions
 class transactions_cleanup;
 
 /** @brief Transaction logic should be contained in a lambda of this form */
-using logic = std::function<void(attempt_context&)>;
+using logic = std::function<void(std::shared_ptr<attempt_context>)>;
 
 /** @brief AsyncTransaction logic should be contained in a lambda of this form */
-using async_logic = std::function<void(async_attempt_context&)>;
+using async_logic = std::function<void(std::shared_ptr<async_attempt_context>)>;
 
 /** @brief AsyncTransaction callback when transaction has completed */
 using txn_complete_callback =
@@ -162,12 +158,12 @@ public:
    * @param config The configuration parameters to use for the transactions.
    * @return a future containing the error that occurred or the transactions object.
    */
-  static std::future<std::pair<std::error_code, std::shared_ptr<transactions>>> create(
-    core::cluster cluster,
-    const couchbase::transactions::transactions_config::built& config);
-  static std::future<std::pair<std::error_code, std::shared_ptr<transactions>>> create(
-    core::cluster cluster,
-    const couchbase::transactions::transactions_config& config);
+  static auto create(core::cluster cluster,
+                     const couchbase::transactions::transactions_config::built& config)
+    -> std::future<std::pair<std::error_code, std::shared_ptr<transactions>>>;
+  static auto create(core::cluster cluster,
+                     const couchbase::transactions::transactions_config& config)
+    -> std::future<std::pair<std::error_code, std::shared_ptr<transactions>>>;
 
   /**
    * @brief Run a transaction
@@ -180,16 +176,14 @@ public:
    * @throws @ref transaction_failed, @ref transaction_expired, @ref transaction_commit_ambiguous,
    * all of which share a common base class @ref transaction_exception.
    */
-  couchbase::transactions::transaction_result run(logic&& code);
+  auto run(logic&& code) -> couchbase::transactions::transaction_result;
 
-  couchbase::transactions::transaction_result run(
-    const couchbase::transactions::transaction_options& config,
-    logic&& code);
+  auto run(const couchbase::transactions::transaction_options& config,
+           logic&& code) -> couchbase::transactions::transaction_result;
 
-  std::pair<couchbase::error, couchbase::transactions::transaction_result> run(
-    ::couchbase::transactions::txn_logic&& code,
-    const couchbase::transactions::transaction_options& cfg =
-      couchbase::transactions::transaction_options()) override;
+  auto run(::couchbase::transactions::txn_logic&& code,
+           const couchbase::transactions::transaction_options& cfg)
+    -> std::pair<couchbase::error, couchbase::transactions::transaction_result> override;
 
   /**
    * @brief Run a transaction
@@ -216,18 +210,18 @@ public:
    * @internal
    * called internally - will likely move
    */
-  void commit(attempt_context& ctx)
+  void commit(std::shared_ptr<attempt_context> ctx)
   {
-    ctx.commit();
+    ctx->commit();
   }
 
   /**
    * @internal
    * called internally - will likely move
    */
-  void rollback(attempt_context& ctx)
+  void rollback(std::shared_ptr<attempt_context> ctx)
   {
-    ctx.rollback();
+    ctx->rollback();
   }
 
   void notify_fork(fork_event event);
@@ -245,7 +239,7 @@ public:
    *
    * @return config for this transactions instance.
    */
-  [[nodiscard]] couchbase::transactions::transactions_config::built& config()
+  [[nodiscard]] auto config() -> couchbase::transactions::transactions_config::built&
   {
     return config_;
   }
@@ -254,7 +248,7 @@ public:
    * @internal
    * Called internally
    */
-  [[nodiscard]] const transactions_cleanup& cleanup() const
+  [[nodiscard]] auto cleanup() const -> const transactions_cleanup&
   {
     return *cleanup_;
   }
@@ -263,7 +257,7 @@ public:
    * @internal
    * Called internally
    */
-  [[nodiscard]] transactions_cleanup& cleanup()
+  [[nodiscard]] auto cleanup() -> transactions_cleanup&
   {
     return *cleanup_;
   }
@@ -273,7 +267,7 @@ public:
    *
    * @return Ref to the cluster used by this transaction object.
    */
-  [[nodiscard]] core::cluster& cluster_ref()
+  [[nodiscard]] auto cluster_ref() -> core::cluster&
   {
     return cluster_;
   }

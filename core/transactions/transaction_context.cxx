@@ -27,6 +27,26 @@
 
 namespace couchbase::core::transactions
 {
+
+auto
+transaction_context::create(transactions& txns,
+                            const couchbase::transactions::transaction_options& config)
+  -> std::shared_ptr<transaction_context>
+{
+  // use empty wrapper to class to enable std::make_shared with private
+  // constructor of transaction_context
+  class transaction_context_wrapper : public transaction_context
+  {
+  public:
+    transaction_context_wrapper(transactions& txns,
+                                const couchbase::transactions::transaction_options& config)
+      : transaction_context(txns, config)
+    {
+    }
+  };
+  return std::make_shared<transaction_context_wrapper>(txns, config);
+}
+
 transaction_context::transaction_context(transactions& txns,
                                          const couchbase::transactions::transaction_options& config)
   : transaction_id_(uid_generator::next())
@@ -105,22 +125,23 @@ transaction_context::after_delay(std::chrono::milliseconds delay, std::function<
 void
 transaction_context::new_attempt_context(async_attempt_context::VoidCallback&& cb)
 {
-  asio::post(transactions_.cluster_ref().io_context(), [this, cb = std::move(cb)]() {
-    // the first time we call the delay, it just records an end time.  After
-    // that, it actually delays.
-    try {
-      (*delay_)();
-      current_attempt_context_ = std::make_shared<attempt_context_impl>(*this);
-      CB_ATTEMPT_CTX_LOG_INFO(current_attempt_context_,
-                              "starting attempt {}/{}/{}/",
-                              num_attempts(),
-                              transaction_id(),
-                              current_attempt_context_->id());
-      cb(nullptr);
-    } catch (...) {
-      cb(std::current_exception());
-    }
-  });
+  asio::post(transactions_.cluster_ref().io_context(),
+             [self = shared_from_this(), cb = std::move(cb)]() {
+               // the first time we call the delay, it just records an end time.  After
+               // that, it actually delays.
+               try {
+                 (*self->delay_)();
+                 self->current_attempt_context_ = attempt_context_impl::create(self);
+                 CB_ATTEMPT_CTX_LOG_INFO(self->current_attempt_context_,
+                                         "starting attempt {}/{}/{}/",
+                                         self->num_attempts(),
+                                         self->transaction_id(),
+                                         self->current_attempt_context_->id());
+                 cb(nullptr);
+               } catch (...) {
+                 cb(std::current_exception());
+               }
+             });
 }
 
 auto
@@ -323,15 +344,14 @@ transaction_context::finalize(txn_complete_callback&& cb)
     if (current_attempt_context_->is_done()) {
       return cb(std::nullopt, get_transaction_result());
     }
-    commit([this, cb = std::move(cb)](std::exception_ptr err) mutable {
+    commit([self = shared_from_this(), cb = std::move(cb)](std::exception_ptr err) mutable {
       if (err) {
-        return handle_error(err, std::move(cb));
+        return self->handle_error(std::move(err), std::move(cb));
       }
-      cb(std::nullopt, get_transaction_result());
+      cb(std::nullopt, self->get_transaction_result());
     });
   } catch (...) {
     return handle_error(std::current_exception(), std::move(cb));
   }
 }
-
 } // namespace couchbase::core::transactions

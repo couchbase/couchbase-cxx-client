@@ -25,6 +25,7 @@
 #include "transactions_cleanup.hxx"
 
 #include <chrono>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -35,13 +36,17 @@ class attempt_context_impl;
 
 struct exp_delay;
 
-class transaction_context
+class transaction_context : public std::enable_shared_from_this<transaction_context>
 {
 public:
-  transaction_context(transactions& txns,
-                      const couchbase::transactions::transaction_options& conf =
-                        couchbase::transactions::transaction_options());
-  transaction_context(const transaction_context&);
+  static auto create(transactions& txns,
+                     const couchbase::transactions::transaction_options& config = {})
+    -> std::shared_ptr<transaction_context>;
+
+  transaction_context(const transaction_context&) = delete;
+  transaction_context(transaction_context&&) = delete;
+  auto operator=(transaction_context&&) -> transaction_context& = delete;
+  auto operator=(transaction_context&) -> transaction_context& = delete;
 
   [[nodiscard]] const std::string& transaction_id() const
   {
@@ -177,6 +182,9 @@ public:
   std::chrono::nanoseconds remaining() const;
 
 private:
+  transaction_context(transactions& txns,
+                      const couchbase::transactions::transaction_options& config);
+
   std::string transaction_id_;
 
   /** The time this overall transaction started */

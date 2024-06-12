@@ -36,7 +36,7 @@ auto
 unstaging_state::wait_until_unstage_possible() -> bool
 {
   std::unique_lock lock(mutex_);
-  auto success = cv_.wait_for(lock, ctx_->overall().remaining(), [this] {
+  auto success = cv_.wait_for(lock, ctx_->overall()->remaining(), [this] {
     return (in_flight_count_ < MAX_PARALLELISM) || abort_;
   });
   if (!abort_) {
@@ -199,7 +199,7 @@ staged_mutation_queue::iterate(std::function<void(staged_mutation&)> op)
 }
 
 void
-staged_mutation_queue::commit(attempt_context_impl* ctx)
+staged_mutation_queue::commit(std::shared_ptr<attempt_context_impl> ctx)
 {
   CB_ATTEMPT_CTX_LOG_TRACE(ctx, "committing staged mutations...");
   std::lock_guard<std::mutex> lock(mutex_);
@@ -286,7 +286,7 @@ staged_mutation_queue::commit(attempt_context_impl* ctx)
 }
 
 void
-staged_mutation_queue::rollback(attempt_context_impl* ctx)
+staged_mutation_queue::rollback(std::shared_ptr<attempt_context_impl> ctx)
 {
   CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rolling back staged mutations...");
   std::lock_guard<std::mutex> lock(mutex_);
@@ -371,7 +371,7 @@ staged_mutation_queue::rollback(attempt_context_impl* ctx)
 }
 
 void
-staged_mutation_queue::rollback_insert(attempt_context_impl* ctx,
+staged_mutation_queue::rollback_insert(std::shared_ptr<attempt_context_impl> ctx,
                                        const staged_mutation& item,
                                        async_exp_delay& delay,
                                        utils::movable_function<void(std::exception_ptr)> callback)
@@ -413,7 +413,7 @@ staged_mutation_queue::rollback_insert(attempt_context_impl* ctx,
               .specs();
           req.access_deleted = true;
           req.cas = item.doc().cas();
-          wrap_durable_request(req, ctx->overall().config());
+          wrap_durable_request(req, ctx->overall()->config());
           return ctx->cluster_ref().execute(
             req,
             [handler = std::move(handler), ctx, &item, delay](
@@ -430,7 +430,7 @@ staged_mutation_queue::rollback_insert(attempt_context_impl* ctx,
 
 void
 staged_mutation_queue::rollback_remove_or_replace(
-  attempt_context_impl* ctx,
+  std::shared_ptr<attempt_context_impl> ctx,
   const staged_mutation& item,
   async_exp_delay& delay,
   utils::movable_function<void(std::exception_ptr)> callback)
@@ -472,7 +472,7 @@ staged_mutation_queue::rollback_remove_or_replace(
               .specs();
           req.cas = item.doc().cas();
           req.flags = item.doc().content().flags;
-          wrap_durable_request(req, ctx->overall().config());
+          wrap_durable_request(req, ctx->overall()->config());
           return ctx->cluster_ref().execute(
             req,
             [handler = std::move(handler), ctx, &item, delay](
@@ -485,7 +485,7 @@ staged_mutation_queue::rollback_remove_or_replace(
 }
 
 void
-staged_mutation_queue::commit_doc(attempt_context_impl* ctx,
+staged_mutation_queue::commit_doc(std::shared_ptr<attempt_context_impl> ctx,
                                   staged_mutation& item,
                                   async_constant_delay& delay,
                                   utils::movable_function<void(std::exception_ptr)> callback,
@@ -546,7 +546,7 @@ staged_mutation_queue::commit_doc(attempt_context_impl* ctx,
           if (item.type() == staged_mutation_type::INSERT && !cas_zero_mode) {
             core::operations::insert_request req{ item.doc().id(), item.content().data };
             req.flags = item.content().flags;
-            wrap_durable_request(req, ctx->overall().config());
+            wrap_durable_request(req, ctx->overall()->config());
             return ctx->cluster_ref().execute(
               req,
               [handler = std::move(handler),
@@ -588,7 +588,7 @@ staged_mutation_queue::commit_doc(attempt_context_impl* ctx,
             req.store_semantics = couchbase::store_semantics::replace;
             req.cas = couchbase::cas(cas_zero_mode ? 0 : item.doc().cas().value());
             req.flags = item.content().flags;
-            wrap_durable_request(req, ctx->overall().config());
+            wrap_durable_request(req, ctx->overall()->config());
             return ctx->cluster_ref().execute(
               req,
               [handler = std::move(handler),
@@ -617,7 +617,7 @@ staged_mutation_queue::commit_doc(attempt_context_impl* ctx,
 }
 
 void
-staged_mutation_queue::remove_doc(attempt_context_impl* ctx,
+staged_mutation_queue::remove_doc(std::shared_ptr<attempt_context_impl> ctx,
                                   const staged_mutation& item,
                                   async_constant_delay& delay,
                                   utils::movable_function<void(std::exception_ptr)> callback)
@@ -645,7 +645,7 @@ staged_mutation_queue::remove_doc(attempt_context_impl* ctx,
             return handler(client_error(*ec, "before_doc_removed hook threw error"));
           }
           core::operations::remove_request req{ item.doc().id() };
-          wrap_durable_request(req, ctx->overall().config());
+          wrap_durable_request(req, ctx->overall()->config());
           return ctx->cluster_ref().execute(
             req,
             [handler = std::move(handler), ctx, &item, delay](
@@ -658,7 +658,7 @@ staged_mutation_queue::remove_doc(attempt_context_impl* ctx,
 }
 
 void
-staged_mutation_queue::validate_commit_doc_result(attempt_context_impl* ctx,
+staged_mutation_queue::validate_commit_doc_result(std::shared_ptr<attempt_context_impl> ctx,
                                                   result& res,
                                                   staged_mutation& item,
                                                   client_error_handler&& handler)
@@ -687,7 +687,7 @@ staged_mutation_queue::validate_commit_doc_result(attempt_context_impl* ctx,
 }
 
 void
-staged_mutation_queue::validate_remove_doc_result(attempt_context_impl* ctx,
+staged_mutation_queue::validate_remove_doc_result(std::shared_ptr<attempt_context_impl> ctx,
                                                   result& res,
                                                   const staged_mutation& item,
                                                   client_error_handler&& handler)
@@ -708,7 +708,7 @@ staged_mutation_queue::validate_remove_doc_result(attempt_context_impl* ctx,
 }
 
 void
-staged_mutation_queue::validate_rollback_insert_result(attempt_context_impl* ctx,
+staged_mutation_queue::validate_rollback_insert_result(std::shared_ptr<attempt_context_impl> ctx,
                                                        result& res,
                                                        const staged_mutation& item,
                                                        client_error_handler&& handler)
@@ -729,10 +729,11 @@ staged_mutation_queue::validate_rollback_insert_result(attempt_context_impl* ctx
 }
 
 void
-staged_mutation_queue::validate_rollback_remove_or_replace_result(attempt_context_impl* ctx,
-                                                                  result& res,
-                                                                  const staged_mutation& item,
-                                                                  client_error_handler&& handler)
+staged_mutation_queue::validate_rollback_remove_or_replace_result(
+  std::shared_ptr<attempt_context_impl> ctx,
+  result& res,
+  const staged_mutation& item,
+  client_error_handler&& handler)
 {
   try {
     validate_operation_result(res);
@@ -752,7 +753,7 @@ staged_mutation_queue::validate_rollback_remove_or_replace_result(attempt_contex
 void
 staged_mutation_queue::handle_commit_doc_error(
   const client_error& e,
-  attempt_context_impl* ctx,
+  std::shared_ptr<attempt_context_impl> ctx,
   staged_mutation& item,
   async_constant_delay& delay,
   bool ambiguity_resolution_mode,
@@ -807,7 +808,7 @@ staged_mutation_queue::handle_commit_doc_error(
 void
 staged_mutation_queue::handle_remove_doc_error(
   const client_error& e,
-  attempt_context_impl* ctx,
+  std::shared_ptr<attempt_context_impl> ctx,
   const staged_mutation& item,
   async_constant_delay& delay,
   utils::movable_function<void(std::exception_ptr)> callback)
@@ -844,7 +845,7 @@ staged_mutation_queue::handle_remove_doc_error(
 void
 staged_mutation_queue::handle_rollback_insert_error(
   const client_error& e,
-  attempt_context_impl* ctx,
+  std::shared_ptr<attempt_context_impl> ctx,
   const staged_mutation& item,
   async_exp_delay& delay,
   utils::movable_function<void(std::exception_ptr)> callback)
@@ -894,7 +895,7 @@ staged_mutation_queue::handle_rollback_insert_error(
 void
 staged_mutation_queue::handle_rollback_remove_or_replace_error(
   const client_error& e,
-  attempt_context_impl* ctx,
+  std::shared_ptr<attempt_context_impl> ctx,
   const staged_mutation& item,
   async_exp_delay& delay,
   utils::movable_function<void(std::exception_ptr)> callback)
