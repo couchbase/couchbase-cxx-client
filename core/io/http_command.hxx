@@ -127,15 +127,25 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     deadline.cancel();
   }
 
-  void send_to(std::shared_ptr<io::http_session> session)
+  void send_to()
   {
     if (!handler_) {
       return;
     }
-    session_ = std::move(session);
     if (span_->uses_tags())
       span_->add_tag(tracing::attributes::local_id, session_->id());
     send();
+  }
+
+  void set_command_session(std::shared_ptr<io::http_session> session)
+  {
+    session_.reset();
+    session_ = std::move(session);
+  }
+
+  [[nodiscard]] auto deadline_expired() const -> bool
+  {
+    return deadline.expiry() < std::chrono::steady_clock::now();
   }
 
 private:

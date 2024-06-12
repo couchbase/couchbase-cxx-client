@@ -132,6 +132,7 @@ public:
     , stream_(std::make_unique<plain_stream_impl>(ctx_))
     , connect_deadline_timer_(stream_->get_executor())
     , idle_timer_(stream_->get_executor())
+    , retry_backoff_(stream_->get_executor())
     , credentials_(credentials)
     , hostname_(hostname)
     , service_(service)
@@ -157,6 +158,7 @@ public:
     , stream_(std::make_unique<tls_stream_impl>(ctx_, tls))
     , connect_deadline_timer_(ctx_)
     , idle_timer_(ctx_)
+    , retry_backoff_(ctx_)
     , credentials_(credentials)
     , hostname_(hostname)
     , service_(service)
@@ -206,19 +208,6 @@ public:
              state_ };
   }
 
-  void start()
-  {
-    state_ = diag::endpoint_state::connecting;
-    async_resolve(http_ctx_.options.use_ip_protocol,
-                  resolver_,
-                  hostname_,
-                  service_,
-                  std::bind(&http_session::on_resolve,
-                            shared_from_this(),
-                            std::placeholders::_1,
-                            std::placeholders::_2));
-  }
-
   [[nodiscard]] auto log_prefix() -> std::string
   {
     std::scoped_lock lock(info_mutex_);
@@ -228,6 +217,16 @@ public:
   [[nodiscard]] auto id() const -> const std::string&
   {
     return id_;
+  }
+
+  [[nodiscard]] auto credentials() const -> const cluster_credentials&
+  {
+    return credentials_;
+  }
+
+  [[nodiscard]] auto is_connected() const -> bool
+  {
+    return connected_;
   }
 
   [[nodiscard]] auto type() const -> service_type
@@ -249,6 +248,48 @@ public:
   {
     std::scoped_lock lock(info_mutex_);
     return info_.remote_endpoint();
+  }
+
+  void connect(utils::movable_function<void()>&& callback)
+  {
+    connect_callback_ = std::move(callback);
+    initiate_connect();
+  }
+
+  void initiate_connect()
+  {
+    if (stopped_) {
+      return;
+    }
+    if (state_ != diag::endpoint_state::connecting) {
+      CB_LOG_DEBUG(
+        "{} {}:{} attempt to establish HTTP connection", info_.log_prefix(), hostname_, service_);
+      state_ = diag::endpoint_state::connecting;
+      async_resolve(http_ctx_.options.use_ip_protocol,
+                    resolver_,
+                    hostname_,
+                    service_,
+                    std::bind(&http_session::on_resolve,
+                              shared_from_this(),
+                              std::placeholders::_1,
+                              std::placeholders::_2));
+    } else {
+      // reset state incase the session is being reused
+      state_ = diag::endpoint_state::disconnected;
+      auto backoff = std::chrono::milliseconds(500);
+      CB_LOG_DEBUG(
+        "{} waiting for {}ms before trying to connect", info_.log_prefix(), backoff.count());
+      retry_backoff_.expires_after(backoff);
+      retry_backoff_.async_wait([self = shared_from_this()](std::error_code ec) mutable {
+        if (ec == asio::error::operation_aborted || self->stopped_) {
+          return;
+        }
+        if (auto callback = std::move(self->connect_callback_); callback) {
+          callback();
+        }
+      });
+      return;
+    }
   }
 
   void on_stop(std::function<void()> handler)
@@ -275,6 +316,10 @@ public:
     });
     connect_deadline_timer_.cancel();
     idle_timer_.cancel();
+    retry_backoff_.cancel();
+    if (connect_callback_) {
+      connect_callback_ = nullptr;
+    }
 
     cancel_current_response(errc::common::request_canceled);
 
@@ -396,7 +441,7 @@ private:
     if (ec) {
       CB_LOG_ERROR(
         "{} error on resolve \"{}:{}\": {}", info_.log_prefix(), hostname_, service_, ec.message());
-      return;
+      return initiate_connect();
     }
     last_active_ = std::chrono::steady_clock::now();
     endpoints_ = endpoints;
@@ -421,15 +466,19 @@ private:
                    hostname_,
                    service_,
                    http_ctx_.options.connect_timeout.count());
-      connect_deadline_timer_.async_wait([self = shared_from_this()](std::error_code ec) {
-        if (ec == asio::error::operation_aborted || self->stopped_) {
-          return;
-        }
-        self->cancel_current_response(couchbase::errc::common::unambiguous_timeout);
-        self->stream_->close([](std::error_code) {
-        });
-      });
       connect_deadline_timer_.expires_after(http_ctx_.options.connect_timeout);
+      connect_deadline_timer_.async_wait(
+        [self = shared_from_this(), it](const auto timer_ec) mutable {
+          if (timer_ec == asio::error::operation_aborted || self->stopped_) {
+            return;
+          }
+          CB_LOG_DEBUG("{} unable to connect to {}:{} in time, reconnecting",
+                       self->info_.log_prefix(),
+                       self->hostname_,
+                       self->service_);
+          return self->stream_->close(std::bind(&http_session::do_connect, self, ++it));
+        });
+
       stream_->async_connect(
         it->endpoint(),
         std::bind(&http_session::on_connect, shared_from_this(), std::placeholders::_1, it));
@@ -438,7 +487,7 @@ private:
                    info_.log_prefix(),
                    hostname_,
                    service_);
-      stop();
+      return initiate_connect();
     }
   }
 
@@ -474,6 +523,9 @@ private:
         info_ = http_session_info(client_id_, id_, stream_->local_endpoint(), it->endpoint());
       }
       connect_deadline_timer_.cancel();
+      if (auto callback = std::move(connect_callback_); callback) {
+        callback();
+      }
       flush();
     }
   }
@@ -602,6 +654,7 @@ private:
   std::unique_ptr<stream_impl> stream_;
   asio::steady_timer connect_deadline_timer_;
   asio::steady_timer idle_timer_;
+  asio::steady_timer retry_backoff_;
 
   cluster_credentials credentials_;
   std::string hostname_;
@@ -613,6 +666,7 @@ private:
   std::atomic_bool keep_alive_{ false };
   std::atomic_bool reading_{ false };
 
+  utils::movable_function<void()> connect_callback_{};
   std::function<void()> on_stop_handler_{ nullptr };
 
   response_context current_response_{};
