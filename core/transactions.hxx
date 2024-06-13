@@ -135,11 +135,6 @@ class transactions : public couchbase::transactions::transactions
 {
 public:
   /**
-   * @brief Destructor
-   */
-  ~transactions();
-
-  /**
    * @brief Create a transactions object.
    *
    * Creates a transactions object, which can be used to run transactions within the current thread.
@@ -216,7 +211,7 @@ public:
 
   void run(couchbase::transactions::async_txn_logic&& code,
            couchbase::transactions::async_txn_complete_logic&& complete_cb,
-           const couchbase::transactions::transaction_options& cfg = {}) override;
+           const couchbase::transactions::transaction_options& cfg) override;
   /**
    * @internal
    * called internally - will likely move

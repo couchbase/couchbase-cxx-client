@@ -56,9 +56,14 @@ public:
    * @return an {@link transaction_error_context}, and a {@link transaction_result} representing the
    * results of the transaction.
    */
-  virtual std::pair<error, transaction_result> run(
-    txn_logic&& logic,
-    const transaction_options& cfg = transaction_options()) = 0;
+  virtual auto run(txn_logic&& logic,
+                   const transaction_options& cfg) -> std::pair<error, transaction_result> = 0;
+
+  auto run(txn_logic&& logic) -> std::pair<error, transaction_result>
+  {
+    return run(std::move(logic), {});
+  }
+
   /**
    * Run an asynchronous transaction.
    *
@@ -80,6 +85,11 @@ public:
    */
   virtual void run(async_txn_logic&& logic,
                    async_txn_complete_logic&& complete_callback,
-                   const transaction_options& cfg = transaction_options()) = 0;
+                   const transaction_options& cfg) = 0;
+
+  void run(async_txn_logic&& logic, async_txn_complete_logic&& complete_callback)
+  {
+    return run(std::move(logic), std::move(complete_callback), {});
+  }
 };
 } // namespace couchbase::transactions
