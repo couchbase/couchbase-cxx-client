@@ -88,7 +88,7 @@ auto
 best_effort_retry_strategy::retry_after(const retry_request& request,
                                         retry_reason reason) -> retry_action
 {
-  if (request.idempotent() || allows_non_idempotent_retry(reason)) {
+  if (request.idempotent() && allows_non_idempotent_retry(reason)) {
     return retry_action{ backoff_calculator_(request.retry_attempts()) };
   }
   return retry_action::do_not_retry();

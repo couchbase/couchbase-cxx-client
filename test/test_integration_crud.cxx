@@ -15,6 +15,7 @@
  *   limitations under the License.
  */
 
+#include "couchbase/error_codes.hxx"
 #include "test_helper_integration.hxx"
 
 #include "utils/move_only_context.hxx"
@@ -1079,5 +1080,41 @@ TEST_CASE("integration: get with expiry with public API", "[integration]")
       REQUIRE(resp.expiry_time().has_value());
       REQUIRE(resp.expiry_time().value() == the_expiry);
     }
+  }
+}
+
+TEST_CASE("integration: CXXCBC-81 upsert after lock", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+  couchbase::core::document_id id{
+    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("locking")
+  };
+  uint32_t lock_time = 10;
+
+  couchbase::cas cas{};
+
+  {
+    couchbase::core::operations::insert_request req{ id, basic_doc_json };
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec());
+    cas = resp.cas;
+  }
+
+  {
+    couchbase::core::operations::get_and_lock_request req{ id };
+    req.lock_time = lock_time;
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec());
+    REQUIRE(cas != resp.cas);
+    cas = resp.cas;
+  }
+
+  {
+    couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary("{}") };
+    req.timeout = std::chrono::seconds{ lock_time - 2 };
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_locked);
   }
 }
