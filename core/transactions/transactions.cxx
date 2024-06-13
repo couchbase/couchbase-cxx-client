@@ -47,8 +47,6 @@ transactions::transactions(core::cluster cluster,
 {
 }
 
-transactions::~transactions() = default;
-
 void
 transactions::create(
   core::cluster cluster,
