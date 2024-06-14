@@ -148,6 +148,12 @@ struct server_version {
     return !use_gocaves;
   }
 
+  [[nodiscard]] auto has_fixed_consistency_check_in_search_engine_MB_55920() const -> bool
+  {
+    return supports_search() &&
+           ((major == 7 && minor == 2 && micro >= 1) || (major == 7 && minor > 2) || major > 7);
+  }
+
   [[nodiscard]] auto supports_search() const -> bool
   {
     return !use_gocaves;
