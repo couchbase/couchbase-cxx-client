@@ -360,6 +360,10 @@ TEST_CASE("integration: search query consistency", "[integration]")
 {
   test::utils::integration_test_guard integration;
 
+  if (!integration.cluster_version().has_fixed_consistency_check_in_search_engine_MB_55920()) {
+    SKIP("consistency checks in search engine has been fixed in 7.2.1, see MB-55920");
+  }
+
   if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
     SKIP("elixir deployment is incompatible with parts of this test");
   }
