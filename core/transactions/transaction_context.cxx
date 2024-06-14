@@ -269,7 +269,7 @@ transaction_context::handle_error(std::exception_ptr err, txn_complete_callback&
       try {
         current_attempt_context_->rollback();
       } catch (const std::exception& er_rollback) {
-        cleanup().add_attempt(*current_attempt_context_);
+        cleanup().add_attempt(current_attempt_context_);
         CB_ATTEMPT_CTX_LOG_TRACE(
           current_attempt_context_,
           "got error \"{}\" while auto rolling back, throwing original error",
@@ -295,12 +295,12 @@ transaction_context::handle_error(std::exception_ptr err, txn_complete_callback&
     }
     if (er.should_retry()) {
       CB_ATTEMPT_CTX_LOG_TRACE(current_attempt_context_, "got retryable exception, retrying");
-      cleanup().add_attempt(*current_attempt_context_);
+      cleanup().add_attempt(current_attempt_context_);
       return callback(std::nullopt, std::nullopt);
     }
 
     // throw the expected exception here
-    cleanup().add_attempt(*current_attempt_context_);
+    cleanup().add_attempt(current_attempt_context_);
     auto final = er.get_final_exception(*this);
     std::optional<::couchbase::transactions::transaction_result> res;
     if (!final) {
@@ -315,7 +315,7 @@ transaction_context::handle_error(std::exception_ptr err, txn_complete_callback&
       CB_ATTEMPT_CTX_LOG_ERROR(
         current_attempt_context_, "got error rolling back \"{}\"", ex.what());
     }
-    cleanup().add_attempt(*current_attempt_context_);
+    cleanup().add_attempt(current_attempt_context_);
     // the assumption here is this must come from the logic, not
     // our operations (which only throw transaction_operation_failed),
     auto op_failed = transaction_operation_failed(FAIL_OTHER, ex.what());
@@ -327,7 +327,7 @@ transaction_context::handle_error(std::exception_ptr err, txn_complete_callback&
     } catch (...) {
       CB_ATTEMPT_CTX_LOG_ERROR(current_attempt_context_, "got error rolling back unexpected error");
     }
-    cleanup().add_attempt(*current_attempt_context_);
+    cleanup().add_attempt(current_attempt_context_);
     // the assumption here is this must come from the logic, not
     // our operations (which only throw transaction_operation_failed),
     auto op_failed = transaction_operation_failed(FAIL_OTHER, "Unexpected error");

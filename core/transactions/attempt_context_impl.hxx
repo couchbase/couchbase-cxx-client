@@ -141,8 +141,7 @@ private:
   void commit_with_query(VoidCallback&& cb);
   void rollback_with_query(VoidCallback&& cb);
 
-  void query_begin_work(std::optional<std::string> query_context,
-                        std::function<void(std::exception_ptr)>&& cb);
+  void query_begin_work(std::optional<std::string> query_context, VoidCallback&& cb);
 
   void do_query(const std::string& statement,
                 const couchbase::transactions::transaction_query_options& opts,
@@ -185,24 +184,23 @@ private:
   }
 
   template<typename E>
-  void op_completed_with_error(std::function<void(std::exception_ptr)>&& cb, E err)
+  void op_completed_with_error(VoidCallback cb, E&& err)
   {
-    return op_completed_with_error(std::move(cb), std::make_exception_ptr(err));
+    return op_completed_with_error(std::move(cb), std::make_exception_ptr(std::forward<E>(err)));
   }
 
-  void op_completed_with_error(std::function<void(std::exception_ptr)>&& cb,
-                               std::exception_ptr err);
+  void op_completed_with_error(VoidCallback cb, std::exception_ptr err);
 
   template<typename Ret, typename E>
   void op_completed_with_error(std::function<void(std::exception_ptr, std::optional<Ret>)>&& cb,
-                               E err)
+                               E&& err)
   {
-    return op_completed_with_error(std::move(cb), std::make_exception_ptr(err));
+    return op_completed_with_error(std::move(cb), std::make_exception_ptr(std::forward<E>(err)));
   }
 
   template<typename Ret>
   void op_completed_with_error(std::function<void(std::exception_ptr, std::optional<Ret>)>&& cb,
-                               std::exception_ptr err)
+                               std::exception_ptr&& err)
   {
     try {
       std::rethrow_exception(std::move(err));
@@ -240,8 +238,7 @@ private:
     }
   }
 
-  void op_completed_with_error_no_cache(std::function<void(std::exception_ptr)>&& cb,
-                                        std::exception_ptr err)
+  void op_completed_with_error_no_cache(VoidCallback&& cb, std::exception_ptr err)
   {
     try {
       cb(std::move(err));

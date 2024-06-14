@@ -211,9 +211,7 @@ attempt_context_impl::get(const core::document_id& id) -> transaction_get_result
   return f.get();
 }
 void
-attempt_context_impl::get(
-  const core::document_id& id,
-  std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb)
+attempt_context_impl::get(const core::document_id& id, Callback&& cb)
 {
   if (op_list_.get_mode().is_query()) {
     return get_with_query(id, false, std::move(cb));
@@ -300,9 +298,7 @@ attempt_context_impl::get_optional(const core::document_id& id)
 }
 
 void
-attempt_context_impl::get_optional(
-  const core::document_id& id,
-  std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb)
+attempt_context_impl::get_optional(const core::document_id& id, Callback&& cb)
 {
 
   if (op_list_.get_mode().is_query()) {
@@ -441,10 +437,9 @@ attempt_context_impl::create_document_metadata(
 }
 
 void
-attempt_context_impl::replace_raw(
-  const transaction_get_result& document,
-  codec::encoded_value content,
-  std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb)
+attempt_context_impl::replace_raw(const transaction_get_result& document,
+                                  codec::encoded_value content,
+                                  Callback&& cb)
 {
 
   if (op_list_.get_mode().is_query()) {
@@ -787,10 +782,9 @@ attempt_context_impl::insert_raw(const core::document_id& id,
 }
 
 void
-attempt_context_impl::insert_raw(
-  const core::document_id& id,
-  codec::encoded_value content,
-  std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb)
+attempt_context_impl::insert_raw(const core::document_id& id,
+                                 codec::encoded_value content,
+                                 Callback&& cb)
 {
   if (op_list_.get_mode().is_query()) {
     return insert_raw_with_query(id, std::move(content), std::move(cb));
@@ -1222,8 +1216,7 @@ wrap_query_request(const couchbase::transactions::transaction_query_options& opt
 }
 
 void
-attempt_context_impl::query_begin_work(std::optional<std::string> query_context,
-                                       std::function<void(std::exception_ptr)>&& cb)
+attempt_context_impl::query_begin_work(std::optional<std::string> query_context, VoidCallback&& cb)
 {
   // construct the txn_data and query options for the existing transaction
   couchbase::transactions::transaction_query_options opts;
@@ -1486,7 +1479,7 @@ attempt_context_impl::wrap_query(
   std::function<void(std::exception_ptr, core::operations::query_response)>&& cb)
 {
   bool has_staged_binary{ false };
-  staged_mutations_->iterate([&](auto& mutation) {
+  staged_mutations_->iterate([&has_staged_binary](auto& mutation) {
     if (mutation.is_staged_binary()) {
       has_staged_binary = true;
     }
@@ -1690,12 +1683,9 @@ make_kv_txdata(std::optional<transaction_get_result> doc = std::nullopt) -> tao:
 }
 
 void
-attempt_context_impl::get_with_query(
-  const core::document_id& id,
-  bool optional,
-  std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb)
+attempt_context_impl::get_with_query(const core::document_id& id, bool optional, Callback&& cb)
 {
-  cache_error_async(cb, [self = shared_from_this(), id, optional, cb]() {
+  cache_error_async(cb, [self = shared_from_this(), id, optional, cb = std::move(cb)]() mutable {
     couchbase::transactions::transaction_query_options opts;
     opts.readonly(true);
     return self->wrap_query(
@@ -1751,103 +1741,108 @@ attempt_context_impl::get_with_query(
 }
 
 void
-attempt_context_impl::insert_raw_with_query(
-  const core::document_id& id,
-  codec::encoded_value content,
-  std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb)
+attempt_context_impl::insert_raw_with_query(const core::document_id& id,
+                                            codec::encoded_value content,
+                                            Callback&& cb)
 {
-  cache_error_async(cb, [self = shared_from_this(), id, content = std::move(content), cb]() {
-    couchbase::transactions::transaction_query_options opts;
-    return self->wrap_query(
-      KV_INSERT,
-      opts,
-      make_params(id, std::move(content)),
-      make_kv_txdata(),
-      STAGE_QUERY_KV_INSERT,
-      true,
-      {},
-      [self, id, cb = std::move(cb)](std::exception_ptr err,
-                                     core::operations::query_response resp) mutable {
-        if (err) {
+  cache_error_async(
+    cb,
+    [self = shared_from_this(), id, content = std::move(content), cb = std::move(cb)]() mutable {
+      couchbase::transactions::transaction_query_options opts;
+      return self->wrap_query(
+        KV_INSERT,
+        opts,
+        make_params(id, std::move(content)),
+        make_kv_txdata(),
+        STAGE_QUERY_KV_INSERT,
+        true,
+        {},
+        [self, id, cb = std::move(cb)](std::exception_ptr err,
+                                       core::operations::query_response resp) mutable {
+          if (err) {
+            try {
+              std::rethrow_exception(err);
+            } catch (const transaction_operation_failed&) {
+              return self->op_completed_with_error(std::move(cb), err);
+            } catch (const document_exists& ex) {
+              return self->op_completed_with_error(std::move(cb), ex);
+            } catch (const std::exception& e) {
+              return self->op_completed_with_error(
+                std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
+            } catch (...) {
+              return self->op_completed_with_error(
+                std::move(cb), transaction_operation_failed(FAIL_OTHER, "unexpected error"));
+            }
+          }
+          // make a transaction_get_result from the row...
           try {
-            std::rethrow_exception(err);
-          } catch (const transaction_operation_failed&) {
-            return self->op_completed_with_error(std::move(cb), err);
-          } catch (const document_exists& ex) {
-            return self->op_completed_with_error(std::move(cb), ex);
+            CB_ATTEMPT_CTX_LOG_TRACE(self, "insert_raw_with_query got: {}", resp.rows.front());
+            transaction_get_result doc(id, core::utils::json::parse(resp.rows.front()));
+            return self->op_completed_with_callback(std::move(cb),
+                                                    std::optional<transaction_get_result>(doc));
           } catch (const std::exception& e) {
+            // TODO: unsure what to do here, but this is pretty fatal, so
             return self->op_completed_with_error(
               std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
-          } catch (...) {
-            return self->op_completed_with_error(
-              std::move(cb), transaction_operation_failed(FAIL_OTHER, "unexpected error"));
           }
-        }
-        // make a transaction_get_result from the row...
-        try {
-          CB_ATTEMPT_CTX_LOG_TRACE(self, "insert_raw_with_query got: {}", resp.rows.front());
-          transaction_get_result doc(id, core::utils::json::parse(resp.rows.front()));
-          return self->op_completed_with_callback(std::move(cb),
-                                                  std::optional<transaction_get_result>(doc));
-        } catch (const std::exception& e) {
-          // TODO: unsure what to do here, but this is pretty fatal, so
-          return self->op_completed_with_error(std::move(cb),
-                                               transaction_operation_failed(FAIL_OTHER, e.what()));
-        }
-      });
-  });
+        });
+    });
 }
 
 void
-attempt_context_impl::replace_raw_with_query(
-  const transaction_get_result& document,
-  codec::encoded_value content,
-  std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb)
+attempt_context_impl::replace_raw_with_query(const transaction_get_result& document,
+                                             codec::encoded_value content,
+                                             Callback&& cb)
 {
-  cache_error_async(cb, [self = shared_from_this(), document, content = std::move(content), cb]() {
-    couchbase::transactions::transaction_query_options opts;
-    return self->wrap_query(
-      KV_REPLACE,
-      opts,
-      make_params(document.id(), std::move(content)),
-      make_kv_txdata(document),
-      STAGE_QUERY_KV_REPLACE,
-      true,
-      {},
-      [self, id = document.id(), cb = std::move(cb)](
-        std::exception_ptr err, core::operations::query_response resp) mutable {
-        if (err) {
+  cache_error_async(
+    cb,
+    [self = shared_from_this(),
+     document,
+     content = std::move(content),
+     cb = std::move(cb)]() mutable {
+      couchbase::transactions::transaction_query_options opts;
+      return self->wrap_query(
+        KV_REPLACE,
+        opts,
+        make_params(document.id(), std::move(content)),
+        make_kv_txdata(document),
+        STAGE_QUERY_KV_REPLACE,
+        true,
+        {},
+        [self, id = document.id(), cb = std::move(cb)](
+          std::exception_ptr err, core::operations::query_response resp) mutable {
+          if (err) {
+            try {
+              std::rethrow_exception(std::move(err));
+            } catch (const query_cas_mismatch& e) {
+              return self->op_completed_with_error(
+                std::move(cb), transaction_operation_failed(FAIL_CAS_MISMATCH, e.what()).retry());
+            } catch (const document_not_found& e) {
+              return self->op_completed_with_error(
+                std::move(cb), transaction_operation_failed(FAIL_DOC_NOT_FOUND, e.what()).retry());
+            } catch (const transaction_operation_failed& e) {
+              return self->op_completed_with_error(std::move(cb), e);
+            } catch (std::exception& e) {
+              return self->op_completed_with_error(
+                std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
+            } catch (...) {
+              return self->op_completed_with_error(
+                std::move(cb), transaction_operation_failed(FAIL_OTHER, "unexpected exception"));
+            }
+          }
+          // make a transaction_get_result from the row...
           try {
-            std::rethrow_exception(std::move(err));
-          } catch (const query_cas_mismatch& e) {
-            return self->op_completed_with_error(
-              std::move(cb), transaction_operation_failed(FAIL_CAS_MISMATCH, e.what()).retry());
-          } catch (const document_not_found& e) {
-            return self->op_completed_with_error(
-              std::move(cb), transaction_operation_failed(FAIL_DOC_NOT_FOUND, e.what()).retry());
-          } catch (const transaction_operation_failed& e) {
-            return self->op_completed_with_error(std::move(cb), e);
-          } catch (std::exception& e) {
+            CB_ATTEMPT_CTX_LOG_TRACE(self, "replace_raw_with_query got: {}", resp.rows.front());
+            transaction_get_result doc(id, core::utils::json::parse(resp.rows.front()));
+            return self->op_completed_with_callback(std::move(cb),
+                                                    std::optional<transaction_get_result>(doc));
+          } catch (const std::exception& e) {
+            // TODO: unsure what to do here, but this is pretty fatal, so
             return self->op_completed_with_error(
               std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
-          } catch (...) {
-            return self->op_completed_with_error(
-              std::move(cb), transaction_operation_failed(FAIL_OTHER, "unexpected exception"));
           }
-        }
-        // make a transaction_get_result from the row...
-        try {
-          CB_ATTEMPT_CTX_LOG_TRACE(self, "replace_raw_with_query got: {}", resp.rows.front());
-          transaction_get_result doc(id, core::utils::json::parse(resp.rows.front()));
-          return self->op_completed_with_callback(std::move(cb),
-                                                  std::optional<transaction_get_result>(doc));
-        } catch (const std::exception& e) {
-          // TODO: unsure what to do here, but this is pretty fatal, so
-          return self->op_completed_with_error(std::move(cb),
-                                               transaction_operation_failed(FAIL_OTHER, e.what()));
-        }
-      });
-  });
+        });
+    });
 }
 
 void
@@ -1863,8 +1858,8 @@ attempt_context_impl::remove_with_query(const transaction_get_result& document, 
       STAGE_QUERY_KV_REMOVE,
       true,
       {},
-      [self, id = document.id(), cb = std::move(cb)](
-        std::exception_ptr err, core::operations::query_response /* resp */) mutable {
+      [self, id = document.id(), cb](std::exception_ptr err,
+                                     core::operations::query_response /* resp */) mutable {
         if (err) {
           try {
             std::rethrow_exception(std::move(err));
@@ -1904,8 +1899,8 @@ attempt_context_impl::commit_with_query(VoidCallback&& cb)
     STAGE_QUERY_COMMIT,
     true,
     {},
-    [self = shared_from_this(), cb = std::move(cb)](
-      std::exception_ptr err, core::operations::query_response /* resp */) mutable {
+    [self = shared_from_this(), cb](std::exception_ptr err,
+                                    core::operations::query_response /* resp */) mutable {
       self->is_done_ = true;
       if (err) {
         try {
@@ -1946,8 +1941,8 @@ attempt_context_impl::rollback_with_query(VoidCallback&& cb)
              STAGE_QUERY_ROLLBACK,
              true,
              {},
-             [self = shared_from_this(), cb = std::move(cb)](
-               std::exception_ptr err, core::operations::query_response /* resp */) mutable {
+             [self = shared_from_this(), cb](std::exception_ptr err,
+                                             core::operations::query_response /* resp */) mutable {
                self->is_done_ = true;
                if (err) {
                  try {
@@ -3451,8 +3446,7 @@ attempt_context_impl::handle_err_from_callback(std::exception_ptr e)
 }
 
 void
-attempt_context_impl::op_completed_with_error(std::function<void(std::exception_ptr)>&& cb,
-                                              std::exception_ptr err)
+attempt_context_impl::op_completed_with_error(VoidCallback cb, std::exception_ptr err)
 {
   try {
     std::rethrow_exception(std::move(err));

@@ -82,7 +82,7 @@ using txn_complete_callback =
  * transactions txn(c, config);
  *
  * try {
- *     txn.run([&](transactions::attempt_context& ctx) {
+ *     txn.run([&](std::shared_ptr<transactions::attempt_context> ctx) {
  *         ctx.upsert(coll, "somekey", nlohmann::json::parse("{\"a\":\"thing\"}"));
  *         ctx.insert(coll, "someotherkey", nlohmann::json::parse("{"\a\":\"different thing\"}"));
  *     });
