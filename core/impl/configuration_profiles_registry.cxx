@@ -26,11 +26,21 @@ namespace couchbase
 {
 
 struct registry {
-  static inline std::map<std::string, std::shared_ptr<configuration_profile>, std::less<>> store{
+  std::map<std::string, std::shared_ptr<configuration_profile>, std::less<>> store{
     { "wan_development", std::make_shared<wan_development_configuration_profile>() }
   };
-  static inline std::mutex store_mutex{};
+  std::mutex store_mutex{};
 };
+
+namespace
+{
+auto
+registry_instance() -> registry&
+{
+  static registry instance{};
+  return instance;
+}
+} // namespace
 
 void
 configuration_profiles_registry::register_profile(const std::string& name,
@@ -39,8 +49,9 @@ configuration_profiles_registry::register_profile(const std::string& name,
   if (name.empty()) {
     return;
   }
-  std::scoped_lock lock(registry::store_mutex);
-  registry::store[name] = std::move(profile);
+  auto& instance = registry_instance();
+  std::scoped_lock lock(instance.store_mutex);
+  instance.store[name] = std::move(profile);
 }
 
 void
@@ -50,15 +61,14 @@ configuration_profiles_registry::apply_profile(const std::string& name,
   std::shared_ptr<configuration_profile> profile;
   if (name.empty()) {
     return;
-  } else {
-    std::scoped_lock lock(registry::store_mutex);
-    if (auto it = registry::store.find(name); it == registry::store.end()) {
-      return;
-    } else if (it->second != nullptr) {
-      profile = it->second;
-    }
   }
-
+  auto& instance = registry_instance();
+  std::scoped_lock lock(instance.store_mutex);
+  if (auto it = instance.store.find(name); it != instance.store.end() && it->second != nullptr) {
+    profile = it->second;
+  } else {
+    return;
+  }
   if (profile) {
     profile->apply(options);
   }
@@ -68,8 +78,10 @@ auto
 configuration_profiles_registry::available_profiles() -> std::vector<std::string>
 {
   std::vector<std::string> profile_names;
-  std::scoped_lock lock(registry::store_mutex);
-  for (const auto& [name, _] : registry::store) {
+  auto& instance = registry_instance();
+  std::scoped_lock lock(instance.store_mutex);
+  profile_names.reserve(instance.store.size());
+  for (const auto& [name, _] : instance.store) {
     profile_names.push_back(name);
   }
   return profile_names;
