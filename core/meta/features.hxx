@@ -162,3 +162,9 @@
  * Supports binary objects in transactions
  */
 #define COUCHBASE_CXX_CLIENT_SUPPORTS_BINARY_TRANSACTIONS
+
+/**
+ * attempt_context in the transaction logic is a std::shared_ptr, a not just bare
+ * reference.
+ */
+#define COUCHBASE_CXX_CLIENT_ATTEMPT_CONTEXT_IS_A_SHARED_POINTER
