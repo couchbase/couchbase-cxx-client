@@ -1,0 +1,10 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=@CMAKE_INSTALL_PREFIX@
+includedir=@CMAKE_INSTALL_PREFIX@/include
+libdir=@CMAKE_INSTALL_LIBDIR@
+
+Name: couchbase-cxx-client @COUCHBASE_CXX_CLIENT_SEMVER@
+Description: Couchbase C++ SDK
+Version: @COUCHBASE_CXX_CLIENT_SEMVER@
+Libs: -L${libdir} -lcouchbase_cxx_client
+Cflags: -I${includedir}

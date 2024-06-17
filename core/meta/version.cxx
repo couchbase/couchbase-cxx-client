@@ -44,6 +44,7 @@ sdk_build_info() -> std::map<std::string, std::string>
 {
   std::map<std::string, std::string> info{};
   info["build_timestamp"] = COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP;
+  info["build_date"] = COUCHBASE_CXX_CLIENT_BUILD_DATE;
   info["revision"] = COUCHBASE_CXX_CLIENT_GIT_REVISION;
   info["version_major"] = std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MAJOR);
   info["version_minor"] = std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MINOR);
@@ -220,9 +221,18 @@ parse_git_describe_output(const std::string& git_describe_output) -> std::string
     }
     if (auto build = match[5].str(); !build.empty() && number_of_commits > 0) {
       if (pre_release.empty()) {
-        return fmt::format("{}+{}.{}", version_core, number_of_commits, build);
+        return fmt::format("{}+{}.{}.{}",
+                           version_core,
+                           number_of_commits,
+                           COUCHBASE_CXX_CLIENT_VERSION_BUILD,
+                           build);
       }
-      return fmt::format("{}-{}+{}.{}", version_core, pre_release, number_of_commits, build);
+      return fmt::format("{}-{}+{}.{}.{}",
+                         version_core,
+                         pre_release,
+                         number_of_commits,
+                         COUCHBASE_CXX_CLIENT_VERSION_BUILD,
+                         build);
     }
     if (pre_release.empty()) {
       return fmt::format("{}", version_core);
@@ -233,14 +243,37 @@ parse_git_describe_output(const std::string& git_describe_output) -> std::string
   return "";
 }
 
+const std::string&
+build_revision_short()
+{
+  static const std::string revision{ COUCHBASE_CXX_CLIENT_GIT_REVISION_SHORT };
+  return revision;
+}
+
+static std::string
+revision_with_prefix(std::string_view prefix)
+{
+  const auto& revision = build_revision_short();
+  if (revision.empty() || revision == "unknown") {
+    return "";
+  }
+  return fmt::format("{}{}", prefix, revision);
+}
+
+auto
+build_date() -> const std::string&
+{
+  static const std::string timestamp{ COUCHBASE_CXX_CLIENT_BUILD_DATE };
+  return timestamp;
+}
+
 auto
 sdk_semver() -> const std::string&
 {
   static const std::string simple_version{
     std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MAJOR) + "." +
     std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MINOR) + "." +
-    std::to_string(COUCHBASE_CXX_CLIENT_VERSION_PATCH) + "+" +
-    std::string(COUCHBASE_CXX_CLIENT_GIT_REVISION_SHORT)
+    std::to_string(COUCHBASE_CXX_CLIENT_VERSION_PATCH) + revision_with_prefix("+")
   };
   static const std::string git_describe_output{ COUCHBASE_CXX_CLIENT_GIT_DESCRIBE };
   static const std::string semantic_version = parse_git_describe_output(git_describe_output);
@@ -253,8 +286,7 @@ sdk_semver() -> const std::string&
 auto
 sdk_version() -> const std::string&
 {
-  static const std::string version{ sdk_version_short() + "/" +
-                                    COUCHBASE_CXX_CLIENT_GIT_REVISION_SHORT };
+  static const std::string version{ sdk_version_short() + revision_with_prefix("/") };
   return version;
 }
 

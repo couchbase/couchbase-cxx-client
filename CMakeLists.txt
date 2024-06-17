@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.19)
 message(STATUS "CMake version ${CMAKE_VERSION}")
 
-set(couchbase_cxx_client_BUILD_NUMBER 0)
+set(couchbase_cxx_client_BUILD_NUMBER 1)
 if(DEFINED ENV{BUILD_NUMBER})
   set(couchbase_cxx_client_BUILD_NUMBER $ENV{BUILD_NUMBER})
 endif()
@@ -16,9 +16,9 @@ endif()
 
 project(
   couchbase_cxx_client
-  VERSION "1.0.0.${couchbase_cxx_client_BUILD_NUMBER}"
+  VERSION "1.0.0"
   LANGUAGES CXX C)
-message(STATUS "Couchbase C++ client ${couchbase_cxx_client_VERSION}, master: ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT}")
+message(STATUS "Couchbase C++ client ${couchbase_cxx_client_VERSION} build ${couchbase_cxx_client_BUILD_NUMBER}, master: ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT}")
 message(STATUS "System: ${CMAKE_SYSTEM_NAME}, ${CMAKE_SYSTEM_VERSION}, ${CMAKE_SYSTEM_PROCESSOR}")
 if(WIN32)
   message(STATUS "Windows SDK: ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
@@ -410,7 +410,7 @@ set(couchbase_cxx_client_FILES
     core/view_query_options.cxx
 )
 
-if(COUCHBASE_CXX_CLIENT_BUILD_SHARED)
+if(COUCHBASE_CXX_CLIENT_BUILD_SHARED OR BUILD_SHARED_LIBS)
   add_library(couchbase_cxx_client SHARED ${couchbase_cxx_client_FILES})
 else()
   add_library(couchbase_cxx_client STATIC ${couchbase_cxx_client_FILES})
@@ -504,3 +504,5 @@ option(COUCHBASE_CXX_CLIENT_BUILD_TOOLS "Build tools" ${COUCHBASE_CXX_CLIENT_MAS
 if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
   add_subdirectory(tools)
 endif()
+
+include(cmake/Packaging.cmake)
