@@ -29,6 +29,8 @@ if(WIN32)
   message(STATUS "Windows SDK: ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
 endif()
 
+include(cmake/TarballRelease.cmake OPTIONAL)
+
 include(cmake/PreventInSourceBuilds.cmake)
 include(cmake/StandardProjectSettings.cmake)
 
@@ -437,10 +439,14 @@ endif()
 add_library(couchbase_cxx_client::couchbase_cxx_client ALIAS couchbase_cxx_client)
 set_target_properties(couchbase_cxx_client PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+target_include_directories(taocpp-json INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
 target_include_directories(couchbase_cxx_client PRIVATE ${PROJECT_BINARY_DIR}/generated ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
-target_include_directories(couchbase_cxx_client PUBLIC ${PROJECT_SOURCE_DIR})
-target_include_directories(couchbase_cxx_client SYSTEM PUBLIC ${PROJECT_SOURCE_DIR}/third_party/cxx_function
-                                                              ${PROJECT_SOURCE_DIR}/third_party/expected/include)
+target_include_directories(couchbase_cxx_client SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/third_party/cxx_function
+                                                               ${PROJECT_SOURCE_DIR}/third_party/expected/include)
 target_link_libraries(couchbase_cxx_client PRIVATE project_options project_warnings)
 
 if (COUCHBASE_CXX_CLIENT_CLANG_TIDY)

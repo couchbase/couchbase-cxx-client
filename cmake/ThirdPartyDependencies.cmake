@@ -26,6 +26,7 @@ if(NOT TARGET fmt::fmt)
     11.0.1
     GITHUB_REPOSITORY
     "fmtlib/fmt"
+    EXCLUDE_FROM_ALL ON
     OPTIONS
     # Unicode support for MSVC enabled in CompilerWarnings.cmake
     "FMT_UNICODE OFF"
@@ -46,6 +47,7 @@ if(NOT TARGET spdlog::spdlog)
     1.14.1
     GITHUB_REPOSITORY
     "gabime/spdlog"
+    EXCLUDE_FROM_ALL ON
     OPTIONS
     "BUILD_SHARED_LIBS OFF"
     "CMAKE_C_VISIBILITY_PRESET hidden"
@@ -64,6 +66,7 @@ if(NOT TARGET Microsoft.GSL::GSL)
     4.0.0
     GITHUB_REPOSITORY
     "microsoft/gsl"
+    EXCLUDE_FROM_ALL ON
     OPTIONS
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
@@ -81,6 +84,7 @@ if(NOT TARGET hdr_histogram_static)
     0.11.8
     GITHUB_REPOSITORY
     "HdrHistogram/HdrHistogram_c"
+    EXCLUDE_FROM_ALL ON
     OPTIONS
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
@@ -101,6 +105,7 @@ if(NOT TARGET llhttp::llhttp)
     9.2.1
     GITHUB_REPOSITORY
     "nodejs/llhttp"
+    EXCLUDE_FROM_ALL ON
     OPTIONS
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
@@ -120,6 +125,7 @@ if(NOT TARGET snappy)
     1.2.1
     GITHUB_REPOSITORY
     "google/snappy"
+    EXCLUDE_FROM_ALL ON
     OPTIONS
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
@@ -167,7 +173,8 @@ if(NOT TARGET asio::asio)
     VERSION
     1.30.2
     GITHUB_REPOSITORY
-    "chriskohlhoff/asio")
+    "chriskohlhoff/asio"
+    EXCLUDE_FROM_ALL ON)
 endif()
 
 # ASIO doesn't use CMake, we have to configure it manually. Extra notes for using on Windows:

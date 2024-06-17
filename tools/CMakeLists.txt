@@ -7,7 +7,14 @@ if(NOT TARGET CLI11::CLI11)
     2.4.1
     GITHUB_REPOSITORY
     "cliutils/cli11"
+    EXCLUDE_FROM_ALL ON
     OPTIONS
+    "BUILD_TESTING OFF"
+    "CLI11_BUILD_TESTS OFF"
+    "CLI11_BUILD_DOCS OFF"
+    "CLI11_BUILD_EXAMPLES OFF"
+    "CLI11_SINGLE_FILE_TESTS OFF"
+    "CLI11_INSTALL OFF"
     "CLI11_PRECOMPILED ON")
 endif()
 
@@ -24,6 +31,7 @@ add_executable(
 target_include_directories(cbc PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/private)
 target_link_libraries(
   cbc
+  PRIVATE
   ${CMAKE_THREAD_LIBS_INIT}
   couchbase_cxx_client
   CLI11
