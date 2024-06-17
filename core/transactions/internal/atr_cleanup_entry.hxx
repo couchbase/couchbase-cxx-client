@@ -81,7 +81,7 @@ private:
                   const std::function<void(transaction_get_result&, bool)>& call);
 
 public:
-  explicit atr_cleanup_entry(attempt_context& ctx);
+  explicit atr_cleanup_entry(std::shared_ptr<attempt_context> ctx);
   explicit atr_cleanup_entry(const atr_entry& entry,
                              const core::document_id& atr_coll,
                              const transactions_cleanup& cleanup,
@@ -144,8 +144,7 @@ private:
 public:
   // pop, but only if the front entry's min_start_time_ is before now
   std::optional<atr_cleanup_entry> pop(bool check_time = true);
-  void push(attempt_context& ctx);
-  void push(const atr_cleanup_entry& entry);
+  void push(std::shared_ptr<attempt_context> ctx);
   std::size_t size() const;
 };
 

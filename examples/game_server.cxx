@@ -148,8 +148,8 @@ public:
                            const std::string& monster_id,
                            std::atomic<bool>& exists)
   {
-    auto [err, result] = transactions_->run([&](attempt_context& ctx) {
-      auto [e, monster] = ctx.get(collection, monster_id);
+    auto [err, result] = transactions_->run([&](std::shared_ptr<attempt_context> ctx) {
+      auto [e, monster] = ctx->get(collection, monster_id);
       if (e.ec() == couchbase::errc::transaction_op::document_not_found_exception) {
         std::cout << "monster no longer exists" << std::endl;
         exists = false;
@@ -164,7 +164,7 @@ public:
                 << damage_ << " damage, now has " << monster_new_hitpoints << " hitpoints"
                 << std::endl;
 
-      auto [e2, player] = ctx.get(collection, player_id);
+      auto [e2, player] = ctx->get(collection, player_id);
       if (e2.ec()) {
         // rollback
         throw std::runtime_error(fmt::format("error getting player {}", player_id));
@@ -173,7 +173,7 @@ public:
       if (monster_new_hitpoints <= 0) {
         // Monster is killed. The remove is just for demoing, and a more realistic examples would
         // set a "dead" flag or similar.
-        ctx.remove(monster);
+        ctx->remove(monster);
 
         const Player& player_body = player.content<Player>();
 
@@ -190,13 +190,13 @@ public:
         Player player_new_body = player_body;
         player_new_body.experience = player_new_experience;
         player_new_body.level = player_new_level;
-        ctx.replace(player, player_new_body);
+        ctx->replace(player, player_new_body);
       } else {
         std::cout << "Monster " << monster_id << " is damaged but alive" << std::endl;
 
         Monster monster_new_body = monster_body;
         monster_new_body.hitpoints = monster_new_hitpoints;
-        ctx.replace(monster, monster_new_body);
+        ctx->replace(monster, monster_new_body);
       }
     });
     if (err.ec()) {

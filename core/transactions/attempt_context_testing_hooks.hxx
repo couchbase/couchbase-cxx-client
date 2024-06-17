@@ -27,10 +27,10 @@ namespace couchbase::core::transactions
 class attempt_context;
 
 using error_func1 =
-  std::function<void(attempt_context*,
+  std::function<void(std::shared_ptr<attempt_context>,
                      core::utils::movable_function<void(std::optional<error_class>)>&&)>;
 using error_func2 =
-  std::function<void(attempt_context*,
+  std::function<void(std::shared_ptr<attempt_context>,
                      const std::string&,
                      core::utils::movable_function<void(std::optional<error_class>)>&&)>;
 
@@ -113,9 +113,11 @@ struct attempt_context_testing_hooks {
   error_func1 after_atr_aborted;
   error_func1 after_atr_rolled_back;
 
-  std::function<std::optional<const std::string>(attempt_context*)> random_atr_id_for_vbucket;
+  std::function<std::optional<const std::string>(std::shared_ptr<attempt_context>)>
+    random_atr_id_for_vbucket;
 
-  std::function<bool(attempt_context*, const std::string&, std::optional<const std::string>)>
+  std::function<
+    bool(std::shared_ptr<attempt_context>, const std::string&, std::optional<const std::string>)>
     has_expired_client_side;
 
   attempt_context_testing_hooks();

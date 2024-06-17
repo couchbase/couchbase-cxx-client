@@ -106,7 +106,7 @@ public:
   };
 
   // Add an attempt cleanup later.
-  void add_attempt(attempt_context& ctx);
+  void add_attempt(std::shared_ptr<attempt_context> ctx);
 
   std::size_t cleanup_queue_length() const
   {

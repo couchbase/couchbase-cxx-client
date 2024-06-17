@@ -127,7 +127,7 @@ public:
 struct unstaging_state {
   static const size_t MAX_PARALLELISM = 1000;
 
-  attempt_context_impl* ctx_;
+  std::shared_ptr<attempt_context_impl> ctx_;
   std::mutex mutex_{};
   std::condition_variable cv_{};
   std::atomic_size_t in_flight_count_{ 0 };
@@ -146,62 +146,62 @@ private:
 
   using client_error_handler = utils::movable_function<void(const std::optional<client_error>&)>;
 
-  static void validate_rollback_remove_or_replace_result(attempt_context_impl* ctx,
+  static void validate_rollback_remove_or_replace_result(std::shared_ptr<attempt_context_impl> ctx,
                                                          result& res,
                                                          const staged_mutation& item,
                                                          client_error_handler&& handler);
-  static void validate_rollback_insert_result(attempt_context_impl* ctx,
+  static void validate_rollback_insert_result(std::shared_ptr<attempt_context_impl> ctx,
                                               result& res,
                                               const staged_mutation& item,
                                               client_error_handler&& handler);
-  static void validate_commit_doc_result(attempt_context_impl* ctx,
+  static void validate_commit_doc_result(std::shared_ptr<attempt_context_impl> ctx,
                                          result& res,
                                          staged_mutation& item,
                                          client_error_handler&& handler);
-  static void validate_remove_doc_result(attempt_context_impl* ctx,
+  static void validate_remove_doc_result(std::shared_ptr<attempt_context_impl> ctx,
                                          result& res,
                                          const staged_mutation& item,
                                          client_error_handler&& handler);
 
   void handle_commit_doc_error(const client_error& e,
-                               attempt_context_impl* ctx,
+                               std::shared_ptr<attempt_context_impl> ctx,
                                staged_mutation& item,
                                async_constant_delay& delay,
                                bool ambiguity_resolution_mode,
                                bool cas_zero_mode,
                                utils::movable_function<void(std::exception_ptr)> callback);
   void handle_remove_doc_error(const client_error& e,
-                               attempt_context_impl* ctx,
+                               std::shared_ptr<attempt_context_impl> ctx,
                                const staged_mutation& item,
                                async_constant_delay& delay,
                                utils::movable_function<void(std::exception_ptr)> callback);
   void handle_rollback_insert_error(const client_error& e,
-                                    attempt_context_impl* ctx,
+                                    std::shared_ptr<attempt_context_impl> ctx,
                                     const staged_mutation& item,
                                     async_exp_delay& delay,
                                     utils::movable_function<void(std::exception_ptr)> callback);
   void handle_rollback_remove_or_replace_error(
     const client_error& e,
-    attempt_context_impl* ctx,
+    std::shared_ptr<attempt_context_impl> ctx,
     const staged_mutation& item,
     async_exp_delay& delay,
     utils::movable_function<void(std::exception_ptr)> callback);
 
-  void commit_doc(attempt_context_impl* ctx,
+  void commit_doc(std::shared_ptr<attempt_context_impl> ctx,
                   staged_mutation& item,
                   async_constant_delay& delay,
                   utils::movable_function<void(std::exception_ptr)> callback,
                   bool ambiguity_resolution_mode = false,
                   bool cas_zero_mode = false);
-  void remove_doc(attempt_context_impl* ctx,
+  void remove_doc(std::shared_ptr<attempt_context_impl> ctx,
                   const staged_mutation& item,
                   async_constant_delay& delay,
                   utils::movable_function<void(std::exception_ptr)> callback);
-  void rollback_insert(attempt_context_impl* ctx,
+  void rollback_insert(std::shared_ptr<attempt_context_impl> ctx,
                        const staged_mutation& item,
                        async_exp_delay& delay,
                        utils::movable_function<void(std::exception_ptr)> callback);
-  void rollback_remove_or_replace(attempt_context_impl* ctx,
+  void rollback_remove_or_replace(std::shared_ptr<attempt_context_impl> ctx,
                                   const staged_mutation& item,
                                   async_exp_delay& delay,
                                   utils::movable_function<void(std::exception_ptr)> callback);
@@ -210,8 +210,8 @@ public:
   auto empty() -> bool;
   void add(const staged_mutation& mutation);
   void extract_to(const std::string& prefix, core::operations::mutate_in_request& req);
-  void commit(attempt_context_impl* ctx);
-  void rollback(attempt_context_impl* ctx);
+  void commit(std::shared_ptr<attempt_context_impl> ctx);
+  void rollback(std::shared_ptr<attempt_context_impl> ctx);
   void iterate(std::function<void(staged_mutation&)>);
   void remove_any(const core::document_id&);
 

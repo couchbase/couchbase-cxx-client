@@ -160,7 +160,7 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
     for (std::size_t i = 0; i < arguments.number_of_transactions; ++i) {
       transactions->run(
         [&collection, &document_ids, &arguments, &errors](
-          couchbase::transactions::async_attempt_context& attempt) {
+          std::shared_ptr<couchbase::transactions::async_attempt_context> attempt) {
           std::vector<std::string> selected_keys;
           std::sample(document_ids.begin(),
                       document_ids.end(),
@@ -169,27 +169,27 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
                       std::mt19937_64{ std::random_device()() });
 
           for (const auto& id : selected_keys) {
-            attempt.get(
-              collection, id, [&attempt, &collection, id, &arguments, &errors](auto ctx, auto res) {
+            attempt->get(
+              collection, id, [attempt, &collection, id, &arguments, &errors](auto ctx, auto res) {
                 if (ctx.ec() == couchbase::errc::transaction_op::document_not_found_exception) {
-                  attempt.insert(collection,
-                                 id,
-                                 generate_document(arguments.document_body_size),
-                                 [&errors](auto ctx, auto) {
-                                   if (ctx.ec()) {
-                                     errors[ctx.ec().message()]++;
-                                   }
-                                 });
-                } else if (ctx.ec()) {
-                  errors[ctx.ec().message()]++;
-                } else {
-                  attempt.replace(res,
+                  attempt->insert(collection,
+                                  id,
                                   generate_document(arguments.document_body_size),
                                   [&errors](auto ctx, auto) {
                                     if (ctx.ec()) {
                                       errors[ctx.ec().message()]++;
                                     }
                                   });
+                } else if (ctx.ec()) {
+                  errors[ctx.ec().message()]++;
+                } else {
+                  attempt->replace(res,
+                                   generate_document(arguments.document_body_size),
+                                   [&errors](auto ctx, auto) {
+                                     if (ctx.ec()) {
+                                       errors[ctx.ec().message()]++;
+                                     }
+                                   });
                 }
               });
           }

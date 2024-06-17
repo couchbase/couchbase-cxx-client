@@ -26,8 +26,8 @@
 
 namespace couchbase::transactions
 {
-using txn_logic = std::function<void(attempt_context&)>;
-using async_txn_logic = std::function<void(async_attempt_context&)>;
+using txn_logic = std::function<void(std::shared_ptr<attempt_context>)>;
+using async_txn_logic = std::function<void(std::shared_ptr<async_attempt_context>)>;
 using async_txn_complete_logic = std::function<void(error, transaction_result)>;
 
 /**

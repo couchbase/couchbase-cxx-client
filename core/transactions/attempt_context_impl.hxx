@@ -34,6 +34,7 @@
 #include "transaction_get_result.hxx"
 
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -70,9 +71,10 @@ class attempt_context_impl
   , public couchbase::transactions::attempt_context
   , public async_attempt_context
   , public couchbase::transactions::async_attempt_context
+  , public std::enable_shared_from_this<attempt_context_impl>
 {
 private:
-  transaction_context& overall_;
+  std::shared_ptr<transaction_context> overall_;
   std::optional<core::document_id> atr_id_;
   bool is_done_{ false };
   std::unique_ptr<staged_mutation_queue> staged_mutations_;
@@ -139,8 +141,7 @@ private:
   void commit_with_query(VoidCallback&& cb);
   void rollback_with_query(VoidCallback&& cb);
 
-  void query_begin_work(std::optional<std::string> query_context,
-                        std::function<void(std::exception_ptr)>&& cb);
+  void query_begin_work(std::optional<std::string> query_context, VoidCallback&& cb);
 
   void do_query(const std::string& statement,
                 const couchbase::transactions::transaction_query_options& opts,
@@ -183,24 +184,23 @@ private:
   }
 
   template<typename E>
-  void op_completed_with_error(std::function<void(std::exception_ptr)>&& cb, E err)
+  void op_completed_with_error(VoidCallback cb, E&& err)
   {
-    return op_completed_with_error(std::move(cb), std::make_exception_ptr(err));
+    return op_completed_with_error(std::move(cb), std::make_exception_ptr(std::forward<E>(err)));
   }
 
-  void op_completed_with_error(std::function<void(std::exception_ptr)>&& cb,
-                               std::exception_ptr err);
+  void op_completed_with_error(VoidCallback cb, std::exception_ptr err);
 
   template<typename Ret, typename E>
   void op_completed_with_error(std::function<void(std::exception_ptr, std::optional<Ret>)>&& cb,
-                               E err)
+                               E&& err)
   {
-    return op_completed_with_error(std::move(cb), std::make_exception_ptr(err));
+    return op_completed_with_error(std::move(cb), std::make_exception_ptr(std::forward<E>(err)));
   }
 
   template<typename Ret>
   void op_completed_with_error(std::function<void(std::exception_ptr, std::optional<Ret>)>&& cb,
-                               std::exception_ptr err)
+                               std::exception_ptr&& err)
   {
     try {
       std::rethrow_exception(std::move(err));
@@ -238,8 +238,7 @@ private:
     }
   }
 
-  void op_completed_with_error_no_cache(std::function<void(std::exception_ptr)>&& cb,
-                                        std::exception_ptr err)
+  void op_completed_with_error_no_cache(VoidCallback&& cb, std::exception_ptr err)
   {
     try {
       cb(std::move(err));
@@ -292,9 +291,17 @@ private:
 
   [[nodiscard]] auto cluster_ref() const -> const core::cluster&;
 
+  explicit attempt_context_impl(std::shared_ptr<transaction_context> transaction_ctx);
+
 public:
-  explicit attempt_context_impl(transaction_context& transaction_ctx);
+  static auto create(std::shared_ptr<transaction_context> transaction_ctx)
+    -> std::shared_ptr<attempt_context_impl>;
+
   ~attempt_context_impl() override;
+  attempt_context_impl(attempt_context_impl&) = delete;
+  attempt_context_impl(attempt_context_impl&&) = delete;
+  auto operator=(attempt_context_impl&) -> attempt_context_impl& = delete;
+  auto operator=(attempt_context_impl&&) -> attempt_context_impl& = delete;
 
   auto get(const core::document_id& id) -> transaction_get_result override;
   auto get(const couchbase::collection& coll, const std::string& id)
@@ -350,49 +357,49 @@ public:
     return is_done_;
   }
 
-  [[nodiscard]] auto overall() -> transaction_context&
+  [[nodiscard]] auto overall() -> std::shared_ptr<transaction_context>
   {
     return overall_;
   }
 
   [[nodiscard]] auto transaction_id() const -> const std::string&
   {
-    return overall_.transaction_id();
+    return overall_->transaction_id();
   }
 
   [[nodiscard]] auto id() const -> const std::string&
   {
-    return overall_.current_attempt().id;
+    return overall_->current_attempt().id;
   }
 
   [[nodiscard]] auto state() -> attempt_state
   {
-    return overall_.current_attempt().state;
+    return overall_->current_attempt().state;
   }
 
   void state(attempt_state s)
   {
-    overall_.current_attempt_state(s);
+    overall_->current_attempt_state(s);
   }
 
   [[nodiscard]] auto atr_id() const -> const std::string&
   {
-    return overall_.atr_id();
+    return overall_->atr_id();
   }
 
   void atr_id(const std::string& atr_id)
   {
-    overall_.atr_id(atr_id);
+    overall_->atr_id(atr_id);
   }
 
   [[nodiscard]] auto atr_collection() const -> const std::string&
   {
-    return overall_.atr_collection();
+    return overall_->atr_collection();
   }
 
   void atr_collection_name(const std::string& coll)
   {
-    overall_.atr_collection(coll);
+    overall_->atr_collection(coll);
   }
 
   auto has_expired_client_side(std::string place, std::optional<const std::string> doc_id) -> bool;
@@ -445,7 +452,7 @@ private:
 
   template<typename Handler>
   void do_get(const core::document_id& id,
-              const std::optional<std::string> resolving_missing_atr_entry,
+              std::optional<std::string> resolving_missing_atr_entry,
               Handler&& cb);
 
   void get_doc(const core::document_id& id,

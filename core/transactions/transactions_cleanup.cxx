@@ -29,6 +29,7 @@
 #include <couchbase/fmt/transaction_keyspace.hxx>
 
 #include <functional>
+#include <memory>
 
 namespace couchbase::core::transactions
 {
@@ -567,22 +568,22 @@ transactions_cleanup::attempts_loop()
 }
 
 void
-transactions_cleanup::add_attempt(attempt_context& ctx)
+transactions_cleanup::add_attempt(std::shared_ptr<attempt_context> ctx)
 {
-  auto& ctx_impl = static_cast<attempt_context_impl&>(ctx);
-  switch (ctx_impl.state()) {
+  auto ctx_impl = std::dynamic_pointer_cast<attempt_context_impl>(ctx);
+  switch (ctx_impl->state()) {
     case attempt_state::NOT_STARTED:
     case attempt_state::COMPLETED:
     case attempt_state::ROLLED_BACK:
       CB_ATTEMPT_CLEANUP_LOG_TRACE("attempt in state {}, not adding to cleanup",
-                                   attempt_state_name(ctx_impl.state()));
+                                   attempt_state_name(ctx_impl->state()));
       return;
     default:
       if (config_.cleanup_config.cleanup_client_attempts) {
-        CB_ATTEMPT_CLEANUP_LOG_DEBUG("adding attempt {} to cleanup queue", ctx_impl.id());
+        CB_ATTEMPT_CLEANUP_LOG_DEBUG("adding attempt {} to cleanup queue", ctx_impl->id());
         atr_queue_.push(ctx);
       } else {
-        CB_ATTEMPT_CLEANUP_LOG_TRACE("not cleaning client attempts, ignoring {}", ctx_impl.id());
+        CB_ATTEMPT_CLEANUP_LOG_TRACE("not cleaning client attempts, ignoring {}", ctx_impl->id());
       }
   }
 }

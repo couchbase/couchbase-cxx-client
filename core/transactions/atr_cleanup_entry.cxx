@@ -70,20 +70,20 @@ atr_cleanup_entry::atr_cleanup_entry(const atr_entry& entry,
 {
 }
 
-atr_cleanup_entry::atr_cleanup_entry(attempt_context& ctx)
+atr_cleanup_entry::atr_cleanup_entry(std::shared_ptr<attempt_context> ctx)
   : min_start_time_(std::chrono::steady_clock::now())
   , check_if_expired_(false)
   , atr_entry_(nullptr)
 {
   // NOTE: we create these entries externally, in fit_performer tests, hence the
   // use of attempt_context rather than attempt_context_impl
-  auto& ctx_impl = static_cast<attempt_context_impl&>(ctx);
-  atr_id_ = { ctx_impl.atr_id_.value().bucket(),
-              ctx_impl.atr_id_.value().scope(),
-              ctx_impl.atr_id_.value().collection(),
-              ctx_impl.atr_id_.value().key() };
-  attempt_id_ = ctx_impl.id();
-  cleanup_ = &ctx_impl.overall_.cleanup();
+  auto ctx_impl = std::dynamic_pointer_cast<attempt_context_impl>(ctx);
+  atr_id_ = { ctx_impl->atr_id_.value().bucket(),
+              ctx_impl->atr_id_.value().scope(),
+              ctx_impl->atr_id_.value().collection(),
+              ctx_impl->atr_id_.value().key() };
+  attempt_id_ = ctx_impl->id();
+  cleanup_ = &ctx_impl->overall_->cleanup();
 }
 
 void
@@ -488,16 +488,9 @@ atr_cleanup_queue::size() const -> std::size_t
 }
 
 void
-atr_cleanup_queue::push(attempt_context& ctx)
+atr_cleanup_queue::push(std::shared_ptr<attempt_context> ctx)
 {
   std::unique_lock<std::mutex> lock(mutex_);
   queue_.emplace(ctx);
-}
-
-void
-atr_cleanup_queue::push(const atr_cleanup_entry& e)
-{
-  std::unique_lock<std::mutex> lock(mutex_);
-  return queue_.push(e);
 }
 } // namespace couchbase::core::transactions
