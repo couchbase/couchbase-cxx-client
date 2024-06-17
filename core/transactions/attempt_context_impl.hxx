@@ -318,6 +318,17 @@ public:
     const core::document_id& id,
     std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb) override;
 
+  auto get_replica_from_preferred_server_group(const core::document_id& id)
+    -> transaction_get_result override;
+  void get_replica_from_preferred_server_group(const core::document_id& id, Callback&& cb) override;
+  auto get_replica_from_preferred_server_group(const couchbase::collection& coll,
+                                               const std::string& id)
+    -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result> override;
+  void get_replica_from_preferred_server_group(
+    const couchbase::collection& coll,
+    const std::string& id,
+    couchbase::transactions::async_result_handler&& handler) override;
+
   void remove(const transaction_get_result& document) override;
   auto remove(const couchbase::transactions::transaction_get_result& doc)
     -> couchbase::error override;
@@ -452,10 +463,12 @@ private:
 
   template<typename Handler>
   void do_get(const core::document_id& id,
+              bool allow_replica,
               std::optional<std::string> resolving_missing_atr_entry,
               Handler&& cb);
 
   void get_doc(const core::document_id& id,
+               bool allow_replica,
                std::function<void(std::optional<error_class>,
                                   std::optional<std::string>,
                                   std::optional<transaction_get_result>)>&& cb);

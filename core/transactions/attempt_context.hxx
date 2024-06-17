@@ -70,6 +70,17 @@ public:
     -> std::optional<transaction_get_result> = 0;
 
   /**
+   * Get a document copy from the selected server group.
+   *
+   * @param id the document's ID
+   *
+   * @see network_options::preferred_server_group
+   * @see https://docs.couchbase.com/server/current/manage/manage-groups/manage-groups.html
+   */
+  virtual auto get_replica_from_preferred_server_group(const core::document_id& id)
+    -> transaction_get_result = 0;
+
+  /**
    * Mutates the specified document with new content, using the document's last
    * TransactionDocument#cas().
    *

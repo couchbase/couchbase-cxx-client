@@ -64,6 +64,19 @@ public:
   virtual void get_optional(const core::document_id& id, Callback&& cb) = 0;
 
   /**
+   * Get a document copy from the selected server group.
+   *
+   * @param id the document's ID
+   * @param cb callback function with the result when successful, or a @ref
+   * transaction_operation_failed.
+   *
+   * @see network_options::preferred_server_group
+   * @see https://docs.couchbase.com/server/current/manage/manage-groups/manage-groups.html
+   */
+  virtual void get_replica_from_preferred_server_group(const core::document_id& id,
+                                                       Callback&& cb) = 0;
+
+  /**
    * Mutates the specified document with new content, using the document's last
    * TransactionDocument#cas().
    *

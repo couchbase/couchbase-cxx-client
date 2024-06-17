@@ -210,6 +210,7 @@ attempt_context_impl::get(const core::document_id& id) -> transaction_get_result
   });
   return f.get();
 }
+
 void
 attempt_context_impl::get(const core::document_id& id, Callback&& cb)
 {
@@ -220,6 +221,7 @@ attempt_context_impl::get(const core::document_id& id, Callback&& cb)
     check_if_done(cb);
     do_get(
       id,
+      false,
       std::nullopt,
       [self = shared_from_this(), id, cb = std::move(cb)](
         std::optional<error_class> ec,
@@ -314,6 +316,7 @@ attempt_context_impl::get_optional(const core::document_id& id, Callback&& cb)
         self->check_if_done(cb);
         self->do_get(
           id,
+          false,
           std::nullopt,
           [self, id, cb = std::move(cb)](std::optional<error_class> ec,
                                          std::optional<std::string> err_message,
@@ -371,6 +374,128 @@ attempt_context_impl::get_optional(const core::document_id& id, Callback&& cb)
           });
       });
   });
+}
+
+void
+attempt_context_impl::get_replica_from_preferred_server_group(
+  const core::document_id& id,
+  std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb)
+{
+  if (op_list_.get_mode().is_query()) {
+    return cb(std::make_exception_ptr(transaction_operation_failed(
+                                        FAIL_OTHER, "Replica Read is not supported in Query Mode")
+                                        .cause(FEATURE_NOT_AVAILABLE_EXCEPTION)),
+              {});
+  }
+  cache_error_async(cb, [self = shared_from_this(), id, cb = std::move(cb)]() mutable {
+    self->check_if_done(cb);
+    self->do_get(
+      id,
+      true,
+      std::nullopt,
+      [self, id, cb = std::move(cb)](std::optional<error_class> ec,
+                                     std::optional<std::string> err_message,
+                                     std::optional<transaction_get_result> res) mutable {
+        auto handler = [self, id, err_message, res = std::move(res), cb = std::move(cb)](
+                         std::optional<error_class> ec) mutable {
+          if (ec) {
+            switch (*ec) {
+              case FAIL_EXPIRY:
+                return self->op_completed_with_error(
+                  std::move(cb),
+                  transaction_operation_failed(*ec, "transaction expired during get").expired());
+              case FAIL_DOC_NOT_FOUND:
+                return self->op_completed_with_error(
+                  std::move(cb),
+                  transaction_operation_failed(
+                    *ec, fmt::format("document not found {}", err_message.value_or("")))
+                    .cause(external_exception::DOCUMENT_NOT_FOUND_EXCEPTION));
+              case FAIL_TRANSIENT:
+                return self->op_completed_with_error(
+                  std::move(cb),
+                  transaction_operation_failed(
+                    *ec, fmt::format("transient failure in get {}", err_message.value_or("")))
+                    .retry());
+              case FAIL_HARD:
+                return self->op_completed_with_error(
+                  std::move(cb),
+                  transaction_operation_failed(
+                    *ec, fmt::format("fail hard in get {}", err_message.value_or("")))
+                    .no_rollback());
+              default: {
+                auto msg = fmt::format("got error \"{}\" (ec={}) while getting replica for doc {}",
+                                       err_message.value_or(""),
+                                       *ec,
+                                       id.key());
+                return self->op_completed_with_error(std::move(cb),
+                                                     transaction_operation_failed(FAIL_OTHER, msg));
+              }
+            }
+          } else {
+            if (!res) {
+              return self->op_completed_with_error(
+                std::move(cb), transaction_operation_failed(*ec, "document not found"));
+            }
+            auto err =
+              check_forward_compat(forward_compat_stage::GETS, res->links().forward_compat());
+            if (err) {
+              return self->op_completed_with_error(std::move(cb), *err);
+            }
+            return self->op_completed_with_callback(std::move(cb), res);
+          }
+        };
+
+        if (!ec) {
+          return self->hooks_.after_get_complete(self, id.key(), std::move(handler));
+        }
+        return handler(ec);
+      });
+  });
+}
+
+auto
+attempt_context_impl::get_replica_from_preferred_server_group(const core::document_id& id)
+  -> transaction_get_result
+{
+  auto barrier = std::make_shared<std::promise<transaction_get_result>>();
+  auto f = barrier->get_future();
+  get_replica_from_preferred_server_group(
+    id, [barrier](std::exception_ptr err, std::optional<transaction_get_result> res) {
+      if (err) {
+        barrier->set_exception(std::move(err));
+      } else {
+        barrier->set_value(*res);
+      }
+    });
+  return f.get();
+}
+
+auto
+attempt_context_impl::get_replica_from_preferred_server_group(const couchbase::collection& coll,
+                                                              const std::string& id)
+  -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result>
+{
+  return wrap_call_for_public_api([this, coll, id]() mutable -> transaction_get_result {
+    return get_replica_from_preferred_server_group(
+      { coll.bucket_name(), coll.scope_name(), coll.name(), id });
+  });
+}
+
+void
+attempt_context_impl::get_replica_from_preferred_server_group(
+  const couchbase::collection& coll,
+  const std::string& id,
+  couchbase::transactions::async_result_handler&& handler)
+{
+  get_replica_from_preferred_server_group(
+    { coll.bucket_name(), coll.scope_name(), coll.name(), id },
+    [handler = std::move(handler)](std::exception_ptr err,
+                                   std::optional<transaction_get_result> res) mutable {
+      if (!res) {
+        return handler({ errc::transaction_op::document_not_found_exception }, {});
+      }
+      return wrap_callback_for_async_public_api(std::move(err), std::move(res), std::move(handler));
+    });
 }
 
 auto
@@ -2758,6 +2883,7 @@ attempt_context_impl::check_if_done(Handler& cb)
 template<typename Handler>
 void
 attempt_context_impl::do_get(const core::document_id& id,
+                             bool allow_replica,
                              std::optional<std::string> resolving_missing_atr_entry,
                              Handler&& cb)
 {
@@ -2785,6 +2911,7 @@ attempt_context_impl::do_get(const core::document_id& id,
       id.key(),
       [self = shared_from_this(),
        id,
+       allow_replica,
        resolving_missing_atr_entry = std::move(resolving_missing_atr_entry),
        cb = std::forward<Handler>(cb)](auto ec) mutable {
         if (ec) {
@@ -2793,6 +2920,7 @@ attempt_context_impl::do_get(const core::document_id& id,
 
         return self->get_doc(
           id,
+          allow_replica,
           [self,
            id,
            resolving_missing_atr_entry = std::move(resolving_missing_atr_entry),
@@ -2878,7 +3006,7 @@ attempt_context_impl::do_get(const core::document_id& id,
                         CB_ATTEMPT_CTX_LOG_DEBUG(self,
                                                  "could not get ATR entry, checking again with {}",
                                                  doc->links().staged_attempt_id().value_or("-"));
-                        return self->do_get(id, doc->links().staged_attempt_id(), cb);
+                        return self->do_get(id, false, doc->links().staged_attempt_id(), cb);
                       }
                       if (ignore_doc) {
                         return cb(std::nullopt, std::nullopt, std::nullopt);
@@ -2891,7 +3019,7 @@ attempt_context_impl::do_get(const core::document_id& id,
                     CB_ATTEMPT_CTX_LOG_DEBUG(self,
                                              "could not get ATR, checking again with {}",
                                              doc->links().staged_attempt_id().value_or("-"));
-                    return self->do_get(id, doc->links().staged_attempt_id(), cb);
+                    return self->do_get(id, false, doc->links().staged_attempt_id(), cb);
                   });
               } else {
                 if (doc->links().is_deleted()) {
@@ -2916,14 +3044,37 @@ attempt_context_impl::do_get(const core::document_id& id,
   }
 }
 
+namespace
+{
+template<typename LookupInRequest, typename Callback>
+void
+execute_lookup(attempt_context_impl* ctx, LookupInRequest& req, Callback&& cb)
+{
+  ctx->overall()->cluster_ref().execute(req, [ctx, cb = std::forward<Callback>(cb)](auto resp) {
+    auto ec = error_class_from_response(resp);
+    if (ec) {
+      CB_ATTEMPT_CTX_LOG_TRACE(ctx, "get_doc got error {} : {}", resp.ctx.ec().message(), *ec);
+      switch (*ec) {
+        case FAIL_PATH_NOT_FOUND:
+          return cb(*ec, resp.ctx.ec().message(), transaction_get_result::create_from(resp));
+        default:
+          return cb(*ec, resp.ctx.ec().message(), std::nullopt);
+      }
+    } else {
+      return cb({}, {}, transaction_get_result::create_from(resp));
+    }
+  });
+}
+} // namespace
+
 void
 attempt_context_impl::get_doc(const core::document_id& id,
+                              bool allow_replica,
                               std::function<void(std::optional<error_class>,
                                                  std::optional<std::string>,
                                                  std::optional<transaction_get_result>)>&& cb)
 {
-  core::operations::lookup_in_request req{ id };
-  req.specs =
+  const auto specs =
     lookup_in_specs{
       lookup_in_specs::get("txn.id").xattr(),
       lookup_in_specs::get("txn.atr").xattr(),
@@ -2938,25 +3089,19 @@ attempt_context_impl::get_doc(const core::document_id& id,
       lookup_in_specs::get(""),
     }
       .specs();
-  req.access_deleted = true;
+
   try {
-    overall_->cluster_ref().execute(
-      req,
-      [self = shared_from_this(), id, cb = std::move(cb)](
-        core::operations::lookup_in_response resp) {
-        auto ec = error_class_from_response(resp);
-        if (ec) {
-          CB_ATTEMPT_CTX_LOG_TRACE(self, "get_doc got error {} : {}", resp.ctx.ec().message(), *ec);
-          switch (*ec) {
-            case FAIL_PATH_NOT_FOUND:
-              return cb(*ec, resp.ctx.ec().message(), transaction_get_result::create_from(resp));
-            default:
-              return cb(*ec, resp.ctx.ec().message(), std::nullopt);
-          }
-        } else {
-          return cb({}, {}, transaction_get_result::create_from(resp));
-        }
-      });
+    if (allow_replica) {
+      core::operations::lookup_in_any_replica_request req{ id };
+      req.read_preference = couchbase::read_preference::selected_server_group;
+      req.specs = specs;
+      execute_lookup(this, req, std::move(cb));
+    } else {
+      core::operations::lookup_in_request req{ id };
+      req.access_deleted = true;
+      req.specs = specs;
+      execute_lookup(this, req, std::move(cb));
+    }
   } catch (const std::exception& e) {
     return cb(FAIL_OTHER, e.what(), std::nullopt);
   }
@@ -3052,6 +3197,7 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
           }
           return self->get_doc(
             id,
+            false,
             [self, id, content, op_id, cb = std::forward<Handler>(cb), error_handler, delay](
               std::optional<error_class> ec3,
               std::optional<std::string> err_message,
