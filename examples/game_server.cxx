@@ -148,57 +148,59 @@ public:
                            const std::string& monster_id,
                            std::atomic<bool>& exists)
   {
-    auto [err, result] = transactions_->run([&](std::shared_ptr<attempt_context> ctx) {
-      auto [e, monster] = ctx->get(collection, monster_id);
-      if (e.ec() == couchbase::errc::transaction_op::document_not_found_exception) {
-        std::cout << "monster no longer exists" << std::endl;
-        exists = false;
-        return;
-      }
-      const Monster& monster_body = monster.content<Monster>();
+    auto [err, result] =
+      transactions_->run([&](std::shared_ptr<attempt_context> ctx) -> couchbase::error {
+        auto [e, monster] = ctx->get(collection, monster_id);
+        if (e.ec() == couchbase::errc::transaction_op::document_not_found_exception) {
+          std::cout << "monster no longer exists" << std::endl;
+          exists = false;
+          return {};
+        }
+        const Monster& monster_body = monster.content<Monster>();
 
-      int monster_hitpoints = monster_body.hitpoints;
-      int monster_new_hitpoints = monster_hitpoints - damage_;
+        int monster_hitpoints = monster_body.hitpoints;
+        int monster_new_hitpoints = monster_hitpoints - damage_;
 
-      std::cout << "Monster " << monster_id << " had " << monster_hitpoints << " hitpoints, took "
-                << damage_ << " damage, now has " << monster_new_hitpoints << " hitpoints"
-                << std::endl;
+        std::cout << "Monster " << monster_id << " had " << monster_hitpoints << " hitpoints, took "
+                  << damage_ << " damage, now has " << monster_new_hitpoints << " hitpoints"
+                  << std::endl;
 
-      auto [e2, player] = ctx->get(collection, player_id);
-      if (e2.ec()) {
-        // rollback
-        throw std::runtime_error(fmt::format("error getting player {}", player_id));
-      }
+        auto [e2, player] = ctx->get(collection, player_id);
+        if (e2.ec()) {
+          // rollback - propagate the error
+          return e2;
+        }
 
-      if (monster_new_hitpoints <= 0) {
-        // Monster is killed. The remove is just for demoing, and a more realistic examples would
-        // set a "dead" flag or similar.
-        ctx->remove(monster);
+        if (monster_new_hitpoints <= 0) {
+          // Monster is killed. The remove is just for demoing, and a more realistic examples would
+          // set a "dead" flag or similar.
+          ctx->remove(monster);
 
-        const Player& player_body = player.content<Player>();
+          const Player& player_body = player.content<Player>();
 
-        // the player earns experience for killing the monster
-        int experience_for_killing_monster = monster_body.experience_when_killed;
-        int player_experience = player_body.experience;
-        int player_new_experience = player_experience + experience_for_killing_monster;
-        int player_new_level = calculate_level_for_experience(player_new_experience);
+          // the player earns experience for killing the monster
+          int experience_for_killing_monster = monster_body.experience_when_killed;
+          int player_experience = player_body.experience;
+          int player_new_experience = player_experience + experience_for_killing_monster;
+          int player_new_level = calculate_level_for_experience(player_new_experience);
 
-        std::cout << "Monster " << monster_id << " was killed. Player " << player_id << " gains "
-                  << experience_for_killing_monster << " experience, now has level "
-                  << player_new_level << std::endl;
+          std::cout << "Monster " << monster_id << " was killed. Player " << player_id << " gains "
+                    << experience_for_killing_monster << " experience, now has level "
+                    << player_new_level << std::endl;
 
-        Player player_new_body = player_body;
-        player_new_body.experience = player_new_experience;
-        player_new_body.level = player_new_level;
-        ctx->replace(player, player_new_body);
-      } else {
-        std::cout << "Monster " << monster_id << " is damaged but alive" << std::endl;
+          Player player_new_body = player_body;
+          player_new_body.experience = player_new_experience;
+          player_new_body.level = player_new_level;
+          ctx->replace(player, player_new_body);
+        } else {
+          std::cout << "Monster " << monster_id << " is damaged but alive" << std::endl;
 
-        Monster monster_new_body = monster_body;
-        monster_new_body.hitpoints = monster_new_hitpoints;
-        ctx->replace(monster, monster_new_body);
-      }
-    });
+          Monster monster_new_body = monster_body;
+          monster_new_body.hitpoints = monster_new_hitpoints;
+          ctx->replace(monster, monster_new_body);
+        }
+        return {};
+      });
     if (err.ec()) {
       std::cout << "txn error during player_hits_monster: " << err.ec().message() << ", "
                 << (err.cause().has_value() ? err.cause().value().ec().message() : "") << std::endl;

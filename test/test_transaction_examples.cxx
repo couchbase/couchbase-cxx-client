@@ -85,16 +85,17 @@ main(int argc, const char* argv[])
     auto [tx_err, tx_res] = cluster.transactions()->run(
       // [3.1] closure argument to run() method encapsulates logic, that has to be run in
       // transaction
-      [=](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+      [=](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
         // [3.2] get document
         auto [err_ctx, doc] = ctx->get(collection, id_1);
         if (err_ctx.ec()) {
           fmt::print(stderr, "failed to get document \"{}\": {}\n", id_1, err_ctx.ec().message());
           // [3.3] don't continue the transaction logic
-          return;
+          return {};
         }
         // [3.4] replace document's content
         ctx->replace(doc, tao::json::value{ { "some", "other content" } });
+        return {};
       });
     // [3.5] check the overall status of the transaction
     if (tx_err.ec()) {
@@ -117,7 +118,7 @@ main(int argc, const char* argv[])
     cluster.transactions()->run(
       // [4.2] closure argument to run() method encapsulates logic, that has to be run in
       // transaction
-      [=](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) {
+      [=](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
         // [4.3] get document
         ctx->get(collection, id_1, [=](auto err_ctx_1, auto doc) {
           if (err_ctx_1.ec()) {
@@ -175,6 +176,7 @@ main(int argc, const char* argv[])
                          }
                        });
         });
+        return {};
       },
       // [4.5], second closure represents transaction completion logic
       [barrier](auto tx_err, auto tx_res) {
@@ -277,14 +279,15 @@ main(int argc, const char* argv[])
 
   {
     auto [tx_err, tx_res] = cluster.transactions()->run(
-      [=](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
-        auto [err_ctx, doc] = ctx->get_replica_from_preferred_server_group(collection, id);
-        if (err_ctx.ec()) {
-          fmt::println(stderr, "failed to get document \"{}\": {}", id, err_ctx.ec().message());
-          return;
+      [=](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
+        auto [err, doc] = ctx->get_replica_from_preferred_server_group(collection, id);
+        if (err) {
+          fmt::println(stderr, "failed to get document \"{}\": {}", id, err.ec().message());
+          return {};
         }
         fmt::println("document content: {}",
                      tao::json::to_string(doc.template content<tao::json::value>()));
+        return {};
       });
 
     if (tx_err.ec()) {
@@ -303,7 +306,7 @@ main(int argc, const char* argv[])
     auto f = barrier->get_future();
     cluster.transactions()->run(
       // transaction logic
-      [=](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) {
+      [=](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
         ctx->get_replica_from_preferred_server_group(collection, id, [=](auto err_ctx, auto doc) {
           if (err_ctx.ec()) {
             fmt::print(stderr, "failed to get document \"{}\": {}\n", id, err_ctx.ec().message());
@@ -312,6 +315,7 @@ main(int argc, const char* argv[])
           fmt::println("document content: {}",
                        tao::json::to_string(doc.template content<tao::json::value>()));
         });
+        return {};
       },
       // completion logic
       [barrier](auto tx_err, auto tx_res) {

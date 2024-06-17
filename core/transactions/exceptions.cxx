@@ -163,4 +163,57 @@ transaction_op_errc_from_external_exception(external_exception e) -> errc::trans
   return errc::transaction_op::unknown;
 }
 
+auto
+external_exception_from_transaction_op_errc(errc::transaction_op ec) -> external_exception
+{
+  switch (ec) {
+    case errc::transaction_op::unknown:
+      return external_exception::UNKNOWN;
+    case errc::transaction_op::active_transaction_record_entry_not_found:
+      return external_exception::ACTIVE_TRANSACTION_RECORD_ENTRY_NOT_FOUND;
+    case errc::transaction_op::active_transaction_record_full:
+      return external_exception::ACTIVE_TRANSACTION_RECORD_FULL;
+    case errc::transaction_op::active_transaction_record_not_found:
+      return external_exception::ACTIVE_TRANSACTION_RECORD_NOT_FOUND;
+    case errc::transaction_op::document_already_in_transaction:
+      return external_exception::DOCUMENT_ALREADY_IN_TRANSACTION;
+    case errc::transaction_op::document_exists_exception:
+      return external_exception::DOCUMENT_EXISTS_EXCEPTION;
+    case errc::transaction_op::document_not_found_exception:
+      return external_exception::DOCUMENT_NOT_FOUND_EXCEPTION;
+    case errc::transaction_op::not_set:
+      return external_exception::NOT_SET;
+    case errc::transaction_op::feature_not_available_exception:
+      return external_exception::FEATURE_NOT_AVAILABLE_EXCEPTION;
+    case errc::transaction_op::transaction_aborted_externally:
+      return external_exception::TRANSACTION_ABORTED_EXTERNALLY;
+    case errc::transaction_op::previous_operation_failed:
+      return external_exception::PREVIOUS_OPERATION_FAILED;
+    case errc::transaction_op::forward_compatibility_failure:
+      return external_exception::FORWARD_COMPATIBILITY_FAILURE;
+    case errc::transaction_op::parsing_failure:
+      return external_exception::PARSING_FAILURE;
+    case errc::transaction_op::illegal_state_exception:
+      return external_exception::ILLEGAL_STATE_EXCEPTION;
+    case errc::transaction_op::couchbase_exception:
+      return external_exception::COUCHBASE_EXCEPTION;
+    case errc::transaction_op::service_not_available_exception:
+      return external_exception::SERVICE_NOT_AVAILABLE_EXCEPTION;
+    case errc::transaction_op::request_canceled_exception:
+      return external_exception::REQUEST_CANCELED_EXCEPTION;
+    case errc::transaction_op::concurrent_operations_detected_on_same_document:
+      return external_exception::CONCURRENT_OPERATIONS_DETECTED_ON_SAME_DOCUMENT;
+    case errc::transaction_op::commit_not_permitted:
+      return external_exception::COMMIT_NOT_PERMITTED;
+    case errc::transaction_op::rollback_not_permitted:
+      return external_exception::ROLLBACK_NOT_PERMITTED;
+    case errc::transaction_op::transaction_already_aborted:
+      return external_exception::TRANSACTION_ALREADY_ABORTED;
+    case errc::transaction_op::transaction_already_committed:
+      return external_exception::TRANSACTION_ALREADY_COMMITTED;
+    default:
+      return external_exception::UNKNOWN;
+  }
+}
+
 } // namespace couchbase::core::transactions

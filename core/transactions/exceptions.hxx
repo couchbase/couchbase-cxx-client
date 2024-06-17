@@ -18,6 +18,7 @@
 
 #include "error_class.hxx"
 
+#include <couchbase/error.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/transactions/transaction_result.hxx>
 
@@ -64,6 +65,10 @@ enum external_exception {
 auto
 transaction_op_errc_from_external_exception(external_exception e)
   -> couchbase::errc::transaction_op;
+
+auto
+external_exception_from_transaction_op_errc(couchbase::errc::transaction_op ec)
+  -> external_exception;
 
 auto
 error_class_from_external_exception(external_exception e)
@@ -154,6 +159,16 @@ public:
     : std::runtime_error(ctx.ec().message())
     , cause_(cause)
     , ctx_(std::move(ctx))
+  {
+  }
+
+  /**
+   * For converting from Public API error (for errors propagated from lambda)
+   */
+  explicit op_exception(couchbase::error err)
+    : std::runtime_error(err.ec().message())
+    , cause_{ external_exception_from_transaction_op_errc(errc::transaction_op(err.ec().value())) }
+    , ctx_{ err.ec() }
   {
   }
 

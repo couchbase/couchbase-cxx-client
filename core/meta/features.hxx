@@ -168,3 +168,9 @@
  * reference.
  */
 #define COUCHBASE_CXX_CLIENT_ATTEMPT_CONTEXT_IS_A_SHARED_POINTER
+
+/**
+ * the transactions lambda in the Public API returns couchbase::error which is used
+ * to propagate errors and rollback
+ */
+#define COUCHBASE_CXX_CLIENT_TXNS_LAMBDA_RETURNS_ERROR 1

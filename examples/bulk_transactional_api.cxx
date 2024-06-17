@@ -180,9 +180,9 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
     std::map<std::string, std::size_t> errors;
 
     auto exec_start = std::chrono::system_clock::now();
-    auto [err, result] =
-      transactions->run([&collection, &document_ids, &document, &arguments, &errors](
-                          std::shared_ptr<couchbase::transactions::attempt_context> attempt) {
+    auto [err, result] = transactions->run(
+      [&collection, &document_ids, &document, &arguments, &errors](
+        std::shared_ptr<couchbase::transactions::attempt_context> attempt) -> couchbase::error {
         for (std::size_t i = 0; i < arguments.number_of_operations; ++i) {
           auto [err, res] = attempt->insert(collection, document_ids[i], document);
           if (err.ec()) {
@@ -191,6 +191,7 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
           fmt::print("\rexecute insert: {}", i);
           fflush(stdout);
         }
+        return {};
       });
     auto exec_end = std::chrono::system_clock::now();
 
@@ -228,9 +229,9 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
     std::map<std::string, std::size_t> errors;
 
     auto exec_start = std::chrono::system_clock::now();
-    auto [err, result] =
-      transactions->run([&collection, &document_ids, &arguments, &errors](
-                          std::shared_ptr<couchbase::transactions::attempt_context> attempt) {
+    auto [err, result] = transactions->run(
+      [&collection, &document_ids, &arguments, &errors](
+        std::shared_ptr<couchbase::transactions::attempt_context> attempt) -> couchbase::error {
         for (std::size_t i = 0; i < arguments.number_of_operations; ++i) {
           auto [err, res] = attempt->get(collection, document_ids[i]);
           if (err.ec()) {
@@ -239,6 +240,7 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
           fmt::print("\rexecute get: {}", i);
           fflush(stdout);
         }
+        return {};
       });
     auto exec_end = std::chrono::system_clock::now();
 
@@ -357,7 +359,8 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
     auto schedule_start = std::chrono::system_clock::now();
     transactions->run(
       [&collection, &document_ids, &document, &arguments, &errors](
-        std::shared_ptr<couchbase::transactions::async_attempt_context> attempt) {
+        std::shared_ptr<couchbase::transactions::async_attempt_context> attempt)
+        -> couchbase::error {
         for (std::size_t i = 0; i < arguments.number_of_operations; ++i) {
           attempt->insert(collection, document_ids[i], document, [&errors](auto ctx, auto) {
             if (ctx.ec()) {
@@ -365,6 +368,7 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
             }
           });
         }
+        return {};
       },
       [tx_promise](auto err, auto result) {
         tx_promise->set_value({ err, result });
@@ -422,7 +426,8 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
     auto schedule_start = std::chrono::system_clock::now();
     transactions->run(
       [&collection, &document_ids, &arguments, &errors](
-        std::shared_ptr<couchbase::transactions::async_attempt_context> attempt) {
+        std::shared_ptr<couchbase::transactions::async_attempt_context> attempt)
+        -> couchbase::error {
         for (std::size_t i = 0; i < arguments.number_of_operations; ++i) {
           attempt->get(collection, document_ids[i], [&errors](auto ctx, auto) {
             if (ctx.ec()) {
@@ -430,6 +435,7 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
             }
           });
         }
+        return {};
       },
       [tx_promise](auto err, auto result) {
         tx_promise->set_value({ err, result });

@@ -118,12 +118,13 @@ TEST_CASE("transactions public blocking API: can get", "[transactions]")
   REQUIRE_FALSE(upsert_res.cas().empty());
 
   auto [tx_err, result] = c.transactions()->run(
-    [id, &coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+    [id, &coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->get(coll, id);
       CHECK_FALSE(e.ec());
       CHECK(doc.key() == id);
       CHECK_FALSE(doc.cas().empty());
       CHECK(doc.content<tao::json::value>() == content);
+      return {};
     },
     txn_opts());
   CHECK_FALSE(result.transaction_id.empty());
@@ -140,9 +141,10 @@ TEST_CASE("transactions public blocking API: get returns error if doc doesn't ex
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
   auto [tx_err, result] = c.transactions()->run(
-    [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+    [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->get(coll, id);
       CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found_exception);
+      return {};
     },
     txn_opts());
   CHECK_FALSE(result.transaction_id.empty());
@@ -159,7 +161,7 @@ TEST_CASE("transactions public blocking API: can insert", "[transactions]")
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
   auto [tx_err, result] = c.transactions()->run(
-    [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+    [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->insert(coll, id, content);
       CHECK_FALSE(e.ec());
       CHECK(doc.key() == id);
@@ -167,6 +169,7 @@ TEST_CASE("transactions public blocking API: can insert", "[transactions]")
       auto [e2, inserted_doc] = ctx->get(coll, id);
       CHECK_FALSE(e2.ec());
       CHECK(inserted_doc.content<tao::json::value>() == content);
+      return {};
     },
     txn_opts());
   REQUIRE_FALSE(result.transaction_id.empty());
@@ -192,9 +195,11 @@ TEST_CASE("transactions public blocking API: insert has error when doc already e
 
   tao::json::value new_content{ { "something", "else" } };
   auto [tx_err, result] = c.transactions()->run(
-    [id, coll, new_content](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+    [id, coll, new_content](
+      std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->insert(coll, id, new_content);
       CHECK(e.ec() == couchbase::errc::transaction_op::document_exists_exception);
+      return {};
     },
     txn_opts());
   CHECK_FALSE(result.transaction_id.empty());
@@ -221,7 +226,8 @@ TEST_CASE("transactions public blocking API: can replace", "[transactions]")
     { "some_other_number", 3 },
   };
   auto [tx_err, result] = c.transactions()->run(
-    [id, coll, new_content](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+    [id, coll, new_content](
+      std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [_, doc] = ctx->get(coll, id);
       auto [e, replaced_doc] = ctx->replace(doc, new_content);
       CHECK_FALSE(e.ec());
@@ -230,6 +236,7 @@ TEST_CASE("transactions public blocking API: can replace", "[transactions]")
       CHECK(doc.content<tao::json::value>() == content);
       // FIXME(JCBC-2152)
       // CHECK(replaced_doc.content<tao::json::value>() == new_content);
+      return {};
     },
     txn_opts());
   CHECK_FALSE(result.transaction_id.empty());
@@ -255,12 +262,14 @@ TEST_CASE("transactions public blocking API: replace fails as expected with bad 
 
   tao::json::value new_content = { { "some_other_number", 3 } };
   auto [tx_err, result] = c.transactions()->run(
-    [id, coll, new_content](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+    [id, coll, new_content](
+      std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [_, doc] = ctx->get(coll, id);
       // all this to change the cas...
       couchbase::core::transactions::transaction_get_result temp_doc(doc);
       temp_doc.cas(100);
       auto replaced_doc = ctx->replace(temp_doc.to_public_result(), new_content);
+      return {};
     },
     txn_opts());
   CHECK_FALSE(result.transaction_id.empty());
@@ -283,9 +292,10 @@ TEST_CASE("transactions public blocking API: can remove", "[transactions]")
   REQUIRE_SUCCESS(err.ec());
 
   auto [tx_err, result] = c.transactions()->run(
-    [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+    [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [_, doc] = ctx->get(coll, id);
       auto removed_doc = ctx->remove(doc);
+      return {};
     },
     txn_opts());
   CHECK_FALSE(result.transaction_id.empty());
@@ -310,7 +320,7 @@ TEST_CASE("transactions public blocking API: remove fails as expected with bad c
   REQUIRE_SUCCESS(err.ec());
 
   auto [tx_err, result] = c.transactions()->run(
-    [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+    [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->get(coll, id);
       // change cas, so remove will fail and retry
       // all this to change the cas...
@@ -318,6 +328,7 @@ TEST_CASE("transactions public blocking API: remove fails as expected with bad c
       temp_doc.cas(100);
       auto remove_err = ctx->remove(temp_doc.to_public_result());
       CHECK(remove_err.ec());
+      return {};
     },
     txn_opts());
   CHECK_FALSE(result.transaction_id.empty());
@@ -335,13 +346,14 @@ TEST_CASE("transactions public blocking API: remove fails as expected with missi
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
   auto [tx_err, result] = c.transactions()->run(
-    [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+    [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->get(coll, id);
       CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found_exception);
       // the doc is 'blank', so trying to use it results in failure
       auto err = ctx->remove(doc);
       CHECK(err.cause().has_value());
       CHECK(err.cause().value().ec() == couchbase::errc::transaction_op::unknown);
+      return {};
     },
     txn_opts());
   CHECK_FALSE(result.transaction_id.empty());
@@ -349,6 +361,33 @@ TEST_CASE("transactions public blocking API: remove fails as expected with missi
   CHECK(tx_err.ec() == couchbase::errc::transaction::failed);
   CHECK(tx_err.cause().has_value());
   CHECK(tx_err.cause().value().ec() == couchbase::errc::transaction_op::unknown);
+}
+
+TEST_CASE("transactions public blocking API: get doc not found and propagating error",
+          "[transactions]")
+{
+  test::utils::integration_test_guard integration;
+
+  auto id = test::utils::uniq_id("txn");
+  auto c = integration.public_cluster();
+  auto coll = c.bucket(integration.ctx.bucket).default_collection();
+
+  auto [tx_err, result] = c.transactions()->run(
+    [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
+      auto [e, doc] = ctx->get(coll, id);
+      CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found_exception);
+      if (e) {
+        return e;
+      }
+      return {};
+    },
+    txn_opts());
+  CHECK_FALSE(result.transaction_id.empty());
+  CHECK_FALSE(result.unstaging_complete);
+  CHECK(tx_err.ec() == couchbase::errc::transaction::failed);
+  CHECK(tx_err.cause().has_value());
+  CHECK(tx_err.cause().value().ec() ==
+        couchbase::errc::transaction_op::document_not_found_exception);
 }
 
 TEST_CASE(
@@ -362,7 +401,7 @@ TEST_CASE(
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
   auto [tx_err, result] = c.transactions()->run(
-    [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+    [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->insert(coll, id, content);
       CHECK_FALSE(e.ec());
       throw std::runtime_error("some exception");
@@ -388,13 +427,14 @@ TEST_CASE("transactions public blocking API: can pass per-transaction configs", 
   auto opts = couchbase::transactions::transaction_options().timeout(std::chrono::seconds(2));
   auto begin = std::chrono::steady_clock::now();
   auto [tx_err, result] = c.transactions()->run(
-    [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+    [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->get(coll, id);
       // all this to change the cas...
       couchbase::core::transactions::transaction_get_result temp_doc(doc);
       temp_doc.cas(100);
       auto remove_err = ctx->remove(temp_doc.to_public_result());
       CHECK(remove_err.ec());
+      return {};
     },
     opts);
   auto end = std::chrono::steady_clock::now();
@@ -424,11 +464,12 @@ TEST_CASE("transactions public blocking API: can do simple query", "[transaction
   REQUIRE_SUCCESS(err.ec());
   auto [tx_err, result] = c.transactions()->run(
     [id, coll, test_ctx = integration.ctx](
-      std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+      std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, res] =
         ctx->query(fmt::format("SELECT * FROM `{}` USE KEYS '{}'", test_ctx.bucket, id));
       CHECK_FALSE(e.ec());
       CHECK(content == res.rows_as_json().front()["default"]);
+      return {};
     },
     couchbase::transactions::transaction_options().timeout(std::chrono::seconds(10)));
   CHECK_FALSE(tx_err.ec());
@@ -452,10 +493,11 @@ TEST_CASE("transactions public blocking API: can do simple mutating query", "[tr
 
   auto [tx_err, result] = c.transactions()->run(
     [id, coll, test_ctx = integration.ctx](
-      std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+      std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, res] = ctx->query(
         fmt::format("UPDATE `{}` USE KEYS '{}' SET `some_number` = 10", test_ctx.bucket, id));
       CHECK_FALSE(e.ec());
+      return {};
     },
     couchbase::transactions::transaction_options().timeout(std::chrono::seconds(10)));
   CHECK_FALSE(tx_err.ec());
@@ -480,7 +522,7 @@ TEST_CASE("transactions public blocking API: some query errors don't force rollb
 
   auto [tx_err, result] = c.transactions()->run(
     [id, coll, test_ctx = integration.ctx](
-      std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+      std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [get_err, get_res] =
         ctx->query(fmt::format("SELECT * FROM `{}` USE KEYS '{}'", test_ctx.bucket, id));
       CHECK_FALSE(get_err.ec());
@@ -488,6 +530,7 @@ TEST_CASE("transactions public blocking API: some query errors don't force rollb
       auto [insert_err, _] = ctx->query(fmt::format(
         R"(INSERT INTO `{}` (KEY, VALUE) VALUES ("{}", {}))", test_ctx.bucket, id, content_json));
       CHECK_FALSE(insert_err.ec());
+      return {};
     },
     couchbase::transactions::transaction_options().timeout(std::chrono::seconds(10)));
   CHECK_FALSE(tx_err.ec());
@@ -514,7 +557,7 @@ TEST_CASE("transactions public blocking API: some query errors do rollback", "[t
 
   auto [tx_err, result] = c.transactions()->run(
     [id, id2, coll, test_ctx = integration.ctx](
-      std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+      std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       // this one works.
       auto [e, _] = ctx->query(fmt::format(
         R"(INSERT INTO `{}` (KEY, VALUE) VALUES ("{}", {}))", test_ctx.bucket, id2, content_json));
@@ -524,6 +567,7 @@ TEST_CASE("transactions public blocking API: some query errors do rollback", "[t
       auto [e2, __] = ctx->query(fmt::format(
         R"(INSERT INTO `{}` (KEY, VALUE) VALUES ("{}", {}))", test_ctx.bucket, id, content_json));
       CHECK_FALSE(e2.ec());
+      return {};
     },
     couchbase::transactions::transaction_options().timeout(std::chrono::seconds(10)));
   CHECK(tx_err.ec() == couchbase::errc::transaction::failed);
@@ -547,11 +591,12 @@ TEST_CASE("transactions public blocking API: some query errors are seen immediat
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
   auto [tx_err, result] = c.transactions()->run(
-    [](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+    [](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, res] = ctx->query("I am not a valid n1ql query");
       CHECK(e.ec());
       CHECK(e.cause().has_value());
       CHECK(e.cause().value().ec() == couchbase::errc::common::parsing_failure);
+      return {};
     },
     couchbase::transactions::transaction_options().timeout(std::chrono::seconds(10)));
   CHECK_FALSE(tx_err.ec());
@@ -581,11 +626,12 @@ TEST_CASE("transactions public blocking API: can query from a scope", "[transact
 
   auto statement = fmt::format("SELECT * FROM `{}` USE KEYS '{}'", new_coll_name, id);
   auto [tx_err, result] = c.transactions()->run(
-    [&](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+    [&](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, res] = ctx->query(new_scope, statement);
       CHECK_FALSE(e.ec());
       CHECK(res.rows_as_json().size() > 0);
       CHECK(res.rows_as_json().front()[new_coll_name] == content);
+      return {};
     },
     txn_opts());
   CHECK_FALSE(tx_err.ec());
@@ -616,10 +662,12 @@ TEST_CASE("transactions public blocking API: can get doc from bucket not yet ope
     auto c = integration.public_cluster();
     auto coll = c.bucket(integration.ctx.bucket).default_collection();
     auto [tx_err, result] = c.transactions()->run(
-      [&id, &coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+      [&id,
+       &coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
         auto [e, doc] = ctx->get(coll, id);
         CHECK_FALSE(e.ec());
         CHECK(doc.content<tao::json::value>() == content);
+        return {};
       },
       txn_opts());
     CHECK_FALSE(tx_err.ec());
@@ -640,10 +688,12 @@ TEST_CASE("transactions public blocking API: can insert doc into bucket not yet 
     auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
     auto [tx_err, result] = c.transactions()->run(
-      [&id, &coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+      [&id,
+       &coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
         auto [e, doc] = ctx->insert(coll, id, content);
         CHECK_FALSE(e.ec());
         CHECK_FALSE(doc.cas().empty());
+        return {};
       },
       txn_opts());
     CHECK_FALSE(tx_err.ec());
@@ -674,12 +724,14 @@ TEST_CASE("transactions public blocking API: can replace doc in bucket not yet o
     tao::json::value new_content = { { "some", "new content" } };
 
     auto [tx_err, result] = c.transactions()->run(
-      [&id, &coll, new_content](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+      [&id, &coll, new_content](
+        std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
         auto [get_err, get_doc] = ctx->get(coll, id);
         CHECK_FALSE(get_err.ec());
         auto [e, doc] = ctx->replace(get_doc, new_content);
         CHECK_FALSE(e.ec());
         CHECK_FALSE(doc.cas().empty());
+        return {};
       },
       txn_opts());
     CHECK_FALSE(tx_err.ec());
@@ -709,11 +761,13 @@ TEST_CASE("transactions public blocking API: can remove doc in bucket not yet op
     auto coll = c.bucket(guard.ctx.bucket).default_collection();
     tao::json::value new_content = { { "some", "new content" } };
     auto [tx_err, result] = c.transactions()->run(
-      [&id, &coll, new_content](std::shared_ptr<couchbase::transactions::attempt_context> ctx) {
+      [&id, &coll, new_content](
+        std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
         auto [e, get_doc] = ctx->get(coll, id);
         CHECK_FALSE(e.ec());
         auto res = ctx->remove(get_doc);
         CHECK_FALSE(res.ec());
+        return {};
       },
       txn_opts());
     CHECK_FALSE(tx_err.ec());
